@@ -19,7 +19,7 @@ class RawDataLoader:
             f.close()
             break
 
-        print(dataset[0].x.size())
+        print(dataset[0].pos)
         # Extracting dataset name and storing it as a serialized object.
         serial_data_name = (pathlib.PurePath(files_dir)).parent.name
         serial_data_path = "./SerializedDataset/" + serial_data_name + ".pkl"
