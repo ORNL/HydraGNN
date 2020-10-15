@@ -1,4 +1,5 @@
-"""
+import torch
+import numpy as np
 # Tensor slicing
 
 x = torch.randn(5, 3, dtype=torch.double)
@@ -7,12 +8,21 @@ print(x.size())
 
 print(x)
 
-z = x[:, [0,2]]
+z = x[:, 1]
+
+y = x[:, 2]
 
 print(z)
 
-print(x.size())
-"""
+print(y)
+
+w = z-y
+
+print(w)
+
+a = np.arange(5)
+b = np.arange(5)
+print(np.divide(a,b))
 '''
 # Trying it out with dataset descriptors
 
@@ -26,7 +36,7 @@ print(a_f_i)
 
 print(x)
 print(x[:, a_f_i])
-'''
+
 
 # Computing adjacency matrix.
 # Stopping criterion: maximum distance from our node(radius of a sphere) and maximum number of neighbours
@@ -36,6 +46,10 @@ import numpy as np
 from collections import defaultdict
 from torch_geometric.data import Data
 import pickle
+from torch_geometric.utils.convert import to_networkx
+import networkx as nx
+import matplotlib.pyplot as plt
+
 
 # Calculate the distance between points
 def distance_between_points(p1, p2):
@@ -106,8 +120,10 @@ points = [[ 0.0000,  0.0000,  0.0000],
         [15.6540,  5.2180,  7.0580],
         [18.2630,  7.8270, 10.5870]]
 
+points2 = [[0, 0, 0], [1,2,1], [3,3,3], [5,3,5],[2,4,2]]
+points = points2
 radius = 10
-size = 32
+size = 5
 max_num = 5
 distance_matrix = np.zeros((size, size))
 candidate_neighbours = {k: [] for k in range(size)}
@@ -133,11 +149,15 @@ for point, neighbours in candidate_neighbours.items():
         neighbours = neighbours[:max_num]
     neighbour_matrix[point, neighbours] = 1
 
-print(neighbour_matrix[1])
+
+adjacency_matrix = torch.tensor(np.nonzero(neighbour_matrix))
+print(adjacency_matrix)
 
 data = Data()
 dataset_path = "./SerializedDataset/FePt_32atoms.pkl"
 with open(dataset_path, "rb") as f:
-    data = pickle.load(f)
+    data = pickle.load(f)[0]
 
-print(data)
+data.edge_index = adjacency_matrix
+data.z = torch.tensor([26, 78])
+'''
