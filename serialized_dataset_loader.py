@@ -64,11 +64,11 @@ class SerializedDataLoader:
                     candidate_neighbours[i].append(j)
 
         
-        ordered_canidate_neighbours = order_candidates(candidate_neighbours=candidate_neighbours, distance_matrix=distance_matrix)
-        collinear_neighbours = remove_collinear_candidates(candidate_neighbours=candidate_neighbours, distance_matrix=distance_matrix)
+        ordered_candidate_neighbours = order_candidates(candidate_neighbours=candidate_neighbours, distance_matrix=distance_matrix)
+        collinear_neighbours = remove_collinear_candidates(candidate_neighbours=ordered_candidate_neighbours, distance_matrix=distance_matrix)
 
         adjacency_matrix = np.zeros((StructureFeatures.SIZE.value, StructureFeatures.SIZE.value))
-        for point, neighbours in candidate_neighbours.items():
+        for point, neighbours in ordered_candidate_neighbours.items():
             neighbours = list(neighbours)
             if point in collinear_neighbours.keys():
                 collinear_points = list(collinear_neighbours[point])
