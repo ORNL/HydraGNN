@@ -48,7 +48,7 @@ def order_candidates(candidate_neighbours: dict, distance_matrix: [[float]]):
 
 def remove_collinear_candidates(candidate_neighbours, distance_matrix):
     """Function determines which neighbours of an atom are collinear. The logic of determining it is:
-    for atom A, B, C check if AB + BC == AC. If that is true, points are on the same line - collinear. 
+    for atom A, B, C check if AB + BC == AC. If that is true, points are on the same line - collinear.
 
     Parameters
     ----------

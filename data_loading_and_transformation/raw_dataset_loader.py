@@ -18,6 +18,7 @@ class RawDataLoader:
     load_raw_data(dataset_path: str)
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
+
     def load_raw_data(self, dataset_path: str):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the SerializedDataset directory.
@@ -50,7 +51,7 @@ class RawDataLoader:
         ----------
         dataset_path: str
             Directory path where raw files are stored.
-                
+
         Returns
         ----------
         Data
@@ -96,7 +97,7 @@ class RawDataLoader:
         ----------
         dataset: [Data]
             List of Data objects representing structures of atoms.
-                
+
         Returns
         ----------
         [Data]
@@ -107,11 +108,11 @@ class RawDataLoader:
         max_charge_density = np.full(StructureFeatures.SIZE.value, -np.inf)
         min_charge_density = np.full(StructureFeatures.SIZE.value, np.inf)
 
-        #histogram_data_free_energy = []
-        #histogram_data_normalized_free_energy = []
+        # histogram_data_free_energy = []
+        # histogram_data_normalized_free_energy = []
 
         for data in dataset:
-            #histogram_data_free_energy.append(data.y[0].item())
+            # histogram_data_free_energy.append(data.y[0].item())
             max_free_energy = max(abs(data.y[0]), max_free_energy)
             min_free_energy = min(abs(data.y[0]), min_free_energy)
             max_charge_density = np.maximum(data.x[:, 1].numpy(), max_charge_density)
@@ -121,7 +122,7 @@ class RawDataLoader:
             data.y[0] = (data.y[0] - min_free_energy) / (
                 max_free_energy - min_free_energy
             )
-            #histogram_data_normalized_free_energy.append(data.y[0].item())
+            # histogram_data_normalized_free_energy.append(data.y[0].item())
             data.x[:, 1] = (data.x[:, 1] - min_charge_density) / (
                 max_charge_density - min_charge_density
             )

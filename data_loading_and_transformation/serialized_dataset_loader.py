@@ -49,7 +49,7 @@ class SerializedDataLoader:
             Used when computing edges in the structure. Represents maximum distance of a neighbour atom from an atom.
         max_num_node_neighbours: int
             Used when computing edges in the structure. Represents maximum number of neighbours of an atom.
-        
+
         Returns
         ----------
         [Data]

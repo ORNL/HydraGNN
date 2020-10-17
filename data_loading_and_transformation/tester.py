@@ -17,7 +17,7 @@ import chart_studio.plotly as py
 import plotly.graph_objects as go
 from mpl_toolkits.mplot3d import Axes3D
 
-#testing raw dataset loader
+# testing raw dataset loader
 cu = "CuAu_32atoms"
 fe = "FePt_32atoms"
 
