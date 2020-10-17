@@ -23,6 +23,10 @@ For proper formatting of code.
 pip install git+git://github.com/psf/black
 ```
 
+For visualizing structure connections.
+```
+pip install python-igraph
+```
 
 # Code formatting
 Before commiting and pushing changes, run command `black .` from the main directory of the project(GCNN).

@@ -1,7 +1,8 @@
 import torch
 import numpy as np
-# Tensor slicing
 
+# Tensor slicing
+"""
 x = torch.randn(5, 3, dtype=torch.double)
 
 print(x.size())
@@ -23,7 +24,7 @@ print(w)
 a = np.arange(5)
 b = np.arange(5)
 print(np.divide(a,b))
-'''
+
 # Trying it out with dataset descriptors
 
 x = torch.randn(5, 3, dtype=torch.double)
@@ -160,4 +161,16 @@ with open(dataset_path, "rb") as f:
 
 data.edge_index = adjacency_matrix
 data.z = torch.tensor([26, 78])
-'''
+"""
+
+a = np.zeros((3, 2))
+a[1, 0] = 1
+a[2, 0] = 1
+
+n = np.nonzero(a[:, 0])
+print(n[0])
+
+a = [1, 2, 3, 4, 5]
+b = [6, 7, 8]
+a = a[: len(b)] + b
+print(a)
