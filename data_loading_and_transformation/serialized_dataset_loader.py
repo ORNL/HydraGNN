@@ -5,8 +5,8 @@ from torch import tensor
 import numpy as np
 import pickle
 import pathlib
-from dataset_descriptors import AtomFeatures, StructureFeatures
-from utils import (
+from data_loading_and_transformation.dataset_descriptors import AtomFeatures, StructureFeatures
+from data_loading_and_transformation.utils import (
     distance_3D,
     remove_collinear_candidates,
     order_candidates,
@@ -98,6 +98,7 @@ class SerializedDataLoader:
 
         feature_indices = [i.value for i in structure_features]
         data.y = data.y[feature_indices]
+
 
     def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):
         """Computes edges of a structure depending on the maximum number of neighbour atoms that each atom can have

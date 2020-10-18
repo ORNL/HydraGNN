@@ -4,7 +4,7 @@ from torch import tensor
 import numpy as np
 import pickle
 import pathlib
-from dataset_descriptors import StructureFeatures
+from data_loading_and_transformation.dataset_descriptors import AtomFeatures, StructureFeatures
 import matplotlib.pyplot as plt
 
 
@@ -60,9 +60,9 @@ class RawDataLoader:
         data_object = Data()
 
         graph_feat = lines[0].split(None, 2)
-        free_energy = np.float64(graph_feat[0].strip())
-        magnetic_charge = np.float64(graph_feat[1].strip())
-        magnetic_moment = np.float64(graph_feat[2].strip())
+        free_energy = float(graph_feat[0].strip())
+        magnetic_charge = float(graph_feat[1].strip())
+        magnetic_moment = float(graph_feat[2].strip())
         data_object.y = tensor([free_energy, magnetic_charge, magnetic_moment])
 
         node_feature_matrix = []
@@ -70,14 +70,14 @@ class RawDataLoader:
         for line in lines[1:]:
             node_feat = line.split(None, 11)
 
-            x_pos = np.float64(node_feat[2].strip())
-            y_pos = np.float64(node_feat[3].strip())
-            z_pos = np.float64(node_feat[4].strip())
+            x_pos = float(node_feat[2].strip())
+            y_pos = float(node_feat[3].strip())
+            z_pos = float(node_feat[4].strip())
             node_position_matrix.append([x_pos, y_pos, z_pos])
 
             num_of_protons = int(node_feat[0].strip())
-            charge_density = np.float64(node_feat[5].strip())
-            magnetic_moment = np.float64(node_feat[6].strip())
+            charge_density = float(node_feat[5].strip())
+            magnetic_moment = float(node_feat[6].strip())
 
             charge_density = charge_density - num_of_protons
 
