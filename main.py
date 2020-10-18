@@ -1,9 +1,14 @@
 import time
 from datetime import datetime
 
-from data_loading_and_transformation.serialized_dataset_loader import SerializedDataLoader
+from data_loading_and_transformation.serialized_dataset_loader import (
+    SerializedDataLoader,
+)
 from data_loading_and_transformation.raw_dataset_loader import RawDataLoader
-from data_loading_and_transformation.dataset_descriptors import AtomFeatures, StructureFeatures
+from data_loading_and_transformation.dataset_descriptors import (
+    AtomFeatures,
+    StructureFeatures,
+)
 
 from models.GNNStack import GNNStack
 import torch.optim as optim
@@ -12,38 +17,44 @@ from torch_geometric.data import DataLoader
 import torch
 
 
-
 def train(dataset, writer, model, opt, num_epoch):
     data_size = len(dataset)
     batch_size = 64
-    loader = DataLoader(dataset[:int(data_size * 0.8)], batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(dataset[int(data_size * 0.8):], batch_size=batch_size, shuffle=True)
+    loader = DataLoader(
+        dataset[: int(data_size * 0.8)], batch_size=batch_size, shuffle=True
+    )
+    test_loader = DataLoader(
+        dataset[int(data_size * 0.8) :], batch_size=batch_size, shuffle=True
+    )
 
     # train
     for epoch in range(num_epoch):
         total_loss = 0
         model.train()
         for batch in loader:
-            #print(batch.train_mask, '----')
+            # print(batch.train_mask, '----')
             opt.zero_grad()
             pred = model(batch)
-            real_value = torch.reshape(batch.y, (batch.y.size()[0],1))
+            real_value = torch.reshape(batch.y, (batch.y.size()[0], 1))
             loss = model.loss(pred, real_value)
             loss.backward()
             opt.step()
             total_loss += loss.item() * batch.num_graphs
         total_loss /= len(loader.dataset)
         writer.add_scalar("loss", total_loss, epoch)
-        print("Epoch {}. Loss: {:.4f}.".format(
-                epoch, total_loss))
+        print("Epoch {}. Loss: {:.4f}.".format(epoch, total_loss))
 
         if epoch % 10 == 0:
             test_loss = test(test_loader, model)
-            print("Epoch {}. Loss: {:.4f}. Test loss: {:.4f}".format(
-                epoch, total_loss, test_loss))
+            print(
+                "Epoch {}. Loss: {:.4f}. Test loss: {:.4f}".format(
+                    epoch, total_loss, test_loss
+                )
+            )
             writer.add_scalar("test loss", test_loss, epoch)
 
     return model
+
 
 def test(loader, model, is_validation=False):
     model.eval()
@@ -55,10 +66,11 @@ def test(loader, model, is_validation=False):
             real_value = data.y
         loss = model.loss(pred, real_value)
         total_loss += loss.item() * data.num_graphs
-    
-    total = len(loader.dataset) 
+
+    total = len(loader.dataset)
 
     return total_loss / total
+
 
 # Dataset parameters
 fe = "FePt_32atoms.pkl"

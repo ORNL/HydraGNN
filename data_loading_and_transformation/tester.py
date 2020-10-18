@@ -9,15 +9,16 @@ import pickle
 import pathlib
 from dataset_descriptors import AtomFeatures, StructureFeatures
 from utils import distance_3D, remove_collinear_candidates, order_candidates
-#from serialized_dataset_loader import SerializedDataLoader
-#from raw_dataset_loader import RawDataLoader
+
+# from serialized_dataset_loader import SerializedDataLoader
+# from raw_dataset_loader import RawDataLoader
 import matplotlib.pyplot as plt
 import igraph as ig
 import chart_studio.plotly as py
 import plotly.graph_objects as go
 from mpl_toolkits.mplot3d import Axes3D
 
-'''
+"""
 # testing raw dataset loader
 cu = "CuAu_32atoms"
 fe = "FePt_32atoms"
@@ -162,7 +163,7 @@ data = [trace1, trace2]
 fig = go.Figure(data=data, layout=layout)
 
 fig.show()
-'''
+"""
 # This section should be deleted in the future. Was previously content of scrabble.py.
 # Tensor slicing
 
@@ -180,13 +181,13 @@ print(z)
 
 print(y)
 
-w = z-y
+w = z - y
 
 print(w)
 
 a = np.arange(5)
 b = np.arange(5)
-print(np.divide(a,b))
+print(np.divide(a, b))
 
 # Trying it out with dataset descriptors
 
@@ -201,9 +202,9 @@ print(x[:, a_f_i])
 
 t = x[:, a_f_i]
 print(t.shape)
-y = torch.randn(10,1, dtype=torch.double)
+y = torch.randn(10, 1, dtype=torch.double)
 print(torch.reshape(y, t.shape))
-'''
+"""
 # Computing adjacency matrix.
 # Stopping criterion: maximum distance from our node(radius of a sphere) and maximum number of neighbours
 import torch
@@ -339,4 +340,4 @@ a = [1, 2, 3, 4, 5]
 b = [6, 7, 8]
 a = a[: len(b)] + b
 print(a)
-'''
+"""
