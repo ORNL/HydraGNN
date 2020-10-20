@@ -30,3 +30,7 @@ pip install python-igraph
 
 # Code formatting
 Before commiting and pushing changes, run command `black .` from the main directory of the project(GCNN).
+
+
+# Running the code
+The main file to run is main.py. When running for the first time uncomment the part with RawDatasetLoader on the beginning to process the raw files and create serialized objects.
