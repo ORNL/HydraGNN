@@ -76,7 +76,7 @@ hidden_dim = 15
 
 # Hyperparameters
 learning_rate = 0.01
-#num_epoch = 200
+num_epoch = 200
 #num_conv_layers = 4
 
 possible_hidden = [i for i in range(15, 150, 15)]
