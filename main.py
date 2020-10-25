@@ -77,13 +77,13 @@ hidden_dim = 15
 # Hyperparameters
 learning_rate = 0.01
 #num_epoch = 200
-#num_conv_layer = 4
+#num_conv_layers = 4
 
 possible_hidden = [i for i in range(15, 150, 15)]
-possible_num_conv_layer = [i for i in range(2, 7, 1)]
+possible_num_conv_layers = [i for i in range(2, 7, 1)]
 
 for hidden_dim in possible_hidden:
-    for num_conv_layer in possible_num_conv_layer:
+    for num_conv_layers in possible_num_conv_layers:
 
         ## Setup for PNNStack
         deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
@@ -92,10 +92,10 @@ for hidden_dim in possible_hidden:
             deg += torch.bincount(d, minlength=deg.numel())
 
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layer=num_conv_layer).to(device)
+        model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layers=num_conv_layers).to(device)
         ## Setup for GNNstack
         '''
-        model = GNNStack(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim)
+        model = GNNStack(input_dim=input_dim, hidden_dim=hidden_dim, num_conv_layers=num_conv_layers)
         '''
 
         optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -114,7 +114,7 @@ for hidden_dim in possible_hidden:
             + "-lr-"
             + str(learning_rate)
             + "-ncl-"
-            +str(num_conv_layer)
+            +str(num_conv_layers)
             + ".pk"
         )
         writer = SummaryWriter("./logs/" + model_name)
