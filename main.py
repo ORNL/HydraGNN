@@ -7,8 +7,9 @@ from data_loading_and_transformation.dataset_descriptors import (
     StructureFeatures,
 )
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import os
 
-from train import train, test
+from train import train_validate_test
 from models.GNNStack import GNNStack
 from models.PNNStack import PNNStack
 import torch.optim as optim
@@ -17,16 +18,17 @@ from tensorboardX import SummaryWriter
 from torch_geometric.data import DataLoader
 from torch_geometric.utils import degree
 import torch
+import pickle
 
-"""
-# This is only to be used when running for the first time to process raw files and store them as serialized objects.
-cu = "CuAu_32atoms"
-fe = "FePt_32atoms"
-
-files_dir = "./Dataset/" + fe + "/output_files/"
-loader = RawDataLoader()
-loader.load_raw_data(dataset_path=files_dir)
-"""
+# Loading raw data if necessary
+raw_dataset_choices = {'1': ["CuAu_32atoms"], '2': ["FePt_32atoms"], '3': ["CuAu_32atoms", "FePt_32atoms"]}
+if len(os.listdir("./SerializedDataset")) < 2:
+    print("Select which raw dataset you want to load and process: 1) CuAu 2) FePt 3) all")
+    chosen_raw_dataset = raw_dataset_choices[input("Selected value: ")]
+    for raw_dataset in chosen_raw_dataset:
+        files_dir = "./Dataset/" + raw_dataset + "/output_files/"
+        loader = RawDataLoader()
+        loader.load_raw_data(dataset_path=files_dir)
 
 # Dataset parameters
 fe = "FePt_32atoms.pkl"
@@ -50,6 +52,8 @@ dataset = loader.load_serialized_data(
     max_num_node_neighbours=max_num_node_neighbours,
 )
 
+torch.manual_seed(0)
+
 data_size = len(dataset)
 batch_size = 64
 train_loader = DataLoader(
@@ -69,60 +73,56 @@ test_loader = DataLoader(
 num_node_features = len(atom_features)
 input_dim = num_node_features
 hidden_dim = 15
-output_dim = 1
 
 # Hyperparameters
 learning_rate = 0.01
-num_epoch = 50
+#num_epoch = 200
+#num_conv_layer = 4
 
+possible_hidden = [i for i in range(15, 150, 15)]
+possible_num_conv_layer = [i for i in range(2, 7, 1)]
 
-## Setup for PNNStack
-deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
-for data in dataset[:int(data_size * 0.7)]:
-    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-    deg += torch.bincount(d, minlength=deg.numel())
+for hidden_dim in possible_hidden:
+    for num_conv_layer in possible_num_conv_layer:
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = PNNStack(deg, len(atom_features), hidden_dim).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
-                              min_lr=0.00001)
+        ## Setup for PNNStack
+        deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
+        for data in dataset[:int(data_size * 0.7)]:
+            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            deg += torch.bincount(d, minlength=deg.numel())
 
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layer=num_conv_layer).to(device)
+        ## Setup for GNNstack
+        '''
+        model = GNNStack(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim)
+        '''
 
-## Setup for GNNstack
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
+                                    min_lr=0.00001)
+
+        model_name = (
+            model.__str__()
+            + str(radius)
+            + "-mnnn-"
+            + str(max_num_node_neighbours)
+            + "-hd-"
+            + str(hidden_dim)
+            + "-ne-"
+            + str(num_epoch)
+            + "-lr-"
+            + str(learning_rate)
+            + "-ncl-"
+            +str(num_conv_layer)
+            + ".pk"
+        )
+        writer = SummaryWriter("./logs/" + model_name)
+        train_validate_test(model, optimizer, num_epoch, train_loader, val_loader, test_loader,writer, scheduler)
+        torch.save(model.state_dict(), "./models_serialized/" + model_name)
 '''
-model = GNNStack(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim)
-opt = optim.Adam(model.parameters(), lr=learning_rate)
-scheduler = StepLR(opt, step_size=num_epoch/5, gamma=0.9)
+model.load_state_dict(torch.load("models_serialized/PNNStack7-mnnn-5-hd-75-ne-200-lr-0.01.pk", map_location=torch.device('cpu')))
+print(test(test_loader, model))
+
+
 '''
-
-model_name = (
-    model.__str__()
-    + str(radius)
-    + "-mnnn-"
-    + str(max_num_node_neighbours)
-    + "-hd-"
-    + str(hidden_dim)
-    + "-ne-"
-    + str(num_epoch)
-    + "-lr-"
-    + str(learning_rate)
-    + ".pk"
-)
-
-writer = SummaryWriter("./logs/" + model_name)
-
-torch.manual_seed(0)
-
-for epoch in range(1, num_epoch):
-    loss = train(train_loader, model, optimizer)
-    writer.add_scalar("train error", loss, epoch)
-    val_mse = test(val_loader, model)
-    writer.add_scalar("validate error", val_mse, epoch)
-    test_mse = test(test_loader, model)
-    writer.add_scalar("validate error", val_mse, epoch)
-    scheduler.step(val_mse)
-    print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}, Val: {val_mse:.4f}, '
-          f'Test: {test_mse:.4f}')
-
-torch.save(model.state_dict(), "./models_serialized/" + model_name)

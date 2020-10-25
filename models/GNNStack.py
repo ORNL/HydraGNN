@@ -5,14 +5,14 @@ import torch_geometric.nn as pyg_nn
 
 
 class GNNStack(nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int):
+    def __init__(self, input_dim: int, hidden_dim: int, num_conv_layers: int):
         super(GNNStack, self).__init__()
-        self.num_layers = 4
+        self.num_conv_layers = 4
         self.dropout = 0.25
         self.convs = nn.ModuleList()
         self.convs.append(self.build_conv_model(input_dim, hidden_dim))
         self.lns = nn.ModuleList()
-        for l in range(self.num_layers):
+        for l in range(self.num_conv_layers):
             self.convs.append(self.build_conv_model(hidden_dim, hidden_dim))
             self.lns.append(nn.LayerNorm(hidden_dim))
 
@@ -20,7 +20,7 @@ class GNNStack(nn.Module):
         self.post_mp = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.Dropout(self.dropout),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Linear(hidden_dim, 1),
         )
 
         
@@ -38,11 +38,10 @@ class GNNStack(nn.Module):
     def forward(self, data):
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
-        for i in range(self.num_layers):
+        for i in range(self.num_conv_layers):
             x = self.convs[i](x, edge_index)
             x = F.relu(x)
-            x = F.dropout(x, p=self.dropout, training=self.training)
-            if not i == self.num_layers - 1:
+            if not i == self.num_conv_layers - 1:
                 x = self.lns[i](x)
 
         x = pyg_nn.global_mean_pool(x, batch)

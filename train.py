@@ -1,6 +1,17 @@
 from torch_geometric.data import DataLoader
 import torch
 
+def train_validate_test(model, optimizer, num_epoch, train_loader, val_loader, test_loader, writer, scheduler):
+    for epoch in range(1, num_epoch):
+    loss = train(train_loader, model, optimizer)
+    writer.add_scalar("train error", loss, epoch)
+    val_mse = test(val_loader, model)
+    writer.add_scalar("validate error", val_mse, epoch)
+    test_mse = test(test_loader, model)
+    writer.add_scalar("test error", test_mse, epoch)
+    scheduler.step(val_mse)
+    print(f'Epoch: {epoch:02d}, Loss: {loss:.4f}, Val: {val_mse:.4f}, '
+          f'Test: {test_mse:.4f}')
 
 def train(loader, model, opt):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
