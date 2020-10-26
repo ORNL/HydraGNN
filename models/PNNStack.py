@@ -41,7 +41,7 @@ class PNNStack(torch.nn.Module):
         value_shape = value.shape
         if pred_shape != value_shape:
             value = torch.reshape(value, pred_shape)
-        return F.mse_loss(pred, value)
+        return F.l1_loss(pred, value)
 
     def __str__(self):
         return "PNNStack"

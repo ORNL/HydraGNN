@@ -72,54 +72,48 @@ test_loader = DataLoader(
 # Fixed Parameters
 num_node_features = len(atom_features)
 input_dim = num_node_features
-hidden_dim = 15
+hidden_dim = int(input("Hidden layers: "))
 
 # Hyperparameters
-learning_rate = 0.01
+learning_rate = float(input("Learning rate: "))
 num_epoch = 200
-#num_conv_layers = 4
+num_conv_layers = 16
 
-possible_hidden = [i for i in range(15, 150, 15)]
-possible_num_conv_layers = [i for i in range(2, 7, 1)]
 
-for hidden_dim in possible_hidden:
-    for num_conv_layers in possible_num_conv_layers:
+## Setup for PNNStack
+deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
+for data in dataset[:int(data_size * 0.7)]:
+    d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+    deg += torch.bincount(d, minlength=deg.numel())
 
-        ## Setup for PNNStack
-        deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
-        for data in dataset[:int(data_size * 0.7)]:
-            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-            deg += torch.bincount(d, minlength=deg.numel())
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layers=num_conv_layers).to(device)
 
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layers=num_conv_layers).to(device)
-        ## Setup for GNNstack
-        '''
-        model = GNNStack(input_dim=input_dim, hidden_dim=hidden_dim, num_conv_layers=num_conv_layers)
-        '''
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
+                            min_lr=0.00001)
 
-        optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
-                                    min_lr=0.00001)
-
-        model_name = (
-            model.__str__()
-            + str(radius)
-            + "-mnnn-"
-            + str(max_num_node_neighbours)
-            + "-hd-"
-            + str(hidden_dim)
-            + "-ne-"
-            + str(num_epoch)
-            + "-lr-"
-            + str(learning_rate)
-            + "-ncl-"
-            +str(num_conv_layers)
-            + ".pk"
-        )
-        writer = SummaryWriter("./logs/" + model_name)
-        train_validate_test(model, optimizer, num_epoch, train_loader, val_loader, test_loader,writer, scheduler)
-        torch.save(model.state_dict(), "./models_serialized/" + model_name)
+model_name = (
+    model.__str__()
+    + "-r-"
+    + str(radius)
+    + "-mnnn-"
+    + str(max_num_node_neighbours)
+    + "-num_conv_layers-"
+    + str(num_conv_layers)
+    + "-hd-"
+    + str(hidden_dim)
+    + "-ne-"
+    + str(num_epoch)
+    + "-lr-"
+    + str(learning_rate)
+    + "-ncl-"
+    +str(num_conv_layers)
+    + ".pk"
+)
+writer = SummaryWriter("./logs/" + model_name)
+train_validate_test(model, optimizer, num_epoch, train_loader, val_loader, test_loader,writer, scheduler)
+torch.save(model.state_dict(), "./models_serialized/" + model_name)
 '''
 model.load_state_dict(torch.load("models_serialized/PNNStack7-mnnn-5-hd-75-ne-200-lr-0.01.pk", map_location=torch.device('cpu')))
 print(test(test_loader, model))
