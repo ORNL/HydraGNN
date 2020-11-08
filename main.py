@@ -61,7 +61,7 @@ dataset2 = loader.load_serialized_data(
     max_num_node_neighbours=max_num_node_neighbours,
 )
 torch.manual_seed(0)
-dataset = dataset1+dataset2
+
 batch_size = int(input("Batch size, integer value: "))
 #train_loader, val_loader, test_loader = split_dataset(dataset=dataset, batch_size=batch_size, perc_train=0.7, perc_val)
 train_loader, val_loader, test_loader = combine_and_split_datasets(dataset1=dataset1, dataset2=dataset2, batch_size=batch_size, perc_train=0.8)
@@ -82,6 +82,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = GINStack(input_dim=input_dim, hidden_dim=hidden_dim, num_conv_layers=num_conv_layers).to(device)
 """
 ## Setup for PNNStack
+
+dataset = dataset1+dataset2
+data_size = len(dataset)
+
 deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
 for data in dataset[:int(data_size * 0.7)]:
     d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
