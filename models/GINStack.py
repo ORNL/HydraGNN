@@ -4,10 +4,10 @@ import torch.nn as nn
 import torch_geometric.nn as pyg_nn
 
 
-class GNNStack(nn.Module):
+class GINStack(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, num_conv_layers: int):
-        super(GNNStack, self).__init__()
-        self.num_conv_layers = 4
+        super(GINStack, self).__init__()
+        self.num_conv_layers = num_conv_layers
         self.dropout = 0.25
         self.convs = nn.ModuleList()
         self.convs.append(self.build_conv_model(input_dim, hidden_dim))
@@ -58,4 +58,4 @@ class GNNStack(nn.Module):
         return F.mse_loss(pred, value)
     
     def __str__(self):
-        return "GNNStack"
+        return "GINStack"

@@ -9,8 +9,8 @@ from data_loading_and_transformation.dataset_descriptors import (
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import os
 
-from train import train_validate_test
-from models.GNNStack import GNNStack
+from utils import train_validate_test, split_dataset, combine_and_split_datasets
+from models.GINStack import GINStack
 from models.PNNStack import PNNStack
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
@@ -32,7 +32,9 @@ if len(os.listdir("./SerializedDataset")) < 2:
 
 # Dataset parameters
 fe = "FePt_32atoms.pkl"
-files_dir = "./SerializedDataset/" + fe
+cu = "CuAu_32atoms.pkl"
+files_dir1 = "./SerializedDataset/" + fe
+files_dir2 = "./SerializedDataset/" + cu
 
 atom_features = [
     AtomFeatures.NUM_OF_PROTONS,
@@ -44,51 +46,49 @@ radius = 7
 max_num_node_neighbours = 5
 
 loader = SerializedDataLoader()
-dataset = loader.load_serialized_data(
-    dataset_path=files_dir,
+dataset1 = loader.load_serialized_data(
+    dataset_path=files_dir1,
     atom_features=atom_features,
     structure_features=structure_features,
     radius=radius,
     max_num_node_neighbours=max_num_node_neighbours,
 )
-
+dataset2 = loader.load_serialized_data(
+    dataset_path=files_dir2,
+    atom_features=atom_features,
+    structure_features=structure_features,
+    radius=radius,
+    max_num_node_neighbours=max_num_node_neighbours,
+)
 torch.manual_seed(0)
 
-data_size = len(dataset)
-batch_size = 64
-train_loader = DataLoader(
-    dataset[: int(data_size * 0.7)], batch_size=batch_size, shuffle=True
-)
-val_loader = DataLoader(
-    dataset[int(data_size * 0.7) : int(data_size * 0.85)],
-    batch_size=batch_size,
-    shuffle=True,
-)
-test_loader = DataLoader(
-    dataset[int(data_size * 0.85) :], batch_size=batch_size, shuffle=True
-)
-
+batch_size = int(input("Batch size, integer value: "))
+#train_loader, val_loader, test_loader = split_dataset(dataset=dataset, batch_size=batch_size, perc_train=0.7, perc_val)
+train_loader, val_loader, test_loader = combine_and_split_datasets(dataset1=dataset1, dataset2=dataset2, batch_size=batch_size, perc_train=0.8)
 ## GCNN parameters
 # Fixed Parameters
 num_node_features = len(atom_features)
 input_dim = num_node_features
-hidden_dim = int(input("Hidden layers: "))
+hidden_dim = 20
 
 # Hyperparameters
-learning_rate = float(input("Learning rate: "))
+learning_rate = 0.0025
 num_epoch = 200
 num_conv_layers = 16
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+## Setup for GINStack
+model = GINStack(input_dim=input_dim, hidden_dim=hidden_dim, num_conv_layers=num_conv_layers).to(device)
+'''
 ## Setup for PNNStack
 deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
 for data in dataset[:int(data_size * 0.7)]:
     d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
     deg += torch.bincount(d, minlength=deg.numel())
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layers=num_conv_layers).to(device)
-
+'''
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
                             min_lr=0.00001)

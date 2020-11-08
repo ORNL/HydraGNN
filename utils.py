@@ -41,3 +41,36 @@ def test(loader, model):
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset)
+
+
+def split_dataset(dataset: [], batch_size: int, perc_train: float, perc_val: float):
+    data_size = len(dataset)
+    train_loader = DataLoader(
+        dataset[: int(data_size * perc_train)], batch_size=batch_size, shuffle=True
+    )
+    val_loader = DataLoader(
+        dataset[int(data_size * perc_train) : int(data_size * (perc_train + perc_val))],
+        batch_size=batch_size,
+        shuffle=True,
+    )
+    test_loader = DataLoader(
+        dataset[int(data_size * (perc_train + perc_val)) :], batch_size=batch_size, shuffle=True
+    )
+
+    return train_loader, val_loader, test_loader
+
+def combine_and_split_datasets(dataset1: [], dataset2:[], batch_size: int, perc_train: float):
+    data_size = len(dataset1)
+    train_loader = DataLoader(
+        dataset1[: int(data_size * perc_train)], batch_size=batch_size, shuffle=True
+    )
+    val_loader = DataLoader(
+        dataset1[int(data_size * perc_train) :],
+        batch_size=batch_size,
+        shuffle=True,
+    )
+    test_loader = DataLoader(
+        dataset2, batch_size=batch_size, shuffle=True
+    )
+
+    return train_loader, val_loader, test_loader
