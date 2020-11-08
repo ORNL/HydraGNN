@@ -61,7 +61,7 @@ dataset2 = loader.load_serialized_data(
     max_num_node_neighbours=max_num_node_neighbours,
 )
 torch.manual_seed(0)
-
+dataset = dataset1+dataset2
 batch_size = int(input("Batch size, integer value: "))
 #train_loader, val_loader, test_loader = split_dataset(dataset=dataset, batch_size=batch_size, perc_train=0.7, perc_val)
 train_loader, val_loader, test_loader = combine_and_split_datasets(dataset1=dataset1, dataset2=dataset2, batch_size=batch_size, perc_train=0.8)
@@ -72,15 +72,15 @@ input_dim = num_node_features
 hidden_dim = 20
 
 # Hyperparameters
-learning_rate = 0.0025
+learning_rate = 0.005
 num_epoch = 200
-num_conv_layers = 16
+num_conv_layers = int(input("Number of convolutional layers: "))
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+"""
 ## Setup for GINStack
 model = GINStack(input_dim=input_dim, hidden_dim=hidden_dim, num_conv_layers=num_conv_layers).to(device)
-'''
+"""
 ## Setup for PNNStack
 deg = torch.zeros(max_num_node_neighbours + 1, dtype=torch.long)
 for data in dataset[:int(data_size * 0.7)]:
@@ -88,7 +88,7 @@ for data in dataset[:int(data_size * 0.7)]:
     deg += torch.bincount(d, minlength=deg.numel())
 
 model = PNNStack(deg, len(atom_features), hidden_dim, num_conv_layers=num_conv_layers).to(device)
-'''
+
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=20,
                             min_lr=0.00001)
@@ -109,6 +109,8 @@ model_name = (
     + str(learning_rate)
     + "-ncl-"
     +str(num_conv_layers)
+    +"-bs-"
+    +str(batch_size)
     + ".pk"
 )
 writer = SummaryWriter("./logs/" + model_name)

@@ -136,7 +136,10 @@ axis = dict(
     title="",
 )
 layout = go.Layout(
-    title="Structure (3D visualization), radius = " + str(radius) + ", maximum number of neighbours = " + str(max_num_node_neighbours),
+    title="Structure (3D visualization), radius = "
+    + str(radius)
+    + ", maximum number of neighbours = "
+    + str(max_num_node_neighbours),
     width=1000,
     height=1000,
     showlegend=False,

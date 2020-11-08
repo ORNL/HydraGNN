@@ -23,8 +23,6 @@ class GINStack(nn.Module):
             nn.Linear(hidden_dim, 1),
         )
 
-        
-
     def build_conv_model(self, input_dim, hidden_dim):
         # refer to pytorch geometric nn module for different implementation of GNNs.
         return pyg_nn.GINConv(
@@ -56,6 +54,6 @@ class GINStack(nn.Module):
         if pred_shape != value_shape:
             value = torch.reshape(value, pred_shape)
         return F.mse_loss(pred, value)
-    
+
     def __str__(self):
         return "GINStack"
