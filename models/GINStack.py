@@ -9,18 +9,19 @@ class GINStack(nn.Module):
         super(GINStack, self).__init__()
         self.num_conv_layers = num_conv_layers
         self.dropout = 0.25
+        self.hidden_dim = hidden_dim
         self.convs = nn.ModuleList()
-        self.convs.append(self.build_conv_model(input_dim, hidden_dim))
+        self.convs.append(self.build_conv_model(input_dim, self.hidden_dim))
         self.lns = nn.ModuleList()
         for l in range(self.num_conv_layers):
-            self.convs.append(self.build_conv_model(hidden_dim, hidden_dim))
-            self.lns.append(nn.LayerNorm(hidden_dim))
+            self.convs.append(self.build_conv_model(self.hidden_dim, self.hidden_dim))
+            self.lns.append(nn.LayerNorm(self.hidden_dim))
 
         # post-message-passing
         self.post_mp = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.Dropout(self.dropout),
-            nn.Linear(hidden_dim, 1),
+            nn.Linear(self.hidden_dim, 1),
         )
 
     def build_conv_model(self, input_dim, hidden_dim):

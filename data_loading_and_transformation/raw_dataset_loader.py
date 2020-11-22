@@ -5,10 +5,8 @@ import numpy as np
 import pickle
 import pathlib
 from data_loading_and_transformation.dataset_descriptors import (
-    AtomFeatures,
     StructureFeatures,
 )
-import matplotlib.pyplot as plt
 
 
 class RawDataLoader:
@@ -24,7 +22,7 @@ class RawDataLoader:
 
     def load_raw_data(self, dataset_path: str):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
-        After that the serialized data is stored to the SerializedDataset directory.
+        After that the serialized data is stored to the serialized_dataset directory.
 
         Parameters
         ----------
@@ -42,10 +40,10 @@ class RawDataLoader:
         dataset_normalized = self.__normalize_dataset(dataset=dataset)
 
         serial_data_name = (pathlib.PurePath(dataset_path)).parent.name
-        serial_data_path = "./SerializedDataset/" + serial_data_name + ".pkl"
+        serial_data_path = "./serialized_dataset/" + serial_data_name + ".pkl"
 
         with open(serial_data_path, "wb") as f:
-            pickle.dump(dataset, f)
+            pickle.dump(dataset_normalized, f)
 
     def __transform_input_to_data_object(self, lines: [str]):
         """Transforms lines of strings read from the raw data file to Data object and returns it.
@@ -78,7 +76,7 @@ class RawDataLoader:
             z_pos = float(node_feat[4].strip())
             node_position_matrix.append([x_pos, y_pos, z_pos])
 
-            num_of_protons = int(node_feat[0].strip())
+            num_of_protons = float(node_feat[0].strip())
             charge_density = float(node_feat[5].strip())
             magnetic_moment = float(node_feat[6].strip())
 

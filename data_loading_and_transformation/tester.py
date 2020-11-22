@@ -10,8 +10,8 @@ import pathlib
 from dataset_descriptors import AtomFeatures, StructureFeatures
 from utils import distance_3D, remove_collinear_candidates, order_candidates
 
-# from serialized_dataset_loader import SerializedDataLoader
-# from raw_dataset_loader import RawDataLoader
+from serialized_dataset_loader import SerializedDataLoader
+from raw_dataset_loader import RawDataLoader
 import matplotlib.pyplot as plt
 import igraph as ig
 import chart_studio.plotly as py
@@ -31,7 +31,7 @@ loader.load_raw_data(dataset_path=files_dir)
 
 cu = "CuAu_32atoms.pkl"
 fe = "FePt_32atoms.pkl"
-files_dir = "./SerializedDataset/" + fe
+files_dir = "./serialized_dataset/" + fe
 
 atom_features = [
     AtomFeatures.NUM_OF_PROTONS,
@@ -324,7 +324,7 @@ adjacency_matrix = torch.tensor(np.nonzero(neighbour_matrix))
 print(adjacency_matrix)
 
 data = Data()
-dataset_path = "./SerializedDataset/FePt_32atoms.pkl"
+dataset_path = "./serialized_dataset/FePt_32atoms.pkl"
 with open(dataset_path, "rb") as f:
     data = pickle.load(f)[0]
 

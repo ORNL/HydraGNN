@@ -2,45 +2,47 @@ import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
 from torch.nn import Sequential, ReLU, Linear
-from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
+from torch_geometric.nn import GATConv, BatchNorm, global_mean_pool
 
 
-class PNNStack(torch.nn.Module):
-    def __init__(self, deg, input_dim, hidden_dim, num_conv_layers):
-        super(PNNStack, self).__init__()
+class GATStack(torch.nn.Module):
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim: int = 16,
+        heads: int = 1,
+        negative_slope: float = 0.2,
+        dropout: float = 0.25,
+        num_conv_layers: int = 16,
+    ):
+        super(GATStack, self).__init__()
 
-        aggregators = ["mean", "min", "max", "std"]
-        scalers = ["identity", "amplification", "attenuation"]
-
-        self.dropout = 0.25
+        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.dropout = dropout
         self.num_conv_layers = num_conv_layers
+        self.heads = heads
+        self.negative_slope = negative_slope
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
         self.convs.append(
-            PNAConv(
-                in_channels=input_dim,
+            GATConv(
+                in_channels=self.input_dim,
                 out_channels=self.hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
-                towers=2,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
+                heads=self.heads,
+                negative_slope=self.negative_slope,
+                dropout=self.dropout,
+                add_self_loops=True,
             )
         )
         for _ in range(self.num_conv_layers):
-            conv = PNAConv(
+            conv = GATConv(
                 in_channels=self.hidden_dim,
                 out_channels=self.hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
-                towers=2,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
+                heads=self.heads,
+                negative_slope=self.negative_slope,
+                dropout=self.dropout,
+                add_self_loops=True,
             )
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
@@ -64,4 +66,4 @@ class PNNStack(torch.nn.Module):
         return F.l1_loss(pred, value)
 
     def __str__(self):
-        return "PNNStack"
+        return "GATStack"

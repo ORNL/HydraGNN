@@ -33,4 +33,4 @@ Before commiting and pushing changes, run command `black .` from the main direct
 
 
 # Running the code
-The main file to run is main.py. When running for the first time uncomment the part with RawDatasetLoader on the beginning to process the raw files and create serialized objects.
+The main file to run is main.py. When running for the first time uncomment the part with RawdatasetLoader on the beginning to process the raw files and create serialized objects.

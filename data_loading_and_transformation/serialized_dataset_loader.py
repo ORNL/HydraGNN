@@ -1,10 +1,7 @@
-import os
 from torch_geometric.data import Data
 import torch
-from torch import tensor
 import numpy as np
 import pickle
-import pathlib
 from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
     StructureFeatures,
