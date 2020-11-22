@@ -106,6 +106,8 @@ class RawDataLoader:
         """
         max_free_energy = float("-inf")
         min_free_energy = float("inf")
+        max_proton_number = np.full(StructureFeatures.SIZE.value, -np.inf)
+        min_proton_number = np.full(StructureFeatures.SIZE.value, np.inf)
         max_charge_density = np.full(StructureFeatures.SIZE.value, -np.inf)
         min_charge_density = np.full(StructureFeatures.SIZE.value, np.inf)
 
@@ -116,6 +118,8 @@ class RawDataLoader:
             # histogram_data_free_energy.append(data.y[0].item())
             max_free_energy = max(abs(data.y[0]), max_free_energy)
             min_free_energy = min(abs(data.y[0]), min_free_energy)
+            max_proton_number = np.maximum(data.x[:, 0].numpy(), max_proton_number)
+            min_proton_number = np.minimum(data.x[:, 0].numpy(), min_proton_number)
             max_charge_density = np.maximum(data.x[:, 1].numpy(), max_charge_density)
             min_charge_density = np.minimum(data.x[:, 1].numpy(), min_charge_density)
 
@@ -124,6 +128,9 @@ class RawDataLoader:
                 max_free_energy - min_free_energy
             )
             # histogram_data_normalized_free_energy.append(data.y[0].item())
+            data.x[:, 0] = (data.x[:, 0] - min_proton_number) / (
+                max_proton_number - min_proton_number
+            )
             data.x[:, 1] = (data.x[:, 1] - min_charge_density) / (
                 max_charge_density - min_charge_density
             )
