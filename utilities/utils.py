@@ -1,29 +1,73 @@
 from torch_geometric.data import DataLoader
 import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from data_loading_and_transformation.serialized_dataset_loader import SerializedDataLoader
+from data_loading_and_transformation.raw_dataset_loader import RawDataLoader
+from ray import tune
+from torch import nn
+from data_loading_and_transformation.dataset_descriptors import (
+    AtomFeatures,
+    StructureFeatures,
+)
+import os
+from utilities.models_setup import generate_model
+
+def train_validate_test(config, checkpoint_dir=None, data_dir=None):
+    
+    atom_features = [
+    AtomFeatures.NUM_OF_PROTONS,
+    AtomFeatures.CHARGE_DENSITY,
+    AtomFeatures.MAGNETIC_MOMENT,
+    ]
+    structure_features = [StructureFeatures.FREE_ENERGY]
+
+    input_dim = len(atom_features)
+    dataset = load_data(config, structure_features, atom_features)
+
+    model = generate_model(model_type="PNN", input_dim=input_dim, dataset=dataset, max_num_node_neighbours=config['max_num_node_neighbours'], hidden_dim=config['hidden_dim'], num_conv_layers=config['num_conv_layers'])
 
 
-def train_validate_test(
-    model,
-    optimizer,
-    num_epoch,
-    train_loader,
-    val_loader,
-    test_loader,
-    writer,
-    scheduler,
-):
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
+    scheduler = ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=20, min_lr=0.00001
+    )
+
+    train_loader, val_loader, test_loader = split_dataset(
+        dataset=dataset, batch_size=config["batch_size"], perc_train=0.7, perc_val=0.15
+    )
+
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
+    model.to(device)
+
+    if checkpoint_dir:
+        model_state, optimizer_state = torch.load(
+            os.path.join(checkpoint_dir, "checkpoint"))
+        model.load_state_dict(model_state)
+        optimizer.load_state_dict(optimizer_state)
+
+    num_epoch = 200
+
     for epoch in range(1, num_epoch):
-        loss = train(train_loader, model, optimizer)
-        writer.add_scalar("train error", loss, epoch)
-        val_mse = test(val_loader, model)
-        writer.add_scalar("validate error", val_mse, epoch)
-        test_mse = test(test_loader, model)
-        writer.add_scalar("test error", test_mse, epoch)
-        scheduler.step(val_mse)
+        train_mae = train(train_loader, model, optimizer)
+        #writer.add_scalar("train error", train_mae, epoch)
+        val_mae = test(val_loader, model)
+        #writer.add_scalar("validate error", val_mae, epoch)
+        test_mae = test(test_loader, model)
+        #writer.add_scalar("test error", test_mae, epoch)
+        scheduler.step(val_mae)
         print(
-            f"Epoch: {epoch:02d}, Loss: {loss:.4f}, Val: {val_mse:.4f}, "
-            f"Test: {test_mse:.4f}"
+            f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
+            f"Test MAE: {test_mae:.4f}"
         )
+        with tune.checkpoint_dir(epoch) as checkpoint_dir:
+            path = os.path.join(checkpoint_dir, "checkpoint")
+            torch.save((model.state_dict(), optimizer.state_dict()), path)
+
+        tune.report(train_mae=train_mae, val_mae=val_mae)
 
 
 def train(loader, model, opt):
@@ -68,7 +112,7 @@ def split_dataset(dataset: [], batch_size: int, perc_train: float, perc_val: flo
         shuffle=True,
     )
     test_loader = DataLoader(
-        dataset[int(data_size * (perc_train + perc_val)) :],
+        dataset[int(data_size * (perc_train + perc_val)):],
         batch_size=batch_size,
         shuffle=True,
     )
@@ -91,3 +135,32 @@ def combine_and_split_datasets(
     test_loader = DataLoader(dataset2, batch_size=batch_size, shuffle=True)
 
     return train_loader, val_loader, test_loader
+
+
+def load_data(config, structure_features, atom_features):
+    # Loading raw data if necessary
+    raw_datasets = ["CuAu_32atoms", "FePt_32atoms"]
+    if len(os.listdir("/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset")) < 2:
+        for raw_dataset in raw_datasets:
+            files_dir = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/dataset/" + raw_dataset + "/output_files/"
+            loader = RawDataLoader()
+            loader.load_raw_data(dataset_path=files_dir)
+
+    # dataset parameters
+    fe = "FePt_32atoms.pkl"
+    cu = "CuAu_32atoms.pkl"
+    files_dir1 = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset/" + fe
+    files_dir2 = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset/" + cu
+
+
+    # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
+    loader = SerializedDataLoader()
+    dataset = loader.load_serialized_data(
+        dataset_path=files_dir1,
+        atom_features=atom_features,
+        structure_features=structure_features,
+        radius=config["radius"],
+        max_num_node_neighbours=config["max_num_node_neighbours"],
+    )
+
+    return dataset

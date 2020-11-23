@@ -40,7 +40,7 @@ class RawDataLoader:
         dataset_normalized = self.__normalize_dataset(dataset=dataset)
 
         serial_data_name = (pathlib.PurePath(dataset_path)).parent.name
-        serial_data_path = "./serialized_dataset/" + serial_data_name + ".pkl"
+        serial_data_path = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset/" + serial_data_name + ".pkl"
 
         with open(serial_data_path, "wb") as f:
             pickle.dump(dataset_normalized, f)

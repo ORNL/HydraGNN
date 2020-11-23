@@ -8,13 +8,9 @@ from torch_geometric.utils import degree
 
 
 def generate_model(
-    model_type: str, input_dim: int, dataset: [Data], max_num_node_neighbours: int
+    model_type: str, input_dim: int, dataset: [Data], max_num_node_neighbours: int, hidden_dim: int, num_conv_layers: int
 ):
     torch.manual_seed(0)
-    num_conv_layers = int(
-        input("Number of convolutional layers(depends on the model used): ")
-    )
-    hidden_dim = int(input("Size of the convolutional layer(hidden dimension): "))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if model_type == "GIN":
@@ -36,22 +32,19 @@ def generate_model(
         ).to(device)
 
     elif model_type == "GAT":
-        heads = int(input("Enter the number of multi-head-attentions(default 1): "))
-        negative_slope = float(
-            input("Enter LeakyReLU angle of the negative slope(default 0.2): ")
-        )
-        dropout = float(
-            input(
-                "Enter dropout probability of the normalized attention coefficients which exposes each node to a stochastically sampled neighborhood during training(default 0): "
-            )
-        )
+        # heads = int(input("Enter the number of multi-head-attentions(default 1): "))
+        # negative_slope = float(
+        #     input("Enter LeakyReLU angle of the negative slope(default 0.2): ")
+        # )
+        # dropout = float(
+        #     input(
+        #         "Enter dropout probability of the normalized attention coefficients which exposes each node to a stochastically sampled neighborhood during training(default 0): "
+        #     )
+        # )
 
         model = GATStack(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
-            heads=heads,
-            negative_slope=negative_slope,
-            dropout=dropout,
             num_conv_layers=num_conv_layers,
         ).to(device)
 
