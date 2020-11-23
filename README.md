@@ -28,6 +28,11 @@ For visualizing structure connections.
 pip install python-igraph
 ```
 
+For Bayesian hyperparameter optimization.
+'''
+pip install ray[tune]
+pip install hpbandster ConfigSpace
+'''
 # Code formatting
 Before commiting and pushing changes, run command `black .` from the main directory of the project(GCNN).
 

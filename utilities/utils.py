@@ -140,17 +140,17 @@ def combine_and_split_datasets(
 def load_data(config, structure_features, atom_features):
     # Loading raw data if necessary
     raw_datasets = ["CuAu_32atoms", "FePt_32atoms"]
-    if len(os.listdir("/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset")) < 2:
+    if len(os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")) < 2:
         for raw_dataset in raw_datasets:
-            files_dir = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/dataset/" + raw_dataset + "/output_files/"
+            files_dir = os.environ["SERIALIZED_DATA_PATH"] + "/dataset/" + raw_dataset + "/output_files/"
             loader = RawDataLoader()
             loader.load_raw_data(dataset_path=files_dir)
 
     # dataset parameters
     fe = "FePt_32atoms.pkl"
     cu = "CuAu_32atoms.pkl"
-    files_dir1 = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset/" + fe
-    files_dir2 = "/home/mburcul/Desktop/Faculty/Master-thesis/GCNN/serialized_dataset/" + cu
+    files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
+    files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
 
 
     # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours

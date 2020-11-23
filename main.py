@@ -6,7 +6,9 @@ from ray.tune.schedulers import HyperBandForBOHB
 import numpy as np
 from utilities.utils import train_validate_test
 from functools import partial
+import os
 
+os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
 config = {"batch_size": tune.choice([30,35,40,45,50,55,60,65,70,75,80,85,90]),
          "learning_rate": tune.loguniform(1e-5, 5e-2),
@@ -16,7 +18,7 @@ config = {"batch_size": tune.choice([30,35,40,45,50,55,60,65,70,75,80,85,90]),
          "max_num_node_neighbours": tune.randint(1, 32),
          }
 
-algo = TuneBOHB(max_concurrent=4, metric="val_mae", mode="min")
+algo = TuneBOHB(max_concurrent=6, metric="val_mae", mode="min")
 
 bohb = HyperBandForBOHB(
     time_attr="training_iteration",
@@ -29,7 +31,7 @@ reporter = CLIReporter(
 
 result = tune.run(
     partial(train_validate_test, checkpoint_dir="./checkpoint-ray-tune"),
-    resources_per_trial={"cpu": 2, "gpu": 0},
+    resources_per_trial={"cpu": 4, "gpu": 0},
     config=config,
     search_alg=algo,
     num_samples=100,
