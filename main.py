@@ -18,7 +18,7 @@ config = {"batch_size": tune.choice([8,16,32,64]),
          "max_num_node_neighbours": tune.randint(1, 32),
          }
 
-algo = TuneBOHB(max_concurrent=6, metric="val_mae", mode="min")
+algo = TuneBOHB(max_concurrent=10, metric="val_mae", mode="min")
 
 bohb = HyperBandForBOHB(
     time_attr="training_iteration",

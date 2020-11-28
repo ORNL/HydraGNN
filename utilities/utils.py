@@ -23,7 +23,7 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
 
     input_dim = len(atom_features)
     dataset1, dataset2 = load_data(config, structure_features, atom_features)
-    dataset = dataset1.extend(dataset2)
+    dataset = dataset1+dataset2
     model = generate_model(model_type="PNN", input_dim=input_dim, dataset=dataset, max_num_node_neighbours=config['max_num_node_neighbours'], hidden_dim=config['hidden_dim'], num_conv_layers=config['num_conv_layers'])
 
 
@@ -152,7 +152,6 @@ def load_data(config, structure_features, atom_features):
     cu = "CuAu_32atoms.pkl"
     files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
     files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
-
 
     # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
     loader = SerializedDataLoader()

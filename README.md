@@ -5,12 +5,12 @@ Installing required packages.
 
 For running on a machine that has only cpu.
 ```
-pip install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
-pip install torch-scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
-pip install torch-sparse==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
-pip install torch-cluster==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
-pip install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
-pip install torch-geometric
+pip3 install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+pip3 install torch-scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+pip3 install torch-sparse==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+pip3 install torch-cluster==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+pip3 install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
+pip3 install torch-geometric
 ```
 
 For serialization and storing the processed data for later sessions.
