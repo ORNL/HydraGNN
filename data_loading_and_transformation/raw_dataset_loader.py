@@ -7,7 +7,7 @@ import pathlib
 from data_loading_and_transformation.dataset_descriptors import (
     StructureFeatures,
 )
-
+from utilities import settings
 
 class RawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
@@ -106,20 +106,12 @@ class RawDataLoader:
         """
         max_free_energy = float("-inf")
         min_free_energy = float("inf")
-        max_proton_number = np.full(StructureFeatures.SIZE.value, -np.inf)
-        min_proton_number = np.full(StructureFeatures.SIZE.value, np.inf)
         max_charge_density = np.full(StructureFeatures.SIZE.value, -np.inf)
         min_charge_density = np.full(StructureFeatures.SIZE.value, np.inf)
 
-        # histogram_data_free_energy = []
-        # histogram_data_normalized_free_energy = []
-
         for data in dataset:
-            # histogram_data_free_energy.append(data.y[0].item())
             max_free_energy = max(abs(data.y[0]), max_free_energy)
             min_free_energy = min(abs(data.y[0]), min_free_energy)
-            max_proton_number = np.maximum(data.x[:, 0].numpy(), max_proton_number)
-            min_proton_number = np.minimum(data.x[:, 0].numpy(), min_proton_number)
             max_charge_density = np.maximum(data.x[:, 1].numpy(), max_charge_density)
             min_charge_density = np.minimum(data.x[:, 1].numpy(), min_charge_density)
 
@@ -127,19 +119,9 @@ class RawDataLoader:
             data.y[0] = (data.y[0] - min_free_energy) / (
                 max_free_energy - min_free_energy
             )
-            # histogram_data_normalized_free_energy.append(data.y[0].item())
-            data.x[:, 0] = (data.x[:, 0] - min_proton_number) / (
-                max_proton_number - min_proton_number
-            )
+            data.x[:, 0] = (data.x[:, 0] - settings.NUMBER_OF_NATURAL_ELEMENTS/2) / settings.NUMBER_OF_NATURAL_ELEMENTS
             data.x[:, 1] = (data.x[:, 1] - min_charge_density) / (
                 max_charge_density - min_charge_density
             )
-
-        # Visualizing the normalization effect
-        # plt.figure("Free energy histogram")
-        # plt.hist(histogram_data_free_energy,bins=50 , range=(min(histogram_data_free_energy)-1000, max(histogram_data_free_energy)+1000))
-        # plt.figure("Normalized free energy histogram")
-        # plt.hist(histogram_data_normalized_free_energy,bins=100, range=(-3,0))
-        # plt.show()
 
         return dataset

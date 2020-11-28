@@ -10,7 +10,7 @@ pip install torch-scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch
 pip install torch-sparse==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
 pip install torch-cluster==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
 pip install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
-pip install torch-geometric'
+pip install torch-geometric
 ```
 
 For serialization and storing the processed data for later sessions.

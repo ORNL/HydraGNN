@@ -22,18 +22,18 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
     structure_features = [StructureFeatures.FREE_ENERGY]
 
     input_dim = len(atom_features)
-    dataset = load_data(config, structure_features, atom_features)
-
+    dataset1, dataset2 = load_data(config, structure_features, atom_features)
+    dataset = dataset1.extend(dataset2)
     model = generate_model(model_type="PNN", input_dim=input_dim, dataset=dataset, max_num_node_neighbours=config['max_num_node_neighbours'], hidden_dim=config['hidden_dim'], num_conv_layers=config['num_conv_layers'])
 
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
     scheduler = ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=20, min_lr=0.00001
+        optimizer, mode="min", factor=0.5, patience=10, min_lr=0.00001
     )
 
-    train_loader, val_loader, test_loader = split_dataset(
-        dataset=dataset, batch_size=config["batch_size"], perc_train=0.7, perc_val=0.15
+    train_loader, val_loader, test_loader = combine_and_split_datasets(
+        dataset1=dataset1, dataset2=dataset2, batch_size=config["batch_size"], perc_train=0.7
     )
 
     device = "cpu"
@@ -63,9 +63,10 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
             f"Test MAE: {test_mae:.4f}"
         )
-        with tune.checkpoint_dir(epoch) as checkpoint_dir:
-            path = os.path.join(checkpoint_dir, "checkpoint")
-            torch.save((model.state_dict(), optimizer.state_dict()), path)
+        if epoch%10 == 0:
+            with tune.checkpoint_dir(epoch) as checkpoint_dir:
+                path = os.path.join(checkpoint_dir, "checkpoint")
+                torch.save((model.state_dict(), optimizer.state_dict()), path)
 
         tune.report(train_mae=train_mae, val_mae=val_mae)
 
@@ -155,12 +156,19 @@ def load_data(config, structure_features, atom_features):
 
     # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
     loader = SerializedDataLoader()
-    dataset = loader.load_serialized_data(
+    dataset1 = loader.load_serialized_data(
         dataset_path=files_dir1,
         atom_features=atom_features,
         structure_features=structure_features,
         radius=config["radius"],
         max_num_node_neighbours=config["max_num_node_neighbours"],
     )
+    dataset2 = loader.load_serialized_data(
+        dataset_path=files_dir2,
+        atom_features=atom_features,
+        structure_features=structure_features,
+        radius=config["radius"],
+        max_num_node_neighbours=config["max_num_node_neighbours"],
+    )
 
-    return dataset
+    return dataset1, dataset2
