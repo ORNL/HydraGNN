@@ -12,8 +12,7 @@ from data_loading_and_transformation.dataset_descriptors import (
 import os
 from utilities.models_setup import generate_model
 
-def train_validate_test(config, checkpoint_dir=None, data_dir=None):
-    
+def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, writer=None):
     atom_features = [
     AtomFeatures.NUM_OF_PROTONS,
     AtomFeatures.CHARGE_DENSITY,
@@ -22,9 +21,10 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
     structure_features = [StructureFeatures.FREE_ENERGY]
 
     input_dim = len(atom_features)
+    perc_train = 0.7
     dataset1, dataset2 = load_data(config, structure_features, atom_features)
-    dataset = dataset1+dataset2
-    model = generate_model(model_type="PNN", input_dim=input_dim, dataset=dataset, max_num_node_neighbours=config['max_num_node_neighbours'], hidden_dim=config['hidden_dim'], num_conv_layers=config['num_conv_layers'])
+
+    model = generate_model(model_type="PNN", input_dim=input_dim, dataset=dataset1[:int(len(dataset1)*perc_train)], config=config)
 
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
@@ -33,7 +33,7 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
     )
 
     train_loader, val_loader, test_loader = combine_and_split_datasets(
-        dataset1=dataset1, dataset2=dataset2, batch_size=config["batch_size"], perc_train=0.7
+        dataset1=dataset1, dataset2=dataset2, batch_size=config["batch_size"], perc_train=perc_train
     )
 
     device = "cpu"
@@ -53,11 +53,8 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
 
     for epoch in range(1, num_epoch):
         train_mae = train(train_loader, model, optimizer)
-        #writer.add_scalar("train error", train_mae, epoch)
         val_mae = test(val_loader, model)
-        #writer.add_scalar("validate error", val_mae, epoch)
         test_mae = test(test_loader, model)
-        #writer.add_scalar("test error", test_mae, epoch)
         scheduler.step(val_mae)
         print(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
@@ -67,8 +64,33 @@ def train_validate_test(config, checkpoint_dir=None, data_dir=None):
             with tune.checkpoint_dir(epoch) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, "checkpoint")
                 torch.save((model.state_dict(), optimizer.state_dict()), path)
-
+        
         tune.report(train_mae=train_mae, val_mae=val_mae)
+
+
+def train_validate_test_normal(model, optimizer, train_loader, val_loader, test_loader, writer, scheduler):
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+        if torch.cuda.device_count() > 1:
+            model = nn.DataParallel(model)
+    model.to(device)
+
+    num_epoch = 200
+
+    for epoch in range(1, num_epoch):
+        train_mae = train(train_loader, model, optimizer)
+        val_mae = test(val_loader, model)
+        test_mae = test(test_loader, model)
+        scheduler.step(val_mae)
+        writer.add_scalar("train error", train_mae, epoch)
+        writer.add_scalar("validate error", val_mae, epoch)
+        writer.add_scalar("test error", test_mae, epoch)
+
+        print(
+            f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
+            f"Test MAE: {test_mae:.4f}"
+        )
 
 
 def train(loader, model, opt):
