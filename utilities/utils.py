@@ -16,7 +16,6 @@ def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, wri
     atom_features = [
     AtomFeatures.NUM_OF_PROTONS,
     AtomFeatures.CHARGE_DENSITY,
-    AtomFeatures.MAGNETIC_MOMENT,
     ]
     structure_features = [StructureFeatures.FREE_ENERGY]
 
