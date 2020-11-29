@@ -15,24 +15,24 @@ pip3 install torch-geometric
 
 For serialization and storing the processed data for later sessions.
 ```
-pip install pickle5
+pip3 install pickle5
 ```
 
 For proper formatting of code.
 ```
-pip install git+git://github.com/psf/black
+pip3 install git+git://github.com/psf/black
 ```
 
 For visualizing structure connections.
 ```
-pip install python-igraph
+pip3 install python-igraph
 ```
 
 For Bayesian hyperparameter optimization.
 '''
-pip install ray[tune]
-pip install hpbandster ConfigSpace
-pip install -U hyperopt
+pip3 install ray[tune]
+pip3 install hpbandster ConfigSpace
+pip3 install -U hyperopt
 '''
 # Code formatting
 Before commiting and pushing changes, run command `black .` from the main directory of the project(GCNN).

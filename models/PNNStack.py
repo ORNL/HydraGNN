@@ -23,6 +23,7 @@ class PNNStack(torch.nn.Module):
                 out_channels=self.hidden_dim,
                 aggregators=aggregators,
                 scalers=scalers,
+                edge_dim=1,
                 deg=deg,
                 towers=5,
                 pre_layers=1,
@@ -36,6 +37,7 @@ class PNNStack(torch.nn.Module):
                 out_channels=self.hidden_dim,
                 aggregators=aggregators,
                 scalers=scalers,
+                edge_dim=1,
                 deg=deg,
                 towers=5,
                 pre_layers=1,
@@ -50,9 +52,9 @@ class PNNStack(torch.nn.Module):
         )
 
     def forward(self, data):
-        x, edge_index, batch = data.x, data.edge_index, data.batch
+        x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x, edge_index)))
+            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr)))
         x = global_mean_pool(x, batch)
         return self.mlp(x)
 

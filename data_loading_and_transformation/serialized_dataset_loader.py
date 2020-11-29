@@ -59,18 +59,21 @@ class SerializedDataLoader:
         with open(dataset_path, "rb") as f:
             dataset = pickle.load(f)
 
-        edge_index = self.__compute_edges(
+        edge_index, edge_distances = self.__compute_edges(
             data=dataset[0],
             radius=radius,
             max_num_node_neighbours=max_num_node_neighbours,
         )
 
+
         for data in dataset:
             data.edge_index = edge_index
+            data.edge_attr = edge_distances
             self.__update_atom_features(atom_features, data)
             self.__update_structure_features(structure_features, data)
 
         return dataset
+
 
     def __update_atom_features(self, atom_features: [AtomFeatures], data: Data):
         """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
@@ -85,6 +88,7 @@ class SerializedDataLoader:
         feature_indices = [i.value for i in atom_features]
         data.x = data.x[:, feature_indices]
 
+
     def __update_structure_features(
         self, structure_features: [StructureFeatures], data: Data
     ):
@@ -98,6 +102,7 @@ class SerializedDataLoader:
 
         feature_indices = [i.value for i in structure_features]
         data.y = data.y[feature_indices]
+
 
     def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):
         """Computes edges of a structure depending on the maximum number of neighbour atoms that each atom can have
@@ -151,5 +156,10 @@ class SerializedDataLoader:
             )
             adjacency_matrix[point, neighbours] = 1
             adjacency_matrix[neighbours, point] = 1
+        
+        edge_index = torch.tensor(np.nonzero(adjacency_matrix))
+        edge_lengths = torch.tensor(distance_matrix[np.nonzero(adjacency_matrix)]).reshape((edge_index.shape[1],1)).type(torch.FloatTensor)
+        # Normalize the lengths using min-max normalization
+        edge_lengths = (edge_lengths - min(edge_lengths))/(max(edge_lengths) - min(edge_lengths))
 
-        return torch.tensor(np.nonzero(adjacency_matrix))
+        return edge_index, edge_lengths
