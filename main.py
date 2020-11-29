@@ -1,8 +1,11 @@
 import torch
 from ray import tune
+from hyperopt import hp
 from ray.tune import CLIReporter
+from ray.tune.suggest import ConcurrencyLimiter
 from ray.tune.suggest.bohb import TuneBOHB
-from ray.tune.schedulers import HyperBandForBOHB
+from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.schedulers import ASHAScheduler
 import numpy as np
 from functools import partial
 import os
@@ -24,32 +27,32 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 def run_with_hyperparameter_optimization():
-    config = {"batch_size": tune.choice([8,16,32,64]),
-            "learning_rate": tune.choice([0.01, 0.005, 0.001, 0.0005, 0.0001]),
-            "num_conv_layers": tune.randint(5,16),
-            "hidden_dim": tune.choice([15,20,25,30,35]),
-            "radius": tune.randint(2,25),
-            "max_num_node_neighbours": tune.randint(1, 32),
+    config = {"batch_size": hp.choice("batch_size", [8, 16, 32, 64]),
+            "learning_rate": hp.choice("learning_rate", [0.01, 0.005, 0.001, 0.0005, 0.0001]),
+            "num_conv_layers": hp.randint("num_conv_layers", 5, 16),
+            "hidden_dim": hp.choice("hidden_dim", [15, 20]),
+            "radius": hp.randint("radius", 2, 25),
+            "max_num_node_neighbours": hp.randint("max_num_node_neighbours", 1, 32),
             }
 
-    algo = TuneBOHB(max_concurrent=10, metric="val_mae", mode="min")
-
-    bohb = HyperBandForBOHB(
-        time_attr="training_iteration",
-        metric="val_mae",
-        mode="min",
-        max_t=200)
+    algo = HyperOptSearch(space=config, metric="val_mae", mode="min")
+    algo = ConcurrencyLimiter(searcher=algo, max_concurrent=3)
+    
+    scheduler = ASHAScheduler(
+        time_attr='training_iteration',
+        metric='val_mae',
+        mode='min',
+        grace_period=10)
 
     reporter = CLIReporter(
-        metric_columns=["train_mae", "val_mae", "training_iteration"])
+        metric_columns=["train_mae", "val_mae", "test_mae", "training_iteration"])
 
     result = tune.run(
         partial(train_validate_test_hyperopt, checkpoint_dir="./checkpoint-ray-tune"),
-        resources_per_trial={"gpu": 0.1},
-        config=config,
+        resources_per_trial={"cpu":2, "gpu": 0.3},
         search_alg=algo,
         num_samples=100,
-        scheduler=bohb,
+        scheduler=scheduler,
         progress_reporter=reporter)
 
 def run_normal():

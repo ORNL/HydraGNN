@@ -32,6 +32,7 @@ For Bayesian hyperparameter optimization.
 '''
 pip install ray[tune]
 pip install hpbandster ConfigSpace
+pip install -U hyperopt
 '''
 # Code formatting
 Before commiting and pushing changes, run command `black .` from the main directory of the project(GCNN).

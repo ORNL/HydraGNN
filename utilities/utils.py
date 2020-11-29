@@ -65,7 +65,7 @@ def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, wri
                 path = os.path.join(checkpoint_dir, "checkpoint")
                 torch.save((model.state_dict(), optimizer.state_dict()), path)
         
-        tune.report(train_mae=train_mae, val_mae=val_mae)
+        tune.report(train_mae=train_mae, val_mae=val_mae, test_mae=test_mae)
 
 
 def train_validate_test_normal(model, optimizer, train_loader, val_loader, test_loader, writer, scheduler):
