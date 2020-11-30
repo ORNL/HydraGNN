@@ -42,7 +42,9 @@ def run_with_hyperparameter_optimization():
         time_attr='training_iteration',
         metric='test_mae',
         mode='min',
-        grace_period=10)
+        grace_period=10,
+        reduction_factor=3
+        )
 
     reporter = CLIReporter(
         metric_columns=["train_mae", "val_mae", "test_mae", "training_iteration"])
