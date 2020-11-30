@@ -27,20 +27,20 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 def run_with_hyperparameter_optimization():
-    config = {"batch_size": hp.choice("batch_size", [8, 16, 32, 64]),
-            "learning_rate": hp.choice("learning_rate", [0.01, 0.005, 0.001, 0.0005, 0.0001]),
-            "num_conv_layers": hp.randint("num_conv_layers", 5, 16),
-            "hidden_dim": hp.choice("hidden_dim", [15, 20]),
-            "radius": hp.randint("radius", 2, 25),
-            "max_num_node_neighbours": hp.randint("max_num_node_neighbours", 1, 32),
+    config = {"batch_size": hp.choice("batch_size", [64]),
+            "learning_rate": hp.choice("learning_rate", [0.005]),
+            "num_conv_layers": hp.choice("num_conv_layers", [8, 10, 12, 14]),
+            "hidden_dim": hp.choice("hidden_dim", [20]),
+            "radius": hp.choice("radius", [5, 10, 15, 20, 25]),
+            "max_num_node_neighbours": hp.randint("max_num_node_neighbours", [5, 10, 15, 20, 25, 30]),
             }
 
-    algo = HyperOptSearch(space=config, metric="val_mae", mode="min")
-    algo = ConcurrencyLimiter(searcher=algo, max_concurrent=3)
+    algo = HyperOptSearch(space=config, metric="test_mae", mode="min")
+    algo = ConcurrencyLimiter(searcher=algo, max_concurrent=10)
     
     scheduler = ASHAScheduler(
         time_attr='training_iteration',
-        metric='val_mae',
+        metric='test_mae',
         mode='min',
         grace_period=10)
 
@@ -49,7 +49,7 @@ def run_with_hyperparameter_optimization():
 
     result = tune.run(
         partial(train_validate_test_hyperopt, checkpoint_dir="./checkpoint-ray-tune"),
-        resources_per_trial={"cpu":2, "gpu": 0.3},
+        resources_per_trial={"cpu":0.5, "gpu": 0.1},
         search_alg=algo,
         num_samples=100,
         scheduler=scheduler,
