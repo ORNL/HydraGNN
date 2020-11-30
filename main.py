@@ -32,7 +32,7 @@ def run_with_hyperparameter_optimization():
             "num_conv_layers": hp.choice("num_conv_layers", [8, 10, 12, 14]),
             "hidden_dim": hp.choice("hidden_dim", [20]),
             "radius": hp.choice("radius", [5, 10, 15, 20, 25]),
-            "max_num_node_neighbours": hp.randint("max_num_node_neighbours", [5, 10, 15, 20, 25, 30]),
+            "max_num_node_neighbours": hp.choice("max_num_node_neighbours", [5, 10, 15, 20, 25, 30]),
             }
 
     algo = HyperOptSearch(space=config, metric="test_mae", mode="min")
