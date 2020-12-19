@@ -9,8 +9,8 @@ class PNNStack(torch.nn.Module):
     def __init__(self, deg, input_dim, hidden_dim, num_conv_layers):
         super(PNNStack, self).__init__()
 
-        aggregators = ["mean", "min", "max", "std"]
-        scalers = ["identity", "amplification", "attenuation"]
+        aggregators = ["mean", "min", "max", "std", "var", "mean"]
+        scalers = ["identity", "amplification", "attenuation", "linear", "inverse_linear"]
 
         self.dropout = 0.25
         self.hidden_dim = hidden_dim
