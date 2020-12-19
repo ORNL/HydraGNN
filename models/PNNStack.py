@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
-from torch.nn import Sequential, ReLU, Linear
+from torch.nn import Sequential, ReLU, Linear, Dropout
 from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 
 
@@ -17,6 +17,7 @@ class PNNStack(torch.nn.Module):
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+        self.dropouts = ModuleList()
         self.convs.append(
             PNAConv(
                 in_channels=input_dim,
@@ -46,6 +47,8 @@ class PNNStack(torch.nn.Module):
             )
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
+            self.dropouts.append(Dropout(self.dropout))
+            self.dropout *= self.dropout
 
         self.mlp = Sequential(
             Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 1)
@@ -53,8 +56,8 @@ class PNNStack(torch.nn.Module):
 
     def forward(self, data):
         x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr)))
+        for conv, batch_norm, dropout in zip(self.convs, self.batch_norms, self.dropouts):
+            x = dropout(F.relu(batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))))
         x = global_mean_pool(x, batch)
         return self.mlp(x)
 
