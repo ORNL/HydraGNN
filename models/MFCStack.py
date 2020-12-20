@@ -55,5 +55,12 @@ class MFCStack(torch.nn.Module):
             value = torch.reshape(value, pred_shape)
         return F.l1_loss(pred, value)
 
+    def loss_rmse(self, pred, value):
+        pred_shape = pred.shape
+        value_shape = value.shape
+        if pred_shape != value_shape:
+            value = torch.reshape(value, pred_shape)
+        return torch.sqrt(F.mse_loss(pred, value))
+
     def __str__(self):
         return "MFCStack"

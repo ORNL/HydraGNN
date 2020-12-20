@@ -7,15 +7,15 @@ from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
 
-def generate_model(
-    model_type: str, input_dim: int, dataset: [Data], config: dict
-):
+def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dict):
     torch.manual_seed(0)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if model_type == "GIN":
         model = GINStack(
-            input_dim=input_dim, hidden_dim=config["hidden_dim"], num_conv_layers=config["num_conv_layers"]
+            input_dim=input_dim,
+            hidden_dim=config["hidden_dim"],
+            num_conv_layers=config["num_conv_layers"],
         ).to(device)
 
     elif model_type == "PNN":
@@ -23,11 +23,13 @@ def generate_model(
         for data in dataset:
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())
+        dropout = float(input("Enter dropout probability: "))
         model = PNNStack(
             deg=deg,
             input_dim=input_dim,
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
+            dropout=dropout,
         ).to(device)
 
     elif model_type == "GAT":

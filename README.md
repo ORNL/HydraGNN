@@ -23,6 +23,11 @@ For proper formatting of code.
 pip3 install git+git://github.com/psf/black
 ```
 
+For tracking down progress using progress bar.
+```
+pip3 install tqdm
+```
+    
 For visualizing structure connections.
 ```
 pip3 install python-igraph

@@ -9,6 +9,7 @@ from data_loading_and_transformation.dataset_descriptors import (
 )
 from utilities import settings
 
+
 class RawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
     Most of the class methods are hidden, because from outside a caller needs only to know about
@@ -40,7 +41,12 @@ class RawDataLoader:
         dataset_normalized = self.__normalize_dataset(dataset=dataset)
 
         serial_data_name = (pathlib.PurePath(dataset_path)).parent.name
-        serial_data_path = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + serial_data_name + ".pkl"
+        serial_data_path = (
+            os.environ["SERIALIZED_DATA_PATH"]
+            + "/serialized_dataset/"
+            + serial_data_name
+            + ".pkl"
+        )
 
         with open(serial_data_path, "wb") as f:
             pickle.dump(dataset_normalized, f)
@@ -119,7 +125,9 @@ class RawDataLoader:
             data.y[0] = (data.y[0] - min_free_energy) / (
                 max_free_energy - min_free_energy
             )
-            data.x[:, 0] = (data.x[:, 0] - settings.NUMBER_OF_NATURAL_ELEMENTS/2) / settings.NUMBER_OF_NATURAL_ELEMENTS
+            data.x[:, 0] = (
+                data.x[:, 0] - settings.NUMBER_OF_NATURAL_ELEMENTS / 2
+            ) / settings.NUMBER_OF_NATURAL_ELEMENTS
             data.x[:, 1] = (data.x[:, 1] - min_charge_density) / (
                 max_charge_density - min_charge_density
             )

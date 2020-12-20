@@ -1,7 +1,9 @@
 from torch_geometric.data import DataLoader
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from data_loading_and_transformation.serialized_dataset_loader import SerializedDataLoader
+from data_loading_and_transformation.serialized_dataset_loader import (
+    SerializedDataLoader,
+)
 from data_loading_and_transformation.raw_dataset_loader import RawDataLoader
 from ray import tune
 from torch import nn
@@ -11,11 +13,15 @@ from data_loading_and_transformation.dataset_descriptors import (
 )
 import os
 from utilities.models_setup import generate_model
+from tqdm import tqdm
 
-def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, writer=None):
+
+def train_validate_test_hyperopt(
+    config, checkpoint_dir=None, data_dir=None, writer=None
+):
     atom_features = [
-    AtomFeatures.NUM_OF_PROTONS,
-    AtomFeatures.CHARGE_DENSITY,
+        AtomFeatures.NUM_OF_PROTONS,
+        AtomFeatures.CHARGE_DENSITY,
     ]
     structure_features = [StructureFeatures.FREE_ENERGY]
 
@@ -23,16 +29,23 @@ def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, wri
     perc_train = 0.7
     dataset1, dataset2 = load_data(config, structure_features, atom_features)
 
-    model = generate_model(model_type="PNN", input_dim=input_dim, dataset=dataset1[:int(len(dataset1)*perc_train)], config=config)
+    model = generate_model(
+        model_type="PNN",
+        input_dim=input_dim,
+        dataset=dataset1[: int(len(dataset1) * perc_train)],
+        config=config,
+    )
 
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'])
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=10, min_lr=0.00001
     )
 
     train_loader, val_loader, test_loader = combine_and_split_datasets(
-        dataset1=dataset1, dataset2=dataset2, batch_size=config["batch_size"], perc_train=perc_train
+        dataset1=dataset1,
+        dataset2=dataset2,
+        batch_size=config["batch_size"],
+        perc_train=perc_train,
     )
 
     device = "cpu"
@@ -44,7 +57,8 @@ def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, wri
 
     if checkpoint_dir:
         model_state, optimizer_state = torch.load(
-            os.path.join(checkpoint_dir, "checkpoint"))
+            os.path.join(checkpoint_dir, "checkpoint")
+        )
         model.load_state_dict(model_state)
         optimizer.load_state_dict(optimizer_state)
 
@@ -52,22 +66,24 @@ def train_validate_test_hyperopt(config, checkpoint_dir=None, data_dir=None, wri
 
     for epoch in range(1, num_epoch):
         train_mae = train(train_loader, model, optimizer)
-        val_mae = test(val_loader, model)
-        test_mae = test(test_loader, model)
+        val_mae = validate(val_loader, model)
+        test_rmse = test(test_loader, model)
         scheduler.step(val_mae)
         print(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
-            f"Test MAE: {test_mae:.4f}"
+            f"Test RMSE: {test_rmse:.4f}"
         )
-        if epoch%10 == 0:
+        if epoch % 10 == 0:
             with tune.checkpoint_dir(epoch) as checkpoint_dir:
                 path = os.path.join(checkpoint_dir, "checkpoint")
                 torch.save((model.state_dict(), optimizer.state_dict()), path)
-        
-        tune.report(train_mae=train_mae, val_mae=val_mae, test_mae=test_mae)
+
+        tune.report(train_mae=train_mae, val_mae=val_mae, test_rmse=test_rmse)
 
 
-def train_validate_test_normal(model, optimizer, train_loader, val_loader, test_loader, writer, scheduler):
+def train_validate_test_normal(
+    model, optimizer, train_loader, val_loader, test_loader, writer, scheduler
+):
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda:0"
@@ -79,16 +95,16 @@ def train_validate_test_normal(model, optimizer, train_loader, val_loader, test_
 
     for epoch in range(1, num_epoch):
         train_mae = train(train_loader, model, optimizer)
-        val_mae = test(val_loader, model)
-        test_mae = test(test_loader, model)
+        val_mae = validate(val_loader, model)
+        test_rmse = test(test_loader, model)
         scheduler.step(val_mae)
         writer.add_scalar("train error", train_mae, epoch)
         writer.add_scalar("validate error", val_mae, epoch)
-        writer.add_scalar("test error", test_mae, epoch)
+        writer.add_scalar("test error", test_rmse, epoch)
 
         print(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
-            f"Test MAE: {test_mae:.4f}"
+            f"Test RMSE: {test_rmse:.4f}"
         )
 
 
@@ -96,7 +112,7 @@ def train(loader, model, opt):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.train()
-    for data in loader:
+    for data in tqdm(loader):
         data = data.to(device)
         opt.zero_grad()
         pred = model(data)
@@ -109,15 +125,30 @@ def train(loader, model, opt):
 
 
 @torch.no_grad()
-def test(loader, model):
+def validate(loader, model):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.eval()
-    for data in loader:
+    for data in tqdm(loader):
         data = data.to(device)
         pred = model(data)
         real_value = torch.reshape(data.y, (data.y.size()[0], 1))
         error = model.loss(pred, real_value)
+        total_error += error.item() * data.num_graphs
+
+    return total_error / len(loader.dataset)
+
+
+@torch.no_grad()
+def test(loader, model):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    total_error = 0
+    model.eval()
+    for data in tqdm(loader):
+        data = data.to(device)
+        pred = model(data)
+        real_value = torch.reshape(data.y, (data.y.size()[0], 1))
+        error = model.loss_rmse(pred, real_value)
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset)
@@ -134,7 +165,7 @@ def split_dataset(dataset: [], batch_size: int, perc_train: float, perc_val: flo
         shuffle=True,
     )
     test_loader = DataLoader(
-        dataset[int(data_size * (perc_train + perc_val)):],
+        dataset[int(data_size * (perc_train + perc_val)) :],
         batch_size=batch_size,
         shuffle=True,
     )
@@ -164,7 +195,12 @@ def load_data(config, structure_features, atom_features):
     raw_datasets = ["CuAu_32atoms", "FePt_32atoms"]
     if len(os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")) < 2:
         for raw_dataset in raw_datasets:
-            files_dir = os.environ["SERIALIZED_DATA_PATH"] + "/dataset/" + raw_dataset + "/output_files/"
+            files_dir = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/dataset/"
+                + raw_dataset
+                + "/output_files/"
+            )
             loader = RawDataLoader()
             loader.load_raw_data(dataset_path=files_dir)
 

@@ -6,13 +6,19 @@ from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 
 
 class PNNStack(torch.nn.Module):
-    def __init__(self, deg, input_dim, hidden_dim, num_conv_layers):
+    def __init__(self, deg, input_dim, hidden_dim, num_conv_layers, dropout):
         super(PNNStack, self).__init__()
 
         aggregators = ["mean", "min", "max", "std", "var", "mean"]
-        scalers = ["identity", "amplification", "attenuation", "linear", "inverse_linear"]
+        scalers = [
+            "identity",
+            "amplification",
+            "attenuation",
+            "linear",
+            "inverse_linear",
+        ]
 
-        self.dropout = 0.25
+        self.dropout = dropout
         self.hidden_dim = hidden_dim
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
@@ -48,16 +54,27 @@ class PNNStack(torch.nn.Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
             self.dropouts.append(Dropout(self.dropout))
-            self.dropout *= self.dropout
+            # self.dropout *= self.dropout
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 1)
+            Linear(self.hidden_dim, 20), ReLU(), Linear(20, 10), ReLU(), Linear(10, 1)
         )
 
     def forward(self, data):
-        x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
-        for conv, batch_norm, dropout in zip(self.convs, self.batch_norms, self.dropouts):
-            x = dropout(F.relu(batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))))
+        x, edge_index, edge_attr, batch = (
+            data.x,
+            data.edge_index,
+            data.edge_attr,
+            data.batch,
+        )
+        for conv, batch_norm, dropout in zip(
+            self.convs, self.batch_norms, self.dropouts
+        ):
+            x = dropout(
+                F.relu(
+                    batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))
+                )
+            )
         x = global_mean_pool(x, batch)
         return self.mlp(x)
 
@@ -67,6 +84,13 @@ class PNNStack(torch.nn.Module):
         if pred_shape != value_shape:
             value = torch.reshape(value, pred_shape)
         return F.l1_loss(pred, value)
+
+    def loss_rmse(self, pred, value):
+        pred_shape = pred.shape
+        value_shape = value.shape
+        if pred_shape != value_shape:
+            value = torch.reshape(value, pred_shape)
+        return torch.sqrt(F.mse_loss(pred, value))
 
     def __str__(self):
         return "PNNStack"
