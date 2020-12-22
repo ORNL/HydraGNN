@@ -1,4 +1,7 @@
 import torch
+from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from ray import tune
 from hyperopt import hp
 from ray.tune import CLIReporter
@@ -7,11 +10,13 @@ from ray.tune.suggest.bohb import TuneBOHB
 from ray.tune.suggest.hyperopt import HyperOptSearch
 from ray.tune.schedulers import ASHAScheduler
 import numpy as np
+
 from functools import partial
 import os
+
 from utilities.utils import (
     load_data,
-    combine_and_split_datasets,
+    dataset_splitting,
     train_validate_test_hyperopt,
     train_validate_test_normal,
 )
@@ -20,12 +25,10 @@ from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
     StructureFeatures,
 )
-from torch.optim.lr_scheduler import ReduceLROnPlateau
 from data_loading_and_transformation.serialized_dataset_loader import (
     SerializedDataLoader,
 )
 from data_loading_and_transformation.raw_dataset_loader import RawDataLoader
-from torch.utils.tensorboard import SummaryWriter
 
 
 def run_with_hyperparameter_optimization():
@@ -66,17 +69,16 @@ def run_with_hyperparameter_optimization():
 
 
 def run_normal():
-    atom_features = [
-        AtomFeatures.NUM_OF_PROTONS,
-        AtomFeatures.CHARGE_DENSITY,
-        AtomFeatures.MAGNETIC_MOMENT,
-    ]
-    structure_features = [StructureFeatures.FREE_ENERGY]
+    config = {}
 
-    config = {
-        "batch_size": 64,
-        "hidden_dim": 20,
-    }
+    atom_features_options = {1: [AtomFeatures.NUM_OF_PROTONS], 2: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY], 3: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY, AtomFeatures.MAGNETIC_MOMENT]}
+    print("Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)all")
+    chosen_atom_features = int(input("Selected value: "))
+    
+    config['atom_features'] = atom_features_options[chosen_atom_features]
+    config['structure_features'] = [StructureFeatures.FREE_ENERGY]
+    config['batch_size'] = 64
+    config['hidden_dim'] = 15
     config["num_conv_layers"] = int(input("Select number of convolutional layers: "))
     config["learning_rate"] = float(input("Select learning rate: "))
     config["radius"] = int(
@@ -85,25 +87,32 @@ def run_normal():
     config["max_num_node_neighbours"] = int(
         input("Select the maximum number of atom neighbours: ")
     )
+    config["num_epoch"] = int(input("Select the number of epochs: "))
+    config["perc_train"] = float(input("Select train percentage: "))
 
-    input_dim = len(atom_features)
-    perc_train = 0.7
-    dataset1, dataset2 = load_data(config, structure_features, atom_features)
+    dataset_CuAu, dataset_FePt = load_data(config)
 
-    train_loader, val_loader, test_loader = combine_and_split_datasets(
-        dataset1=dataset1,
-        dataset2=dataset2,
+    dataset_options = {1: 'CuAu', 2: 'FePt', 3: 'Combine&Shuffle', 4: 'CuAu-train, FePt-test', 5: 'FePt-train, CuAu-test'}
+    print("Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test")
+    chosen_dataset_option = int(input("Selected value: "))
+    config['dataset_option'] = dataset_options[chosen_dataset_option]
+    train_loader, val_loader, test_loader = dataset_splitting(
+        dataset1=dataset_CuAu,
+        dataset2=dataset_FePt,
         batch_size=config["batch_size"],
-        perc_train=perc_train,
+        perc_train=config["perc_train"],
+        chosen_dataset_option=chosen_dataset_option
     )
 
+    input_dim = len(config['atom_features'])
     model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
     print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
     chosen_model = model_choices[input("Selected value: ")]
+
     model = generate_model(
         model_type=chosen_model,
         input_dim=input_dim,
-        dataset=dataset1[: int(len(dataset1) * perc_train)],
+        dataset=train_loader.dataset,
         config=config,
     )
 
@@ -111,7 +120,6 @@ def run_normal():
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
-    num_epoch = 200
 
     model_name = (
         model.__str__()
@@ -124,14 +132,20 @@ def run_normal():
         + "-hd-"
         + str(model.hidden_dim)
         + "-ne-"
-        + str(num_epoch)
+        + str(config["num_epoch"])
         + "-lr-"
         + str(config["learning_rate"])
         + "-bs-"
         + str(config["batch_size"])
+        + "-data-"
+        + config['dataset_option']
         + ".pk"
     )
     writer = SummaryWriter("./logs/" + model_name)
+
+    with open("./logs/" + model_name + "/config.txt", 'w') as f:
+        print(config, file=f)
+
     train_validate_test_normal(
         model,
         optimizer,
@@ -140,6 +154,7 @@ def run_normal():
         test_loader,
         writer,
         scheduler,
+        config["num_epoch"]
     )
     torch.save(model.state_dict(), "./models_serialized/" + model_name)
 

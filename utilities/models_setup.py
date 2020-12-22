@@ -23,13 +23,11 @@ def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dic
         for data in dataset:
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())
-        dropout = float(input("Enter dropout probability: "))
         model = PNNStack(
             deg=deg,
             input_dim=input_dim,
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
-            dropout=dropout,
         ).to(device)
 
     elif model_type == "GAT":

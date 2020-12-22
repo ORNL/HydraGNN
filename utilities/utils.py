@@ -12,6 +12,7 @@ from data_loading_and_transformation.dataset_descriptors import (
     StructureFeatures,
 )
 import os
+from random import shuffle
 from utilities.models_setup import generate_model
 from tqdm import tqdm
 
@@ -64,7 +65,7 @@ def train_validate_test_hyperopt(
 
     num_epoch = 200
 
-    for epoch in range(1, num_epoch):
+    for epoch in range(0, num_epoch):
         train_mae = train(train_loader, model, optimizer)
         val_mae = validate(val_loader, model)
         test_rmse = test(test_loader, model)
@@ -82,7 +83,7 @@ def train_validate_test_hyperopt(
 
 
 def train_validate_test_normal(
-    model, optimizer, train_loader, val_loader, test_loader, writer, scheduler
+    model, optimizer, train_loader, val_loader, test_loader, writer, scheduler, num_epoch
 ):
     device = "cpu"
     if torch.cuda.is_available():
@@ -91,9 +92,8 @@ def train_validate_test_normal(
             model = nn.DataParallel(model)
     model.to(device)
 
-    num_epoch = 200
 
-    for epoch in range(1, num_epoch):
+    for epoch in range(0, num_epoch):
         train_mae = train(train_loader, model, optimizer)
         val_mae = validate(val_loader, model)
         test_rmse = test(test_loader, model)
@@ -153,8 +153,25 @@ def test(loader, model):
 
     return total_error / len(loader.dataset)
 
+# Dataset splitting and manipulation
+def dataset_splitting(dataset1: [], dataset2: [], batch_size: int, perc_train: float, chosen_dataset_option: int):
 
-def split_dataset(dataset: [], batch_size: int, perc_train: float, perc_val: float):
+    if chosen_dataset_option==1:
+        return split_dataset(dataset=dataset1, batch_size=batch_size, perc_train=perc_train)
+    elif chosen_dataset_option==2:
+        return split_dataset(dataset=dataset2, batch_size=batch_size, perc_train=perc_train)
+    elif chosen_dataset_option==3:
+        dataset1.extend(dataset2)
+        shuffle(dataset1)
+        return split_dataset(dataset=dataset1, batch_size=batch_size, perc_train=perc_train)
+    elif chosen_dataset_option==4:
+        return combine_and_split_datasets(dataset1=dataset1, dataset2=dataset2, batch_size=batch_size, perc_train=perc_train)
+    elif chosen_dataset_option==5:
+        return combine_and_split_datasets(dataset1=dataset2, dataset2=dataset1, batch_size=batch_size, perc_train=perc_train)
+
+
+def split_dataset(dataset: [], batch_size: int, perc_train: float):
+    perc_val = (1 - perc_train) / 2
     data_size = len(dataset)
     train_loader = DataLoader(
         dataset[: int(data_size * perc_train)], batch_size=batch_size, shuffle=True
@@ -190,7 +207,7 @@ def combine_and_split_datasets(
     return train_loader, val_loader, test_loader
 
 
-def load_data(config, structure_features, atom_features):
+def load_data(config):
     # Loading raw data if necessary
     raw_datasets = ["CuAu_32atoms", "FePt_32atoms"]
     if len(os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")) < 2:
@@ -214,15 +231,15 @@ def load_data(config, structure_features, atom_features):
     loader = SerializedDataLoader()
     dataset1 = loader.load_serialized_data(
         dataset_path=files_dir1,
-        atom_features=atom_features,
-        structure_features=structure_features,
+        atom_features=config['atom_features'],
+        structure_features=config['structure_features'],
         radius=config["radius"],
         max_num_node_neighbours=config["max_num_node_neighbours"],
     )
     dataset2 = loader.load_serialized_data(
         dataset_path=files_dir2,
-        atom_features=atom_features,
-        structure_features=structure_features,
+        atom_features=config['atom_features'],
+        structure_features=config['structure_features'],
         radius=config["radius"],
         max_num_node_neighbours=config["max_num_node_neighbours"],
     )
