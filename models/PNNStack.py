@@ -66,7 +66,7 @@ class PNNStack(torch.nn.Module):
             self.convs, self.batch_norms
         ):
             x = F.relu(
-                    batch_norm(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))
+                    batch_norm(conv(x=x, edge_index=edge_index))
                 )
         x = global_mean_pool(x, batch)
         return self.mlp(x)
