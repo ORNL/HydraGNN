@@ -9,13 +9,12 @@ class PNNStack(torch.nn.Module):
     def __init__(self, deg, input_dim, hidden_dim, num_conv_layers):
         super(PNNStack, self).__init__()
 
-        aggregators = ["mean", "min", "max", "std", "var", "mean"]
+        aggregators = ["mean", "min", "max", "std"]
         scalers = [
             "identity",
             "amplification",
             "attenuation",
             "linear",
-            "inverse_linear",
         ]
 
         self.hidden_dim = hidden_dim
@@ -53,7 +52,7 @@ class PNNStack(torch.nn.Module):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 20), ReLU(), Linear(20, 10), ReLU(), Linear(10, 1)
+            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 1)
         )
 
     def forward(self, data):

@@ -139,6 +139,8 @@ def run_normal():
         + str(config["batch_size"])
         + "-data-"
         + config['dataset_option']
+        + "-node_feat-"
+        + str(chosen_atom_features)
         + ".pk"
     )
     writer = SummaryWriter("./logs/" + model_name)
