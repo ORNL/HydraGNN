@@ -27,7 +27,6 @@ class PNNStack(torch.nn.Module):
                 out_channels=self.hidden_dim,
                 aggregators=aggregators,
                 scalers=scalers,
-                edge_dim=1,
                 deg=deg,
                 towers=5,
                 pre_layers=1,
@@ -41,7 +40,6 @@ class PNNStack(torch.nn.Module):
                 out_channels=self.hidden_dim,
                 aggregators=aggregators,
                 scalers=scalers,
-                edge_dim=1,
                 deg=deg,
                 towers=5,
                 pre_layers=1,
@@ -56,10 +54,9 @@ class PNNStack(torch.nn.Module):
         )
 
     def forward(self, data):
-        x, edge_index, edge_attr, batch = (
+        x, edge_index, batch = (
             data.x,
             data.edge_index,
-            data.edge_attr,
             data.batch,
         )
         for conv, batch_norm in zip(
