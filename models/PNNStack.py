@@ -62,7 +62,7 @@ class PNNStack(torch.nn.Module):
         for conv, batch_norm in zip(
             self.convs, self.batch_norms
         ):
-            x = F.leaky_relu(
+            x = F.relu(
                     batch_norm(conv(x=x, edge_index=edge_index))
                 )
         x = global_mean_pool(x, batch)
