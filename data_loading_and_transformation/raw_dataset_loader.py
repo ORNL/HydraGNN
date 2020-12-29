@@ -114,12 +114,16 @@ class RawDataLoader:
         min_free_energy = float("inf")
         max_charge_density = np.full(StructureFeatures.SIZE.value, -np.inf)
         min_charge_density = np.full(StructureFeatures.SIZE.value, np.inf)
+        max_magnetic_moment = np.full(StructureFeatures.SIZE.value, -np.inf)
+        min_magnetic_moment = np.full(StructureFeatures.SIZE.value, np.inf)
 
         for data in dataset:
             max_free_energy = max(abs(data.y[0]), max_free_energy)
             min_free_energy = min(abs(data.y[0]), min_free_energy)
             max_charge_density = np.maximum(data.x[:, 1].numpy(), max_charge_density)
             min_charge_density = np.minimum(data.x[:, 1].numpy(), min_charge_density)
+            max_magnetic_moment = np.maximum(data.x[:, 2].numpy(), max_magnetic_moment)
+            min_magnetic_moment = np.minimum(data.x[:, 2].numpy(), min_magnetic_moment)
 
         for data in dataset:
             data.y[0] = (data.y[0] - min_free_energy) / (
@@ -127,6 +131,9 @@ class RawDataLoader:
             )
             data.x[:, 1] = (data.x[:, 1] - min_charge_density) / (
                 max_charge_density - min_charge_density
+            )
+            data.x[:, 2] = (data.x[:, 2] - min_magnetic_moment) / (
+                max_magnetic_moment - min_magnetic_moment
             )
 
         return dataset
