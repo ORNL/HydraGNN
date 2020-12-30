@@ -1,5 +1,6 @@
 import os
 from torch_geometric.data import Data
+import torch
 from torch import tensor
 import numpy as np
 import pickle
@@ -8,7 +9,7 @@ from data_loading_and_transformation.dataset_descriptors import (
     StructureFeatures,
 )
 from utilities import settings
-
+from data_loading_and_transformation.utils import tensor_divide
 
 class RawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
@@ -110,30 +111,27 @@ class RawDataLoader:
         [Data]
             Normalized dataset.
         """
-        max_free_energy = float("-inf")
-        min_free_energy = float("inf")
+        max_structure_free_energy = float("-inf")
+        min_structure_free_energy = float("inf")
+        max_structure_charge_density = float("-inf")
+        min_structure_charge_density = float("inf")
+        max_structure_magnetic_moment = float("-inf")
+        min_structure_magnetic_moment = float("inf")
         max_charge_density = np.full(StructureFeatures.SIZE.value, -np.inf)
         min_charge_density = np.full(StructureFeatures.SIZE.value, np.inf)
         max_magnetic_moment = np.full(StructureFeatures.SIZE.value, -np.inf)
         min_magnetic_moment = np.full(StructureFeatures.SIZE.value, np.inf)
 
         for data in dataset:
-            max_free_energy = max(abs(data.y[0]), max_free_energy)
-            min_free_energy = min(abs(data.y[0]), min_free_energy)
+            max_structure_free_energy = max(abs(data.y[0]), max_structure_free_energy)
+            min_structure_free_energy = min(abs(data.y[0]), min_structure_free_energy)
             max_charge_density = np.maximum(data.x[:, 1].numpy(), max_charge_density)
             min_charge_density = np.minimum(data.x[:, 1].numpy(), min_charge_density)
             max_magnetic_moment = np.maximum(data.x[:, 2].numpy(), max_magnetic_moment)
             min_magnetic_moment = np.minimum(data.x[:, 2].numpy(), min_magnetic_moment)
 
         for data in dataset:
-            data.y[0] = (data.y[0] - min_free_energy) / (
-                max_free_energy - min_free_energy
-            )
-            data.x[:, 1] = (data.x[:, 1] - min_charge_density) / (
-                max_charge_density - min_charge_density
-            )
-            data.x[:, 2] = (data.x[:, 2] - min_magnetic_moment) / (
-                max_magnetic_moment - min_magnetic_moment
-            )
-
+            data.y[0] = tensor_divide((data.y[0] - min_structure_free_energy), (max_structure_free_energy - min_structure_free_energy))
+            data.x[:, 1] = tensor_divide((data.x[:, 1] - min_charge_density), (max_charge_density - min_charge_density))
+            data.x[:, 2] = tensor_divide((data.x[:, 2] - min_magnetic_moment), (max_magnetic_moment - min_magnetic_moment))
         return dataset

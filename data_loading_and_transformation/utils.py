@@ -1,5 +1,5 @@
 import numpy as np
-
+import torch
 
 def distance_3D(p1: [float], p2: [float]):
     """Computes the Euclidean distance between two 3D points.
@@ -111,3 +111,7 @@ def resolve_neighbour_conflicts(
     neighbours = neighbours[:number_of_allowed] + already_neighbours
 
     return neighbours
+
+
+def tensor_divide(x1, x2):
+    return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2!=0))

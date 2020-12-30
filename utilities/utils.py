@@ -117,7 +117,7 @@ def train(loader, model, opt):
         opt.zero_grad()
         pred = model(data)
         real_value = torch.reshape(data.y, (data.y.size()[0], 1))
-        loss = model.loss(pred, real_value)
+        loss = model.loss_rmse(pred, real_value)
         loss.backward()
         total_error += loss.item() * data.num_graphs
         opt.step()
@@ -133,7 +133,7 @@ def validate(loader, model):
         data = data.to(device)
         pred = model(data)
         real_value = torch.reshape(data.y, (data.y.size()[0], 1))
-        error = model.loss(pred, real_value)
+        error = model.loss_rmse(pred, real_value)
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset)
