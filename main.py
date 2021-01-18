@@ -132,7 +132,7 @@ def run_normal():
         + str(config["radius"])
         + "-mnnn-"
         + str(config["max_num_node_neighbours"])
-        + "-num_conv_layers-"
+        + "-ncl-"
         + str(model.num_conv_layers)
         + "-hd-"
         + str(model.hidden_dim)
@@ -144,9 +144,9 @@ def run_normal():
         + str(config["batch_size"])
         + "-data-"
         + config['dataset_option']
-        + "-node_feat-"
+        + "-node_ft-"
         + str(chosen_atom_features)
-        + "-predict-"
+        + "-pred_val-"
         + str(chosen_prediction_value)
         + ".pk"
     )
