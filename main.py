@@ -146,6 +146,8 @@ def run_normal():
         + config['dataset_option']
         + "-node_feat-"
         + str(chosen_atom_features)
+        + "-predict-"
+        + str(chosen_prediction_value)
         + ".pk"
     )
     writer = SummaryWriter("./logs/" + model_name)
