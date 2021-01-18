@@ -14,6 +14,7 @@ def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dic
     if model_type == "GIN":
         model = GINStack(
             input_dim=input_dim,
+            output_dim=config["output_dim"],
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
         ).to(device)
@@ -26,6 +27,7 @@ def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dic
         model = PNNStack(
             deg=deg,
             input_dim=input_dim,
+            output_dim=config["output_dim"],
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
         ).to(device)
@@ -43,6 +45,7 @@ def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dic
 
         model = GATStack(
             input_dim=input_dim,
+            output_dim=config["output_dim"],
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
         ).to(device)
@@ -50,6 +53,7 @@ def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dic
     elif model_type == "MFC":
         model = MFCStack(
             input_dim=input_dim,
+            output_dim=config["output_dim"],
             hidden_dim=config["hidden_dim"],
             max_degree=config["max_num_node_neighbours"],
             num_conv_layers=config["num_conv_layers"],

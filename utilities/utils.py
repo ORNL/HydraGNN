@@ -83,7 +83,7 @@ def train_validate_test_hyperopt(
 
 
 def train_validate_test_normal(
-    model, optimizer, train_loader, val_loader, test_loader, writer, scheduler, num_epoch
+    model, optimizer, train_loader, val_loader, test_loader, writer, scheduler, config
 ):
     device = "cpu"
     if torch.cuda.is_available():
@@ -92,11 +92,11 @@ def train_validate_test_normal(
             model = nn.DataParallel(model)
     model.to(device)
 
-
+    num_epoch = config["num_epoch"]
     for epoch in range(0, num_epoch):
-        train_mae = train(train_loader, model, optimizer)
-        val_mae = validate(val_loader, model)
-        test_rmse = test(test_loader, model)
+        train_mae = train(train_loader, model, optimizer, config["output_dim"])
+        val_mae = validate(val_loader, model, config["output_dim"])
+        test_rmse = test(test_loader, model, config["output_dim"])
         scheduler.step(val_mae)
         writer.add_scalar("train error", train_mae, epoch)
         writer.add_scalar("validate error", val_mae, epoch)
@@ -108,7 +108,7 @@ def train_validate_test_normal(
         )
 
 
-def train(loader, model, opt):
+def train(loader, model, opt, output_dim):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.train()
@@ -116,8 +116,7 @@ def train(loader, model, opt):
         data = data.to(device)
         opt.zero_grad()
         pred = model(data)
-        real_value = torch.reshape(data.y, (data.y.size()[0], 1))
-        loss = model.loss_rmse(pred, real_value)
+        loss = model.loss_rmse(pred, data.y)
         loss.backward()
         total_error += loss.item() * data.num_graphs
         opt.step()
@@ -125,30 +124,28 @@ def train(loader, model, opt):
 
 
 @torch.no_grad()
-def validate(loader, model):
+def validate(loader, model, output_dim):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.eval()
     for data in tqdm(loader):
         data = data.to(device)
         pred = model(data)
-        real_value = torch.reshape(data.y, (data.y.size()[0], 1))
-        error = model.loss_rmse(pred, real_value)
+        error = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset)
 
 
 @torch.no_grad()
-def test(loader, model):
+def test(loader, model, output_dim):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.eval()
     for data in tqdm(loader):
         data = data.to(device)
         pred = model(data)
-        real_value = torch.reshape(data.y, (data.y.size()[0], 1))
-        error = model.loss_rmse(pred, real_value)
+        error = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset)
@@ -231,17 +228,11 @@ def load_data(config):
     loader = SerializedDataLoader()
     dataset1 = loader.load_serialized_data(
         dataset_path=files_dir1,
-        atom_features=config['atom_features'],
-        structure_features=config['structure_features'],
-        radius=config["radius"],
-        max_num_node_neighbours=config["max_num_node_neighbours"],
+        config=config,
     )
     dataset2 = loader.load_serialized_data(
         dataset_path=files_dir2,
-        atom_features=config['atom_features'],
-        structure_features=config['structure_features'],
-        radius=config["radius"],
-        max_num_node_neighbours=config["max_num_node_neighbours"],
+        config=config,
     )
 
     return dataset1, dataset2

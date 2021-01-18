@@ -9,6 +9,7 @@ class GATStack(torch.nn.Module):
     def __init__(
         self,
         input_dim,
+        output_dim,
         hidden_dim: int = 16,
         heads: int = 1,
         negative_slope: float = 0.2,
@@ -48,7 +49,7 @@ class GATStack(torch.nn.Module):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 1)
+            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, output_dim)
         )
 
     def forward(self, data):

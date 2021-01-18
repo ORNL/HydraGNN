@@ -71,11 +71,11 @@ def run_with_hyperparameter_optimization():
 def run_normal():
     config = {}
 
-    atom_features_options = {1: [AtomFeatures.NUM_OF_PROTONS], 2: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY], 3: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY, AtomFeatures.MAGNETIC_MOMENT]}
-    print("Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)all")
-    chosen_atom_features = int(input("Selected value: "))
-    
+    atom_features_options = {1: [AtomFeatures.NUM_OF_PROTONS], 2: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY], 3: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.MAGNETIC_MOMENT], 4: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY, AtomFeatures.MAGNETIC_MOMENT]}
+    print("Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)proton number+magnetic moment 4)all")
+    chosen_atom_features = int(input("Selected value: "))    
     config['atom_features'] = atom_features_options[chosen_atom_features]
+
     config['structure_features'] = [StructureFeatures.FREE_ENERGY]
     config['batch_size'] = int(input("Select batch size(8,16,32,64): "))
     config['hidden_dim'] = int(input("Select hidden dimension: "))
@@ -90,6 +90,11 @@ def run_normal():
     config["num_epoch"] = int(input("Select the number of epochs: "))
     config["perc_train"] = float(input("Select train percentage: "))
 
+    predicted_value_option = {1: 1, 2: 32, 3: 32, 4: 33, 5: 33, 6: 65}
+    print("Select the values you want to predict: 1)free energy 2)charge density 3)magnetic moment 4)free energy+charge density 5)free energy+magnetic moment, 6)free energy+charge density+magnetic moment")
+    chosen_prediction_value = int(input("Selected value: "))
+    config["output_dim"] = predicted_value_option[chosen_prediction_value]
+    config["predicted_value_option"] = chosen_prediction_value
     dataset_CuAu, dataset_FePt = load_data(config)
 
     dataset_options = {1: 'CuAu', 2: 'FePt', 3: 'Combine&Shuffle', 4: 'CuAu-train, FePt-test', 5: 'FePt-train, CuAu-test'}
@@ -156,7 +161,7 @@ def run_normal():
         test_loader,
         writer,
         scheduler,
-        config["num_epoch"]
+        config
     )
     torch.save(model.state_dict(), "./models_serialized/" + model_name)
 

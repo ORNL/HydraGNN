@@ -69,9 +69,7 @@ class RawDataLoader:
 
         graph_feat = lines[0].split(None, 2)
         free_energy = float(graph_feat[0].strip())
-        magnetic_charge = float(graph_feat[1].strip())
-        magnetic_moment = float(graph_feat[2].strip())
-        data_object.y = tensor([free_energy, magnetic_charge, magnetic_moment])
+        data_object.y = tensor([free_energy])
 
         node_feature_matrix = []
         node_position_matrix = []

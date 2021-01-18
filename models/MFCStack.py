@@ -9,6 +9,7 @@ class MFCStack(torch.nn.Module):
     def __init__(
         self,
         input_dim,
+        output_dim,
         max_degree: int,
         hidden_dim: int = 16,
         num_conv_layers: int = 16,
@@ -38,7 +39,7 @@ class MFCStack(torch.nn.Module):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 1)
+            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, output_dim)
         )
 
     def forward(self, data):

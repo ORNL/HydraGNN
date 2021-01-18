@@ -6,7 +6,7 @@ from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 
 
 class PNNStack(torch.nn.Module):
-    def __init__(self, deg, input_dim, hidden_dim, num_conv_layers):
+    def __init__(self, deg, input_dim, output_dim, hidden_dim, num_conv_layers):
         super(PNNStack, self).__init__()
 
         aggregators = ["mean", "min", "max", "std"]
@@ -48,7 +48,7 @@ class PNNStack(torch.nn.Module):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, 1)
+            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, output_dim)
         )
 
     def forward(self, data):

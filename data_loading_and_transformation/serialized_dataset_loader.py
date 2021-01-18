@@ -29,10 +29,7 @@ class SerializedDataLoader:
     def load_serialized_data(
         self,
         dataset_path: str,
-        atom_features: [AtomFeatures],
-        structure_features: [StructureFeatures],
-        radius: float,
-        max_num_node_neighbours: int,
+        config,
     ):
         """Loads the serialized structures data from specified path, computes new edges for the structures based on the maximum number of neighbours and radius. Additionally,
         atom and structure features are updated.
@@ -61,15 +58,15 @@ class SerializedDataLoader:
 
         edge_index, edge_distances = self.__compute_edges(
             data=dataset[0],
-            radius=radius,
-            max_num_node_neighbours=max_num_node_neighbours,
+            radius=config["radius"],
+            max_num_node_neighbours=config["max_num_node_neighbours"],
         )
 
         for data in dataset:
             data.edge_index = edge_index
             data.edge_attr = edge_distances
-            self.__update_atom_features(atom_features, data)
-            self.__update_structure_features(structure_features, data)
+            self.__update_predicted_values(config["predicted_value_option"], data)
+            self.__update_atom_features(config["atom_features"], data)
 
         return dataset
 
@@ -86,19 +83,38 @@ class SerializedDataLoader:
         feature_indices = [i.value for i in atom_features]
         data.x = data.x[:, feature_indices]
 
-    def __update_structure_features(
-        self, structure_features: [StructureFeatures], data: Data
+    def __update_predicted_values(
+        self, predicted_value_option: int, data: Data
     ):
-        """Updates structure features. A structure is represented with the Data object.
+        """Updates values of the structure we want to predict. Predicted value is represented by integer value.
 
         Parameters
         ----------
-        structure_features: [StructureFeatures]
-            List of features to update. Each feature is instance of Enum StructureFeatures.
-        """
+        predicted_value_option: int
+            Integer value that represents one of the options for predict. Possible values and associated output dimensions: 
+            1)free energy - 1
+            2)charge density - 32
+            3)magnetic moment - 32
+            4)free energy+charge density - 33
+            5)free energy+magnetic moment - 33
+            6)free energy+charge density+magnetic moment - 65
 
-        feature_indices = [i.value for i in structure_features]
-        data.y = data.y[feature_indices]
+        """
+        free_energy = torch.reshape(data.y[0], (1,1))
+        charge_density = torch.reshape(data.x[:, 1], (32,1))
+        magnetic_moment = torch.reshape(data.x[:, 2], (32,1))
+        if predicted_value_option==1:
+            data.y = torch.reshape(data.y[0], (1,1))
+        elif predicted_value_option==2:
+            data.y = torch.reshape(data.x[:, 1], (32,1))
+        elif predicted_value_option==3:
+            data.y = torch.reshape(data.x[:, 1], (32,1))
+        elif predicted_value_option==4:
+            data.y = torch.cat([free_energy, charge_density], 0)
+        elif predicted_value_option==5:
+            data.y = torch.cat([free_energy, magnetic_moment], 0)
+        elif predicted_value_option==6:
+            data.y = torch.cat([free_energy, charge_density, magnetic_moment], 0)
 
     def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):
         """Computes edges of a structure depending on the maximum number of neighbour atoms that each atom can have
