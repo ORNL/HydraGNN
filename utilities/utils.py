@@ -219,10 +219,11 @@ def load_data(config):
             loader.load_raw_data(dataset_path=files_dir)
 
     # dataset parameters
-    fe = "FePt_32atoms.pkl"
     cu = "CuAu_32atoms.pkl"
-    files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
-    files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
+    fe = "FePt_32atoms.pkl"
+    
+    files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
+    files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
 
     # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
     loader = SerializedDataLoader()

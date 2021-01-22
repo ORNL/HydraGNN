@@ -76,7 +76,6 @@ def run_normal():
     chosen_atom_features = int(input("Selected value: "))    
     config['atom_features'] = atom_features_options[chosen_atom_features]
 
-    config['structure_features'] = [StructureFeatures.FREE_ENERGY]
     config['batch_size'] = int(input("Select batch size(8,16,32,64): "))
     config['hidden_dim'] = int(input("Select hidden dimension: "))
     config["num_conv_layers"] = int(input("Select number of convolutional layers: "))
