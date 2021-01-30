@@ -150,21 +150,44 @@ def test(loader, model, output_dim):
 
     return total_error / len(loader.dataset)
 
-# Dataset splitting and manipulation
-def dataset_splitting(dataset1: [], dataset2: [], batch_size: int, perc_train: float, chosen_dataset_option: int):
 
-    if chosen_dataset_option==1:
-        return split_dataset(dataset=dataset1, batch_size=batch_size, perc_train=perc_train)
-    elif chosen_dataset_option==2:
-        return split_dataset(dataset=dataset2, batch_size=batch_size, perc_train=perc_train)
-    elif chosen_dataset_option==3:
+# Dataset splitting and manipulation
+def dataset_splitting(
+    dataset1: [],
+    dataset2: [],
+    batch_size: int,
+    perc_train: float,
+    chosen_dataset_option: int,
+):
+
+    if chosen_dataset_option == 1:
+        return split_dataset(
+            dataset=dataset1, batch_size=batch_size, perc_train=perc_train
+        )
+    elif chosen_dataset_option == 2:
+        return split_dataset(
+            dataset=dataset2, batch_size=batch_size, perc_train=perc_train
+        )
+    elif chosen_dataset_option == 3:
         dataset1.extend(dataset2)
         shuffle(dataset1)
-        return split_dataset(dataset=dataset1, batch_size=batch_size, perc_train=perc_train)
-    elif chosen_dataset_option==4:
-        return combine_and_split_datasets(dataset1=dataset1, dataset2=dataset2, batch_size=batch_size, perc_train=perc_train)
-    elif chosen_dataset_option==5:
-        return combine_and_split_datasets(dataset1=dataset2, dataset2=dataset1, batch_size=batch_size, perc_train=perc_train)
+        return split_dataset(
+            dataset=dataset1, batch_size=batch_size, perc_train=perc_train
+        )
+    elif chosen_dataset_option == 4:
+        return combine_and_split_datasets(
+            dataset1=dataset1,
+            dataset2=dataset2,
+            batch_size=batch_size,
+            perc_train=perc_train,
+        )
+    elif chosen_dataset_option == 5:
+        return combine_and_split_datasets(
+            dataset1=dataset2,
+            dataset2=dataset1,
+            batch_size=batch_size,
+            perc_train=perc_train,
+        )
 
 
 def split_dataset(dataset: [], batch_size: int, perc_train: float):
@@ -221,7 +244,7 @@ def load_data(config):
     # dataset parameters
     cu = "CuAu_32atoms.pkl"
     fe = "FePt_32atoms.pkl"
-    
+
     files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
     files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
 

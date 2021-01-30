@@ -39,7 +39,11 @@ class MFCStack(torch.nn.Module):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, output_dim)
+            Linear(self.hidden_dim, 50),
+            ReLU(),
+            Linear(50, 25),
+            ReLU(),
+            Linear(25, output_dim),
         )
 
     def forward(self, data):

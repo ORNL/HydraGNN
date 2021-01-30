@@ -11,6 +11,7 @@ from data_loading_and_transformation.dataset_descriptors import (
 from utilities import settings
 from data_loading_and_transformation.utils import tensor_divide
 
+
 class RawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
     Most of the class methods are hidden, because from outside a caller needs only to know about
@@ -129,7 +130,16 @@ class RawDataLoader:
             min_magnetic_moment = np.minimum(data.x[:, 2].numpy(), min_magnetic_moment)
 
         for data in dataset:
-            data.y[0] = tensor_divide((data.y[0] - min_structure_free_energy), (max_structure_free_energy - min_structure_free_energy))
-            data.x[:, 1] = tensor_divide((data.x[:, 1] - min_charge_density), (max_charge_density - min_charge_density))
-            data.x[:, 2] = tensor_divide((data.x[:, 2] - min_magnetic_moment), (max_magnetic_moment - min_magnetic_moment))
+            data.y[0] = tensor_divide(
+                (data.y[0] - min_structure_free_energy),
+                (max_structure_free_energy - min_structure_free_energy),
+            )
+            data.x[:, 1] = tensor_divide(
+                (data.x[:, 1] - min_charge_density),
+                (max_charge_density - min_charge_density),
+            )
+            data.x[:, 2] = tensor_divide(
+                (data.x[:, 2] - min_magnetic_moment),
+                (max_magnetic_moment - min_magnetic_moment),
+            )
         return dataset

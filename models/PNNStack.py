@@ -48,7 +48,11 @@ class PNNStack(torch.nn.Module):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         self.mlp = Sequential(
-            Linear(self.hidden_dim, 50), ReLU(), Linear(50, 25), ReLU(), Linear(25, output_dim)
+            Linear(self.hidden_dim, 50),
+            ReLU(),
+            Linear(50, 25),
+            ReLU(),
+            Linear(25, output_dim),
         )
 
     def forward(self, data):
@@ -57,12 +61,8 @@ class PNNStack(torch.nn.Module):
             data.edge_index,
             data.batch,
         )
-        for conv, batch_norm in zip(
-            self.convs, self.batch_norms
-        ):
-            x = F.relu(
-                    batch_norm(conv(x=x, edge_index=edge_index))
-                )
+        for conv, batch_norm in zip(self.convs, self.batch_norms):
+            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
         x = global_mean_pool(x, batch)
         return self.mlp(x)
 

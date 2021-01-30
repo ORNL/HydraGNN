@@ -83,15 +83,13 @@ class SerializedDataLoader:
         feature_indices = [i.value for i in atom_features]
         data.x = data.x[:, feature_indices]
 
-    def __update_predicted_values(
-        self, predicted_value_option: int, data: Data
-    ):
+    def __update_predicted_values(self, predicted_value_option: int, data: Data):
         """Updates values of the structure we want to predict. Predicted value is represented by integer value.
 
         Parameters
         ----------
         predicted_value_option: int
-            Integer value that represents one of the options for predict. Possible values and associated output dimensions: 
+            Integer value that represents one of the options for predict. Possible values and associated output dimensions:
             1)free energy - 1
             2)charge density - 32
             3)magnetic moment - 32
@@ -100,20 +98,20 @@ class SerializedDataLoader:
             6)free energy+charge density+magnetic moment - 65
 
         """
-        free_energy = torch.reshape(data.y[0], (1,1))
-        charge_density = torch.reshape(data.x[:, 1], (32,1))
-        magnetic_moment = torch.reshape(data.x[:, 2], (32,1))
-        if predicted_value_option==1:
-            data.y = torch.reshape(data.y[0], (1,1))
-        elif predicted_value_option==2:
-            data.y = torch.reshape(data.x[:, 1], (32,1))
-        elif predicted_value_option==3:
-            data.y = torch.reshape(data.x[:, 1], (32,1))
-        elif predicted_value_option==4:
+        free_energy = torch.reshape(data.y[0], (1, 1))
+        charge_density = torch.reshape(data.x[:, 1], (32, 1))
+        magnetic_moment = torch.reshape(data.x[:, 2], (32, 1))
+        if predicted_value_option == 1:
+            data.y = torch.reshape(data.y[0], (1, 1))
+        elif predicted_value_option == 2:
+            data.y = torch.reshape(data.x[:, 1], (32, 1))
+        elif predicted_value_option == 3:
+            data.y = torch.reshape(data.x[:, 1], (32, 1))
+        elif predicted_value_option == 4:
             data.y = torch.cat([free_energy, charge_density], 0)
-        elif predicted_value_option==5:
+        elif predicted_value_option == 5:
             data.y = torch.cat([free_energy, magnetic_moment], 0)
-        elif predicted_value_option==6:
+        elif predicted_value_option == 6:
             data.y = torch.cat([free_energy, charge_density, magnetic_moment], 0)
 
     def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):

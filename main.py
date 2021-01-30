@@ -71,13 +71,24 @@ def run_with_hyperparameter_optimization():
 def run_normal():
     config = {}
 
-    atom_features_options = {1: [AtomFeatures.NUM_OF_PROTONS], 2: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY], 3: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.MAGNETIC_MOMENT], 4: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY, AtomFeatures.MAGNETIC_MOMENT]}
-    print("Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)proton number+magnetic moment 4)all")
-    chosen_atom_features = int(input("Selected value: "))    
-    config['atom_features'] = atom_features_options[chosen_atom_features]
+    atom_features_options = {
+        1: [AtomFeatures.NUM_OF_PROTONS],
+        2: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.CHARGE_DENSITY],
+        3: [AtomFeatures.NUM_OF_PROTONS, AtomFeatures.MAGNETIC_MOMENT],
+        4: [
+            AtomFeatures.NUM_OF_PROTONS,
+            AtomFeatures.CHARGE_DENSITY,
+            AtomFeatures.MAGNETIC_MOMENT,
+        ],
+    }
+    print(
+        "Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)proton number+magnetic moment 4)all"
+    )
+    chosen_atom_features = int(input("Selected value: "))
+    config["atom_features"] = atom_features_options[chosen_atom_features]
 
-    config['batch_size'] = int(input("Select batch size(8,16,32,64): "))
-    config['hidden_dim'] = int(input("Select hidden dimension: "))
+    config["batch_size"] = int(input("Select batch size(8,16,32,64): "))
+    config["hidden_dim"] = int(input("Select hidden dimension: "))
     config["num_conv_layers"] = int(input("Select number of convolutional layers: "))
     config["learning_rate"] = float(input("Select learning rate: "))
     config["radius"] = int(
@@ -90,25 +101,35 @@ def run_normal():
     config["perc_train"] = float(input("Select train percentage: "))
 
     predicted_value_option = {1: 1, 2: 32, 3: 32, 4: 33, 5: 33, 6: 65}
-    print("Select the values you want to predict: 1)free energy 2)charge density 3)magnetic moment 4)free energy+charge density 5)free energy+magnetic moment, 6)free energy+charge density+magnetic moment")
+    print(
+        "Select the values you want to predict: 1)free energy 2)charge density 3)magnetic moment 4)free energy+charge density 5)free energy+magnetic moment, 6)free energy+charge density+magnetic moment"
+    )
     chosen_prediction_value = int(input("Selected value: "))
     config["output_dim"] = predicted_value_option[chosen_prediction_value]
     config["predicted_value_option"] = chosen_prediction_value
     dataset_CuAu, dataset_FePt = load_data(config)
 
-    dataset_options = {1: 'CuAu', 2: 'FePt', 3: 'Combine&Shuffle', 4: 'CuAu-train, FePt-test', 5: 'FePt-train, CuAu-test'}
-    print("Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test")
+    dataset_options = {
+        1: "CuAu",
+        2: "FePt",
+        3: "Combine&Shuffle",
+        4: "CuAu-train, FePt-test",
+        5: "FePt-train, CuAu-test",
+    }
+    print(
+        "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test"
+    )
     chosen_dataset_option = int(input("Selected value: "))
-    config['dataset_option'] = dataset_options[chosen_dataset_option]
+    config["dataset_option"] = dataset_options[chosen_dataset_option]
     train_loader, val_loader, test_loader = dataset_splitting(
         dataset1=dataset_CuAu,
         dataset2=dataset_FePt,
         batch_size=config["batch_size"],
         perc_train=config["perc_train"],
-        chosen_dataset_option=chosen_dataset_option
+        chosen_dataset_option=chosen_dataset_option,
     )
 
-    input_dim = len(config['atom_features'])
+    input_dim = len(config["atom_features"])
     model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
     print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
     chosen_model = model_choices[input("Selected value: ")]
@@ -142,7 +163,7 @@ def run_normal():
         + "-bs-"
         + str(config["batch_size"])
         + "-data-"
-        + config['dataset_option']
+        + config["dataset_option"]
         + "-node_ft-"
         + str(chosen_atom_features)
         + "-pred_val-"
@@ -151,7 +172,7 @@ def run_normal():
     )
     writer = SummaryWriter("./logs/" + model_name)
 
-    with open("./logs/" + model_name + "/config.txt", 'w') as f:
+    with open("./logs/" + model_name + "/config.txt", "w") as f:
         print(config, file=f)
 
     train_validate_test_normal(
@@ -162,7 +183,7 @@ def run_normal():
         test_loader,
         writer,
         scheduler,
-        config
+        config,
     )
     torch.save(model.state_dict(), "./models_serialized/" + model_name)
 

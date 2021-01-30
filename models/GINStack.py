@@ -5,7 +5,9 @@ import torch_geometric.nn as pyg_nn
 
 
 class GINStack(nn.Module):
-    def __init__(self, input_dim: int, output_dim: int, hidden_dim: int, num_conv_layers: int):
+    def __init__(
+        self, input_dim: int, output_dim: int, hidden_dim: int, num_conv_layers: int
+    ):
         super(GINStack, self).__init__()
         self.num_conv_layers = num_conv_layers
         self.dropout = 0.25
