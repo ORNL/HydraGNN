@@ -13,6 +13,7 @@ import numpy as np
 
 from functools import partial
 import os
+import json
 
 from utilities.utils import (
     load_data,
@@ -23,7 +24,7 @@ from utilities.utils import (
 from utilities.models_setup import generate_model
 from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
-    StructureFeatures,
+    Dataset,
 )
 from data_loading_and_transformation.serialized_dataset_loader import (
     SerializedDataLoader,
@@ -85,7 +86,9 @@ def run_normal():
         "Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)proton number+magnetic moment 4)all"
     )
     chosen_atom_features = int(input("Selected value: "))
-    config["atom_features"] = atom_features_options[chosen_atom_features]
+    config["atom_features"] = [
+        x.value for x in atom_features_options[chosen_atom_features]
+    ]
 
     config["batch_size"] = int(input("Select batch size(8,16,32,64): "))
     config["hidden_dim"] = int(input("Select hidden dimension: "))
@@ -107,26 +110,28 @@ def run_normal():
     chosen_prediction_value = int(input("Selected value: "))
     config["output_dim"] = predicted_value_option[chosen_prediction_value]
     config["predicted_value_option"] = chosen_prediction_value
-    dataset_CuAu, dataset_FePt = load_data(config)
+    dataset_CuAu, dataset_FePt, dataset_FeSi = load_data(config)
 
     dataset_options = {
-        1: "CuAu",
-        2: "FePt",
-        3: "Combine&Shuffle",
-        4: "CuAu-train, FePt-test",
-        5: "FePt-train, CuAu-test",
+        1: Dataset.CuAu,
+        2: Dataset.FePt,
+        3: Dataset.CuAu_FePt_SHUFFLE,
+        4: Dataset.CuAu_TRAIN_FePt_TEST,
+        5: Dataset.FePt_TRAIN_CuAu_TEST,
+        6: Dataset.FeSi,
     }
     print(
-        "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test"
+        "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test, 6)FeSi "
     )
     chosen_dataset_option = int(input("Selected value: "))
-    config["dataset_option"] = dataset_options[chosen_dataset_option]
+    config["dataset_option"] = dataset_options[chosen_dataset_option].value
     train_loader, val_loader, test_loader = dataset_splitting(
-        dataset1=dataset_CuAu,
-        dataset2=dataset_FePt,
+        dataset_CuAu=dataset_CuAu,
+        dataset_FePt=dataset_FePt,
+        dataset_FeSi=dataset_FeSi,
         batch_size=config["batch_size"],
         perc_train=config["perc_train"],
-        chosen_dataset_option=chosen_dataset_option,
+        chosen_dataset_option=dataset_options[chosen_dataset_option],
     )
 
     input_dim = len(config["atom_features"])
@@ -146,7 +151,7 @@ def run_normal():
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    model_name = (
+    model_with_config_name = (
         model.__str__()
         + "-r-"
         + str(config["radius"])
@@ -170,10 +175,10 @@ def run_normal():
         + str(chosen_prediction_value)
         + ".pk"
     )
-    writer = SummaryWriter("./logs/" + model_name)
+    writer = SummaryWriter("./logs/" + model_with_config_name)
 
-    with open("./logs/" + model_name + "/config.txt", "w") as f:
-        print(config, file=f)
+    with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
+        json.dump(config, f)
 
     train_validate_test_normal(
         model,
@@ -184,8 +189,12 @@ def run_normal():
         writer,
         scheduler,
         config,
+        model_with_config_name,
     )
-    torch.save(model.state_dict(), "./models_serialized/" + model_name)
+    torch.save(
+        model.state_dict(),
+        "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
+    )
 
 
 os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -200,10 +209,3 @@ choice = int(
     )
 )
 type_of_run[choice]()
-
-"""
-model.load_state_dict(torch.load("models_serialized/PNNStack7-mnnn-5-hd-75-ne-200-lr-0.01.pk", map_location=torch.device('cpu')))
-print(test(test_loader, model))
-
-
-"""

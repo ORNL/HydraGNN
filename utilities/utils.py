@@ -10,10 +10,12 @@ from torch import nn
 from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
     StructureFeatures,
+    Dataset
 )
 import os
 from random import shuffle
 from utilities.models_setup import generate_model
+from utilities.visualizer import Visualizer
 from tqdm import tqdm
 
 
@@ -83,7 +85,15 @@ def train_validate_test_hyperopt(
 
 
 def train_validate_test_normal(
-    model, optimizer, train_loader, val_loader, test_loader, writer, scheduler, config
+    model,
+    optimizer,
+    train_loader,
+    val_loader,
+    test_loader,
+    writer,
+    scheduler,
+    config,
+    model_with_config_name,
 ):
     device = "cpu"
     if torch.cuda.is_available():
@@ -91,12 +101,17 @@ def train_validate_test_normal(
         if torch.cuda.device_count() > 1:
             model = nn.DataParallel(model)
     model.to(device)
-
+    visualizer = Visualizer(model_with_config_name)
     num_epoch = config["num_epoch"]
     for epoch in range(0, num_epoch):
         train_mae = train(train_loader, model, optimizer, config["output_dim"])
         val_mae = validate(val_loader, model, config["output_dim"])
-        test_rmse = test(test_loader, model, config["output_dim"])
+        test_rmse, true_values, predicted_values= test(
+            test_loader, model, config["output_dim"]
+        )
+        visualizer.add_test_values(
+            true_values=true_values, predicted_values=predicted_values
+        )
         scheduler.step(val_mae)
         writer.add_scalar("train error", train_mae, epoch)
         writer.add_scalar("validate error", val_mae, epoch)
@@ -106,6 +121,7 @@ def train_validate_test_normal(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
             f"Test RMSE: {test_rmse:.4f}"
         )
+    visualizer.create_scatter_plot()
 
 
 def train(loader, model, opt, output_dim):
@@ -142,49 +158,59 @@ def test(loader, model, output_dim):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.eval()
+    true_values = []
+    predicted_values = []
     for data in tqdm(loader):
         data = data.to(device)
         pred = model(data)
+        true_values.extend(data.y.tolist())
+        predicted_values.extend(pred.tolist())
         error = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
 
-    return total_error / len(loader.dataset)
+    return total_error / len(loader.dataset), true_values, predicted_values
 
 
 # Dataset splitting and manipulation
 def dataset_splitting(
-    dataset1: [],
-    dataset2: [],
+    dataset_CuAu: [],
+    dataset_FePt: [],
+    dataset_FeSi: [],
     batch_size: int,
     perc_train: float,
     chosen_dataset_option: int,
 ):
 
-    if chosen_dataset_option == 1:
+    if chosen_dataset_option == Dataset.CuAu:
         return split_dataset(
-            dataset=dataset1, batch_size=batch_size, perc_train=perc_train
+            dataset=dataset_CuAu, batch_size=batch_size, perc_train=perc_train
         )
-    elif chosen_dataset_option == 2:
+    elif chosen_dataset_option == Dataset.FePt:
         return split_dataset(
-            dataset=dataset2, batch_size=batch_size, perc_train=perc_train
+            dataset=dataset_FePt, batch_size=batch_size, perc_train=perc_train
         )
-    elif chosen_dataset_option == 3:
-        dataset1.extend(dataset2)
-        shuffle(dataset1)
+    elif chosen_dataset_option == Dataset.FeSi:
         return split_dataset(
-            dataset=dataset1, batch_size=batch_size, perc_train=perc_train
+            dataset=dataset_FeSi, batch_size=batch_size, perc_train=perc_train
         )
-    elif chosen_dataset_option == 4:
+    elif chosen_dataset_option == Dataset.CuAu_FePt_SHUFFLE:
+        dataset_CuAu.extend(dataset_FePt)
+        dataset_combined = dataset_CuAu
+        shuffle(dataset_combined)
+        return split_dataset(
+            dataset=dataset_combined, batch_size=batch_size, perc_train=perc_train
+        )
+    elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
         return combine_and_split_datasets(
-            dataset1=dataset1,
-            dataset2=dataset2,
+            dataset1=dataset_CuAu,
+            dataset2=dataset_FePt,
             batch_size=batch_size,
             perc_train=perc_train,
         )
-    elif chosen_dataset_option == 5:
+    elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
         return combine_and_split_datasets(
-            dataset1=dataset2,
-            dataset2=dataset1,
+            dataset1=dataset_FePt,
+            dataset2=dataset_CuAu,
             batch_size=batch_size,
             perc_train=perc_train,
         )
@@ -229,8 +255,8 @@ def combine_and_split_datasets(
 
 def load_data(config):
     # Loading raw data if necessary
-    raw_datasets = ["CuAu_32atoms", "FePt_32atoms"]
-    if len(os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")) < 2:
+    raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms"]
+    if len(os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")) < len(raw_datasets):
         for raw_dataset in raw_datasets:
             files_dir = (
                 os.environ["SERIALIZED_DATA_PATH"]
@@ -244,9 +270,11 @@ def load_data(config):
     # dataset parameters
     cu = "CuAu_32atoms.pkl"
     fe = "FePt_32atoms.pkl"
+    fesi = "FeSi_1024atoms.pkl"
 
     files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
     files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
+    files_dir3 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fesi
 
     # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
     loader = SerializedDataLoader()
@@ -258,5 +286,9 @@ def load_data(config):
         dataset_path=files_dir2,
         config=config,
     )
+    dataset3 = loader.load_serialized_data(
+        dataset_path=files_dir3,
+        config=config,
+    )
 
-    return dataset1, dataset2
+    return dataset1, dataset2, dataset3

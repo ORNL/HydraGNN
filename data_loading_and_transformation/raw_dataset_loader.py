@@ -5,9 +5,6 @@ from torch import tensor
 import numpy as np
 import pickle
 import pathlib
-from data_loading_and_transformation.dataset_descriptors import (
-    StructureFeatures,
-)
 from utilities import settings
 from data_loading_and_transformation.utils import tensor_divide
 
@@ -110,16 +107,17 @@ class RawDataLoader:
         [Data]
             Normalized dataset.
         """
+        num_of_atoms = len(dataset[0].x)
         max_structure_free_energy = float("-inf")
         min_structure_free_energy = float("inf")
         max_structure_charge_density = float("-inf")
         min_structure_charge_density = float("inf")
         max_structure_magnetic_moment = float("-inf")
         min_structure_magnetic_moment = float("inf")
-        max_charge_density = np.full(StructureFeatures.SIZE.value, -np.inf)
-        min_charge_density = np.full(StructureFeatures.SIZE.value, np.inf)
-        max_magnetic_moment = np.full(StructureFeatures.SIZE.value, -np.inf)
-        min_magnetic_moment = np.full(StructureFeatures.SIZE.value, np.inf)
+        max_charge_density = np.full(num_of_atoms, -np.inf)
+        min_charge_density = np.full(num_of_atoms, np.inf)
+        max_magnetic_moment = np.full(num_of_atoms, -np.inf)
+        min_magnetic_moment = np.full(num_of_atoms, np.inf)
 
         for data in dataset:
             max_structure_free_energy = max(abs(data.y[0]), max_structure_free_energy)

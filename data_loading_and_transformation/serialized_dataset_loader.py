@@ -4,7 +4,6 @@ import numpy as np
 import pickle
 from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
-    StructureFeatures,
 )
 from data_loading_and_transformation.utils import (
     distance_3D,
@@ -21,7 +20,7 @@ class SerializedDataLoader:
 
     Methods
     -------
-    load_serialized_data(dataset_path: str, atom_features: [AtomFeatures], structure_features: [StructureFeatures], radius: float, max_num_node_neighbours: int,)
+    load_serialized_data(dataset_path: str, config: dict)
         Loads the serialized structures data from specified path, computes new edges for the structures based on the maximum number of neighbours and radius. Additionally,
         atom and structure features are updated.
     """
@@ -38,15 +37,8 @@ class SerializedDataLoader:
         ----------
         dataset_path: str
             Directory path where files containing serialized structures are stored.
-        atom_features: [AtomFeatures]
-            List of atom features that are preserved in the returned dataset.
-        structure_features: [StructureFeatures]
-            List of structure features that are preserved in the returned dataset
-        radius: float
-            Used when computing edges in the structure. Represents maximum distance of a neighbour atom from an atom.
-        max_num_node_neighbours: int
-            Used when computing edges in the structure. Represents maximum number of neighbours of an atom.
-
+        config: dict
+            Dictionary containing information needed to load the data and transform it, respectively: atom_features, radius, max_num_node_neighbours and predicted_value_option.
         Returns
         ----------
         [Data]
@@ -80,7 +72,7 @@ class SerializedDataLoader:
         data: Data
             A Data object representing a structure that has atoms.
         """
-        feature_indices = [i.value for i in atom_features]
+        feature_indices = [i for i in atom_features]
         data.x = data.x[:, feature_indices]
 
     def __update_predicted_values(self, predicted_value_option: int, data: Data):
@@ -99,14 +91,14 @@ class SerializedDataLoader:
 
         """
         free_energy = torch.reshape(data.y[0], (1, 1))
-        charge_density = torch.reshape(data.x[:, 1], (32, 1))
-        magnetic_moment = torch.reshape(data.x[:, 2], (32, 1))
+        charge_density = torch.reshape(data.x[:, 1], (len(data.x), 1))
+        magnetic_moment = torch.reshape(data.x[:, 2], (len(data.x), 1))
         if predicted_value_option == 1:
             data.y = torch.reshape(data.y[0], (1, 1))
         elif predicted_value_option == 2:
-            data.y = torch.reshape(data.x[:, 1], (32, 1))
+            data.y = torch.reshape(data.x[:, 1], (len(data.x), 1))
         elif predicted_value_option == 3:
-            data.y = torch.reshape(data.x[:, 1], (32, 1))
+            data.y = torch.reshape(data.x[:, 1], (len(data.x), 1))
         elif predicted_value_option == 4:
             data.y = torch.cat([free_energy, charge_density], 0)
         elif predicted_value_option == 5:
@@ -132,13 +124,14 @@ class SerializedDataLoader:
         torch.tensor
             Tensor filled with pairs (atom1_index, atom2_index) that represent edges or connections between atoms within the structure.
         """
+        num_of_atoms = len(data.x)
         distance_matrix = np.zeros(
-            (StructureFeatures.SIZE.value, StructureFeatures.SIZE.value)
+            (num_of_atoms, num_of_atoms)
         )
-        candidate_neighbours = {k: [] for k in range(StructureFeatures.SIZE.value)}
+        candidate_neighbours = {k: [] for k in range(num_of_atoms)}
 
-        for i in range(StructureFeatures.SIZE.value):
-            for j in range(StructureFeatures.SIZE.value):
+        for i in range(num_of_atoms):
+            for j in range(num_of_atoms):
                 distance = distance_3D(data.pos[i], data.pos[j])
                 distance_matrix[i, j] = distance
                 if distance_matrix[i, j] <= radius and i != j:
@@ -153,7 +146,7 @@ class SerializedDataLoader:
         )
 
         adjacency_matrix = np.zeros(
-            (StructureFeatures.SIZE.value, StructureFeatures.SIZE.value)
+            (num_of_atoms, num_of_atoms)
         )
         for point, neighbours in ordered_candidate_neighbours.items():
             neighbours = list(neighbours)
