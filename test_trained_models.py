@@ -57,7 +57,9 @@ state_dict = torch.load(
 )
 model.load_state_dict(state_dict)
 
-error, true_values, predicted_values, error_values = test(test_loader, model, config["output_dim"])
+error, true_values, predicted_values, error_values = test(
+    test_loader, model, config["output_dim"]
+)
 print(error)
 visualizer = Visualizer("")
 visualizer.add_test_values(true_values=true_values, predicted_values=predicted_values)

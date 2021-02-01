@@ -125,9 +125,7 @@ class SerializedDataLoader:
             Tensor filled with pairs (atom1_index, atom2_index) that represent edges or connections between atoms within the structure.
         """
         num_of_atoms = len(data.x)
-        distance_matrix = np.zeros(
-            (num_of_atoms, num_of_atoms)
-        )
+        distance_matrix = np.zeros((num_of_atoms, num_of_atoms))
         candidate_neighbours = {k: [] for k in range(num_of_atoms)}
 
         for i in range(num_of_atoms):
@@ -145,9 +143,7 @@ class SerializedDataLoader:
             distance_matrix=distance_matrix,
         )
 
-        adjacency_matrix = np.zeros(
-            (num_of_atoms, num_of_atoms)
-        )
+        adjacency_matrix = np.zeros((num_of_atoms, num_of_atoms))
         for point, neighbours in ordered_candidate_neighbours.items():
             neighbours = list(neighbours)
             if point in collinear_neighbours.keys():

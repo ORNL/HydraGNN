@@ -71,8 +71,12 @@ def run_with_hyperparameter_optimization():
 
 def run_normal_terminal_input():
     config = {}
-    load_from_json = int(input("Do you want to upload the configuration from the file or input it from terminal(use configuration.json in the utilities folder)? 1)JSON 2)Terminal"))
-    if load_from_json==1:
+    load_from_json = int(
+        input(
+            "Do you want to upload the configuration from the file or input it from terminal(use configuration.json in the utilities folder)? 1)JSON 2)Terminal"
+        )
+    )
+    if load_from_json == 1:
         with open("./utilities/configuration.json", "r") as f:
             config = json.load(f)
 
@@ -218,7 +222,7 @@ def run_normal_config_file():
     }
     chosen_dataset_option = None
     for dataset in dataset_options:
-        if dataset.value==config["dataset_option"]:
+        if dataset.value == config["dataset_option"]:
             chosen_dataset_option = dataset
 
     train_loader, val_loader, test_loader = dataset_splitting(
@@ -292,8 +296,13 @@ def run_normal_config_file():
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
     )
 
+
 os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-type_of_run = {1: run_with_hyperparameter_optimization, 2: run_normal_terminal_input, 3: run_normal_config_file}
+type_of_run = {
+    1: run_with_hyperparameter_optimization,
+    2: run_normal_terminal_input,
+    3: run_normal_config_file,
+}
 
 print(
     "Training and validation is conducted on first dataset and testing on the second dataset."

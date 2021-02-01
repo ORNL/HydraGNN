@@ -62,4 +62,3 @@ class Visualizer:
             )
         else:
             plt.show()
-        

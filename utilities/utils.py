@@ -10,7 +10,7 @@ from torch import nn
 from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
     StructureFeatures,
-    Dataset
+    Dataset,
 )
 import os
 from random import shuffle
@@ -106,7 +106,7 @@ def train_validate_test_normal(
     for epoch in range(0, num_epoch):
         train_mae = train(train_loader, model, optimizer, config["output_dim"])
         val_mae = validate(val_loader, model, config["output_dim"])
-        test_rmse, true_values, predicted_values= test(
+        test_rmse, true_values, predicted_values = test(
             test_loader, model, config["output_dim"]
         )
         visualizer.add_test_values(
@@ -256,7 +256,9 @@ def combine_and_split_datasets(
 def load_data(config):
     # Loading raw data if necessary
     raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms"]
-    if len(os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")) < len(raw_datasets):
+    if len(
+        os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")
+    ) < len(raw_datasets):
         for raw_dataset in raw_datasets:
             files_dir = (
                 os.environ["SERIALIZED_DATA_PATH"]
