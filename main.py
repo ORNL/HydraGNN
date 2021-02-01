@@ -221,7 +221,7 @@ def run_normal_config_file():
         6: Dataset.FeSi,
     }
     chosen_dataset_option = None
-    for dataset in dataset_options:
+    for dataset in dataset_options.values():
         if dataset.value == config["dataset_option"]:
             chosen_dataset_option = dataset
 
