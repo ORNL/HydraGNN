@@ -69,8 +69,12 @@ def run_with_hyperparameter_optimization():
     )
 
 
-def run_normal():
+def run_normal_terminal_input():
     config = {}
+    load_from_json = int(input("Do you want to upload the configuration from the file or input it from terminal(use configuration.json in the utilities folder)? 1)JSON 2)Terminal"))
+    if load_from_json==1:
+        with open("./utilities/configuration.json", "r") as f:
+            config = json.load(f)
 
     atom_features_options = {
         1: [AtomFeatures.NUM_OF_PROTONS],
@@ -197,15 +201,106 @@ def run_normal():
     )
 
 
+def run_normal_config_file():
+    config = {}
+    with open("./utilities/configuration.json", "r") as f:
+        config = json.load(f)
+
+    dataset_CuAu, dataset_FePt, dataset_FeSi = load_data(config)
+
+    dataset_options = {
+        1: Dataset.CuAu,
+        2: Dataset.FePt,
+        3: Dataset.CuAu_FePt_SHUFFLE,
+        4: Dataset.CuAu_TRAIN_FePt_TEST,
+        5: Dataset.FePt_TRAIN_CuAu_TEST,
+        6: Dataset.FeSi,
+    }
+    chosen_dataset_option = None
+    for dataset in dataset_options:
+        if dataset.value==config["dataset_option"]:
+            chosen_dataset_option = dataset
+
+    train_loader, val_loader, test_loader = dataset_splitting(
+        dataset_CuAu=dataset_CuAu,
+        dataset_FePt=dataset_FePt,
+        dataset_FeSi=dataset_FeSi,
+        batch_size=config["batch_size"],
+        perc_train=config["perc_train"],
+        chosen_dataset_option=chosen_dataset_option,
+    )
+
+    input_dim = len(config["atom_features"])
+    model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
+    print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
+    chosen_model = model_choices[input("Selected value: ")]
+
+    model = generate_model(
+        model_type=chosen_model,
+        input_dim=input_dim,
+        dataset=train_loader.dataset,
+        config=config,
+    )
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
+    scheduler = ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+    )
+
+    model_with_config_name = (
+        model.__str__()
+        + "-r-"
+        + str(config["radius"])
+        + "-mnnn-"
+        + str(config["max_num_node_neighbours"])
+        + "-ncl-"
+        + str(model.num_conv_layers)
+        + "-hd-"
+        + str(model.hidden_dim)
+        + "-ne-"
+        + str(config["num_epoch"])
+        + "-lr-"
+        + str(config["learning_rate"])
+        + "-bs-"
+        + str(config["batch_size"])
+        + "-data-"
+        + config["dataset_option"]
+        + "-node_ft-"
+        + str(chosen_atom_features)
+        + "-pred_val-"
+        + str(chosen_prediction_value)
+        + ".pk"
+    )
+    writer = SummaryWriter("./logs/" + model_with_config_name)
+
+    with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
+        json.dump(config, f)
+
+    train_validate_test_normal(
+        model,
+        optimizer,
+        train_loader,
+        val_loader,
+        test_loader,
+        writer,
+        scheduler,
+        config,
+        model_with_config_name,
+    )
+    torch.save(
+        model.state_dict(),
+        "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
+    )
+
 os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-type_of_run = {1: run_with_hyperparameter_optimization, 2: run_normal}
+type_of_run = {1: run_with_hyperparameter_optimization, 2: run_normal_terminal_input, 3: run_normal_config_file}
 
 print(
     "Training and validation is conducted on first dataset and testing on the second dataset."
 )
 choice = int(
     input(
-        "Select the type of run between hyperparameter optimization and normal run 1)Hyperopt 2)Normal: "
+        "Select the type of run between hyperparameter optimization, normal run with configuration input from terminal and normal run with configuration input from a file: 1)Hyperopt 2)Normal(terminal input) 3)Normal(config file) "
     )
 )
 type_of_run[choice]()
