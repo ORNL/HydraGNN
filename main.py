@@ -178,10 +178,9 @@ def run_normal_terminal_input():
         + "-data-"
         + config["dataset_option"]
         + "-node_ft-"
-        + str(chosen_atom_features)
+        + ''.join(str(x) for x in config["atom_features"])
         + "-pred_val-"
-        + str(chosen_prediction_value)
-        + ".pk"
+        + str(config["predicted_value_option"])
     )
     writer = SummaryWriter("./logs/" + model_with_config_name)
 
@@ -270,11 +269,11 @@ def run_normal_config_file():
         + "-data-"
         + config["dataset_option"]
         + "-node_ft-"
-        + str(chosen_atom_features)
+        + ''.join(str(x) for x in config["atom_features"])
         + "-pred_val-"
-        + str(chosen_prediction_value)
-        + ".pk"
+        + str(config["predicted_value_option"])
     )
+    
     writer = SummaryWriter("./logs/" + model_with_config_name)
 
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
