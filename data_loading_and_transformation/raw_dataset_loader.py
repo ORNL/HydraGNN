@@ -126,7 +126,6 @@ class RawDataLoader:
             min_charge_density = np.minimum(data.x[:, 1].numpy(), min_charge_density)
             max_magnetic_moment = np.maximum(data.x[:, 2].numpy(), max_magnetic_moment)
             min_magnetic_moment = np.minimum(data.x[:, 2].numpy(), min_magnetic_moment)
-        breakpoint()
         for data in dataset:
             data.y[0] = tensor_divide(
                 (abs(data.y[0]) - min_structure_free_energy),
@@ -140,5 +139,4 @@ class RawDataLoader:
                 (data.x[:, 2] - min_magnetic_moment),
                 (max_magnetic_moment - min_magnetic_moment),
             )
-        breakpoint()
         return dataset
