@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from tqdm import tqdm
 
 
 def distance_3D(p1: [float], p2: [float]):
@@ -31,8 +32,9 @@ def order_candidates(candidate_neighbours: dict, distance_matrix: [[float]]):
         Matrix containing the distances for each pair of atoms within the structure.
     """
 
+    print("Ordering candidate neighbours based on their distance.")
     sorted_candidate_neighbours = {}
-    for point_index, candidates in candidate_neighbours.items():
+    for point_index, candidates in tqdm(candidate_neighbours.items()):
         distances = distance_matrix[point_index, candidates]
         candidate_distance_dict = {
             candidates[i]: distances[i] for i in range(len(candidates))
@@ -58,8 +60,9 @@ def remove_collinear_candidates(candidate_neighbours, distance_matrix):
     distance_matrix: [[float]]
         Matrix containing the distances for each pair of atoms within the structure.
     """
+    print("Determining which neighbours are collinear.")
     collinear_neigbours = {}
-    for point_index, candidates in candidate_neighbours.items():
+    for point_index, candidates in tqdm(candidate_neighbours.items()):
         candidates = list(candidates)
         collinear_points = []
         for candidate1 in range(len(candidates)):

@@ -101,17 +101,11 @@ def train_validate_test_normal(
         if torch.cuda.device_count() > 1:
             model = nn.DataParallel(model)
     model.to(device)
-    visualizer = Visualizer(model_with_config_name)
     num_epoch = config["num_epoch"]
     for epoch in range(0, num_epoch):
         train_mae = train(train_loader, model, optimizer, config["output_dim"])
         val_mae = validate(val_loader, model, config["output_dim"])
-        test_rmse, true_values, predicted_values = test(
-            test_loader, model, config["output_dim"]
-        )
-        visualizer.add_test_values(
-            true_values=true_values, predicted_values=predicted_values
-        )
+        test_rmse = test(test_loader, model, config["output_dim"])
         scheduler.step(val_mae)
         writer.add_scalar("train error", train_mae, epoch)
         writer.add_scalar("validate error", val_mae, epoch)
@@ -121,6 +115,14 @@ def train_validate_test_normal(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
             f"Test RMSE: {test_rmse:.4f}"
         )
+    # At the end of training phase, do the one test run for visualizer to get latest predictions
+    visualizer = Visualizer(model_with_config_name)
+    test_rmse, true_values, predicted_values = test(
+        test_loader, model, config["output_dim"]
+    )
+    visualizer.add_test_values(
+        true_values=true_values, predicted_values=predicted_values
+    )
     visualizer.create_scatter_plot()
 
 
@@ -171,49 +173,59 @@ def test(loader, model, output_dim):
     return total_error / len(loader.dataset), true_values, predicted_values
 
 
-# Dataset splitting and manipulation
-def dataset_splitting(
-    dataset_CuAu: [],
-    dataset_FePt: [],
-    dataset_FeSi: [],
-    batch_size: int,
-    perc_train: float,
-    chosen_dataset_option: int,
+def dataset_loading_and_splitting(
+    config: {},
+    chosen_dataset_option: Dataset,
 ):
 
     if chosen_dataset_option == Dataset.CuAu:
+        dataset_CuAu = load_data(Dataset.CuAu.value, config)
         return split_dataset(
-            dataset=dataset_CuAu, batch_size=batch_size, perc_train=perc_train
+            dataset=dataset_CuAu,
+            batch_size=config["batch_size"],
+            perc_train=config["perc_train"],
         )
     elif chosen_dataset_option == Dataset.FePt:
+        dataset_FePt = load_data(Dataset.FePt.value, config)
         return split_dataset(
-            dataset=dataset_FePt, batch_size=batch_size, perc_train=perc_train
+            dataset=dataset_FePt,
+            batch_size=config["batch_size"],
+            perc_train=config["perc_train"],
         )
     elif chosen_dataset_option == Dataset.FeSi:
+        dataset_FeSi = load_data(Dataset.FeSi.value, config)
         return split_dataset(
-            dataset=dataset_FeSi, batch_size=batch_size, perc_train=perc_train
+            dataset=dataset_FeSi,
+            batch_size=config["batch_size"],
+            perc_train=config["perc_train"],
         )
-    elif chosen_dataset_option == Dataset.CuAu_FePt_SHUFFLE:
-        dataset_CuAu.extend(dataset_FePt)
-        dataset_combined = dataset_CuAu
-        shuffle(dataset_combined)
-        return split_dataset(
-            dataset=dataset_combined, batch_size=batch_size, perc_train=perc_train
-        )
-    elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
-        return combine_and_split_datasets(
-            dataset1=dataset_CuAu,
-            dataset2=dataset_FePt,
-            batch_size=batch_size,
-            perc_train=perc_train,
-        )
-    elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
-        return combine_and_split_datasets(
-            dataset1=dataset_FePt,
-            dataset2=dataset_CuAu,
-            batch_size=batch_size,
-            perc_train=perc_train,
-        )
+    else:
+        dataset_CuAu = load_data(Dataset.CuAu.value, config)
+        dataset_FePt = load_data(Dataset.FePt.value, config)
+        if chosen_dataset_option == Dataset.CuAu_FePt_SHUFFLE:
+            dataset_CuAu.extend(dataset_FePt)
+            dataset_combined = dataset_CuAu
+            shuffle(dataset_combined)
+            return split_dataset(
+                dataset=dataset_combined,
+                batch_size=config["batch_size"],
+                perc_train=config["perc_train"],
+            )
+        elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
+
+            return combine_and_split_datasets(
+                dataset1=dataset_CuAu,
+                dataset2=dataset_FePt,
+                batch_size=config["batch_size"],
+                perc_train=config["perc_train"],
+            )
+        elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
+            return combine_and_split_datasets(
+                dataset1=dataset_FePt,
+                dataset2=dataset_CuAu,
+                batch_size=config["batch_size"],
+                perc_train=config["perc_train"],
+            )
 
 
 def split_dataset(dataset: [], batch_size: int, perc_train: float):
@@ -253,7 +265,23 @@ def combine_and_split_datasets(
     return train_loader, val_loader, test_loader
 
 
-def load_data(config):
+def load_data(dataset_option, config):
+    transform_raw_data_to_serialized()
+    files_dir = (
+        f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
+    )
+
+    # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
+    loader = SerializedDataLoader()
+    dataset = loader.load_serialized_data(
+        dataset_path=files_dir,
+        config=config,
+    )
+
+    return dataset
+
+
+def transform_raw_data_to_serialized():
     # Loading raw data if necessary
     raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms"]
     if len(
@@ -268,29 +296,3 @@ def load_data(config):
             )
             loader = RawDataLoader()
             loader.load_raw_data(dataset_path=files_dir)
-
-    # dataset parameters
-    cu = "CuAu_32atoms.pkl"
-    fe = "FePt_32atoms.pkl"
-    fesi = "FeSi_1024atoms.pkl"
-
-    files_dir1 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + cu
-    files_dir2 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fe
-    files_dir3 = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/" + fesi
-
-    # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-    loader = SerializedDataLoader()
-    dataset1 = loader.load_serialized_data(
-        dataset_path=files_dir1,
-        config=config,
-    )
-    dataset2 = loader.load_serialized_data(
-        dataset_path=files_dir2,
-        config=config,
-    )
-    dataset3 = loader.load_serialized_data(
-        dataset_path=files_dir3,
-        config=config,
-    )
-
-    return dataset1, dataset2, dataset3

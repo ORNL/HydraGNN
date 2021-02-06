@@ -16,8 +16,7 @@ import os
 import json
 
 from utilities.utils import (
-    load_data,
-    dataset_splitting,
+    dataset_loading_and_splitting,
     train_validate_test_hyperopt,
     train_validate_test_normal,
 )
@@ -118,7 +117,6 @@ def run_normal_terminal_input():
     chosen_prediction_value = int(input("Selected value: "))
     config["output_dim"] = predicted_value_option[chosen_prediction_value]
     config["predicted_value_option"] = chosen_prediction_value
-    dataset_CuAu, dataset_FePt, dataset_FeSi = load_data(config)
 
     dataset_options = {
         1: Dataset.CuAu,
@@ -133,12 +131,8 @@ def run_normal_terminal_input():
     )
     chosen_dataset_option = int(input("Selected value: "))
     config["dataset_option"] = dataset_options[chosen_dataset_option].value
-    train_loader, val_loader, test_loader = dataset_splitting(
-        dataset_CuAu=dataset_CuAu,
-        dataset_FePt=dataset_FePt,
-        dataset_FeSi=dataset_FeSi,
-        batch_size=config["batch_size"],
-        perc_train=config["perc_train"],
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
+        config=config,
         chosen_dataset_option=dataset_options[chosen_dataset_option],
     )
 
@@ -178,7 +172,7 @@ def run_normal_terminal_input():
         + "-data-"
         + config["dataset_option"]
         + "-node_ft-"
-        + ''.join(str(x) for x in config["atom_features"])
+        + "".join(str(x) for x in config["atom_features"])
         + "-pred_val-"
         + str(config["predicted_value_option"])
     )
@@ -187,6 +181,9 @@ def run_normal_terminal_input():
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
         json.dump(config, f)
 
+    print(
+        f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}"
+    )
     train_validate_test_normal(
         model,
         optimizer,
@@ -208,8 +205,8 @@ def run_normal_config_file():
     config = {}
     with open("./utilities/configuration.json", "r") as f:
         config = json.load(f)
-
-    dataset_CuAu, dataset_FePt, dataset_FeSi = load_data(config)
+    predicted_value_option = {1: 1, 2: 32, 3: 32, 4: 33, 5: 33, 6: 65}
+    config["output_dim"] = predicted_value_option[config["predicted_value_option"]]
 
     dataset_options = {
         1: Dataset.CuAu,
@@ -224,23 +221,13 @@ def run_normal_config_file():
         if dataset.value == config["dataset_option"]:
             chosen_dataset_option = dataset
 
-    train_loader, val_loader, test_loader = dataset_splitting(
-        dataset_CuAu=dataset_CuAu,
-        dataset_FePt=dataset_FePt,
-        dataset_FeSi=dataset_FeSi,
-        batch_size=config["batch_size"],
-        perc_train=config["perc_train"],
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
+        config=config,
         chosen_dataset_option=chosen_dataset_option,
     )
-
-    input_dim = len(config["atom_features"])
-    model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
-    print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
-    chosen_model = model_choices[input("Selected value: ")]
-
     model = generate_model(
-        model_type=chosen_model,
-        input_dim=input_dim,
+        model_type=config["model_type"],
+        input_dim=len(config["atom_features"]),
         dataset=train_loader.dataset,
         config=config,
     )
@@ -269,16 +256,19 @@ def run_normal_config_file():
         + "-data-"
         + config["dataset_option"]
         + "-node_ft-"
-        + ''.join(str(x) for x in config["atom_features"])
+        + "".join(str(x) for x in config["atom_features"])
         + "-pred_val-"
         + str(config["predicted_value_option"])
     )
-    
+
     writer = SummaryWriter("./logs/" + model_with_config_name)
 
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
         json.dump(config, f)
 
+    print(
+        f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}"
+    )
     train_validate_test_normal(
         model,
         optimizer,
@@ -303,9 +293,6 @@ type_of_run = {
     3: run_normal_config_file,
 }
 
-print(
-    "Training and validation is conducted on first dataset and testing on the second dataset."
-)
 choice = int(
     input(
         "Select the type of run between hyperparameter optimization, normal run with configuration input from terminal and normal run with configuration input from a file: 1)Hyperopt 2)Normal(terminal input) 3)Normal(config file) "

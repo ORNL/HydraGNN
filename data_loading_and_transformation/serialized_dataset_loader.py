@@ -11,6 +11,7 @@ from data_loading_and_transformation.utils import (
     order_candidates,
     resolve_neighbour_conflicts,
 )
+from tqdm import tqdm
 
 
 class SerializedDataLoader:
@@ -124,11 +125,13 @@ class SerializedDataLoader:
         torch.tensor
             Tensor filled with pairs (atom1_index, atom2_index) that represent edges or connections between atoms within the structure.
         """
+        print("Compute edges of the structure=adjacency matrix.")
         num_of_atoms = len(data.x)
         distance_matrix = np.zeros((num_of_atoms, num_of_atoms))
         candidate_neighbours = {k: [] for k in range(num_of_atoms)}
 
-        for i in range(num_of_atoms):
+        print("Computing edge distances and adding candidate neighbours.")
+        for i in tqdm(range(num_of_atoms)):
             for j in range(num_of_atoms):
                 distance = distance_3D(data.pos[i], data.pos[j])
                 distance_matrix[i, j] = distance
@@ -143,8 +146,9 @@ class SerializedDataLoader:
             distance_matrix=distance_matrix,
         )
 
+        print("Removing collinear neighbours and resolving neighbour conflicts.")
         adjacency_matrix = np.zeros((num_of_atoms, num_of_atoms))
-        for point, neighbours in ordered_candidate_neighbours.items():
+        for point, neighbours in tqdm(ordered_candidate_neighbours.items()):
             neighbours = list(neighbours)
             if point in collinear_neighbours.keys():
                 collinear_points = list(collinear_neighbours[point])

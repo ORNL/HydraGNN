@@ -10,7 +10,7 @@ from data_loading_and_transformation.dataset_descriptors import (
     Dataset,
 )
 from data_loading_and_transformation.dataset_descriptors import AtomFeatures
-from utilities.utils import load_data, dataset_splitting, test
+from utilities.utils import dataset_loading_and_splitting, test
 from utilities.models_setup import generate_model
 import tqdm
 import json
@@ -34,15 +34,9 @@ with open(f"{models_dir}{chosen_model}/config.json", "r") as f:
     config = json.load(f)
 
 chosen_dataset_option = [x for x in Dataset if x.value == config["dataset_option"]][0]
-
 os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-dataset_CuAu, dataset_FePt, dataset_FeSi = load_data(config)
-train_loader, val_loader, test_loader = dataset_splitting(
-    dataset_CuAu=dataset_CuAu,
-    dataset_FePt=dataset_FePt,
-    dataset_FeSi=dataset_FeSi,
-    batch_size=config["batch_size"],
-    perc_train=config["perc_train"],
+train_loader, val_loader, test_loader = dataset_loading_and_splitting(
+    config=config,
     chosen_dataset_option=chosen_dataset_option,
 )
 model = generate_model(
@@ -57,10 +51,8 @@ state_dict = torch.load(
 )
 model.load_state_dict(state_dict)
 
-error, true_values, predicted_values, error_values = test(
-    test_loader, model, config["output_dim"]
-)
-print(error)
+error, true_values, predicted_values = test(test_loader, model, config["output_dim"])
+print(f"Testing error = {error}")
 visualizer = Visualizer("")
 visualizer.add_test_values(true_values=true_values, predicted_values=predicted_values)
 visualizer.create_scatter_plot(save_plot=False)

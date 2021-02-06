@@ -5,7 +5,6 @@ from torch import tensor
 import numpy as np
 import pickle
 import pathlib
-from utilities import settings
 from data_loading_and_transformation.utils import tensor_divide
 
 

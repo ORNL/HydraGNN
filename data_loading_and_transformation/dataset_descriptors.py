@@ -19,13 +19,10 @@ class StructureFeatures(Enum):
     FREE_ENERGY = 0
     CHARGE_DENSITY = 1
     MAGNETIC_MOMENT = 2
-    SIZE = 32
 
 
 class Dataset(Enum):
-    """Class is an enum that represents features of an atom. Values paired with names of features represent column
-    indexes for each feature that are used in referencing them throughout the project.
-    """
+    """Class is an enum that represents available datasets and their combinations."""
 
     FePt = "FePt"
     CuAu = "CuAu"
