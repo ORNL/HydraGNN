@@ -109,11 +109,11 @@ def train_validate_test_normal(
         scheduler.step(val_mae)
         writer.add_scalar("train error", train_mae, epoch)
         writer.add_scalar("validate error", val_mae, epoch)
-        writer.add_scalar("test error", test_rmse, epoch)
+        writer.add_scalar("test error", test_rmse[0], epoch)
 
         print(
-            f"Epoch: {epoch:02d}, Train MAE: {train_mae:.4f}, Val MAE: {val_mae:.4f}, "
-            f"Test RMSE: {test_rmse:.4f}"
+            f"Epoch: {epoch:02d}, Train MAE: {train_mae:.8f}, Val MAE: {val_mae:.8f}, "
+            f"Test RMSE: {test_rmse[0]:.8f}"
         )
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     visualizer = Visualizer(model_with_config_name)
