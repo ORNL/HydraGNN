@@ -13,6 +13,16 @@ pip3 install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/
 pip3 install torch-geometric
 ```
 
+For running on a machine that has GPUs and where PyTorch is already implemented.
+```
+pip install --no-index torch-scatter -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+pip install --no-index torch-sparse -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+pip install --no-index torch-cluster -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+pip install --no-index torch-spline-conv -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
+pip install torch-geometric
+```
+where ${CUDA} and ${TORCH} should be replaced by your specific CUDA version (cpu, cu92, cu101, cu102, cu110) and PyTorch version (1.4.0, 1.5.0, 1.6.0, 1.7.0)
+
 For serialization and storing the processed data for later sessions.
 ```
 pip3 install pickle5
