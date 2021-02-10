@@ -131,6 +131,12 @@ def run_normal_terminal_input():
     )
     chosen_dataset_option = int(input("Selected value: "))
     config["dataset_option"] = dataset_options[chosen_dataset_option].value
+    print(
+        "Do you want to use subsample of the dataset? If yes input the size of the subsample if no enter 0."
+    )
+    subsample_size = int(input("Selected value: "))
+    if subsample_size > 0:
+        config["subsample_size"] = subsample_size
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=dataset_options[chosen_dataset_option],

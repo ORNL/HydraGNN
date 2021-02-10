@@ -5,7 +5,7 @@ from torch import tensor
 import numpy as np
 import pickle
 import pathlib
-from data_loading_and_transformation.utils import tensor_divide
+from data_loading_and_transformation.helper_functions import tensor_divide
 
 
 class RawDataLoader:

@@ -89,5 +89,6 @@ Possible values:
     9. predicted_value_option(1, 2, 3, 4, 5, 6) where 1 = free energy, 2 = charge_density, 3 = magnetic moment, 4 = free energy+charge density 5 = free energy+magnetic moment, 6 = free energy+charge density+magnetic moment
     10. dataset_option(str) possible values: FePt, CuAu, FeSi, CuAu_FePt_SHUFFLE, CuAu_TRAIN_FePt_TEST, FePt_TRAIN_CuAu_TEST
     11. model_type(str) possible values PNN, MFC, GIN and GAT
+    12. subsample_size(int) needs to be smaller than the size of original dataset, when used the serialized dataset loader will take the subset of the original dataset using stratified sampling
 
 Remark: keep in mind that predicted_value_option is used to compute output dimension. Besides free energy which has dimension of 1, other combinations depend on the number of atoms in the dataset(example: free energy+charge density=1 + number of atoms) and this was configured specifically for structures that have number of atoms equal to 32. If you want to add datasets with different structures in terms of number of atoms, you need to change parts of the code in main.py where this is computed from a dictionary.

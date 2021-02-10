@@ -5,13 +5,14 @@ import pickle
 from data_loading_and_transformation.dataset_descriptors import (
     AtomFeatures,
 )
-from data_loading_and_transformation.utils import (
+from data_loading_and_transformation.helper_functions import (
     distance_3D,
     remove_collinear_candidates,
     order_candidates,
     resolve_neighbour_conflicts,
 )
 from tqdm import tqdm
+from sklearn.model_selection import StratifiedShuffleSplit
 
 
 class SerializedDataLoader:
@@ -60,6 +61,11 @@ class SerializedDataLoader:
             data.edge_attr = edge_distances
             self.__update_predicted_values(config["predicted_value_option"], data)
             self.__update_atom_features(config["atom_features"], data)
+
+        if "subsample_size" in config.keys():
+            return self.__stratified_sampling(
+                dataset=dataset, subsample_size=config["subsample_size"]
+            )
 
         return dataset
 
@@ -172,3 +178,50 @@ class SerializedDataLoader:
         )
 
         return edge_index, edge_lengths
+
+    def __stratified_sampling(self, dataset: [Data], subsample_size: int):
+        """Given the dataset and the size of the subsample you want to extract from it, method will
+        apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
+        In the case of the structures dataset where each structure contains 2 types of atoms, the category will
+        be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
+
+        Parameters
+        ----------
+        dataset: [Data]
+            A list of Data objects representing a structure that has atoms.
+        subsample_size: int
+            Size of the subsample of the dataset.
+
+        Returns
+        ----------
+        [Data]
+            Subsample of the original dataset constructed using stratified sampling of size subsample_size.
+        """
+        unique_values = torch.unique(dataset[0].x[:, 0]).tolist()
+        dataset_categories = []
+        print("Computing the categories for the whole dataset.")
+        for data in tqdm(dataset):
+            frequencies = torch.bincount(data.x[:, 0].int())
+            frequencies = sorted(frequencies[frequencies > 0].tolist())
+            category = 0
+            for index, frequency in enumerate(frequencies):
+                category += frequency * (100 ** index)
+            dataset_categories.append(category)
+
+        subsample_percentage = subsample_size / len(dataset)
+        subsample_indices = []
+        subsample = []
+
+        sss = StratifiedShuffleSplit(
+            n_splits=1, train_size=subsample_percentage, random_state=0
+        )
+
+        for subsample_index, rest_of_data_index in sss.split(
+            dataset, dataset_categories
+        ):
+            subsample_indices = subsample_index.tolist()
+
+        for index in subsample_indices:
+            subsample.append(dataset[index])
+
+        return subsample

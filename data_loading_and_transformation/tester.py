@@ -5,10 +5,11 @@ from torch_geometric.data import Data
 import torch
 from torch import tensor
 import numpy as np
+import json
 import pickle
 import pathlib
 from dataset_descriptors import AtomFeatures, StructureFeatures
-from utils import distance_3D, remove_collinear_candidates, order_candidates
+from helper_functions import distance_3D, remove_collinear_candidates, order_candidates
 
 from serialized_dataset_loader import SerializedDataLoader
 from raw_dataset_loader import RawDataLoader
@@ -18,39 +19,21 @@ import chart_studio.plotly as py
 import plotly.graph_objects as go
 from mpl_toolkits.mplot3d import Axes3D
 
-
-# testing raw dataset loader
-cu = "CuAu_32atoms"
-fe = "FePt_32atoms"
-
-files_dir = "./Dataset/" + fe + "/output_files/"
-loader = RawDataLoader()
-loader.load_raw_data(dataset_path=files_dir)
-
-# testing serialized dataset loader
-
-cu = "CuAu_32atoms.pkl"
-fe = "FePt_32atoms.pkl"
+cu = "CuAu.pkl"
+fe = "FePt.pkl"
+si = "FeSi.pkl"
 files_dir = "./serialized_dataset/" + fe
 
-atom_features = [
-    AtomFeatures.NUM_OF_PROTONS,
-    AtomFeatures.CHARGE_DENSITY,
-    AtomFeatures.MAGNETIC_MOMENT,
-]
-structure_features = [StructureFeatures.FREE_ENERGY]
-radius = 7
-max_num_node_neighbours = 10
+os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+
+config = {}
+with open("./utilities/configuration.json", "r") as f:
+    config = json.load(f)
 
 loader = SerializedDataLoader()
-dataset = loader.load_serialized_data(
-    dataset_path=files_dir,
-    atom_features=atom_features,
-    structure_features=structure_features,
-    radius=radius,
-    max_num_node_neighbours=max_num_node_neighbours,
-)
 
+dataset = loader.load_serialized_data(dataset_path=files_dir, config=config)
+breakpoint()
 structure = dataset[0]
 vertices = structure.pos.numpy().tolist()
 edges = structure.edge_index.t().numpy().tolist()
@@ -136,10 +119,8 @@ axis = dict(
     title="",
 )
 layout = go.Layout(
-    title="Structure (3D visualization), radius = "
-    + str(radius)
-    + ", maximum number of neighbours = "
-    + str(max_num_node_neighbours),
+    title=f"Structure (3D visualization), radius = {str(config['radius'])},"
+    + f" maximum number of neighbours = {str(config['max_num_node_neighbours'])}",
     width=1000,
     height=1000,
     showlegend=False,
