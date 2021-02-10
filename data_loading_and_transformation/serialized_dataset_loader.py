@@ -62,9 +62,9 @@ class SerializedDataLoader:
             self.__update_predicted_values(config["predicted_value_option"], data)
             self.__update_atom_features(config["atom_features"], data)
 
-        if "subsample_size" in config.keys():
+        if "subsample_percentage" in config.keys():
             return self.__stratified_sampling(
-                dataset=dataset, subsample_size=config["subsample_size"]
+                dataset=dataset, subsample_percentage=config["subsample_percentage"]
             )
 
         return dataset
@@ -179,8 +179,8 @@ class SerializedDataLoader:
 
         return edge_index, edge_lengths
 
-    def __stratified_sampling(self, dataset: [Data], subsample_size: int):
-        """Given the dataset and the size of the subsample you want to extract from it, method will
+    def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
+        """Given the dataset and the percentage of data you want to extract from it, method will
         apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
         In the case of the structures dataset where each structure contains 2 types of atoms, the category will
         be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
@@ -189,13 +189,13 @@ class SerializedDataLoader:
         ----------
         dataset: [Data]
             A list of Data objects representing a structure that has atoms.
-        subsample_size: int
-            Size of the subsample of the dataset.
+        subsample_percentage: float
+            Percentage of the dataset.
 
         Returns
         ----------
         [Data]
-            Subsample of the original dataset constructed using stratified sampling of size subsample_size.
+            Subsample of the original dataset constructed using stratified sampling.
         """
         unique_values = torch.unique(dataset[0].x[:, 0]).tolist()
         dataset_categories = []
@@ -208,7 +208,6 @@ class SerializedDataLoader:
                 category += frequency * (100 ** index)
             dataset_categories.append(category)
 
-        subsample_percentage = subsample_size / len(dataset)
         subsample_indices = []
         subsample = []
 

@@ -14,5 +14,5 @@
     "predicted_value_option": 1,
     "dataset_option": "CuAu",
     "model_type": "PNN",
-    "subsample_size": 1000
+    "subsample_percentage": 0.03
 }
