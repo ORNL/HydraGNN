@@ -30,3 +30,4 @@ class Dataset(Enum):
     CuAu_TRAIN_FePt_TEST = "CuAu_TRAIN_FePt_TEST"
     FePt_TRAIN_CuAu_TEST = "FePt_TRAIN_CuAu_TEST"
     FeSi = "FeSi"
+    FePt_FeSi_SHUFFLE = "CuAu_FePt_FeSi_SHUFFLE"

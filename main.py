@@ -125,9 +125,10 @@ def run_normal_terminal_input():
         4: Dataset.CuAu_TRAIN_FePt_TEST,
         5: Dataset.FePt_TRAIN_CuAu_TEST,
         6: Dataset.FeSi,
+        7: Dataset.FePt_FeSi_SHUFFLE,
     }
     print(
-        "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test, 6)FeSi "
+        "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine CuAu-FePt&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test, 6)FeSi , 7) Combine FePt-FeSi&Shuffle"
     )
     chosen_dataset_option = int(input("Selected value: "))
     config["dataset_option"] = dataset_options[chosen_dataset_option].value
@@ -221,6 +222,7 @@ def run_normal_config_file():
         4: Dataset.CuAu_TRAIN_FePt_TEST,
         5: Dataset.FePt_TRAIN_CuAu_TEST,
         6: Dataset.FeSi,
+        7: Dataset.FePt_FeSi_SHUFFLE,
     }
     chosen_dataset_option = None
     for dataset in dataset_options.values():

@@ -202,6 +202,7 @@ def dataset_loading_and_splitting(
     else:
         dataset_CuAu = load_data(Dataset.CuAu.value, config)
         dataset_FePt = load_data(Dataset.FePt.value, config)
+        dataset_FeSi = load_data(Dataset.FeSi.value, config)
         if chosen_dataset_option == Dataset.CuAu_FePt_SHUFFLE:
             dataset_CuAu.extend(dataset_FePt)
             dataset_combined = dataset_CuAu
@@ -223,6 +224,15 @@ def dataset_loading_and_splitting(
             return combine_and_split_datasets(
                 dataset1=dataset_FePt,
                 dataset2=dataset_CuAu,
+                batch_size=config["batch_size"],
+                perc_train=config["perc_train"],
+            )
+        elif chosen_dataset_option == Dataset.FePt_FeSi_SHUFFLE:
+            dataset_FePt.extend(dataset_FeSi)
+            dataset_combined = dataset_FePt
+            shuffle(dataset_combined)
+            return split_dataset(
+                dataset=dataset_combined,
                 batch_size=config["batch_size"],
                 perc_train=config["perc_train"],
             )
