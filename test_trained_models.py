@@ -24,7 +24,7 @@ def best_models(
     plot_results=False,
 ):
     expected_error = [5.349268349268197e-05, 0.09692384524119867, 7.984326111682e-05]
-    EPSILON = 1e-10
+    EPSILON = 1e-8
 
     available_models = sorted(os.listdir(models_dir))
     try:
