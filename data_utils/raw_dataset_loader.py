@@ -1,11 +1,13 @@
 import os
-from torch_geometric.data import Data
-import torch
-from torch import tensor
 import numpy as np
 import pickle
 import pathlib
-from data_loading_and_transformation.helper_functions import tensor_divide
+
+import torch
+from torch_geometric.data import Data
+from torch import tensor
+
+from data_utils.helper_functions import tensor_divide
 
 
 class RawDataLoader:
