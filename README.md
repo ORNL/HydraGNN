@@ -1,9 +1,31 @@
 # GCNN
 
-# Packages
-Installing required packages.
+## Dependencies
+To install required packages with only basic capability:
+```
+pip install -r requirements.txt
+pip install -r requirements-torchdep.txt
+```
 
-For running on a machine that has only cpu.
+In order to run Bayesian hyperparameter optimization additionally install:
+```
+pip install -r requirements-hyperopt.txt
+```
+
+If you plan to modify the code, include packages for formatting (`black`) and
+testing (`pytest`) the code:
+```
+pip install -r requirements-dev.txt
+```
+
+For serialization and storing the processed data for later sessions (`pickle`)
+and visualizing structure connections (`igraph`):
+```
+pip install -r requirements-other.txt
+```
+
+### Detailed dependency installation
+For installing a specific PyTorch version on a machine that has only cpu:
 ```
 pip3 install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
 pip3 install torch-scatter==latest+cpu -f https://pytorch-geometric.com/whl/torch-1.6.0.html
@@ -13,7 +35,7 @@ pip3 install torch-spline-conv==latest+cpu -f https://pytorch-geometric.com/whl/
 pip3 install torch-geometric
 ```
 
-For running on a machine that has GPUs and where PyTorch is already implemented.
+For installing on a machine that has GPUs and PyTorch already installed:
 ```
 pip install --no-index torch-scatter -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
 pip install --no-index torch-sparse -f https://pytorch-geometric.com/whl/torch-${TORCH}+${CUDA}.html
@@ -23,48 +45,23 @@ pip install torch-geometric
 ```
 where ${CUDA} and ${TORCH} should be replaced by your specific CUDA version (cpu, cu92, cu101, cu102, cu110) and PyTorch version (1.4.0, 1.5.0, 1.6.0, 1.7.0)
 
-For serialization and storing the processed data for later sessions.
-```
-pip3 install pickle5
-```
 
-For proper formatting of code.
-```
-pip3 install git+git://github.com/psf/black
-```
-
-For tracking down progress using progress bar.
-```
-pip3 install tqdm
-```
-
-For visualizing structure connections.
-```
-pip3 install python-igraph
-```
-
-For Bayesian hyperparameter optimization.
-```
-pip3 install ray[tune]
-pip3 install hpbandster ConfigSpace
-pip3 install -U hyperopt
-```
-# Code formatting
+## Code formatting
 Before committing and pushing changes, run command `black .` from the main directory of the project(GCNN).
 
-# Running the code
+## Running the code
 There are two options for running the code:
 1. Training the model(main.py)
 2. Reproducing the results using existing models(test_trained_models.py)
 
 
-## Training the model(main.py)
+### Training the model(main.py)
 There are 3 options:
 1. Run it with hyperparameter optimization
 2. Run it normally with inputting the parameters of data and model from terminal
 3. Run it normally but load the whole parameters config from json file whose location is GCNN/utilities/configuration.json
 
-### Loading parameters from configuration.json file
+#### Loading parameters from configuration.json file
 This is an example for configuration.json file:
 ```
 {
