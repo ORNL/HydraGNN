@@ -23,7 +23,7 @@ def run_normal_terminal_input():
         )
     )
     if load_from_json == 1:
-        with open("./utils/configuration.json", "r") as f:
+        with open("./examples/configuration.json", "r") as f:
             config = json.load(f)
 
     atom_features_options = {
@@ -157,7 +157,7 @@ def run_normal_terminal_input():
 
 def run_normal_config_file():
     config = {}
-    with open("./utils/configuration.json", "r") as f:
+    with open("./examples/configuration.json", "r") as f:
         config = json.load(f)
     predicted_value_option = {1: 1, 2: 32, 3: 32, 4: 33, 5: 33, 6: 65}
     config["output_dim"] = predicted_value_option[config["predicted_value_option"]]

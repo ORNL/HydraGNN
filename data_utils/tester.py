@@ -27,7 +27,7 @@ files_dir = "./serialized_dataset/" + fe
 os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
 config = {}
-with open("./utilities/configuration.json", "r") as f:
+with open("./examples/configuration.json", "r") as f:
     config = json.load(f)
 
 loader = SerializedDataLoader()
