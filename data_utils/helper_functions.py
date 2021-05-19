@@ -1,6 +1,7 @@
 import numpy as np
-import torch
 from tqdm import tqdm
+
+import torch
 
 
 def distance_3D(p1: [float], p2: [float]):

@@ -1,10 +1,11 @@
+import torch
+from torch_geometric.data import Data
+from torch_geometric.utils import degree
+
 from models.GINStack import GINStack
 from models.PNNStack import PNNStack
 from models.GATStack import GATStack
 from models.MFCStack import MFCStack
-import torch
-from torch_geometric.data import Data
-from torch_geometric.utils import degree
 
 
 def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dict):

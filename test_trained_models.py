@@ -1,21 +1,21 @@
-import torch
 import os
 import tqdm
 import json
 import pytest
+
+import torch
+
 from models.PNNStack import PNNStack
-from data_loading_and_transformation.raw_dataset_loader import RawDataLoader
-from data_loading_and_transformation.serialized_dataset_loader import (
-    SerializedDataLoader,
-)
-from data_loading_and_transformation.dataset_descriptors import (
+from data_utils.raw_dataset_loader import RawDataLoader
+from data_utils.serialized_dataset_loader import SerializedDataLoader
+from data_utils.dataset_descriptors import (
     AtomFeatures,
     Dataset,
 )
-from data_loading_and_transformation.dataset_descriptors import AtomFeatures
-from utilities.utils import dataset_loading_and_splitting, test
-from utilities.models_setup import generate_model
-from utilities.visualizer import Visualizer
+from data_utils.dataset_descriptors import AtomFeatures
+from utils.utils import dataset_loading_and_splitting, test
+from utils.models_setup import generate_model
+from utils.visualizer import Visualizer
 
 
 def best_models(

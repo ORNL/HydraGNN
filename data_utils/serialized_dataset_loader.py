@@ -1,18 +1,18 @@
-from torch_geometric.data import Data
-import torch
 import numpy as np
 import pickle
-from data_loading_and_transformation.dataset_descriptors import (
-    AtomFeatures,
-)
-from data_loading_and_transformation.helper_functions import (
+from tqdm import tqdm
+from sklearn.model_selection import StratifiedShuffleSplit
+
+import torch
+from torch_geometric.data import Data
+
+from data_utils.dataset_descriptors import AtomFeatures
+from data_utils.helper_functions import (
     distance_3D,
     remove_collinear_candidates,
     order_candidates,
     resolve_neighbour_conflicts,
 )
-from tqdm import tqdm
-from sklearn.model_selection import StratifiedShuffleSplit
 
 
 class SerializedDataLoader:

@@ -4,7 +4,6 @@ from .utils import (
     dataset_loading_and_splitting,
     load_data,
     train_validate_test_normal,
-    train_validate_test_hyperopt,
     test,
 )
 from .visualizer import Visualizer
