@@ -34,8 +34,10 @@ def train_validate_test_normal(
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda:0"
+        """
         if torch.cuda.device_count() > 1:
             model = nn.DataParallel(model)
+        """
     model.to(device)
     num_epoch = config["num_epoch"]
     for epoch in range(0, num_epoch):
@@ -63,7 +65,7 @@ def train_validate_test_normal(
 
 
 def train(loader, model, opt, output_dim):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.train()
     for data in tqdm(loader):
@@ -79,7 +81,7 @@ def train(loader, model, opt, output_dim):
 
 @torch.no_grad()
 def validate(loader, model, output_dim):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.eval()
     for data in tqdm(loader):
@@ -93,7 +95,7 @@ def validate(loader, model, output_dim):
 
 @torch.no_grad()
 def test(loader, model, output_dim):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     total_error = 0
     model.eval()
     true_values = []
