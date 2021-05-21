@@ -6,7 +6,16 @@ from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 
 
 class PNNStack(torch.nn.Module):
-    def __init__(self, deg, input_dim, output_dim, num_nodes, hidden_dim, num_conv_layers, num_shared=1):
+    def __init__(
+        self,
+        deg,
+        input_dim,
+        output_dim,
+        num_nodes,
+        hidden_dim,
+        num_conv_layers,
+        num_shared=1,
+    ):
         super(PNNStack, self).__init__()
 
         aggregators = ["mean", "min", "max", "std"]
@@ -47,22 +56,25 @@ class PNNStack(torch.nn.Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
         ############multiple heads/taks################
-        denselayers=[] #shared dense layers, before mutli-heads
+        denselayers = []  # shared dense layers, before mutli-heads
         for ishare in range(num_shared):
             denselayers.append(Linear(self.hidden_dim, self.hidden_dim))
             denselayers.append(ReLU())
-            self.shared=Sequential(*denselayers)
+        self.shared = Sequential(*denselayers)
 
         # currently, only two types of outputs are considered, graph-level scalars and nodes-level vectors with num_nodes dimension, or mixed or the two
-        if output_dim < num_nodes: #all graph-level outputs
+        if output_dim < num_nodes:  # all graph-level outputs
             self.num_heads = output_dim
-            outputs_dims   = [1 for _ in range(self.num_heads)]
-        elif output_dim%num_nodes==0: #all node-level outputs
-            self.num_heads = output_dim//num_nodes
+            outputs_dims = [1 for _ in range(self.num_heads)]
+        elif output_dim % num_nodes == 0:  # all node-level outputs
+            self.num_heads = output_dim // num_nodes
             outputs_dims = [num_nodes for _ in range(self.num_heads)]
-        else: # mixed graph-level and node-level
-            self.num_heads = output_dim%num_nodes + output_dim//num_nodes
-            outputs_dims = [1 if ih<output_dim%num_nodes else num_nodes for ih in range(self.num_heads)]
+        else:  # mixed graph-level and node-level
+            self.num_heads = output_dim % num_nodes + output_dim // num_nodes
+            outputs_dims = [
+                1 if ih < output_dim % num_nodes else num_nodes
+                for ih in range(self.num_heads)
+            ]
 
         self.num_heads = len(outputs_dims)  # number of heads/tasks
         self.heads = ModuleList()
@@ -75,6 +87,7 @@ class PNNStack(torch.nn.Module):
                 Linear(25, outputs_dims[ihead]),
             )
             self.heads.append(mlp)
+
     def forward(self, data):
         x, edge_index, batch = (
             data.x,
@@ -85,7 +98,7 @@ class PNNStack(torch.nn.Module):
             x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
         x = global_mean_pool(x, batch)
         ####
-        x = self.shared(x) # shared dense layers
+        x = self.shared(x)  # shared dense layers
         outputs = []
         for headloc in self.heads:
             outputs.append(headloc(x))
