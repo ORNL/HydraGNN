@@ -7,8 +7,9 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils.utils import (
     dataset_loading_and_splitting,
     train_validate_test_normal,
+    setup_ddp,
 )
-from utils.models_setup import generate_model
+from utils.models_setup import generate_model, get_gpus_list, get_gpu
 from data_utils.dataset_descriptors import (
     AtomFeatures,
     Dataset,
@@ -156,6 +157,9 @@ def run_normal_terminal_input():
 
 
 def run_normal_config_file():
+
+    run_in_parallel, world_size, world_rank = setup_ddp()
+
     config = {}
     with open("./examples/configuration.json", "r") as f:
         config = json.load(f)
@@ -179,17 +183,14 @@ def run_normal_config_file():
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=chosen_dataset_option,
+        distributed_data_parallelism=run_in_parallel,
     )
     model = generate_model(
         model_type=config["model_type"],
         input_dim=len(config["atom_features"]),
         dataset=train_loader.dataset,
         config=config,
-    )
-
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
-    scheduler = ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+        distributed_data_parallelism=run_in_parallel,
     )
 
     model_with_config_name = (
@@ -216,6 +217,17 @@ def run_normal_config_file():
         + str(config["predicted_value_option"])
     )
 
+    if run_in_parallel:
+        available_gpus = get_gpus_list()
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=["cuda:" + str(int(world_rank) % len(available_gpus))]
+        )
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
+    scheduler = ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+    )
+
     writer = SummaryWriter("./logs/" + model_with_config_name)
 
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
@@ -235,10 +247,18 @@ def run_normal_config_file():
         config,
         model_with_config_name,
     )
-    torch.save(
-        model.state_dict(),
-        "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
-    )
+    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
+        if int(world_rank) == 0:
+            save_state = True
+    else:
+        save_state = True
+
+    if save_state:
+        torch.save(
+            model.state_dict(),
+            "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
+        )
 
 
 if __name__ == "__main__":
