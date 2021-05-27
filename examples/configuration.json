@@ -6,12 +6,12 @@
     "hidden_dim": 15,
     "num_conv_layers": 16,
     "learning_rate": 0.02,
-    "radius": 7,
-    "max_num_node_neighbours": 5,
+    "radius": 10,
+    "max_num_node_neighbours": 10,
     "num_epoch": 200,
     "perc_train": 0.7,
+    "output_dim": 1,
     "predicted_value_option": 1,
-    "dataset_option": "FePt",
-    "model_type": "PNN",
-    "subsample_percentage": 0.99
+    "dataset_option": "CuAu",
+    "model_type": "PNN"
 }
