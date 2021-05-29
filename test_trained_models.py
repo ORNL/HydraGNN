@@ -66,6 +66,7 @@ def best_models(
         test_loader, model, config["output_dim"]
     )
     print(f"Testing error = {error}")
+    print(f"Model Testing error = {expected_error[model_index]}")
     assert abs(error - expected_error[model_index]) < EPSILON
 
     if plot_results:
