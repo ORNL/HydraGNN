@@ -23,7 +23,11 @@ def best_models(
     models_dir="./reproducing_results/best_performing_models/",
     plot_results=False,
 ):
-    expected_error = [0.0011474628477206312, 4.2980859073136316e-05, 0.09525399695377092]
+    expected_error = [
+        0.0011474628477206312,
+        4.2980859073136316e-05,
+        0.09525399695377092,
+    ]
     EPSILON = 1e-8
 
     available_models = sorted(os.listdir(models_dir))
