@@ -28,7 +28,7 @@ def best_models(
         4.2980859073136316e-05,
         0.09525396614461332,
     ]
-    EPSILON = 1e-8
+    EPSILON = 1e-7
 
     available_models = sorted(os.listdir(models_dir))
     try:
@@ -65,8 +65,6 @@ def best_models(
     error, true_values, predicted_values = test(
         test_loader, model, config["output_dim"]
     )
-    print(f"Testing error = {error}")
-    print(f"Model Testing error = {expected_error[model_index]}")
     assert abs(error - expected_error[model_index]) < EPSILON
 
     if plot_results:
