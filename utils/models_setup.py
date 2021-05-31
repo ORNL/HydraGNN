@@ -29,8 +29,10 @@ def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dic
             deg=deg,
             input_dim=input_dim,
             output_dim=config["output_dim"],
+            num_nodes=dataset[0].num_nodes,
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
+            num_shared=1,
         ).to(device)
 
     elif model_type == "GAT":
