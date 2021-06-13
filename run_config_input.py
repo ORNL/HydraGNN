@@ -220,7 +220,7 @@ def run_normal_config_file():
     if run_in_parallel:
         available_gpus = get_gpus_list()
         model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=["cuda:" + str(int(world_rank) % len(available_gpus))]
+            model, device_ids=get_gpu(int(world_rank) % len(available_gpus))
         )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])

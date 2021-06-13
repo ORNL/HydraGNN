@@ -9,6 +9,16 @@ from models.GATStack import GATStack
 from models.MFCStack import MFCStack
 
 
+def get_comm_size_and_rank():
+    try:
+        world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
+        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
+    except KeyError:
+        print("DDP has to be initialized within a job - Running in sequential mode")
+
+    return world_size, world_rank
+
+
 def get_gpus_list():
 
     available_gpus = [i for i in range(torch.cuda.device_count())]
@@ -39,8 +49,7 @@ def generate_model(
 ):
 
     if distributed_data_parallelism:
-        world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
-        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
+        world_size, world_rank = get_comm_size_and_rank()
 
     torch.manual_seed(0)
 

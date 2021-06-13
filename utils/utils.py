@@ -238,20 +238,9 @@ def dataset_loading_and_splitting(
             )
 
 
-def split_dataset(
-    dataset: [],
-    batch_size: int,
-    perc_train: float,
-    distributed_data_parallelism: bool = False,
+def create_dataloaders(
+    distributed_data_parallelism, trainset, valset, testset, batch_size
 ):
-    perc_val = (1 - perc_train) / 2
-    data_size = len(dataset)
-
-    trainset = dataset[: int(data_size * perc_train)]
-    valset = dataset[
-        int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
-    ]
-    testset = dataset[int(data_size * (perc_train + perc_val)) :]
 
     if distributed_data_parallelism:
 
@@ -286,6 +275,28 @@ def split_dataset(
     return train_loader, val_loader, test_loader
 
 
+def split_dataset(
+    dataset: [],
+    batch_size: int,
+    perc_train: float,
+    distributed_data_parallelism: bool = False,
+):
+    perc_val = (1 - perc_train) / 2
+    data_size = len(dataset)
+
+    trainset = dataset[: int(data_size * perc_train)]
+    valset = dataset[
+        int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
+    ]
+    testset = dataset[int(data_size * (perc_train + perc_val)) :]
+
+    train_loader, val_loader, test_loader = create_dataloaders(
+        distributed_data_parallelism, trainset, valset, testset, batch_size
+    )
+
+    return train_loader, val_loader, test_loader
+
+
 def combine_and_split_datasets(
     dataset1: [],
     dataset2: [],
@@ -299,43 +310,9 @@ def combine_and_split_datasets(
     valset = dataset1[int(data_size * perc_train) :]
     testset = dataset2
 
-    if distributed_data_parallelism:
-
-        train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
-        val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
-        test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
-
-        train_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler
-        )
-        val_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=val_sampler
-        )
-        test_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=test_sampler
-        )
-
-    else:
-
-        train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(
-            valset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
-        test_loader = DataLoader(
-            testset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
-
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(
-        valset,
-        batch_size=batch_size,
-        shuffle=True,
+    train_loader, val_loader, test_loader = create_dataloaders(
+        distributed_data_parallelism, trainset, valset, testset, batch_size
     )
-    test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True)
 
     return train_loader, val_loader, test_loader
 
