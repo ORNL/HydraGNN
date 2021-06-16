@@ -4,8 +4,10 @@ from torch.nn import ModuleList
 from torch.nn import Sequential, ReLU, Linear
 from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 
+from .Base import Base
 
-class PNNStack(torch.nn.Module):
+
+class PNNStack(Base):
     def __init__(
         self,
         deg,
@@ -103,20 +105,6 @@ class PNNStack(torch.nn.Module):
         for headloc in self.heads:
             outputs.append(headloc(x))
         return torch.cat(outputs, dim=1)
-
-    def loss(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return F.l1_loss(pred, value)
-
-    def loss_rmse(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return torch.sqrt(F.mse_loss(pred, value))
 
     def __str__(self):
         return "PNNStack"

@@ -3,8 +3,10 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch_geometric.nn as pyg_nn
 
+from .Base import Base
 
-class GINStack(nn.Module):
+
+class GINStack(Base):
     def __init__(
         self, input_dim: int, output_dim: int, hidden_dim: int, num_conv_layers: int
     ):
@@ -50,20 +52,6 @@ class GINStack(nn.Module):
         x = self.post_mp(x)
 
         return x
-
-    def loss(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return F.mse_loss(pred, value)
-
-    def loss_rmse(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return torch.sqrt(F.mse_loss(pred, value))
 
     def __str__(self):
         return "GINStack"
