@@ -105,7 +105,7 @@ class SerializedDataLoader:
         elif predicted_value_option == 2:
             data.y = torch.reshape(data.x[:, 1], (len(data.x), 1))
         elif predicted_value_option == 3:
-            data.y = torch.reshape(data.x[:, 1], (len(data.x), 1))
+            data.y = torch.reshape(data.x[:, 2], (len(data.x), 1))
         elif predicted_value_option == 4:
             data.y = torch.cat([free_energy, charge_density], 0)
         elif predicted_value_option == 5:
