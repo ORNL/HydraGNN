@@ -8,36 +8,30 @@ from models.PNNStack import PNNStack
 from models.GATStack import GATStack
 from models.MFCStack import MFCStack
 
-
-def get_comm_size_and_rank():
-    try:
-        world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
-        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
-    except KeyError:
-        print("DDP has to be initialized within a job - Running in sequential mode")
-
-    return world_size, world_rank
+from utils.utils import get_comm_size_and_rank
 
 
-def get_gpus_list():
+def get_gpu_list():
 
     available_gpus = [i for i in range(torch.cuda.device_count())]
 
     return available_gpus
 
 
-def get_gpu(number):
-    gpus_list = get_gpus_list()
-    if number not in gpus_list:
-        raise ValueError(
-            "The GPU ID:" + str(number) + " is not inside the list of GPUs available"
-        )
-    else:
-        device = torch.device(
-            "cuda:" + str(number)
-        )  # you can continue going on here, like cuda:1 cuda:2....etc.
+def get_device(use_gpu=True, rank_per_model=1):
 
-    return device
+    available_gpus = get_gpu_list()
+    if not use_gpu or not available_gpus:
+        print("Using CPU")
+        return "cpu", torch.device("cpu")
+
+    world_size, world_rank = get_comm_size_and_rank()
+    if rank_per_model != 1:
+        raise ValueError("Exactly 1 rank per device currently supported")
+
+    print("Using GPU")
+    device_name = "cuda:" + str(world_rank)
+    return device_name, torch.device(device_name)
 
 
 def generate_model(
@@ -45,19 +39,12 @@ def generate_model(
     input_dim: int,
     dataset: [Data],
     config: dict,
-    distributed_data_parallelism: bool = False,
+    use_gpu: bool = True,
+    use_distributed: bool = False,
 ):
-
-    if distributed_data_parallelism:
-        world_size, world_rank = get_comm_size_and_rank()
-
     torch.manual_seed(0)
 
-    available_gpus = get_gpus_list()
-    if len(available_gpus) > 0:
-        device = get_gpu(int(world_rank) % len(available_gpus))
-    else:
-        device = torch.device("cpu")
+    _, device = get_device(use_gpu)
 
     if model_type == "GIN":
         model = GINStack(

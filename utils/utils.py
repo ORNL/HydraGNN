@@ -16,8 +16,19 @@ from data_utils.dataset_descriptors import (
     StructureFeatures,
     Dataset,
 )
-from utils.models_setup import generate_model
 from utils.visualizer import Visualizer
+
+
+def get_comm_size_and_rank():
+    world_size = 1
+    world_rank = 0
+    try:
+        world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
+        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
+    except KeyError:
+        print("DDP has to be initialized within a job - Running in sequential mode")
+
+    return world_size, world_rank
 
 
 def setup_ddp():
@@ -27,8 +38,7 @@ def setup_ddp():
     backend = "nccl" if torch.cuda.is_available() else "gloo"
 
     distributed_data_parallelism = False
-    world_size = None
-    world_rank = None
+    world_size, world_rank = get_comm_size_and_rank()
 
     master_addr = "127.0.0.1"
     master_port = "8889"

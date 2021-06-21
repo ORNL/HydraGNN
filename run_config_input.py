@@ -9,7 +9,7 @@ from utils.utils import (
     train_validate_test_normal,
     setup_ddp,
 )
-from utils.models_setup import generate_model, get_gpus_list, get_gpu
+from utils.models_setup import generate_model, get_device
 from data_utils.dataset_descriptors import (
     AtomFeatures,
     Dataset,
@@ -156,12 +156,12 @@ def run_normal_terminal_input():
     )
 
 
-def run_normal_config_file():
+def run_normal_config_file(config_file="./examples/configuration.json"):
 
     run_in_parallel, world_size, world_rank = setup_ddp()
 
     config = {}
-    with open("./examples/configuration.json", "r") as f:
+    with open(config_file, "r") as f:
         config = json.load(f)
     predicted_value_option = {1: 1, 2: 32, 3: 32, 4: 33, 5: 33, 6: 65}
     config["output_dim"] = predicted_value_option[config["predicted_value_option"]]
@@ -190,7 +190,6 @@ def run_normal_config_file():
         input_dim=len(config["atom_features"]),
         dataset=train_loader.dataset,
         config=config,
-        distributed_data_parallelism=run_in_parallel,
     )
 
     model_with_config_name = (
@@ -217,11 +216,14 @@ def run_normal_config_file():
         + str(config["predicted_value_option"])
     )
 
+    device_name, device = get_device()
     if run_in_parallel:
-        available_gpus = get_gpus_list()
-        model = torch.nn.parallel.DistributedDataParallel(
-            model, device_ids=get_gpu(int(world_rank) % len(available_gpus))
-        )
+        if device_name == "cpu":
+            model = torch.nn.parallel.DistributedDataParallel(model)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(
+                model, device_ids=[device]
+            )
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
     scheduler = ReduceLROnPlateau(
@@ -247,6 +249,7 @@ def run_normal_config_file():
         config,
         model_with_config_name,
     )
+    save_state = False
     if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
         world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
         if int(world_rank) == 0:
