@@ -1,2 +1,4 @@
 black
 pytest
+pytest-mpi
+mpi4py
