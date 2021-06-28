@@ -75,6 +75,7 @@ def best_models(
         visualizer.create_scatter_plot(save_plot=False)
 
 
+@pytest.mark.mpi_skip()
 @pytest.mark.parametrize("model_index", [0, 1, 2])
 def pytest_best_models(model_index):
     best_models(model_index)

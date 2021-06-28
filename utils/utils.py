@@ -3,7 +3,7 @@ from random import shuffle
 from tqdm import tqdm
 
 import torch
-from torch import nn
+import torch.distributed as dist
 from torch_geometric.data import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -16,8 +16,48 @@ from data_utils.dataset_descriptors import (
     StructureFeatures,
     Dataset,
 )
-from utils.models_setup import generate_model
 from utils.visualizer import Visualizer
+
+
+def get_comm_size_and_rank():
+    world_size = 1
+    world_rank = 0
+    try:
+        world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
+        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
+    except KeyError:
+        print("DDP has to be initialized within a job - Running in sequential mode")
+
+    return world_size, world_rank
+
+
+def setup_ddp():
+
+    """ "Initialize DDP"""
+
+    backend = "nccl" if torch.cuda.is_available() else "gloo"
+
+    distributed_data_parallelism = False
+    world_size, world_rank = get_comm_size_and_rank()
+
+    master_addr = "127.0.0.1"
+    master_port = "8889"
+    try:
+        world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
+        world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
+        os.environ["MASTER_ADDR"] = master_addr
+        os.environ["MASTER_PORT"] = master_port
+        os.environ["WORLD_SIZE"] = world_size
+        os.environ["RANK"] = world_rank
+        dist.init_process_group(
+            backend=backend, rank=int(world_rank), world_size=int(world_size)
+        )
+        distributed_data_parallelism = True
+
+    except KeyError:
+        print("DDP has to be initialized within a job - Running in sequential mode")
+
+    return distributed_data_parallelism, world_size, world_rank
 
 
 def train_validate_test_normal(
@@ -31,14 +71,7 @@ def train_validate_test_normal(
     config,
     model_with_config_name,
 ):
-    device = "cpu"
-    if torch.cuda.is_available():
-        device = "cuda:0"
-        """
-        if torch.cuda.device_count() > 1:
-            model = nn.DataParallel(model)
-        """
-    model.to(device)
+
     num_epoch = config["num_epoch"]
     for epoch in range(0, num_epoch):
         train_mae = train(train_loader, model, optimizer, config["output_dim"])
@@ -65,14 +98,24 @@ def train_validate_test_normal(
 
 
 def train(loader, model, opt, output_dim):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    total_error = 0
+
+    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+        device = next(model.module.parameters()).device
+    else:
+        device = next(model.parameters()).device
+
     model.train()
+
+    total_error = 0
     for data in tqdm(loader):
         data = data.to(device)
         opt.zero_grad()
-        pred = model(data)
-        loss = model.loss_rmse(pred, data.y)
+        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+            pred = model.module(data)
+            loss = model.module.loss_rmse(pred, data.y)
+        else:
+            pred = model(data)
+            loss = model.loss_rmse(pred, data.y)
         loss.backward()
         total_error += loss.item() * data.num_graphs
         opt.step()
@@ -81,13 +124,22 @@ def train(loader, model, opt, output_dim):
 
 @torch.no_grad()
 def validate(loader, model, output_dim):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+        device = next(model.module.parameters()).device
+    else:
+        device = next(model.parameters()).device
+
     total_error = 0
     model.eval()
     for data in tqdm(loader):
         data = data.to(device)
-        pred = model(data)
-        error = model.loss_rmse(pred, data.y)
+        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+            pred = model.module(data)
+            error = model.module.loss_rmse(pred, data.y)
+        else:
+            pred = model(data)
+            error = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset)
@@ -95,17 +147,29 @@ def validate(loader, model, output_dim):
 
 @torch.no_grad()
 def test(loader, model, output_dim):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+        device = next(model.module.parameters()).device
+    else:
+        device = next(model.parameters()).device
+
     total_error = 0
     model.eval()
     true_values = []
     predicted_values = []
     for data in tqdm(loader):
         data = data.to(device)
-        pred = model(data)
+        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+            pred = model.module(data)
+        else:
+            pred = model(data)
         true_values.extend(data.y.tolist())
         predicted_values.extend(pred.tolist())
-        error = model.loss_rmse(pred, data.y)
+
+        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+            error = model.module.loss_rmse(pred, data.y)
+        else:
+            error = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
 
     return total_error / len(loader.dataset), true_values, predicted_values
@@ -114,6 +178,7 @@ def test(loader, model, output_dim):
 def dataset_loading_and_splitting(
     config: {},
     chosen_dataset_option: Dataset,
+    distributed_data_parallelism: bool = False,
 ):
 
     if chosen_dataset_option == Dataset.CuAu:
@@ -122,6 +187,7 @@ def dataset_loading_and_splitting(
             dataset=dataset_CuAu,
             batch_size=config["batch_size"],
             perc_train=config["perc_train"],
+            distributed_data_parallelism=distributed_data_parallelism,
         )
     elif chosen_dataset_option == Dataset.FePt:
         dataset_FePt = load_data(Dataset.FePt.value, config)
@@ -129,6 +195,7 @@ def dataset_loading_and_splitting(
             dataset=dataset_FePt,
             batch_size=config["batch_size"],
             perc_train=config["perc_train"],
+            distributed_data_parallelism=distributed_data_parallelism,
         )
     elif chosen_dataset_option == Dataset.FeSi:
         dataset_FeSi = load_data(Dataset.FeSi.value, config)
@@ -136,6 +203,7 @@ def dataset_loading_and_splitting(
             dataset=dataset_FeSi,
             batch_size=config["batch_size"],
             perc_train=config["perc_train"],
+            distributed_data_parallelism=distributed_data_parallelism,
         )
     else:
         dataset_CuAu = load_data(Dataset.CuAu.value, config)
@@ -149,6 +217,7 @@ def dataset_loading_and_splitting(
                 dataset=dataset_combined,
                 batch_size=config["batch_size"],
                 perc_train=config["perc_train"],
+                distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
 
@@ -157,6 +226,7 @@ def dataset_loading_and_splitting(
                 dataset2=dataset_FePt,
                 batch_size=config["batch_size"],
                 perc_train=config["perc_train"],
+                distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
             return combine_and_split_datasets(
@@ -164,6 +234,7 @@ def dataset_loading_and_splitting(
                 dataset2=dataset_CuAu,
                 batch_size=config["batch_size"],
                 perc_train=config["perc_train"],
+                distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.FePt_FeSi_SHUFFLE:
             dataset_FePt.extend(dataset_FeSi)
@@ -173,42 +244,85 @@ def dataset_loading_and_splitting(
                 dataset=dataset_combined,
                 batch_size=config["batch_size"],
                 perc_train=config["perc_train"],
+                distributed_data_parallelism=distributed_data_parallelism,
             )
 
 
-def split_dataset(dataset: [], batch_size: int, perc_train: float):
+def create_dataloaders(
+    distributed_data_parallelism, trainset, valset, testset, batch_size
+):
+
+    if distributed_data_parallelism:
+
+        train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
+        val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
+        test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
+
+        train_loader = DataLoader(
+            trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler
+        )
+        val_loader = DataLoader(
+            trainset, batch_size=batch_size, shuffle=False, sampler=val_sampler
+        )
+        test_loader = DataLoader(
+            trainset, batch_size=batch_size, shuffle=False, sampler=test_sampler
+        )
+
+    else:
+
+        train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(
+            valset,
+            batch_size=batch_size,
+            shuffle=True,
+        )
+        test_loader = DataLoader(
+            testset,
+            batch_size=batch_size,
+            shuffle=True,
+        )
+
+    return train_loader, val_loader, test_loader
+
+
+def split_dataset(
+    dataset: [],
+    batch_size: int,
+    perc_train: float,
+    distributed_data_parallelism: bool = False,
+):
     perc_val = (1 - perc_train) / 2
     data_size = len(dataset)
-    train_loader = DataLoader(
-        dataset[: int(data_size * perc_train)], batch_size=batch_size, shuffle=True
-    )
-    val_loader = DataLoader(
-        dataset[int(data_size * perc_train) : int(data_size * (perc_train + perc_val))],
-        batch_size=batch_size,
-        shuffle=True,
-    )
-    test_loader = DataLoader(
-        dataset[int(data_size * (perc_train + perc_val)) :],
-        batch_size=batch_size,
-        shuffle=True,
+
+    trainset = dataset[: int(data_size * perc_train)]
+    valset = dataset[
+        int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
+    ]
+    testset = dataset[int(data_size * (perc_train + perc_val)) :]
+
+    train_loader, val_loader, test_loader = create_dataloaders(
+        distributed_data_parallelism, trainset, valset, testset, batch_size
     )
 
     return train_loader, val_loader, test_loader
 
 
 def combine_and_split_datasets(
-    dataset1: [], dataset2: [], batch_size: int, perc_train: float
+    dataset1: [],
+    dataset2: [],
+    batch_size: int,
+    perc_train: float,
+    distributed_data_parallelism: bool = False,
 ):
     data_size = len(dataset1)
-    train_loader = DataLoader(
-        dataset1[: int(data_size * perc_train)], batch_size=batch_size, shuffle=True
+
+    trainset = dataset1[: int(data_size * perc_train)]
+    valset = dataset1[int(data_size * perc_train) :]
+    testset = dataset2
+
+    train_loader, val_loader, test_loader = create_dataloaders(
+        distributed_data_parallelism, trainset, valset, testset, batch_size
     )
-    val_loader = DataLoader(
-        dataset1[int(data_size * perc_train) :],
-        batch_size=batch_size,
-        shuffle=True,
-    )
-    test_loader = DataLoader(dataset2, batch_size=batch_size, shuffle=True)
 
     return train_loader, val_loader, test_loader
 

@@ -1,3 +1,4 @@
+import os
 import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
@@ -7,10 +8,43 @@ from models.PNNStack import PNNStack
 from models.GATStack import GATStack
 from models.MFCStack import MFCStack
 
+from utils.utils import get_comm_size_and_rank
 
-def generate_model(model_type: str, input_dim: int, dataset: [Data], config: dict):
+
+def get_gpu_list():
+
+    available_gpus = [i for i in range(torch.cuda.device_count())]
+
+    return available_gpus
+
+
+def get_device(use_gpu=True, rank_per_model=1):
+
+    available_gpus = get_gpu_list()
+    if not use_gpu or not available_gpus:
+        print("Using CPU")
+        return "cpu", torch.device("cpu")
+
+    world_size, world_rank = get_comm_size_and_rank()
+    if rank_per_model != 1:
+        raise ValueError("Exactly 1 rank per device currently supported")
+
+    print("Using GPU")
+    device_name = "cuda:" + str(world_rank)
+    return device_name, torch.device(device_name)
+
+
+def generate_model(
+    model_type: str,
+    input_dim: int,
+    dataset: [Data],
+    config: dict,
+    use_gpu: bool = True,
+    use_distributed: bool = False,
+):
     torch.manual_seed(0)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    _, device = get_device(use_gpu)
 
     if model_type == "GIN":
         model = GINStack(
