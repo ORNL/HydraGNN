@@ -10,8 +10,8 @@ from .Base import Base
 class GATStack(Base):
     def __init__(
         self,
-        input_dim,
-        output_dim,
+        input_dim: int,
+        output_dim: int,
         num_nodes: int,
         hidden_dim: int = 16,
         heads: int = 1,

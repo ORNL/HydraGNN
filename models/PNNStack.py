@@ -9,13 +9,13 @@ from .Base import Base
 class PNNStack(Base):
     def __init__(
         self,
-        deg,
-        input_dim,
-        output_dim,
-        num_nodes,
-        hidden_dim,
-        num_conv_layers,
-        num_shared=1,
+        deg: torch.Tensor,
+        input_dim: int,
+        output_dim: int,
+        num_nodes: int,
+        hidden_dim: int,
+        num_conv_layers: int,
+        num_shared: int = 1,
     ):
         super().__init__()
 
