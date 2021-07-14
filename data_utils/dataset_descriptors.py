@@ -24,10 +24,10 @@ class StructureFeatures(Enum):
 class Dataset(Enum):
     """Class is an enum that represents available datasets and their combinations."""
 
-    FePt = "FePt"
-    CuAu = "CuAu"
+    FePt = "FePt_32atoms"
+    CuAu = "CuAu_32atoms"
     CuAu_FePt_SHUFFLE = "CuAu_FePt_SHUFFLE"
     CuAu_TRAIN_FePt_TEST = "CuAu_TRAIN_FePt_TEST"
     FePt_TRAIN_CuAu_TEST = "FePt_TRAIN_CuAu_TEST"
-    FeSi = "FeSi"
+    FeSi = "FeSi_1024atoms"
     FePt_FeSi_SHUFFLE = "CuAu_FePt_FeSi_SHUFFLE"
