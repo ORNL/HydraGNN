@@ -2,9 +2,9 @@
     "atom_features": [
         0
     ],
-    "batch_size": 64,
-    "hidden_dim": 15,
-    "num_conv_layers": 8,
+    "batch_size": 32,
+    "hidden_dim": 8,
+    "num_conv_layers": 4,
     "learning_rate": 0.02,
     "radius": 7,
     "max_num_node_neighbours": 4,
