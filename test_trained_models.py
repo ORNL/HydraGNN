@@ -28,7 +28,7 @@ def best_models(
         4.2980859073136316e-05,
         0.06583345943206065,
     ]
-    EPSILON = 1e-3
+    EPSILON = 1e-2
 
     available_models = sorted(os.listdir(models_dir))
     try:
