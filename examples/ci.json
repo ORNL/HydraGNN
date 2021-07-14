@@ -10,6 +10,7 @@
     "max_num_node_neighbours": 4,
     "num_epoch": 2,
     "perc_train": 0.7,
+    "output_dim": 1,
     "predicted_value_option": 1,
     "dataset_option": "FePt_32atoms",
     "model_type": "PNN",

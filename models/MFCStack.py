@@ -12,9 +12,11 @@ class MFCStack(Base):
         self,
         input_dim,
         output_dim,
+        num_nodes: int,
         max_degree: int,
         hidden_dim: int = 16,
         num_conv_layers: int = 16,
+        num_shared: int = 1,
     ):
         super(MFCStack, self).__init__()
 

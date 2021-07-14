@@ -12,11 +12,13 @@ class GATStack(Base):
         self,
         input_dim,
         output_dim,
+        num_nodes: int,
         hidden_dim: int = 16,
         heads: int = 1,
         negative_slope: float = 0.2,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
+        num_shared: int = 1,
     ):
         super(GATStack, self).__init__()
 
