@@ -12,6 +12,6 @@
     "perc_train": 0.7,
     "output_dim": 1,
     "predicted_value_option": 1,
-    "dataset_option": "CuAu",
+    "dataset_option": "CuAu_32atoms",
     "model_type": "PNN"
 }
