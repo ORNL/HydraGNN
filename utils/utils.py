@@ -56,6 +56,8 @@ def setup_ddp():
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
+    except RuntimeError:
+        print("DDP already initialized.")
 
     return distributed_data_parallelism, world_size, world_rank
 
