@@ -15,8 +15,12 @@ def pytest_train_model(model_type):
     with open(config_file, "r") as f:
         config = json.load(f)
 
+    tmp_file = "./tmp.json"
     config["model_type"] = model_type
-    with open(config_file, "w") as f:
+    with open(tmp_file, "w") as f:
         json.dump(config, f)
 
-    run_normal_config_file("./examples/ci.json")
+    run_normal_config_file(tmp_file)
+
+    if os.path.exists(tmp_file):
+        os.remove(tmp_file)
