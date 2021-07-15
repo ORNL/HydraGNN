@@ -18,37 +18,33 @@ jobs:
         python: [3.7, 3.8]
 
     steps:
-      - uses: actions/checkout@v2
       - name: Setup Python
         uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python }}
+      - name: Checkout GCNN
+        uses: actions/checkout@v2.2.0
       - name: Install MPI
         run: |
           sudo apt-get update
           sudo apt-get install -y libopenmpi-dev
           sudo apt-get clean
-      - name: Cache venv
+      - name: Cache pip
         uses: actions/cache@v2
         with:
-          path: ~/.venv
-          key: ${{ runner.os }}-venv-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: ${{ runner.os }}-venv-
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torchdep.txt') }}
       - name: Install dependencies
         run: |
-          python -m venv ~/.venv
-          ~/.venv/bin/activate
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
-          pip install -r requirements-torchdep.txt
+          python -m pip install --upgrade -r requirements.txt -r requirements-dev.txt
+          python -m pip install --upgrade -r requirements-torchdep.txt
       - name: Run pytest
         run: |
-          ~/.venv/bin/activate
-          pytest
+          python -m pytest
           mpirun -n 1 python -m pytest --with-mpi
           mpirun -n 2 python -m pytest --with-mpi
       - name: Format black
         run: |
-          ~/.venv/bin/activate
           black .
           git diff --exit-code
