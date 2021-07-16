@@ -46,11 +46,14 @@ def generate_model(
 
     _, device = get_device(use_gpu)
 
+    num_atoms = dataset[0].num_nodes  # FIXME: assumes constant number of atoms
+
     if model_type == "GIN":
         model = GINStack(
             input_dim=input_dim,
             output_dim=config["output_dim"],
             hidden_dim=config["hidden_dim"],
+            num_nodes=num_atoms,
             num_conv_layers=config["num_conv_layers"],
         ).to(device)
 
@@ -63,10 +66,9 @@ def generate_model(
             deg=deg,
             input_dim=input_dim,
             output_dim=config["output_dim"],
-            num_nodes=dataset[0].num_nodes,
+            num_nodes=num_atoms,
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
-            num_shared=1,
         ).to(device)
 
     elif model_type == "GAT":
@@ -84,6 +86,7 @@ def generate_model(
             input_dim=input_dim,
             output_dim=config["output_dim"],
             hidden_dim=config["hidden_dim"],
+            num_nodes=num_atoms,
             num_conv_layers=config["num_conv_layers"],
         ).to(device)
 
@@ -91,6 +94,7 @@ def generate_model(
         model = MFCStack(
             input_dim=input_dim,
             output_dim=config["output_dim"],
+            num_nodes=num_atoms,
             hidden_dim=config["hidden_dim"],
             max_degree=config["max_num_node_neighbours"],
             num_conv_layers=config["num_conv_layers"],

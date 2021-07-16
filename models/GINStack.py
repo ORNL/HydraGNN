@@ -3,10 +3,18 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch_geometric.nn as pyg_nn
 
+from .Base import Base
 
-class GINStack(nn.Module):
+
+class GINStack(Base):
     def __init__(
-        self, input_dim: int, output_dim: int, hidden_dim: int, num_conv_layers: int
+        self,
+        input_dim: int,
+        output_dim: int,
+        num_nodes: int,
+        hidden_dim: int,
+        num_conv_layers: int,
+        num_shared: int = 1,
     ):
         super(GINStack, self).__init__()
         self.num_conv_layers = num_conv_layers
@@ -25,6 +33,8 @@ class GINStack(nn.Module):
             nn.Dropout(self.dropout),
             nn.Linear(self.hidden_dim, output_dim),
         )
+
+        super()._multihead(input_dim, output_dim, num_nodes, num_shared)
 
     def build_conv_model(self, input_dim, hidden_dim):
         # refer to pytorch geometric nn module for different implementation of GNNs.
@@ -50,20 +60,6 @@ class GINStack(nn.Module):
         x = self.post_mp(x)
 
         return x
-
-    def loss(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return F.mse_loss(pred, value)
-
-    def loss_rmse(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return torch.sqrt(F.mse_loss(pred, value))
 
     def __str__(self):
         return "GINStack"

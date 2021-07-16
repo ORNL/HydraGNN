@@ -2,14 +2,15 @@
     "atom_features": [
         0
     ],
-    "batch_size": 64,
-    "hidden_dim": 15,
-    "num_conv_layers": 8,
+    "batch_size": 32,
+    "hidden_dim": 8,
+    "num_conv_layers": 4,
     "learning_rate": 0.02,
     "radius": 7,
     "max_num_node_neighbours": 4,
     "num_epoch": 2,
     "perc_train": 0.7,
+    "output_dim": 1,
     "predicted_value_option": 1,
     "dataset_option": "FePt_32atoms",
     "model_type": "PNN",

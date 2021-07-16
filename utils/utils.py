@@ -49,9 +49,10 @@ def setup_ddp():
         os.environ["MASTER_PORT"] = master_port
         os.environ["WORLD_SIZE"] = world_size
         os.environ["RANK"] = world_rank
-        dist.init_process_group(
-            backend=backend, rank=int(world_rank), world_size=int(world_size)
-        )
+        if not dist.is_initialized():
+            dist.init_process_group(
+                backend=backend, rank=int(world_rank), world_size=int(world_size)
+            )
         distributed_data_parallelism = True
 
     except KeyError:
