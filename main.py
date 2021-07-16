@@ -11,7 +11,7 @@ def main(choice):
         2: run_normal_terminal_input,
         3: run_normal_config_file,
     }
-    type_of_run[choice]()
+    type_of_run[int(choice)]()
 
 
 if __name__ == "__main__":
