@@ -21,7 +21,7 @@ class GINStack(Base):
         super().__init__()
         self.num_conv_layers = num_conv_layers
         self.hidden_dim = hidden_dim
-        self.dropout = dropout        
+        self.dropout = dropout
         self.convs = ModuleList()
         self.convs.append(self.build_conv_model(input_dim, self.hidden_dim))
         self.batch_norms = ModuleList()

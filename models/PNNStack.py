@@ -29,7 +29,7 @@ class PNNStack(Base):
         ]
 
         self.hidden_dim = hidden_dim
-        self.dropout = dropout        
+        self.dropout = dropout
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
@@ -60,7 +60,6 @@ class PNNStack(Base):
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         super()._multihead(output_dim, num_nodes, num_shared)
-
 
     def __str__(self):
         return "PNNStack"

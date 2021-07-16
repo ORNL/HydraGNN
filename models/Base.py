@@ -9,9 +9,7 @@ class Base(torch.nn.Module):
         super().__init__()
         self.dropout = 0.25
 
-    def _multihead(
-        self, output_dim: int, num_nodes: int, num_shared: int
-    ):
+    def _multihead(self, output_dim: int, num_nodes: int, num_shared: int):
         denselayers = []  # shared dense layers, before mutli-heads
         for ishare in range(num_shared):
             denselayers.append(Linear(self.hidden_dim, self.hidden_dim))

@@ -23,7 +23,7 @@ class MFCStack(Base):
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
-        self.dropout = dropout        
+        self.dropout = dropout
         self.max_degree = max_degree
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
