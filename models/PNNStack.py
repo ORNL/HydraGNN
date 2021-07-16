@@ -14,7 +14,8 @@ class PNNStack(Base):
         output_dim: int,
         num_nodes: int,
         hidden_dim: int,
-        num_conv_layers: int,
+        dropout: float = 0.25,
+        num_conv_layers: int = 16,
         num_shared: int = 1,
     ):
         super().__init__()
@@ -28,6 +29,7 @@ class PNNStack(Base):
         ]
 
         self.hidden_dim = hidden_dim
+        self.dropout = dropout        
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
@@ -57,23 +59,8 @@ class PNNStack(Base):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-        super()._multihead(input_dim, output_dim, num_nodes, num_shared)
+        super()._multihead(output_dim, num_nodes, num_shared)
 
-    def forward(self, data):
-        x, edge_index, batch = (
-            data.x,
-            data.edge_index,
-            data.batch,
-        )
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
-        x = global_mean_pool(x, batch)
-        ####
-        x = self.shared(x)  # shared dense layers
-        outputs = []
-        for headloc in self.heads:
-            outputs.append(headloc(x))
-        return torch.cat(outputs, dim=1)
 
     def __str__(self):
         return "PNNStack"
