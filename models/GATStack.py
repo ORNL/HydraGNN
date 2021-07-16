@@ -20,7 +20,7 @@ class GATStack(Base):
         num_conv_layers: int = 16,
         num_shared: int = 1,
     ):
-        super(GATStack, self).__init__()
+        super().__init__()
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
@@ -52,13 +52,7 @@ class GATStack(Base):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-        self.mlp = Sequential(
-            Linear(self.hidden_dim, 50),
-            ReLU(),
-            Linear(50, 25),
-            ReLU(),
-            Linear(25, output_dim),
-        )
+        super()._multihead(output_dim, num_nodes, num_shared)
 
     def __str__(self):
         return "GATStack"

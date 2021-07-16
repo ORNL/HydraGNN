@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
+from torch.nn import ModuleList
 import torch_geometric.nn as pyg_nn
 
 from .Base import Base
@@ -13,28 +14,23 @@ class GINStack(Base):
         output_dim: int,
         num_nodes: int,
         hidden_dim: int,
-        num_conv_layers: int,
+        dropout: float = 0.25,
+        num_conv_layers: int = 16,
         num_shared: int = 1,
     ):
-        super(GINStack, self).__init__()
+        super().__init__()
         self.num_conv_layers = num_conv_layers
-        self.dropout = 0.25
         self.hidden_dim = hidden_dim
-        self.convs = nn.ModuleList()
+        self.dropout = dropout
+        self.convs = ModuleList()
         self.convs.append(self.build_conv_model(input_dim, self.hidden_dim))
-        self.lns = nn.ModuleList()
+        self.batch_norms = ModuleList()
+        self.lns = ModuleList()
         for l in range(self.num_conv_layers):
             self.convs.append(self.build_conv_model(self.hidden_dim, self.hidden_dim))
             self.lns.append(nn.LayerNorm(self.hidden_dim))
 
-        # post-message-passing
-        self.post_mp = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim),
-            nn.Dropout(self.dropout),
-            nn.Linear(self.hidden_dim, output_dim),
-        )
-
-        super()._multihead(input_dim, output_dim, num_nodes, num_shared)
+        super()._multihead(output_dim, num_nodes, num_shared)
 
     def build_conv_model(self, input_dim, hidden_dim):
         # refer to pytorch geometric nn module for different implementation of GNNs.
@@ -57,7 +53,12 @@ class GINStack(Base):
 
         x = pyg_nn.global_mean_pool(x, batch)
 
-        x = self.post_mp(x)
+        x = self.shared(x)  # shared dense layers
+        #### multi-head decoder part####
+        outputs = []
+        for headloc in self.heads:
+            outputs.append(headloc(x))
+        return torch.cat(outputs, dim=1)
 
         return x
 

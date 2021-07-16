@@ -7,10 +7,9 @@ from torch_geometric.nn import global_mean_pool
 class Base(torch.nn.Module):
     def __init__(self):
         super().__init__()
+        self.dropout = 0.25
 
-    def _multihead(
-        self, input_dim: int, output_dim: int, num_nodes: int, num_shared: int
-    ):
+    def _multihead(self, output_dim: int, num_nodes: int, num_shared: int):
         denselayers = []  # shared dense layers, before mutli-heads
         for ishare in range(num_shared):
             denselayers.append(Linear(self.hidden_dim, self.hidden_dim))
@@ -44,11 +43,21 @@ class Base(torch.nn.Module):
             self.heads.append(mlp)
 
     def forward(self, data):
-        x, edge_index, batch = data.x, data.edge_index, data.batch
+        x, edge_index, batch = (
+            data.x,
+            data.edge_index,
+            data.batch,
+        )
+        ### encoder part ####
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x, edge_index)))
+            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
         x = global_mean_pool(x, batch)
-        return self.mlp(x)
+        x = self.shared(x)  # shared dense layers
+        #### multi-head decoder part####
+        outputs = []
+        for headloc in self.heads:
+            outputs.append(headloc(x))
+        return torch.cat(outputs, dim=1)
 
     def loss(self, pred, value):
         pred_shape = pred.shape
