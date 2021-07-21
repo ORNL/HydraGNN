@@ -75,6 +75,7 @@ def run_normal_terminal_input():
         5: Dataset.FePt_TRAIN_CuAu_TEST,
         6: Dataset.FeSi,
         7: Dataset.FePt_FeSi_SHUFFLE,
+        8: Dataset.unit_test,
     }
     print(
         "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine CuAu-FePt&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test, 6)FeSi , 7) Combine FePt-FeSi&Shuffle"
@@ -206,6 +207,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         5: Dataset.FePt_TRAIN_CuAu_TEST,
         6: Dataset.FeSi,
         7: Dataset.FePt_FeSi_SHUFFLE,
+        8: Dataset.unit_test,
     }
     chosen_dataset_option = None
     for dataset in dataset_options.values():
@@ -318,10 +320,25 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         save_state = True
 
     if save_state:
-        torch.save(
-            model.state_dict(),
-            "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
-        )
+        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+            if int(world_rank) == 0:
+                torch.save(
+                    model.module.state_dict(),
+                    "./logs/"
+                    + model_with_config_name
+                    + "/"
+                    + model_with_config_name
+                    + ".pk",
+                )
+        else:
+            torch.save(
+                model.state_dict(),
+                "./logs/"
+                + model_with_config_name
+                + "/"
+                + model_with_config_name
+                + ".pk",
+            )
 
 
 if __name__ == "__main__":

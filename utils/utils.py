@@ -222,6 +222,14 @@ def dataset_loading_and_splitting(
             perc_train=config["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,
         )
+    elif chosen_dataset_option == Dataset.unit_test:
+        dataset_unit_test = load_data(Dataset.unit_test.value, config)
+        return split_dataset(
+            dataset=dataset_unit_test,
+            batch_size=config["batch_size"],
+            perc_train=config["perc_train"],
+            distributed_data_parallelism=distributed_data_parallelism,
+        )
     else:
         # FIXME, should re-normalize mixed datasets based on joint min_max
         raise ValueError(
@@ -366,16 +374,25 @@ def load_data(dataset_option, config):
 
 def transform_raw_data_to_serialized():
     # Loading raw data if necessary
-    raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms"]
-    if len(
-        os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")
-    ) < len(raw_datasets):
+
+    _, rank = get_comm_size_and_rank()
+
+    if rank == 0:
+
+        raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms", "unit_test"]
+        serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
+        if not os.path.exists(serialized_dir):
+            os.mkdir(serialized_dir)
         for raw_dataset in raw_datasets:
+            serialized_dataset_dir = os.path.join(serialized_dir, raw_dataset)
             files_dir = (
                 os.environ["SERIALIZED_DATA_PATH"]
                 + "/dataset/"
                 + raw_dataset
                 + "/output_files/"
             )
-            loader = RawDataLoader()
-            loader.load_raw_data(dataset_path=files_dir)
+            if not os.path.exists(serialized_dataset_dir):
+                loader = RawDataLoader()
+                loader.load_raw_data(dataset_path=files_dir)
+
+    dist.barrier()

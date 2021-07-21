@@ -2,3 +2,7 @@
 *DS_Store
 __pycache__
 logs
+serialized_dataset
+dataset/unit_test/
+logs/
+serialized_dataset/
