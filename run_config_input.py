@@ -14,6 +14,7 @@ from data_utils.dataset_descriptors import (
     AtomFeatures,
     Dataset,
 )
+import pickle
 
 
 def run_normal_terminal_input():
@@ -86,10 +87,41 @@ def run_normal_terminal_input():
     subsample_percentage = float(input("Selected value: "))
     if subsample_percentage > 0:
         config["subsample_percentage"] = subsample_percentage
+
+    config["denormalize_output"] = "False"
+    print("Select if you want to denormalize the output: 0) No (by default), 1) Yes")
+    if int(input("Selected value: ")) == 1:
+        config["denormalize_output"] = "True"
+
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=dataset_options[chosen_dataset_option],
     )
+
+    if config["denormalize_output"] == "True":
+        dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['dataset_option']}.pkl"
+        with open(dataset_path, "rb") as f:
+            x_minmax = pickle.load(f)
+            y_minmax = pickle.load(f)
+        config["x_minmax"] = []
+        config["y_minmax"] = []
+        config["x_minmax"].append(x_minmax[:, :, config["atom_features"]].tolist())
+        if config["predicted_value_option"] == 1:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+        elif config["predicted_value_option"] == 2:
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+        elif config["predicted_value_option"] == 3:
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
+        elif config["predicted_value_option"] == 4:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+        elif config["predicted_value_option"] == 5:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
+        elif config["predicted_value_option"] == 6:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
 
     input_dim = len(config["atom_features"])
     model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
@@ -185,6 +217,34 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         chosen_dataset_option=chosen_dataset_option,
         distributed_data_parallelism=run_in_parallel,
     )
+
+    if "denormalize_output" in config and config["denormalize_output"] == "True":
+        dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['dataset_option']}.pkl"
+        with open(dataset_path, "rb") as f:
+            x_minmax = pickle.load(f)
+            y_minmax = pickle.load(f)
+        config["x_minmax"] = []
+        config["y_minmax"] = []
+        config["x_minmax"].append(x_minmax[:, :, config["atom_features"]].tolist())
+        if config["predicted_value_option"] == 1:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+        elif config["predicted_value_option"] == 2:
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+        elif config["predicted_value_option"] == 3:
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
+        elif config["predicted_value_option"] == 4:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+        elif config["predicted_value_option"] == 5:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
+        elif config["predicted_value_option"] == 6:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
+    else:
+        config["denormalize_output"] = "False"
+
     model = generate_model(
         model_type=config["model_type"],
         input_dim=len(config["atom_features"]),
