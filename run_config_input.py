@@ -187,7 +187,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         distributed_data_parallelism=run_in_parallel,
     )
 
-    if "out_wunit" in config and config["out_wunit"] == "True":
+    if "denormalize_output" in config and config["denormalize_output"] == "True":
         dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['dataset_option']}.pkl"
         with open(dataset_path, "rb") as f:
             x_minmax = pickle.load(f)
@@ -212,7 +212,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
             config["y_minmax"].append(x_minmax[:, :, 1].tolist())
             config["y_minmax"].append(x_minmax[:, :, 2].tolist())
     else:
-        config["out_wunit"] = "False"
+        config["denormalize_output"] = "False"
 
     model = generate_model(
         model_type=config["model_type"],

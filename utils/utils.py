@@ -92,7 +92,7 @@ def train_validate_test_normal(
     test_rmse, true_values, predicted_values = test(
         test_loader, model, config["output_dim"]
     )
-    if config["out_wunit"] == "True":  ##output predictions with unit/not normalized
+    if config["denormalize_output"] == "True":  ##output predictions with unit/not normalized
         y_minmax = config["y_minmax"]
         for isamp in range(len(predicted_values)):
             for iout in range(len(predicted_values[0])):
@@ -221,9 +221,9 @@ def dataset_loading_and_splitting(
             distributed_data_parallelism=distributed_data_parallelism,
         )
     else:
+        # FIXME, should re-normalize mixed datasets based on joint min_max
         raise ValueError(
-            "Not ready yet. Should re-normalize mixed datasets based on joint min_max",
-            chosen_dataset_option,
+            "Chosen dataset option not yet supported", chosen_dataset_option
         )
         dataset_CuAu = load_data(Dataset.CuAu.value, config)
         dataset_FePt = load_data(Dataset.FePt.value, config)
