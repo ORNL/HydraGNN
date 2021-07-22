@@ -13,6 +13,5 @@
     "output_dim": 1,
     "predicted_value_option": 1,
     "dataset_option": "CuAu_32atoms",
-    "model_type": "PNN",
-    "denormalize_output": "True"
+    "model_type": "PNN"
 }

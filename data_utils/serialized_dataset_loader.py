@@ -48,8 +48,6 @@ class SerializedDataLoader:
         """
         dataset = []
         with open(dataset_path, "rb") as f:
-            x_minmax = pickle.load(f)
-            y_minmax = pickle.load(f)
             dataset = pickle.load(f)
 
         edge_index, edge_distances = self.__compute_edges(
