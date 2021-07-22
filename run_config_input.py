@@ -187,10 +187,8 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         distributed_data_parallelism=run_in_parallel,
     )
 
-    if ("out_wunit" in config and config["out_wunit"]):
-        dataset_path = (
-            f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['dataset_option']}.pkl"
-        )
+    if "out_wunit" in config and config["out_wunit"]:
+        dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['dataset_option']}.pkl"
         with open(dataset_path, "rb") as f:
             x_minmax = pickle.load(f)
             y_minmax = pickle.load(f)
@@ -198,23 +196,23 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         config["y_minmax"] = []
         config["x_minmax"].append(x_minmax[:, :, config["atom_features"]].tolist())
         if config["predicted_value_option"] == 1:
-            config["y_minmax"].append(y_minmax[:,0].tolist())
-        elif config["predicted_value_option"]== 2:
-            config["y_minmax"].append(x_minmax[:,:,1].tolist())
-        elif config["predicted_value_option"]  == 3:
-            config["y_minmax"].append(x_minmax[:,:,2].tolist())
-        elif config["predicted_value_option"]  == 4:
-            config["y_minmax"].append(y_minmax[:,0].tolist())
-            config["y_minmax"].append(x_minmax[:,:,1].tolist())
-        elif config["predicted_value_option"]  == 5:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+        elif config["predicted_value_option"] == 2:
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+        elif config["predicted_value_option"] == 3:
+            config["y_minmax"].append(x_minmax[:, :, 2].tolist())
+        elif config["predicted_value_option"] == 4:
+            config["y_minmax"].append(y_minmax[:, 0].tolist())
+            config["y_minmax"].append(x_minmax[:, :, 1].tolist())
+        elif config["predicted_value_option"] == 5:
             config["y_minmax"].append(y_minmax[:, 0].tolist())
             config["y_minmax"].append(x_minmax[:, :, 2].tolist())
-        elif config["predicted_value_option"]  == 6:
+        elif config["predicted_value_option"] == 6:
             config["y_minmax"].append(y_minmax[:, 0].tolist())
             config["y_minmax"].append(x_minmax[:, :, 1].tolist())
             config["y_minmax"].append(x_minmax[:, :, 2].tolist())
     else:
-        config["out_wunit"]="False"
+        config["out_wunit"] = "False"
 
     model = generate_model(
         model_type=config["model_type"],

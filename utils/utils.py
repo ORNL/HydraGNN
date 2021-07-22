@@ -92,14 +92,19 @@ def train_validate_test_normal(
     test_rmse, true_values, predicted_values = test(
         test_loader, model, config["output_dim"]
     )
-    if config["out_wunit"]: ##output predictions with unit/not normalized
+    if config["out_wunit"]:  ##output predictions with unit/not normalized
         y_minmax = config["y_minmax"]
         for isamp in range(len(predicted_values)):
             for iout in range(len(predicted_values[0])):
-                predicted_values[isamp][iout] = predicted_values[isamp][iout]*(y_minmax[iout][1]-y_minmax[iout][0])+y_minmax[iout][0]
-                true_values[isamp][iout]      = true_values[isamp][iout]     *(y_minmax[iout][1]-y_minmax[iout][0])+y_minmax[iout][0]
-
-
+                predicted_values[isamp][iout] = (
+                    predicted_values[isamp][iout]
+                    * (y_minmax[iout][1] - y_minmax[iout][0])
+                    + y_minmax[iout][0]
+                )
+                true_values[isamp][iout] = (
+                    true_values[isamp][iout] * (y_minmax[iout][1] - y_minmax[iout][0])
+                    + y_minmax[iout][0]
+                )
 
     visualizer.add_test_values(
         true_values=true_values, predicted_values=predicted_values
@@ -216,7 +221,10 @@ def dataset_loading_and_splitting(
             distributed_data_parallelism=distributed_data_parallelism,
         )
     else:
-        raise ValueError("Not ready yet. Should re-normalize mixed datasets based on joint min_max", chosen_dataset_option)
+        raise ValueError(
+            "Not ready yet. Should re-normalize mixed datasets based on joint min_max",
+            chosen_dataset_option,
+        )
         dataset_CuAu = load_data(Dataset.CuAu.value, config)
         dataset_FePt = load_data(Dataset.FePt.value, config)
         dataset_FeSi = load_data(Dataset.FeSi.value, config)
