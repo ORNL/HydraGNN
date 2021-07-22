@@ -38,7 +38,9 @@ class RawDataLoader:
             dataset.append(data_object)
             f.close()
 
-        dataset_normalized = self.__normalize_dataset(dataset=dataset)
+        dataset_normalized, x_minmax, y_minmax = self.__normalize_dataset(
+            dataset=dataset
+        )
 
         serial_data_name = (pathlib.PurePath(dataset_path)).parent.name
         serial_data_path = (
@@ -49,6 +51,8 @@ class RawDataLoader:
         )
 
         with open(serial_data_path, "wb") as f:
+            pickle.dump(x_minmax, f)
+            pickle.dump(y_minmax, f)
             pickle.dump(dataset_normalized, f)
 
     def __transform_input_to_data_object(self, lines: [str]):
@@ -120,6 +124,12 @@ class RawDataLoader:
         max_magnetic_moment = np.full(num_of_atoms, -np.inf)
         min_magnetic_moment = np.full(num_of_atoms, np.inf)
 
+        # the minimum and maximum data used for normalization
+        x_minmax = np.zeros((2, num_of_atoms, len(dataset[0].x[0, :])))
+        y_minmax = np.zeros((2, len(dataset[0].y)))
+        x_minmax[1, :, :] = 1.0
+        y_minmax[1, :] = 1.0
+
         for data in dataset:
             max_structure_free_energy = max(abs(data.y[0]), max_structure_free_energy)
             min_structure_free_energy = min(abs(data.y[0]), min_structure_free_energy)
@@ -140,4 +150,11 @@ class RawDataLoader:
                 (data.x[:, 2] - min_magnetic_moment),
                 (max_magnetic_moment - min_magnetic_moment),
             )
-        return dataset
+        x_minmax[0, :, 1] = min_charge_density
+        x_minmax[1, :, 1] = max_charge_density
+        x_minmax[0, :, 2] = min_magnetic_moment
+        x_minmax[1, :, 2] = max_magnetic_moment
+        y_minmax[0, 0] = min_structure_free_energy
+        y_minmax[1, 0] = max_structure_free_energy
+
+        return dataset, x_minmax, y_minmax
