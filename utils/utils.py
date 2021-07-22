@@ -92,7 +92,7 @@ def train_validate_test_normal(
     test_rmse, true_values, predicted_values = test(
         test_loader, model, config["output_dim"]
     )
-    if config["out_wunit"]:  ##output predictions with unit/not normalized
+    if config["out_wunit"] == "True":  ##output predictions with unit/not normalized
         y_minmax = config["y_minmax"]
         for isamp in range(len(predicted_values)):
             for iout in range(len(predicted_values[0])):
