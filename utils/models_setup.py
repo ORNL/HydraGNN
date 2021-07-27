@@ -74,6 +74,7 @@ def generate_model(
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
             config_heads=config["output_heads"],
+            loss_weights=config["task_weights"],
         ).to(device)
 
     elif model_type == "PNN":
@@ -90,6 +91,7 @@ def generate_model(
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
             config_heads=config["output_heads"],
+            loss_weights=config["task_weights"],
         ).to(device)
 
     elif model_type == "GAT":
@@ -111,6 +113,7 @@ def generate_model(
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
             config_heads=config["output_heads"],
+            loss_weights=config["task_weights"],
         ).to(device)
 
     elif model_type == "MFC":
@@ -123,6 +126,7 @@ def generate_model(
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
             config_heads=config["output_heads"],
+            loss_weights=config["task_weights"],
         ).to(device)
 
     return model

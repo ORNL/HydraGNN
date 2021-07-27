@@ -17,6 +17,7 @@ from data_utils.dataset_descriptors import (
     Dataset,
 )
 from utils.visualizer import Visualizer
+import numpy as np
 
 import re
 
@@ -118,7 +119,7 @@ def setup_ddp():
 
 
 def train_validate_test_normal(
-    model,
+    model_wrapper,
     optimizer,
     train_loader,
     val_loader,
@@ -127,40 +128,122 @@ def train_validate_test_normal(
     scheduler,
     config,
     model_with_config_name,
+    plot_init_sol=True,
+    plot_hist_sol=False,
 ):
 
     num_epoch = config["Training"]["num_epoch"]
+    trainlib = []
+    vallib = []
+    testlib = []  # total loss tracking for train/vali/test
+    tasklib = []
+    tasklib_test = []
+    tasklib_vali = []  # loss tracking for summation across all atoms/nodes
+    tasklib_nodes = []
+    tasklib_test_nodes = []
+    tasklib_vali_nodes = []  # probably not needed
+
+    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
+        model = model_wrapper.module
+    else:
+        model = model_wrapper
+
+    x_atomfeature = []
+    for data in test_loader.dataset:
+        x_atomfeature.append(data.x)
+    if plot_init_sol:  # visualizing of initial conditions
+        test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
+        true_values = test_rmse[3]
+        predicted_values = test_rmse[4]
+        for ihead in range(model.num_heads):
+            visualizer = Visualizer(model_with_config_name)
+            visualizer.add_test_values(
+                true_values=true_values[ihead], predicted_values=predicted_values[ihead]
+            )
+            visualizer.create_scatter_plot_atoms(ihead, x_atomfeature, -1)
+            visualizer.create_error_histogram_plot_atoms(ihead, x_atomfeature, -1)
+
     for epoch in range(0, num_epoch):
-        train_mae = train(
+        train_mae, train_taskserr, train_taskserr_nodes = train(
             train_loader, model, optimizer, config["Architecture"]["output_dim"]
         )
-        val_mae = validate(val_loader, model, config["Architecture"]["output_dim"])
+        val_mae, val_taskserr, val_taskserr_nodes = validate(
+            val_loader, model, config["Architecture"]["output_dim"]
+        )
         test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
         scheduler.step(val_mae)
         if writer is not None:
             writer.add_scalar("train error", train_mae, epoch)
             writer.add_scalar("validate error", val_mae, epoch)
             writer.add_scalar("test error", test_rmse[0], epoch)
-
+            for ivar in range(model.num_heads):
+                writer.add_scalar(
+                    "train error of task" + str(ivar), train_taskserr[ivar], epoch
+                )
         print(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.8f}, Val MAE: {val_mae:.8f}, "
             f"Test RMSE: {test_rmse[0]:.8f}"
         )
+        print("Tasks MAE:", train_taskserr)
+
+        trainlib.append(train_mae)
+        vallib.append(val_mae)
+        testlib.append(test_rmse[0])
+        tasklib.append(train_taskserr)
+        tasklib_vali.append(val_taskserr)
+        tasklib_test.append(test_rmse[1])
+
+        tasklib_nodes.append(train_taskserr_nodes)
+        tasklib_vali_nodes.append(val_taskserr_nodes)
+        tasklib_test_nodes.append(test_rmse[2])
+
+        ###tracking the solution evolving with training
+        if plot_hist_sol:
+            true_values = test_rmse[3]
+            predicted_values = test_rmse[4]
+            for ihead in range(model.num_heads):
+                visualizer = Visualizer(model_with_config_name)
+                visualizer.add_test_values(
+                    true_values=true_values[ihead],
+                    predicted_values=predicted_values[ihead],
+                )
+                visualizer.create_scatter_plot_atoms(ihead, x_atomfeature, epoch)
+                visualizer.create_error_histogram_plot_atoms(
+                    ihead, x_atomfeature, epoch
+                )
+
     # At the end of training phase, do the one test run for visualizer to get latest predictions
-    visualizer = Visualizer(model_with_config_name)
-    test_rmse, true_values, predicted_values = test(
+    test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
         test_loader, model, config["Architecture"]["output_dim"]
     )
-    if False:
-        # if config["Variables_of_interest"]["denormalize_output"] == "True":  ##output predictions with unit/not normalized
-        # fixme(multihead): disabled for now, it is related to multitask/head PR, will be updated later
+
+    if config["Variables_of_interest"]["denormalize_output"] == "True":  ##output predictions with unit/not normalized
         true_values, predicted_values = output_denormalize(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
-    visualizer.add_test_values(
-        true_values=true_values, predicted_values=predicted_values
+
+    for ihead in range(model.num_heads):
+        visualizer = Visualizer(model_with_config_name)
+        visualizer.add_test_values(
+            true_values=true_values[ihead], predicted_values=predicted_values[ihead]
+        )
+        visualizer.create_plot_global(ihead)
+        visualizer.create_scatter_plot_atoms(ihead, x_atomfeature)
+        visualizer.create_error_histogram_plot_atoms(ihead, x_atomfeature)
+
+    ######plot loss history#####
+    visualizer.plot_history(
+        trainlib,
+        vallib,
+        testlib,
+        tasklib,
+        tasklib_vali,
+        tasklib_test,
+        tasklib_nodes,
+        tasklib_vali_nodes,
+        tasklib_test_nodes,
+        model.loss_weights,
     )
-    visualizer.create_scatter_plot()
 
 
 def output_denormalize(y_minmax, true_values, predicted_values):
@@ -181,12 +264,17 @@ def output_denormalize(y_minmax, true_values, predicted_values):
     return true_values, predicted_values
 
 
-def train(loader, model, opt, output_dim):
+def train(loader, model_wrapper, opt, output_dim):
 
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        device = next(model.module.parameters()).device
+    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
+        model = model_wrapper.module
     else:
-        device = next(model.parameters()).device
+        model = model_wrapper
+
+    device = next(model.parameters()).device
+    total_error = 0
+    tasks_error = np.zeros(model.num_heads)
+    tasks_noderr = np.zeros(model.num_heads)
 
     model.train()
 
@@ -196,67 +284,114 @@ def train(loader, model, opt, output_dim):
         opt.zero_grad()
         if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
             pred = model.module(data)
-            loss = model.module.loss_rmse(pred, data.y)
+            loss, tasks_rmse, tasks_nodes = model.module.loss_rmse(pred, data.y)
         else:
             pred = model(data)
-            loss = model.loss_rmse(pred, data.y)
+            loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+
         loss.backward()
-        total_error += loss.item() * data.num_graphs
         opt.step()
-    return total_error / len(loader.dataset)
+        total_error += loss.item() * data.num_graphs
+        for itask in range(len(tasks_rmse)):
+            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
+    return (
+        total_error / len(loader.dataset),
+        tasks_error / len(loader.dataset),
+        tasks_noderr / len(loader.dataset),
+    )
 
 
 @torch.no_grad()
-def validate(loader, model, output_dim):
+def validate(loader, model_wrapper, output_dim):
 
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        device = next(model.module.parameters()).device
+    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
+        model = model_wrapper.module
     else:
-        device = next(model.parameters()).device
+        model = model_wrapper
+
+    device = next(model.parameters()).device
 
     total_error = 0
+    tasks_error = np.zeros(model.num_heads)
+    tasks_noderr = np.zeros(model.num_heads)
     model.eval()
     for data in tqdm(loader):
         data = data.to(device)
         if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
             pred = model.module(data)
-            error = model.module.loss_rmse(pred, data.y)
+            error, tasks_rmse, tasks_nodes = model.module.loss_rmse(pred, data.y)
         else:
             pred = model(data)
-            error = model.loss_rmse(pred, data.y)
+            error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
+        for itask in range(len(tasks_rmse)):
+            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
-    return total_error / len(loader.dataset)
+    return (
+        total_error / len(loader.dataset),
+        tasks_error / len(loader.dataset),
+        tasks_noderr / len(loader.dataset),
+    )
 
 
 @torch.no_grad()
-def test(loader, model, output_dim):
+def test(loader, model_wrapper, output_dim):
 
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        device = next(model.module.parameters()).device
+    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
+        model = model_wrapper.module
     else:
-        device = next(model.parameters()).device
+        model = model_wrapper
+
+    device = next(model.parameters()).device
 
     total_error = 0
+    tasks_error = np.zeros(model.num_heads)
+    tasks_noderr = np.zeros(model.num_heads)
     model.eval()
-    true_values = []
-    predicted_values = []
+    true_values = [[] for _ in range(model.num_heads)]
+    predicted_values = [[] for _ in range(model.num_heads)]
+    IImean = [i for i in range(sum(model.head_dims))]
+    if model.ilossweights_nll == 1:
+        IImean = [i for i in range(sum(model.head_dims) + model.num_heads)]
+        [
+            IImean.remove(sum(model.head_dims[: ihead + 1]) + (ihead + 1) * 1 - 1)
+            for ihead in range(model.num_heads)
+        ]
     for data in tqdm(loader):
         data = data.to(device)
         if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
             pred = model.module(data)
         else:
             pred = model(data)
-        true_values.extend(data.y.tolist())
-        predicted_values.extend(pred.tolist())
 
         if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-            error = model.module.loss_rmse(pred, data.y)
+            error, tasks_rmse, tasks_nodes = model.module.loss_rmse(pred, data.y)
         else:
-            error = model.loss_rmse(pred, data.y)
+            error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
+        for itask in range(len(tasks_rmse)):
+            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
-    return total_error / len(loader.dataset), true_values, predicted_values
+        ytrue = torch.reshape(data.y, (-1, sum(model.head_dims)))
+        for ihead in range(model.num_heads):
+            isum = sum(model.head_dims[: ihead + 1])
+            true_values[ihead].extend(
+                ytrue[:, isum - model.head_dims[ihead] : isum].tolist()
+            )
+            predicted_values[ihead].extend(
+                pred[:, IImean[isum - model.head_dims[ihead] : isum]].tolist()
+            )
+
+    return (
+        total_error / len(loader.dataset),
+        tasks_error / len(loader.dataset),
+        tasks_noderr / len(loader.dataset),
+        true_values,
+        predicted_values,
+    )
 
 
 def dataset_loading_and_splitting(

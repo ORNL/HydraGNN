@@ -79,7 +79,6 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
                 )
             else:
                 raise ValueError("Unknown output type", output_type[item])
-
     else:
         config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "False"
     config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
@@ -120,6 +119,10 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
                 "input_node_features"
             ]
         )
+        + "-task_weights-"
+        + "".join(str(weigh) + "-" for weigh in config["task_weights"])
+        + "num_sl-"
+        + str(config["num_sharedlayers"])
     )
 
     device_name, device = get_device()
@@ -167,6 +170,20 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     print(
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}"
     )
+
+    if (
+        "continue" in config and config["continue"] == 1
+    ):  # starting from an existing model
+        modelstart = config["startfrom"]
+        if not modelstart:
+            modelstart = model_with_config_name
+
+        state_dict = torch.load(
+            f"./logs/{modelstart}/{modelstart}.pk",
+            map_location="cpu",
+        )
+        model.load_state_dict(state_dict)
+
     train_validate_test_normal(
         model,
         optimizer,
