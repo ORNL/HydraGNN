@@ -30,7 +30,9 @@ def get_device(use_gpu=True, rank_per_model=1):
         raise ValueError("Exactly 1 rank per device currently supported")
 
     print("Using GPU")
-    device_name = "cuda:" + str(world_rank)
+    ## We try not to specify GPU IDs to be more flexible
+    #device_name = "cuda:" + str(world_rank)
+    device_name = "cuda"
     return device_name, torch.device(device_name)
 
 

@@ -40,8 +40,13 @@ def setup_ddp():
     distributed_data_parallelism = False
     world_size, world_rank = get_comm_size_and_rank()
 
-    master_addr = "127.0.0.1"
-    master_port = "8889"
+    ## source: https://www.olcf.ornl.gov/wp-content/uploads/2019/12/Scaling-DL-on-Summit.pdf
+    ## The following is Summit specific
+    import subprocess
+    get_master = "echo $(cat {} | sort | uniq | grep -v batch | grep -v login | head -1 )".format(os.environ['LSB_DJOB_HOSTFILE'])
+    master_addr = str(subprocess.check_output(get_master, shell=True))[2:-3]
+    master_port = "23456"
+
     try:
         world_size = os.environ["OMPI_COMM_WORLD_SIZE"]
         world_rank = os.environ["OMPI_COMM_WORLD_RANK"]
