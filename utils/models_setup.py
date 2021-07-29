@@ -30,9 +30,16 @@ def get_device(use_gpu=True, rank_per_model=1):
         raise ValueError("Exactly 1 rank per device currently supported")
 
     print("Using GPU")
-    ## We try not to specify GPU IDs to be more flexible
-    #device_name = "cuda:" + str(world_rank)
-    device_name = "cuda"
+    ## We need to ge a local rank to assign one of GPUs per node
+    localrank = 0
+    if os.getenv('OMPI_COMM_WORLD_LOCAL_RANK'):
+        ## Summit
+        localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+    elif os.getenv('SLURM_LOCALID'):
+        ## CADES
+        localrank = int(os.environ["SLURM_LOCALID"])
+
+    device_name = "cuda:" + str(localrank)
     return device_name, torch.device(device_name)
 
 

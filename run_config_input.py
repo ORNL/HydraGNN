@@ -314,7 +314,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     )
     save_state = False
     if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        _, world_rank = get_comm_size_and_rank
+        _, world_rank = get_comm_size_and_rank()
         if int(world_rank) == 0:
             save_state = True
     else:
