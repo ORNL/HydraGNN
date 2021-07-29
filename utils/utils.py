@@ -28,7 +28,7 @@ def get_comm_size_and_rank():
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
 
-    return world_size, world_rank
+    return int(world_size), int(world_rank)
 
 
 def setup_ddp():
