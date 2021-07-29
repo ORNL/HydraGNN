@@ -32,18 +32,18 @@ def get_device(use_gpu=True, rank_per_model=1):
     print("Using GPU")
     ## We need to ge a local rank if there are multiple GPUs available.
     localrank = 0
-    if os.getenv('OMPI_COMM_WORLD_LOCAL_RANK'):
-        ## Summit
-        localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
-    elif os.getenv('SLURM_LOCALID'):
-        ## CADES
-        localrank = int(os.environ["SLURM_LOCALID"])
+    if torch.cuda.device_count()>0:
+        if os.getenv('OMPI_COMM_WORLD_LOCAL_RANK'):
+            ## Summit
+            localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+        elif os.getenv('SLURM_LOCALID'):
+            ## CADES
+            localrank = int(os.environ["SLURM_LOCALID"])
+
+        if localrank >= torch.cuda.device_count():
+            print("WARN: localrank is greater than the available device count - %d %d"%(localrank, torch.cuda.device_count()))
     
     device_name = "cuda:" + str(localrank)
-    if not (localrank < torch.cuda.device_count()):
-        print("WARN: localrank is greater than the available device count - %d %d"%(localrank, torch.cuda.device_count()))
-        device_name = "cuda"
-    print("Set GPU device name: '%s'"%device_name)
 
     return device_name, torch.device(device_name)
 
