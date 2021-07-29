@@ -32,7 +32,7 @@ def get_device(use_gpu=True, rank_per_model=1):
     print("Using GPU")
     ## We need to ge a local rank if there are multiple GPUs available.
     localrank = 0
-    if torch.cuda.device_count()>0:
+    if torch.cuda.device_count() > 1:
         if os.getenv('OMPI_COMM_WORLD_LOCAL_RANK'):
             ## Summit
             localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
