@@ -28,7 +28,7 @@ def get_comm_size_and_rank():
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
 
-    return world_size, world_rank
+    return int(world_size), int(world_rank)
 
 
 def setup_ddp():
@@ -222,6 +222,14 @@ def dataset_loading_and_splitting(
             perc_train=config["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,
         )
+    elif chosen_dataset_option == Dataset.unit_test:
+        dataset_unit_test = load_data(Dataset.unit_test.value, config)
+        return split_dataset(
+            dataset=dataset_unit_test,
+            batch_size=config["batch_size"],
+            perc_train=config["perc_train"],
+            distributed_data_parallelism=distributed_data_parallelism,
+        )
     else:
         # FIXME, should re-normalize mixed datasets based on joint min_max
         raise ValueError(
@@ -349,7 +357,7 @@ def combine_and_split_datasets(
 
 
 def load_data(dataset_option, config):
-    transform_raw_data_to_serialized()
+    transform_raw_data_to_serialized(dataset_option)
     files_dir = (
         f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
     )
@@ -364,18 +372,29 @@ def load_data(dataset_option, config):
     return dataset
 
 
-def transform_raw_data_to_serialized():
-    # Loading raw data if necessary
-    raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms"]
-    if len(
-        os.listdir(os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset")
-    ) < len(raw_datasets):
-        for raw_dataset in raw_datasets:
-            files_dir = (
-                os.environ["SERIALIZED_DATA_PATH"]
-                + "/dataset/"
-                + raw_dataset
-                + "/output_files/"
-            )
+def transform_raw_data_to_serialized(raw_dataset: str):
+
+    _, rank = get_comm_size_and_rank()
+
+    if rank == 0:
+
+        raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms", "unit_test"]
+        if raw_dataset not in raw_datasets:
+            print("WARNING: requested serialized dataset does not exist.")
+            return
+
+        serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
+        if not os.path.exists(serialized_dir):
+            os.mkdir(serialized_dir)
+        serialized_dataset_dir = os.path.join(serialized_dir, raw_dataset)
+        files_dir = (
+            os.environ["SERIALIZED_DATA_PATH"]
+            + "/dataset/"
+            + raw_dataset
+            + "/output_files/"
+        )
+        if not os.path.exists(serialized_dataset_dir):
             loader = RawDataLoader()
             loader.load_raw_data(dataset_path=files_dir)
+
+    dist.barrier()

@@ -31,3 +31,4 @@ class Dataset(Enum):
     FePt_TRAIN_CuAu_TEST = "FePt_TRAIN_CuAu_TEST"
     FeSi = "FeSi_1024atoms"
     FePt_FeSi_SHUFFLE = "CuAu_FePt_FeSi_SHUFFLE"
+    unit_test = "unit_test"
