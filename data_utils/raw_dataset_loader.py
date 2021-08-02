@@ -121,6 +121,7 @@ class RawDataLoader:
 
         node_feature_matrix = []
         node_position_matrix = []
+        magnetic_moment_v = []
         for line in lines[1:]:
             node_feat = line.split(None, 11)
 
@@ -139,6 +140,7 @@ class RawDataLoader:
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
+        data_object.magnetic_vec = tensor(magnetic_moment_v)
 
         return data_object
 

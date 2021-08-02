@@ -240,7 +240,7 @@ class Visualizer:
         """Creates scatter plots for scalar output and vector outputs."""
 
         nshape = np.asarray(self.predicted_values).shape
-        varnames = ["free energy", "charge density", "magnetic moment"]
+        varnames = ["free energy", "charge density"]
         if nshape[1] == 1:
             fig, axs = plt.subplots(1, 2, figsize=(12, 6))
             ax = axs[0]
@@ -355,7 +355,7 @@ class Visualizer:
         """Creates error histogram plot for vector outputs."""
 
         nshape = np.asarray(self.predicted_values).shape
-        varnames = ["free energy", "charge density", "magnetic moment"]
+        varnames = ["free energy", "charge density"]
         if nshape[1] == 1:
             return
         else:
@@ -422,6 +422,95 @@ class Visualizer:
                 else:
                     fig.savefig(
                         f"./logs/{self.model_with_config_name}/task{ivar}_error_hist1d.png"
+                    )
+                plt.close()
+
+    def create_scatter_plot_atoms_vec(
+        self, ivar, x_atomfeature, iepoch=None, save_plot=True
+    ):
+        """Creates scatter plots for scalar output and vector outputs."""
+
+        nshape = np.asarray(self.predicted_values).shape
+        predicted_vec = np.reshape(
+            np.asarray(self.predicted_values), (nshape[0], -1, 3)
+        )
+        true_vec = np.reshape(np.asarray(self.true_values), (nshape[0], -1, 3))
+        num_nodes = true_vec.shape[1]
+
+        for icomp in range(3):
+            nrow = floor(sqrt((num_nodes + 1)))
+            ncol = ceil((num_nodes + 1) / nrow)
+            fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
+            axs = axs.flatten()
+            for iatom in range(num_nodes):
+                xfeature = []
+                truecomp = []
+                predcomp = []
+                for isamp in range(nshape[0]):
+                    xfeature.append(x_atomfeature[isamp][iatom])
+                    truecomp.append(predicted_vec[isamp, iatom, icomp])
+                    predcomp.append(true_vec[isamp, iatom, icomp])
+                ax = axs[iatom]
+                self.__scatter_impl(
+                    ax,
+                    truecomp,
+                    predcomp,
+                    s=6,
+                    c=xfeature,
+                    title="atom:" + str(iatom),
+                    xylim_equal=True,
+                )
+
+            ax = axs[num_nodes]  # summation over all the atoms/nodes
+            xfeature = []
+            truecomp = []
+            predcomp = []
+            for isamp in range(nshape[0]):
+                xfeature.append(sum(x_atomfeature[isamp][:]))
+                truecomp.append(sum(predicted_vec[isamp, :, icomp]))
+                predcomp.append(sum(true_vec[isamp, :, icomp]))
+            self.__scatter_impl(
+                ax, truecomp, predcomp, s=40, c=xfeature, title="SUM", xylim_equal=True
+            )
+
+            ax = axs[num_nodes + 1]  # summation over all the samples for each atom/node
+            xfeature = []
+            truecomp = []
+            predcomp = []
+            for iatom in range(num_nodes):
+                xfeature.append(sum(x_atomfeature[:][iatom]))
+                truecomp.append(sum(true_vec[:, iatom, icomp]))
+                predcomp.append(sum(predicted_vec[:, iatom, icomp]))
+            self.__scatter_impl(
+                ax,
+                truecomp,
+                predcomp,
+                s=40,
+                c=xfeature,
+                title="mean(atom:0-" + str(iatom) + ")",
+                xylim_equal=True,
+            )
+
+            for iext in range(nshape[1] + 2, axs.size):
+                axs[iext].axis("off")
+            plt.subplots_adjust(
+                left=0.05, bottom=0.05, right=0.98, top=0.95, wspace=0.1, hspace=0.25
+            )
+
+            if save_plot:
+                if iepoch:
+                    fig.savefig(
+                        f"./logs/{self.model_with_config_name}/task{ivar}_"
+                        + str(icomp)
+                        + "_"
+                        + str(iepoch).zfill(4)
+                        + ".png"
+                    )
+                else:
+                    fig.savefig(
+                        f"./logs/{self.model_with_config_name}/task{ivar}_"
+                        + str(icomp)
+                        + ".png"
                     )
                 plt.close()
 

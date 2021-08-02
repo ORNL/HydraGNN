@@ -149,6 +149,7 @@ def train_validate_test_normal(
         model = model_wrapper
 
     x_atomfeature = []
+    num_nodes = len(test_loader.dataset[0].x)
     for data in test_loader.dataset:
         x_atomfeature.append(data.x)
     if plot_init_sol:  # visualizing of initial conditions
@@ -160,8 +161,11 @@ def train_validate_test_normal(
             visualizer.add_test_values(
                 true_values=true_values[ihead], predicted_values=predicted_values[ihead]
             )
-            visualizer.create_scatter_plot_atoms(ihead, x_atomfeature, -1)
-            visualizer.create_error_histogram_plot_atoms(ihead, x_atomfeature, -1)
+            if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
+                visualizer.create_scatter_plot_atoms_vec(ihead, x_atomfeature, -1)
+            else:
+                visualizer.create_scatter_plot_atoms(ihead, x_atomfeature, -1)
+                visualizer.create_error_histogram_plot_atoms(ihead, x_atomfeature, -1)
 
     for epoch in range(0, num_epoch):
         train_mae, train_taskserr, train_taskserr_nodes = train(
@@ -207,10 +211,13 @@ def train_validate_test_normal(
                     true_values=true_values[ihead],
                     predicted_values=predicted_values[ihead],
                 )
-                visualizer.create_scatter_plot_atoms(ihead, x_atomfeature, epoch)
-                visualizer.create_error_histogram_plot_atoms(
-                    ihead, x_atomfeature, epoch
-                )
+                if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
+                    visualizer.create_scatter_plot_atoms_vec(ihead, x_atomfeature, -1)
+                else:
+                    visualizer.create_scatter_plot_atoms(ihead, x_atomfeature, epoch)
+                    visualizer.create_error_histogram_plot_atoms(
+                        ihead, x_atomfeature, epoch
+                    )
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
@@ -228,8 +235,11 @@ def train_validate_test_normal(
             true_values=true_values[ihead], predicted_values=predicted_values[ihead]
         )
         visualizer.create_plot_global(ihead)
-        visualizer.create_scatter_plot_atoms(ihead, x_atomfeature)
-        visualizer.create_error_histogram_plot_atoms(ihead, x_atomfeature)
+        if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
+            visualizer.create_scatter_plot_atoms_vec(ihead, x_atomfeature, -1)
+        else:
+            visualizer.create_scatter_plot_atoms(ihead, x_atomfeature)
+            visualizer.create_error_histogram_plot_atoms(ihead, x_atomfeature)
 
     ######plot loss history#####
     visualizer.plot_history(

@@ -16,6 +16,7 @@ from data_utils.dataset_descriptors import (
     Dataset,
 )
 import pickle
+import numpy as np
 
 
 def run_normal_config_file(config_file="./examples/configuration.json"):
