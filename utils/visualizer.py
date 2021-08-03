@@ -77,12 +77,13 @@ class Visualizer:
         y,
         s=None,
         c=None,
+        marker=None,
         title=None,
         x_label=None,
         y_label=None,
         xylim_equal=False,
     ):
-        ax.scatter(x, y, s, c)
+        ax.scatter(x, y, s, c, marker)
         ax.set_title(title)
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
@@ -93,7 +94,7 @@ class Visualizer:
             ax.set_xlim(minimum, maximum)
             ax.set_ylim(minimum, maximum)
 
-    def create_plot_global(self, ivar, save_plot=True):
+    def create_plot_global(self, varname, save_plot=True):
         """Creates global scatter/condmean/error pdf plot from stored values in the true and  predicted values lists."""
         nshape = np.asarray(self.predicted_values).shape
         if nshape[1] == 1:
@@ -228,19 +229,20 @@ class Visualizer:
 
         if save_plot:
             fig.savefig(
-                f"./logs/{self.model_with_config_name}/Plot_scatter_condm_err_ivar{ivar}.png"
+                f"./logs/{self.model_with_config_name}/"
+                + varname
+                + "_scatter_condm_err.png"
             )
             plt.close()
         else:
             plt.show()
 
     def create_scatter_plot_atoms(
-        self, ivar, x_atomfeature, iepoch=None, save_plot=True
+        self, varname, x_atomfeature, iepoch=None, save_plot=True
     ):
         """Creates scatter plots for scalar output and vector outputs."""
 
         nshape = np.asarray(self.predicted_values).shape
-        varnames = ["free energy", "charge density"]
         if nshape[1] == 1:
             fig, axs = plt.subplots(1, 2, figsize=(12, 6))
             ax = axs[0]
@@ -248,7 +250,7 @@ class Visualizer:
                 ax,
                 self.true_values,
                 self.predicted_values,
-                title=varnames[ivar],
+                title=varname,
                 x_label="True",
                 y_label="Predicted",
                 xylim_equal=True,
@@ -261,8 +263,7 @@ class Visualizer:
                 density=True,
             )
             ax.plot(0.5 * (bin_edges[:-1] + bin_edges[1:]), hist1d, "ro")
-            ax.set_title("Scalar output: error")
-            ax.set_title(varnames[ivar] + ": error")
+            ax.set_title(varname + ": error PDF")
 
             plt.subplots_adjust(
                 left=0.075, bottom=0.1, right=0.98, top=0.9, wspace=0.2, hspace=0.25
@@ -270,12 +271,16 @@ class Visualizer:
             if save_plot:
                 if iepoch:
                     fig.savefig(
-                        f"./logs/{self.model_with_config_name}/task{ivar}_"
+                        f"./logs/{self.model_with_config_name}/"
+                        + varname
+                        + "_"
                         + str(iepoch).zfill(4)
                         + ".png"
                     )
                 else:
-                    fig.savefig(f"./logs/{self.model_with_config_name}/task{ivar}.png")
+                    fig.savefig(
+                        f"./logs/{self.model_with_config_name}/" + varname + ".png"
+                    )
                 plt.close()
             return
         else:
@@ -328,7 +333,7 @@ class Visualizer:
                 predcomp,
                 s=40,
                 c=xfeature,
-                title="mean(atom:0-" + str(iatom) + ")",
+                title="SMP_Mean4sites:0-" + str(nshape[1]),
                 xylim_equal=True,
             )
 
@@ -341,21 +346,24 @@ class Visualizer:
             if save_plot:
                 if iepoch:
                     fig.savefig(
-                        f"./logs/{self.model_with_config_name}/task{ivar}_"
+                        f"./logs/{self.model_with_config_name}/"
+                        + varname
+                        + "_"
                         + str(iepoch).zfill(4)
                         + ".png"
                     )
                 else:
-                    fig.savefig(f"./logs/{self.model_with_config_name}/task{ivar}.png")
+                    fig.savefig(
+                        f"./logs/{self.model_with_config_name}/" + varname + ".png"
+                    )
                 plt.close()
 
     def create_error_histogram_plot_atoms(
-        self, ivar, x_atomfeature, iepoch=None, save_plot=True
+        self, varname, x_atomfeature, iepoch=None, save_plot=True
     ):
         """Creates error histogram plot for vector outputs."""
 
         nshape = np.asarray(self.predicted_values).shape
-        varnames = ["free energy", "charge density"]
         if nshape[1] == 1:
             return
         else:
@@ -405,7 +413,7 @@ class Visualizer:
                 np.array(predcomp) - np.array(truecomp), bins=40, density=True
             )
             ax.plot(0.5 * (bin_edges[:-1] + bin_edges[1:]), hist1d, "ro")
-            ax.set_title("mean(atom:0-" + str(iatom) + ")")
+            ax.set_title("SMP_Mean4sites:0-" + str(nshape[1]))
 
             for iext in range(nshape[1] + 2, axs.size):
                 axs[iext].axis("off")
@@ -415,18 +423,22 @@ class Visualizer:
             if save_plot:
                 if iepoch:
                     fig.savefig(
-                        f"./logs/{self.model_with_config_name}/task{ivar}_error_hist1d_"
+                        f"./logs/{self.model_with_config_name}/"
+                        + varname
+                        + "_error_hist1d_"
                         + str(iepoch).zfill(4)
                         + ".png"
                     )
                 else:
                     fig.savefig(
-                        f"./logs/{self.model_with_config_name}/task{ivar}_error_hist1d.png"
+                        f"./logs/{self.model_with_config_name}/"
+                        + varname
+                        + "_error_hist1d.png"
                     )
                 plt.close()
 
     def create_scatter_plot_atoms_vec(
-        self, ivar, x_atomfeature, iepoch=None, save_plot=True
+        self, varname, x_atomfeature, iepoch=None, save_plot=True
     ):
         """Creates scatter plots for scalar output and vector outputs."""
 
@@ -437,19 +449,20 @@ class Visualizer:
         true_vec = np.reshape(np.asarray(self.true_values), (nshape[0], -1, 3))
         num_nodes = true_vec.shape[1]
 
-        for icomp in range(3):
-            nrow = floor(sqrt((num_nodes + 1)))
-            ncol = ceil((num_nodes + 1) / nrow)
-            fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
-            axs = axs.flatten()
-            for iatom in range(num_nodes):
+        markers_vec = ["o", "s", "d"]  # different markers for three vector components
+        nrow = floor(sqrt((num_nodes + 1)))
+        ncol = ceil((num_nodes + 1) / nrow)
+        fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
+        axs = axs.flatten()
+        for iatom in range(num_nodes):
+            for icomp in range(3):
                 xfeature = []
                 truecomp = []
                 predcomp = []
                 for isamp in range(nshape[0]):
                     xfeature.append(x_atomfeature[isamp][iatom])
-                    truecomp.append(predicted_vec[isamp, iatom, icomp])
-                    predcomp.append(true_vec[isamp, iatom, icomp])
+                    truecomp.append(true_vec[isamp, iatom, icomp])
+                    predcomp.append(predicted_vec[isamp, iatom, icomp])
                 ax = axs[iatom]
                 self.__scatter_impl(
                     ax,
@@ -457,23 +470,33 @@ class Visualizer:
                     predcomp,
                     s=6,
                     c=xfeature,
+                    marker=markers_vec[icomp],
                     title="atom:" + str(iatom),
                     xylim_equal=True,
                 )
 
-            ax = axs[num_nodes]  # summation over all the atoms/nodes
+        ax = axs[num_nodes]  # summation over all the atoms/nodes
+        for icomp in range(3):
             xfeature = []
             truecomp = []
             predcomp = []
             for isamp in range(nshape[0]):
                 xfeature.append(sum(x_atomfeature[isamp][:]))
-                truecomp.append(sum(predicted_vec[isamp, :, icomp]))
-                predcomp.append(sum(true_vec[isamp, :, icomp]))
+                truecomp.append(sum(true_vec[isamp, :, icomp]))
+                predcomp.append(sum(predicted_vec[isamp, :, icomp]))
             self.__scatter_impl(
-                ax, truecomp, predcomp, s=40, c=xfeature, title="SUM", xylim_equal=True
+                ax,
+                truecomp,
+                predcomp,
+                s=40,
+                c=xfeature,
+                marker=markers_vec[icomp],
+                title="SUM",
+                xylim_equal=True,
             )
 
-            ax = axs[num_nodes + 1]  # summation over all the samples for each atom/node
+        ax = axs[num_nodes + 1]  # summation over all the samples for each atom/node
+        for icomp in range(3):
             xfeature = []
             truecomp = []
             predcomp = []
@@ -487,32 +510,29 @@ class Visualizer:
                 predcomp,
                 s=40,
                 c=xfeature,
-                title="mean(atom:0-" + str(iatom) + ")",
+                marker=markers_vec[icomp],
+                title="SMP_Mean4sites:0-" + str(num_nodes),
                 xylim_equal=True,
             )
 
-            for iext in range(nshape[1] + 2, axs.size):
-                axs[iext].axis("off")
-            plt.subplots_adjust(
-                left=0.05, bottom=0.05, right=0.98, top=0.95, wspace=0.1, hspace=0.25
-            )
+        for iext in range(num_nodes + 2, axs.size):
+            axs[iext].axis("off")
+        plt.subplots_adjust(
+            left=0.05, bottom=0.05, right=0.98, top=0.95, wspace=0.1, hspace=0.25
+        )
 
-            if save_plot:
-                if iepoch:
-                    fig.savefig(
-                        f"./logs/{self.model_with_config_name}/task{ivar}_"
-                        + str(icomp)
-                        + "_"
-                        + str(iepoch).zfill(4)
-                        + ".png"
-                    )
-                else:
-                    fig.savefig(
-                        f"./logs/{self.model_with_config_name}/task{ivar}_"
-                        + str(icomp)
-                        + ".png"
-                    )
-                plt.close()
+        if save_plot:
+            if iepoch:
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/"
+                    + varname
+                    + "_"
+                    + str(iepoch).zfill(4)
+                    + ".png"
+                )
+            else:
+                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+            plt.close()
 
     def plot_history(
         self,
@@ -526,6 +546,7 @@ class Visualizer:
         tasklib_vali_nodes,
         tasklib_test_nodes,
         task_weights,
+        task_names,
     ):
         nrow = 1
         fhist = open(f"./logs/{self.model_with_config_name}/history_loss.pckl", "wb")
@@ -541,6 +562,7 @@ class Visualizer:
                 tasklib_vali_nodes,
                 tasklib_test_nodes,
                 task_weights,
+                task_names,
             ],
             fhist,
         )
@@ -568,7 +590,7 @@ class Visualizer:
             ax.plot(tasklib[:, ivar], label="train")
             ax.plot(tasklib_vali[:, ivar], label="validation")
             ax.plot(tasklib_test[:, ivar], "--", label="test")
-            ax.set_title("Task " + str(ivar) + ", {:.4f}".format(task_weights[ivar]))
+            ax.set_title(task_names[ivar] + ", {:.4f}".format(task_weights[ivar]))
             ax.set_xlabel("Epochs")
             ax.set_yscale("log")
             if ivar == 0:
