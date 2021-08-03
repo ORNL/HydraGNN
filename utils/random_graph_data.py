@@ -5,7 +5,7 @@ import numpy
 
 
 def random_graph_data(
-    number_configurations: int = 500, number_atoms: int = 10, num_clusters: int = 2
+    number_configurations: int = 1000, number_atoms: int = 10, num_clusters: int = 2
 ):
 
     original_path = "output_files"
