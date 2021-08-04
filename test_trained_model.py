@@ -11,7 +11,7 @@ from utils.models_setup import generate_model
 from data_utils.dataset_descriptors import (
     Dataset,
 )
-
+import pickle
 
 def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = None):
 
@@ -50,6 +50,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         chosen_dataset_option=config["Dataset"]["name"],
         distributed_data_parallelism=run_in_parallel,
     )
+
     model = generate_model(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
         input_dim=len(
@@ -60,6 +61,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
 
     model_with_config_name = (
+<<<<<<< HEAD
         model.__str__()
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
@@ -84,14 +86,19 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
                 "input_node_features"
             ]
         )
+        + "-task_weights-"
+        + "".join(str(weigh) + "-"for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"])
+        + "num_sl-"
+        + str(config["NeuralNetwork"]["Architecture"]["num_sharedlayers"])
     )
+
     state_dict = torch.load(
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         map_location="cpu",
     )
     model.load_state_dict(state_dict)
 
-    error, true_values, predicted_values = test(
+    error, node_err1, node_err2, true_values, predicted_values = test(
         test_loader, model, config["NeuralNetwork"]["Architecture"]["output_dim"]
     )
 

@@ -567,13 +567,13 @@ class Visualizer:
             fhist,
         )
         fhist.close()
-
-        if len(tasklib) > 0:
+        num_tasks = len(tasklib[0])
+        if num_tasks > 0:
             tasklib = np.array(tasklib)
             tasklib_vali = np.array(tasklib_vali)
             tasklib_test = np.array(tasklib_test)
             nrow = 2
-        fig, axs = plt.subplots(nrow, 3, figsize=(16, 6 * nrow))
+        fig, axs = plt.subplots(nrow, num_tasks, figsize=(16, 6 * nrow))
         axs = axs.flatten()
         ax = axs[0]
         ax.plot(trainlib, "-", label="train")
@@ -583,10 +583,10 @@ class Visualizer:
         ax.set_xlabel("Epochs")
         ax.set_yscale("log")
         ax.legend()
-        for iext in range(1, 3):
+        for iext in range(1, num_tasks):
             axs[iext].axis("off")
         for ivar in range(tasklib.shape[1]):
-            ax = axs[3 + ivar]
+            ax = axs[num_tasks + ivar]
             ax.plot(tasklib[:, ivar], label="train")
             ax.plot(tasklib_vali[:, ivar], label="validation")
             ax.plot(tasklib_test[:, ivar], "--", label="test")
@@ -595,7 +595,7 @@ class Visualizer:
             ax.set_yscale("log")
             if ivar == 0:
                 ax.legend()
-        for iext in range(3 + tasklib.shape[1], axs.size):
+        for iext in range(num_tasks + tasklib.shape[1], axs.size):
             axs[iext].axis("off")
         plt.subplots_adjust(
             left=0.1, bottom=0.08, right=0.98, top=0.9, wspace=0.25, hspace=0.3

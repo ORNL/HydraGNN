@@ -16,6 +16,9 @@ def pytest_train_model(model_type):
 
     _, rank = get_comm_size_and_rank()
 
+    if rank == 0:
+        deterministic_graph_data()
+
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
@@ -23,9 +26,6 @@ def pytest_train_model(model_type):
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
-
-    if rank == 0:
-        deterministic_graph_data(number_atoms=config["num_node"])
 
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
@@ -45,11 +45,13 @@ def pytest_train_model(model_type):
     }
     # Check RMSE error
     assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
-    # Check individual samples
-    for true_value, predicted_value in zip(true_values, predicted_values):
-        assert (
-            abs(true_value[0] - predicted_value[0]) < thresholds[model_type][1]
-        ), "Samples checking failed!" + str(abs(true_value[0] - predicted_value[0]))
+    for ihead in range(len(true_values)):
+        head_true = true_values[ihead]
+        head_pred = predicted_values[ihead]
+        # Check individual samples
+        for true_value, predicted_value in zip(head_true, head_pred):
+            for idim in range(len(true_value)):
+                assert (abs(true_value[idim] - predicted_value[idim]) < thresholds[model_type][1]), "Samples checking failed!" + str(abs(true_value[idim] - predicted_value[idim]))
 
 
 if __name__ == "__main__":
