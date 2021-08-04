@@ -121,9 +121,9 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
             ]
         )
         + "-task_weights-"
-        + "".join(str(weigh) + "-" for weigh in config["task_weights"])
+        + "".join(str(weigh) + "-" for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"])
         + "num_sl-"
-        + str(config["num_sharedlayers"])
+        + str(config["NeuralNetwork"]["Architecture"]["num_sharedlayers"])
     )
 
     device_name, device = get_device()
@@ -173,9 +173,9 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     )
 
     if (
-        "continue" in config and config["continue"] == 1
+        "continue" in config["NeuralNetwork"]["Training"] and config["NeuralNetwork"]["Training"]["continue"] == 1
     ):  # starting from an existing model
-        modelstart = config["startfrom"]
+        modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
         if not modelstart:
             modelstart = model_with_config_name
 

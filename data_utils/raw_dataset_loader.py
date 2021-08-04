@@ -108,6 +108,9 @@ class RawDataLoader:
         Data
             Data object representing structure of a graph sample.
         """
+
+        #fixme, not flexible, improve later
+
         data_object = Data()
 
         graph_feat = lines[0].split(None, 2)
@@ -121,7 +124,6 @@ class RawDataLoader:
 
         node_feature_matrix = []
         node_position_matrix = []
-        magnetic_moment_v = []
         for line in lines[1:]:
             node_feat = line.split(None, 11)
 
@@ -135,13 +137,10 @@ class RawDataLoader:
                 for icomp in range(node_feature_dim[item]):
                     it_comp = node_feature_col[item] + icomp
                     node_feature.append(float(node_feat[it_comp].strip()))
-
             node_feature_matrix.append(node_feature)
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
-        data_object.magnetic_vec = tensor(magnetic_moment_v)
-
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):
