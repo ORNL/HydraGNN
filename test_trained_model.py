@@ -11,7 +11,7 @@ from utils.models_setup import generate_model
 from data_utils.dataset_descriptors import (
     Dataset,
 )
-import pickle
+
 
 def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = None):
 
@@ -29,6 +29,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
+
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
@@ -61,7 +62,6 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
 
     model_with_config_name = (
-<<<<<<< HEAD
         model.__str__()
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
