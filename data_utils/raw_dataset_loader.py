@@ -109,7 +109,7 @@ class RawDataLoader:
             Data object representing structure of a graph sample.
         """
 
-        #fixme, not flexible, improve later
+        # fixme, not flexible, improve later
 
         data_object = Data()
 

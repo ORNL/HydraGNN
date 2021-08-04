@@ -219,14 +219,20 @@ def train_validate_test_normal(
                 )
                 if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
                     visualizer.create_scatter_plot_atoms_vec(
-                        config["Target_dataset"]["output_names"][ihead], x_atomfeature, epoch
+                        config["Target_dataset"]["output_names"][ihead],
+                        x_atomfeature,
+                        epoch,
                     )
                 else:
                     visualizer.create_scatter_plot_atoms(
-                        config["Target_dataset"]["output_names"][ihead], x_atomfeature, epoch
+                        config["Target_dataset"]["output_names"][ihead],
+                        x_atomfeature,
+                        epoch,
                     )
                     visualizer.create_error_histogram_plot_atoms(
-                        config["Target_dataset"]["output_names"][ihead], x_atomfeature, epoch
+                        config["Target_dataset"]["output_names"][ihead],
+                        x_atomfeature,
+                        epoch,
                     )
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions

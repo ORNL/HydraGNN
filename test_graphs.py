@@ -27,7 +27,6 @@ def pytest_train_model(model_type):
     if rank == 0:
         deterministic_graph_data(number_atoms=config["num_node"])
 
-
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
     with open(tmp_file, "w") as f:

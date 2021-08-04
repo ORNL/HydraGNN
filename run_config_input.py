@@ -121,7 +121,10 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
             ]
         )
         + "-task_weights-"
-        + "".join(str(weigh) + "-" for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"])
+        + "".join(
+            str(weigh) + "-"
+            for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
+        )
         + "num_sl-"
         + str(config["NeuralNetwork"]["Architecture"]["num_sharedlayers"])
     )
@@ -173,7 +176,8 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     )
 
     if (
-        "continue" in config["NeuralNetwork"]["Training"] and config["NeuralNetwork"]["Training"]["continue"] == 1
+        "continue" in config["NeuralNetwork"]["Training"]
+        and config["NeuralNetwork"]["Training"]["continue"] == 1
     ):  # starting from an existing model
         modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
         if not modelstart:
