@@ -35,8 +35,8 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
             dim_item = config["Dataset"]["properties"]["dim"][output_index[item]]
         elif output_type[item] == "node":
             dim_item = (
-                    config["Dataset"]["atom_featurs"]["dim"][output_index[item]]
-                    * config["Dataset"]["num_atoms"]
+                config["Dataset"]["atom_featurs"]["dim"][output_index[item]]
+                * config["Dataset"]["num_atoms"]
             )
         else:
             raise ValueError("Unknown output type", output_type[item])
@@ -70,25 +70,28 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
 
     model_with_config_name = (
-            model.__str__()
-            + "-r-"
-            + str(config["NeuralNetwork"]["Architecture"]["radius"])
-            + "-mnnn-"
-            + str(config["NeuralNetwork"]["Architecture"]["max_num_node_neighbours"])
-            + "-ncl-"
-            + str(model.num_conv_layers)
-            + "-hd-"
-            + str(model.hidden_dim)
-            + "-ne-"
-            + str(config["NeuralNetwork"]["Training"]["num_epoch"])
-            + "-lr-"
-            + str(config["NeuralNetwork"]["Training"]["learning_rate"])
-            + "-bs-"
-            + str(config["NeuralNetwork"]["Training"]["batch_size"])
-            + "-data-"
-            + config["Dataset"]["name"]
-            + "-node_ft-"
-            + "".join(str(x) for x in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"])
+        model.__str__()
+        + "-r-"
+        + str(config["NeuralNetwork"]["Architecture"]["radius"])
+        + "-mnnn-"
+        + str(config["NeuralNetwork"]["Architecture"]["max_num_node_neighbours"])
+        + "-ncl-"
+        + str(model.num_conv_layers)
+        + "-hd-"
+        + str(model.hidden_dim)
+        + "-ne-"
+        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
+        + "-lr-"
+        + str(config["NeuralNetwork"]["Training"]["learning_rate"])
+        + "-bs-"
+        + str(config["NeuralNetwork"]["Training"]["batch_size"])
+        + "-data-"
+        + config["Dataset"]["name"]
+        + "-node_ft-"
+        + "".join(
+            str(x)
+            for x in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]
+        )
     )
     state_dict = torch.load(
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
