@@ -24,7 +24,7 @@ def pytest_train_model(model_type):
         config = json.load(f)
 
     tmp_file = "./tmp.json"
-    config["model_type"] = model_type
+    config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
     with open(tmp_file, "w") as f:
         json.dump(config, f)
 
