@@ -35,7 +35,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
             dim_item = config["Dataset"]["properties"]["dim"][output_index[item]]
         elif output_type[item] == "node":
             dim_item = (
-                config["Dataset"]["atom_featurs"]["dim"][output_index[item]]
+                config["Dataset"]["atom_features"]["dim"][output_index[item]]
                 * config["Dataset"]["num_atoms"]
             )
         else:
