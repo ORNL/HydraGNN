@@ -11,7 +11,7 @@ class GATStack(Base):
     def __init__(
         self,
         input_dim: int,
-        output_dim: int,
+        output_dim: list,
         num_nodes: int,
         hidden_dim: int = 16,
         heads: int = 1,

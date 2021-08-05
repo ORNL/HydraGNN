@@ -21,7 +21,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def load_raw_data(self, dataset_path: str):
+    def load_raw_data(self, dataset_path: str, config):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
 
@@ -29,6 +29,7 @@ class RawDataLoader:
         ----------
         dataset_path: str
             Directory path where raw files are stored.
+        config: shows the target variables information, e.g, location and dimension, in data file
         """
         dataset = []
         for filename in os.listdir(dataset_path):

@@ -73,11 +73,13 @@ def train_validate_test_normal(
     model_with_config_name,
 ):
 
-    num_epoch = config["num_epoch"]
+    num_epoch = config["Training"]["num_epoch"]
     for epoch in range(0, num_epoch):
-        train_mae = train(train_loader, model, optimizer, config["output_dim"])
-        val_mae = validate(val_loader, model, config["output_dim"])
-        test_rmse = test(test_loader, model, config["output_dim"])
+        train_mae = train(
+            train_loader, model, optimizer, config["Architecture"]["output_dim"]
+        )
+        val_mae = validate(val_loader, model, config["Architecture"]["output_dim"])
+        test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
         scheduler.step(val_mae)
         writer.add_scalar("train error", train_mae, epoch)
         writer.add_scalar("validate error", val_mae, epoch)
@@ -90,23 +92,25 @@ def train_validate_test_normal(
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     visualizer = Visualizer(model_with_config_name)
     test_rmse, true_values, predicted_values = test(
-        test_loader, model, config["output_dim"]
+        test_loader, model, config["Architecture"]["output_dim"]
     )
     if (
-        config["denormalize_output"] == "True"
-    ):  ##output predictions with unit/not normalized
-        y_minmax = config["y_minmax"]
-        for isamp in range(len(predicted_values)):
-            for iout in range(len(predicted_values[0])):
-                predicted_values[isamp][iout] = (
-                    predicted_values[isamp][iout]
-                    * (y_minmax[iout][1] - y_minmax[iout][0])
-                    + y_minmax[iout][0]
-                )
-                true_values[isamp][iout] = (
-                    true_values[isamp][iout] * (y_minmax[iout][1] - y_minmax[iout][0])
-                    + y_minmax[iout][0]
-                )
+        False
+    ):  # ( config["Target_dataset"]["denormalize_output"] == "True"):  ##output predictions with unit/not normalized
+        # fixme; disabled for now, it is related to multitask/head PR, will be updated later
+        y_minmax = config["Target_dataset"]["y_minmax"]
+        for iout in range(len(y_minmax)):
+            for isamp in range(len(predicted_values[0])):
+                for iatom in range(len(predicted_values[iout][0])):
+                    ymin = y_minmax[iout][0][iatom]
+                    ymax = y_minmax[iout][1][iatom]
+
+                    predicted_values[iout][isamp][iatom] = (
+                        predicted_values[iout][isamp][iatom] * (ymax - ymin) + ymin
+                    )
+                    true_values[iout][isamp][iatom] = (
+                        true_values[iout][isamp][iatom] * (ymax - ymin) + ymin
+                    )
 
     visualizer.add_test_values(
         true_values=true_values, predicted_values=predicted_values
@@ -202,32 +206,32 @@ def dataset_loading_and_splitting(
         dataset_CuAu = load_data(Dataset.CuAu.value, config)
         return split_dataset(
             dataset=dataset_CuAu,
-            batch_size=config["batch_size"],
-            perc_train=config["perc_train"],
+            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,
         )
     elif chosen_dataset_option == Dataset.FePt:
         dataset_FePt = load_data(Dataset.FePt.value, config)
         return split_dataset(
             dataset=dataset_FePt,
-            batch_size=config["batch_size"],
-            perc_train=config["perc_train"],
+            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,
         )
     elif chosen_dataset_option == Dataset.FeSi:
         dataset_FeSi = load_data(Dataset.FeSi.value, config)
         return split_dataset(
             dataset=dataset_FeSi,
-            batch_size=config["batch_size"],
-            perc_train=config["perc_train"],
+            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,
         )
     elif chosen_dataset_option == Dataset.unit_test:
         dataset_unit_test = load_data(Dataset.unit_test.value, config)
         return split_dataset(
             dataset=dataset_unit_test,
-            batch_size=config["batch_size"],
-            perc_train=config["perc_train"],
+            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,
         )
     else:
@@ -244,8 +248,8 @@ def dataset_loading_and_splitting(
             shuffle(dataset_combined)
             return split_dataset(
                 dataset=dataset_combined,
-                batch_size=config["batch_size"],
-                perc_train=config["perc_train"],
+                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
                 distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
@@ -253,16 +257,16 @@ def dataset_loading_and_splitting(
             return combine_and_split_datasets(
                 dataset1=dataset_CuAu,
                 dataset2=dataset_FePt,
-                batch_size=config["batch_size"],
-                perc_train=config["perc_train"],
+                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
                 distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
             return combine_and_split_datasets(
                 dataset1=dataset_FePt,
                 dataset2=dataset_CuAu,
-                batch_size=config["batch_size"],
-                perc_train=config["perc_train"],
+                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
                 distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.FePt_FeSi_SHUFFLE:
@@ -271,8 +275,8 @@ def dataset_loading_and_splitting(
             shuffle(dataset_combined)
             return split_dataset(
                 dataset=dataset_combined,
-                batch_size=config["batch_size"],
-                perc_train=config["perc_train"],
+                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
                 distributed_data_parallelism=distributed_data_parallelism,
             )
 
@@ -357,7 +361,7 @@ def combine_and_split_datasets(
 
 
 def load_data(dataset_option, config):
-    transform_raw_data_to_serialized(dataset_option)
+    transform_raw_data_to_serialized(dataset_option, config["Dataset"])
     files_dir = (
         f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
     )
@@ -366,13 +370,13 @@ def load_data(dataset_option, config):
     loader = SerializedDataLoader()
     dataset = loader.load_serialized_data(
         dataset_path=files_dir,
-        config=config,
+        config=config["NeuralNetwork"],
     )
 
     return dataset
 
 
-def transform_raw_data_to_serialized(raw_dataset: str):
+def transform_raw_data_to_serialized(raw_dataset: str, config):
 
     _, rank = get_comm_size_and_rank()
 
@@ -395,7 +399,7 @@ def transform_raw_data_to_serialized(raw_dataset: str):
         )
         if not os.path.exists(serialized_dataset_dir):
             loader = RawDataLoader()
-            loader.load_raw_data(dataset_path=files_dir)
+            loader.load_raw_data(dataset_path=files_dir, config=config)
 
     if dist.is_initialized():
         dist.barrier()

@@ -11,7 +11,7 @@ class PNNStack(Base):
         self,
         deg: torch.Tensor,
         input_dim: int,
-        output_dim: int,
+        output_dim: list,
         num_nodes: int,
         hidden_dim: int,
         dropout: float = 0.25,
