@@ -94,11 +94,10 @@ def train_validate_test_normal(
     test_rmse, true_values, predicted_values = test(
         test_loader, model, config["Architecture"]["output_dim"]
     )
-    if (
-        False
-    ):  # ( config["Target_dataset"]["denormalize_output"] == "True"):  ##output predictions with unit/not normalized
-        # fixme; disabled for now, it is related to multitask/head PR, will be updated later
-        y_minmax = config["Target_dataset"]["y_minmax"]
+    if False:
+        # if config["Variables_of_interest"]["denormalize_output"] == "True":  ##output predictions with unit/not normalized
+        # fixme(multihead): disabled for now, it is related to multitask/head PR, will be updated later
+        y_minmax = config["Variables_of_interest"]["y_minmax"]
         for iout in range(len(y_minmax)):
             for isamp in range(len(predicted_values[0])):
                 for iatom in range(len(predicted_values[iout][0])):

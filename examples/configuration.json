@@ -5,12 +5,12 @@
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],
             "dim": [1,1,1],
-            "locations": [0,5,6]
+            "column_index": [0,5,6]
         },
-        "graph_properties":{
+        "graph_features":{
             "name": [ "free_energy"],
             "dim": [1],
-            "locations": [0]
+            "column_index": [0]
         }
     },
     "NeuralNetwork": {
@@ -23,7 +23,7 @@
             "num_sharedlayers": 2,
             "task_weights": [1.0, 1.0, 1.0]
         },
-        "Target_dataset": {
+        "Variables_of_interest": {
             "input_node_features": [0],
             "output_names": ["free_energy","charge_density", "magnetic_moment"],
             "output_index": [0, 1, 2],

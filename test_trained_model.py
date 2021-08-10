@@ -27,12 +27,12 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    output_type = config["NeuralNetwork"]["Target_dataset"]["type"]
-    output_index = config["NeuralNetwork"]["Target_dataset"]["output_index"]
+    output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
+    output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
-            dim_item = config["Dataset"]["graph_properties"]["dim"][output_index[item]]
+            dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
         elif output_type[item] == "node":
             dim_item = (
                 config["Dataset"]["node_features"]["dim"][output_index[item]]
@@ -64,7 +64,9 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
     model = generate_model(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
-        input_dim=len(config["NeuralNetwork"]["Target_dataset"]["input_node_features"]),
+        input_dim=len(
+            config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+        ),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
     )
@@ -90,7 +92,9 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         + "-node_ft-"
         + "".join(
             str(x)
-            for x in config["NeuralNetwork"]["Target_dataset"]["input_node_features"]
+            for x in config["NeuralNetwork"]["Variables_of_interest"][
+                "input_node_features"
+            ]
         )
     )
     state_dict = torch.load(

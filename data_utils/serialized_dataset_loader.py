@@ -62,18 +62,20 @@ class SerializedDataLoader:
             data.edge_index = edge_index
             data.edge_attr = edge_distances
             self.__update_predicted_values(
-                config["Target_dataset"]["type"],
-                config["Target_dataset"]["output_index"],
+                config["Variables_of_interest"]["type"],
+                config["Variables_of_interest"]["output_index"],
                 data,
             )
             self.__update_atom_features(
-                config["Target_dataset"]["input_node_features"], data
+                config["Variables_of_interest"]["input_node_features"], data
             )
 
-        if "subsample_percentage" in config["Target_dataset"].keys():
+        if "subsample_percentage" in config["Variables_of_interest"].keys():
             return self.__stratified_sampling(
                 dataset=dataset,
-                subsample_percentage=config["Target_dataset"]["subsample_percentage"],
+                subsample_percentage=config["Variables_of_interest"][
+                    "subsample_percentage"
+                ],
             )
 
         return dataset
