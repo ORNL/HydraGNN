@@ -9,28 +9,21 @@ class Base(torch.nn.Module):
         super().__init__()
         self.dropout = 0.25
 
-    def _multihead(self, output_dim: int, num_nodes: int, num_shared: int):
+    def _multihead(self, output_dim: list, num_nodes: int, num_shared: int):
         denselayers = []  # shared dense layers, before mutli-heads
         for ishare in range(num_shared):
             denselayers.append(Linear(self.hidden_dim, self.hidden_dim))
             denselayers.append(ReLU())
         self.shared = Sequential(*denselayers)
 
-        # currently, only two types of outputs are considered, graph-level scalars and nodes-level vectors with num_nodes dimension, or mixed or the two
-        if output_dim < num_nodes:  # all graph-level outputs
-            self.num_heads = output_dim
-            outputs_dims = [1 for _ in range(self.num_heads)]
-        elif output_dim % num_nodes == 0:  # all node-level outputs
-            self.num_heads = output_dim // num_nodes
-            outputs_dims = [num_nodes for _ in range(self.num_heads)]
-        else:  # mixed graph-level and node-level
-            self.num_heads = output_dim % num_nodes + output_dim // num_nodes
-            outputs_dims = [
-                1 if ih < output_dim % num_nodes else num_nodes
-                for ih in range(self.num_heads)
-            ]
+        ############multiple heads/taks################
+        # get number of heads from input
+        ##One head represent one variable
+        ##Head can have different sizes, head_dims;
+        ###e.g., 1 for energy, 32 for charge density, 32*3 for magnetic moments
+        self.num_heads = len(output_dim)
+        self.head_dims = output_dim
 
-        self.num_heads = len(outputs_dims)  # number of heads/tasks
         self.heads = ModuleList()
         for ihead in range(self.num_heads):
             mlp = Sequential(
@@ -38,7 +31,7 @@ class Base(torch.nn.Module):
                 ReLU(),
                 Linear(50, 25),
                 ReLU(),
-                Linear(25, outputs_dims[ihead]),
+                Linear(25, self.head_dims[ihead]),
             )
             self.heads.append(mlp)
 

@@ -26,8 +26,21 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
-    predicted_value_option = {1: 1, 2: 32, 3: 32, 4: 33, 5: 33, 6: 65}
-    config["output_dim"] = predicted_value_option[config["predicted_value_option"]]
+
+    output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
+    output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
+    config["NeuralNetwork"]["Architecture"]["output_dim"] = []
+    for item in range(len(output_type)):
+        if output_type[item] == "graph":
+            dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
+        elif output_type[item] == "node":
+            dim_item = (
+                config["Dataset"]["node_features"]["dim"][output_index[item]]
+                * config["Dataset"]["num_nodes"]
+            )
+        else:
+            raise ValueError("Unknown output type", output_type[item])
+        config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
 
     dataset_options = {
         1: Dataset.CuAu,
@@ -41,7 +54,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     }
     chosen_dataset_option = None
     for dataset in dataset_options.values():
-        if dataset.value == config["dataset_option"]:
+        if dataset.value == config["Dataset"]["name"]:
             chosen_dataset_option = dataset
 
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
@@ -50,33 +63,39 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         distributed_data_parallelism=run_in_parallel,
     )
     model = generate_model(
-        model_type=config["model_type"],
-        input_dim=len(config["atom_features"]),
+        model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
+        input_dim=len(
+            config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+        ),
         dataset=train_loader.dataset,
-        config=config,
+        config=config["NeuralNetwork"]["Architecture"],
     )
+
     model_with_config_name = (
         model.__str__()
         + "-r-"
-        + str(config["radius"])
+        + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-mnnn-"
-        + str(config["max_num_node_neighbours"])
+        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
         + str(model.num_conv_layers)
         + "-hd-"
         + str(model.hidden_dim)
         + "-ne-"
-        + str(config["num_epoch"])
+        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
         + "-lr-"
-        + str(config["learning_rate"])
+        + str(config["NeuralNetwork"]["Training"]["learning_rate"])
         + "-bs-"
-        + str(config["batch_size"])
+        + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-data-"
-        + config["dataset_option"]
+        + config["Dataset"]["name"]
         + "-node_ft-"
-        + "".join(str(x) for x in config["atom_features"])
-        + "-pred_val-"
-        + str(config["predicted_value_option"])
+        + "".join(
+            str(x)
+            for x in config["NeuralNetwork"]["Variables_of_interest"][
+                "input_node_features"
+            ]
+        )
     )
     state_dict = torch.load(
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
@@ -85,7 +104,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     model.load_state_dict(state_dict)
 
     error, true_values, predicted_values = test(
-        test_loader, model, config["output_dim"]
+        test_loader, model, config["NeuralNetwork"]["Architecture"]["output_dim"]
     )
 
     return error, true_values, predicted_values

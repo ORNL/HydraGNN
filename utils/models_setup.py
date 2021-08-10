@@ -75,7 +75,7 @@ def generate_model(
         ).to(device)
 
     elif model_type == "PNN":
-        deg = torch.zeros(config["max_num_node_neighbours"] + 1, dtype=torch.long)
+        deg = torch.zeros(config["max_neighbours"] + 1, dtype=torch.long)
         for data in dataset:
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())
@@ -113,7 +113,7 @@ def generate_model(
             output_dim=config["output_dim"],
             num_nodes=num_atoms,
             hidden_dim=config["hidden_dim"],
-            max_degree=config["max_num_node_neighbours"],
+            max_degree=config["max_neighbours"],
             num_conv_layers=config["num_conv_layers"],
         ).to(device)
 

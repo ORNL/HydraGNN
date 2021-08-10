@@ -29,6 +29,7 @@ class RawDataLoader:
         ----------
         dataset_path: str
             Directory path where raw files are stored.
+        config: shows the target variables information, e.g, location and dimension, in data file
         """
         dataset = []
         for filename in os.listdir(dataset_path):

@@ -1,18 +1,43 @@
 {
-    "atom_features": [
-        0
-    ],
-    "batch_size": 64,
-    "hidden_dim": 15,
-    "num_conv_layers": 16,
-    "learning_rate": 0.02,
-    "radius": 10,
-    "max_num_node_neighbours": 10,
-    "num_epoch": 200,
-    "perc_train": 0.7,
-    "output_dim": 1,
-    "predicted_value_option": 1,
-    "dataset_option": "CuAu_32atoms",
-    "model_type": "PNN",
-    "denormalize_output": "True"
+    "Dataset": {
+        "name": "CuAu_32atoms",
+        "num_nodes": 32,
+        "node_features": {
+            "name": ["num_of_protons","charge_density", "magnetic_moment"],
+            "dim": [1,1,1],
+            "column_index": [0,5,6]
+        },
+        "graph_features":{
+            "name": [ "free_energy"],
+            "dim": [1],
+            "column_index": [0]
+        }
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNN",
+            "radius": 7,
+            "max_neighbours": 5,
+            "hidden_dim": 5,
+            "num_conv_layers": 6,
+            "num_sharedlayers": 2,
+            "task_weights": [1.0, 1.0, 1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["free_energy","charge_density", "magnetic_moment"],
+            "output_index": [0, 1, 2],
+            "type": ["graph","node","node"],
+            "denormalize_output": "True"
+        },
+        "Training": {
+            "num_epoch": 20,
+            "perc_train": 0.7,
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "continue": 0,
+            "startfrom": "existing_model"
+        }
+    }
 }
+

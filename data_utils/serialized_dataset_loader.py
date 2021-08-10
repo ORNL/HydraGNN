@@ -48,25 +48,34 @@ class SerializedDataLoader:
         """
         dataset = []
         with open(dataset_path, "rb") as f:
-            x_minmax = pickle.load(f)
-            y_minmax = pickle.load(f)
+            _ = pickle.load(f)
+            _ = pickle.load(f)
             dataset = pickle.load(f)
 
         edge_index, edge_distances = self.__compute_edges(
             data=dataset[0],
-            radius=config["radius"],
-            max_num_node_neighbours=config["max_num_node_neighbours"],
+            radius=config["Architecture"]["radius"],
+            max_num_node_neighbours=config["Architecture"]["max_neighbours"],
         )
 
         for data in dataset:
             data.edge_index = edge_index
             data.edge_attr = edge_distances
-            self.__update_predicted_values(config["predicted_value_option"], data)
-            self.__update_atom_features(config["atom_features"], data)
+            self.__update_predicted_values(
+                config["Variables_of_interest"]["type"],
+                config["Variables_of_interest"]["output_index"],
+                data,
+            )
+            self.__update_atom_features(
+                config["Variables_of_interest"]["input_node_features"], data
+            )
 
-        if "subsample_percentage" in config.keys():
+        if "subsample_percentage" in config["Variables_of_interest"].keys():
             return self.__stratified_sampling(
-                dataset=dataset, subsample_percentage=config["subsample_percentage"]
+                dataset=dataset,
+                subsample_percentage=config["Variables_of_interest"][
+                    "subsample_percentage"
+                ],
             )
 
         return dataset
@@ -84,36 +93,25 @@ class SerializedDataLoader:
         feature_indices = [i for i in atom_features]
         data.x = data.x[:, feature_indices]
 
-    def __update_predicted_values(self, predicted_value_option: int, data: Data):
+    def __update_predicted_values(self, type: list, index: list, data: Data):
         """Updates values of the structure we want to predict. Predicted value is represented by integer value.
-
         Parameters
         ----------
-        predicted_value_option: int
-            Integer value that represents one of the options for predict. Possible values and associated output dimensions:
-            1)free energy - 1
-            2)charge density - 32
-            3)magnetic moment - 32
-            4)free energy+charge density - 33
-            5)free energy+magnetic moment - 33
-            6)free energy+charge density+magnetic moment - 65
-
+        type: "graph" level or "node" level
+        index: index/location in data.y for graph level and in data.x for node level
+        data: Data
+            A Data object representing a structure that has atoms.
         """
-        free_energy = torch.reshape(data.y[0], (1, 1))
-        charge_density = torch.reshape(data.x[:, 1], (len(data.x), 1))
-        magnetic_moment = torch.reshape(data.x[:, 2], (len(data.x), 1))
-        if predicted_value_option == 1:
-            data.y = torch.reshape(data.y[0], (1, 1))
-        elif predicted_value_option == 2:
-            data.y = torch.reshape(data.x[:, 1], (len(data.x), 1))
-        elif predicted_value_option == 3:
-            data.y = torch.reshape(data.x[:, 2], (len(data.x), 1))
-        elif predicted_value_option == 4:
-            data.y = torch.cat([free_energy, charge_density], 0)
-        elif predicted_value_option == 5:
-            data.y = torch.cat([free_energy, magnetic_moment], 0)
-        elif predicted_value_option == 6:
-            data.y = torch.cat([free_energy, charge_density, magnetic_moment], 0)
+        output_feature = []
+        for item in range(len(type)):
+            if type[item] == "graph":
+                feat_ = torch.reshape(data.y[index[item]], (1, 1))
+            elif type[item] == "node":
+                feat_ = torch.reshape(data.x[:, index[item]], (-1, 1))
+            else:
+                raise ValueError("Unknown output type", type[item])
+            output_feature.append(feat_)
+        data.y = torch.cat(output_feature, 0)
 
     def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):
         """Computes edges of a structure depending on the maximum number of neighbour atoms that each atom can have

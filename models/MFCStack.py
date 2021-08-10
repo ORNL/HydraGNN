@@ -11,7 +11,7 @@ class MFCStack(Base):
     def __init__(
         self,
         input_dim: int,
-        output_dim: int,
+        output_dim: list,
         num_nodes: int,
         max_degree: int,
         hidden_dim: int = 16,
