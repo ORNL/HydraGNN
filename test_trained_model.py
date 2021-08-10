@@ -32,11 +32,11 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
-            dim_item = config["Dataset"]["properties"]["dim"][output_index[item]]
+            dim_item = config["Dataset"]["graph_properties"]["dim"][output_index[item]]
         elif output_type[item] == "node":
             dim_item = (
-                config["Dataset"]["atom_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_atoms"]
+                config["Dataset"]["node_features"]["dim"][output_index[item]]
+                * config["Dataset"]["num_nodes"]
             )
         else:
             raise ValueError("Unknown output type", output_type[item])
@@ -64,7 +64,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
     model = generate_model(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
-        input_dim=len(config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]),
+        input_dim=len(config["NeuralNetwork"]["Target_dataset"]["input_node_features"]),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
     )
@@ -74,7 +74,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_num_node_neighbours"])
+        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
         + str(model.num_conv_layers)
         + "-hd-"
@@ -90,7 +90,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         + "-node_ft-"
         + "".join(
             str(x)
-            for x in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]
+            for x in config["NeuralNetwork"]["Target_dataset"]["input_node_features"]
         )
     )
     state_dict = torch.load(

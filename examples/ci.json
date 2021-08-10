@@ -1,13 +1,13 @@
 {
     "Dataset": {
         "name": "unit_test",
-        "num_atoms": 10,
-        "atom_features": {
+        "num_nodes": 10,
+        "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],
             "locations": [0, 6, 7]
         },
-        "properties":{
+        "graph_properties":{
             "name": [ "sum_x_x2_x3"],
             "dim": [1],
             "locations": [0]
@@ -17,14 +17,14 @@
         "Architecture": {
             "model_type": "PNN",
             "radius": 7,
-            "max_num_node_neighbours": 4,
+            "max_neighbours": 4,
             "hidden_dim": 10,
             "num_conv_layers": 5,
             "num_sharedlayers": 2,
             "task_weights": [1.0, 1.0, 1.0, 1.0]
         },
         "Target_dataset": {
-            "input_atom_features": [0],
+            "input_node_features": [0],
             "output_names": ["sum_x_x2_x3"],
             "output_index": [0],
             "type": ["graph"],

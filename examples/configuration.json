@@ -1,13 +1,13 @@
 {
     "Dataset": {
         "name": "CuAu_32atoms",
-        "num_atoms": 32,
-        "atom_features": {
+        "num_nodes": 32,
+        "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],
             "dim": [1,1,1],
             "locations": [0,5,6]
         },
-        "properties":{
+        "graph_properties":{
             "name": [ "free_energy"],
             "dim": [1],
             "locations": [0]
@@ -17,14 +17,14 @@
         "Architecture": {
             "model_type": "PNN",
             "radius": 7,
-            "max_num_node_neighbours": 5,
+            "max_neighbours": 5,
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "num_sharedlayers": 2,
             "task_weights": [1.0, 1.0, 1.0]
         },
         "Target_dataset": {
-            "input_atom_features": [0],
+            "input_node_features": [0],
             "output_names": ["free_energy","charge_density", "magnetic_moment"],
             "output_index": [0, 1, 2],
             "type": ["graph","node","node"],

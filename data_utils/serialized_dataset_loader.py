@@ -55,7 +55,7 @@ class SerializedDataLoader:
         edge_index, edge_distances = self.__compute_edges(
             data=dataset[0],
             radius=config["Architecture"]["radius"],
-            max_num_node_neighbours=config["Architecture"]["max_num_node_neighbours"],
+            max_num_node_neighbours=config["Architecture"]["max_neighbours"],
         )
 
         for data in dataset:
@@ -67,7 +67,7 @@ class SerializedDataLoader:
                 data,
             )
             self.__update_atom_features(
-                config["Target_dataset"]["input_atom_features"], data
+                config["Target_dataset"]["input_node_features"], data
             )
 
         if "subsample_percentage" in config["Target_dataset"].keys():

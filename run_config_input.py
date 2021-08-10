@@ -42,28 +42,28 @@ def run_normal_terminal_input():
         "Select the atom features you want in the dataset: 1)proton number 2)proton number+charge density 3)proton number+magnetic moment 4)all"
     )
     config["Dataset"] = {}
-    config["Dataset"]["atom_features"] = {}
-    config["Dataset"]["properties"] = {}
+    config["Dataset"]["node_features"] = {}
+    config["Dataset"]["graph_properties"] = {}
 
     config["NeuralNetwork"] = {}
     config["NeuralNetwork"]["Architecture"] = {}
     config["NeuralNetwork"]["Target_dataset"] = {}
     config["NeuralNetwork"]["Training"] = {}
 
-    config["Dataset"]["atom_features"]["name"] = [
+    config["Dataset"]["node_features"]["name"] = [
         "num_of_protons",
         "charge_density",
         "magnetic_moment",
     ]
-    config["Dataset"]["atom_features"]["dim"] = [1, 1, 1]
-    config["Dataset"]["atom_features"]["locations"] = [0, 5, 6]
-    config["Dataset"]["properties"]["name"] = ["free_energy"]
-    config["Dataset"]["properties"]["dim"] = [1]
-    config["Dataset"]["properties"]["locations"] = [0]
+    config["Dataset"]["node_features"]["dim"] = [1, 1, 1]
+    config["Dataset"]["node_features"]["locations"] = [0, 5, 6]
+    config["Dataset"]["graph_properties"]["name"] = ["free_energy"]
+    config["Dataset"]["graph_properties"]["dim"] = [1]
+    config["Dataset"]["graph_properties"]["locations"] = [0]
 
-    config["NeuralNetwork"]["Target_dataset"]["input_atom_features"] = []
+    config["NeuralNetwork"]["Target_dataset"]["input_node_features"] = []
     chosen_atom_features = int(input("Selected value: "))
-    config["NeuralNetwork"]["Target_dataset"]["input_atom_features"] = [
+    config["NeuralNetwork"]["Target_dataset"]["input_node_features"] = [
         x.value for x in atom_features_options[chosen_atom_features]
     ]
 
@@ -80,10 +80,10 @@ def run_normal_terminal_input():
         input("Select learning rate: ")
     )
     config["NeuralNetwork"]["Architecture"]["radius"] = int(
-        input("Select the radius within which neighbours of an atom are chosen: ")
+        input("Select the radius within which neighbours of a node are chosen: ")
     )
-    config["NeuralNetwork"]["Architecture"]["max_num_node_neighbours"] = int(
-        input("Select the maximum number of atom neighbours: ")
+    config["NeuralNetwork"]["Architecture"]["max_neighbours"] = int(
+        input("Select the maximum number of node neighbours: ")
     )
     config["NeuralNetwork"]["Training"]["num_epoch"] = int(
         input("Select the number of epochs: ")
@@ -116,11 +116,11 @@ def run_normal_terminal_input():
     )
     chosen_dataset_option = int(input("Selected value: "))
     config["Dataset"]["name"] = dataset_options[chosen_dataset_option].value
-    config["Dataset"]["num_atoms"] = int(input("Enter the number of atoms: "))
-    config["Dataset"]["properties"]["dim"] = [
+    config["Dataset"]["num_nodes"] = int(input("Enter the number of nodes: "))
+    config["Dataset"]["graph_properties"]["dim"] = [
         1,
-        config["Dataset"]["num_atoms"],
-        config["Dataset"]["num_atoms"],
+        config["Dataset"]["num_nodes"],
+        config["Dataset"]["num_nodes"],
     ]
 
     print(
@@ -147,10 +147,10 @@ def run_normal_terminal_input():
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
-            dim_item = config["Dataset"]["properties"]["dim"][output_index[item]]
+            dim_item = config["Dataset"]["graph_properties"]["dim"][output_index[item]]
         elif output_type[item] == "node":
             dim_item = (
-                config["Dataset"]["atom_features"]["dim"][output_index[item]]
+                config["Dataset"]["node_features"]["dim"][output_index[item]]
                 * config["Dataset"]["num_atoms"]
             )
         else:
@@ -168,7 +168,7 @@ def run_normal_terminal_input():
         config["NeuralNetwork"]["Target_dataset"]["x_minmax"] = []
         config["NeuralNetwork"]["Target_dataset"]["y_minmax"] = []
         feature_indices = [
-            i for i in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]
+            i for i in config["NeuralNetwork"]["Target_dataset"]["input_node_features"]
         ]
         for item in feature_indices:
             config["NeuralNetwork"]["Target_dataset"]["x_minmax"].append(
@@ -189,7 +189,7 @@ def run_normal_terminal_input():
     else:
         config["NeuralNetwork"]["Target_dataset"]["denormalize_output"] = "False"
 
-    input_dim = len(config["NeuralNetwork"]["Target_dataset"]["input_atom_features"])
+    input_dim = len(config["NeuralNetwork"]["Target_dataset"]["input_node_features"])
     model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
     print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
     chosen_model = model_choices[input("Selected value: ")]
@@ -213,7 +213,7 @@ def run_normal_terminal_input():
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_num_node_neighbours"])
+        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
         + str(model.num_conv_layers)
         + "-hd-"
@@ -229,7 +229,7 @@ def run_normal_terminal_input():
         + "-node_ft-"
         + "".join(
             str(x)
-            for x in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]
+            for x in config["NeuralNetwork"]["Target_dataset"]["input_node_features"]
         )
     )
     writer = SummaryWriter("./logs/" + model_with_config_name)
@@ -291,11 +291,11 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
-            dim_item = config["Dataset"]["properties"]["dim"][output_index[item]]
+            dim_item = config["Dataset"]["graph_properties"]["dim"][output_index[item]]
         elif output_type[item] == "node":
             dim_item = (
-                config["Dataset"]["atom_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_atoms"]
+                config["Dataset"]["node_features"]["dim"][output_index[item]]
+                * config["Dataset"]["num_nodes"]
             )
         else:
             raise ValueError("Unknown output type", output_type[item])
@@ -312,7 +312,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         config["NeuralNetwork"]["Target_dataset"]["x_minmax"] = []
         config["NeuralNetwork"]["Target_dataset"]["y_minmax"] = []
         feature_indices = [
-            i for i in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]
+            i for i in config["NeuralNetwork"]["Target_dataset"]["input_node_features"]
         ]
         for item in feature_indices:
             config["NeuralNetwork"]["Target_dataset"]["x_minmax"].append(
@@ -335,7 +335,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
 
     model = generate_model(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
-        input_dim=len(config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]),
+        input_dim=len(config["NeuralNetwork"]["Target_dataset"]["input_node_features"]),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
     )
@@ -345,7 +345,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_num_node_neighbours"])
+        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
         + str(model.num_conv_layers)
         + "-hd-"
@@ -361,7 +361,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         + "-node_ft-"
         + "".join(
             str(x)
-            for x in config["NeuralNetwork"]["Target_dataset"]["input_atom_features"]
+            for x in config["NeuralNetwork"]["Target_dataset"]["input_node_features"]
         )
     )
 
