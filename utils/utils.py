@@ -153,24 +153,31 @@ def train_validate_test_normal(
     if False:
         # if config["Variables_of_interest"]["denormalize_output"] == "True":  ##output predictions with unit/not normalized
         # fixme(multihead): disabled for now, it is related to multitask/head PR, will be updated later
-        y_minmax = config["Variables_of_interest"]["y_minmax"]
-        for iout in range(len(y_minmax)):
-            for isamp in range(len(predicted_values[0])):
-                for iatom in range(len(predicted_values[iout][0])):
-                    ymin = y_minmax[iout][0][iatom]
-                    ymax = y_minmax[iout][1][iatom]
-
-                    predicted_values[iout][isamp][iatom] = (
-                        predicted_values[iout][isamp][iatom] * (ymax - ymin) + ymin
-                    )
-                    true_values[iout][isamp][iatom] = (
-                        true_values[iout][isamp][iatom] * (ymax - ymin) + ymin
-                    )
-
+        true_values, predicted_values = output_denormalize(
+            config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
+        )
     visualizer.add_test_values(
         true_values=true_values, predicted_values=predicted_values
     )
     visualizer.create_scatter_plot()
+
+
+def output_denormalize(y_minmax, true_values, predicted_values):
+    # Fixme, should be improved later
+    for ihead in range(len(y_minmax)):
+        for isamp in range(len(predicted_values[0])):
+            for iatom in range(len(predicted_values[ihead][0])):
+                ymin = y_minmax[ihead][0][iatom]
+                ymax = y_minmax[ihead][1][iatom]
+
+                predicted_values[ihead][isamp][iatom] = (
+                    predicted_values[ihead][isamp][iatom] * (ymax - ymin) + ymin
+                )
+                true_values[ihead][isamp][iatom] = (
+                    true_values[ihead][isamp][iatom] * (ymax - ymin) + ymin
+                )
+
+    return true_values, predicted_values
 
 
 def train(loader, model, opt, output_dim):
@@ -256,35 +263,10 @@ def dataset_loading_and_splitting(
     chosen_dataset_option: Dataset,
     distributed_data_parallelism: bool = False,
 ):
-
-    if chosen_dataset_option == Dataset.CuAu:
-        dataset_CuAu = load_data(Dataset.CuAu.value, config)
+    if chosen_dataset_option in [item.value for item in Dataset]:
+        dataset_chosen = load_data(chosen_dataset_option, config)
         return split_dataset(
-            dataset=dataset_CuAu,
-            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            distributed_data_parallelism=distributed_data_parallelism,
-        )
-    elif chosen_dataset_option == Dataset.FePt:
-        dataset_FePt = load_data(Dataset.FePt.value, config)
-        return split_dataset(
-            dataset=dataset_FePt,
-            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            distributed_data_parallelism=distributed_data_parallelism,
-        )
-    elif chosen_dataset_option == Dataset.FeSi:
-        dataset_FeSi = load_data(Dataset.FeSi.value, config)
-        return split_dataset(
-            dataset=dataset_FeSi,
-            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            distributed_data_parallelism=distributed_data_parallelism,
-        )
-    elif chosen_dataset_option == Dataset.unit_test:
-        dataset_unit_test = load_data(Dataset.unit_test.value, config)
-        return split_dataset(
-            dataset=dataset_unit_test,
+            dataset=dataset_chosen,
             batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
             perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
             distributed_data_parallelism=distributed_data_parallelism,

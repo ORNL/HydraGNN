@@ -107,12 +107,8 @@ def run_normal_terminal_input():
     dataset_options = {
         1: Dataset.CuAu,
         2: Dataset.FePt,
-        3: Dataset.CuAu_FePt_SHUFFLE,
-        4: Dataset.CuAu_TRAIN_FePt_TEST,
-        5: Dataset.FePt_TRAIN_CuAu_TEST,
-        6: Dataset.FeSi,
-        7: Dataset.FePt_FeSi_SHUFFLE,
-        8: Dataset.unit_test,
+        3: Dataset.FeSi,
+        4: Dataset.unit_test,
     }
     print(
         "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine CuAu-FePt&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test, 6)FeSi , 7) Combine FePt-FeSi&Shuffle"
@@ -276,24 +272,9 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    dataset_options = {
-        1: Dataset.CuAu,
-        2: Dataset.FePt,
-        3: Dataset.CuAu_FePt_SHUFFLE,
-        4: Dataset.CuAu_TRAIN_FePt_TEST,
-        5: Dataset.FePt_TRAIN_CuAu_TEST,
-        6: Dataset.FeSi,
-        7: Dataset.FePt_FeSi_SHUFFLE,
-        8: Dataset.unit_test,
-    }
-    chosen_dataset_option = None
-    for dataset in dataset_options.values():
-        if dataset.value == config["Dataset"]["name"]:
-            chosen_dataset_option = dataset
-
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
-        chosen_dataset_option=chosen_dataset_option,
+        chosen_dataset_option=config["Dataset"]["name"],
         distributed_data_parallelism=run_in_parallel,
     )
 
