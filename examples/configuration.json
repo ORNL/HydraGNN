@@ -1,6 +1,7 @@
 {
     "Dataset": {
         "name": "CuAu_32atoms",
+        "format": "LSMS",
         "num_nodes": 32,
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],

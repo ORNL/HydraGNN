@@ -398,7 +398,7 @@ def combine_and_split_datasets(
 
 
 def load_data(dataset_option, config):
-    transform_raw_data_to_serialized(dataset_option)
+    transform_raw_data_to_serialized(dataset_option, config["Dataset"])
     files_dir = (
         f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
     )
@@ -413,7 +413,7 @@ def load_data(dataset_option, config):
     return dataset
 
 
-def transform_raw_data_to_serialized(raw_dataset: str):
+def transform_raw_data_to_serialized(raw_dataset: str, config):
 
     _, rank = get_comm_size_and_rank()
 
@@ -436,7 +436,7 @@ def transform_raw_data_to_serialized(raw_dataset: str):
         )
         if not os.path.exists(serialized_dataset_dir):
             loader = RawDataLoader()
-            loader.load_raw_data(dataset_path=files_dir)
+            loader.load_raw_data(dataset_path=files_dir, config=config)
 
     if dist.is_initialized():
         dist.barrier()
