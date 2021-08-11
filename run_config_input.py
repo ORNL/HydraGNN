@@ -110,17 +110,15 @@ def run_normal_terminal_input():
         3: Dataset.FeSi,
         4: Dataset.unit_test,
     }
-    print(
-        "Select the dataset you want to use: 1) CuAu 2) FePt 3)Combine CuAu-FePt&Shuffle 4)CuAu-train, FePt-test 5)FePt-train, CuAu-test, 6)FeSi , 7) Combine FePt-FeSi&Shuffle"
-    )
+    print("Select the dataset you want to use: 1) CuAu 2) FePt 3)FeSi , 4) unit_test")
     chosen_dataset_option = int(input("Selected value: "))
     config["Dataset"]["name"] = dataset_options[chosen_dataset_option].value
+    if chosen_dataset_option < 4:
+        config["Dataset"]["format"] = "LSMS"
+    else:
+        config["Dataset"]["format"] = "unit_test"
+
     config["Dataset"]["num_nodes"] = int(input("Enter the number of nodes: "))
-    config["Dataset"]["graph_features"]["dim"] = [
-        1,
-        config["Dataset"]["num_nodes"],
-        config["Dataset"]["num_nodes"],
-    ]
 
     print(
         "Do you want to use subsample of the dataset? If yes input the percentage of the original dataset if no enter 0."
@@ -136,10 +134,12 @@ def run_normal_terminal_input():
     if int(input("Selected value: ")) == 1:
         config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "True"
 
-    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
-        config=config,
-        chosen_dataset_option=dataset_options[chosen_dataset_option],
+    input_dim = len(
+        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
+    model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
+    print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
+    chosen_model = model_choices[input("Selected value: ")]
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
@@ -150,11 +150,16 @@ def run_normal_terminal_input():
         elif output_type[item] == "node":
             dim_item = (
                 config["Dataset"]["node_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_atoms"]
+                * config["Dataset"]["num_nodes"]
             )
         else:
             raise ValueError("Unknown output type", output_type[item])
         config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
+
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
+        config=config,
+        chosen_dataset_option=config["Dataset"]["name"],
+    )
 
     if (
         "denormalize_output" in config["NeuralNetwork"]["Variables_of_interest"]
@@ -191,13 +196,6 @@ def run_normal_terminal_input():
 
     else:
         config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "False"
-
-    input_dim = len(
-        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
-    )
-    model_choices = {"1": "GIN", "2": "PNN", "3": "GAT", "4": "MFC"}
-    print("Select which model you want to use: 1) GIN 2) PNN 3) GAT 4) MFC")
-    chosen_model = model_choices[input("Selected value: ")]
 
     model = generate_model(
         model_type=chosen_model,
