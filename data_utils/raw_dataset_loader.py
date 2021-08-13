@@ -21,7 +21,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def load_raw_data(self, dataset_path: str):
+    def load_raw_data(self, dataset_path: str, config):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
 
@@ -31,13 +31,29 @@ class RawDataLoader:
             Directory path where raw files are stored.
         config: shows the target variables information, e.g, location and dimension, in data file
         """
+
+        node_feature_dim = config["node_features"]["dim"]
+        node_feature_col = config["node_features"]["column_index"]
+        graph_feature_dim = config["graph_features"]["dim"]
+        graph_feature_col = config["graph_features"]["column_index"]
+
         dataset = []
         for filename in os.listdir(dataset_path):
             f = open(dataset_path + filename, "r")
             all_lines = f.readlines()
-            data_object = self.__transform_input_to_data_object(lines=all_lines)
+            data_object = self.__transform_input_to_data_object_base(
+                lines=all_lines,
+                node_feature_dim=node_feature_dim,
+                node_feature_col=node_feature_col,
+                graph_feature_dim=graph_feature_dim,
+                graph_feature_col=graph_feature_col,
+            )
             dataset.append(data_object)
             f.close()
+
+        if config["format"] == "LSMS":
+            for idx, data_object in enumerate(dataset):
+                dataset[idx] = self.__charge_density_update_for_LSMS(data_object)
 
         dataset_normalized, x_minmax, y_minmax = self.__normalize_dataset(
             dataset=dataset
@@ -56,7 +72,14 @@ class RawDataLoader:
             pickle.dump(y_minmax, f)
             pickle.dump(dataset_normalized, f)
 
-    def __transform_input_to_data_object(self, lines: [str]):
+    def __transform_input_to_data_object_base(
+        self,
+        lines: [str],
+        node_feature_dim: list,
+        node_feature_col: list,
+        graph_feature_dim: list,
+        graph_feature_col: list,
+    ):
         """Transforms lines of strings read from the raw data file to Data object and returns it.
 
         Parameters
@@ -67,13 +90,18 @@ class RawDataLoader:
         Returns
         ----------
         Data
-            Data object representing structure of an atom.
+            Data object representing structure of a graph sample.
         """
         data_object = Data()
 
         graph_feat = lines[0].split(None, 2)
-        free_energy = float(graph_feat[0].strip())
-        data_object.y = tensor([free_energy])
+        g_feature = []
+        # collect graph features
+        for item in range(len(graph_feature_dim)):
+            for icomp in range(graph_feature_dim[item]):
+                it_comp = graph_feature_col[item] + icomp
+                g_feature.append(float(graph_feat[it_comp].strip()))
+        data_object.y = tensor([g_feature])
 
         node_feature_matrix = []
         node_position_matrix = []
@@ -85,19 +113,35 @@ class RawDataLoader:
             z_pos = float(node_feat[4].strip())
             node_position_matrix.append([x_pos, y_pos, z_pos])
 
-            num_of_protons = float(node_feat[0].strip())
-            charge_density = float(node_feat[5].strip())
-            magnetic_moment = float(node_feat[6].strip())
+            node_feature = []
+            for item in range(len(node_feature_dim)):
+                for icomp in range(node_feature_dim[item]):
+                    it_comp = node_feature_col[item] + icomp
+                    node_feature.append(float(node_feat[it_comp].strip()))
 
-            charge_density = charge_density - num_of_protons
-
-            node_feature_matrix.append(
-                [num_of_protons, charge_density, magnetic_moment]
-            )
+            node_feature_matrix.append(node_feature)
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
 
+        return data_object
+
+    def __charge_density_update_for_LSMS(self, data_object: Data):
+        """Calculate charge density for LSMS format
+        Parameters
+        ----------
+        data_object: Data
+            Data object representing structure of a graph sample.
+
+        Returns
+        ----------
+        Data
+            Data object representing structure of a graph sample.
+        """
+        num_of_protons = data_object.x[0]
+        charge_density = data_object.x[1]
+        charge_density -= num_of_protons
+        data_object.x[1] = charge_density
         return data_object
 
     def __normalize_dataset(self, dataset: [Data]):
