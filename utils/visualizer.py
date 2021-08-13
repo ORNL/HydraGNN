@@ -38,13 +38,10 @@ class Visualizer:
         """When called it performs flattening of a list because the values that are stored in true and predicted values lists are in
         the shape: [[1], [2], ...] and in order to visualize them in scatter plot they need to be in the shape: [1, 2, ...].
         """
-        if len(self.true_values) != len(self.predicted_values):
+        if len(self.true_values) * len(self.true_values[0]) != len(
+            self.predicted_values
+        ) * len(self.predicted_values[0]):
             print("Length of true and predicted values array is not the same!")
-
-        elif len(self.true_values[0]) > 1 or len(self.predicted_values[0]) > 1:
-            print(
-                "Values inside true or predicted values list can only be scalars and not array of points!"
-            )
 
         self.true_values = list(chain.from_iterable(self.true_values))
         self.predicted_values = list(chain.from_iterable(self.predicted_values))
