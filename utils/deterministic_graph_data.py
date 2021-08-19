@@ -47,19 +47,18 @@ def deterministic_graph_data(
 
     number_atoms = 2 * number_unit_cell_x * number_unit_cell_y * number_unit_cell_z
     positions = torch.zeros(number_atoms, 3)
-    lattice_parameter = 0.5
 
     # We assume that the unit cell is Body Center Cubic (BCC)
     count_pos = 0
     for x in range(0, number_unit_cell_x):
         for y in range(0, number_unit_cell_y):
             for z in range(0, number_unit_cell_z):
-                positions[count_pos][0] = x + 0.0
-                positions[count_pos][1] = y + 0.0
-                positions[count_pos][2] = z + 0.0
-                positions[count_pos + 1][0] = x + lattice_parameter
-                positions[count_pos + 1][1] = y + lattice_parameter
-                positions[count_pos + 1][2] = z + lattice_parameter
+                positions[count_pos][0] = x
+                positions[count_pos][1] = y
+                positions[count_pos][2] = z
+                positions[count_pos + 1][0] = x + 0.5
+                positions[count_pos + 1][1] = y + 0.5
+                positions[count_pos + 1][2] = z + 0.5
                 count_pos = count_pos + 2
 
     for configuration in range(0, number_configurations):
