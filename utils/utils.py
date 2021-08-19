@@ -128,8 +128,8 @@ def train_validate_test_normal(
     scheduler,
     config,
     model_with_config_name,
-    plot_init_sol=True,
-    plot_hist_sol=False,
+    plot_init_solution=True,
+    plot_hist_solution=False,
 ):
 
     num_epoch = config["Training"]["num_epoch"]
@@ -152,7 +152,7 @@ def train_validate_test_normal(
     num_nodes = len(test_loader.dataset[0].x)
     for data in test_loader.dataset:
         x_atomfeature.append(data.x)
-    if plot_init_sol:  # visualizing of initial conditions
+    if plot_init_solution:  # visualizing of initial conditions
         test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
         true_values = test_rmse[3]
         predicted_values = test_rmse[4]
@@ -214,7 +214,7 @@ def train_validate_test_normal(
         tasklib_test_nodes.append(test_rmse[2])
 
         ###tracking the solution evolving with training
-        if plot_hist_sol:
+        if plot_hist_solution:
             true_values = test_rmse[3]
             predicted_values = test_rmse[4]
             for ihead in range(model.num_heads):
