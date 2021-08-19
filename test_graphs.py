@@ -51,7 +51,11 @@ def pytest_train_model(model_type):
         # Check individual samples
         for true_value, predicted_value in zip(head_true, head_pred):
             for idim in range(len(true_value)):
-                assert (abs(true_value[idim] - predicted_value[idim]) < thresholds[model_type][1]), "Samples checking failed!" + str(abs(true_value[idim] - predicted_value[idim]))
+                assert (
+                    abs(true_value[idim] - predicted_value[idim]) < thresholds[model_type][1]
+                ), "Samples checking failed!" + str(
+                    abs(true_value[idim] - predicted_value[idim])
+                )
 
 
 if __name__ == "__main__":

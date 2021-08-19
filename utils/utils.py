@@ -133,60 +133,52 @@ def train_validate_test_normal(
 ):
 
     num_epoch = config["Training"]["num_epoch"]
+    # total loss tracking for train/vali/test
     trainlib = []
     vallib = []
-    testlib = []  # total loss tracking for train/vali/test
+    testlib = []
+    # loss tracking for summation across all atoms/nodes
     tasklib = []
     tasklib_test = []
-    tasklib_vali = []  # loss tracking for summation across all atoms/nodes
+    tasklib_vali = []
+    # loss tracking for each site/node
     tasklib_nodes = []
     tasklib_test_nodes = []
-    tasklib_vali_nodes = []  # probably not needed
+    tasklib_vali_nodes = []
 
     if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
         model = model_wrapper.module
     else:
         model = model_wrapper
 
-    x_atomfeature = []
-    num_nodes = len(test_loader.dataset[0].x)
+    # preparing for results visualization
+    ## collecting node feature
+    node_feature = []
     for data in test_loader.dataset:
-        x_atomfeature.append(data.x)
+        node_feature.append(data.x)
+    visualizer = Visualizer(
+        model_with_config_name,
+        node_feature=node_feature,
+        num_heads=model.num_heads,
+        head_dims=model.head_dims,
+    )
+
     if plot_init_solution:  # visualizing of initial conditions
-        test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
+        test_rmse = test(test_loader, model)
         true_values = test_rmse[3]
         predicted_values = test_rmse[4]
-        for ihead in range(model.num_heads):
-            visualizer = Visualizer(model_with_config_name)
-            visualizer.add_test_values(
-                true_values=true_values[ihead], predicted_values=predicted_values[ihead]
-            )
-            if model.head_dims[ihead] // num_nodes == 3:  # vector output
-                visualizer.create_scatter_plot_atoms_vec(
-                    config["Variables_of_interest"]["output_names"][ihead],
-                    x_atomfeature,
-                    -1,
-                )
-            else:
-                visualizer.create_scatter_plot_atoms(
-                    config["Variables_of_interest"]["output_names"][ihead],
-                    x_atomfeature,
-                    -1,
-                )
-                visualizer.create_error_histogram_plot_atoms(
-                    config["Variables_of_interest"]["output_names"][ihead],
-                    x_atomfeature,
-                    -1,
-                )
-
+        visualizer.create_scatter_plots(
+            true_values,
+            predicted_values,
+            output_names=config["Variables_of_interest"]["output_names"],
+            iepoch=-1,
+        )
     for epoch in range(0, num_epoch):
         train_mae, train_taskserr, train_taskserr_nodes = train(
-            train_loader, model, optimizer, config["Architecture"]["output_dim"]
+            train_loader, model, optimizer
         )
-        val_mae, val_taskserr, val_taskserr_nodes = validate(
-            val_loader, model, config["Architecture"]["output_dim"]
-        )
-        test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
+        val_mae, val_taskserr, val_taskserr_nodes = validate(val_loader, model)
+        test_rmse = test(test_loader, model)
         scheduler.step(val_mae)
         if writer is not None:
             writer.add_scalar("train error", train_mae, epoch)
@@ -217,63 +209,35 @@ def train_validate_test_normal(
         if plot_hist_solution:
             true_values = test_rmse[3]
             predicted_values = test_rmse[4]
-            for ihead in range(model.num_heads):
-                visualizer = Visualizer(model_with_config_name)
-                visualizer.add_test_values(
-                    true_values=true_values[ihead],
-                    predicted_values=predicted_values[ihead],
-                )
-                if model.head_dims[ihead] // num_nodes == 3:
-                    # vector output
-                    visualizer.create_scatter_plot_atoms_vec(
-                        config["Variables_of_interest"]["output_names"][ihead],
-                        x_atomfeature,
-                        epoch,
-                    )
-                else:
-                    visualizer.create_scatter_plot_atoms(
-                        config["Variables_of_interest"]["output_names"][ihead],
-                        x_atomfeature,
-                        epoch,
-                    )
-                    visualizer.create_error_histogram_plot_atoms(
-                        config["Variables_of_interest"]["output_names"][ihead],
-                        x_atomfeature,
-                        epoch,
-                    )
+            visualizer.create_scatter_plots(
+                true_values,
+                predicted_values,
+                output_names=config["Variables_of_interest"]["output_names"],
+                iepoch=epoch,
+            )
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
-        test_loader, model, config["Architecture"]["output_dim"]
+        test_loader, model
     )
 
-    if (
-        config["Variables_of_interest"]["denormalize_output"] == "True"
-    ):  ##output predictions with unit/not normalized
+    ##output predictions with unit/not normalized
+    if config["Variables_of_interest"]["denormalize_output"] == "True":
         true_values, predicted_values = output_denormalize(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
 
-    for ihead in range(model.num_heads):
-        visualizer = Visualizer(model_with_config_name)
-        visualizer.add_test_values(
-            true_values=true_values[ihead], predicted_values=predicted_values[ihead]
-        )
-        visualizer.create_plot_global(
-            config["Variables_of_interest"]["output_names"][ihead]
-        )
-        if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
-            visualizer.create_scatter_plot_atoms_vec(
-                config["Variables_of_interest"]["output_names"][ihead], x_atomfeature
-            )
-        else:
-            visualizer.create_scatter_plot_atoms(
-                config["Variables_of_interest"]["output_names"][ihead], x_atomfeature
-            )
-            visualizer.create_error_histogram_plot_atoms(
-                config["Variables_of_interest"]["output_names"][ihead], x_atomfeature
-            )
-
+    ######result visualization######
+    visualizer.create_plot_global(
+        true_values,
+        predicted_values,
+        output_names=config["Variables_of_interest"]["output_names"],
+    )
+    visualizer.create_scatter_plots(
+        true_values,
+        predicted_values,
+        output_names=config["Variables_of_interest"]["output_names"],
+    )
     ######plot loss history#####
     visualizer.plot_history(
         trainlib,
@@ -308,7 +272,7 @@ def output_denormalize(y_minmax, true_values, predicted_values):
     return true_values, predicted_values
 
 
-def train(loader, model_wrapper, opt, output_dim):
+def train(loader, model_wrapper, opt):
 
     if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
         model = model_wrapper.module
@@ -316,7 +280,6 @@ def train(loader, model_wrapper, opt, output_dim):
         model = model_wrapper
 
     device = next(model.parameters()).device
-    total_error = 0
     tasks_error = np.zeros(model.num_heads)
     tasks_noderr = np.zeros(model.num_heads)
 
@@ -347,7 +310,7 @@ def train(loader, model_wrapper, opt, output_dim):
 
 
 @torch.no_grad()
-def validate(loader, model_wrapper, output_dim):
+def validate(loader, model_wrapper):
 
     if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
         model = model_wrapper.module
@@ -381,7 +344,7 @@ def validate(loader, model_wrapper, output_dim):
 
 
 @torch.no_grad()
-def test(loader, model_wrapper, output_dim):
+def test(loader, model_wrapper):
 
     if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
         model = model_wrapper.module

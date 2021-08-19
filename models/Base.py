@@ -11,7 +11,16 @@ class Base(torch.nn.Module):
         super().__init__()
         self.dropout = 0.25
 
-    def _multihead(self, output_dim: list, num_nodes: int, output_type: list, config_heads: {}, ilossweights_hyperp: int, loss_weights: list, ilossweights_nll: int):
+    def _multihead(
+        self,
+        output_dim: list,
+        num_nodes: int,
+        output_type: list,
+        config_heads: {},
+        ilossweights_hyperp: int,
+        loss_weights: list,
+        ilossweights_nll: int,
+    ):
 
         ############multiple heads/taks################
         # get number of heads from input
@@ -51,8 +60,6 @@ class Base(torch.nn.Module):
                     + " VS "
                     + str(self.num_heads)
                 )
-                # print('Inconsistent number of loss weights and tasks: '+str(len(loss_weights)) + ' VS ' +str(self.num_heads))
-                # self.loss_weights = [4**ihead for ihead in range(self.num_heads)]
             else:
                 self.loss_weights = loss_weights
             weightabssum = sum(abs(number) for number in self.loss_weights)
@@ -70,7 +77,12 @@ class Base(torch.nn.Module):
                         Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
                     )
                     denselayers.append(ReLU())
-                denselayers.append(Linear(dim_head_hidden[-1], self.head_dims[ihead] + ilossweights_nll * 1))
+                denselayers.append(
+                    Linear(
+                        dim_head_hidden[-1],
+                        self.head_dims[ihead] + ilossweights_nll * 1,
+                    )
+                )
                 mlp = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
                 mlp = ModuleList()
@@ -85,7 +97,9 @@ class Base(torch.nn.Module):
                             Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
                         )
                         denselayers.append(ReLU())
-                    denselayers.append(Linear(dim_head_hidden[-1], 1 + ilossweights_nll * 1))
+                    denselayers.append(
+                        Linear(dim_head_hidden[-1], 1 + ilossweights_nll * 1)
+                    )
                     mlp.append(Sequential(*denselayers))
             else:
                 raise ValueError(
@@ -161,7 +175,8 @@ class Base(torch.nn.Module):
             value = torch.reshape(value, pred_shape)
         return torch.sqrt(F.mse_loss(pred, value)), [], []
 
-    def loss_nll(self, pred, value):  # negative log likelihood loss
+    def loss_nll(self, pred, value):
+        # negative log likelihood loss
         # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
         pred_shape = pred.shape
         value_shape = value.shape

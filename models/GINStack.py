@@ -55,7 +55,15 @@ class GINStack(Base):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-        super()._multihead(output_dim, num_nodes, output_type, config_heads, ilossweights_hyperp, loss_weights, ilossweights_nll)
+        super()._multihead(
+            output_dim,
+            num_nodes,
+            output_type,
+            config_heads,
+            ilossweights_hyperp,
+            loss_weights,
+            ilossweights_nll,
+        )
 
     def __str__(self):
         return "GINStack"

@@ -102,7 +102,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     model.load_state_dict(state_dict)
 
     error, node_err1, node_err2, true_values, predicted_values = test(
-        test_loader, model, config["NeuralNetwork"]["Architecture"]["output_dim"]
+        test_loader, model
     )
 
     return error, true_values, predicted_values
