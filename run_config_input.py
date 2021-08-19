@@ -384,6 +384,21 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
         json.dump(config, f)
 
+    if (
+        "continue" in config["NeuralNetwork"]["Training"]
+        and config["NeuralNetwork"]["Training"]["continue"] == 1
+    ):
+        # starting from an existing model
+        modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
+        if not modelstart:
+            modelstart = model_with_config_name
+
+        state_dict = torch.load(
+            f"./logs/{modelstart}/{modelstart}.pk",
+            map_location="cpu",
+        )
+        model.load_state_dict(state_dict)
+
     print(
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}"
     )
