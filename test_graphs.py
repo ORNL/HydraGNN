@@ -37,7 +37,7 @@ def pytest_train_model(model_type):
     error, true_values, predicted_values = test_trained_model(tmp_file, model_type)
 
     for true_value, predicted_value in zip(true_values, predicted_values):
-        if model_type == "PIN":
+        if model_type == "PNN":
             assert abs(true_value[0] - predicted_value[0]) < 0.1
         else:
             assert abs(true_value[0] - predicted_value[0]) < 0.5
