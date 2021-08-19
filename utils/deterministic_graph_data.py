@@ -1,11 +1,16 @@
 import os
 import shutil
+import math
 import torch
 import numpy
 
 
-def random_graph_data(
-    number_configurations: int = 1000, number_atoms: int = 10, num_clusters: int = 2
+def deterministic_graph_data(
+    number_configurations: int = 50,
+    number_unit_cell_x: int = 2,
+    number_unit_cell_y: int = 1,
+    number_unit_cell_z: int = 1,
+    num_clusters: int = 3,
 ):
 
     original_path = "output_files"
@@ -40,22 +45,33 @@ def random_graph_data(
 
     ###############################################################################################
 
+    number_atoms = 2 * number_unit_cell_x * number_unit_cell_y * number_unit_cell_z
+    positions = torch.zeros(number_atoms, 3)
+    lattice_parameter = 0.5
+
+    # We assume that the unit cell is Body Center Cubic (BCC)
+    count_pos = 0
+    for x in range(0, number_unit_cell_x):
+        for y in range(0, number_unit_cell_y):
+            for z in range(0, number_unit_cell_z):
+                positions[count_pos][0] = x + 0.0
+                positions[count_pos][1] = y + 0.0
+                positions[count_pos][2] = z + 0.0
+                positions[count_pos + 1][0] = x + lattice_parameter
+                positions[count_pos + 1][1] = y + lattice_parameter
+                positions[count_pos + 1][2] = z + lattice_parameter
+                count_pos = count_pos + 2
+
     for configuration in range(0, number_configurations):
 
         node_ids = torch.tensor([int(i) for i in range(0, number_atoms)]).reshape(
             (number_atoms, 1)
         )
-        positions = 5 * torch.randint(0, num_clusters, (number_atoms, 1)) + torch.randn(
-            number_atoms, 3
-        )
+        cluster_ids_x = torch.randint(0, num_clusters, (number_atoms, 1))
 
-        cluster_ids_x = torch.tensor(
-            [int(i % num_clusters) for i in range(0, number_atoms)]
-        )
-        cluster_ids_x = cluster_ids_x.reshape(number_atoms, 1)
         node_feature = cluster_ids_x
-        cluster_ids_x_square = cluster_ids_x.reshape(number_atoms, 1) ** 2
-        cluster_ids_x_cube = cluster_ids_x.reshape(number_atoms, 1) ** 3
+        cluster_ids_x_square = cluster_ids_x ** 2
+        cluster_ids_x_cube = cluster_ids_x ** 3
 
         updated_table = torch.cat(
             (
