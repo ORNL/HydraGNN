@@ -190,9 +190,8 @@ class Base(torch.nn.Module):
 
         return nll_loss, tasks_rmseloss, []
 
-    def loss_hpweighted(
-        self, pred, value
-    ):  # weights for difficult tasks as hyper-parameters
+    def loss_hpweighted(self, pred, value):
+        # weights for difficult tasks as hyper-parameters
         pred_shape = pred.shape
         value_shape = value.shape
         if pred_shape != value_shape:

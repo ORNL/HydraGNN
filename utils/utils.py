@@ -161,16 +161,22 @@ def train_validate_test_normal(
             visualizer.add_test_values(
                 true_values=true_values[ihead], predicted_values=predicted_values[ihead]
             )
-            if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
+            if model.head_dims[ihead] // num_nodes == 3:  # vector output
                 visualizer.create_scatter_plot_atoms_vec(
-                    config["Target_dataset"]["output_names"][ihead], x_atomfeature, -1
+                    config["Variables_of_interest"]["output_names"][ihead],
+                    x_atomfeature,
+                    -1,
                 )
             else:
                 visualizer.create_scatter_plot_atoms(
-                    config["Target_dataset"]["output_names"][ihead], x_atomfeature, -1
+                    config["Variables_of_interest"]["output_names"][ihead],
+                    x_atomfeature,
+                    -1,
                 )
                 visualizer.create_error_histogram_plot_atoms(
-                    config["Target_dataset"]["output_names"][ihead], x_atomfeature, -1
+                    config["Variables_of_interest"]["output_names"][ihead],
+                    x_atomfeature,
+                    -1,
                 )
 
     for epoch in range(0, num_epoch):
@@ -217,20 +223,21 @@ def train_validate_test_normal(
                     true_values=true_values[ihead],
                     predicted_values=predicted_values[ihead],
                 )
-                if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
+                if model.head_dims[ihead] // num_nodes == 3:
+                    # vector output
                     visualizer.create_scatter_plot_atoms_vec(
-                        config["Target_dataset"]["output_names"][ihead],
+                        config["Variables_of_interest"]["output_names"][ihead],
                         x_atomfeature,
                         epoch,
                     )
                 else:
                     visualizer.create_scatter_plot_atoms(
-                        config["Target_dataset"]["output_names"][ihead],
+                        config["Variables_of_interest"]["output_names"][ihead],
                         x_atomfeature,
                         epoch,
                     )
                     visualizer.create_error_histogram_plot_atoms(
-                        config["Target_dataset"]["output_names"][ihead],
+                        config["Variables_of_interest"]["output_names"][ihead],
                         x_atomfeature,
                         epoch,
                     )
@@ -240,7 +247,9 @@ def train_validate_test_normal(
         test_loader, model, config["Architecture"]["output_dim"]
     )
 
-    if config["Variables_of_interest"]["denormalize_output"] == "True":  ##output predictions with unit/not normalized
+    if (
+        config["Variables_of_interest"]["denormalize_output"] == "True"
+    ):  ##output predictions with unit/not normalized
         true_values, predicted_values = output_denormalize(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
@@ -250,17 +259,19 @@ def train_validate_test_normal(
         visualizer.add_test_values(
             true_values=true_values[ihead], predicted_values=predicted_values[ihead]
         )
-        visualizer.create_plot_global(config["Target_dataset"]["output_names"][ihead])
+        visualizer.create_plot_global(
+            config["Variables_of_interest"]["output_names"][ihead]
+        )
         if model.head_dims[ihead] // num_nodes == 3:  # magnetic moments
             visualizer.create_scatter_plot_atoms_vec(
-                config["Target_dataset"]["output_names"][ihead], x_atomfeature
+                config["Variables_of_interest"]["output_names"][ihead], x_atomfeature
             )
         else:
             visualizer.create_scatter_plot_atoms(
-                config["Target_dataset"]["output_names"][ihead], x_atomfeature
+                config["Variables_of_interest"]["output_names"][ihead], x_atomfeature
             )
             visualizer.create_error_histogram_plot_atoms(
-                config["Target_dataset"]["output_names"][ihead], x_atomfeature
+                config["Variables_of_interest"]["output_names"][ihead], x_atomfeature
             )
 
     ######plot loss history#####
@@ -275,7 +286,7 @@ def train_validate_test_normal(
         tasklib_vali_nodes,
         tasklib_test_nodes,
         model.loss_weights,
-        config["Target_dataset"]["output_names"],
+        config["Variables_of_interest"]["output_names"],
     )
 
 
