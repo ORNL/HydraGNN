@@ -398,34 +398,23 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         config["NeuralNetwork"],
         model_with_config_name,
     )
-    save_state = False
+
     if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
         _, world_rank = get_comm_size_and_rank()
         if int(world_rank) == 0:
-            save_state = True
-    else:
-        save_state = True
-
-    if save_state:
-        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-            if int(world_rank) == 0:
-                torch.save(
-                    model.module.state_dict(),
-                    "./logs/"
-                    + model_with_config_name
-                    + "/"
-                    + model_with_config_name
-                    + ".pk",
-                )
-        else:
             torch.save(
-                model.state_dict(),
+                model.module.state_dict(),
                 "./logs/"
                 + model_with_config_name
                 + "/"
                 + model_with_config_name
                 + ".pk",
             )
+    else:
+        torch.save(
+            model.state_dict(),
+            "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
+        )
 
 
 if __name__ == "__main__":
