@@ -40,4 +40,4 @@ def pytest_train_model(model_type):
         if model_type == "PIN":
             assert abs(true_value[0] - predicted_value[0]) < 0.1
         else:
-            assert abs(true_value[0] - predicted_value[0]) < 0.4
+            assert abs(true_value[0] - predicted_value[0]) < 0.5
