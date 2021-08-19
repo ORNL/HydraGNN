@@ -6,9 +6,9 @@ import numpy
 
 
 def deterministic_graph_data(
-    number_configurations: int = 50,
+    number_configurations: int = 200,
     number_unit_cell_x: int = 2,
-    number_unit_cell_y: int = 1,
+    number_unit_cell_y: int = 2,
     number_unit_cell_z: int = 1,
     num_clusters: int = 3,
 ):
