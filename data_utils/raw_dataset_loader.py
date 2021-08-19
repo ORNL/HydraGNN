@@ -108,9 +108,6 @@ class RawDataLoader:
         Data
             Data object representing structure of a graph sample.
         """
-
-        # fixme, not flexible, improve later
-
         data_object = Data()
 
         graph_feat = lines[0].split(None, 2)
