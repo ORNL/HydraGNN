@@ -8,19 +8,46 @@ plt.rcParams.update({"font.size": 18})
 
 
 class Visualizer:
-    """A class used for visualizing values in a scatter plot. There are two attributes: true_values and predicted_values that we want to see
-    in a scatter plot. The ideal case is that the values will be positioned on a thin diagonal of the scatter plot.
+    """A class used for visualizing results of GCNN outputs.
 
     Methods
     -------
-    add_test_values(true_values: [], predicted_values: [])
-        Add the true and predicted values to the lists.
-    create_scatter_plot()
-        Create the scatter plot out of true and predicted values.
+    __init__(self, model_with_config_name: str, node_feature=[], num_heads=1, head_dims=[1])
+        Create a Visualizer object with model name (also the location to save the plots), node feature list,
+        number of heads, and head dimensions list.
+    __hist2d_contour(self, data1, data2)
+        Calculate joint histogram of data1 and data2 values.
+    __err_condmean(self, data1, data2, weight=1.0)
+        Calculate conditional mean values of the weighted difference between data1 and data2 on data1, i.e., <weight*|data1-data2|>_data1.
+    __scatter_impl(self,ax,x,y,s=None,c=None,marker=None,title=None,x_label=None,y_label=None,xylim_equal=False,)
+        Create scatter plot of x and y values.
+
+    ##create plots for a single variable with name varname
+    create_plot_global_analysis(self, varname, true_values, predicted_values, save_plot=True)
+        Creates scatter/conditonal mean/error pdf plots from the true and predicted values of variable varname.
+        For node level output, statistics across all nodes, l2 length and sum, are also considered for analysis.
+        (file: varname +"_scatter_condm_err.png")
+    create_scatter_plot_variable(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
+        Creates scatter plots for true_values and predicted values of variable varname at iepoch.
+        (file: varname + ".png")
+    create_error_histogram_plot_nodes(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
+        Creates error histogram plot for the true and predicted values of variable varname at iepoch.[node level]
+        (file: varname+"_error_hist1d_"+ str(iepoch).zfill(4)+ ".png" or varname+"_error_hist1d.png" )
+    create_scatter_plot_nodes_vec(self, varname, true_values, predicted_values, iepoch=None, save_plot=True):
+        Creates scatter plots for true and predicted values of vector variable varname.
+        (file: varname+"_"+ str(iepoch).zfill(4) + ".png" or varname+".png" )
+
+    #create plots for all heads
+    plot_history(self,trainlib,vallib,testlib,tasklib,tasklib_vali,tasklib_test,tasklib_nodes,tasklib_vali_nodes,tasklib_test_nodes,task_weights,task_names,):
+        Save history of losses to file and plot.
+    create_scatter_plots(self, true_values, predicted_values, output_names=None, iepoch=None)
+        Creates scatter plots for all head predictions. One plot for each head
+    create_plot_global(self, true_values, predicted_values, output_names=None)
+        Creates global analysis for all head predictons, e.g., scatter/condmean/error pdf plot. One plot for each head
     """
 
     def __init__(
-        self, model_with_config_name: str, node_feature, num_heads=1, head_dims=[1]
+        self, model_with_config_name: str, node_feature: [], num_heads=1, head_dims=[1]
     ):
         self.true_values = []
         self.predicted_values = []
@@ -30,7 +57,7 @@ class Visualizer:
         self.num_heads = num_heads
         self.head_dims = head_dims
 
-    def hist2d_contour(self, data1, data2):
+    def __hist2d_contour(self, data1, data2):
         hist2d_pasr, xedge_pasr, yedge_pasr = np.histogram2d(
             np.hstack(data1), np.hstack(data2), bins=50
         )
@@ -40,7 +67,7 @@ class Visualizer:
         hist2d_pasr = hist2d_pasr / np.amax(hist2d_pasr)
         return BCTX_pasr, BCTY_pasr, hist2d_pasr
 
-    def hist1d_err(self, data1, data2, weight=1.0):
+    def __err_condmean(self, data1, data2, weight=1.0):
         errabs = np.abs(np.hstack(data1) - np.hstack(data2)) * weight
         hist2d_pasr, xedge_pasr, yedge_pasr = np.histogram2d(
             np.hstack(data1), errabs, bins=50
@@ -75,10 +102,10 @@ class Visualizer:
             ax.set_xlim(minimum, maximum)
             ax.set_ylim(minimum, maximum)
 
-    def create_plot_global_ihead(
+    def create_plot_global_analysis(
         self, varname, true_values, predicted_values, save_plot=True
     ):
-        """Creates global scatter/condmean/error pdf plot from stored values in the true and  predicted values lists."""
+        """Creates scatter/condmean/error pdf plots for the true and predicted values of variable varname."""
         nshape = np.asarray(predicted_values).shape
         if nshape[1] == 1:
             fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
@@ -97,7 +124,9 @@ class Visualizer:
             )
 
             ax = axs[1]
-            xtrue, error = self.hist1d_err(true_values, predicted_values, weight=1.0)
+            xtrue, error = self.__err_condmean(
+                true_values, predicted_values, weight=1.0
+            )
             ax.plot(xtrue, error, "ro")
             ax.set_title("Conditional mean abs. error")
             ax.set_xlabel("True")
@@ -141,7 +170,7 @@ class Visualizer:
             )
 
             ax = axs[1, 0]
-            xtrue, error = self.hist1d_err(
+            xtrue, error = self.__err_condmean(
                 vlen_true, vlen_pred, weight=1.0 / sqrt(nshape[1])
             )
             ax.plot(xtrue, error, "ro")
@@ -168,7 +197,9 @@ class Visualizer:
             )
 
             ax = axs[1, 1]
-            xtrue, error = self.hist1d_err(vsum_true, vsum_pred, weight=1.0 / nshape[1])
+            xtrue, error = self.__err_condmean(
+                vsum_true, vsum_pred, weight=1.0 / nshape[1]
+            )
             ax.plot(xtrue, error, "ro")
 
             ax = axs[2, 1]
@@ -195,7 +226,7 @@ class Visualizer:
             )
 
             ax = axs[1, 2]
-            xtrue, error = self.hist1d_err(truecomp, predcomp, weight=1.0)
+            xtrue, error = self.__err_condmean(truecomp, predcomp, weight=1.0)
             ax.plot(xtrue, error, "ro")
 
             ax = axs[2, 2]
@@ -218,10 +249,10 @@ class Visualizer:
         else:
             plt.show()
 
-    def create_scatter_plot_atoms(
+    def create_scatter_plot_variable(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
-        """Creates scatter plots for scalar output and vector outputs."""
+        """Creates scatter plots for true_values and predicted values of variable varname at iepoch."""
 
         nshape = np.asarray(predicted_values).shape
         if nshape[1] == 1:
@@ -249,46 +280,31 @@ class Visualizer:
             plt.subplots_adjust(
                 left=0.075, bottom=0.1, right=0.98, top=0.9, wspace=0.2, hspace=0.25
             )
-            if save_plot:
-                if iepoch:
-                    fig.savefig(
-                        f"./logs/{self.model_with_config_name}/"
-                        + varname
-                        + "_"
-                        + str(iepoch).zfill(4)
-                        + ".png"
-                    )
-                else:
-                    fig.savefig(
-                        f"./logs/{self.model_with_config_name}/" + varname + ".png"
-                    )
-                plt.close()
-            return
         else:
             nrow = floor(sqrt((nshape[1] + 1)))
             ncol = ceil((nshape[1] + 1) / nrow)
             fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
             axs = axs.flatten()
-            for iatom in range(nshape[1]):
+            for inode in range(nshape[1]):
                 xfeature = []
                 truecomp = []
                 predcomp = []
                 for isamp in range(nshape[0]):
-                    xfeature.append(self.node_feature[isamp][iatom])
-                    truecomp.append(true_values[isamp][iatom])
-                    predcomp.append(predicted_values[isamp][iatom])
-                ax = axs[iatom]
+                    xfeature.append(self.node_feature[isamp][inode])
+                    truecomp.append(true_values[isamp][inode])
+                    predcomp.append(predicted_values[isamp][inode])
+                ax = axs[inode]
                 self.__scatter_impl(
                     ax,
                     truecomp,
                     predcomp,
                     s=6,
                     c=xfeature,
-                    title="atom:" + str(iatom),
+                    title="node:" + str(inode),
                     xylim_equal=True,
                 )
 
-            ax = axs[nshape[1]]  # summation over all the atoms/nodes
+            ax = axs[nshape[1]]  # summation over all the nodes/nodes
             xfeature = []
             truecomp = []
             predcomp = []
@@ -299,15 +315,15 @@ class Visualizer:
             self.__scatter_impl(
                 ax, truecomp, predcomp, s=40, c=xfeature, title="SUM", xylim_equal=True
             )
-            # summation over all the samples for each atom/node
+            # summation over all the samples for each node
             ax = axs[nshape[1] + 1]
             xfeature = []
             truecomp = []
             predcomp = []
-            for iatom in range(nshape[1]):
-                xfeature.append(sum(self.node_feature[:][iatom]))
-                truecomp.append(sum(true_values[:][iatom]))
-                predcomp.append(sum(predicted_values[:][iatom]))
+            for inode in range(nshape[1]):
+                xfeature.append(sum(self.node_feature[:][inode]))
+                truecomp.append(sum(true_values[:][inode]))
+                predcomp.append(sum(predicted_values[:][inode]))
             self.__scatter_impl(
                 ax,
                 truecomp,
@@ -323,26 +339,24 @@ class Visualizer:
             plt.subplots_adjust(
                 left=0.05, bottom=0.05, right=0.98, top=0.95, wspace=0.1, hspace=0.25
             )
+        if save_plot:
+            if iepoch:
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/"
+                    + varname
+                    + "_"
+                    + str(iepoch).zfill(4)
+                    + ".png"
+                )
+            else:
+                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+            plt.close()
+        return
 
-            if save_plot:
-                if iepoch:
-                    fig.savefig(
-                        f"./logs/{self.model_with_config_name}/"
-                        + varname
-                        + "_"
-                        + str(iepoch).zfill(4)
-                        + ".png"
-                    )
-                else:
-                    fig.savefig(
-                        f"./logs/{self.model_with_config_name}/" + varname + ".png"
-                    )
-                plt.close()
-
-    def create_error_histogram_plot_atoms(
+    def create_error_histogram_plot_nodes(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
-        """Creates error histogram plot for vector outputs."""
+        """Creates error histogram plot for true and predicted values of variable varname at iepoch.[node level]"""
 
         nshape = np.asarray(predicted_values).shape
         if nshape[1] == 1:
@@ -353,20 +367,20 @@ class Visualizer:
             # error plots
             fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3.5, nrow * 3.2))
             axs = axs.flatten()
-            for iatom in range(nshape[1]):
+            for inode in range(nshape[1]):
                 xfeature = []
                 truecomp = []
                 predcomp = []
                 for isamp in range(nshape[0]):
-                    xfeature.append(self.node_feature[isamp][iatom])
-                    truecomp.append(true_values[isamp][iatom])
-                    predcomp.append(predicted_values[isamp][iatom])
+                    xfeature.append(self.node_feature[isamp][inode])
+                    truecomp.append(true_values[isamp][inode])
+                    predcomp.append(predicted_values[isamp][inode])
                 hist1d, bin_edges = np.histogram(
                     np.array(predcomp) - np.array(truecomp), bins=40, density=True
                 )
-                ax = axs[iatom]
+                ax = axs[inode]
                 ax.plot(0.5 * (bin_edges[:-1] + bin_edges[1:]), hist1d, "ro")
-                ax.set_title("atom:" + str(iatom))
+                ax.set_title("node:" + str(inode))
 
             ax = axs[nshape[1]]
             xfeature = []
@@ -382,14 +396,15 @@ class Visualizer:
             ax.plot(0.5 * (bin_edges[:-1] + bin_edges[1:]), hist1d, "ro")
             ax.set_title("SUM")
 
-            ax = axs[nshape[1] + 1]  # summation over all the samples for each atom/node
+            # summation over all the samples for each node
+            ax = axs[nshape[1] + 1]
             xfeature = []
             truecomp = []
             predcomp = []
-            for iatom in range(nshape[1]):
-                xfeature.append(sum(self.node_feature[:][iatom]))
-                truecomp.append(sum(true_values[:][iatom]))
-                predcomp.append(sum(predicted_values[:][iatom]))
+            for inode in range(nshape[1]):
+                xfeature.append(sum(self.node_feature[:][inode]))
+                truecomp.append(sum(true_values[:][inode]))
+                predcomp.append(sum(predicted_values[:][inode]))
             hist1d, bin_edges = np.histogram(
                 np.array(predcomp) - np.array(truecomp), bins=40, density=True
             )
@@ -418,10 +433,10 @@ class Visualizer:
                     )
                 plt.close()
 
-    def create_scatter_plot_atoms_vec(
+    def create_scatter_plot_nodes_vec(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
-        """Creates scatter plots for scalar output and vector outputs."""
+        """Creates scatter plots for true and predicted values of vector variable varname[nodel level]."""
 
         nshape = np.asarray(predicted_values).shape
         predicted_vec = np.reshape(np.asarray(predicted_values), (nshape[0], -1, 3))
@@ -433,16 +448,16 @@ class Visualizer:
         ncol = ceil((num_nodes + 1) / nrow)
         fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
         axs = axs.flatten()
-        for iatom in range(num_nodes):
+        for inode in range(num_nodes):
             for icomp in range(3):
                 xfeature = []
                 truecomp = []
                 predcomp = []
                 for isamp in range(nshape[0]):
-                    xfeature.append(self.node_feature[isamp][iatom])
-                    truecomp.append(true_vec[isamp, iatom, icomp])
-                    predcomp.append(predicted_vec[isamp, iatom, icomp])
-                ax = axs[iatom]
+                    xfeature.append(self.node_feature[isamp][inode])
+                    truecomp.append(true_vec[isamp, inode, icomp])
+                    predcomp.append(predicted_vec[isamp, inode, icomp])
+                ax = axs[inode]
                 self.__scatter_impl(
                     ax,
                     truecomp,
@@ -450,11 +465,11 @@ class Visualizer:
                     s=6,
                     c=xfeature,
                     marker=markers_vec[icomp],
-                    title="atom:" + str(iatom),
+                    title="node:" + str(inode),
                     xylim_equal=True,
                 )
 
-        ax = axs[num_nodes]  # summation over all the atoms/nodes
+        ax = axs[num_nodes]  # summation over all the nodes/nodes
         for icomp in range(3):
             xfeature = []
             truecomp = []
@@ -474,15 +489,15 @@ class Visualizer:
                 xylim_equal=True,
             )
 
-        ax = axs[num_nodes + 1]  # summation over all the samples for each atom/node
+        ax = axs[num_nodes + 1]  # summation over all the samples for each node
         for icomp in range(3):
             xfeature = []
             truecomp = []
             predcomp = []
-            for iatom in range(num_nodes):
-                xfeature.append(sum(self.node_feature[:][iatom]))
-                truecomp.append(sum(true_vec[:, iatom, icomp]))
-                predcomp.append(sum(predicted_vec[:, iatom, icomp]))
+            for inode in range(num_nodes):
+                xfeature.append(sum(self.node_feature[:][inode]))
+                truecomp.append(sum(true_vec[:, inode, icomp]))
+                predcomp.append(sum(predicted_vec[:, inode, icomp]))
             self.__scatter_impl(
                 ax,
                 truecomp,
@@ -589,20 +604,20 @@ class Visualizer:
         for ihead in range(self.num_heads):
             if self.head_dims[ihead] // self.num_nodes == 3:
                 # vector output
-                self.create_scatter_plot_atoms_vec(
+                self.create_scatter_plot_nodes_vec(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
                     iepoch,
                 )
             else:
-                self.create_scatter_plot_atoms(
+                self.create_scatter_plot_variable(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
                     iepoch,
                 )
-                self.create_error_histogram_plot_atoms(
+                self.create_error_histogram_plot_nodes(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
@@ -612,7 +627,7 @@ class Visualizer:
     def create_plot_global(self, true_values, predicted_values, output_names=None):
         """Creates global analysis for all head predictons, e.g., scatter/condmean/error pdf plot."""
         for ihead in range(self.num_heads):
-            self.create_plot_global_ihead(
+            self.create_plot_global_analysis(
                 output_names[ihead],
                 true_values[ihead],
                 predicted_values[ihead],
