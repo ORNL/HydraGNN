@@ -36,5 +36,10 @@ def pytest_train_model(model_type):
 
     error, true_values, predicted_values = test_trained_model(tmp_file, model_type)
 
+    # Check RMSE error
+    assert error < 0.05, "RMSE checking failed!" + str(error)
+    # Check individual samples
     for true_value, predicted_value in zip(true_values, predicted_values):
-        assert abs(true_value[0] - predicted_value[0]) < 1e-3
+        assert (
+            abs(true_value[0] - predicted_value[0]) < 0.2
+        ), "Samples checking failed!" + str(abs(true_value[0] - predicted_value[0]))
