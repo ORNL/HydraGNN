@@ -332,10 +332,10 @@ def create_dataloaders(
             trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler
         )
         val_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=val_sampler
+            valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
         )
         test_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=test_sampler
+            testset, batch_size=batch_size, shuffle=False, sampler=test_sampler
         )
 
     else:
