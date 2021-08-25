@@ -382,8 +382,8 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
         _, world_rank = get_comm_size_and_rank()
         if int(world_rank) == 0:
-    	writer = SummaryWriter("./logs/" + model_with_config_name)
-    else: 
+            writer = SummaryWriter("./logs/" + model_with_config_name)
+    else:
         writer = SummaryWriter("./logs/" + model_with_config_name)
 
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
