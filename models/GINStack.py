@@ -28,7 +28,7 @@ class GINStack(Base):
         self.lns = ModuleList()
         for l in range(self.num_conv_layers):
             self.convs.append(self.build_conv_model(self.hidden_dim, self.hidden_dim))
-            self.lns.append(nn.LayerNorm(self.hidden_dim))
+            self.lns.append(pyg_nn.BatchNorm(self.hidden_dim))
 
         super()._multihead(output_dim, num_nodes, num_shared)
 
