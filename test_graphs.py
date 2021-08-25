@@ -1,4 +1,4 @@
-import os, json
+import sys, os, json
 import pytest
 
 from run_config_input import run_normal_config_file
@@ -43,3 +43,8 @@ def pytest_train_model(model_type):
         assert (
             abs(true_value[0] - predicted_value[0]) < 0.2
         ), "Samples checking failed!" + str(abs(true_value[0] - predicted_value[0]))
+
+
+if __name__ == "__main__":
+    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    pytest_train_model(sys.argv[1])
