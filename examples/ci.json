@@ -17,8 +17,8 @@
     "NeuralNetwork": {
         "Architecture": {
             "model_type": "PNN",
-            "radius": 4,
-            "max_neighbours": 4,
+            "radius": 10,
+            "max_neighbours": 10,
             "hidden_dim": 4,
             "num_conv_layers": 4,
             "num_sharedlayers": 2,
