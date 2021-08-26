@@ -379,6 +379,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    writer = None
     if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
         _, world_rank = get_comm_size_and_rank()
         if int(world_rank) == 0:

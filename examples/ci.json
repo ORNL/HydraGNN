@@ -17,10 +17,10 @@
     "NeuralNetwork": {
         "Architecture": {
             "model_type": "PNN",
-            "radius": 7,
+            "radius": 4,
             "max_neighbours": 4,
-            "hidden_dim": 10,
-            "num_conv_layers": 5,
+            "hidden_dim": 4,
+            "num_conv_layers": 4,
             "num_sharedlayers": 2,
             "task_weights": [1.0, 1.0, 1.0, 1.0]
         },
@@ -32,7 +32,7 @@
             "denormalize_output": "True"
         },
         "Training": {
-            "num_epoch": 100,
+            "num_epoch": 150,
             "perc_train": 0.7,
             "learning_rate": 0.02,
             "batch_size": 32

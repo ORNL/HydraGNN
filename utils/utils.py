@@ -137,9 +137,10 @@ def train_validate_test_normal(
         val_mae = validate(val_loader, model, config["Architecture"]["output_dim"])
         test_rmse = test(test_loader, model, config["Architecture"]["output_dim"])
         scheduler.step(val_mae)
-        writer.add_scalar("train error", train_mae, epoch)
-        writer.add_scalar("validate error", val_mae, epoch)
-        writer.add_scalar("test error", test_rmse[0], epoch)
+        if writer is not None:
+            writer.add_scalar("train error", train_mae, epoch)
+            writer.add_scalar("validate error", val_mae, epoch)
+            writer.add_scalar("test error", test_rmse[0], epoch)
 
         print(
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.8f}, Val MAE: {val_mae:.8f}, "

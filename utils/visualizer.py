@@ -57,5 +57,6 @@ class Visualizer:
             plt.savefig(
                 f"./logs/{self.model_with_config_name}/scatter_plot_test_{self.model_with_config_name}.png"
             )
+            plt.close()
         else:
             plt.show()

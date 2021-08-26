@@ -1,10 +1,14 @@
-import os, json
+import sys, os, json
 import pytest
 
 from run_config_input import run_normal_config_file
-from utils.random_graph_data import random_graph_data
+from utils.deterministic_graph_data import deterministic_graph_data
 from utils.utils import get_comm_size_and_rank
 from test_trained_model import test_trained_model
+
+import torch
+
+torch.manual_seed(0)
 
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNN"])
@@ -13,7 +17,7 @@ def pytest_train_model(model_type):
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
-        random_graph_data()
+        deterministic_graph_data()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -32,5 +36,15 @@ def pytest_train_model(model_type):
 
     error, true_values, predicted_values = test_trained_model(tmp_file, model_type)
 
+    # Check RMSE error
+    assert error < 0.05, "RMSE checking failed!" + str(error)
+    # Check individual samples
     for true_value, predicted_value in zip(true_values, predicted_values):
-        assert abs(true_value[0] - predicted_value[0]) < 1e-3
+        assert (
+            abs(true_value[0] - predicted_value[0]) < 0.2
+        ), "Samples checking failed!" + str(abs(true_value[0] - predicted_value[0]))
+
+
+if __name__ == "__main__":
+    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    pytest_train_model(sys.argv[1])
