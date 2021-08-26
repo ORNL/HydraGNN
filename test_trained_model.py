@@ -101,8 +101,8 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
     model.load_state_dict(state_dict)
 
-    error, node_err1, node_err2, true_values, predicted_values = test(
+    error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values = test(
         test_loader, model
     )
 
-    return error, true_values, predicted_values
+    return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values

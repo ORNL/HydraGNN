@@ -281,8 +281,8 @@ class Visualizer:
                 left=0.075, bottom=0.1, right=0.98, top=0.9, wspace=0.2, hspace=0.25
             )
         else:
-            nrow = floor(sqrt((nshape[1] + 1)))
-            ncol = ceil((nshape[1] + 1) / nrow)
+            nrow = floor(sqrt((nshape[1] + 2)))
+            ncol = ceil((nshape[1] + 2) / nrow)
             fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
             axs = axs.flatten()
             for inode in range(nshape[1]):
@@ -362,8 +362,8 @@ class Visualizer:
         if nshape[1] == 1:
             return
         else:
-            nrow = floor(sqrt((nshape[1] + 1)))
-            ncol = ceil((nshape[1] + 1) / nrow)
+            nrow = floor(sqrt((nshape[1] + 2)))
+            ncol = ceil((nshape[1] + 2) / nrow)
             # error plots
             fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3.5, nrow * 3.2))
             axs = axs.flatten()
@@ -444,8 +444,8 @@ class Visualizer:
         num_nodes = true_vec.shape[1]
 
         markers_vec = ["o", "s", "d"]  # different markers for three vector components
-        nrow = floor(sqrt((num_nodes + 1)))
-        ncol = ceil((num_nodes + 1) / nrow)
+        nrow = floor(sqrt((num_nodes + 2)))
+        ncol = ceil((num_nodes + 2) / nrow)
         fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 3, nrow * 3))
         axs = axs.flatten()
         for inode in range(num_nodes):

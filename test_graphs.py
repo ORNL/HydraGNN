@@ -34,7 +34,13 @@ def pytest_train_model(model_type):
 
     run_normal_config_file(tmp_file)
 
-    error, true_values, predicted_values = test_trained_model(tmp_file, model_type)
+    (
+        error,
+        error_sumofnodes_task,
+        error_rmse_task,
+        true_values,
+        predicted_values,
+    ) = test_trained_model(tmp_file, model_type)
 
     # Set RMSE and sample error thresholds
     thresholds = {
@@ -46,6 +52,13 @@ def pytest_train_model(model_type):
     # Check RMSE error
     assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
     for ihead in range(len(true_values)):
+        error_head_sum = error_sumofnodes_task[ihead]
+        assert error_head_sum < 0.05, (
+            "RMSE checking failed for head sum of head "
+            + str(ihead)
+            + "! "
+            + str(error_head_sum)
+        )
         head_true = true_values[ihead]
         head_pred = predicted_values[ihead]
         # Check individual samples
