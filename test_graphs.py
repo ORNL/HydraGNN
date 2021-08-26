@@ -49,15 +49,20 @@ def pytest_train_model(model_type):
         "GIN": [0.08, 0.20],
         "GAT": [0.05, 0.20],
     }
-    # Check RMSE error
-    assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
     for ihead in range(len(true_values)):
-        error_head_sum = error_sumofnodes_task[ihead]
+        error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
         assert error_head_sum < 0.05, (
-            "RMSE checking failed for head sum of head "
+            "RMSE checking failed for sum of head "
             + str(ihead)
             + "! "
             + str(error_head_sum)
+        )
+        error_head_rmse = error_rmse_task[ihead]
+        assert error_head_rmse < 0.05, (
+            "RMSE checking failed for components of head "
+            + str(ihead)
+            + "! "
+            + str(error_head_rmse)
         )
         head_true = true_values[ihead]
         head_pred = predicted_values[ihead]
@@ -69,6 +74,8 @@ def pytest_train_model(model_type):
                 ), "Samples checking failed!" + str(
                     abs(true_value[idim] - predicted_value[idim])
                 )
+    # Check RMSE error
+    assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
 
 
 if __name__ == "__main__":
