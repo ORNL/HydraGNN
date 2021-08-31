@@ -21,19 +21,18 @@
             "max_neighbours": 5,
             "hidden_dim": 5,
             "num_conv_layers": 6,
-            "heads": {
-                "head_graph":{
+            "output_heads": {
+                "head":{
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 5,
                     "num_headlayers": 2,
                     "dim_headlayers": [50,25]
                 },
-                "node_graph": {
+                "node": {
                     "num_headlayers": 2,
                     "dim_headlayers": [50,25]
-                },
+                }
             },
-
             "task_weights": [1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {

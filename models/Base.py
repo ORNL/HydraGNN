@@ -24,12 +24,12 @@ class Base(torch.nn.Module):
 
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
-        if "output_graph" in config_heads:
+        if "graph" in config_heads:
             denselayers = []
-            dim_sharedlayers = config_heads["output_graph"]["dim_sharedlayers"]
+            dim_sharedlayers = config_heads["graph"]["dim_sharedlayers"]
             denselayers.append(ReLU())
             denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
-            for ishare in range(config_heads["output_graph"]["num_sharedlayers"] - 1):
+            for ishare in range(config_heads["graph"]["num_sharedlayers"] - 1):
                 denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
                 denselayers.append(ReLU())
             self.graph_shared = Sequential(*denselayers)
@@ -38,8 +38,8 @@ class Base(torch.nn.Module):
         for ihead in range(self.num_heads):
             # mlp for each head output
             if self.head_type[ihead] == "graph":
-                num_head_hidden = config_heads["output_graph"]["num_headlayers"]
-                dim_head_hidden = config_heads["output_graph"]["dim_headlayers"]
+                num_head_hidden = config_heads["graph"]["num_headlayers"]
+                dim_head_hidden = config_heads["graph"]["dim_headlayers"]
                 denselayers = []
                 denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                 denselayers.append(ReLU())
@@ -53,8 +53,8 @@ class Base(torch.nn.Module):
             elif self.head_type[ihead] == "node":
                 mlp = ModuleList()
                 for inode in range(self.num_nodes):
-                    num_head_hidden = config_heads["output_node"]["num_headlayers"]
-                    dim_head_hidden = config_heads["output_node"]["dim_headlayers"]
+                    num_head_hidden = config_heads["node"]["num_headlayers"]
+                    dim_head_hidden = config_heads["node"]["dim_headlayers"]
                     denselayers = []
                     denselayers.append(Linear(self.hidden_dim, dim_head_hidden[0]))
                     denselayers.append(ReLU())

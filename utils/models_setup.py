@@ -73,7 +73,7 @@ def generate_model(
             num_nodes=num_atoms,
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
-            config_heads=config["heads"],
+            config_heads=config["output_heads"],
         ).to(device)
 
     elif model_type == "PNN":
@@ -89,7 +89,7 @@ def generate_model(
             hidden_dim=config["hidden_dim"],
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
-            config_heads=config["heads"],
+            config_heads=config["output_heads"],
         ).to(device)
 
     elif model_type == "GAT":
@@ -110,7 +110,7 @@ def generate_model(
             num_nodes=num_atoms,
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
-            config_heads=config["heads"],
+            config_heads=config["output_heads"],
         ).to(device)
 
     elif model_type == "MFC":
@@ -122,7 +122,7 @@ def generate_model(
             max_degree=config["max_neighbours"],
             num_conv_layers=config["num_conv_layers"],
             output_type=config["output_type"],
-            config_heads=config["heads"],
+            config_heads=config["output_heads"],
         ).to(device)
 
     return model
