@@ -78,9 +78,9 @@ class Base(torch.nn.Module):
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
         num_features = x.shape[1]
-        self.batch_size = batch.max() + 1
+        batch_size = batch.max() + 1
         out = torch.zeros(
-            (self.batch_size, num_features, self.num_nodes),
+            (batch_size, num_features, self.num_nodes),
             dtype=x.dtype,
             device=x.device,
         )
@@ -104,7 +104,7 @@ class Base(torch.nn.Module):
         # node features for node level output
         x_nodes = self.node_features_reshape(x, batch)
         outputs = torch.zeros(
-            (self.batch_size, self.head_dim_sum), dtype=x.dtype, device=x.device
+            (x_nodes.shape[0], self.head_dim_sum), dtype=x.dtype, device=x.device
         )
         istart = 0
         for head_dim, headloc, type_head in zip(
