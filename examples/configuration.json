@@ -22,7 +22,7 @@
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "output_heads": {
-                "head":{
+                "graph":{
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 5,
                     "num_headlayers": 2,
