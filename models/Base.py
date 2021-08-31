@@ -21,6 +21,7 @@ class Base(torch.nn.Module):
         self.head_dims = output_dim
         self.head_type = output_type
         self.num_nodes = num_nodes
+        self.head_dim_sum = sum(self.head_dims)
 
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
@@ -76,10 +77,12 @@ class Base(torch.nn.Module):
 
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
-        batch_size = batch.max() + 1
         num_features = x.shape[1]
+        self.batch_size = batch.max() + 1
         out = torch.zeros(
-            (batch_size, num_features, self.num_nodes), dtype=x.dtype, device=x.device
+            (self.batch_size, num_features, self.num_nodes),
+            dtype=x.dtype,
+            device=x.device,
         )
         for inode in range(self.num_nodes):
             inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
@@ -100,17 +103,23 @@ class Base(torch.nn.Module):
         x_graph = global_mean_pool(x, batch)
         # node features for node level output
         x_nodes = self.node_features_reshape(x, batch)
-        outputs = []
-        for headloc, type_head in zip(self.heads, self.head_type):
+        outputs = torch.zeros(
+            (self.batch_size, self.head_dim_sum), dtype=x.dtype, device=x.device
+        )
+        istart = 0
+        for head_dim, headloc, type_head in zip(
+            self.head_dims, self.heads, self.head_type
+        ):
             if type_head == "graph":
                 x_graph = self.graph_shared(x_graph)
-                outputs.append(headloc(x_graph))
+                outputs[:, istart : (istart + head_dim)] = headloc(x_graph)
             else:
-                node_output = []
                 for inode in range(self.num_nodes):
-                    node_output.append(headloc[inode](x_nodes[:, :, inode]))
-                outputs.append(torch.cat(node_output, dim=1))
-        return torch.cat(outputs, dim=1)
+                    outputs[:, istart + inode] = headloc[inode](
+                        x_nodes[:, :, inode]
+                    ).squeeze()
+            istart += head_dim
+        return outputs
 
     def loss(self, pred, value):
         pred_shape = pred.shape

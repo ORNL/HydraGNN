@@ -2,7 +2,7 @@
     "Dataset": {
         "name": "unit_test",
         "format": "unit_test",
-        "num_nodes": 10,
+        "num_nodes": 8,
         "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],
