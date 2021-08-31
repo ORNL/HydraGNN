@@ -38,6 +38,10 @@ class RawDataLoader:
         graph_feature_col = config["graph_features"]["column_index"]
 
         dataset = []
+        assert (
+            len(os.listdir(dataset_path)) > 0
+        ), "No data files provided in {}!".format(dataset_path)
+
         for filename in os.listdir(dataset_path):
             f = open(os.path.join(dataset_path, filename), "r")
             all_lines = f.readlines()
