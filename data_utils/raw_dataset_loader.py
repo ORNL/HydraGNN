@@ -39,7 +39,7 @@ class RawDataLoader:
 
         dataset = []
         for filename in os.listdir(dataset_path):
-            f = open(dataset_path + filename, "r")
+            f = open(os.path.join(dataset_path, filename), "r")
             all_lines = f.readlines()
             data_object = self.__transform_input_to_data_object_base(
                 lines=all_lines,
@@ -61,7 +61,7 @@ class RawDataLoader:
             minmax_graph_feature,
         ) = self.__normalize_dataset(dataset=dataset)
 
-        serial_data_name = (pathlib.PurePath(dataset_path)).parent.name
+        serial_data_name = config["name"]
         serial_data_path = (
             os.environ["SERIALIZED_DATA_PATH"]
             + "/serialized_dataset/"

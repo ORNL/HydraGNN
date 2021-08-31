@@ -1,6 +1,7 @@
 {
     "Dataset": {
-        "name": "CuAu_32atoms",
+        "name": "FePt_32atoms",
+        "path": "FePt",
         "format": "LSMS",
         "num_nodes": 32,
         "node_features": {
@@ -52,4 +53,3 @@
         }
     }
 }
-
