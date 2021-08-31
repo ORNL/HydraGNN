@@ -12,13 +12,14 @@ class GATStack(Base):
         self,
         input_dim: int,
         output_dim: list,
+        output_type: list,
         num_nodes: int,
-        hidden_dim: int = 16,
+        hidden_dim: int,
+        config_heads: {},
         heads: int = 1,
         negative_slope: float = 0.2,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
-        num_shared: int = 1,
     ):
         super().__init__()
 
@@ -26,6 +27,7 @@ class GATStack(Base):
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.num_conv_layers = num_conv_layers
+        # note that self.heads is a parameter in GATConv, not the num_heads in the output part
         self.heads = heads
         self.negative_slope = negative_slope
         self.convs = ModuleList()
@@ -52,7 +54,7 @@ class GATStack(Base):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-        super()._multihead(output_dim, num_nodes, num_shared)
+        super()._multihead(output_dim, num_nodes, output_type, config_heads)
 
     def __str__(self):
         return "GATStack"

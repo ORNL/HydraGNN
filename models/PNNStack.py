@@ -12,11 +12,12 @@ class PNNStack(Base):
         deg: torch.Tensor,
         input_dim: int,
         output_dim: list,
+        output_type: list,
         num_nodes: int,
         hidden_dim: int,
+        config_heads: {},
         dropout: float = 0.25,
         num_conv_layers: int = 16,
-        num_shared: int = 1,
     ):
         super().__init__()
 
@@ -59,7 +60,7 @@ class PNNStack(Base):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-        super()._multihead(output_dim, num_nodes, num_shared)
+        super()._multihead(output_dim, num_nodes, output_type, config_heads)
 
     def __str__(self):
         return "PNNStack"

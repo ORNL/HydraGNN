@@ -41,6 +41,9 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         else:
             raise ValueError("Unknown output type", output_type[item])
         config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
+    config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
+        "Variables_of_interest"
+    ]["type"]
 
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
