@@ -196,6 +196,9 @@ def run_normal_terminal_input():
 
     else:
         config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "False"
+    config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
+        "Variables_of_interest"
+    ]["type"]
 
     model = generate_model(
         model_type=chosen_model,
@@ -326,6 +329,9 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
 
     else:
         config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "False"
+    config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
+        "Variables_of_interest"
+    ]["type"]
 
     model = generate_model(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
