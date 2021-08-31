@@ -50,33 +50,6 @@ def order_candidates(candidate_neighbours: dict, distance_matrix: [[float]]):
     return sorted_candidate_neighbours
 
 
-def remove_collinear_candidates(candidate_neighbours, distance_matrix):
-    """Function determines which neighbours of an atom are collinear. The logic of determining it is:
-    for atom A, B, C check if AB + BC == AC. If that is true, points are on the same line - collinear.
-
-    Parameters
-    ----------
-    candidate_neighbours: dict
-        Dictionary of neighbours for each atom. Key-value pair: index_of_atom: [indexes_of_neighbours].
-    distance_matrix: [[float]]
-        Matrix containing the distances for each pair of atoms within the structure.
-    """
-    print("Determining which neighbours are collinear.")
-    collinear_neigbours = {}
-    for point_index, candidates in tqdm(candidate_neighbours.items()):
-        candidates = list(candidates)
-        collinear_points = []
-        for candidate1 in range(len(candidates)):
-            for candidate2 in range(candidate1 + 1, len(candidates)):
-                AC = distance_matrix[point_index, candidates[candidate2]]
-                AB = distance_matrix[point_index, candidates[candidate1]]
-                BC = distance_matrix[candidates[candidate1], candidates[candidate2]]
-                if abs(AC - (AB + BC)) < 10 ** (-3):
-                    collinear_points.append(candidates[candidate2])
-        collinear_neigbours[point_index] = collinear_points
-    return collinear_neigbours
-
-
 def resolve_neighbour_conflicts(
     point_index: int,
     neighbours: [int],
