@@ -12,7 +12,8 @@ torch.manual_seed(0)
 
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNN"])
-def pytest_train_model(model_type):
+@pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+def pytest_train_model(model_type, ci_input):
 
     _, rank = get_comm_size_and_rank()
 
@@ -22,7 +23,7 @@ def pytest_train_model(model_type):
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
-    config_file = "./examples/ci.json"
+    config_file = "./examples/" + ci_input
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
@@ -79,4 +80,4 @@ def pytest_train_model(model_type):
 
 if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-    pytest_train_model(sys.argv[1])
+    pytest_train_model(sys.argv[1], "ci.json")
