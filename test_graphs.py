@@ -77,7 +77,6 @@ def pytest_train_model(model_type):
     # Check RMSE error
     assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
 
-
 if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
     pytest_train_model(sys.argv[1])
