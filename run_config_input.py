@@ -124,8 +124,6 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
             str(weigh) + "-"
             for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
         )
-        + "num_sl-"
-        + str(config["NeuralNetwork"]["Architecture"]["num_sharedlayers"])
     )
 
     device_name, device = get_device()

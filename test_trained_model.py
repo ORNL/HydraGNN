@@ -91,8 +91,6 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
             str(weigh) + "-"
             for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
         )
-        + "num_sl-"
-        + str(config["NeuralNetwork"]["Architecture"]["num_sharedlayers"])
     )
 
     state_dict = torch.load(
