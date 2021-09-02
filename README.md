@@ -56,10 +56,9 @@ There are two options for running the code:
 
 
 ### Training the model(main.py)
-There are 3 options:
+There are 2 options:
 1. Run it with hyperparameter optimization
-2. Run it normally with inputting the parameters of data and model from terminal
-3. Run it normally but load the whole parameters config from json file whose location is GCNN/utilities/configuration.json
+2. Run it with parameters from json config file (examples in `examples/`)
 
 #### Loading parameters from configuration.json file
 This is an example for configuration.json file:
