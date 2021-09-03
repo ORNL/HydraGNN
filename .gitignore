@@ -1,6 +1,6 @@
 *~
 *DS_Store
 __pycache__
-dataset/unit_test/
+dataset/
 logs/
 serialized_dataset/

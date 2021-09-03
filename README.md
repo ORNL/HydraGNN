@@ -1,5 +1,14 @@
 # GCNN
 
+## Datasets
+
+Built in examples are provided for testing purposes only. One source of data to
+create GCNN surrogate predictions is DFT output on the OLCF Constellation:
+https://doi.ccs.ornl.gov/
+
+Detailed instructions are available on the
+[Wiki](https://github.com/allaffa/GCNN/wiki/Datasets)
+
 ## Dependencies
 To install required packages with only basic capability:
 ```
