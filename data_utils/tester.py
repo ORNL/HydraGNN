@@ -9,7 +9,6 @@ import json
 import pickle
 import pathlib
 from dataset_descriptors import AtomFeatures, StructureFeatures
-from helper_functions import distance_3D, remove_collinear_candidates, order_candidates
 
 from serialized_dataset_loader import SerializedDataLoader
 from raw_dataset_loader import RawDataLoader

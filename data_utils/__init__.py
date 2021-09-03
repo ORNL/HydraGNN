@@ -2,7 +2,6 @@ from .dataset_descriptors import AtomFeatures, Dataset, StructureFeatures
 from .helper_functions import (
     distance_3D,
     order_candidates,
-    remove_collinear_candidates,
     resolve_neighbour_conflicts,
     tensor_divide,
 )

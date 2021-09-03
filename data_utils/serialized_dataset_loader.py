@@ -9,7 +9,6 @@ from torch_geometric.data import Data
 from data_utils.dataset_descriptors import AtomFeatures
 from data_utils.helper_functions import (
     distance_3D,
-    remove_collinear_candidates,
     order_candidates,
     resolve_neighbour_conflicts,
 )
@@ -144,24 +143,15 @@ class SerializedDataLoader:
                 if distance_matrix[i, j] <= radius and i != j:
                     candidate_neighbours[i].append(j)
 
-        ordered_candidate_neighbours = order_candidates(
+        candidate_neighbours = order_candidates(
             candidate_neighbours=candidate_neighbours, distance_matrix=distance_matrix
         )
-        collinear_neighbours = remove_collinear_candidates(
-            candidate_neighbours=ordered_candidate_neighbours,
-            distance_matrix=distance_matrix,
-        )
 
-        print("Removing collinear neighbours and resolving neighbour conflicts.")
+        print("Resolving neighbour conflicts.")
         adjacency_matrix = np.zeros((num_of_atoms, num_of_atoms))
-        for point, neighbours in tqdm(ordered_candidate_neighbours.items()):
-            neighbours = list(neighbours)
-            if point in collinear_neighbours.keys():
-                collinear_points = list(collinear_neighbours[point])
-                neighbours = [x for x in neighbours if x not in collinear_points]
-
+        for point, neighbours in tqdm(candidate_neighbours.items()):
             neighbours = resolve_neighbour_conflicts(
-                point, neighbours, adjacency_matrix, max_num_node_neighbours
+                point, list(neighbours), adjacency_matrix, max_num_node_neighbours
             )
             adjacency_matrix[point, neighbours] = 1
             adjacency_matrix[neighbours, point] = 1
