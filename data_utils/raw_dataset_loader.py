@@ -207,7 +207,7 @@ class RawDataLoader:
                 )
             for ifeat in range(num_node_features):
                 data.x[:, ifeat] = tensor_divide(
-                    (data.x[:, 1] - minmax_node_feature[0, :, ifeat]),
+                    (data.x[:, ifeat] - minmax_node_feature[0, :, ifeat]),
                     (
                         minmax_node_feature[1, :, ifeat]
                         - minmax_node_feature[0, :, ifeat]
