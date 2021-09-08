@@ -25,23 +25,29 @@ class GINStack(Base):
         self.dropout = dropout
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.convs.append(self.build_conv_model(input_dim, self.hidden_dim))
+        self.convs.append(
+            GINConv(
+                nn.Sequential(
+                    nn.Linear(input_dim, self.hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.hidden_dim, self.hidden_dim),
+                )
+            )
+        )
+
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            self.convs.append(self.build_conv_model(self.hidden_dim, self.hidden_dim))
+            conv = GINConv(
+                nn.Sequential(
+                    nn.Linear(self.hidden_dim, self.hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(self.hidden_dim, self.hidden_dim),
+                )
+            )
+            self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
         super()._multihead(output_dim, num_nodes, output_type, config_heads)
-
-    def build_conv_model(self, input_dim, hidden_dim):
-        # refer to pytorch geometric nn module for different implementation of GNNs.
-        return GINConv(
-            nn.Sequential(
-                nn.Linear(input_dim, hidden_dim),
-                nn.ReLU(),
-                nn.Linear(hidden_dim, hidden_dim),
-            )
-        )
 
     def __str__(self):
         return "GINStack"
