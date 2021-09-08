@@ -31,7 +31,9 @@ class GINStack(Base):
                     nn.Linear(input_dim, self.hidden_dim),
                     nn.ReLU(),
                     nn.Linear(self.hidden_dim, self.hidden_dim),
-                )
+                ),
+                eps=100.0,
+                train_eps=True,
             )
         )
 
@@ -42,7 +44,9 @@ class GINStack(Base):
                     nn.Linear(self.hidden_dim, self.hidden_dim),
                     nn.ReLU(),
                     nn.Linear(self.hidden_dim, self.hidden_dim),
-                )
+                ),
+                eps=100.0,
+                train_eps=True,
             )
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
