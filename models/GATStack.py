@@ -42,7 +42,8 @@ class GATStack(Base):
                 add_self_loops=True,
             )
         )
-        for _ in range(self.num_conv_layers):
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        for _ in range(self.num_conv_layers - 1):
             conv = GATConv(
                 in_channels=self.hidden_dim,
                 out_channels=self.hidden_dim,

@@ -26,7 +26,8 @@ class GINStack(Base):
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
         self.convs.append(self.build_conv_model(input_dim, self.hidden_dim))
-        for _ in range(self.num_conv_layers):
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        for _ in range(self.num_conv_layers - 1):
             self.convs.append(self.build_conv_model(self.hidden_dim, self.hidden_dim))
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
