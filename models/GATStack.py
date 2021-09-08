@@ -42,10 +42,10 @@ class GATStack(Base):
                 add_self_loops=True,
             )
         )
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
-        for _ in range(self.num_conv_layers - 1):
+        self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        for _ in range(self.num_conv_layers - 2):
             conv = GATConv(
-                in_channels=self.hidden_dim,
+                in_channels=self.hidden_dim * self.heads,
                 out_channels=self.hidden_dim,
                 heads=self.heads,
                 negative_slope=self.negative_slope,
@@ -53,8 +53,18 @@ class GATStack(Base):
                 add_self_loops=True,
             )
             self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim))
-
+            self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        conv = GATConv(
+            in_channels=self.hidden_dim * self.heads,
+            out_channels=self.hidden_dim,
+            heads=self.heads,
+            negative_slope=self.negative_slope,
+            dropout=self.dropout,
+            add_self_loops=True,
+            concat=False,
+        )
+        self.convs.append(conv)
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
         super()._multihead(output_dim, num_nodes, output_type, config_heads)
 
     def __str__(self):
