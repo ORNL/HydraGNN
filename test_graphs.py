@@ -39,9 +39,9 @@ def pytest_train_model(model_type):
     # Set RMSE and sample error thresholds
     thresholds = {
         "PNN": [0.02, 0.10],
-        "MFC": [0.05, 0.15],
+        "MFC": [0.05, 0.20],
         "GIN": [0.08, 0.20],
-        "GAT": [0.10, 0.35],
+        "GAT": [0.05, 0.20],
     }
     # Check RMSE error
     assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
