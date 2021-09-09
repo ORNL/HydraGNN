@@ -31,7 +31,7 @@
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [8,8]
+                    "dim_headlayers": [10,10]
                 }
             },
             "task_weights": [1.0, 1.0, 1.0, 1.0]

@@ -27,7 +27,7 @@
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 4,
                     "num_headlayers": 2,
-                    "dim_headlayers": [15,10]
+                    "dim_headlayers": [30,30]
                 },
                 "node": {
                     "num_headlayers": 2,
@@ -41,7 +41,7 @@
             "output_names": ["sum_x_x2_x3"],
             "output_index": [0],
             "type": ["graph"],
-            "denormalize_output": "True"
+            "denormalize_output": "False"
         },
         "Training": {
             "num_epoch": 150,
