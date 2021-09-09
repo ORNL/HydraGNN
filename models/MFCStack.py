@@ -36,7 +36,8 @@ class MFCStack(Base):
                 max_degree=self.max_degree,
             )
         )
-        for _ in range(self.num_conv_layers):
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        for _ in range(self.num_conv_layers - 1):
             conv = MFConv(
                 in_channels=self.hidden_dim,
                 out_channels=self.hidden_dim,

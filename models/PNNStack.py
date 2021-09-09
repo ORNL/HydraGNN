@@ -46,7 +46,8 @@ class PNNStack(Base):
                 divide_input=False,
             )
         )
-        for _ in range(self.num_conv_layers):
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        for _ in range(self.num_conv_layers - 1):
             conv = PNAConv(
                 in_channels=self.hidden_dim,
                 out_channels=self.hidden_dim,
