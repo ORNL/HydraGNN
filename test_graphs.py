@@ -52,18 +52,24 @@ def pytest_train_model(model_type, ci_input):
     }
     for ihead in range(len(true_values)):
         error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
-        assert error_head_sum < 0.05, (
+        assert error_head_sum < thresholds[model_type][0], (
             "RMSE checking failed for sum of head "
             + str(ihead)
             + "! "
             + str(error_head_sum)
+            + ">"
+            + str(thresholds[model_type][0])
         )
         error_head_rmse = error_rmse_task[ihead]
-        assert error_head_rmse < 0.05, (
-            "RMSE checking failed for components of head "
-            + str(ihead)
-            + "! "
-            + str(error_head_rmse)
+        assert error_head_rmse < thresholds[model_type][0], (
+            (
+                "RMSE checking failed for components of head "
+                + str(ihead)
+                + "! "
+                + str(error_head_rmse)
+            )
+            + ">"
+            + str(thresholds[model_type][0])
         )
         head_true = true_values[ihead]
         head_pred = predicted_values[ihead]
@@ -71,12 +77,22 @@ def pytest_train_model(model_type, ci_input):
         for true_value, predicted_value in zip(head_true, head_pred):
             for idim in range(len(true_value)):
                 assert (
-                    abs(true_value[idim] - predicted_value[idim]) < thresholds[model_type][1]
-                ), "Samples checking failed!" + str(
                     abs(true_value[idim] - predicted_value[idim])
+                    < thresholds[model_type][1]
+                ), (
+                    "Samples checking failed!"
+                    + str(abs(true_value[idim] - predicted_value[idim]))
+                    + ">"
+                    + str(thresholds[model_type][1])
                 )
     # Check RMSE error
-    assert error < thresholds[model_type][0], "RMSE checking failed!" + str(error)
+    assert error < thresholds[model_type][0], (
+        "Total RMSE checking failed!"
+        + str(error)
+        + ">"
+        + str(thresholds[model_type][0])
+    )
+
 
 if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
