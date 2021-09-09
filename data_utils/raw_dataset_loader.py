@@ -43,6 +43,10 @@ class RawDataLoader:
         ), "No data files provided in {}!".format(dataset_path)
 
         for filename in os.listdir(dataset_path):
+            # FIXME: file unintentionally included in CuAu Constellation dataset
+            # See https://github.com/allaffa/GCNN/issues/79
+            if filename == ".DS_Store":
+                continue
             f = open(os.path.join(dataset_path, filename), "r", encoding="utf-8")
             all_lines = f.readlines()
             data_object = self.__transform_input_to_data_object_base(
