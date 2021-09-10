@@ -27,14 +27,14 @@
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 4,
                     "num_headlayers": 2,
-                    "dim_headlayers": [15,15]
+                    "dim_headlayers": [10,10]
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [15,15]
+                    "dim_headlayers": [10,10]
                 }
             },
-            "task_weights": [1.0, 1.0, 1.0, 1.0]
+            "task_weights": [1.0, 8.0, 8.0, 8.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
@@ -46,7 +46,7 @@
         "Training": {
             "num_epoch": 200,
             "perc_train": 0.7,
-            "learning_rate": 0.005,
+            "learning_rate": 0.01,
             "batch_size": 32
         }
     }
