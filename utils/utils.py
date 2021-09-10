@@ -138,7 +138,7 @@ def train_validate_test_normal(
     total_loss_val = []
     total_loss_test = []
     # loss tracking of summation across all nodes for node feature predictions
-    task_loss_train_sum= []
+    task_loss_train_sum = []
     task_loss_test_sum = []
     task_loss_val_sum = []
     # loss tracking for each head/task

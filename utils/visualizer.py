@@ -75,7 +75,9 @@ class Visualizer:
         xcen_pasr = 0.5 * (xedge_pasr[0:-1] + xedge_pasr[1:])
         ycen_pasr = 0.5 * (yedge_pasr[0:-1] + yedge_pasr[1:])
         hist2d_pasr = hist2d_pasr / np.amax(hist2d_pasr)
-        mean1d_cond = np.dot(hist2d_pasr, ycen_pasr) / (np.sum(hist2d_pasr, axis=1) + 1e-12)
+        mean1d_cond = np.dot(hist2d_pasr, ycen_pasr) / (
+            np.sum(hist2d_pasr, axis=1) + 1e-12
+        )
         return xcen_pasr, mean1d_cond
 
     def __scatter_impl(
@@ -563,7 +565,7 @@ class Visualizer:
         fhist.close()
         num_tasks = len(task_loss_train_sum[0])
         if num_tasks > 0:
-            task_loss_train_sum= np.array(task_loss_train_sum)
+            task_loss_train_sum = np.array(task_loss_train_sum)
             task_loss_val_sum = np.array(task_loss_val_sum)
             task_loss_test_sum = np.array(task_loss_test_sum)
             nrow = 2
