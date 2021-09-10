@@ -27,11 +27,11 @@
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 4,
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10]
+                    "dim_headlayers": [30,30]
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10]
+                    "dim_headlayers": [30,30]
                 }
             },
             "task_weights": [1.0, 8.0, 8.0, 8.0]
