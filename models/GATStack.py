@@ -2,7 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
 from torch.nn import Sequential, ReLU, Linear
-from torch_geometric.nn import GATConv, BatchNorm
+from torch_geometric.nn import GATv2Conv, BatchNorm
 
 from .Base import Base
 
@@ -16,8 +16,8 @@ class GATStack(Base):
         num_nodes: int,
         hidden_dim: int,
         config_heads: {},
-        heads: int = 1,
-        negative_slope: float = 0.2,
+        heads: int = 6,
+        negative_slope: float = 0.05,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
     ):
@@ -33,7 +33,7 @@ class GATStack(Base):
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
         self.convs.append(
-            GATConv(
+            GATv2Conv(
                 in_channels=self.input_dim,
                 out_channels=self.hidden_dim,
                 heads=self.heads,
@@ -44,7 +44,7 @@ class GATStack(Base):
         )
         self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
-            conv = GATConv(
+            conv = GATv2Conv(
                 in_channels=self.hidden_dim * self.heads,
                 out_channels=self.hidden_dim,
                 heads=self.heads,
@@ -54,7 +54,7 @@ class GATStack(Base):
             )
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        conv = GATConv(
+        conv = GATv2Conv(
             in_channels=self.hidden_dim * self.heads,
             out_channels=self.hidden_dim,
             heads=self.heads,
