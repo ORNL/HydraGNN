@@ -38,7 +38,7 @@ class Visualizer:
         (file: varname+"_"+ str(iepoch).zfill(4) + ".png" or varname+".png" )
 
     #create plots for all heads
-    plot_history(self,trainlib,vallib,testlib,tasklib,tasklib_vali,tasklib_test,tasklib_nodes,tasklib_vali_nodes,tasklib_test_nodes,task_weights,task_names,):
+    plot_history(self,total_loss_train,total_loss_val,total_loss_test,task_loss_train_sum,task_loss_val_sum, task_loss_test_sum,task_loss_train,task_loss_val,task_loss_test,task_weights,task_names,):
         Save history of losses to file and plot.
     create_scatter_plots(self, true_values, predicted_values, output_names=None, iepoch=None)
         Creates scatter plots for all head predictions. One plot for each head
@@ -75,7 +75,7 @@ class Visualizer:
         xcen_pasr = 0.5 * (xedge_pasr[0:-1] + xedge_pasr[1:])
         ycen_pasr = 0.5 * (yedge_pasr[0:-1] + yedge_pasr[1:])
         hist2d_pasr = hist2d_pasr / np.amax(hist2d_pasr)
-        mean1d_cond = np.dot(hist2d_pasr, ycen_pasr) / np.sum(hist2d_pasr, axis=1)
+        mean1d_cond = np.dot(hist2d_pasr, ycen_pasr) / (np.sum(hist2d_pasr, axis=1) + 1e-12)
         return xcen_pasr, mean1d_cond
 
     def __scatter_impl(
@@ -530,15 +530,15 @@ class Visualizer:
 
     def plot_history(
         self,
-        trainlib,
-        vallib,
-        testlib,
-        tasklib,
-        tasklib_vali,
-        tasklib_test,
-        tasklib_nodes,
-        tasklib_vali_nodes,
-        tasklib_test_nodes,
+        total_loss_train,
+        total_loss_val,
+        total_loss_test,
+        task_loss_train_sum,
+        task_loss_val_sum,
+        task_loss_test_sum,
+        task_loss_train,
+        task_loss_val,
+        task_loss_test,
         task_weights,
         task_names,
     ):
@@ -546,50 +546,50 @@ class Visualizer:
         fhist = open(f"./logs/{self.model_with_config_name}/history_loss.pckl", "wb")
         pickle.dump(
             [
-                trainlib,
-                vallib,
-                testlib,
-                tasklib,
-                tasklib_vali,
-                tasklib_test,
-                tasklib_nodes,
-                tasklib_vali_nodes,
-                tasklib_test_nodes,
+                total_loss_train,
+                total_loss_val,
+                total_loss_test,
+                task_loss_train_sum,
+                task_loss_val_sum,
+                task_loss_test_sum,
+                task_loss_train,
+                task_loss_val,
+                task_loss_test,
                 task_weights,
                 task_names,
             ],
             fhist,
         )
         fhist.close()
-        num_tasks = len(tasklib[0])
+        num_tasks = len(task_loss_train_sum[0])
         if num_tasks > 0:
-            tasklib = np.array(tasklib)
-            tasklib_vali = np.array(tasklib_vali)
-            tasklib_test = np.array(tasklib_test)
+            task_loss_train_sum= np.array(task_loss_train_sum)
+            task_loss_val_sum = np.array(task_loss_val_sum)
+            task_loss_test_sum = np.array(task_loss_test_sum)
             nrow = 2
         fig, axs = plt.subplots(nrow, num_tasks, figsize=(16, 6 * nrow))
         axs = axs.flatten()
         ax = axs[0]
-        ax.plot(trainlib, "-", label="train")
-        ax.plot(vallib, ":", label="validation")
-        ax.plot(testlib, "--", label="test")
+        ax.plot(total_loss_train, "-", label="train")
+        ax.plot(total_loss_val, ":", label="validation")
+        ax.plot(total_loss_test, "--", label="test")
         ax.set_title("total loss")
         ax.set_xlabel("Epochs")
         ax.set_yscale("log")
         ax.legend()
         for iext in range(1, num_tasks):
             axs[iext].axis("off")
-        for ivar in range(tasklib.shape[1]):
+        for ivar in range(task_loss_train_sum.shape[1]):
             ax = axs[num_tasks + ivar]
-            ax.plot(tasklib[:, ivar], label="train")
-            ax.plot(tasklib_vali[:, ivar], label="validation")
-            ax.plot(tasklib_test[:, ivar], "--", label="test")
+            ax.plot(task_loss_train_sum[:, ivar], label="train")
+            ax.plot(task_loss_val_sum[:, ivar], label="validation")
+            ax.plot(task_loss_test_sum[:, ivar], "--", label="test")
             ax.set_title(task_names[ivar] + ", {:.4f}".format(task_weights[ivar]))
             ax.set_xlabel("Epochs")
             ax.set_yscale("log")
             if ivar == 0:
                 ax.legend()
-        for iext in range(num_tasks + tasklib.shape[1], axs.size):
+        for iext in range(num_tasks + task_loss_train_sum.shape[1], axs.size):
             axs[iext].axis("off")
         plt.subplots_adjust(
             left=0.1, bottom=0.08, right=0.98, top=0.9, wspace=0.25, hspace=0.3

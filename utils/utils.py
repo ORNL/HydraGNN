@@ -119,7 +119,7 @@ def setup_ddp():
 
 
 def train_validate_test_normal(
-    model_wrapper,
+    model,
     optimizer,
     train_loader,
     val_loader,
@@ -134,23 +134,22 @@ def train_validate_test_normal(
 
     num_epoch = config["Training"]["num_epoch"]
     # total loss tracking for train/vali/test
-    trainlib = []
-    vallib = []
-    testlib = []
-    # loss tracking for summation across all atoms/nodes
-    tasklib = []
-    tasklib_test = []
-    tasklib_vali = []
-    # loss tracking for each site/node
-    tasklib_nodes = []
-    tasklib_test_nodes = []
-    tasklib_vali_nodes = []
+    total_loss_train = []
+    total_loss_val = []
+    total_loss_test = []
+    # loss tracking of summation across all nodes for node feature predictions
+    task_loss_train_sum= []
+    task_loss_test_sum = []
+    task_loss_val_sum = []
+    # loss tracking for each head/task
+    task_loss_train = []
+    task_loss_test = []
+    task_loss_val = []
 
-    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
-        model = model_wrapper.module
+    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
+        model = model.module
     else:
-        model = model_wrapper
-
+        model = model
     # preparing for results visualization
     ## collecting node feature
     node_feature = []
@@ -194,16 +193,16 @@ def train_validate_test_normal(
         )
         print("Tasks MAE:", train_taskserr)
 
-        trainlib.append(train_mae)
-        vallib.append(val_mae)
-        testlib.append(test_rmse[0])
-        tasklib.append(train_taskserr)
-        tasklib_vali.append(val_taskserr)
-        tasklib_test.append(test_rmse[1])
+        total_loss_train.append(train_mae)
+        total_loss_val.append(val_mae)
+        total_loss_test.append(test_rmse[0])
+        task_loss_train_sum.append(train_taskserr)
+        task_loss_val_sum.append(val_taskserr)
+        task_loss_test_sum.append(test_rmse[1])
 
-        tasklib_nodes.append(train_taskserr_nodes)
-        tasklib_vali_nodes.append(val_taskserr_nodes)
-        tasklib_test_nodes.append(test_rmse[2])
+        task_loss_train.append(train_taskserr_nodes)
+        task_loss_val.append(val_taskserr_nodes)
+        task_loss_test.append(test_rmse[2])
 
         ###tracking the solution evolving with training
         if plot_hist_solution:
@@ -240,15 +239,15 @@ def train_validate_test_normal(
     )
     ######plot loss history#####
     visualizer.plot_history(
-        trainlib,
-        vallib,
-        testlib,
-        tasklib,
-        tasklib_vali,
-        tasklib_test,
-        tasklib_nodes,
-        tasklib_vali_nodes,
-        tasklib_test_nodes,
+        total_loss_train,
+        total_loss_val,
+        total_loss_test,
+        task_loss_train_sum,
+        task_loss_val_sum,
+        task_loss_test_sum,
+        task_loss_train,
+        task_loss_val,
+        task_loss_test,
         model.loss_weights,
         config["Variables_of_interest"]["output_names"],
     )
@@ -272,12 +271,7 @@ def output_denormalize(y_minmax, true_values, predicted_values):
     return true_values, predicted_values
 
 
-def train(loader, model_wrapper, opt):
-
-    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
-        model = model_wrapper.module
-    else:
-        model = model_wrapper
+def train(loader, model, opt):
 
     device = next(model.parameters()).device
     tasks_error = np.zeros(model.num_heads)
@@ -289,12 +283,9 @@ def train(loader, model_wrapper, opt):
     for data in tqdm(loader):
         data = data.to(device)
         opt.zero_grad()
-        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-            pred = model.module(data)
-            loss, tasks_rmse, tasks_nodes = model.module.loss_rmse(pred, data.y)
-        else:
-            pred = model(data)
-            loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+
+        pred = model(data)
+        loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
 
         loss.backward()
         opt.step()
@@ -310,12 +301,7 @@ def train(loader, model_wrapper, opt):
 
 
 @torch.no_grad()
-def validate(loader, model_wrapper):
-
-    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
-        model = model_wrapper.module
-    else:
-        model = model_wrapper
+def validate(loader, model):
 
     device = next(model.parameters()).device
 
@@ -325,12 +311,9 @@ def validate(loader, model_wrapper):
     model.eval()
     for data in tqdm(loader):
         data = data.to(device)
-        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-            pred = model.module(data)
-            error, tasks_rmse, tasks_nodes = model.module.loss_rmse(pred, data.y)
-        else:
-            pred = model(data)
-            error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+
+        pred = model(data)
+        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
@@ -344,12 +327,7 @@ def validate(loader, model_wrapper):
 
 
 @torch.no_grad()
-def test(loader, model_wrapper):
-
-    if isinstance(model_wrapper, torch.nn.parallel.distributed.DistributedDataParallel):
-        model = model_wrapper.module
-    else:
-        model = model_wrapper
+def test(loader, model):
 
     device = next(model.parameters()).device
 
@@ -368,15 +346,9 @@ def test(loader, model_wrapper):
         ]
     for data in tqdm(loader):
         data = data.to(device)
-        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-            pred = model.module(data)
-        else:
-            pred = model(data)
 
-        if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-            error, tasks_rmse, tasks_nodes = model.module.loss_rmse(pred, data.y)
-        else:
-            error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+        pred = model(data)
+        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
         total_error += error.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
