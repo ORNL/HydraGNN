@@ -15,7 +15,7 @@ torch.manual_seed(0)
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input):
 
-    _, rank = get_comm_size_and_rank()
+    world_size, rank = get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -54,6 +54,9 @@ def pytest_train_model(model_type, ci_input):
         "GIN": [0.08, 0.20],
         "GAT": [0.05, 0.20],
     }
+    if world_size == 2:
+        thresholds["MFC"][1] = 0.25
+        thresholds["GAT"][1] = 0.25
     for ihead in range(len(true_values)):
         error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
         assert error_head_sum < thresholds[model_type][0], (
