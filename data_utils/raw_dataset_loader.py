@@ -134,12 +134,10 @@ class RawDataLoader:
                 for icomp in range(node_feature_dim[item]):
                     it_comp = node_feature_col[item] + icomp
                     node_feature.append(float(node_feat[it_comp].strip()))
-
             node_feature_matrix.append(node_feature)
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
-
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):

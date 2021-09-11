@@ -3,7 +3,7 @@
         "name": "unit_test",
         "format": "unit_test",
         "path": "dataset/unit_test/output_files",
-        "num_nodes": 8,
+        "num_nodes": 4,
         "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],
@@ -19,7 +19,7 @@
         "Architecture": {
             "model_type": "PNN",
             "radius": 2.0,
-            "max_neighbours": 4,
+            "max_neighbours": 3,
             "hidden_dim": 4,
             "num_conv_layers": 2,
             "output_heads": {
@@ -31,22 +31,22 @@
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [4,4]
+                    "dim_headlayers": [10,10]
                 }
             },
-            "task_weights": [1.0]
+            "task_weights": [1.0, 4.0, 4.0, 4.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["sum_x_x2_x3"],
-            "output_index": [0],
-            "type": ["graph"],
+            "output_names": ["sum_x_x2_x3","x","x2","x3"],
+            "output_index": [0,0,1,2],
+            "type": ["graph","node","node","node"],
             "denormalize_output": "False"
         },
         "Training": {
-            "num_epoch": 150,
+            "num_epoch": 200,
             "perc_train": 0.7,
-            "learning_rate": 0.02,
+            "learning_rate": 0.01,
             "batch_size": 32
         }
     }

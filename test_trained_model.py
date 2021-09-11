@@ -29,6 +29,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
+
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
@@ -50,6 +51,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         chosen_dataset_option=config["Dataset"]["name"],
         distributed_data_parallelism=run_in_parallel,
     )
+
     model = generate_model(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
         input_dim=len(
@@ -84,15 +86,21 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
                 "input_node_features"
             ]
         )
+        + "-task_weights-"
+        + "".join(
+            str(weigh) + "-"
+            for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
+        )
     )
+
     state_dict = torch.load(
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         map_location="cpu",
     )
     model.load_state_dict(state_dict)
 
-    error, true_values, predicted_values = test(
-        test_loader, model, config["NeuralNetwork"]["Architecture"]["output_dim"]
+    error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values = test(
+        test_loader, model
     )
 
-    return error, true_values, predicted_values
+    return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values
