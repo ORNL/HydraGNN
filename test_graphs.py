@@ -56,7 +56,7 @@ def pytest_train_model(model_type, ci_input):
     }
     if world_size == 2:
         thresholds["MFC"][1] = 0.25
-        thresholds["GAT"][1] = 0.25
+        thresholds["GAT"][1] = 0.30
     for ihead in range(len(true_values)):
         error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
         assert error_head_sum < thresholds[model_type][0], (
