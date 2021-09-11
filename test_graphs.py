@@ -17,9 +17,6 @@ def pytest_train_model(model_type, ci_input):
 
     _, rank = get_comm_size_and_rank()
 
-    if rank == 0:
-        deterministic_graph_data()
-
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
@@ -27,6 +24,13 @@ def pytest_train_model(model_type, ci_input):
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
+
+    if rank == 0:
+        num_nodes = config["Dataset"]["num_nodes"]
+        if num_nodes == 4:
+            deterministic_graph_data(number_unit_cell_y=1)
+        else:
+            deterministic_graph_data()
 
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
