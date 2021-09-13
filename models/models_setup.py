@@ -7,6 +7,7 @@ from .GINStack import GINStack
 from .PNAStack import PNAStack
 from .GATStack import GATStack
 from .MFCStack import MFCStack
+from .CGCNNStack import CGCNNStack
 
 from utils.utils import get_comm_size_and_rank
 from utils.print_utils import print_distributed
@@ -130,6 +131,20 @@ def generate_model(
             config_heads=config["output_heads"],
             loss_weights=config["task_weights"],
         ).to(device)
+    elif model_type == "CGCNN":
+        model = CGCNNStack(
+            input_dim=input_dim,
+            output_dim=config["output_dim"],
+            num_nodes=num_atoms,
+            num_conv_layers=config["num_conv_layers"],
+            output_type=config["output_type"],
+            config_heads=config["output_heads"],
+            loss_weights=config["task_weights"],
+        ).to(device)
+    else:
+        raise ValueError(
+            "Chosen model option not yet supported", model_type
+        )
 
     else:
         raise ValueError("Unknown model_type: {0}".format(model_type))

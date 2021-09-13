@@ -13,7 +13,8 @@ import shutil
 torch.manual_seed(0)
 
 
-@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA"])
+
+@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
@@ -86,6 +87,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         "MFC": [0.10, 0.25],
         "GIN": [0.10, 0.85],
         "GAT": [0.80, 0.85],
+        "CGCNN": [0.10, 0.20],
     }
     verbosity = 2
 
@@ -150,3 +152,4 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
     pytest_train_model(sys.argv[1], "ci.json")
+    pytest_train_model(sys.argv[1], "ci_multihead.json")
