@@ -38,6 +38,9 @@ class GATStack(Base):
         super().__init__()
 
         self.input_dim = input_dim
+        self.head_dims = output_dim
+        self.head_type = output_type
+        self.config_heads = config_heads
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.num_conv_layers = num_conv_layers
@@ -79,15 +82,71 @@ class GATStack(Base):
         )
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(self.hidden_dim))
+        self.__conv_node_features__()
         super()._multihead(
-            output_dim,
-            num_nodes,
-            output_type,
-            config_heads,
-            ilossweights_hyperp,
-            loss_weights,
-            ilossweights_nll,
+            num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
         )
+
+    def __conv_node_features__(self):
+        # convolutional layers for node level predictions
+        # two ways to implement node features from here:
+        # 1. one graph for all node features
+        # 2. one graph for one node features (currently implemented)
+        self.convs_node_hidden = ModuleList()
+        self.batch_norms_node_hidden = ModuleList()
+        self.convs_node_output = ModuleList()
+        self.batch_norms_node_output = ModuleList()
+
+        node_feature_ind = [
+            i for i, head_type in enumerate(self.head_type) if head_type == "node"
+        ]
+        if len(node_feature_ind) == 0:
+            return
+
+        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+        # In this part, each head has same number of convolutional layers, but can have different output dimension
+        self.convs_node_hidden.append(
+            GATv2Conv(
+                in_channels=self.hidden_dim,
+                out_channels=self.hidden_dim_node[0],
+                heads=self.heads,
+                negative_slope=self.negative_slope,
+                dropout=self.dropout,
+                add_self_loops=True,
+            )
+        )
+        self.batch_norms_node_hidden.append(
+            BatchNorm(self.hidden_dim_node[0] * self.heads)
+        )
+        for ilayer in range(self.num_conv_layers_node - 1):
+            self.convs_node_hidden.append(
+                GATv2Conv(
+                    in_channels=self.hidden_dim_node[ilayer] * self.heads,
+                    out_channels=self.hidden_dim_node[ilayer + 1],
+                    heads=self.heads,
+                    negative_slope=self.negative_slope,
+                    dropout=self.dropout,
+                    add_self_loops=True,
+                )
+            )
+            self.batch_norms_node_hidden.append(
+                BatchNorm(self.hidden_dim_node[ilayer + 1] * self.heads)
+            )
+
+        for ihead in node_feature_ind:
+            self.convs_node_output.append(
+                GATv2Conv(
+                    in_channels=self.hidden_dim_node[-1] * self.heads,
+                    out_channels=self.head_dims[ihead],
+                    heads=self.heads,
+                    negative_slope=self.negative_slope,
+                    dropout=self.dropout,
+                    add_self_loops=True,
+                    concat=False,
+                )
+            )
+            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def __str__(self):
         return "GATStack"

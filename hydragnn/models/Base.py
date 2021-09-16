@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool
 from torch.nn import GaussianNLLLoss
 import sys
+from .mlp_node_feature import mlp_node_feature
 
 
 class Base(torch.nn.Module):
@@ -24,10 +25,7 @@ class Base(torch.nn.Module):
 
     def _multihead(
         self,
-        output_dim: list,
         num_nodes: int,
-        output_type: list,
-        config_heads: {},
         ilossweights_hyperp: int,
         loss_weights: list,
         ilossweights_nll: int,
@@ -38,20 +36,19 @@ class Base(torch.nn.Module):
         ##One head represent one variable
         ##Head can have different sizes, head_dims;
         ###e.g., 1 for energy, 32 for charge density, 32 or 32*3 for magnetic moments
-        self.num_heads = len(output_dim)
-        self.head_dims = output_dim
-        self.head_type = output_type
+        self.num_heads = len(self.head_dims)
         self.num_nodes = num_nodes
-        self.head_dim_sum = sum(self.head_dims)
+
+        # self.head_dim_sum = sum(self.head_dims) #need to be improved due to num_nodes
 
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
-        if "graph" in config_heads:
+        if "graph" in self.config_heads:
             denselayers = []
-            dim_sharedlayers = config_heads["graph"]["dim_sharedlayers"]
+            dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
             denselayers.append(ReLU())
             denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
-            for ishare in range(config_heads["graph"]["num_sharedlayers"] - 1):
+            for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
                 denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
                 denselayers.append(ReLU())
             self.graph_shared = Sequential(*denselayers)
@@ -75,11 +72,12 @@ class Base(torch.nn.Module):
                 self.loss_weights = loss_weights
             weightabssum = sum(abs(number) for number in self.loss_weights)
             self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
+        inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
             if self.head_type[ihead] == "graph":
-                num_head_hidden = config_heads["graph"]["num_headlayers"]
-                dim_head_hidden = config_heads["graph"]["dim_headlayers"]
+                num_head_hidden = self.config_heads["graph"]["num_headlayers"]
+                dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
                 denselayers = []
                 denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                 denselayers.append(ReLU())
@@ -94,45 +92,39 @@ class Base(torch.nn.Module):
                         self.head_dims[ihead] + ilossweights_nll * 1,
                     )
                 )
-                mlp = Sequential(*denselayers)
+                head_NN = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                mlp = ModuleList()
-                for inode in range(self.num_nodes):
-                    num_head_hidden = config_heads["node"]["num_headlayers"]
-                    dim_head_hidden = config_heads["node"]["dim_headlayers"]
-                    denselayers = []
-                    denselayers.append(Linear(self.hidden_dim, dim_head_hidden[0]))
-                    denselayers.append(ReLU())
-                    for ilayer in range(num_head_hidden - 1):
-                        denselayers.append(
-                            Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
-                        )
-                        denselayers.append(ReLU())
-                    denselayers.append(
-                        Linear(dim_head_hidden[-1], 1 + ilossweights_nll * 1)
+                self.node_NN_type = self.config_heads["node"]["type"]
+                head_NN = ModuleList()
+                if self.node_NN_type == "mlp":
+                    head_NN = mlp_node_feature(
+                        self.hidden_dim,
+                        self.head_dims[ihead],
+                        self.num_nodes,
+                        self.hidden_dim_node,
                     )
-                    mlp.append(Sequential(*denselayers))
+                elif self.node_NN_type == "conv":
+                    for conv, batch_norm in zip(
+                        self.convs_node_hidden, self.batch_norms_node_hidden
+                    ):
+                        head_NN.append(conv)
+                        head_NN.append(batch_norm)
+                    head_NN.append(self.convs_node_output[inode_feature])
+                    head_NN.append(self.batch_norms_node_output[inode_feature])
+                    inode_feature += 1
+                else:
+                    raise ValueError(
+                        "Unknown head NN structure for node features"
+                        + self.node_NN_type
+                        + "; currently only support 'mlp' (for constant num_nodes) or 'conv'"
+                    )
             else:
                 raise ValueError(
                     "Unknown head type"
                     + self.head_type[ihead]
                     + "; currently only support 'graph' or 'node'"
                 )
-            self.heads.append(mlp)
-
-    def node_features_reshape(self, x, batch):
-        """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
-        num_features = x.shape[1]
-        batch_size = batch.max() + 1
-        out = torch.zeros(
-            (batch_size, num_features, self.num_nodes),
-            dtype=x.dtype,
-            device=x.device,
-        )
-        for inode in range(self.num_nodes):
-            inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
-            out[:, :, inode] = x[inode_index, :]
-        return out
+            self.heads.append(head_NN)
 
     def forward(self, data):
         x, edge_index, batch = (
@@ -146,91 +138,65 @@ class Base(torch.nn.Module):
         #### multi-head decoder part####
         # shared dense layers for graph level output
         x_graph = global_mean_pool(x, batch)
-        # node features for node level output
-        x_nodes = self.node_features_reshape(x, batch)
-        outputs = torch.zeros(
-            (x_nodes.shape[0], self.head_dim_sum), dtype=x.dtype, device=x.device
-        )
-        istart = 0
+        outputs = []
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads, self.head_type
         ):
             if type_head == "graph":
-                x_graph = self.graph_shared(x_graph)
-                outputs[:, istart : (istart + head_dim)] = headloc(x_graph)
+                x_graph_head = x_graph.clone()
+                x_graph_head = self.graph_shared(x_graph_head)
+                outputs.append(headloc(x_graph_head))
             else:
-                for inode in range(self.num_nodes):
-                    outputs[:, istart + inode] = headloc[inode](
-                        x_nodes[:, :, inode]
-                    ).squeeze()
-            istart += head_dim
+                x_node = x.clone()
+                if self.node_NN_type == "conv":
+                    for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
+                        x_node = F.relu(
+                            batch_norm(conv(x=x_node, edge_index=edge_index))
+                        )
+                else:
+                    x_node = headloc(x=x_node, batch=batch)
+                outputs.append(x_node)
         return outputs
 
-    def loss(self, pred, value):
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return F.l1_loss(pred, value)
-
-    def loss_rmse(self, pred, value):
-
+    def loss_rmse(self, pred, value, head_index):
         if self.ilossweights_nll == 1:
-            return self.loss_nll(pred, value)
+            return self.loss_nll(pred, value, head_index)
         elif self.ilossweights_hyperp == 1:
-            return self.loss_hpweighted(pred, value)
+            return self.loss_hpweighted(pred, value, head_index)
 
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-        return torch.sqrt(F.mse_loss(pred, value)), [], []
-
-    def loss_nll(self, pred, value):
+    def loss_nll(self, pred, value, head_index):
         # negative log likelihood loss
         # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape[0] != value_shape[0]:
-            value = torch.reshape(value, (pred_shape[0], -1))
-            if value.shape[1] != pred.shape[1] - self.num_heads:
-                raise ValueError(
-                    "expected feature dims="
-                    + str(pred.shape[1] - self.num_heads)
-                    + "; actual="
-                    + str(value.shape[1])
-                )
-
+        # fixme
+        raise ValueError("loss_nll() not ready yet")
         nll_loss = 0
         tasks_rmseloss = []
         loss = GaussianNLLLoss()
         for ihead in range(self.num_heads):
-            isum = sum(self.head_dims[: ihead + 1])
-            ivar = isum + (ihead + 1) * 1 - 1
-
-            head_var = torch.exp(pred[:, ivar])
-            head_pre = pred[:, ivar - self.head_dims[ihead] : ivar]
-            head_val = value[:, isum - self.head_dims[ihead] : isum]
+            head_pre = pred[ihead][:, :-1]
+            pred_shape = head_pre.shape
+            head_val = value[head_index[ihead]]
+            value_shape = head_val.shape
+            if pred_shape != value_shape:
+                head_val = torch.reshape(head_val, pred_shape)
+            head_var = torch.exp(pred[ihead][:, -1])
             nll_loss += loss(head_pre, head_val, head_var)
             tasks_rmseloss.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
 
         return nll_loss, tasks_rmseloss, []
 
-    def loss_hpweighted(self, pred, value):
+    def loss_hpweighted(self, pred, value, head_index):
         # weights for difficult tasks as hyper-parameters
-        pred_shape = pred.shape
-        value_shape = value.shape
-        if pred_shape != value_shape:
-            value = torch.reshape(value, pred_shape)
-
         tot_loss = 0
         tasks_rmseloss = []
         tasks_nodes = []
         for ihead in range(self.num_heads):
-            isum = sum(self.head_dims[: ihead + 1])
-
-            head_pre = pred[:, isum - self.head_dims[ihead] : isum]
-            head_val = value[:, isum - self.head_dims[ihead] : isum]
+            head_pre = pred[ihead]
+            pred_shape = head_pre.shape
+            head_val = value[head_index[ihead]]
+            value_shape = head_val.shape
+            if pred_shape != value_shape:
+                head_val = torch.reshape(head_val, pred_shape)
 
             tot_loss += (
                 torch.sqrt(F.mse_loss(head_pre, head_val)) * self.loss_weights[ihead]

@@ -54,14 +54,19 @@ def train_validate_test(
     # preparing for results visualization
     ## collecting node feature
     node_feature = []
-    for data in test_loader.dataset:
-        node_feature.append(data.x)
+    nodes_num_list = []
+    for data in test_loader:
+        node_feature.extend(data.x.tolist())
+        nodes_num_list.extend(data.num_nodes_list.tolist())
+
     visualizer = Visualizer(
         model_with_config_name,
         node_feature=node_feature,
         num_heads=model.num_heads,
         head_dims=model.head_dims,
+        num_nodes=nodes_num_list,
     )
+    visualizer.num_nodes_plot()
 
     if plot_init_solution:  # visualizing of initial conditions
         test_rmse = test(test_loader, model, verbosity)
@@ -125,7 +130,7 @@ def train_validate_test(
     )
 
     ##output predictions with unit/not normalized
-    if config["Variables_of_interest"]["denormalize_output"] == "True":
+    if config["Variables_of_interest"]["denormalize_output"]:
         true_values, predicted_values = output_denormalize(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
@@ -157,8 +162,24 @@ def train_validate_test(
     )
 
 
-def train(loader, model, opt, verbosity):
+def find_head_index_for_true(model, data):
+    batch_size = data.batch.max() + 1
+    y_loc = data.y_loc
+    # head size for each sample
+    total_size = y_loc[:, -1]
+    head_index = []
+    for ihead in range(model.num_heads):
+        _head_ind = []
+        for isample in range(batch_size):
+            istart = sum(total_size[:isample]) + y_loc[isample, ihead]
+            iend = sum(total_size[:isample]) + y_loc[isample, ihead + 1]
+            [_head_ind.append(ind) for ind in range(istart, iend)]
+        head_index.append(_head_ind)
 
+    return head_index
+
+
+def train(loader, model, opt, verbosity):
     device = next(model.parameters()).device
     tasks_error = np.zeros(model.num_heads)
     tasks_noderr = np.zeros(model.num_heads)
@@ -169,9 +190,10 @@ def train(loader, model, opt, verbosity):
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
         opt.zero_grad()
+        head_index = find_head_index_for_true(model, data)
 
         pred = model(data)
-        loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+        loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
 
         loss.backward()
         opt.step()
@@ -197,9 +219,10 @@ def validate(loader, model, verbosity):
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
+        head_index = find_head_index_for_true(model, data)
 
         pred = model(data)
-        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
@@ -232,23 +255,24 @@ def test(loader, model, verbosity):
         ]
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
+        head_index = find_head_index_for_true(model, data)
 
         pred = model(data)
-        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y)
+        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
             tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
-
-        ytrue = torch.reshape(data.y, (-1, sum(model.head_dims)))
+        ytrue = data.y
+        istart = 0
         for ihead in range(model.num_heads):
-            isum = sum(model.head_dims[: ihead + 1])
-            true_values[ihead].extend(
-                ytrue[:, isum - model.head_dims[ihead] : isum].tolist()
-            )
-            predicted_values[ihead].extend(
-                pred[:, IImean[isum - model.head_dims[ihead] : isum]].tolist()
-            )
+            head_pre = pred[ihead]
+            pred_shape = head_pre.shape
+            iend = istart + pred_shape[0] * pred_shape[1]
+            head_val = ytrue[head_index[ihead]]
+            istart = iend
+            true_values[ihead].extend(head_val.tolist())
+            predicted_values[ihead].extend(pred[ihead].tolist())
 
     return (
         total_error / len(loader.dataset),

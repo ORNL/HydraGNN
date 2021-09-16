@@ -156,6 +156,7 @@ class RawDataLoader:
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
+        data_object.num_nodes_list = data_object.pos.shape[0]
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):
@@ -178,15 +179,14 @@ class RawDataLoader:
 
     def __normalize_dataset(self):
         """Performs the normalization on Data objects and returns the normalized dataset."""
-        num_of_nodes = len(self.dataset_list[0][0].x)
         num_node_features = self.dataset_list[0][0].x.shape[1]
         num_graph_features = len(self.dataset_list[0][0].y)
 
         self.minmax_graph_feature = np.full((2, num_graph_features), np.inf)
         # [0,...]:minimum values; [1,...]: maximum values
-        self.minmax_node_feature = np.full((2, num_of_nodes, num_node_features), np.inf)
+        self.minmax_node_feature = np.full((2, num_node_features), np.inf)
         self.minmax_graph_feature[1, :] *= -1
-        self.minmax_node_feature[1, :, :] *= -1
+        self.minmax_node_feature[1, :] *= -1
         for dataset in self.dataset_list:
             for data in dataset:
                 # find maximum and minimum values for graph level features
@@ -199,13 +199,14 @@ class RawDataLoader:
                     )
                 # find maximum and minimum values for node level features
                 for ifeat in range(num_node_features):
-                    self.minmax_node_feature[0, :, ifeat] = np.minimum(
-                        data.x[:, ifeat].numpy(), self.minmax_node_feature[0, :, ifeat]
+                    self.minmax_node_feature[0, ifeat] = np.minimum(
+                        np.amin(data.x[:, ifeat].numpy()),
+                        self.minmax_node_feature[0, ifeat],
                     )
-                    self.minmax_node_feature[1, :, ifeat] = np.maximum(
-                        data.x[:, ifeat].numpy(), self.minmax_node_feature[1, :, ifeat]
+                    self.minmax_node_feature[1, ifeat] = np.maximum(
+                        np.amax(data.x[:, ifeat].numpy()),
+                        self.minmax_node_feature[1, ifeat],
                     )
-
         for dataset in self.dataset_list:
             for data in dataset:
                 for ifeat in range(num_graph_features):
@@ -218,9 +219,9 @@ class RawDataLoader:
                     )
                 for ifeat in range(num_node_features):
                     data.x[:, ifeat] = tensor_divide(
-                        (data.x[:, ifeat] - self.minmax_node_feature[0, :, ifeat]),
+                        (data.x[:, ifeat] - self.minmax_node_feature[0, ifeat]),
                         (
-                            self.minmax_node_feature[1, :, ifeat]
-                            - self.minmax_node_feature[0, :, ifeat]
+                            self.minmax_node_feature[1, ifeat]
+                            - self.minmax_node_feature[0, ifeat]
                         ),
                     )

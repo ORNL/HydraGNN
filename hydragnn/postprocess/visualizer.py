@@ -61,7 +61,12 @@ class Visualizer:
     """
 
     def __init__(
-        self, model_with_config_name: str, node_feature: [], num_heads=1, head_dims=[1]
+        self,
+        model_with_config_name: str,
+        node_feature: [],
+        num_nodes: [],
+        num_heads=1,
+        head_dims=[1],
     ):
         self.true_values = []
         self.predicted_values = []
@@ -70,6 +75,7 @@ class Visualizer:
         self.num_nodes = len(node_feature[0])
         self.num_heads = num_heads
         self.head_dims = head_dims
+        self.num_nodes_list = num_nodes
 
     def __hist2d_contour(self, data1, data2):
         hist2d_pasr, xedge_pasr, yedge_pasr = np.histogram2d(
@@ -618,7 +624,7 @@ class Visualizer:
     ):
         """Creates scatter plots for all head predictions."""
         for ihead in range(self.num_heads):
-            if self.head_dims[ihead] // self.num_nodes == 3:
+            if self.head_dims[ihead] == 3:
                 # vector output
                 self.create_scatter_plot_nodes_vec(
                     output_names[ihead],
@@ -649,3 +655,13 @@ class Visualizer:
                 predicted_values[ihead],
                 save_plot=True,
             )
+
+    def num_nodes_plot(
+        self,
+    ):
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        ax.hist(self.num_nodes_list)
+        ax.set_title("Histogram of graph size in test set")
+        ax.set_xlabel("number of nodes")
+        fig.savefig(f"./logs/{self.model_with_config_name}/num_nodes.png")
+        plt.close()

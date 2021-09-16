@@ -66,13 +66,12 @@ class SerializedDataLoader:
             _ = pickle.load(f)
             dataset = pickle.load(f)
 
-        edge_index, edge_distances = self.__compute_edges(
-            data=dataset[0],
-            radius=config["Architecture"]["radius"],
-            max_num_node_neighbours=config["Architecture"]["max_neighbours"],
-        )
-
         for data in dataset:
+            edge_index, edge_distances = self.__compute_edges(
+                data=data,
+                radius=config["Architecture"]["radius"],
+                max_num_node_neighbours=config["Architecture"]["max_neighbours"],
+            )
             data.edge_index = edge_index
             data.edge_attr = edge_distances
             self.__update_predicted_values(
@@ -117,6 +116,7 @@ class SerializedDataLoader:
             A Data object representing a structure that has atoms.
         """
         output_feature = []
+        data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64)
         for item in range(len(type)):
             if type[item] == "graph":
                 feat_ = torch.reshape(data.y[index[item]], (1, 1))
@@ -125,6 +125,9 @@ class SerializedDataLoader:
             else:
                 raise ValueError("Unknown output type", type[item])
             output_feature.append(feat_)
+            data.y_loc[0, item + 1] = (
+                data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
+            )
         data.y = torch.cat(output_feature, 0)
 
     def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):

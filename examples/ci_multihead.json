@@ -9,6 +9,7 @@
             "raw": {"total": "dataset/unit_test_multihead"}
         },
         "num_nodes": 4,
+        "variable_size": true,
         "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],
@@ -36,7 +37,8 @@
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10]
+                    "dim_headlayers": [10,10],
+                    "type": "conv"
                 }
             },
             "task_weights": [1.0, 4.0, 4.0, 4.0]
@@ -46,7 +48,7 @@
             "output_names": ["sum_x_x2_x3","x","x2","x3"],
             "output_index": [0,0,1,2],
             "type": ["graph","node","node","node"],
-            "denormalize_output": "False"
+            "denormalize_output": false
         },
         "Training": {
             "num_epoch": 200,
