@@ -56,10 +56,7 @@ def _(config: dict):
         if output_type[item] == "graph":
             dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
         elif output_type[item] == "node":
-            dim_item = (
-                config["Dataset"]["node_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_nodes"]
-            )
+            dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
             raise ValueError("Unknown output type", output_type[item])
         config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)

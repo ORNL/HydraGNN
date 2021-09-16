@@ -36,15 +36,77 @@ class GINStack(Base):
     ):
         super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
+        self.__conv_node_features__()
         super()._multihead(
-            output_dim,
-            num_nodes,
-            output_type,
-            config_heads,
-            ilossweights_hyperp,
-            loss_weights,
-            ilossweights_nll,
+            num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
         )
+
+    def __conv_node_features__(self):
+        # convolutional layers for node level predictions
+        # two ways to implement node features from here:
+        # 1. one graph for all node features
+        # 2. one graph for one node features (currently implemented)
+        self.convs_node_hidden = ModuleList()
+        self.batch_norms_node_hidden = ModuleList()
+        self.convs_node_output = ModuleList()
+        self.batch_norms_node_output = ModuleList()
+
+        node_feature_ind = [
+            i for i, head_type in enumerate(self.head_type) if head_type == "node"
+        ]
+        if len(node_feature_ind) == 0:
+            return
+
+        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+        # In this part, each head has same number of convolutional layers, but can have different output dimension
+        self.convs_node_hidden.append(
+            GINConv(
+                nn.Sequential(
+                    nn.Linear(self.hidden_dim, self.hidden_dim_node[0]),
+                    nn.ReLU(),
+                    nn.Linear(self.hidden_dim_node[0], self.hidden_dim_node[0]),
+                ),
+                eps=100.0,
+                train_eps=True,
+            )
+        )
+        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
+        for ilayer in range(self.num_conv_layers_node - 1):
+            self.convs_node_hidden.append(
+                GINConv(
+                    nn.Sequential(
+                        nn.Linear(
+                            self.hidden_dim_node[ilayer],
+                            self.hidden_dim_node[ilayer + 1],
+                        ),
+                        nn.ReLU(),
+                        nn.Linear(
+                            self.hidden_dim_node[ilayer + 1],
+                            self.hidden_dim_node[ilayer + 1],
+                        ),
+                    ),
+                    eps=100.0,
+                    train_eps=True,
+                )
+            )
+            self.batch_norms_node_hidden.append(
+                BatchNorm(self.hidden_dim_node[ilayer + 1])
+            )
+
+        for ihead in node_feature_ind:
+            self.convs_node_output.append(
+                GINConv(
+                    nn.Sequential(
+                        nn.Linear(self.hidden_dim_node[-1], self.head_dims[ihead]),
+                        nn.ReLU(),
+                        nn.Linear(self.head_dims[ihead], self.head_dims[ihead]),
+                    ),
+                    eps=100.0,
+                    train_eps=True,
+                )
+            )
+            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def get_conv(self, input_dim, output_dim):
         return GINConv(

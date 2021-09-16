@@ -7,6 +7,7 @@
         "path": {"raw": {"total": "FePt"}},
         "format": "LSMS",
         "num_nodes": 32,
+        "variable_size": false,
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],
             "dim": [1,1,1],
@@ -44,7 +45,7 @@
             "output_names": ["free_energy","charge_density", "magnetic_moment"],
             "output_index": [0, 1, 2],
             "type": ["graph","node","node"],
-            "denormalize_output": "True"
+            "denormalize_output": true
         },
         "Training": {
             "num_epoch": 20,

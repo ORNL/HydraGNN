@@ -56,6 +56,7 @@ def _(config: dict):
         config=config,
         chosen_dataset_option=config["Dataset"]["name"],
     )
+    graph_size_variable = config["Dataset"]["variable_size"]
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
@@ -64,10 +65,18 @@ def _(config: dict):
         if output_type[item] == "graph":
             dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
         elif output_type[item] == "node":
-            dim_item = (
-                config["Dataset"]["node_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_nodes"]
-            )
+            if graph_size_variable:
+                if (
+                    config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
+                        "type"
+                    ]
+                    == "mlp"
+                ):
+                    raise ValueError(
+                        "mlp type of node feature prediction for variable graph size not yet supported",
+                        graph_size_variable,
+                    )
+            dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
             raise ValueError("Unknown output type", output_type[item])
         config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
@@ -75,7 +84,6 @@ def _(config: dict):
     if (
         "denormalize_output" in config["NeuralNetwork"]["Variables_of_interest"]
         and config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]
-        == "True"
     ):
         if "total" in config["Dataset"]["path"]["raw"].keys():
             dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
@@ -109,7 +117,7 @@ def _(config: dict):
             else:
                 raise ValueError("Unknown output type", output_type[item])
     else:
-        config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "False"
+        config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = False
     config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
         "Variables_of_interest"
     ]["type"]
