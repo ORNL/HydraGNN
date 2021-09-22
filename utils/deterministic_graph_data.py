@@ -3,14 +3,16 @@ import shutil
 import math
 import torch
 import numpy
+from sklearn.neighbors import KNeighborsRegressor
 
 
 def deterministic_graph_data(
-    number_configurations: int = 500,
+    number_configurations: int = 1000,
     number_unit_cell_x: int = 2,
     number_unit_cell_y: int = 2,
     number_unit_cell_z: int = 1,
-    num_clusters: int = 3,
+    number_clusters: int = 3,
+    number_neighbors: int = 2,
 ):
 
     original_path = "output_files"
@@ -45,8 +47,10 @@ def deterministic_graph_data(
 
     ###############################################################################################
 
-    number_atoms = 2 * number_unit_cell_x * number_unit_cell_y * number_unit_cell_z
-    positions = torch.zeros(number_atoms, 3)
+    number_nodes = 2 * number_unit_cell_x * number_unit_cell_y * number_unit_cell_z
+    positions = torch.zeros(number_nodes, 3)
+
+    assert(number_neighbors < number_nodes, "Number of neighbors exceeds total number of nodes in the graph")
 
     # We assume that the unit cell is Body Center Cubic (BCC)
     count_pos = 0
@@ -63,14 +67,21 @@ def deterministic_graph_data(
 
     for configuration in range(0, number_configurations):
 
-        node_ids = torch.tensor([int(i) for i in range(0, number_atoms)]).reshape(
-            (number_atoms, 1)
+        node_ids = torch.tensor([int(i) for i in range(0, number_nodes)]).reshape(
+            (number_nodes, 1)
         )
-        cluster_ids_x = torch.randint(0, num_clusters, (number_atoms, 1))
+        cluster_ids_x = torch.randint(0, number_clusters, (number_nodes, 1))
 
         node_feature = cluster_ids_x
-        cluster_ids_x_square = cluster_ids_x ** 2
-        cluster_ids_x_cube = cluster_ids_x ** 3
+        cluster_ids_x_square = node_feature ** 2
+        cluster_ids_x_cube = node_feature ** 3
+
+	# We use a K neraest neighbor model to average nodal features and simulate a message passing between neighboring nodes
+        knn = KNeighborsRegressor(number_neighbors)
+        knn.fit(positions, node_feature)
+        node_feature = torch.Tensor(knn.predict(positions))
+        cluster_ids_x_square = node_feature ** 2
+        cluster_ids_x_cube = node_feature ** 3
 
         updated_table = torch.cat(
             (
@@ -96,7 +107,7 @@ def deterministic_graph_data(
         file = open(original_path + "/output" + str(configuration) + ".txt", "a")
         file.write(numpy_string_total_value)
 
-        for index in range(0, number_atoms):
+        for index in range(0, number_nodes):
             numpy_row = numpy_updated_table[index, :]
             numpy_string_row = numpy.array2string(
                 numpy_row, precision=2, separator="\t", suppress_small=True
