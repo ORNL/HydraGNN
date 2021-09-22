@@ -50,7 +50,10 @@ def deterministic_graph_data(
     number_nodes = 2 * number_unit_cell_x * number_unit_cell_y * number_unit_cell_z
     positions = torch.zeros(number_nodes, 3)
 
-    assert(number_neighbors < number_nodes, "Number of neighbors exceeds total number of nodes in the graph")
+    assert (
+        number_neighbors < number_nodes,
+        "Number of neighbors exceeds total number of nodes in the graph",
+    )
 
     # We assume that the unit cell is Body Center Cubic (BCC)
     count_pos = 0
@@ -76,7 +79,7 @@ def deterministic_graph_data(
         cluster_ids_x_square = node_feature ** 2
         cluster_ids_x_cube = node_feature ** 3
 
-	# We use a K neraest neighbor model to average nodal features and simulate a message passing between neighboring nodes
+        # We use a K neraest neighbor model to average nodal features and simulate a message passing between neighboring nodes
         knn = KNeighborsRegressor(number_neighbors)
         knn.fit(positions, node_feature)
         node_feature = torch.Tensor(knn.predict(positions))
