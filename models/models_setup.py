@@ -3,10 +3,10 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
-from models.GINStack import GINStack
-from models.PNAStack import PNAStack
-from models.GATStack import GATStack
-from models.MFCStack import MFCStack
+from .GINStack import GINStack
+from .PNAStack import PNAStack
+from .GATStack import GATStack
+from .MFCStack import MFCStack
 
 from utils.utils import get_comm_size_and_rank
 

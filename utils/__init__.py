@@ -1,4 +1,3 @@
-from .models_setup import generate_model
 from .deterministic_graph_data import deterministic_graph_data
 from .utils import (
     combine_and_split_datasets,

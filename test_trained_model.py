@@ -7,7 +7,7 @@ from utils.utils import (
     test,
     setup_ddp,
 )
-from utils.models_setup import generate_model
+from models.models_setup import generate_model
 from data_utils.dataset_descriptors import (
     Dataset,
 )
