@@ -11,7 +11,7 @@ import torch
 torch.manual_seed(0)
 
 
-@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNN"])
+@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input):
 
@@ -49,7 +49,7 @@ def pytest_train_model(model_type, ci_input):
 
     # Set RMSE and sample error thresholds
     thresholds = {
-        "PNN": [0.03, 0.10],
+        "PNA": [0.03, 0.10],
         "MFC": [0.05, 0.20],
         "GIN": [0.05, 0.20],
         "GAT": [0.05, 0.25],

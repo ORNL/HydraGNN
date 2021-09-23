@@ -10,7 +10,7 @@ from utils.utils import (
     setup_ddp,
     get_comm_size_and_rank,
 )
-from utils.models_setup import generate_model, get_device
+from models.models_setup import generate_model, get_device
 from data_utils.dataset_descriptors import (
     AtomFeatures,
     Dataset,

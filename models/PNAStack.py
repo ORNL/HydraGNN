@@ -5,7 +5,7 @@ from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
 from .Base import Base
 
 
-class PNNStack(Base):
+class PNAStack(Base):
     def __init__(
         self,
         deg: torch.Tensor,
@@ -75,4 +75,4 @@ class PNNStack(Base):
         )
 
     def __str__(self):
-        return "PNNStack"
+        return "PNAStack"

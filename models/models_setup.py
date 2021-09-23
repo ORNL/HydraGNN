@@ -3,10 +3,10 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
-from models.GINStack import GINStack
-from models.PNNStack import PNNStack
-from models.GATStack import GATStack
-from models.MFCStack import MFCStack
+from .GINStack import GINStack
+from .PNAStack import PNAStack
+from .GATStack import GATStack
+from .MFCStack import MFCStack
 
 from utils.utils import get_comm_size_and_rank
 
@@ -77,12 +77,12 @@ def generate_model(
             loss_weights=config["task_weights"],
         ).to(device)
 
-    elif model_type == "PNN":
+    elif model_type == "PNA":
         deg = torch.zeros(config["max_neighbours"] + 1, dtype=torch.long)
         for data in dataset:
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())
-        model = PNNStack(
+        model = PNAStack(
             deg=deg,
             input_dim=input_dim,
             output_dim=config["output_dim"],
@@ -128,5 +128,8 @@ def generate_model(
             config_heads=config["output_heads"],
             loss_weights=config["task_weights"],
         ).to(device)
+
+    else:
+        raise ValueError("Unknown model_type: {0}".format(model_type))
 
     return model

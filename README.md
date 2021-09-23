@@ -55,9 +55,10 @@ Detailed instructions are available on the
 
 GCNN uses a JSON configuration file (examples in `examples/`):
 
-Options (WORK IN PROGRESS):
+There are many options for GCNN; the dataset and model type are particularly
+important:
  - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms`
- - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNN`, `MFC`, `GIN`, `GAT`
+ - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNA`, `MFC`, `GIN`, `GAT`
 
 ## Contributing
 
