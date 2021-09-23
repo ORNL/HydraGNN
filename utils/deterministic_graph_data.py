@@ -51,9 +51,8 @@ def deterministic_graph_data(
     positions = torch.zeros(number_nodes, 3)
 
     assert (
-        number_neighbors < number_nodes,
-        "Number of neighbors exceeds total number of nodes in the graph",
-    )
+        number_neighbors < number_nodes
+    ), "Number of neighbors exceeds total number of nodes in the graph"
 
     # We assume that the unit cell is Body Center Cubic (BCC)
     count_pos = 0
