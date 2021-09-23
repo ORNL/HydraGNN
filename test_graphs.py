@@ -13,24 +13,30 @@ torch.manual_seed(0)
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input):
+def pytest_train_model(model_type, ci_input, overwrite_data = False):
 
     world_size, rank = get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
-    config_file = "./examples/" + ci_input
+    config_file = os.path.join("examples", ci_input)
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
 
     if rank == 0:
+        test_path = config["Dataset"]["path"]
+        if overwrite_data:
+            shutil.rmtree(test_path)
+        if not os.path.exists(test_path):
+            os.makedirs(test_path)
+
         num_nodes = config["Dataset"]["num_nodes"]
         if num_nodes == 4:
-            deterministic_graph_data(number_unit_cell_y=1)
+            deterministic_graph_data(test_path, number_unit_cell_y=1)
         else:
-            deterministic_graph_data()
+            deterministic_graph_data(test_path)
 
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type

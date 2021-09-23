@@ -7,6 +7,7 @@ from sklearn.neighbors import KNeighborsRegressor
 
 
 def deterministic_graph_data(
+    path: str,
     number_configurations: int = 500,
     number_unit_cell_x: int = 2,
     number_unit_cell_y: int = 2,
@@ -14,12 +15,6 @@ def deterministic_graph_data(
     number_clusters: int = 3,
     number_neighbors: int = 2,
 ):
-
-    original_path = "output_files"
-    if os.path.exists(original_path):
-        shutil.rmtree(original_path)
-    os.mkdir(original_path)
-
     ###############################################################################################
     ###################################   STRUCTURE OF THE DATA  ##################################
     ###############################################################################################
@@ -106,21 +101,15 @@ def deterministic_graph_data(
         numpy_total_value = total_value.detach().numpy()
         numpy_string_total_value = numpy.array2string(numpy_total_value)
 
-        file = open(original_path + "/output" + str(configuration) + ".txt", "a")
-        file.write(numpy_string_total_value)
+        filetxt = numpy_string_total_value
 
         for index in range(0, number_nodes):
             numpy_row = numpy_updated_table[index, :]
             numpy_string_row = numpy.array2string(
                 numpy_row, precision=2, separator="\t", suppress_small=True
             )
-            file.write("\n")
-            file.write(numpy_string_row.lstrip("[").rstrip("]"))
+            filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
-        file.close()
-
-    final_path = "./dataset/unit_test"
-    if os.path.isdir(final_path):
-        shutil.rmtree(final_path)
-    os.makedirs(final_path)
-    _ = shutil.move(original_path, final_path, copy_function=shutil.copytree)
+        filename = os.path.join(path, "output" + str(configuration) + ".txt")
+        with open(filename, "w") as f:
+            f.write(filetxt)
