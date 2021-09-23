@@ -52,7 +52,7 @@ def pytest_train_model(model_type, ci_input):
         "PNN": [0.03, 0.10],
         "MFC": [0.05, 0.20],
         "GIN": [0.05, 0.20],
-        "GAT": [0.05, 0.20],
+        "GAT": [0.05, 0.25],
     }
     if world_size == 2:
         thresholds["MFC"][1] = 0.25
