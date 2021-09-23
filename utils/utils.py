@@ -4,7 +4,7 @@ from tqdm import tqdm
 
 import torch
 import torch.distributed as dist
-from torch_geometric.data import DataLoader
+from torch_geometric.loader import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from data_utils.serialized_dataset_loader import (
