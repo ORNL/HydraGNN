@@ -13,7 +13,7 @@ torch.manual_seed(0)
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input, overwrite_data = False):
+def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
     world_size, rank = get_comm_size_and_rank()
 
