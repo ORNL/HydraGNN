@@ -129,4 +129,7 @@ def generate_model(
             loss_weights=config["task_weights"],
         ).to(device)
 
+    else:
+        raise ValueError("Unknown model_type: {0}".format(model_type))
+
     return model
