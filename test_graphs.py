@@ -49,14 +49,15 @@ def pytest_train_model(model_type, ci_input):
 
     # Set RMSE and sample error thresholds
     thresholds = {
-        "PNN": [0.02, 0.10],
+        "PNN": [0.03, 0.10],
         "MFC": [0.05, 0.20],
-        "GIN": [0.08, 0.20],
+        "GIN": [0.05, 0.20],
         "GAT": [0.05, 0.20],
     }
     if world_size == 2:
         thresholds["MFC"][1] = 0.25
-        thresholds["GAT"][1] = 0.30
+        thresholds["GAT"][0] = 0.10
+        thresholds["GAT"][1] = 0.80
     for ihead in range(len(true_values)):
         error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
         assert error_head_sum < thresholds[model_type][0], (
