@@ -7,7 +7,7 @@ from sklearn.neighbors import KNeighborsRegressor
 
 
 def deterministic_graph_data(
-    number_configurations: int = 1000,
+    number_configurations: int = 500,
     number_unit_cell_x: int = 2,
     number_unit_cell_y: int = 2,
     number_unit_cell_z: int = 1,
