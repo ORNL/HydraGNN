@@ -76,6 +76,7 @@ def get_raw_comm_size_and_rank():
 
     return int(world_size), int(world_rank)
 
+
 def get_comm_size_and_rank():
     world_size = None
     world_rank = 0
