@@ -56,7 +56,7 @@ def parse_slurm_nodelist(nodelist):
     return nlist
 
 
-def get_comm_size_and_rank():
+def get_raw_comm_size_and_rank():
     world_size = None
     world_rank = 0
 
@@ -76,6 +76,18 @@ def get_comm_size_and_rank():
 
     return int(world_size), int(world_rank)
 
+def get_comm_size_and_rank():
+    world_size = None
+    world_rank = 0
+
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+        world_rank = dist.get_rank()
+    else:
+        world_size = 1
+
+    return int(world_size), int(world_rank)
+
 
 def setup_ddp():
 
@@ -88,7 +100,7 @@ def setup_ddp():
     else:
         raise RuntimeError("No parallel backends available")
 
-    world_size, world_rank = get_comm_size_and_rank()
+    world_size, world_rank = get_raw_comm_size_and_rank()
 
     ## Default setting
     master_addr = "127.0.0.1"
