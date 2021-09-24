@@ -27,17 +27,18 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         config = json.load(f)
 
     if rank == 0:
-        test_path = config["Dataset"]["path"]
+        data_path = config["Dataset"]["path"]["raw"]["total"]
         if overwrite_data:
-            shutil.rmtree(test_path)
-        if not os.path.exists(test_path):
-            os.makedirs(test_path)
-        if not os.listdir(test_path):
+            shutil.rmtree(data_path)
+
+        if not os.path.exists(data_path):
+            os.makedirs(data_path)
+        if not os.listdir(data_path):
             num_nodes = config["Dataset"]["num_nodes"]
             if num_nodes == 4:
-                deterministic_graph_data(test_path, number_unit_cell_y=1)
+                deterministic_graph_data(data_path, number_unit_cell_y=1)
             else:
-                deterministic_graph_data(test_path)
+                deterministic_graph_data(data_path)
 
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type

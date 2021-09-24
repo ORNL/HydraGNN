@@ -21,7 +21,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def load_raw_data(self, dataset_path: str, config):
+    def load_raw_data(self, dataset_path: str, config, dataset_append=[]):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
 
@@ -68,13 +68,25 @@ class RawDataLoader:
         ) = self.__normalize_dataset(dataset=dataset)
 
         serial_data_name = config["name"]
-        serial_data_path = (
-            os.environ["SERIALIZED_DATA_PATH"]
-            + "/serialized_dataset/"
-            + serial_data_name
-            + ".pkl"
-        )
+        if dataset_append == "total":
+            serial_data_path = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/serialized_dataset/"
+                + serial_data_name
+                + ".pkl"
+            )
+        else:
+            # append for train; test; validation
+            serial_data_path = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/serialized_dataset/"
+                + serial_data_name
+                + "_"
+                + dataset_append
+                + ".pkl"
+            )
 
+        # fixme; need to recalculate minimum and maximum values when train/test/validation sets provided separately
         with open(serial_data_path, "wb") as f:
             pickle.dump(minmax_node_feature, f)
             pickle.dump(minmax_graph_feature, f)
