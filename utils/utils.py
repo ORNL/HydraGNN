@@ -82,7 +82,7 @@ def setup_ddp():
     """ "Initialize DDP"""
 
     if dist.is_nccl_available() and torch.cuda.is_available():
-        backend = "nccl" 
+        backend = "nccl"
     elif torch.distributed.is_gloo_available():
         backend = "gloo"
     else:
