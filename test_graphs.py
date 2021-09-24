@@ -7,6 +7,7 @@ from utils.utils import get_comm_size_and_rank
 from test_trained_model import test_trained_model
 
 import torch
+import shutil
 
 torch.manual_seed(0)
 
