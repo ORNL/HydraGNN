@@ -17,7 +17,7 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "model_type": "PNN",
+            "model_type": "PNA",
             "radius": 7,
             "max_neighbours": 5,
             "hidden_dim": 5,
