@@ -60,10 +60,17 @@ def get_comm_size_and_rank():
     world_size = None
     world_rank = 0
 
-    if dist.is_initialized():
-        world_size = dist.get_world_size()
-        world_rank = dist.get_rank()
-    else:
+    if os.getenv("OMPI_COMM_WORLD_SIZE") and os.getenv("OMPI_COMM_WORLD_RANK"):
+        ## Summit
+        world_size = int(os.environ["OMPI_COMM_WORLD_SIZE"])
+        world_rank = int(os.environ["OMPI_COMM_WORLD_RANK"])
+    elif os.getenv("SLURM_NPROCS") and os.getenv("SLURM_PROCID"):
+        ## CADES
+        world_size = int(os.environ["SLURM_NPROCS"])
+        world_rank = int(os.environ["SLURM_PROCID"])
+
+    ## Fall back to default
+    if world_size is None:
         world_size = 1
         print("DDP has to be initialized within a job - Running in sequential mode")
 
