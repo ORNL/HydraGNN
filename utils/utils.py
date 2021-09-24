@@ -81,7 +81,12 @@ def setup_ddp():
 
     """ "Initialize DDP"""
 
-    backend = "nccl" if dist.is_nccl_available() else "gloo"
+    if dist.is_nccl_available() and torch.cuda.is_available():
+        backend = "nccl" 
+    elif torch.distributed.is_gloo_available():
+        backend = "gloo"
+    else:
+        raise RuntimeError("No parallel backends available")
 
     distributed_data_parallelism = False
     world_size, world_rank = get_comm_size_and_rank()
