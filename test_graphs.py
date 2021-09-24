@@ -44,9 +44,15 @@ def pytest_train_model(model_type, ci_input, overwrite_data=True):
             if not os.listdir(data_path):
                 num_nodes = config["Dataset"]["num_nodes"]
                 if num_nodes == 4:
-                    deterministic_graph_data(data_path, number_unit_cell_y=1, number_configurations=num_samples)
+                    deterministic_graph_data(
+                        data_path,
+                        number_unit_cell_y=1,
+                        number_configurations=num_samples,
+                    )
                 else:
-                    deterministic_graph_data(data_path, number_configurations=num_samples)
+                    deterministic_graph_data(
+                        data_path, number_configurations=num_samples
+                    )
 
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
