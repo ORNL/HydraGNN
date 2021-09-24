@@ -21,7 +21,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     if chosen_model is None:
         raise RuntimeError("No model type provided")
 
-    run_in_parallel, world_size, world_rank = setup_ddp()
+    world_size, world_rank = setup_ddp()
 
     config = {}
     with open(config_file, "r") as f:
@@ -49,7 +49,6 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=config["Dataset"]["name"],
-        distributed_data_parallelism=run_in_parallel,
     )
 
     model = generate_model(
