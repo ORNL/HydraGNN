@@ -1,7 +1,7 @@
 import sys, os, json
 
 import torch
-import torch.distribution as dist
+import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
