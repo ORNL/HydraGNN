@@ -56,7 +56,7 @@ def parse_slurm_nodelist(nodelist):
     return nlist
 
 
-def get_comm_size_and_rank():
+def init_comm_size_and_rank():
     world_size = None
     world_rank = 0
 
@@ -77,14 +77,31 @@ def get_comm_size_and_rank():
     return int(world_size), int(world_rank)
 
 
+def get_comm_size_and_rank():
+    world_size = None
+    world_rank = 0
+
+    if dist.is_initialized():
+        world_size = dist.get_world_size()
+        world_rank = dist.get_rank()
+    else:
+        world_size = 1
+
+    return int(world_size), int(world_rank)
+
+
 def setup_ddp():
 
     """ "Initialize DDP"""
 
-    backend = "nccl" if torch.cuda.is_available() else "gloo"
+    if dist.is_nccl_available() and torch.cuda.is_available():
+        backend = "nccl"
+    elif torch.distributed.is_gloo_available():
+        backend = "gloo"
+    else:
+        raise RuntimeError("No parallel backends available")
 
-    distributed_data_parallelism = False
-    world_size, world_rank = get_comm_size_and_rank()
+    world_size, world_rank = init_comm_size_and_rank()
 
     ## Default setting
     master_addr = "127.0.0.1"
@@ -111,11 +128,10 @@ def setup_ddp():
             dist.init_process_group(
                 backend=backend, rank=int(world_rank), world_size=int(world_size)
             )
-        distributed_data_parallelism = True
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
 
-    return distributed_data_parallelism, world_size, world_rank
+    return world_size, world_rank
 
 
 def train_validate_test_normal(
@@ -376,7 +392,6 @@ def test(loader, model):
 def dataset_loading_and_splitting(
     config: {},
     chosen_dataset_option: Dataset,
-    distributed_data_parallelism: bool = False,
 ):
     if chosen_dataset_option in [item.value for item in Dataset]:
         dataset_chosen = load_data(chosen_dataset_option, config)
@@ -384,7 +399,6 @@ def dataset_loading_and_splitting(
             dataset=dataset_chosen,
             batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
             perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            distributed_data_parallelism=distributed_data_parallelism,
         )
     else:
         # FIXME, should re-normalize mixed datasets based on joint min_max
@@ -402,7 +416,6 @@ def dataset_loading_and_splitting(
                 dataset=dataset_combined,
                 batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
                 perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-                distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
 
@@ -411,7 +424,6 @@ def dataset_loading_and_splitting(
                 dataset2=dataset_FePt,
                 batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
                 perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-                distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
             return combine_and_split_datasets(
@@ -419,7 +431,6 @@ def dataset_loading_and_splitting(
                 dataset2=dataset_CuAu,
                 batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
                 perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-                distributed_data_parallelism=distributed_data_parallelism,
             )
         elif chosen_dataset_option == Dataset.FePt_FeSi_SHUFFLE:
             dataset_FePt.extend(dataset_FeSi)
@@ -429,15 +440,12 @@ def dataset_loading_and_splitting(
                 dataset=dataset_combined,
                 batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
                 perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-                distributed_data_parallelism=distributed_data_parallelism,
             )
 
 
-def create_dataloaders(
-    distributed_data_parallelism, trainset, valset, testset, batch_size
-):
+def create_dataloaders(trainset, valset, testset, batch_size):
 
-    if distributed_data_parallelism:
+    if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
         val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
@@ -474,7 +482,6 @@ def split_dataset(
     dataset: [],
     batch_size: int,
     perc_train: float,
-    distributed_data_parallelism: bool = False,
 ):
     perc_val = (1 - perc_train) / 2
     data_size = len(dataset)
@@ -486,7 +493,7 @@ def split_dataset(
     testset = dataset[int(data_size * (perc_train + perc_val)) :]
 
     train_loader, val_loader, test_loader = create_dataloaders(
-        distributed_data_parallelism, trainset, valset, testset, batch_size
+        trainset, valset, testset, batch_size
     )
 
     return train_loader, val_loader, test_loader
@@ -497,7 +504,6 @@ def combine_and_split_datasets(
     dataset2: [],
     batch_size: int,
     perc_train: float,
-    distributed_data_parallelism: bool = False,
 ):
     data_size = len(dataset1)
 
@@ -506,7 +512,7 @@ def combine_and_split_datasets(
     testset = dataset2
 
     train_loader, val_loader, test_loader = create_dataloaders(
-        distributed_data_parallelism, trainset, valset, testset, batch_size
+        trainset, valset, testset, batch_size
     )
 
     return train_loader, val_loader, test_loader

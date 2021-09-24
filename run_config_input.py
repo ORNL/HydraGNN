@@ -1,6 +1,7 @@
 import sys, os, json
 
 import torch
+import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -20,7 +21,7 @@ import pickle
 
 def run_normal_config_file(config_file="./examples/configuration.json"):
 
-    run_in_parallel, world_size, world_rank = setup_ddp()
+    world_size, world_rank = setup_ddp()
 
     config = {}
     with open(config_file, "r") as f:
@@ -29,7 +30,6 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=config["Dataset"]["name"],
-        distributed_data_parallelism=run_in_parallel,
     )
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
@@ -127,7 +127,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     )
 
     device_name, device = get_device()
-    if run_in_parallel:
+    if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
         else:
