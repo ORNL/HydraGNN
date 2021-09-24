@@ -32,12 +32,12 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             shutil.rmtree(test_path)
         if not os.path.exists(test_path):
             os.makedirs(test_path)
-
-        num_nodes = config["Dataset"]["num_nodes"]
-        if num_nodes == 4:
-            deterministic_graph_data(test_path, number_unit_cell_y=1)
-        else:
-            deterministic_graph_data(test_path)
+        if not os.listdir(test_path):
+            num_nodes = config["Dataset"]["num_nodes"]
+            if num_nodes == 4:
+                deterministic_graph_data(test_path, number_unit_cell_y=1)
+            else:
+                deterministic_graph_data(test_path)
 
     tmp_file = "./tmp.json"
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
