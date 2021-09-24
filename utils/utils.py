@@ -4,8 +4,13 @@ from tqdm import tqdm
 
 import torch
 import torch.distributed as dist
-from torch_geometric.loader import DataLoader
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+# FIXME: deprecated in torch_geometric 2.0
+try:
+    from torch_geometric.loader import DataLoader
+except:
+    from torch_geometric.data import DataLoader
 
 from data_utils.serialized_dataset_loader import (
     SerializedDataLoader,
