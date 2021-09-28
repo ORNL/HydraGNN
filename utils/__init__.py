@@ -6,4 +6,5 @@ from .utils import (
     train_validate_test_normal,
     test,
 )
+from .print_utils import print_distributed
 from .visualizer import Visualizer

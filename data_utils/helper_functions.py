@@ -1,7 +1,9 @@
 import numpy as np
 from tqdm import tqdm
+from utils.print_utils import print_distributed, tqdm_verbosity_check
 
 import torch
+import torch.distributed as dist
 
 
 def distance_3D(p1: [float], p2: [float]):
@@ -22,7 +24,9 @@ def distance_3D(p1: [float], p2: [float]):
     return distance
 
 
-def order_candidates(candidate_neighbours: dict, distance_matrix: [[float]]):
+def order_candidates(
+    candidate_neighbours: dict, distance_matrix: [[float]], verbosity: int
+):
     """Function orders the possible neighbour candidates of an atom based on their distance from the atom.
 
     Parameters
@@ -33,9 +37,15 @@ def order_candidates(candidate_neighbours: dict, distance_matrix: [[float]]):
         Matrix containing the distances for each pair of atoms within the structure.
     """
 
-    print("Ordering candidate neighbours based on their distance.")
+    print_distributed(
+        verbosity, "Ordering candidate neighbours based on their distance."
+    )
     sorted_candidate_neighbours = {}
-    for point_index, candidates in tqdm(candidate_neighbours.items()):
+    for point_index, candidates in (
+        tqdm(candidate_neighbours.items())
+        if tqdm_verbosity_check(verbosity)
+        else candidate_neighbours.items()
+    ):
         distances = distance_matrix[point_index, candidates]
         candidate_distance_dict = {
             candidates[i]: distances[i] for i in range(len(candidates))

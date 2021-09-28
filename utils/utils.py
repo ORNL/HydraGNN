@@ -1,7 +1,9 @@
 import os
 from random import shuffle
 from tqdm import tqdm
+from utils.print_utils import tqdm_verbosity_check
 
+import numpy as np
 import torch
 import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -21,8 +23,8 @@ from data_utils.dataset_descriptors import (
     StructureFeatures,
     Dataset,
 )
+from utils.print_utils import print_distributed
 from utils.visualizer import Visualizer
-import numpy as np
 
 import re
 
@@ -145,10 +147,10 @@ def train_validate_test_normal(
     scheduler,
     config,
     model_with_config_name,
+    verbosity=0,
     plot_init_solution=True,
     plot_hist_solution=False,
 ):
-
     num_epoch = config["Training"]["num_epoch"]
     # total loss tracking for train/vali/test
     total_loss_train = []
@@ -180,7 +182,7 @@ def train_validate_test_normal(
     )
 
     if plot_init_solution:  # visualizing of initial conditions
-        test_rmse = test(test_loader, model)
+        test_rmse = test(test_loader, model, verbosity)
         true_values = test_rmse[3]
         predicted_values = test_rmse[4]
         visualizer.create_scatter_plots(
@@ -191,10 +193,12 @@ def train_validate_test_normal(
         )
     for epoch in range(0, num_epoch):
         train_mae, train_taskserr, train_taskserr_nodes = train(
-            train_loader, model, optimizer
+            train_loader, model, optimizer, verbosity
         )
-        val_mae, val_taskserr, val_taskserr_nodes = validate(val_loader, model)
-        test_rmse = test(test_loader, model)
+        val_mae, val_taskserr, val_taskserr_nodes = validate(
+            val_loader, model, verbosity
+        )
+        test_rmse = test(test_loader, model, verbosity)
         scheduler.step(val_mae)
         if writer is not None:
             writer.add_scalar("train error", train_mae, epoch)
@@ -204,11 +208,12 @@ def train_validate_test_normal(
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
                 )
-        print(
+        print_distributed(
+            verbosity,
             f"Epoch: {epoch:02d}, Train MAE: {train_mae:.8f}, Val MAE: {val_mae:.8f}, "
-            f"Test RMSE: {test_rmse[0]:.8f}"
+            f"Test RMSE: {test_rmse[0]:.8f}",
         )
-        print("Tasks MAE:", train_taskserr)
+        print_distributed(verbosity, "Tasks MAE:", train_taskserr)
 
         total_loss_train.append(train_mae)
         total_loss_val.append(val_mae)
@@ -234,7 +239,7 @@ def train_validate_test_normal(
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
-        test_loader, model
+        test_loader, model, verbosity
     )
 
     ##output predictions with unit/not normalized
@@ -288,7 +293,7 @@ def output_denormalize(y_minmax, true_values, predicted_values):
     return true_values, predicted_values
 
 
-def train(loader, model, opt):
+def train(loader, model, opt, verbosity):
 
     device = next(model.parameters()).device
     tasks_error = np.zeros(model.num_heads)
@@ -297,7 +302,7 @@ def train(loader, model, opt):
     model.train()
 
     total_error = 0
-    for data in tqdm(loader):
+    for data in tqdm(loader) if tqdm_verbosity_check(verbosity) else loader:
         data = data.to(device)
         opt.zero_grad()
 
@@ -318,7 +323,7 @@ def train(loader, model, opt):
 
 
 @torch.no_grad()
-def validate(loader, model):
+def validate(loader, model, verbosity):
 
     device = next(model.parameters()).device
 
@@ -326,7 +331,7 @@ def validate(loader, model):
     tasks_error = np.zeros(model.num_heads)
     tasks_noderr = np.zeros(model.num_heads)
     model.eval()
-    for data in tqdm(loader):
+    for data in tqdm(loader) if tqdm_verbosity_check(verbosity) else loader:
         data = data.to(device)
 
         pred = model(data)
@@ -344,7 +349,7 @@ def validate(loader, model):
 
 
 @torch.no_grad()
-def test(loader, model):
+def test(loader, model, verbosity):
 
     device = next(model.parameters()).device
 
@@ -361,7 +366,7 @@ def test(loader, model):
             IImean.remove(sum(model.head_dims[: ihead + 1]) + (ihead + 1) * 1 - 1)
             for ihead in range(model.num_heads)
         ]
-    for data in tqdm(loader):
+    for data in tqdm(loader) if tqdm_verbosity_check(verbosity) else loader:
         data = data.to(device)
 
         pred = model(data)
@@ -526,10 +531,9 @@ def load_data(dataset_option, config):
     )
 
     # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-    loader = SerializedDataLoader()
+    loader = SerializedDataLoader(config["Verbosity"]["level"])
     dataset = loader.load_serialized_data(
-        dataset_path=files_dir,
-        config=config["NeuralNetwork"],
+        dataset_path=files_dir, config=config["NeuralNetwork"]
     )
 
     return dataset

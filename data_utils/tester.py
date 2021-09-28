@@ -36,7 +36,7 @@ breakpoint()
 structure = dataset[0]
 vertices = structure.pos.numpy().tolist()
 edges = structure.edge_index.t().numpy().tolist()
-print(torch.tensor(edges))
+print_distributed(1, torch.tensor(edges))
 N = num_of_atoms = len(structure.x)
 
 

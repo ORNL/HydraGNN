@@ -1,4 +1,7 @@
 {
+    "Verbosity": {
+        "level": 0
+    },
     "Dataset": {
         "name": "FePt_32atoms",
         "path": "FePt",

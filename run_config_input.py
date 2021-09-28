@@ -11,6 +11,7 @@ from utils.utils import (
     setup_ddp,
     get_comm_size_and_rank,
 )
+from utils.print_utils import print_distributed
 from models.models_setup import generate_model, get_device
 from data_utils.dataset_descriptors import (
     AtomFeatures,
@@ -26,6 +27,8 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
+
+    verbosity = config["Verbosity"]["level"]
 
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
@@ -168,8 +171,9 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         )
         model.load_state_dict(state_dict)
 
-    print(
-        f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}"
+    print_distributed(
+        verbosity,
+        f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
 
     if (
@@ -196,6 +200,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         scheduler,
         config["NeuralNetwork"],
         model_with_config_name,
+        verbosity,
     )
 
     if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
