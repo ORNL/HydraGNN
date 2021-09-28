@@ -1,3 +1,6 @@
+import matplotlib as mpl
+
+mpl.use("Agg")
 import matplotlib.pyplot as plt
 from itertools import chain
 import time, pickle

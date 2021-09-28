@@ -112,16 +112,12 @@ def setup_ddp():
     master_addr = "127.0.0.1"
     master_port = "8889"
 
-    if os.getenv("LSB_DJOB_HOSTFILE") is not None:
+    if os.getenv("LSB_HOSTS") is not None:
         ## source: https://www.olcf.ornl.gov/wp-content/uploads/2019/12/Scaling-DL-on-Summit.pdf
         ## The following is Summit specific
-        import subprocess
-
-        get_master = "echo $(cat {} | sort | uniq | grep -v batch | grep -v login | head -1 )".format(
-            os.environ["LSB_DJOB_HOSTFILE"]
-        )
-        master_addr = str(subprocess.check_output(get_master, shell=True))[2:-3]
+        master_addr = os.environ["LSB_HOSTS"].split()[1]
     elif os.getenv("SLURM_NODELIST") is not None:
+        ## The following is CADES specific
         master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
 
     try:
