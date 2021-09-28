@@ -116,6 +116,7 @@ def setup_ddp():
         master_addr = os.environ["LSB_HOSTS"].split()[1]
     elif os.getenv("SLURM_NODELIST") is not None:
         master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
+
     try:
         os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = master_port
