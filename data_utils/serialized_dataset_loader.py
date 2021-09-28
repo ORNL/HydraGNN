@@ -4,7 +4,6 @@ from tqdm import tqdm
 from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
-import torch.distributed as dist
 from torch_geometric.data import Data
 
 from utils.print_utils import print_distributed, tqdm_verbosity_check
