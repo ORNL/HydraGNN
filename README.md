@@ -3,7 +3,8 @@
 ## Dependencies
 
 To install required packages with only basic capability (`torch`,
-`torch_geometric`, and related packages):
+`torch_geometric`, and related packages)
+and to serialize+store the processed data for later sessions (`pickle5`):
 ```
 pip install -r requirements.txt
 pip install -r requirements-torchdep.txt
@@ -18,12 +19,6 @@ If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```
 pip install -r requirements-dev.txt
-```
-
-For serialization and storing the processed data for later sessions (`pickle`)
-and visualizing structure connections (`igraph`):
-```
-pip install -r requirements-other.txt
 ```
 
 Detailed dependency installation instructions are available on the
