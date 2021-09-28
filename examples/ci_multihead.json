@@ -1,4 +1,7 @@
 {
+    "Verbosity": {
+        "level": 0
+    },
     "Dataset": {
         "name": "unit_test",
         "format": "unit_test",

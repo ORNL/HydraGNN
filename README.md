@@ -57,6 +57,7 @@ GCNN uses a JSON configuration file (examples in `examples/`):
 
 There are many options for GCNN; the dataset and model type are particularly
 important:
+ - `["Verbosity"]["level"]`: `0`, `1`, `2`, `3`, `4`
  - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms`
  - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNA`, `MFC`, `GIN`, `GAT`
 

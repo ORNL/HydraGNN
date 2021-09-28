@@ -4,7 +4,10 @@ from tqdm import tqdm
 from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
+import torch.distributed as dist
 from torch_geometric.data import Data
+
+from utils.print_utils import print_distributed, tqdm_verbosity_check
 
 from data_utils.dataset_descriptors import AtomFeatures
 from data_utils.helper_functions import (
@@ -15,6 +18,14 @@ from data_utils.helper_functions import (
 
 
 class SerializedDataLoader:
+
+    """
+    Constructor
+    """
+
+    def __init__(self, verbosity: int):
+        self.verbosity = verbosity
+
     """A class used for loading existing structures from files that are lists of serialized structures.
     Most of the class methods are hidden, because from outside a caller needs only to know about
     load_serialized_data method.
@@ -26,11 +37,7 @@ class SerializedDataLoader:
         atom and structure features are updated.
     """
 
-    def load_serialized_data(
-        self,
-        dataset_path: str,
-        config,
-    ):
+    def load_serialized_data(self, dataset_path: str, config):
         """Loads the serialized structures data from specified path, computes new edges for the structures based on the maximum number of neighbours and radius. Additionally,
         atom and structure features are updated.
 
@@ -130,13 +137,21 @@ class SerializedDataLoader:
         torch.tensor
             Tensor filled with pairs (atom1_index, atom2_index) that represent edges or connections between atoms within the structure.
         """
-        print("Compute edges of the structure=adjacency matrix.")
+        print_distributed(
+            self.verbosity, "Compute edges of the structure=adjacency matrix."
+        )
         num_of_atoms = len(data.x)
         distance_matrix = np.zeros((num_of_atoms, num_of_atoms))
         candidate_neighbours = {k: [] for k in range(num_of_atoms)}
 
-        print("Computing edge distances and adding candidate neighbours.")
-        for i in tqdm(range(num_of_atoms)):
+        print_distributed(
+            self.verbosity, "Computing edge distances and adding candidate neighbours."
+        )
+        for i in tqdm(
+            range(num_of_atoms)
+            if tqdm_verbosity_check(self.verbosity)
+            else range(num_of_atoms)
+        ):
             for j in range(num_of_atoms):
                 distance = distance_3D(data.pos[i], data.pos[j])
                 distance_matrix[i, j] = distance
@@ -144,12 +159,18 @@ class SerializedDataLoader:
                     candidate_neighbours[i].append(j)
 
         candidate_neighbours = order_candidates(
-            candidate_neighbours=candidate_neighbours, distance_matrix=distance_matrix
+            candidate_neighbours=candidate_neighbours,
+            distance_matrix=distance_matrix,
+            verbosity=self.verbosity,
         )
 
-        print("Resolving neighbour conflicts.")
+        print_distributed(self.verbosity, "Resolving neighbour conflicts.")
         adjacency_matrix = np.zeros((num_of_atoms, num_of_atoms))
-        for point, neighbours in tqdm(candidate_neighbours.items()):
+        for point, neighbours in tqdm(
+            candidate_neighbours.items()
+            if tqdm_verbosity_check(self.verbosity)
+            else candidate_neighbours.items()
+        ):
             neighbours = resolve_neighbour_conflicts(
                 point, list(neighbours), adjacency_matrix, max_num_node_neighbours
             )
@@ -189,8 +210,10 @@ class SerializedDataLoader:
         """
         unique_values = torch.unique(dataset[0].x[:, 0]).tolist()
         dataset_categories = []
-        print("Computing the categories for the whole dataset.")
-        for data in tqdm(dataset):
+        print_distributed(
+            self.verbosity, "Computing the categories for the whole dataset."
+        )
+        for data in tqdm(dataset) if tqdm_verbosity_check(self.verbosity) else dataset:
             frequencies = torch.bincount(data.x[:, 0].int())
             frequencies = sorted(frequencies[frequencies > 0].tolist())
             category = 0
