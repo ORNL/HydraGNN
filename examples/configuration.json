@@ -1,7 +1,7 @@
 {
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": "output_files",
+        "path": "FePt",
         "format": "LSMS",
         "num_nodes": 32,
         "node_features": {
