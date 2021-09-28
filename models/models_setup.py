@@ -9,6 +9,7 @@ from .GATStack import GATStack
 from .MFCStack import MFCStack
 
 from utils.utils import get_comm_size_and_rank
+from utils.print_utils import print_distributed
 
 
 def get_gpu_list():
@@ -18,18 +19,18 @@ def get_gpu_list():
     return available_gpus
 
 
-def get_device(use_gpu=True, rank_per_model=1):
+def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
 
     available_gpus = get_gpu_list()
     if not use_gpu or not available_gpus:
-        print("Using CPU")
+        print_distributed(verbosity_level, "Using CPU")
         return "cpu", torch.device("cpu")
 
     world_size, world_rank = get_comm_size_and_rank()
     if rank_per_model != 1:
         raise ValueError("Exactly 1 rank per device currently supported")
 
-    print("Using GPU")
+    print_distributed(verbosity_level, "Using GPU")
     ## We need to ge a local rank if there are multiple GPUs available.
     localrank = 0
     if torch.cuda.device_count() > 1:
@@ -56,12 +57,13 @@ def generate_model(
     input_dim: int,
     dataset: [Data],
     config: dict,
+    verbosity_level: int,
     use_gpu: bool = True,
     use_distributed: bool = False,
 ):
     torch.manual_seed(0)
 
-    _, device = get_device(use_gpu)
+    _, device = get_device(use_gpu, verbosity_level=verbosity_level)
 
     num_atoms = dataset[0].num_nodes  # FIXME: assumes constant number of atoms
 

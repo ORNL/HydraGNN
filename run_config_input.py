@@ -95,6 +95,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         ),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
+        verbosity_level=config["Verbosity"]["level"],
     )
 
     model_with_config_name = (
@@ -129,7 +130,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         )
     )
 
-    device_name, device = get_device()
+    device_name, device = get_device(verbosity_level=config["Verbosity"]["level"])
     if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)

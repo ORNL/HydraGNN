@@ -58,6 +58,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         ),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
+        verbosity_level=config["Verbosity"]["level"],
     )
 
     model_with_config_name = (

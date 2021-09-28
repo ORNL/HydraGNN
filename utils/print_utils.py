@@ -1,3 +1,5 @@
+from tqdm import tqdm
+
 import torch.distributed as dist
 
 
@@ -26,7 +28,7 @@ Verbosity options for printing
 0 - > nothing
 1 -> master prints the basic
 2 -> Master prints everything, progression bars included
-3 -> all MPI processes print the basic 
+3 -> all MPI processes print the basic
 4 -> all MPI processes print the basic, , progression bars included
 """
 
@@ -45,5 +47,8 @@ def print_distributed(verbosity_level, *args, **kwargs):
     return print_verbose(*args, **kwargs)
 
 
-def tqdm_verbosity_check(verbosity_level):
-    return (0 == dist.get_rank() and 2 == verbosity_level) or 4 == verbosity_level
+def iterate_tqdm(iterator, verbosity_level):
+    if (0 == dist.get_rank() and 2 == verbosity_level) or 4 == verbosity_level:
+        return tqdm(iterator)
+    else:
+        return iterator

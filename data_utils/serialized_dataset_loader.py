@@ -1,12 +1,11 @@
 import numpy as np
 import pickle
-from tqdm import tqdm
 from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
 from torch_geometric.data import Data
 
-from utils.print_utils import print_distributed, tqdm_verbosity_check
+from utils.print_utils import print_distributed, iterate_tqdm
 
 from data_utils.dataset_descriptors import AtomFeatures
 from data_utils.helper_functions import (
@@ -146,11 +145,7 @@ class SerializedDataLoader:
         print_distributed(
             self.verbosity, "Computing edge distances and adding candidate neighbours."
         )
-        for i in tqdm(
-            range(num_of_atoms)
-            if tqdm_verbosity_check(self.verbosity)
-            else range(num_of_atoms)
-        ):
+        for i in iterate_tqdm(range(num_of_atoms), self.verbosity):
             for j in range(num_of_atoms):
                 distance = distance_3D(data.pos[i], data.pos[j])
                 distance_matrix[i, j] = distance
@@ -165,10 +160,8 @@ class SerializedDataLoader:
 
         print_distributed(self.verbosity, "Resolving neighbour conflicts.")
         adjacency_matrix = np.zeros((num_of_atoms, num_of_atoms))
-        for point, neighbours in tqdm(
-            candidate_neighbours.items()
-            if tqdm_verbosity_check(self.verbosity)
-            else candidate_neighbours.items()
+        for point, neighbours in iterate_tqdm(
+            candidate_neighbours.items(), self.verbosity
         ):
             neighbours = resolve_neighbour_conflicts(
                 point, list(neighbours), adjacency_matrix, max_num_node_neighbours
@@ -212,7 +205,7 @@ class SerializedDataLoader:
         print_distributed(
             self.verbosity, "Computing the categories for the whole dataset."
         )
-        for data in tqdm(dataset) if tqdm_verbosity_check(self.verbosity) else dataset:
+        for data in iterate_tqdm(dataset, self.verbosity):
             frequencies = torch.bincount(data.x[:, 0].int())
             frequencies = sorted(frequencies[frequencies > 0].tolist())
             category = 0
