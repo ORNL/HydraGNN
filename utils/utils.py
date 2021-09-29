@@ -580,7 +580,7 @@ def transform_raw_data_to_serialized(config):
                 loader.load_raw_data(
                     dataset_path=raw_data_path,
                     config=config,
-                    dataset_append=dataset_name,
+                    dataset_type=dataset_name,
                 )
 
     if dist.is_initialized():

@@ -21,7 +21,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def load_raw_data(self, dataset_path: str, config, dataset_append=[]):
+    def load_raw_data(self, dataset_path: str, config, dataset_type=None):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
 
@@ -68,7 +68,7 @@ class RawDataLoader:
         ) = self.__normalize_dataset(dataset=dataset)
 
         serial_data_name = config["name"]
-        if dataset_append == "total":
+        if dataset_type == "total":
             serial_data_path = (
                 os.environ["SERIALIZED_DATA_PATH"]
                 + "/serialized_dataset/"
@@ -82,7 +82,7 @@ class RawDataLoader:
                 + "/serialized_dataset/"
                 + serial_data_name
                 + "_"
-                + dataset_append
+                + dataset_type
                 + ".pkl"
             )
 
