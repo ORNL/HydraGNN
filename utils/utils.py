@@ -504,7 +504,7 @@ def split_dataset(
         valset = dataset_list[dataset_names.index("test")]
         testset = dataset_list[dataset_names.index("validate")]
     else:
-        raise ValueError("Unsupported dataset input", dataset_names)
+        raise ValueError('Must provide "total" OR "train", "test", "validate" data paths: ', dataset_names)
 
     train_loader, val_loader, test_loader = create_dataloaders(
         trainset, valset, testset, batch_size
