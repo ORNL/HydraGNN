@@ -1,9 +1,9 @@
 import numpy as np
-from tqdm import tqdm
-from utils.print_utils import print_distributed, tqdm_verbosity_check
 
 import torch
 import torch.distributed as dist
+
+from utils.print_utils import print_distributed, iterate_tqdm
 
 
 def distance_3D(p1: [float], p2: [float]):
@@ -41,10 +41,8 @@ def order_candidates(
         verbosity, "Ordering candidate neighbours based on their distance."
     )
     sorted_candidate_neighbours = {}
-    for point_index, candidates in (
-        tqdm(candidate_neighbours.items())
-        if tqdm_verbosity_check(verbosity)
-        else candidate_neighbours.items()
+    for point_index, candidates in iterate_tqdm(
+        candidate_neighbours.items(), verbosity
     ):
         distances = distance_matrix[point_index, candidates]
         candidate_distance_dict = {

@@ -1,7 +1,5 @@
 import os
 from random import shuffle
-from tqdm import tqdm
-from utils.print_utils import tqdm_verbosity_check
 
 import numpy as np
 import torch
@@ -23,7 +21,7 @@ from data_utils.dataset_descriptors import (
     StructureFeatures,
     Dataset,
 )
-from utils.print_utils import print_distributed
+from utils.print_utils import print_distributed, iterate_tqdm
 from utils.visualizer import Visualizer
 
 import re
@@ -302,7 +300,7 @@ def train(loader, model, opt, verbosity):
     model.train()
 
     total_error = 0
-    for data in tqdm(loader) if tqdm_verbosity_check(verbosity) else loader:
+    for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
         opt.zero_grad()
 
@@ -331,7 +329,7 @@ def validate(loader, model, verbosity):
     tasks_error = np.zeros(model.num_heads)
     tasks_noderr = np.zeros(model.num_heads)
     model.eval()
-    for data in tqdm(loader) if tqdm_verbosity_check(verbosity) else loader:
+    for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
 
         pred = model(data)
@@ -366,7 +364,7 @@ def test(loader, model, verbosity):
             IImean.remove(sum(model.head_dims[: ihead + 1]) + (ihead + 1) * 1 - 1)
             for ihead in range(model.num_heads)
         ]
-    for data in tqdm(loader) if tqdm_verbosity_check(verbosity) else loader:
+    for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
 
         pred = model(data)
