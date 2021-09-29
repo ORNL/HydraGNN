@@ -36,11 +36,21 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             if dataset_name == "total":
                 num_samples = num_samples_tot
             elif dataset_name == "train":
-                num_samples = int(num_samples_tot * config["NeuralNetwork"]["Training"]["perc_train"])
+                num_samples = int(
+                    num_samples_tot * config["NeuralNetwork"]["Training"]["perc_train"]
+                )
             elif dataset_name == "test":
-                num_samples = int(num_samples_tot * (1 - config["NeuralNetwork"]["Training"]["perc_train"]) * 0.5)
+                num_samples = int(
+                    num_samples_tot
+                    * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                    * 0.5
+                )
             elif dataset_name == "validate":
-                num_samples = int(num_samples_tot * (1 - config["NeuralNetwork"]["Training"]["perc_train"]) * 0.5)
+                num_samples = int(
+                    num_samples_tot
+                    * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                    * 0.5
+                )
             if not os.listdir(data_path):
                 num_nodes = config["Dataset"]["num_nodes"]
                 if num_nodes == 4:

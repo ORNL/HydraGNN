@@ -6,7 +6,9 @@
         "name": "unit_test",
         "format": "unit_test",
         "path": {
-            "raw": {"total": "dataset/unit_test_singlehead"}
+            "raw": {"train": "dataset/unit_test_singlehead_train",
+            "test": "dataset/unit_test_singlehead_test",
+            "validate": "dataset/unit_test_singlehead_validate"}
         },
         "num_nodes": 8,
         "node_features": {

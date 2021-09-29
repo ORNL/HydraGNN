@@ -86,11 +86,98 @@ class RawDataLoader:
                 + ".pkl"
             )
 
-        # fixme; need to recalculate minimum and maximum values when train/test/validation sets provided separately
         with open(serial_data_path, "wb") as f:
             pickle.dump(minmax_node_feature, f)
             pickle.dump(minmax_graph_feature, f)
             pickle.dump(dataset_normalized, f)
+
+    def minmax_update(self, serial_data_name=None, data_types=None):
+        for ifile, dataset_type in enumerate(data_types):
+            # find the minimum and maximum values over all datasets
+            serial_data_path = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/serialized_dataset/"
+                + serial_data_name
+                + "_"
+                + dataset_type
+                + ".pkl"
+            )
+            with open(serial_data_path, "rb") as f:
+                minmax_node_feature = pickle.load(f)
+                minmax_graph_feature = pickle.load(f)
+            if ifile == 0:
+                minmax_node_feature_global = minmax_node_feature
+                minmax_graph_feature_global = minmax_graph_feature
+            else:
+                minmax_graph_feature_global[0, :] = np.minimum(
+                    minmax_graph_feature_global[0, :], minmax_graph_feature[0, :]
+                )
+                minmax_graph_feature_global[1, :] = np.maximum(
+                    minmax_graph_feature_global[1, :], minmax_graph_feature[1, :]
+                )
+                minmax_node_feature_global[0, :, :] = np.minimum(
+                    minmax_node_feature_global[0, :, :], minmax_node_feature[0, :, :]
+                )
+                minmax_node_feature_global[1, :, :] = np.maximum(
+                    minmax_node_feature_global[1, :, :], minmax_node_feature[1, :, :]
+                )
+
+        # update normalized values with min/max, and update the pkl files
+        num_graph_features = minmax_graph_feature_global.shape[-1]
+        num_node_features = minmax_node_feature_global.shape[-1]
+        for dataset_type in data_types:
+            serial_data_path = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/serialized_dataset/"
+                + serial_data_name
+                + "_"
+                + dataset_type
+                + ".pkl"
+            )
+            with open(serial_data_path, "rb") as f:
+                minmax_node_feature = pickle.load(f)
+                minmax_graph_feature = pickle.load(f)
+                dataset_normalized = pickle.load(f)
+
+            for data in dataset_normalized:
+                for ifeat in range(num_graph_features):
+                    data.y[ifeat] = (
+                        data.y[ifeat]
+                        * (
+                            minmax_graph_feature[1, ifeat]
+                            - minmax_graph_feature[0, ifeat]
+                        )
+                        + minmax_graph_feature[0, ifeat]
+                    )
+                    data.y[ifeat] = tensor_divide(
+                        (data.y[ifeat] - minmax_graph_feature_global[0, ifeat]),
+                        (
+                            minmax_graph_feature_global[1, ifeat]
+                            - minmax_graph_feature_global[0, ifeat]
+                        ),
+                    )
+                for ifeat in range(num_node_features):
+                    data.x[:, ifeat] = (
+                        data.x[:, ifeat]
+                        * (
+                            minmax_node_feature[1, :, ifeat]
+                            - minmax_node_feature[0, :, ifeat]
+                        )
+                        + minmax_node_feature[0, :, ifeat]
+                    )
+
+                    data.x[:, ifeat] = tensor_divide(
+                        (data.x[:, ifeat] - minmax_node_feature_global[0, :, ifeat]),
+                        (
+                            minmax_node_feature_global[1, :, ifeat]
+                            - minmax_node_feature_global[0, :, ifeat]
+                        ),
+                    )
+
+            with open(serial_data_path, "wb") as f:
+                pickle.dump(minmax_node_feature_global, f)
+                pickle.dump(minmax_graph_feature_global, f)
+                pickle.dump(dataset_normalized, f)
 
     def __transform_input_to_data_object_base(
         self,

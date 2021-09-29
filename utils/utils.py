@@ -504,7 +504,10 @@ def split_dataset(
         valset = dataset_list[dataset_names.index("test")]
         testset = dataset_list[dataset_names.index("validate")]
     else:
-        raise ValueError('Must provide "total" OR "train", "test", "validate" data paths: ', dataset_names)
+        raise ValueError(
+            'Must provide "total" OR "train", "test", "validate" data paths: ',
+            dataset_names,
+        )
 
     train_loader, val_loader, test_loader = create_dataloaders(
         trainset, valset, testset, batch_size
@@ -581,6 +584,13 @@ def transform_raw_data_to_serialized(config):
                     dataset_path=raw_data_path,
                     config=config,
                     dataset_type=dataset_name,
+                )
+            if len(config["path"]["raw"]) > 1:
+                # update minimum and maximum based on train/test/validate sets
+                loader = RawDataLoader()
+                loader.minmax_update(
+                    serial_data_name=config["name"],
+                    data_types=list(config["path"]["raw"].keys()),
                 )
 
     if dist.is_initialized():
