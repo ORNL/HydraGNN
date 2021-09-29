@@ -21,7 +21,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def load_raw_data(self, dataset_path: str, config, dataset_type=None):
+    def load_raw_data(self, dataset_path: str, config, dataset_type="total"):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
 
@@ -67,26 +67,14 @@ class RawDataLoader:
             minmax_graph_feature,
         ) = self.__normalize_dataset(dataset=dataset)
 
-        serial_data_name = config["name"]
+        serial_data_path = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/"
         if dataset_type == "total":
-            serial_data_path = (
-                os.environ["SERIALIZED_DATA_PATH"]
-                + "/serialized_dataset/"
-                + serial_data_name
-                + ".pkl"
-            )
+            serial_data_name = config["name"] + ".pkl"
         else:
             # append for train; test; validation
-            serial_data_path = (
-                os.environ["SERIALIZED_DATA_PATH"]
-                + "/serialized_dataset/"
-                + serial_data_name
-                + "_"
-                + dataset_type
-                + ".pkl"
-            )
+            serial_data_name = config["name"] + "_" + dataset_type + ".pkl"
 
-        with open(serial_data_path, "wb") as f:
+        with open(serial_data_path + serial_data_name, "wb") as f:
             pickle.dump(minmax_node_feature, f)
             pickle.dump(minmax_graph_feature, f)
             pickle.dump(dataset_normalized, f)
