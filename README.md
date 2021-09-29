@@ -10,11 +10,6 @@ pip install -r requirements.txt
 pip install -r requirements-torchdep.txt
 ```
 
-In order to run Bayesian hyperparameter optimization additionally install:
-```
-pip install -r requirements-hyperopt.txt
-```
-
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```
@@ -26,15 +21,16 @@ Detailed dependency installation instructions are available on the
 
 ## Running the code
 
-There are two main options for running the code:
+There are two main options for running the code; both require a JSON input file
+for configurable options.
 1. Training a model (including starting from a previously trained model using
-configuration options)
+configuration options):
     ```
     python run_config_file.py
     ```
-2. Hyperparameter optimization
+2. Making predictions from a previously trained model:
     ```
-    python run_hyperparam_opt.py
+    python test_trained_model.py
     ```
 
 ### Datasets
