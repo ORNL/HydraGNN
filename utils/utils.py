@@ -398,9 +398,10 @@ def dataset_loading_and_splitting(
     chosen_dataset_option: Dataset,
 ):
     if chosen_dataset_option in [item.value for item in Dataset]:
-        dataset_chosen = load_data(chosen_dataset_option, config)
+        dataset_chosen, dataset_names = load_data(chosen_dataset_option, config)
         return split_dataset(
-            dataset=dataset_chosen,
+            dataset_list=dataset_chosen,
+            dataset_names=dataset_names,
             batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
             perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
         )
@@ -483,18 +484,30 @@ def create_dataloaders(trainset, valset, testset, batch_size):
 
 
 def split_dataset(
-    dataset: [],
+    dataset_list: [],
+    dataset_names: [],
     batch_size: int,
     perc_train: float,
 ):
-    perc_val = (1 - perc_train) / 2
-    data_size = len(dataset)
 
-    trainset = dataset[: int(data_size * perc_train)]
-    valset = dataset[
-        int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
-    ]
-    testset = dataset[int(data_size * (perc_train + perc_val)) :]
+    if len(dataset_names) == 1 and dataset_names[0] == "total":
+        dataset = dataset_list[0]
+        perc_val = (1 - perc_train) / 2
+        data_size = len(dataset)
+        trainset = dataset[: int(data_size * perc_train)]
+        valset = dataset[
+            int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
+        ]
+        testset = dataset[int(data_size * (perc_train + perc_val)) :]
+    elif len(dataset_names) == 3:
+        trainset = dataset_list[dataset_names.index("train")]
+        valset = dataset_list[dataset_names.index("test")]
+        testset = dataset_list[dataset_names.index("validate")]
+    else:
+        raise ValueError(
+            'Must provide "total" OR "train", "test", "validate" data paths: ',
+            dataset_names,
+        )
 
     train_loader, val_loader, test_loader = create_dataloaders(
         trainset, valset, testset, batch_size
@@ -524,17 +537,24 @@ def combine_and_split_datasets(
 
 def load_data(dataset_option, config):
     transform_raw_data_to_serialized(config["Dataset"])
-    files_dir = (
-        f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
-    )
+    dataset_list = []
+    datasetname_list = []
+    for dataset_name, raw_data_path in config["Dataset"]["path"]["raw"].items():
+        if dataset_name == "total":
+            files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
+        else:
+            files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}_{dataset_name}.pkl"
 
-    # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-    loader = SerializedDataLoader(config["Verbosity"]["level"])
-    dataset = loader.load_serialized_data(
-        dataset_path=files_dir, config=config["NeuralNetwork"]
-    )
+        # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
+        loader = SerializedDataLoader(config["Verbosity"]["level"])
+        dataset = loader.load_serialized_data(
+            dataset_path=files_dir,
+            config=config["NeuralNetwork"],
+        )
+        dataset_list.append(dataset)
+        datasetname_list.append(dataset_name)
 
-    return dataset
+    return dataset_list, datasetname_list
 
 
 def transform_raw_data_to_serialized(config):
@@ -542,25 +562,8 @@ def transform_raw_data_to_serialized(config):
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
-        raw_dataset = config["name"]
-        raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms", "unit_test"]
-        if raw_dataset not in raw_datasets:
-            print("WARNING: requested serialized dataset does not exist.")
-            return
-
-        serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
-        if not os.path.exists(serialized_dir):
-            os.mkdir(serialized_dir)
-        serialized_dataset_dir = os.path.join(serialized_dir, raw_dataset)
-
-        if not os.path.exists(serialized_dataset_dir):
-            loader = RawDataLoader()
-            raw_data_path = config["path"]
-            if not os.path.isabs(raw_data_path):
-                raw_data_path = os.path.join(os.getcwd(), raw_data_path)
-            if not os.path.exists(raw_data_path):
-                os.mkdir(raw_data_path)
-            loader.load_raw_data(dataset_path=raw_data_path, config=config)
+        loader = RawDataLoader(config)
+        loader.load_raw_data()
 
     if dist.is_initialized():
         dist.barrier()
