@@ -562,36 +562,8 @@ def transform_raw_data_to_serialized(config):
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
-        raw_dataset = config["name"]
-        raw_datasets = ["CuAu_32atoms", "FePt_32atoms", "FeSi_1024atoms", "unit_test"]
-        if raw_dataset not in raw_datasets:
-            print("WARNING: requested serialized dataset does not exist.")
-            return
-
-        serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
-        if not os.path.exists(serialized_dir):
-            os.mkdir(serialized_dir)
-        serialized_dataset_dir = os.path.join(serialized_dir, raw_dataset)
-
-        if not os.path.exists(serialized_dataset_dir):
-            for dataset_name, raw_data_path in config["path"]["raw"].items():
-                loader = RawDataLoader()
-                if not os.path.isabs(raw_data_path):
-                    raw_data_path = os.path.join(os.getcwd(), raw_data_path)
-                if not os.path.exists(raw_data_path):
-                    os.mkdir(raw_data_path)
-                loader.load_raw_data(
-                    dataset_path=raw_data_path,
-                    config=config,
-                    dataset_type=dataset_name,
-                )
-            if len(config["path"]["raw"]) > 1:
-                # update minimum and maximum based on train/test/validate sets
-                loader = RawDataLoader()
-                loader.minmax_update(
-                    serial_data_name=config["name"],
-                    data_types=list(config["path"]["raw"].keys()),
-                )
+        loader = RawDataLoader(config)
+        loader.load_raw_data()
 
     if dist.is_initialized():
         dist.barrier()

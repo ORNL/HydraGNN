@@ -17,170 +17,19 @@ class RawDataLoader:
 
     Methods
     -------
-    load_raw_data(dataset_path: str)
+    load_raw_data()
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def load_raw_data(self, dataset_path: str, config, dataset_type="total"):
-        """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
-        After that the serialized data is stored to the serialized_dataset directory.
-
-        Parameters
-        ----------
-        dataset_path: str
-            Directory path where raw files are stored.
-        config: shows the target variables information, e.g, location and dimension, in data file
+    def __init__(self, config):
         """
-
-        node_feature_dim = config["node_features"]["dim"]
-        node_feature_col = config["node_features"]["column_index"]
-        graph_feature_dim = config["graph_features"]["dim"]
-        graph_feature_col = config["graph_features"]["column_index"]
-
-        dataset = []
-        assert (
-            len(os.listdir(dataset_path)) > 0
-        ), "No data files provided in {}!".format(dataset_path)
-
-        for filename in os.listdir(dataset_path):
-            if filename == ".DS_Store":
-                continue
-            f = open(os.path.join(dataset_path, filename), "r", encoding="utf-8")
-            all_lines = f.readlines()
-            data_object = self.__transform_input_to_data_object_base(
-                lines=all_lines,
-                node_feature_dim=node_feature_dim,
-                node_feature_col=node_feature_col,
-                graph_feature_dim=graph_feature_dim,
-                graph_feature_col=graph_feature_col,
-            )
-            dataset.append(data_object)
-            f.close()
-
-        if config["format"] == "LSMS":
-            for idx, data_object in enumerate(dataset):
-                dataset[idx] = self.__charge_density_update_for_LSMS(data_object)
-
-        (
-            dataset_normalized,
-            minmax_node_feature,
-            minmax_graph_feature,
-        ) = self.__normalize_dataset(dataset=dataset)
-
-        serial_data_path = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset/"
-        if dataset_type == "total":
-            serial_data_name = config["name"] + ".pkl"
-        else:
-            # append for train; test; validation
-            serial_data_name = config["name"] + "_" + dataset_type + ".pkl"
-
-        with open(serial_data_path + serial_data_name, "wb") as f:
-            pickle.dump(minmax_node_feature, f)
-            pickle.dump(minmax_graph_feature, f)
-            pickle.dump(dataset_normalized, f)
-
-    def minmax_update(self, serial_data_name=None, data_types=None):
-        for ifile, dataset_type in enumerate(data_types):
-            # find the minimum and maximum values over all datasets
-            serial_data_path = (
-                os.environ["SERIALIZED_DATA_PATH"]
-                + "/serialized_dataset/"
-                + serial_data_name
-                + "_"
-                + dataset_type
-                + ".pkl"
-            )
-            with open(serial_data_path, "rb") as f:
-                minmax_node_feature = pickle.load(f)
-                minmax_graph_feature = pickle.load(f)
-            if ifile == 0:
-                minmax_node_feature_global = minmax_node_feature
-                minmax_graph_feature_global = minmax_graph_feature
-            else:
-                minmax_graph_feature_global[0, :] = np.minimum(
-                    minmax_graph_feature_global[0, :], minmax_graph_feature[0, :]
-                )
-                minmax_graph_feature_global[1, :] = np.maximum(
-                    minmax_graph_feature_global[1, :], minmax_graph_feature[1, :]
-                )
-                minmax_node_feature_global[0, :, :] = np.minimum(
-                    minmax_node_feature_global[0, :, :], minmax_node_feature[0, :, :]
-                )
-                minmax_node_feature_global[1, :, :] = np.maximum(
-                    minmax_node_feature_global[1, :, :], minmax_node_feature[1, :, :]
-                )
-
-        # update normalized values with min/max, and update the pkl files
-        num_graph_features = minmax_graph_feature_global.shape[-1]
-        num_node_features = minmax_node_feature_global.shape[-1]
-        for dataset_type in data_types:
-            serial_data_path = (
-                os.environ["SERIALIZED_DATA_PATH"]
-                + "/serialized_dataset/"
-                + serial_data_name
-                + "_"
-                + dataset_type
-                + ".pkl"
-            )
-            with open(serial_data_path, "rb") as f:
-                minmax_node_feature = pickle.load(f)
-                minmax_graph_feature = pickle.load(f)
-                dataset_normalized = pickle.load(f)
-
-            for data in dataset_normalized:
-                for ifeat in range(num_graph_features):
-                    data.y[ifeat] = (
-                        data.y[ifeat]
-                        * (
-                            minmax_graph_feature[1, ifeat]
-                            - minmax_graph_feature[0, ifeat]
-                        )
-                        + minmax_graph_feature[0, ifeat]
-                    )
-                    data.y[ifeat] = tensor_divide(
-                        (data.y[ifeat] - minmax_graph_feature_global[0, ifeat]),
-                        (
-                            minmax_graph_feature_global[1, ifeat]
-                            - minmax_graph_feature_global[0, ifeat]
-                        ),
-                    )
-                for ifeat in range(num_node_features):
-                    data.x[:, ifeat] = (
-                        data.x[:, ifeat]
-                        * (
-                            minmax_node_feature[1, :, ifeat]
-                            - minmax_node_feature[0, :, ifeat]
-                        )
-                        + minmax_node_feature[0, :, ifeat]
-                    )
-
-                    data.x[:, ifeat] = tensor_divide(
-                        (data.x[:, ifeat] - minmax_node_feature_global[0, :, ifeat]),
-                        (
-                            minmax_node_feature_global[1, :, ifeat]
-                            - minmax_node_feature_global[0, :, ifeat]
-                        ),
-                    )
-
-            with open(serial_data_path, "wb") as f:
-                pickle.dump(minmax_node_feature_global, f)
-                pickle.dump(minmax_graph_feature_global, f)
-                pickle.dump(dataset_normalized, f)
-
-    def __transform_input_to_data_object_base(
-        self,
-        lines: [str],
-        node_feature_dim: list,
-        node_feature_col: list,
-        graph_feature_dim: list,
-        graph_feature_col: list,
-    ):
-        """Transforms lines of strings read from the raw data file to Data object and returns it.
-
-        Parameters
-        ----------
-        lines:
-          content of data file with all the graph information
+        config:
+          shows the dataset path the target variables information, e.g, location and dimension, in data file
+        ###########
+        dataset_list:
+          list of datasets read from self.path_dictionary
+        serial_data_name_list:
+          list of pkl file names
         node_feature_dim:
           list of dimensions of node features
         node_feature_col:
@@ -189,7 +38,78 @@ class RawDataLoader:
           list of dimensions of graph features
         graph_feature_col: list,
           list of column location/index (start location if dim>1) of graph features
+        """
+        self.dataset_list = []
+        self.serial_data_name_list = []
+        self.node_feature_dim = config["node_features"]["dim"]
+        self.node_feature_col = config["node_features"]["column_index"]
+        self.graph_feature_dim = config["graph_features"]["dim"]
+        self.graph_feature_col = config["graph_features"]["column_index"]
+        self.raw_dataset_name = config["name"]
+        self.data_format = config["format"]
+        self.path_dictionary = config["path"]["raw"]
 
+    def load_raw_data(self):
+        """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
+        After that the serialized data is stored to the serialized_dataset directory.
+        """
+
+        serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
+        if not os.path.exists(serialized_dir):
+            os.mkdir(serialized_dir)
+
+        for dataset_type, raw_data_path in self.path_dictionary.items():
+            if not os.path.isabs(raw_data_path):
+                raw_data_path = os.path.join(os.getcwd(), raw_data_path)
+            if not os.path.exists(raw_data_path):
+                raise ValueError("Folder not found: ", raw_data_path)
+
+            dataset = []
+            assert (
+                len(os.listdir(raw_data_path)) > 0
+            ), "No data files provided in {}!".format(raw_data_path)
+
+            for filename in os.listdir(raw_data_path):
+                if filename == ".DS_Store":
+                    continue
+                f = open(os.path.join(raw_data_path, filename), "r", encoding="utf-8")
+                all_lines = f.readlines()
+                data_object = self.__transform_input_to_data_object_base(
+                    lines=all_lines
+                )
+                dataset.append(data_object)
+                f.close()
+
+            if self.data_format == "LSMS":
+                for idx, data_object in enumerate(dataset):
+                    dataset[idx] = self.__charge_density_update_for_LSMS(data_object)
+
+            if dataset_type == "total":
+                serial_data_name = self.raw_dataset_name + ".pkl"
+            else:
+                # append for train; test; validation
+                serial_data_name = self.raw_dataset_name + "_" + dataset_type + ".pkl"
+
+            self.dataset_list.append(dataset)
+            self.serial_data_name_list.append(serial_data_name)
+
+        self.__normalize_dataset()
+
+        for serial_data_name, dataset_normalized in zip(
+            self.serial_data_name_list, self.dataset_list
+        ):
+            with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
+                pickle.dump(self.minmax_node_feature, f)
+                pickle.dump(self.minmax_graph_feature, f)
+                pickle.dump(dataset_normalized, f)
+
+    def __transform_input_to_data_object_base(self, lines: [str]):
+        """Transforms lines of strings read from the raw data file to Data object and returns it.
+
+        Parameters
+        ----------
+        lines:
+          content of data file with all the graph information
         Returns
         ----------
         Data
@@ -200,9 +120,9 @@ class RawDataLoader:
         graph_feat = lines[0].split(None, 2)
         g_feature = []
         # collect graph features
-        for item in range(len(graph_feature_dim)):
-            for icomp in range(graph_feature_dim[item]):
-                it_comp = graph_feature_col[item] + icomp
+        for item in range(len(self.graph_feature_dim)):
+            for icomp in range(self.graph_feature_dim[item]):
+                it_comp = self.graph_feature_col[item] + icomp
                 g_feature.append(float(graph_feat[it_comp].strip()))
         data_object.y = tensor(g_feature)
 
@@ -217,9 +137,9 @@ class RawDataLoader:
             node_position_matrix.append([x_pos, y_pos, z_pos])
 
             node_feature = []
-            for item in range(len(node_feature_dim)):
-                for icomp in range(node_feature_dim[item]):
-                    it_comp = node_feature_col[item] + icomp
+            for item in range(len(self.node_feature_dim)):
+                for icomp in range(self.node_feature_dim[item]):
+                    it_comp = self.node_feature_col[item] + icomp
                     node_feature.append(float(node_feat[it_comp].strip()))
             node_feature_matrix.append(node_feature)
 
@@ -245,60 +165,51 @@ class RawDataLoader:
         data_object.x[1] = charge_density
         return data_object
 
-    def __normalize_dataset(self, dataset: [Data]):
-        """Performs the normalization on Data objects and returns the normalized dataset.
+    def __normalize_dataset(self):
+        """Performs the normalization on Data objects and returns the normalized dataset."""
+        num_of_nodes = len(self.dataset_list[0][0].x)
+        num_node_features = self.dataset_list[0][0].x.shape[1]
+        num_graph_features = len(self.dataset_list[0][0].y)
 
-        Parameters
-        ----------
-        dataset: [Data]
-            List of Data objects representing structures of graphs.
-
-        Returns
-        ----------
-        [Data]
-            Normalized dataset.
-        """
-        num_of_nodes = len(dataset[0].x)
-        num_node_features = dataset[0].x.shape[1]
-        num_graph_features = len(dataset[0].y)
-
-        minmax_graph_feature = np.full((2, num_graph_features), np.inf)
+        self.minmax_graph_feature = np.full((2, num_graph_features), np.inf)
         # [0,...]:minimum values; [1,...]: maximum values
-        minmax_node_feature = np.full((2, num_of_nodes, num_node_features), np.inf)
-        minmax_graph_feature[1, :] *= -1
-        minmax_node_feature[1, :, :] *= -1
+        self.minmax_node_feature = np.full((2, num_of_nodes, num_node_features), np.inf)
+        self.minmax_graph_feature[1, :] *= -1
+        self.minmax_node_feature[1, :, :] *= -1
+        for dataset in self.dataset_list:
+            for data in dataset:
+                # find maximum and minimum values for graph level features
+                for ifeat in range(num_graph_features):
+                    self.minmax_graph_feature[0, ifeat] = min(
+                        data.y[ifeat], self.minmax_graph_feature[0, ifeat]
+                    )
+                    self.minmax_graph_feature[1, ifeat] = max(
+                        data.y[ifeat], self.minmax_graph_feature[1, ifeat]
+                    )
+                # find maximum and minimum values for node level features
+                for ifeat in range(num_node_features):
+                    self.minmax_node_feature[0, :, ifeat] = np.minimum(
+                        data.x[:, ifeat].numpy(), self.minmax_node_feature[0, :, ifeat]
+                    )
+                    self.minmax_node_feature[1, :, ifeat] = np.maximum(
+                        data.x[:, ifeat].numpy(), self.minmax_node_feature[1, :, ifeat]
+                    )
 
-        for data in dataset:
-            # find maximum and minimum values for graph level features
-            for ifeat in range(num_graph_features):
-                minmax_graph_feature[0, ifeat] = min(
-                    data.y[ifeat], minmax_graph_feature[0, ifeat]
-                )
-                minmax_graph_feature[1, ifeat] = max(
-                    data.y[ifeat], minmax_graph_feature[1, ifeat]
-                )
-            # find maximum and minimum values for node level features
-            for ifeat in range(num_node_features):
-                minmax_node_feature[0, :, ifeat] = np.minimum(
-                    data.x[:, ifeat].numpy(), minmax_node_feature[0, :, ifeat]
-                )
-                minmax_node_feature[1, :, ifeat] = np.maximum(
-                    data.x[:, ifeat].numpy(), minmax_node_feature[1, :, ifeat]
-                )
-
-        for data in dataset:
-            for ifeat in range(num_graph_features):
-                data.y[ifeat] = tensor_divide(
-                    (data.y[ifeat] - minmax_graph_feature[0, ifeat]),
-                    (minmax_graph_feature[1, ifeat] - minmax_graph_feature[0, ifeat]),
-                )
-            for ifeat in range(num_node_features):
-                data.x[:, ifeat] = tensor_divide(
-                    (data.x[:, ifeat] - minmax_node_feature[0, :, ifeat]),
-                    (
-                        minmax_node_feature[1, :, ifeat]
-                        - minmax_node_feature[0, :, ifeat]
-                    ),
-                )
-
-        return dataset, minmax_node_feature, minmax_graph_feature
+        for dataset in self.dataset_list:
+            for data in dataset:
+                for ifeat in range(num_graph_features):
+                    data.y[ifeat] = tensor_divide(
+                        (data.y[ifeat] - self.minmax_graph_feature[0, ifeat]),
+                        (
+                            self.minmax_graph_feature[1, ifeat]
+                            - self.minmax_graph_feature[0, ifeat]
+                        ),
+                    )
+                for ifeat in range(num_node_features):
+                    data.x[:, ifeat] = tensor_divide(
+                        (data.x[:, ifeat] - self.minmax_node_feature[0, :, ifeat]),
+                        (
+                            self.minmax_node_feature[1, :, ifeat]
+                            - self.minmax_node_feature[0, :, ifeat]
+                        ),
+                    )
