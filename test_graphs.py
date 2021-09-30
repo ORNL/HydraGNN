@@ -86,7 +86,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         "MFC": [0.10, 0.25],
         "GIN": [0.10, 0.85],
         "GAT": [0.80, 0.85],
-        "CGCNN": [0.10, 0.20],
+        "CGCNN": [0.10, 0.40],
     }
     verbosity = 2
 
