@@ -13,7 +13,6 @@ import shutil
 torch.manual_seed(0)
 
 
-
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
