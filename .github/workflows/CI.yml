@@ -47,6 +47,7 @@ jobs:
           git diff --exit-code
       - name: Run pytest
         run: |
+          pip list
           python -m pytest
           mpirun -n 1 python -m pytest --with-mpi
           mpirun -n 2 python -m pytest --with-mpi
