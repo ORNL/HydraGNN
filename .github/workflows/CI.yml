@@ -48,6 +48,6 @@ jobs:
       - name: Run pytest
         run: |
           pip list
-          python -m pytest
-          mpirun -n 1 python -m pytest --with-mpi
-          mpirun -n 2 python -m pytest --with-mpi
+          python -m pytest -rfEP
+          mpirun -n 1 python -m pytest -rfEP --with-mpi
+          mpirun -n 2 python -m pytest -rfEP --with-mpi
