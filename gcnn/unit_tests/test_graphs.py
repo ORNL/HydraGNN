@@ -1,28 +1,22 @@
 import sys, os, json
 import pytest
 
-from run_config_input import run_normal_config_file
-from utils.deterministic_graph_data import deterministic_graph_data
-from utils.distributed import get_comm_size_and_rank
-from test_trained_model import test_trained_model
-from utils.print_utils import print_distributed
-
 import torch
 import shutil
 
-torch.manual_seed(0)
+import gcnn, gcnn.unit_tests
 
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
-    world_size, rank = get_comm_size_and_rank()
+    world_size, rank = gcnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
-    config_file = os.path.join("examples", ci_input)
+    config_file = os.path.join(os.getcwd(), "examples", ci_input)
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
@@ -55,13 +49,13 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             if not os.listdir(data_path):
                 num_nodes = config["Dataset"]["num_nodes"]
                 if num_nodes == 4:
-                    deterministic_graph_data(
+                    gcnn.unit_tests.deterministic_graph_data(
                         data_path,
                         number_unit_cell_y=1,
                         number_configurations=num_samples,
                     )
                 else:
-                    deterministic_graph_data(
+                    gcnn.unit_tests.deterministic_graph_data(
                         data_path, number_configurations=num_samples
                     )
 
@@ -70,7 +64,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     with open(tmp_file, "w") as f:
         json.dump(config, f)
 
-    run_normal_config_file(tmp_file)
+    gcnn.run_training(tmp_file)
 
     (
         error,
@@ -78,7 +72,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         error_rmse_task,
         true_values,
         predicted_values,
-    ) = test_trained_model(tmp_file, model_type)
+    ) = gcnn.run_prediction(tmp_file, model_type)
 
     # Set RMSE and sample error thresholds
     thresholds = {
@@ -97,7 +91,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + " < "
             + str(thresholds[model_type][0])
         )
-        print_distributed(verbosity, "head sum: " + error_str)
+        gcnn.utils.print_distributed(verbosity, "head sum: " + error_str)
         assert (
             error_head_sum < thresholds[model_type][0]
         ), "RMSE checking failed for sum of head " + str(ihead)
@@ -108,7 +102,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + " < "
             + str(thresholds[model_type][0])
         )
-        print_distributed(verbosity, "head: " + error_str)
+        gcnn.utils.print_distributed(verbosity, "head: " + error_str)
         assert (
             error_head_rmse < thresholds[model_type][0]
         ), "RMSE checking failed for components of head " + str(ihead)
@@ -140,15 +134,9 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + " < "
             + str(thresholds[model_type][1])
         )
-        print_distributed(verbosity, "samples avg/min/max: " + error_str)
+        gcnn.utils.print_distributed(verbosity, "samples avg/min/max: " + error_str)
 
     # Check RMSE error
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
-    print_distributed(verbosity, "total: " + error_str)
+    gcnn.utils.print_distributed(verbosity, "total: " + error_str)
     assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
-
-
-if __name__ == "__main__":
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-    pytest_train_model(sys.argv[1], "ci.json")
-    pytest_train_model(sys.argv[1], "ci_multihead.json")

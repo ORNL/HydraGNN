@@ -1,11 +1,8 @@
 import os
+import re
 
 import torch
 import torch.distributed as dist
-
-from utils.print_utils import print_distributed
-
-import re
 
 
 def parse_slurm_nodelist(nodelist):

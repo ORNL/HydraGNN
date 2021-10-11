@@ -1,19 +1,14 @@
-import json
+import json, os
 
 import torch
 
-from utils.distributed import setup_ddp
-from utils.utils import (
-    dataset_loading_and_splitting,
-    test,
-)
-from models.models_setup import generate_model
-from data_utils.dataset_descriptors import (
-    Dataset,
-)
+from gcnn.preprocess.load_data import dataset_loading_and_splitting
+from gcnn.utils.distributed import setup_ddp
+from gcnn.models.create import create
+from gcnn.train.train_validate_test import test
 
 
-def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = None):
+def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None):
 
     if config_file is None:
         raise RuntimeError("No configure file provided")
@@ -51,7 +46,7 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
         chosen_dataset_option=config["Dataset"]["name"],
     )
 
-    model = generate_model(
+    model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
         input_dim=len(
             config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
@@ -99,8 +94,12 @@ def test_trained_model(config_file: str = None, chosen_model: torch.nn.Module = 
     )
     model.load_state_dict(state_dict)
 
-    error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values = test(
-        test_loader, model, config["Verbosity"]["level"]
-    )
+    (
+        error,
+        error_sumofnodes_task,
+        error_rmse_task,
+        true_values,
+        predicted_values,
+    ) = test(test_loader, model, config["Verbosity"]["level"])
 
     return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values

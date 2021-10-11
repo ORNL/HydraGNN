@@ -5,14 +5,13 @@ from sklearn.model_selection import StratifiedShuffleSplit
 import torch
 from torch_geometric.data import Data
 
-from utils.print_utils import print_distributed, iterate_tqdm
-
-from data_utils.dataset_descriptors import AtomFeatures
-from data_utils.helper_functions import (
+from .dataset_descriptors import AtomFeatures
+from .helper_functions import (
     distance_3D,
     order_candidates,
     resolve_neighbour_conflicts,
 )
+from gcnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
 class SerializedDataLoader:
