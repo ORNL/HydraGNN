@@ -4,7 +4,7 @@
     },
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"raw": {"total": "FePt"},
+        "path": {"raw": {"total": "FePt"}},
         "format": "LSMS",
         "num_nodes": 32,
         "node_features": {
