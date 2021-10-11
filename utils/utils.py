@@ -77,7 +77,6 @@ def init_comm_size_and_rank():
     ## Fall back to default
     if world_size is None:
         world_size = 1
-        print("DDP has to be initialized within a job - Running in sequential mode")
 
     return int(world_size), int(world_rank)
 
