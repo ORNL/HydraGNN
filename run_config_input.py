@@ -8,6 +8,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from utils.utils import (
     dataset_loading_and_splitting,
     train_validate_test_normal,
+)
+from utils.distributed_environment import (
     setup_ddp,
     get_comm_size_and_rank,
 )
@@ -220,8 +222,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
             model.state_dict(),
             "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         )
-
-
+   
 if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
     run_normal_config_file()

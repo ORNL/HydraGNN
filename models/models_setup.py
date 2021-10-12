@@ -8,7 +8,7 @@ from .PNAStack import PNAStack
 from .GATStack import GATStack
 from .MFCStack import MFCStack
 
-from utils.utils import get_comm_size_and_rank
+from utils.distributed_environment import get_comm_size_and_rank
 from utils.print_utils import print_distributed
 
 
