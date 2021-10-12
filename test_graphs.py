@@ -5,6 +5,7 @@ from run_config_input import run_normal_config_file
 from utils.deterministic_graph_data import deterministic_graph_data
 from utils.utils import get_comm_size_and_rank
 from test_trained_model import test_trained_model
+from utils.print_utils import print_distributed
 
 import torch
 import shutil
@@ -86,49 +87,64 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         "GIN": [0.10, 0.85],
         "GAT": [0.80, 0.85],
     }
+    verbosity = 2
 
     for ihead in range(len(true_values)):
         error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
-        assert error_head_sum < thresholds[model_type][0], (
-            "RMSE checking failed for sum of head "
-            + str(ihead)
-            + "! "
-            + str(error_head_sum)
-            + ">"
+        error_str = (
+            str("{:.6f}".format(error_head_sum))
+            + " < "
             + str(thresholds[model_type][0])
         )
+        print_distributed(verbosity, "head sum: " + error_str)
+        assert (
+            error_head_sum < thresholds[model_type][0]
+        ), "RMSE checking failed for sum of head " + str(ihead)
+
         error_head_rmse = error_rmse_task[ihead]
-        assert error_head_rmse < thresholds[model_type][0], (
-            (
-                "RMSE checking failed for components of head "
-                + str(ihead)
-                + "! "
-                + str(error_head_rmse)
-            )
-            + ">"
+        error_str = (
+            str("{:.6f}".format(error_head_rmse))
+            + " < "
             + str(thresholds[model_type][0])
         )
+        print_distributed(verbosity, "head: " + error_str)
+        assert (
+            error_head_rmse < thresholds[model_type][0]
+        ), "RMSE checking failed for components of head " + str(ihead)
+
         head_true = true_values[ihead]
         head_pred = predicted_values[ihead]
         # Check individual samples
+        sample_error_sum = 0.0
+        sample_error_min = 1.0
+        sample_error_max = 0.0
         for true_value, predicted_value in zip(head_true, head_pred):
             for idim in range(len(true_value)):
+                sample_error = abs(true_value[idim] - predicted_value[idim])
                 assert (
-                    abs(true_value[idim] - predicted_value[idim])
-                    < thresholds[model_type][1]
-                ), (
-                    "Samples checking failed!"
-                    + str(abs(true_value[idim] - predicted_value[idim]))
-                    + ">"
-                    + str(thresholds[model_type][1])
-                )
+                    sample_error < thresholds[model_type][1]
+                ), "Samples checking failed!"
+                sample_error_sum += sample_error
+                if sample_error < sample_error_min:
+                    sample_error_min = sample_error
+                if sample_error > sample_error_max:
+                    sample_error_max = sample_error
+        num_samples = len(head_pred) * len(true_value)
+        error_str = (
+            "{:.6f}".format(sample_error_sum / num_samples)
+            + " / "
+            + "{:.6f}".format(sample_error_min)
+            + " / "
+            + "{:.6f}".format(sample_error_max)
+            + " < "
+            + str(thresholds[model_type][1])
+        )
+        print_distributed(verbosity, "samples avg/min/max: " + error_str)
+
     # Check RMSE error
-    assert error < thresholds[model_type][0], (
-        "Total RMSE checking failed!"
-        + str(error)
-        + ">"
-        + str(thresholds[model_type][0])
-    )
+    error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
+    print_distributed(verbosity, "total: " + error_str)
+    assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
 
 
 if __name__ == "__main__":
