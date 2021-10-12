@@ -2,10 +2,10 @@ import json
 
 import torch
 
+from utils.distributed import setup_ddp
 from utils.utils import (
     dataset_loading_and_splitting,
     test,
-    setup_ddp,
 )
 from models.models_setup import generate_model
 from data_utils.dataset_descriptors import (
