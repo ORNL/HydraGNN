@@ -113,5 +113,3 @@ def setup_ddp():
         print("DDP has to be initialized within a job - Running in sequential mode")
 
     return world_size, world_rank
-
-

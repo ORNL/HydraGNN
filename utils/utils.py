@@ -27,6 +27,7 @@ from utils.visualizer import Visualizer
 
 import re
 
+
 def train_validate_test_normal(
     model,
     optimizer,
