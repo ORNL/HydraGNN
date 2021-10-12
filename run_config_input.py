@@ -9,7 +9,7 @@ from utils.utils import (
     dataset_loading_and_splitting,
     train_validate_test_normal,
 )
-from utils.distributed_environment import (
+from utils.distributed import (
     setup_ddp,
     get_comm_size_and_rank,
 )

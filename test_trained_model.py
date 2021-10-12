@@ -2,7 +2,7 @@ import json
 
 import torch
 
-from utils.distributed_environment import setup_ddp
+from utils.distributed import setup_ddp
 from utils.utils import (
     dataset_loading_and_splitting,
     test,

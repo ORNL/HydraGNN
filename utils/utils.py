@@ -21,7 +21,7 @@ from data_utils.dataset_descriptors import (
     StructureFeatures,
     Dataset,
 )
-from utils.distributed_environment import get_comm_size_and_rank
+from utils.distributed import get_comm_size_and_rank
 from utils.print_utils import print_distributed, iterate_tqdm
 from utils.visualizer import Visualizer
 

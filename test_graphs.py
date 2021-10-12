@@ -3,7 +3,7 @@ import pytest
 
 from run_config_input import run_normal_config_file
 from utils.deterministic_graph_data import deterministic_graph_data
-from utils.distributed_environment import get_comm_size_and_rank
+from utils.distributed import get_comm_size_and_rank
 from test_trained_model import test_trained_model
 from utils.print_utils import print_distributed
 
