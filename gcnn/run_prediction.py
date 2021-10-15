@@ -16,6 +16,11 @@ def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None
     if chosen_model is None:
         raise RuntimeError("No model type provided")
 
+    try:
+        os.environ["SERIALIZED_DATA_PATH"]
+    except:
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+
     world_size, world_rank = setup_ddp()
 
     config = {}

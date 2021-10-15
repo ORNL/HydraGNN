@@ -15,6 +15,11 @@ from gcnn.train.train_validate_test import train_validate_test
 
 def run_training(config_file="./examples/configuration.json"):
 
+    try:
+        os.environ["SERIALIZED_DATA_PATH"]
+    except:
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+
     world_size, world_rank = setup_ddp()
 
     config = {}
