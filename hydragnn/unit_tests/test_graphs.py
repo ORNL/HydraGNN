@@ -33,7 +33,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         config = json.load(f)
 
     if rank == 0:
-        num_samples_tot = 500
+        num_samples_tot = 800
         for dataset_name, data_path in config["Dataset"]["path"]["raw"].items():
             if overwrite_data:
                 shutil.rmtree(data_path)

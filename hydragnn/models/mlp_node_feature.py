@@ -37,14 +37,17 @@ class mlp_node_feature(Module):
             out[:, :, inode] = x[inode_index, :]
         return out
 
-    def forward(self, x: Tensor, batch: Tensor):
-        x_nodes = self.node_features_reshape(x, batch)
+    def forward(self, x: Tensor, batch: Tensor, share_mlp: bool = False):
         outs = torch.zeros(
             (x.shape[0], self.output_dim),
             dtype=x.dtype,
             device=x.device,
         )
-        for inode in range(self.num_nodes):
-            inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
-            outs[inode_index, :] = self.mlp[inode](x_nodes[:, :, inode])
+        if share_mlp:
+            outs = self.mlp[0](x)
+        else:
+            x_nodes = self.node_features_reshape(x, batch)
+            for inode in range(self.num_nodes):
+                inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
+                outs[inode_index, :] = self.mlp[inode](x_nodes[:, :, inode])
         return outs

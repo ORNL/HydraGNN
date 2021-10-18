@@ -8,7 +8,7 @@
         "path": {
             "raw": {"total": "dataset/unit_test_multihead"}
         },
-        "num_nodes": 4,
+        "num_nodes": 8,
         "variable_size": true,
         "node_features": {
             "name": ["x","x2","x3"],
@@ -26,22 +26,22 @@
             "model_type": "PNA",
             "radius": 2.0,
             "max_neighbours": 3,
-            "hidden_dim": 4,
-            "num_conv_layers": 3,
+            "hidden_dim": 8,
+            "num_conv_layers": 2,
             "output_heads": {
                 "graph":{
                     "num_sharedlayers": 2,
-                    "dim_sharedlayers": 4,
+                    "dim_sharedlayers": 10,
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10]
+                    "dim_headlayers": [20,20]
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10],
-                    "type": "conv"
+                    "dim_headlayers": [20, 20],
+                    "type": "mlp"
                 }
             },
-            "task_weights": [1.0, 4.0, 4.0, 4.0]
+            "task_weights": [20.0, 1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],

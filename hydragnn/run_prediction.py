@@ -38,6 +38,7 @@ def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None
     with open(config_file, "r") as f:
         config = json.load(f)
 
+    graph_size_variable = config["Dataset"]["variable_size"]
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
 
@@ -46,6 +47,23 @@ def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None
         if output_type[item] == "graph":
             dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
         elif output_type[item] == "node":
+            config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
+                "share_mlp"
+            ] = False
+            if graph_size_variable:
+                if (
+                    config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
+                        "type"
+                    ]
+                    == "mlp"
+                ):
+                    config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
+                        "share_mlp"
+                    ] = True
+                #  raise ValueError(
+                #      "mlp type of node feature prediction for variable graph size not yet supported",
+                #      graph_size_variable,
+                #  )
             dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
             raise ValueError("Unknown output type", output_type[item])

@@ -154,7 +154,11 @@ class Base(torch.nn.Module):
                             batch_norm(conv(x=x_node, edge_index=edge_index))
                         )
                 else:
-                    x_node = headloc(x=x_node, batch=batch)
+                    x_node = headloc(
+                        x=x_node,
+                        batch=batch,
+                        share_mlp=self.config_heads["node"]["share_mlp"],
+                    )
                 outputs.append(x_node)
         return outputs
 
