@@ -102,7 +102,8 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
                     if num_nodes == 4:
                         tests.deterministic_graph_data(
                             data_path,
-                            number_unit_cell_y=1,
+                            number_unit_cell_x_range=[1, 2],
+                            number_unit_cell_y_range=[1, 2],
                             number_configurations=num_samples,
                         )
                     else:
