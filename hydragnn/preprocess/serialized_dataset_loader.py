@@ -22,7 +22,7 @@ from .helper_functions import (
     order_candidates,
     resolve_neighbour_conflicts,
 )
-from gcnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
 class SerializedDataLoader:

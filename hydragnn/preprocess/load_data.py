@@ -21,10 +21,10 @@ try:
 except:
     from torch_geometric.data import DataLoader
 
-from gcnn.preprocess.serialized_dataset_loader import SerializedDataLoader
-from gcnn.preprocess.raw_dataset_loader import RawDataLoader
-from gcnn.preprocess.dataset_descriptors import Dataset
-from gcnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
+from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
+from hydragnn.preprocess.dataset_descriptors import Dataset
+from hydragnn.utils.distributed import get_comm_size_and_rank
 
 
 def dataset_loading_and_splitting(

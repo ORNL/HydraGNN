@@ -14,7 +14,7 @@ import numpy as np
 import torch
 import torch.distributed as dist
 
-from gcnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
 def distance_3D(p1: [float], p2: [float]):

@@ -17,11 +17,11 @@ import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from gcnn.preprocess.load_data import dataset_loading_and_splitting
-from gcnn.utils.distributed import setup_ddp, get_comm_size_and_rank
-from gcnn.utils.print_utils import print_distributed
-from gcnn.models.create import create, get_device
-from gcnn.train.train_validate_test import train_validate_test
+from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
+from hydragnn.utils.print_utils import print_distributed
+from hydragnn.models.create import create, get_device
+from hydragnn.train.train_validate_test import train_validate_test
 
 
 def run_training(config_file="./examples/configuration.json"):

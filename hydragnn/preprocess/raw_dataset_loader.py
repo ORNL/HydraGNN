@@ -18,7 +18,7 @@ import torch
 from torch_geometric.data import Data
 from torch import tensor
 
-from gcnn.preprocess.helper_functions import tensor_divide
+from hydragnn.preprocess.helper_functions import tensor_divide
 
 
 class RawDataLoader:

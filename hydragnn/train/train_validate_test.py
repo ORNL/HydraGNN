@@ -14,9 +14,9 @@ import numpy as np
 
 import torch
 
-from gcnn.preprocess.serialized_dataset_loader import SerializedDataLoader
-from gcnn.postprocess.visualizer import Visualizer
-from gcnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
+from hydragnn.postprocess.visualizer import Visualizer
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
 def train_validate_test(
