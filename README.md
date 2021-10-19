@@ -23,14 +23,16 @@ Detailed dependency installation instructions are available on the
 
 There are two main options for running the code; both require a JSON input file
 for configurable options.
-1. Training a model (including starting from a previously trained model using
-configuration options):
+1. Training a model, including continuing from a previously trained model using
+configuration options:
     ```
-    python run_config_file.py
+    import gcnn
+    gcnn.run_training("examples/configuration.json")
     ```
 2. Making predictions from a previously trained model:
     ```
-    python test_trained_model.py
+    import gcnn
+    gcnn.run_prediction("examples/configuration.json", model)
     ```
 
 ### Datasets
@@ -50,7 +52,7 @@ There are many options for GCNN; the dataset and model type are particularly
 important:
  - `["Verbosity"]["level"]`: `0`, `1`, `2`, `3`, `4`
  - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms`
- - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNA`, `MFC`, `GIN`, `GAT`
+ - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNA`, `MFC`, `GIN`, `GAT`, `CGCNN`
 
 ## Contributing
 

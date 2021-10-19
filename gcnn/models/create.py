@@ -3,14 +3,14 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
-from .GINStack import GINStack
-from .PNAStack import PNAStack
-from .GATStack import GATStack
-from .MFCStack import MFCStack
-from .CGCNNStack import CGCNNStack
+from gcnn.models.GINStack import GINStack
+from gcnn.models.PNAStack import PNAStack
+from gcnn.models.GATStack import GATStack
+from gcnn.models.MFCStack import MFCStack
+from gcnn.models.CGCNNStack import CGCNNStack
 
-from utils.distributed import get_comm_size_and_rank
-from utils.print_utils import print_distributed
+from gcnn.utils.distributed import get_comm_size_and_rank
+from gcnn.utils.print_utils import print_distributed
 
 
 def get_gpu_list():
@@ -53,7 +53,7 @@ def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
     return device_name, torch.device(device_name)
 
 
-def generate_model(
+def create(
     model_type: str,
     input_dim: int,
     dataset: [Data],

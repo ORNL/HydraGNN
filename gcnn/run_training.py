@@ -1,28 +1,24 @@
 import sys, os, json
+import pickle
 
 import torch
 import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from utils.utils import (
-    dataset_loading_and_splitting,
-    train_validate_test_normal,
-)
-from utils.distributed import (
-    setup_ddp,
-    get_comm_size_and_rank,
-)
-from utils.print_utils import print_distributed
-from models.models_setup import generate_model, get_device
-from data_utils.dataset_descriptors import (
-    AtomFeatures,
-    Dataset,
-)
-import pickle
+from gcnn.preprocess.load_data import dataset_loading_and_splitting
+from gcnn.utils.distributed import setup_ddp, get_comm_size_and_rank
+from gcnn.utils.print_utils import print_distributed
+from gcnn.models.create import create, get_device
+from gcnn.train.train_validate_test import train_validate_test
 
 
-def run_normal_config_file(config_file="./examples/configuration.json"):
+def run_training(config_file="./examples/configuration.json"):
+
+    try:
+        os.environ["SERIALIZED_DATA_PATH"]
+    except:
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     world_size, world_rank = setup_ddp()
 
@@ -31,7 +27,6 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         config = json.load(f)
 
     verbosity = config["Verbosity"]["level"]
-
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=config["Dataset"]["name"],
@@ -90,7 +85,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         "Variables_of_interest"
     ]["type"]
 
-    model = generate_model(
+    model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
         input_dim=len(
             config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
@@ -132,7 +127,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         )
     )
 
-    device_name, device = get_device(verbosity_level=config["Verbosity"]["level"])
+    device_name, device = get_device(config["Verbosity"]["level"])
     if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
@@ -193,7 +188,7 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
         )
         model.load_state_dict(state_dict)
 
-    train_validate_test_normal(
+    train_validate_test(
         model,
         optimizer,
         train_loader,
@@ -222,8 +217,3 @@ def run_normal_config_file(config_file="./examples/configuration.json"):
             model.state_dict(),
             "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         )
-
-
-if __name__ == "__main__":
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-    run_normal_config_file()
