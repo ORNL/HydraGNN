@@ -1,18 +1,31 @@
+##############################################################################
+# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
 import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
-from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
+from torch.nn import Sequential, ReLU, Linear
+from torch_geometric.nn import MFConv, BatchNorm, global_mean_pool
+
 from .Base import Base
 
 
-class PNAStack(Base):
+class MFCStack(Base):
     def __init__(
         self,
-        deg: torch.Tensor,
         input_dim: int,
         output_dim: list,
         output_type: list,
         num_nodes: int,
+        max_degree: int,
         hidden_dim: int,
         config_heads: {},
         dropout: float = 0.25,
@@ -24,42 +37,26 @@ class PNAStack(Base):
     ):
         super().__init__()
 
-        aggregators = ["mean", "min", "max", "std"]
-        scalers = [
-            "identity",
-            "amplification",
-            "attenuation",
-            "linear",
-        ]
-
+        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
+        self.max_degree = max_degree
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
         self.convs.append(
-            PNAConv(
-                in_channels=input_dim,
+            MFConv(
+                in_channels=self.input_dim,
                 out_channels=self.hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
+                max_degree=self.max_degree,
             )
         )
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = PNAConv(
+            conv = MFConv(
                 in_channels=self.hidden_dim,
                 out_channels=self.hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
+                max_degree=self.max_degree,
             )
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
@@ -75,4 +72,4 @@ class PNAStack(Base):
         )
 
     def __str__(self):
-        return "PNAStack"
+        return "MFCStack"

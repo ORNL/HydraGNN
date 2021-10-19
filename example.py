@@ -1,3 +1,3 @@
-import gcnn
+import hydragnn
 
-gcnn.run_training()
+hydragnn.run_training()

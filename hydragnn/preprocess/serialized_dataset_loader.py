@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
 import numpy as np
 import pickle
 from sklearn.model_selection import StratifiedShuffleSplit
@@ -11,7 +22,7 @@ from .helper_functions import (
     order_candidates,
     resolve_neighbour_conflicts,
 )
-from gcnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
 class SerializedDataLoader:

@@ -1,11 +1,22 @@
+##############################################################################
+# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
 import json, os
 
 import torch
 
-from gcnn.preprocess.load_data import dataset_loading_and_splitting
-from gcnn.utils.distributed import setup_ddp
-from gcnn.models.create import create
-from gcnn.train.train_validate_test import test
+from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.utils.distributed import setup_ddp
+from hydragnn.models.create import create
+from hydragnn.train.train_validate_test import test
 
 
 def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None):

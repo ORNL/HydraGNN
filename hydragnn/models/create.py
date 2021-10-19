@@ -1,16 +1,27 @@
+##############################################################################
+# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
 import os
 import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
-from gcnn.models.GINStack import GINStack
-from gcnn.models.PNAStack import PNAStack
-from gcnn.models.GATStack import GATStack
-from gcnn.models.MFCStack import MFCStack
-from gcnn.models.CGCNNStack import CGCNNStack
+from hydragnn.models.GINStack import GINStack
+from hydragnn.models.PNAStack import PNAStack
+from hydragnn.models.GATStack import GATStack
+from hydragnn.models.MFCStack import MFCStack
+from hydragnn.models.CGCNNStack import CGCNNStack
 
-from gcnn.utils.distributed import get_comm_size_and_rank
-from gcnn.utils.print_utils import print_distributed
+from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.print_utils import print_distributed
 
 
 def get_gpu_list():

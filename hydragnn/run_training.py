@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
 import sys, os, json
 import pickle
 
@@ -6,11 +17,11 @@ import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from gcnn.preprocess.load_data import dataset_loading_and_splitting
-from gcnn.utils.distributed import setup_ddp, get_comm_size_and_rank
-from gcnn.utils.print_utils import print_distributed
-from gcnn.models.create import create, get_device
-from gcnn.train.train_validate_test import train_validate_test
+from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
+from hydragnn.utils.print_utils import print_distributed
+from hydragnn.models.create import create, get_device
+from hydragnn.train.train_validate_test import train_validate_test
 
 
 def run_training(config_file="./examples/configuration.json"):
