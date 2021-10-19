@@ -19,13 +19,16 @@ from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 
 
-def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None):
+def run_prediction(config_file: str = "./examples/configuration.json"):
 
-    if config_file is None:
-        raise RuntimeError("No configure file provided")
+    config = {}
+    with open(config_file, "r") as f:
+        config = json.load(f)
 
-    if chosen_model is None:
-        raise RuntimeError("No model type provided")
+    run_prediction(config)
+
+
+def run_prediction(config: {}):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
@@ -33,10 +36,6 @@ def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     world_size, world_rank = setup_ddp()
-
-    config = {}
-    with open(config_file, "r") as f:
-        config = json.load(f)
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
