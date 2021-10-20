@@ -44,6 +44,14 @@ def create(
     # i.e., self.node_NN_type = "mlp_per_node"
     num_atoms = dataset[0].num_nodes
 
+    edge_dim = None
+    edge_models = ["PNA", "CGCNN"]
+    if "edge_features" in config and config["edge_features"]:
+        assert (
+            model_type in edge_models
+        ), "Edge features can only be used with PNA and CGCNN."
+        edge_dim = len(config["edge_features"])
+
     if model_type == "GIN":
         model = GINStack(
             input_dim=input_dim,
@@ -71,6 +79,7 @@ def create(
             output_type=config["output_type"],
             config_heads=config["output_heads"],
             loss_weights=config["task_weights"],
+            edge_dim=edge_dim,
         ).to(device)
 
     elif model_type == "GAT":
@@ -107,6 +116,7 @@ def create(
             config_heads=config["output_heads"],
             loss_weights=config["task_weights"],
         ).to(device)
+
     elif model_type == "CGCNN":
         model = CGCNNStack(
             input_dim=input_dim,
@@ -116,6 +126,7 @@ def create(
             output_type=config["output_type"],
             config_heads=config["output_heads"],
             loss_weights=config["task_weights"],
+            edge_dim=edge_dim,
         ).to(device)
     else:
         raise ValueError("Unknown model_type: {0}".format(model_type))

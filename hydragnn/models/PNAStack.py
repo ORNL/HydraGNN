@@ -26,6 +26,7 @@ class PNAStack(Base):
         num_nodes: int,
         hidden_dim: int,
         config_heads: {},
+        edge_dim: list = None,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
@@ -42,6 +43,7 @@ class PNAStack(Base):
             "linear",
         ]
         self.deg = deg
+        self.edge_dim = edge_dim
 
         super().__init__(
             input_dim,
@@ -64,6 +66,7 @@ class PNAStack(Base):
             aggregators=self.aggregators,
             scalers=self.scalers,
             deg=self.deg,
+            edge_dim=self.edge_dim,
             pre_layers=1,
             post_layers=1,
             divide_input=False,

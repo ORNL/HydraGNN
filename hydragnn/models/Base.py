@@ -194,7 +194,12 @@ class Base(Module):
         )
         ### encoder part ####
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
+            if data.edge_attr is not None:
+                c = conv(x=x, edge_index=edge_index, edge_attr=data.edge_attr)
+            else:
+                c = conv(x=x, edge_index=edge_index)
+            x = F.relu(batch_norm(c))
+
         #### multi-head decoder part####
         # shared dense layers for graph level output
         x_graph = global_mean_pool(x, batch)
