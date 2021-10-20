@@ -17,10 +17,8 @@ import shutil
 
 import hydragnn, tests
 
-
-@pytest.mark.parametrize("model_type", ["PNA", "GIN", "GAT", "MFC", "CGCNN"])
-@pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input, overwrite_data=False):
+# Main unit test function called by pytest wrappers.
+def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False):
 
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
@@ -70,6 +68,10 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     if model_type == "MFC" and ci_input == "ci_multihead.json":
         config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
 
+    # Only run with edge lengths for models that support them.
+    if use_lengths:
+        config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+
     if rank == 0:
         num_samples_tot = 500
         # check if serialized pickle files or folders for raw files provided
@@ -109,7 +111,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.
-    if model_type == "PNA":
+    if model_type == "PNA" and not use_lengths:
         hydragnn.run_training(config_file)
     else:
         hydragnn.run_training(config)
@@ -187,3 +189,16 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
     hydragnn.utils.print_distributed(verbosity, "total: " + error_str)
     assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
+
+
+# Test across all models with both single/multihead
+@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
+@pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+def pytest_train_model(model_type, ci_input, overwrite_data=False):
+    unittest_train_model(model_type, ci_input, False, overwrite_data)
+
+
+# Test only models
+@pytest.mark.parametrize("model_type", ["PNA", "CGCNN"])
+def pytest_train_model_lengths(model_type, overwrite_data=False):
+    unittest_train_model(model_type, "ci.json", True, overwrite_data)
