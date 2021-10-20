@@ -21,6 +21,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
 from hydragnn.utils.print_utils import print_distributed
+from hydragnn.utils.time_utils import print_timers
 from hydragnn.models.create import create, get_device
 from hydragnn.train.train_validate_test import train_validate_test
 
@@ -242,3 +243,5 @@ def _(config: dict):
             model.state_dict(),
             "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         )
+
+    print_timers(verbosity)
