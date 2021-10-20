@@ -92,7 +92,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         "MFC": [0.10, 0.25],
         "GIN": [0.10, 0.85],
         "GAT": [0.80, 0.85],
-        #fixme: error for cgcnn will be reduced after edge attributes being implemented
+        # fixme: error for cgcnn will be reduced after edge attributes being implemented
         "CGCNN": [0.20, 0.95],
     }
     verbosity = 2
@@ -145,9 +145,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + str(thresholds[model_type][1])
         )
         hydragnn.utils.print_distributed(verbosity, "samples avg/min/max: " + error_str)
-        assert (
-                sample_error_max < thresholds[model_type][1]
-        ), "Samples checking failed!"
+        assert sample_error_max < thresholds[model_type][1], "Samples checking failed!"
 
     # Check RMSE error
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
