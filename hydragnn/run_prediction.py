@@ -10,6 +10,7 @@
 ##############################################################################
 
 import json, os
+from functools import singledispatch
 
 import torch
 
@@ -19,13 +20,23 @@ from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 
 
-def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None):
+@singledispatch
+def run_prediction(config):
+    raise TypeError("Input must be filename string or configuration dictionary.")
 
-    if config_file is None:
-        raise RuntimeError("No configure file provided")
 
-    if chosen_model is None:
-        raise RuntimeError("No model type provided")
+@run_prediction.register
+def _(config_file: str):
+
+    config = {}
+    with open(config_file, "r") as f:
+        config = json.load(f)
+
+    run_prediction(config)
+
+
+@run_prediction.register
+def run_prediction(config: dict):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
@@ -33,10 +44,6 @@ def run_prediction(config_file: str = None, chosen_model: torch.nn.Module = None
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     world_size, world_rank = setup_ddp()
-
-    config = {}
-    with open(config_file, "r") as f:
-        config = json.load(f)
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
