@@ -24,7 +24,7 @@ from hydragnn.models.create import create, get_device
 from hydragnn.train.train_validate_test import train_validate_test
 
 
-def run_training(config_file: str = "./examples/configuration.json"):
+def run_training(config_file: str):
 
     config = {}
     with open(config_file, "r") as f:

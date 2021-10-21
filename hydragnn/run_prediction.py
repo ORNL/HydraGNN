@@ -19,7 +19,7 @@ from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 
 
-def run_prediction(config_file: str = "./examples/configuration.json"):
+def run_prediction(config_file: str):
 
     config = {}
     with open(config_file, "r") as f:
