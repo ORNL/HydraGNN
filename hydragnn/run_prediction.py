@@ -10,6 +10,7 @@
 ##############################################################################
 
 import json, os
+from functools import singledispatch
 
 import torch
 
@@ -19,7 +20,13 @@ from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 
 
-def run_prediction(config_file: str):
+@singledispatch
+def run_prediction(config):
+    raise TypeError("Input must be filename string or configuration dictionary.")
+
+
+@run_prediction.register
+def _(config_file: str):
 
     config = {}
     with open(config_file, "r") as f:
@@ -28,7 +35,8 @@ def run_prediction(config_file: str):
     run_prediction(config)
 
 
-def run_prediction(config: {}):
+@run_prediction.register
+def run_prediction(config: dict):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
