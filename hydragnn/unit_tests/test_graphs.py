@@ -71,7 +71,12 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
                         data_path, number_configurations=num_samples
                     )
 
-    hydragnn.run_training(config)
+    # Since the config file uses PNA already, test the file overload here.
+    # All the other models need to use the locally modified dictionary.
+    if model_type == "PNA":
+        hydragnn.run_training(config_file)
+    else:
+        hydragnn.run_training(config)
 
     (
         error,
