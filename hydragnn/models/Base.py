@@ -53,14 +53,10 @@ class Base(torch.nn.Module):
     ):
 
         ############multiple heads/taks################
-        # get number of heads from input
         ##One head represent one variable
         ##Head can have different sizes, head_dims;
-        ###e.g., 1 for energy, 32 for charge density, 32 or 32*3 for magnetic moments
         self.num_heads = len(self.head_dims)
         self.num_nodes = num_nodes
-
-        # self.head_dim_sum = sum(self.head_dims) #need to be improved due to num_nodes
 
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
@@ -137,7 +133,7 @@ class Base(torch.nn.Module):
                     raise ValueError(
                         "Unknown head NN structure for node features"
                         + self.node_NN_type
-                        + "; currently only support 'mlp' (for constant num_nodes) or 'conv'"
+                        + "; currently only support 'mlp' or 'conv'"
                     )
             else:
                 raise ValueError(
@@ -211,7 +207,7 @@ class Base(torch.nn.Module):
         return nll_loss, tasks_rmseloss, []
 
     def loss_hpweighted(self, pred, value, head_index):
-        # weights for difficult tasks as hyper-parameters
+        # weights for different tasks as hyper-parameters
         tot_loss = 0
         tasks_rmseloss = []
         tasks_nodes = []
@@ -286,3 +282,6 @@ class mlp_node_feature(Module):
                 inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
                 outs[inode_index, :] = self.mlp[inode](x_nodes[:, :, inode])
         return outs
+
+    def __str__(self):
+        return "mlp_node_feature"
