@@ -11,6 +11,7 @@
 
 import sys, os, json
 import pickle
+from functools import singledispatch
 
 import torch
 import torch.distributed as dist
@@ -24,7 +25,23 @@ from hydragnn.models.create import create, get_device
 from hydragnn.train.train_validate_test import train_validate_test
 
 
-def run_training(config_file="./examples/configuration.json"):
+@singledispatch
+def run_training(config):
+    raise TypeError("Input must be filename string or configuration dictionary.")
+
+
+@run_training.register
+def _(config_file: str):
+
+    config = {}
+    with open(config_file, "r") as f:
+        config = json.load(f)
+
+    run_training(config)
+
+
+@run_training.register
+def _(config: dict):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
@@ -32,10 +49,6 @@ def run_training(config_file="./examples/configuration.json"):
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     world_size, world_rank = setup_ddp()
-
-    config = {}
-    with open(config_file, "r") as f:
-        config = json.load(f)
 
     verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(

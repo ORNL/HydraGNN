@@ -31,6 +31,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
+    config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
 
     if rank == 0:
         num_samples_tot = 500
@@ -70,12 +71,12 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
                         data_path, number_configurations=num_samples
                     )
 
-    tmp_file = "./tmp.json"
-    config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
-    with open(tmp_file, "w") as f:
-        json.dump(config, f)
-
-    hydragnn.run_training(tmp_file)
+    # Since the config file uses PNA already, test the file overload here.
+    # All the other models need to use the locally modified dictionary.
+    if model_type == "PNA":
+        hydragnn.run_training(config_file)
+    else:
+        hydragnn.run_training(config)
 
     (
         error,
@@ -83,7 +84,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         error_rmse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.run_prediction(tmp_file, model_type)
+    ) = hydragnn.run_prediction(config)
 
     # Set RMSE and sample error thresholds
     thresholds = {
