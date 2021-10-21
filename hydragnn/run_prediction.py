@@ -48,6 +48,7 @@ def _(config: dict):
     world_size, world_rank = setup_ddp()
 
     verbosity = config["Verbosity"]["level"]
+
     graph_size_variable = config["Dataset"]["variable_size"]
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
