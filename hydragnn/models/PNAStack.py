@@ -42,18 +42,15 @@ class PNAStack(Base):
             "attenuation",
             "linear",
         ]
+        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.num_conv_layers = num_conv_layers
+        self.deg = deg
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
 
-        self.convs.append(self.get_conv(input_dim, deg))
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
-        for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim, deg)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim))
+        super()._init_model()
 
         super()._multihead(
             output_dim,
@@ -65,13 +62,13 @@ class PNAStack(Base):
             ilossweights_nll,
         )
 
-    def get_conv(self, dim, deg):
+    def get_conv(self, dim):
         return PNAConv(
             in_channels=dim,
             out_channels=self.hidden_dim,
             aggregators=self.aggregators,
             scalers=self.scalers,
-            deg=deg,
+            deg=self.deg,
             pre_layers=1,
             post_layers=1,
             divide_input=False,
