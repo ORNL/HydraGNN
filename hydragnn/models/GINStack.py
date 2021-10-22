@@ -40,29 +40,11 @@ class GINStack(Base):
         self.dropout = dropout
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.convs.append(
-            GINConv(
-                nn.Sequential(
-                    nn.Linear(input_dim, self.hidden_dim),
-                    nn.ReLU(),
-                    nn.Linear(self.hidden_dim, self.hidden_dim),
-                ),
-                eps=100.0,
-                train_eps=True,
-            )
-        )
 
+        self.convs.append(self.get_conv(input_dim))
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = GINConv(
-                nn.Sequential(
-                    nn.Linear(self.hidden_dim, self.hidden_dim),
-                    nn.ReLU(),
-                    nn.Linear(self.hidden_dim, self.hidden_dim),
-                ),
-                eps=100.0,
-                train_eps=True,
-            )
+            conv = self.get_conv(self.hidden_dim)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
@@ -74,6 +56,17 @@ class GINStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def get_conv(self, dim):
+        return GINConv(
+            nn.Sequential(
+                nn.Linear(dim, self.hidden_dim),
+                nn.ReLU(),
+                nn.Linear(self.hidden_dim, self.hidden_dim),
+            ),
+            eps=100.0,
+            train_eps=True,
         )
 
     def __str__(self):

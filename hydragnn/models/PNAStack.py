@@ -35,43 +35,23 @@ class PNAStack(Base):
     ):
         super().__init__()
 
-        aggregators = ["mean", "min", "max", "std"]
-        scalers = [
+        self.aggregators = ["mean", "min", "max", "std"]
+        self.scalers = [
             "identity",
             "amplification",
             "attenuation",
             "linear",
         ]
-
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.convs.append(
-            PNAConv(
-                in_channels=input_dim,
-                out_channels=self.hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
-            )
-        )
+
+        self.convs.append(self.get_conv(input_dim, deg))
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = PNAConv(
-                in_channels=self.hidden_dim,
-                out_channels=self.hidden_dim,
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
-            )
+            conv = self.get_conv(self.hidden_dim, deg)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
@@ -83,6 +63,18 @@ class PNAStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def get_conv(self, dim, deg):
+        return PNAConv(
+            in_channels=dim,
+            out_channels=self.hidden_dim,
+            aggregators=self.aggregators,
+            scalers=self.scalers,
+            deg=deg,
+            pre_layers=1,
+            post_layers=1,
+            divide_input=False,
         )
 
     def __str__(self):

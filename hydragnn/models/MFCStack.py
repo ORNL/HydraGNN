@@ -44,20 +44,11 @@ class MFCStack(Base):
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.convs.append(
-            MFConv(
-                in_channels=self.input_dim,
-                out_channels=self.hidden_dim,
-                max_degree=self.max_degree,
-            )
-        )
+
+        self.convs.append(self.get_conv(self.input_dim))
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = MFConv(
-                in_channels=self.hidden_dim,
-                out_channels=self.hidden_dim,
-                max_degree=self.max_degree,
-            )
+            conv = self.get_conv(self.hidden_dim)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
@@ -69,6 +60,13 @@ class MFCStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def get_conv(self, dim):
+        return MFConv(
+            in_channels=dim,
+            out_channels=self.hidden_dim,
+            max_degree=self.max_degree,
         )
 
     def __str__(self):
