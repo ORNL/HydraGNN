@@ -47,15 +47,7 @@ class GATStack(Base):
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
 
-        self.convs.append(self.get_conv(self.input_dim))
-        self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        for _ in range(self.num_conv_layers - 2):
-            conv = self.get_conv(self.hidden_dim * self.heads)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        conv = self.get_conv(self.hidden_dim * self.heads, concat=False)
-        self.convs.append(conv)
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        self.__init_model()
 
         super()._multihead(
             output_dim,
@@ -67,7 +59,18 @@ class GATStack(Base):
             ilossweights_nll,
         )
 
-    def get_conv(self, in_channels, concat=True):
+    def __init_model(self):
+        self.convs.append(self.get_conv(self.input_dim, True))
+        self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        for _ in range(self.num_conv_layers - 2):
+            conv = self.get_conv(self.hidden_dim * self.heads, True)
+            self.convs.append(conv)
+            self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        conv = self.get_conv(self.hidden_dim * self.heads, False)
+        self.convs.append(conv)
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+    def get_conv(self, in_channels, concat):
         return GATv2Conv(
             in_channels=in_channels,
             out_channels=self.hidden_dim,

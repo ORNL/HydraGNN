@@ -35,18 +35,14 @@ class GINStack(Base):
         # https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
         super().__init__()
-        self.num_conv_layers = num_conv_layers
+        self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
+        self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
 
-        self.convs.append(self.get_conv(input_dim))
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
-        for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim))
+        super()._init_model()
 
         super()._multihead(
             output_dim,
