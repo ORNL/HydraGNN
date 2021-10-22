@@ -35,15 +35,9 @@ class MFCStack(Base):
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper
         # https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
-        super().__init__()
+        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.dropout = dropout
         self.max_degree = max_degree
-        self.num_conv_layers = num_conv_layers
-        self.convs = ModuleList()
-        self.batch_norms = ModuleList()
 
         super()._init_model()
 
