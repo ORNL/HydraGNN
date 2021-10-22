@@ -111,6 +111,8 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
                             data_path, number_configurations=num_samples
                         )
 
+    if model_type == "MFC" and ci_input == "ci_multihead.json":
+        config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 4
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.
     if model_type == "PNA":

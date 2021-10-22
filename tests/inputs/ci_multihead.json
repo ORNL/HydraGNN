@@ -54,7 +54,7 @@
             "num_epoch": 100,
             "perc_train": 0.7,
             "learning_rate": 0.01,
-            "batch_size": 32
+            "batch_size": 16
         }
     }
 }
