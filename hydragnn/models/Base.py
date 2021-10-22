@@ -36,10 +36,10 @@ class Base(torch.nn.Module):
         self._init_model()
 
     def _init_model(self):
-        self.convs.append(self.get_conv(self.input_dim))
+        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim)
+            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 

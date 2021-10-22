@@ -52,20 +52,20 @@ class GATStack(Base):
         )
 
     def _init_model(self):
-        self.convs.append(self.get_conv(self.input_dim, True))
+        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))
         self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
-            conv = self.get_conv(self.hidden_dim * self.heads, True)
+            conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, True)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        conv = self.get_conv(self.hidden_dim * self.heads, False)
+        conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, False)
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-    def get_conv(self, in_channels, concat):
+    def get_conv(self, input_dim, output_dim, concat):
         return GATv2Conv(
-            in_channels=in_channels,
-            out_channels=self.hidden_dim,
+            in_channels=input_dim,
+            out_channels=output_dim,
             heads=self.heads,
             negative_slope=self.negative_slope,
             dropout=self.dropout,
