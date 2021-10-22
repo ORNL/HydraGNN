@@ -36,8 +36,6 @@ class GINStack(Base):
     ):
         super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
-        super()._init_model()
-
         super()._multihead(
             output_dim,
             num_nodes,
