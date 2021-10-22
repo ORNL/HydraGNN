@@ -46,12 +46,12 @@ class GINStack(Base):
             ilossweights_nll,
         )
 
-    def get_conv(self, dim):
+    def get_conv(self, input_dim, output_dim):
         return GINConv(
             nn.Sequential(
-                nn.Linear(dim, self.hidden_dim),
+                nn.Linear(input_dim, output_dim),
                 nn.ReLU(),
-                nn.Linear(self.hidden_dim, self.hidden_dim),
+                nn.Linear(output_dim, output_dim),
             ),
             eps=100.0,
             train_eps=True,

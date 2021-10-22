@@ -46,9 +46,9 @@ class CGCNNStack(Base):
             ilossweights_nll,
         )
 
-    def get_conv(self, dim):
+    def get_conv(self, input_dim, _):
         return CGConv(
-            channels=dim,
+            channels=input_dim,
             dim=self.edge_dim,
             aggr="add",
             batch_norm=False,

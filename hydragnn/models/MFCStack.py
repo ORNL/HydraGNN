@@ -49,10 +49,10 @@ class MFCStack(Base):
             ilossweights_nll,
         )
 
-    def get_conv(self, dim):
+    def get_conv(self, input_dim, output_dim):
         return MFConv(
-            in_channels=dim,
-            out_channels=self.hidden_dim,
+            in_channels=input_dim,
+            out_channels=output_dim,
             max_degree=self.max_degree,
         )
 
