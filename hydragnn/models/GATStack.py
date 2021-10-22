@@ -46,39 +46,17 @@ class GATStack(Base):
         self.negative_slope = negative_slope
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.convs.append(
-            GATv2Conv(
-                in_channels=self.input_dim,
-                out_channels=self.hidden_dim,
-                heads=self.heads,
-                negative_slope=self.negative_slope,
-                dropout=self.dropout,
-                add_self_loops=True,
-            )
-        )
+
+        self.convs.append(self.get_conv(self.input_dim))
         self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
-            conv = GATv2Conv(
-                in_channels=self.hidden_dim * self.heads,
-                out_channels=self.hidden_dim,
-                heads=self.heads,
-                negative_slope=self.negative_slope,
-                dropout=self.dropout,
-                add_self_loops=True,
-            )
+            conv = self.get_conv(self.hidden_dim * self.heads)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        conv = GATv2Conv(
-            in_channels=self.hidden_dim * self.heads,
-            out_channels=self.hidden_dim,
-            heads=self.heads,
-            negative_slope=self.negative_slope,
-            dropout=self.dropout,
-            add_self_loops=True,
-            concat=False,
-        )
+        conv = self.get_conv(self.hidden_dim * self.heads, concat=False)
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(self.hidden_dim))
+
         super()._multihead(
             output_dim,
             num_nodes,
@@ -87,6 +65,17 @@ class GATStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def get_conv(self, in_channels, concat=True):
+        return GATv2Conv(
+            in_channels=in_channels,
+            out_channels=self.hidden_dim,
+            heads=self.heads,
+            negative_slope=self.negative_slope,
+            dropout=self.dropout,
+            add_self_loops=True,
+            concat=concat,
         )
 
     def __str__(self):

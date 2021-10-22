@@ -36,28 +36,16 @@ class CGCNNStack(Base):
 
         # self.hidden_dim = hidden_dim
         self.hidden_dim = input_dim
+        self.edge_dim = edge_dim
         self.dropout = dropout
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
-        self.convs.append(
-            CGConv(
-                channels=input_dim,
-                dim=edge_dim,
-                aggr="add",
-                batch_norm=False,
-                bias=True,
-            )
-        )
+
+        self.convs.append(self.get_conv(input_dim))
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = CGConv(
-                channels=self.hidden_dim,
-                dim=edge_dim,
-                aggr="add",
-                batch_norm=False,
-                bias=True,
-            )
+            conv = self.get_conv(self.hidden_dim)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
@@ -69,6 +57,15 @@ class CGCNNStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def get_conv(self, dim):
+        return CGConv(
+            channels=dim,
+            dim=self.edge_dim,
+            aggr="add",
+            batch_norm=False,
+            bias=True,
         )
 
     def __str__(self):
