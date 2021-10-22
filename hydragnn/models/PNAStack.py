@@ -33,7 +33,6 @@ class PNAStack(Base):
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper
         # https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
         self.aggregators = ["mean", "min", "max", "std"]
         self.scalers = [
@@ -44,7 +43,7 @@ class PNAStack(Base):
         ]
         self.deg = deg
 
-        super()._init_model()
+        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
         super()._multihead(
             output_dim,

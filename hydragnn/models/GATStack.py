@@ -35,13 +35,11 @@ class GATStack(Base):
         loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
         # note that self.heads is a parameter in GATConv, not the num_heads in the output part
         self.heads = heads
         self.negative_slope = negative_slope
 
-        self.__init_model()
+        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
         super()._multihead(
             output_dim,
@@ -53,7 +51,7 @@ class GATStack(Base):
             ilossweights_nll,
         )
 
-    def __init_model(self):
+    def _init_model(self):
         self.convs.append(self.get_conv(self.input_dim, True))
         self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
