@@ -114,7 +114,7 @@ class Base(torch.nn.Module):
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp":
-                """  if different graphs in the dataset have different size, one MLP is shared across all nodes """
+                #"""if different graphs in the dataset have different size, one MLP is shared across all nodes """
                     head_NN = mlp_node_feature(
                         self.hidden_dim,
                         self.head_dims[ihead],
