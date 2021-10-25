@@ -39,6 +39,11 @@ class Base(torch.nn.Module):
         self.config_heads = config_heads
         self.head_type = output_type
         self.head_dims = output_dim
+        ##convolutional layers for node level predictions
+        self.convs_node_hidden = ModuleList()
+        self.batch_norms_node_hidden = ModuleList()
+        self.convs_node_output = ModuleList()
+        self.batch_norms_node_output = ModuleList()
 
         self._init_model()
 
@@ -49,6 +54,37 @@ class Base(torch.nn.Module):
             conv = self.get_conv(self.hidden_dim, self.hidden_dim)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+        # *******convolutional layers for node level predictions*******#
+        # two ways to implement node features from here:
+        # 1. one graph for all node features
+        # 2. one graph for one node features (currently implemented)
+        node_feature_ind = [
+            i for i, head_type in enumerate(self.head_type) if head_type == "node"
+        ]
+        if len(node_feature_ind) == 0:
+            return
+        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+        # In this part, each head has same number of convolutional layers, but can have different output dimension
+        self.convs_node_hidden.append(
+            self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
+        )
+        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
+        for ilayer in range(self.num_conv_layers_node - 1):
+            self.convs_node_hidden.append(
+                self.get_conv(
+                    self.hidden_dim_node[ilayer], self.hidden_dim_node[ilayer + 1]
+                )
+            )
+            self.batch_norms_node_hidden.append(
+                BatchNorm(self.hidden_dim_node[ilayer + 1])
+            )
+        for ihead in node_feature_ind:
+            self.convs_node_output.append(
+                self.get_conv(self.hidden_dim_node[-1], self.head_dims[ihead])
+            )
+            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def _multihead(
         self,

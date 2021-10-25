@@ -52,7 +52,6 @@ class PNAStack(Base):
             dropout,
             num_conv_layers,
         )
-        self.__conv_node_features__()
         super()._multihead(
             num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
         )
@@ -68,70 +67,6 @@ class PNAStack(Base):
             post_layers=1,
             divide_input=False,
         )
-
-    def __conv_node_features__(self):
-        # convolutional layers for node level predictions
-        # two ways to implement node features from here:
-        # 1. one graph for all node features
-        # 2. one graph for one node features (currently implemented)
-        self.convs_node_hidden = ModuleList()
-        self.batch_norms_node_hidden = ModuleList()
-        self.convs_node_output = ModuleList()
-        self.batch_norms_node_output = ModuleList()
-
-        node_feature_ind = [
-            i for i, head_type in enumerate(self.head_type) if head_type == "node"
-        ]
-        if len(node_feature_ind) == 0:
-            return
-
-        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
-        # In this part, each head has same number of convolutional layers, but can have different output dimension
-        self.convs_node_hidden.append(
-            PNAConv(
-                in_channels=self.hidden_dim,
-                out_channels=self.hidden_dim_node[0],
-                aggregators=self.aggregators,
-                scalers=self.scalers,
-                deg=self.deg,
-                pre_layers=1,
-                post_layers=1,
-                divide_input=False,
-            )
-        )
-        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
-        for ilayer in range(self.num_conv_layers_node - 1):
-            self.convs_node_hidden.append(
-                PNAConv(
-                    in_channels=self.hidden_dim_node[ilayer],
-                    out_channels=self.hidden_dim_node[ilayer + 1],
-                    aggregators=self.aggregators,
-                    scalers=self.scalers,
-                    deg=self.deg,
-                    pre_layers=1,
-                    post_layers=1,
-                    divide_input=False,
-                )
-            )
-            self.batch_norms_node_hidden.append(
-                BatchNorm(self.hidden_dim_node[ilayer + 1])
-            )
-
-        for ihead in node_feature_ind:
-            self.convs_node_output.append(
-                PNAConv(
-                    in_channels=self.hidden_dim_node[-1],
-                    out_channels=self.head_dims[ihead],
-                    aggregators=self.aggregators,
-                    scalers=self.scalers,
-                    deg=self.deg,
-                    pre_layers=1,
-                    post_layers=1,
-                    divide_input=False,
-                )
-            )
-            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def __str__(self):
         return "PNAStack"
