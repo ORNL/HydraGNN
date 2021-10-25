@@ -48,8 +48,22 @@ def _(config: dict):
     world_size, world_rank = setup_ddp()
 
     verbosity = config["Verbosity"]["level"]
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
+        config=config,
+        chosen_dataset_option=config["Dataset"]["name"],
+    )
 
-    graph_size_variable = config["Dataset"]["variable_size"]
+    graph_size_variable = False
+    nodes_num_list = []
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in loader:
+            nodes_num_list.extend(data.num_nodes_list.tolist())
+            if len(list(set(nodes_num_list))) > 1:
+                graph_size_variable = True
+                break
+        if graph_size_variable:
+            break
+
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
 
@@ -71,10 +85,6 @@ def _(config: dict):
                     config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
                         "share_mlp"
                     ] = True
-                #  raise ValueError(
-                #      "mlp type of node feature prediction for variable graph size not yet supported",
-                #      graph_size_variable,
-                #  )
             dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
             raise ValueError("Unknown output type", output_type[item])
@@ -82,11 +92,6 @@ def _(config: dict):
     config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
         "Variables_of_interest"
     ]["type"]
-
-    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
-        config=config,
-        chosen_dataset_option=config["Dataset"]["name"],
-    )
 
     model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],

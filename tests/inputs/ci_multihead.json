@@ -9,7 +9,6 @@
             "raw": {"total": "dataset/unit_test_multihead"}
         },
         "num_nodes": 8,
-        "variable_size": true,
         "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],

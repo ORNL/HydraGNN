@@ -56,7 +56,18 @@ def _(config: dict):
         config=config,
         chosen_dataset_option=config["Dataset"]["name"],
     )
-    graph_size_variable = config["Dataset"]["variable_size"]
+
+    graph_size_variable = False
+    nodes_num_list = []
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in loader:
+            nodes_num_list.extend(data.num_nodes_list.tolist())
+            if len(list(set(nodes_num_list))) > 1:
+                graph_size_variable = True
+                break
+        if graph_size_variable:
+            break
+
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
     config["NeuralNetwork"]["Architecture"]["output_dim"] = []
