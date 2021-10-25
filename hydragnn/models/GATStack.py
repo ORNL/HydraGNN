@@ -35,50 +35,12 @@ class GATStack(Base):
         loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.dropout = dropout
-        self.num_conv_layers = num_conv_layers
         # note that self.heads is a parameter in GATConv, not the num_heads in the output part
         self.heads = heads
         self.negative_slope = negative_slope
-        self.convs = ModuleList()
-        self.batch_norms = ModuleList()
-        self.convs.append(
-            GATv2Conv(
-                in_channels=self.input_dim,
-                out_channels=self.hidden_dim,
-                heads=self.heads,
-                negative_slope=self.negative_slope,
-                dropout=self.dropout,
-                add_self_loops=True,
-            )
-        )
-        self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        for _ in range(self.num_conv_layers - 2):
-            conv = GATv2Conv(
-                in_channels=self.hidden_dim * self.heads,
-                out_channels=self.hidden_dim,
-                heads=self.heads,
-                negative_slope=self.negative_slope,
-                dropout=self.dropout,
-                add_self_loops=True,
-            )
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
-        conv = GATv2Conv(
-            in_channels=self.hidden_dim * self.heads,
-            out_channels=self.hidden_dim,
-            heads=self.heads,
-            negative_slope=self.negative_slope,
-            dropout=self.dropout,
-            add_self_loops=True,
-            concat=False,
-        )
-        self.convs.append(conv)
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
+
         super()._multihead(
             output_dim,
             num_nodes,
@@ -87,6 +49,28 @@ class GATStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def _init_model(self):
+        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))
+        self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        for _ in range(self.num_conv_layers - 2):
+            conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, True)
+            self.convs.append(conv)
+            self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, False)
+        self.convs.append(conv)
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+    def get_conv(self, input_dim, output_dim, concat):
+        return GATv2Conv(
+            in_channels=input_dim,
+            out_channels=output_dim,
+            heads=self.heads,
+            negative_slope=self.negative_slope,
+            dropout=self.dropout,
+            add_self_loops=True,
+            concat=concat,
         )
 
     def __str__(self):

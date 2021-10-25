@@ -12,15 +12,36 @@
 import torch
 from torch.nn import ModuleList, Sequential, ReLU, Linear
 import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
 import sys
 
 
 class Base(torch.nn.Module):
-    def __init__(self):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: list,
+        dropout: float = 0.25,
+        num_conv_layers: int = 16,
+    ):
         super().__init__()
-        self.dropout = 0.25
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.dropout = dropout
+        self.num_conv_layers = num_conv_layers
+        self.convs = ModuleList()
+        self.batch_norms = ModuleList()
+
+        self._init_model()
+
+    def _init_model(self):
+        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        for _ in range(self.num_conv_layers - 1):
+            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
+            self.convs.append(conv)
+            self.batch_norms.append(BatchNorm(self.hidden_dim))
 
     def _multihead(
         self,
