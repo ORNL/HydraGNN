@@ -65,6 +65,11 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         if os.path.exists(pkl_file):
             config["Dataset"]["path"]["raw"][dataset_name] = pkl_file
 
+    # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+    # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+    if model_type == "MFC" and ci_input == "ci_multihead.json":
+        config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 1
+
     if rank == 0:
         num_samples_tot = 500
         # check if serialized pickle files or folders for raw files provided
@@ -111,8 +116,6 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
                             data_path, number_configurations=num_samples
                         )
 
-    if model_type == "MFC" and ci_input == "ci_multihead.json":
-        config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 4
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.
     if model_type == "PNA":
