@@ -15,10 +15,9 @@ import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
 import sys
-from torch import Tensor
 
 
-class Base(torch.nn.Module):
+class Base(Module):
     def __init__(
         self,
         input_dim: int,
@@ -157,7 +156,7 @@ class Base(torch.nn.Module):
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp":
                     # """if different graphs in the dataset have different size, one MLP is shared across all nodes """
-                    head_NN = mlp_node_feature(
+                    head_NN = MLPNode(
                         self.hidden_dim,
                         self.head_dims[ihead],
                         self.num_nodes,
@@ -176,7 +175,7 @@ class Base(torch.nn.Module):
                     raise ValueError(
                         "Unknown head NN structure for node features"
                         + self.node_NN_type
-                        + "; currently only support 'mlp' or 'conv'"
+                        + "; currently only support 'mlp' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                     )
             else:
                 raise ValueError(
@@ -277,7 +276,7 @@ class Base(torch.nn.Module):
         return "Base"
 
 
-class mlp_node_feature(Module):
+class MLPNode(Module):
     def __init__(self, input_dim, output_dim, num_nodes, hidden_dim_node):
         super().__init__()
         self.input_dim = input_dim
@@ -311,7 +310,7 @@ class mlp_node_feature(Module):
             out[:, :, inode] = x[inode_index, :]
         return out
 
-    def forward(self, x: Tensor, batch: Tensor, share_mlp: bool = False):
+    def forward(self, x: torch.Tensor, batch: torch.Tensor, share_mlp: bool = False):
         outs = torch.zeros(
             (x.shape[0], self.output_dim),
             dtype=x.dtype,
@@ -327,4 +326,4 @@ class mlp_node_feature(Module):
         return outs
 
     def __str__(self):
-        return "mlp_node_feature"
+        return "MLPNode"
