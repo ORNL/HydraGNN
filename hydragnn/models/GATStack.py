@@ -39,16 +39,18 @@ class GATStack(Base):
         self.heads = heads
         self.negative_slope = negative_slope
 
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
-        super()._multihead(
+        super().__init__(
+            input_dim,
+            hidden_dim,
             output_dim,
-            num_nodes,
             output_type,
             config_heads,
-            ilossweights_hyperp,
-            loss_weights,
-            ilossweights_nll,
+            dropout,
+            num_conv_layers,
+        )
+        self.__conv_node_features__()
+        super()._multihead(
+            num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
         )
 
     def _init_model(self):

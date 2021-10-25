@@ -34,11 +34,29 @@ class GINStack(Base):
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper
         # https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
+        super().__init__(
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            config_heads,
+            dropout,
+            num_conv_layers,
+        )
         self.__conv_node_features__()
         super()._multihead(
             num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
+        )
+
+    def get_conv(self, input_dim, output_dim):
+        return GINConv(
+            nn.Sequential(
+                nn.Linear(input_dim, output_dim),
+                nn.ReLU(),
+                nn.Linear(output_dim, output_dim),
+            ),
+            eps=100.0,
+            train_eps=True,
         )
 
     def __conv_node_features__(self):
@@ -107,17 +125,6 @@ class GINStack(Base):
                 )
             )
             self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
-
-    def get_conv(self, input_dim, output_dim):
-        return GINConv(
-            nn.Sequential(
-                nn.Linear(input_dim, output_dim),
-                nn.ReLU(),
-                nn.Linear(output_dim, output_dim),
-            ),
-            eps=100.0,
-            train_eps=True,
-        )
 
     def __str__(self):
         return "GINStack"

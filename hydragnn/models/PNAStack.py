@@ -43,14 +43,33 @@ class PNAStack(Base):
         ]
         self.deg = deg
 
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
-        self.__conv_node_features__(aggregators, scalers, deg)
+        super().__init__(
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            config_heads,
+            dropout,
+            num_conv_layers,
+        )
+        self.__conv_node_features__()
         super()._multihead(
             num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
         )
 
-    def __conv_node_features__(self, aggregators, scalers, deg):
+    def get_conv(self, input_dim, output_dim):
+        return PNAConv(
+            in_channels=input_dim,
+            out_channels=output_dim,
+            aggregators=self.aggregators,
+            scalers=self.scalers,
+            deg=self.deg,
+            pre_layers=1,
+            post_layers=1,
+            divide_input=False,
+        )
+
+    def __conv_node_features__(self):
         # convolutional layers for node level predictions
         # two ways to implement node features from here:
         # 1. one graph for all node features
@@ -73,9 +92,9 @@ class PNAStack(Base):
             PNAConv(
                 in_channels=self.hidden_dim,
                 out_channels=self.hidden_dim_node[0],
-                aggregators=aggregators,
-                scalers=scalers,
-                deg=deg,
+                aggregators=self.aggregators,
+                scalers=self.scalers,
+                deg=self.deg,
                 pre_layers=1,
                 post_layers=1,
                 divide_input=False,
@@ -87,9 +106,9 @@ class PNAStack(Base):
                 PNAConv(
                     in_channels=self.hidden_dim_node[ilayer],
                     out_channels=self.hidden_dim_node[ilayer + 1],
-                    aggregators=aggregators,
-                    scalers=scalers,
-                    deg=deg,
+                    aggregators=self.aggregators,
+                    scalers=self.scalers,
+                    deg=self.deg,
                     pre_layers=1,
                     post_layers=1,
                     divide_input=False,
@@ -104,27 +123,15 @@ class PNAStack(Base):
                 PNAConv(
                     in_channels=self.hidden_dim_node[-1],
                     out_channels=self.head_dims[ihead],
-                    aggregators=aggregators,
-                    scalers=scalers,
-                    deg=deg,
+                    aggregators=self.aggregators,
+                    scalers=self.scalers,
+                    deg=self.deg,
                     pre_layers=1,
                     post_layers=1,
                     divide_input=False,
                 )
             )
             self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
-
-    def get_conv(self, input_dim, output_dim):
-        return PNAConv(
-            in_channels=input_dim,
-            out_channels=output_dim,
-            aggregators=self.aggregators,
-            scalers=self.scalers,
-            deg=self.deg,
-            pre_layers=1,
-            post_layers=1,
-            divide_input=False,
-        )
 
     def __str__(self):
         return "PNAStack"

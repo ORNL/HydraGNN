@@ -36,11 +36,27 @@ class CGCNNStack(Base):
 
         # CGCNN does not change embedding dimensions
         # We use input dimension (first argument of constructor) also as hidden dimension (second argument of constructor)
-        super().__init__(input_dim, input_dim, dropout, num_conv_layers)
-
+        super().__init__(
+            input_dim,
+            input_dim,
+            output_dim,
+            output_type,
+            config_heads,
+            dropout,
+            num_conv_layers,
+        )
         self.__conv_node_features__()
         super()._multihead(
             num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
+        )
+
+    def get_conv(self, input_dim, _):
+        return CGConv(
+            channels=input_dim,
+            dim=self.edge_dim,
+            aggr="add",
+            batch_norm=False,
+            bias=True,
         )
 
     def __conv_node_features__(self):
@@ -72,15 +88,6 @@ class CGCNNStack(Base):
         # so to predict output node features with different dimensions from the input node feature's, CGConv can be
         # combined with, e.g.,mlp
         return
-
-    def get_conv(self, input_dim, _):
-        return CGConv(
-            channels=input_dim,
-            dim=self.edge_dim,
-            aggr="add",
-            batch_norm=False,
-            bias=True,
-        )
 
     def __str__(self):
         return "CGCNNStack"

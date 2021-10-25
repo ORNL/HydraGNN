@@ -22,7 +22,10 @@ class Base(torch.nn.Module):
     def __init__(
         self,
         input_dim: int,
-        hidden_dim: list,
+        hidden_dim: int,
+        output_dim: list,
+        output_type: list,
+        config_heads: {},
         dropout: float = 0.25,
         num_conv_layers: int = 16,
     ):
@@ -33,6 +36,9 @@ class Base(torch.nn.Module):
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+        self.config_heads = config_heads
+        self.head_type = output_type
+        self.head_dims = output_dim
 
         self._init_model()
 
@@ -114,7 +120,7 @@ class Base(torch.nn.Module):
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp":
-                #"""if different graphs in the dataset have different size, one MLP is shared across all nodes """
+                    # """if different graphs in the dataset have different size, one MLP is shared across all nodes """
                     head_NN = mlp_node_feature(
                         self.hidden_dim,
                         self.head_dims[ihead],

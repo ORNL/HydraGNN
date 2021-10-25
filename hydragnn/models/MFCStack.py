@@ -37,8 +37,15 @@ class MFCStack(Base):
     ):
         self.max_degree = max_degree
 
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
+        super().__init__(
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            config_heads,
+            dropout,
+            num_conv_layers,
+        )
         self.__conv_node_features__()
         super()._multihead(
             num_nodes, ilossweights_hyperp, loss_weights, ilossweights_nll
