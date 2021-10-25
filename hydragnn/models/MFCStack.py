@@ -35,31 +35,9 @@ class MFCStack(Base):
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper
         # https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
     ):
-        super().__init__()
-
-        self.input_dim = input_dim
-        self.hidden_dim = hidden_dim
-        self.dropout = dropout
         self.max_degree = max_degree
-        self.num_conv_layers = num_conv_layers
-        self.convs = ModuleList()
-        self.batch_norms = ModuleList()
-        self.convs.append(
-            MFConv(
-                in_channels=self.input_dim,
-                out_channels=self.hidden_dim,
-                max_degree=self.max_degree,
-            )
-        )
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
-        for _ in range(self.num_conv_layers - 1):
-            conv = MFConv(
-                in_channels=self.hidden_dim,
-                out_channels=self.hidden_dim,
-                max_degree=self.max_degree,
-            )
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
 
         super()._multihead(
             output_dim,
@@ -69,6 +47,13 @@ class MFCStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+        )
+
+    def get_conv(self, input_dim, output_dim):
+        return MFConv(
+            in_channels=input_dim,
+            out_channels=output_dim,
+            max_degree=self.max_degree,
         )
 
     def __str__(self):
