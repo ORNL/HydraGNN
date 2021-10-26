@@ -62,6 +62,8 @@ class GATStack(Base):
         conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, False)
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+    def _init_conv(self):
         # *******convolutional layers for node level predictions*******#
         # two ways to implement node features from here:
         # 1. one graph for all node features

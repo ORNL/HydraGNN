@@ -45,6 +45,7 @@ class Base(Module):
         self.batch_norms_node_output = ModuleList()
 
         self._init_model()
+        self._init_conv()
 
     def _init_model(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
@@ -54,6 +55,7 @@ class Base(Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
+    def _init_conv(self):
         # *******convolutional layers for node level predictions*******#
         # two ways to implement node features from here:
         # 1. one graph for all node features

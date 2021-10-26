@@ -58,14 +58,7 @@ class CGCNNStack(Base):
             bias=True,
         )
 
-    def _init_model(self):
-        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
-        for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim))
-
+    def _init_conv(self):
         # *******convolutional layers for node level predictions*******#
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
