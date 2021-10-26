@@ -74,6 +74,7 @@ class Base(Module):
 
         self._init_conv()
         self._init_node_conv()
+        self._multihead()
 
     def _init_conv(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))

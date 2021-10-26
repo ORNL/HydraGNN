@@ -50,7 +50,6 @@ class MFCStack(Base):
             dropout,
             num_conv_layers,
         )
-        super()._multihead()
 
     def get_conv(self, input_dim, output_dim):
         return MFConv(

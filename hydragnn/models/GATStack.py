@@ -52,7 +52,6 @@ class GATStack(Base):
             dropout,
             num_conv_layers,
         )
-        super()._multihead()
 
     def _init_conv(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))

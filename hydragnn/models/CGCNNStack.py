@@ -49,7 +49,6 @@ class CGCNNStack(Base):
             dropout,
             num_conv_layers,
         )
-        super()._multihead()
 
     def get_conv(self, input_dim, _):
         return CGConv(
