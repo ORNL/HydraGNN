@@ -32,11 +32,11 @@
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 10,
                     "num_headlayers": 2,
-                    "dim_headlayers": [20,20]
+                    "dim_headlayers": [10, 10]
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [20, 20],
+                    "dim_headlayers": [10, 10],
                     "type": "mlp"
                 }
             },
