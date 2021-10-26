@@ -55,11 +55,11 @@ class Timer:
         world_size, world_rank = get_comm_size_and_rank()
 
         if torch.distributed.is_initialized():
-            torch.distributed.all_reduce(self.tmin, op=torch.distributed.ReduceOp.MIN)
+            torch.distributed.reduce(self.tmin, 0, op=torch.distributed.ReduceOp.MIN)
             self.tmin = self.tmin.item()
-            torch.distributed.all_reduce(self.tmax, op=torch.distributed.ReduceOp.MAX)
+            torch.distributed.reduce(self.tmax, 0, op=torch.distributed.ReduceOp.MAX)
             self.tmax = self.tmax.item()
-            torch.distributed.all_reduce(self.tavg, op=torch.distributed.ReduceOp.SUM)
+            torch.distributed.reduce(self.tavg, 0, op=torch.distributed.ReduceOp.SUM)
         self.tavg = self.tavg.item() / world_size
 
         if self.name:
