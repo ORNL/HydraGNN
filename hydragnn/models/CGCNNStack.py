@@ -60,7 +60,7 @@ class CGCNNStack(Base):
             bias=True,
         )
 
-    def _init_conv(self):
+    def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"

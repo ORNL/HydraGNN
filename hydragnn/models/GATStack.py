@@ -54,7 +54,7 @@ class GATStack(Base):
         )
         super()._multihead()
 
-    def _init_model(self):
+    def _init_conv(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))
         self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
@@ -65,7 +65,7 @@ class GATStack(Base):
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-    def _init_conv(self):
+    def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
         # two ways to implement node features from here:
         # 1. one graph for all node features

@@ -72,10 +72,10 @@ class Base(Module):
             weightabssum = sum(abs(number) for number in self.loss_weights)
             self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
 
-        self._init_model()
         self._init_conv()
+        self._init_node_conv()
 
-    def _init_model(self):
+    def _init_conv(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
         self.batch_norms.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
@@ -83,7 +83,7 @@ class Base(Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
-    def _init_conv(self):
+    def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
         # two ways to implement node features from here:
         # 1. one graph for all node features
