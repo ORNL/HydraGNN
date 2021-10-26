@@ -1,7 +1,7 @@
 import time
 import torch
-from utils.distributed import get_comm_size_and_rank
-from utils.print_utils import print_distributed
+from .distributed import get_comm_size_and_rank
+from .print_utils import print_distributed
 
 
 class TimerError(Exception):
