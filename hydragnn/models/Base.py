@@ -25,6 +25,10 @@ class Base(Module):
         output_dim: list,
         output_type: list,
         config_heads: {},
+        num_nodes: int,
+        ilossweights_hyperp: int,
+        loss_weights: list,
+        ilossweights_nll: int,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
     ):
@@ -35,14 +39,38 @@ class Base(Module):
         self.num_conv_layers = num_conv_layers
         self.convs = ModuleList()
         self.batch_norms = ModuleList()
+        self.num_nodes = num_nodes
+        ##One head represent one variable
+        ##Head can have different sizes, head_dims
+        self.heads_NN = ModuleList()
         self.config_heads = config_heads
         self.head_type = output_type
         self.head_dims = output_dim
+        self.num_heads = len(self.head_dims)
         ##convolutional layers for node level predictions
         self.convs_node_hidden = ModuleList()
         self.batch_norms_node_hidden = ModuleList()
         self.convs_node_output = ModuleList()
         self.batch_norms_node_output = ModuleList()
+
+        self.ilossweights_nll = ilossweights_nll
+        self.ilossweights_hyperp = ilossweights_hyperp
+        if self.ilossweights_hyperp * self.ilossweights_nll == 1:
+            raise ValueError(
+                "ilossweights_hyperp and ilossweights_nll cannot be both set to 1."
+            )
+        if self.ilossweights_hyperp == 1:
+            if len(loss_weights) != self.num_heads:
+                raise ValueError(
+                    "Inconsistent number of loss weights and tasks: "
+                    + str(len(loss_weights))
+                    + " VS "
+                    + str(self.num_heads)
+                )
+            else:
+                self.loss_weights = loss_weights
+            weightabssum = sum(abs(number) for number in self.loss_weights)
+            self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
 
         self._init_model()
         self._init_conv()
@@ -87,20 +115,8 @@ class Base(Module):
             )
             self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
-    def _multihead(
-        self,
-        num_nodes: int,
-        ilossweights_hyperp: int,
-        loss_weights: list,
-        ilossweights_nll: int,
-    ):
-
+    def _multihead(self):
         ############multiple heads/taks################
-        ##One head represent one variable
-        ##Head can have different sizes, head_dims;
-        self.num_heads = len(self.head_dims)
-        self.num_nodes = num_nodes
-
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
         if "graph" in self.config_heads:
@@ -113,25 +129,6 @@ class Base(Module):
                 denselayers.append(ReLU())
             self.graph_shared = Sequential(*denselayers)
 
-        self.heads = ModuleList()
-        self.ilossweights_nll = ilossweights_nll
-        self.ilossweights_hyperp = ilossweights_hyperp
-        if self.ilossweights_hyperp * self.ilossweights_nll == 1:
-            raise ValueError(
-                "ilossweights_hyperp and ilossweights_nll cannot be both set to 1."
-            )
-        if self.ilossweights_hyperp == 1:
-            if len(loss_weights) != self.num_heads:
-                raise ValueError(
-                    "Inconsistent number of loss weights and tasks: "
-                    + str(len(loss_weights))
-                    + " VS "
-                    + str(self.num_heads)
-                )
-            else:
-                self.loss_weights = loss_weights
-            weightabssum = sum(abs(number) for number in self.loss_weights)
-            self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
         inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
@@ -149,7 +146,7 @@ class Base(Module):
                 denselayers.append(
                     Linear(
                         dim_head_hidden[-1],
-                        self.head_dims[ihead] + ilossweights_nll * 1,
+                        self.head_dims[ihead] + self.ilossweights_nll * 1,
                     )
                 )
                 head_NN = Sequential(*denselayers)
@@ -185,7 +182,7 @@ class Base(Module):
                     + self.head_type[ihead]
                     + "; currently only support 'graph' or 'node'"
                 )
-            self.heads.append(head_NN)
+            self.heads_NN.append(head_NN)
 
     def forward(self, data):
         x, edge_index, batch = (
@@ -201,7 +198,7 @@ class Base(Module):
         x_graph = global_mean_pool(x, batch)
         outputs = []
         for head_dim, headloc, type_head in zip(
-            self.head_dims, self.heads, self.head_type
+            self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
                 x_graph_head = x_graph.clone()
