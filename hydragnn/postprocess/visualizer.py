@@ -64,7 +64,7 @@ class Visualizer:
         self,
         model_with_config_name: str,
         node_feature: [],
-        num_nodes: [],
+        num_nodes_list: [],
         num_heads=1,
         head_dims=[1],
     ):
@@ -75,7 +75,7 @@ class Visualizer:
         self.num_nodes = len(node_feature[0])
         self.num_heads = num_heads
         self.head_dims = head_dims
-        self.num_nodes_list = num_nodes
+        self.num_nodes_list = num_nodes_list
 
     def __hist2d_contour(self, data1, data2):
         hist2d_pasr, xedge_pasr, yedge_pasr = np.histogram2d(

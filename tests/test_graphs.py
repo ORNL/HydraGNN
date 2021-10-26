@@ -135,7 +135,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     thresholds = {
         "PNA": [0.10, 0.25],
         "MFC": [0.10, 0.25],
-        "GIN": [0.10, 0.90],
+        "GIN": [0.15, 0.90],
         "GAT": [0.80, 0.95],
         # fixme: error for cgcnn will be reduced after edge attributes being implemented
         "CGCNN": [0.30, 0.95],

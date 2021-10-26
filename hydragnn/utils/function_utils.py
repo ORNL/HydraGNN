@@ -59,7 +59,7 @@ def update_config_NN_outputs(config, graph_size_variable):
     return config
 
 
-def load_minmax_to_config(dataset_path, config):
+def update_config_minmax(dataset_path, config):
     """load minimum and maximum values from dataset_path, if need denormalize,"""
     with open(dataset_path, "rb") as f:
         node_minmax = pickle.load(f)

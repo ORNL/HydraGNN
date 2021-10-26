@@ -24,7 +24,7 @@ from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.function_utils import (
     check_if_graph_size_constant,
     update_config_NN_outputs,
-    load_minmax_to_config,
+    update_config_minmax,
     get_model_output_name,
 )
 from hydragnn.models.create import create, get_device
@@ -76,7 +76,7 @@ def _(config: dict):
         else:
             ###used for min/max values loading below
             dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
-        config = load_minmax_to_config(dataset_path, config)
+        config = update_config_minmax(dataset_path, config)
     else:
         config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = False
 

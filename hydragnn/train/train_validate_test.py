@@ -66,7 +66,7 @@ def train_validate_test(
         node_feature=node_feature,
         num_heads=model.num_heads,
         head_dims=model.head_dims,
-        num_nodes=nodes_num_list,
+        num_nodes_list=nodes_num_list,
     )
     visualizer.num_nodes_plot()
 

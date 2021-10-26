@@ -5,6 +5,6 @@ from .time_utils import Timer, print_timers
 from .function_utils import (
     check_if_graph_size_constant,
     update_config_NN_outputs,
-    load_minmax_to_config,
+    update_config_minmax,
     get_model_output_name,
 )
