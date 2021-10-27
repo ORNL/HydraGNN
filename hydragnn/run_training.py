@@ -175,6 +175,7 @@ def _(config: dict):
     else:
         writer = SummaryWriter("./logs/" + model_with_config_name)
 
+    dist.barrier()
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
         json.dump(config, f)
 
