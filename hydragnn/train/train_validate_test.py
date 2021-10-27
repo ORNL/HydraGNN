@@ -75,6 +75,10 @@ def train_validate_test(
             output_names=config["Variables_of_interest"]["output_names"],
             iepoch=-1,
         )
+
+    timer = Timer("train_validate_test")
+    timer.start()
+
     for epoch in range(0, num_epoch):
         train_mae, train_taskserr, train_taskserr_nodes = train(
             train_loader, model, optimizer, verbosity
@@ -121,6 +125,8 @@ def train_validate_test(
                 iepoch=epoch,
             )
 
+    timer.stop()
+
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
         test_loader, model, verbosity
@@ -161,9 +167,6 @@ def train_validate_test(
 
 def train(loader, model, opt, verbosity):
 
-    timer = Timer("train")
-    timer.start()
-
     device = next(model.parameters()).device
     tasks_error = np.zeros(model.num_heads)
     tasks_noderr = np.zeros(model.num_heads)
@@ -185,8 +188,6 @@ def train(loader, model, opt, verbosity):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
             tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
-    timer.stop()
-
     return (
         total_error / len(loader.dataset),
         tasks_error / len(loader.dataset),
@@ -196,9 +197,6 @@ def train(loader, model, opt, verbosity):
 
 @torch.no_grad()
 def validate(loader, model, verbosity):
-
-    timer = Timer("validate")
-    timer.start()
 
     device = next(model.parameters()).device
 
@@ -216,8 +214,6 @@ def validate(loader, model, verbosity):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
             tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
-    timer.stop()
-
     return (
         total_error / len(loader.dataset),
         tasks_error / len(loader.dataset),
@@ -227,9 +223,6 @@ def validate(loader, model, verbosity):
 
 @torch.no_grad()
 def test(loader, model, verbosity):
-
-    timer = Timer("test")
-    timer.start()
 
     device = next(model.parameters()).device
 
@@ -265,8 +258,6 @@ def test(loader, model, verbosity):
             predicted_values[ihead].extend(
                 pred[:, IImean[isum - model.head_dims[ihead] : isum]].tolist()
             )
-
-    timer.stop()
 
     return (
         total_error / len(loader.dataset),

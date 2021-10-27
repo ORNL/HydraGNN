@@ -1,6 +1,7 @@
 import time
 import torch
 from .distributed import get_comm_size_and_rank
+from .device import get_device
 from .print_utils import print_distributed
 
 
@@ -26,6 +27,7 @@ class Timer:
         self.name = name
 
         self.world_size, self.world_rank = get_comm_size_and_rank()
+        self.device = get_device()
 
         self.timers_local.setdefault(name, 0.0)
         self.timers_min.setdefault(name, 0.0)
@@ -48,9 +50,10 @@ class Timer:
         self.elapsed_time = time.perf_counter() - self.start_time
         self.start_time = None
 
-        self.tmin = torch.Tensor([self.elapsed_time])
-        self.tmax = torch.Tensor([self.elapsed_time])
-        self.tavg = torch.Tensor([self.elapsed_time])
+        _, self.device = get_device()
+        self.tmin = torch.Tensor([self.elapsed_time]).to(self.device)
+        self.tmax = torch.Tensor([self.elapsed_time]).to(self.device)
+        self.tavg = torch.Tensor([self.elapsed_time]).to(self.device)
 
         world_size, world_rank = get_comm_size_and_rank()
 
@@ -86,17 +89,18 @@ def print_timers(verbosity):
     world_size, world_rank = get_comm_size_and_rank()
 
     # With proper lever of verbosity >=1, the local timers will have different values per process
-    print_distributed(
-        verbosity, f"Process {world_rank} - Local timers: ", Timer.timers_local
-    )
+    [print_distributed(
+        verbosity, f"Process {world_rank} - Local timer: ", key, " : ", round(value,2)) for key, value in Timer.timers_local.items()
+    ]
 
     # The statistics are the result of global collective operations, so we only print them once
     if verbosity >= 1:
-        print_distributed(1, "Minimum timers: ")
-        print_distributed(1, Timer.timers_min)
-        print_distributed(1, "Maximum timers: ")
-        print_distributed(1, Timer.timers_max)
-        print_distributed(1, "Average timers: ")
-        print_distributed(1, Timer.timers_avg)
-        print_distributed(1, "Number of calls to timers: ")
+        if world_size > 1:
+           print_distributed(1, "Minimum timers: ")
+           [print_distributed(1, key, " : ", round(value,2)) for key, value in Timer.timers_min.items()]
+           print_distributed(1, "Maximum timers: ")
+           [print_distributed(1, key, " : ", round(value,2)) for key, value in Timer.timers_max.items()]
+           print_distributed(1, "Average timers: ")
+           [print_distributed(1, key, " : ", round(value,2)) for key, value in Timer.timers_avg.items()]
+           print_distributed(1, "Number of calls to timers: ")
         print_distributed(1, Timer.number_calls)
