@@ -89,18 +89,34 @@ def print_timers(verbosity):
     world_size, world_rank = get_comm_size_and_rank()
 
     # With proper lever of verbosity >=1, the local timers will have different values per process
-    [print_distributed(
-        verbosity, f"Process {world_rank} - Local timer: ", key, " : ", round(value,2)) for key, value in Timer.timers_local.items()
+    [
+        print_distributed(
+            verbosity,
+            f"Process {world_rank} - Local timer: ",
+            key,
+            " : ",
+            round(value, 2),
+        )
+        for key, value in Timer.timers_local.items()
     ]
 
     # The statistics are the result of global collective operations, so we only print them once
     if verbosity >= 1:
         if world_size > 1:
-           print_distributed(1, "Minimum timers: ")
-           [print_distributed(1, key, " : ", round(value,2)) for key, value in Timer.timers_min.items()]
-           print_distributed(1, "Maximum timers: ")
-           [print_distributed(1, key, " : ", round(value,2)) for key, value in Timer.timers_max.items()]
-           print_distributed(1, "Average timers: ")
-           [print_distributed(1, key, " : ", round(value,2)) for key, value in Timer.timers_avg.items()]
-           print_distributed(1, "Number of calls to timers: ")
+            print_distributed(1, "Minimum timers: ")
+            [
+                print_distributed(1, key, " : ", round(value, 2))
+                for key, value in Timer.timers_min.items()
+            ]
+            print_distributed(1, "Maximum timers: ")
+            [
+                print_distributed(1, key, " : ", round(value, 2))
+                for key, value in Timer.timers_max.items()
+            ]
+            print_distributed(1, "Average timers: ")
+            [
+                print_distributed(1, key, " : ", round(value, 2))
+                for key, value in Timer.timers_avg.items()
+            ]
+            print_distributed(1, "Number of calls to timers: ")
         print_distributed(1, Timer.number_calls)
