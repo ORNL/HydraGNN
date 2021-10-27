@@ -14,7 +14,6 @@ import torch.nn.functional as F
 from torch.nn import ModuleList
 from torch_geometric.nn import CGConv, BatchNorm, global_mean_pool
 from .Base import Base
-from hydragnn.utils.print_utils import print_distributed
 
 
 class CGCNNStack(Base):
@@ -75,19 +74,14 @@ class CGCNNStack(Base):
         # fixme: CGConv layer alone will present the same out dimension with the input, instead of having different "in_channels" and "out_channels" as in the other conv layers;
         # so to predict output node features with different dimensions from the input node feature's, CGConv can be
         # combined with, e.g.,mlp
-        verbosity = 2
         for ihead in range(self.num_heads):
             if (
                 self.head_type[ihead] == "node"
                 and self.config_heads["node"]["type"] == "conv"
             ):
-                print_distributed(
-                    verbosity,
-                    "Warning: conv for node features decoder part not ready yet! Switch to shared mlp for prediction",
+                raise ValueError(
+                    '"conv" for node features decoder part in CGCNN is not ready yet. Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "mlp_per_node" in input file.'
                 )
-                break
-        self.config_heads["node"]["type"] = "mlp"
-        self.config_heads["node"]["share_mlp"] = True
 
     def __str__(self):
         return "CGCNNStack"

@@ -9,8 +9,6 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import pickle
-import os
-from hydragnn.utils.print_utils import print_distributed
 
 
 def update_config_NN_outputs(config, graph_size_variable):
@@ -24,21 +22,16 @@ def update_config_NN_outputs(config, graph_size_variable):
         if output_type[item] == "graph":
             dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
         elif output_type[item] == "node":
-            if graph_size_variable:
-                if (
-                    config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
-                        "type"
-                    ]
-                    == "mlp_per_node"
-                ):
-                    verbosity = 2
-                    print_distributed(
-                        verbosity,
-                        "'mlp_per_node' is not allowed for variable graph size, switching to 'mlp'",
-                    )
-                    config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
-                        "type"
-                    ] = "mlp"
+            if (
+                graph_size_variable
+                and config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
+                    "type"
+                ]
+                == "mlp_per_node"
+            ):
+                raise ValueError(
+                    '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
+                )
 
             dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
