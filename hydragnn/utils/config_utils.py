@@ -13,26 +13,13 @@ import os
 from hydragnn.utils.print_utils import print_distributed
 
 
-def check_if_graph_size_constant(train_loader, val_loader, test_loader):
-    graph_size_variable = False
-    nodes_num_list = []
-    for loader in [train_loader, val_loader, test_loader]:
-        for data in loader:
-            nodes_num_list.extend(data.num_nodes_list.tolist())
-            if len(list(set(nodes_num_list))) > 1:
-                graph_size_variable = True
-                return graph_size_variable
-    return graph_size_variable
-
-
 def update_config_NN_outputs(config, graph_size_variable):
-    """get config["NeuralNetwork"]["Architecture"]["output_dim"] and ...["output_type"]
-    and  config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["share_mlp"]"""
+    """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
 
-    config["NeuralNetwork"]["Architecture"]["output_dim"] = []
+    dims_list = []
     for item in range(len(output_type)):
         if output_type[item] == "graph":
             dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
@@ -56,10 +43,9 @@ def update_config_NN_outputs(config, graph_size_variable):
             dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
             raise ValueError("Unknown output type", output_type[item])
-        config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
-    config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
-        "Variables_of_interest"
-    ]["type"]
+        dims_list.append(dim_item)
+    config["NeuralNetwork"]["Architecture"]["output_dim"] = dims_list
+    config["NeuralNetwork"]["Architecture"]["output_type"] = output_type
     return config
 
 
@@ -94,7 +80,7 @@ def update_config_minmax(dataset_path, config):
     return config
 
 
-def get_model_output_name(model, config):
+def get_model_output_name_config(model, config):
     return (
         model.__str__()
         + "-r-"

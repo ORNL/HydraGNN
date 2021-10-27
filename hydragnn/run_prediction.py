@@ -15,12 +15,12 @@ from functools import singledispatch
 import torch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import setup_ddp
 from hydragnn.utils.time_utils import print_timers
-from hydragnn.utils.function_utils import (
-    check_if_graph_size_constant,
+from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
-    get_model_output_name,
+    get_model_output_name_config,
 )
 from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
@@ -73,7 +73,7 @@ def _(config: dict):
         verbosity_level=config["Verbosity"]["level"],
     )
 
-    model_with_config_name = get_model_output_name(model, config)
+    model_with_config_name = get_model_output_name_config(model, config)
     state_dict = torch.load(
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         map_location="cpu",

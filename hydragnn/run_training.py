@@ -18,14 +18,14 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
-from hydragnn.utils.function_utils import (
-    check_if_graph_size_constant,
+from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
     update_config_minmax,
-    get_model_output_name,
+    get_model_output_name_config,
 )
 from hydragnn.models.create import create, get_device
 from hydragnn.train.train_validate_test import train_validate_test
@@ -90,7 +90,7 @@ def _(config: dict):
         verbosity_level=config["Verbosity"]["level"],
     )
 
-    model_with_config_name = get_model_output_name(model, config)
+    model_with_config_name = get_model_output_name_config(model, config)
 
     device_name, device = get_device(config["Verbosity"]["level"])
     if dist.is_initialized():

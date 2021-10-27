@@ -170,7 +170,10 @@ def train_validate_test(
     )
 
 
-def find_head_index_for_true(model, data):
+def get_head_indices(model, data):
+    """In data.y (the true value here), all feature variables for a mini-batch are concatenated together as a large list.
+    To calculate loss function, we need to know true value for each feature in every head.
+    This function is to get the feature/head index/location in the large list."""
     batch_size = data.batch.max() + 1
     y_loc = data.y_loc
     # head size for each sample
@@ -198,7 +201,7 @@ def train(loader, model, opt, verbosity):
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
         opt.zero_grad()
-        head_index = find_head_index_for_true(model, data)
+        head_index = get_head_indices(model, data)
 
         pred = model(data)
         loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
@@ -228,7 +231,7 @@ def validate(loader, model, verbosity):
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
-        head_index = find_head_index_for_true(model, data)
+        head_index = get_head_indices(model, data)
 
         pred = model(data)
         error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
@@ -264,7 +267,7 @@ def test(loader, model, verbosity):
         ]
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
-        head_index = find_head_index_for_true(model, data)
+        head_index = get_head_indices(model, data)
 
         pred = model(data)
         error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)

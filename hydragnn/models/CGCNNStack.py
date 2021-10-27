@@ -61,6 +61,9 @@ class CGCNNStack(Base):
         )
 
     def _init_node_conv(self):
+        """It overwrites _init_node_conv() in Base since purely convolutional layers in _init_node_conv() is not implemented yet.
+        Here it serves as a temporary place holder. Purely cgcnn conv is not feasible for node feature predictions with
+        arbitrary output dimensions, unless we combine it with mlp"""
         # *******convolutional layers for node level predictions******* #
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
