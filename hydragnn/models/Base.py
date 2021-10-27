@@ -161,6 +161,7 @@ class Base(Module):
                         self.head_dims[ihead],
                         self.num_nodes,
                         self.hidden_dim_node,
+                        self.config_heads["node"]["type"],
                     )
                 elif self.node_NN_type == "conv":
                     for conv, batch_norm in zip(
@@ -213,11 +214,7 @@ class Base(Module):
                             batch_norm(conv(x=x_node, edge_index=edge_index))
                         )
                 else:
-                    x_node = headloc(
-                        x=x_node,
-                        batch=batch,
-                        node_type=self.config_heads["node"]["type"],
-                    )
+                    x_node = headloc(x=x_node, batch=batch)
                 outputs.append(x_node)
         return outputs
 
@@ -277,11 +274,12 @@ class Base(Module):
 
 
 class MLPNode(Module):
-    def __init__(self, input_dim, output_dim, num_nodes, hidden_dim_node):
+    def __init__(self, input_dim, output_dim, num_nodes, hidden_dim_node, node_type):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.num_nodes = num_nodes
+        self.node_type = node_type
 
         self.mlp = ModuleList()
         for inode in range(self.num_nodes):
@@ -310,13 +308,13 @@ class MLPNode(Module):
             out[:, :, inode] = x[inode_index, :]
         return out
 
-    def forward(self, x: torch.Tensor, batch: torch.Tensor, node_type: str = "mlp"):
+    def forward(self, x: torch.Tensor, batch: torch.Tensor):
         outs = torch.zeros(
             (x.shape[0], self.output_dim),
             dtype=x.dtype,
             device=x.device,
         )
-        if node_type == "mlp":
+        if self.node_type == "mlp":
             outs = self.mlp[0](x)
         else:
             x_nodes = self.node_features_reshape(x, batch)

@@ -34,7 +34,7 @@ def update_config_NN_outputs(config, graph_size_variable):
                     verbosity = 2
                     print_distributed(
                         verbosity,
-                        "'mlp_per_node' is not allowed for variable graph size, switch to 'mlp'",
+                        "'mlp_per_node' is not allowed for variable graph size, switching to 'mlp'",
                     )
                     config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
                         "type"
