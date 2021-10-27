@@ -9,6 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import os
 import torch
 
 from .distributed import get_comm_size_and_rank
