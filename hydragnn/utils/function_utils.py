@@ -10,6 +10,7 @@
 ##############################################################################
 import pickle
 import os
+from hydragnn.utils.print_utils import print_distributed
 
 
 def check_if_graph_size_constant(train_loader, val_loader, test_loader):
@@ -36,19 +37,22 @@ def update_config_NN_outputs(config, graph_size_variable):
         if output_type[item] == "graph":
             dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
         elif output_type[item] == "node":
-            config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
-                "share_mlp"
-            ] = False
             if graph_size_variable:
                 if (
                     config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
                         "type"
                     ]
-                    == "mlp"
+                    == "mlp_per_node"
                 ):
+                    verbosity = 2
+                    print_distributed(
+                        verbosity,
+                        "'mlp_per_node' is not allowed for variable graph size, switch to 'mlp'",
+                    )
                     config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
-                        "share_mlp"
-                    ] = True
+                        "type"
+                    ] = "mlp"
+
             dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
         else:
             raise ValueError("Unknown output type", output_type[item])

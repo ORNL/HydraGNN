@@ -154,7 +154,7 @@ class Base(Module):
             elif self.head_type[ihead] == "node":
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
-                if self.node_NN_type == "mlp":
+                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
                     # """if different graphs in the dataset have different size, one MLP is shared across all nodes """
                     head_NN = MLPNode(
                         self.hidden_dim,
@@ -175,7 +175,7 @@ class Base(Module):
                     raise ValueError(
                         "Unknown head NN structure for node features"
                         + self.node_NN_type
-                        + "; currently only support 'mlp' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                     )
             else:
                 raise ValueError(
@@ -216,7 +216,7 @@ class Base(Module):
                     x_node = headloc(
                         x=x_node,
                         batch=batch,
-                        share_mlp=self.config_heads["node"]["share_mlp"],
+                        node_type=self.config_heads["node"]["type"],
                     )
                 outputs.append(x_node)
         return outputs
@@ -310,13 +310,13 @@ class MLPNode(Module):
             out[:, :, inode] = x[inode_index, :]
         return out
 
-    def forward(self, x: torch.Tensor, batch: torch.Tensor, share_mlp: bool = False):
+    def forward(self, x: torch.Tensor, batch: torch.Tensor, node_type: str = "mlp"):
         outs = torch.zeros(
             (x.shape[0], self.output_dim),
             dtype=x.dtype,
             device=x.device,
         )
-        if share_mlp:
+        if node_type == "mlp":
             outs = self.mlp[0](x)
         else:
             x_nodes = self.node_features_reshape(x, batch)
