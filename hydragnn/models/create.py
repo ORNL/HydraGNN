@@ -51,6 +51,10 @@ def create(
             model_type in edge_models
         ), "Edge features can only be used with PNA and CGCNN."
         edge_dim = len(config["edge_features"])
+    elif model_type == "CGCNN":
+        # CG always needs an integer edge_dim
+        # PNA would fail with integer edge_dim without edge_attr
+        edge_dim = 0
 
     if model_type == "GIN":
         model = GINStack(
