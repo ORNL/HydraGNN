@@ -25,6 +25,7 @@ from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
 from hydragnn.preprocess.dataset_descriptors import Dataset
 from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.time_utils import Timer
 
 
 def dataset_loading_and_splitting(
@@ -193,6 +194,9 @@ def load_data(dataset_option, config):
 
 def transform_raw_data_to_serialized(config):
 
+    timer = Timer("transform_raw_data_to_serialized")
+    timer.start()
+
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
@@ -201,3 +205,5 @@ def transform_raw_data_to_serialized(config):
 
     if dist.is_initialized():
         dist.barrier()
+
+    timer.stop()

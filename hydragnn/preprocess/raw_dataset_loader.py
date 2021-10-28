@@ -21,6 +21,8 @@ from torch import tensor
 from hydragnn.preprocess.helper_functions import tensor_divide
 from hydragnn.utils.time_utils import Timer
 
+# WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
+
 
 class RawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
@@ -65,9 +67,6 @@ class RawDataLoader:
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
         """
-
-        # timer = Timer("load_raw_data")
-        # timer.start()
 
         serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
         if not os.path.exists(serialized_dir):
@@ -118,8 +117,6 @@ class RawDataLoader:
                 pickle.dump(self.minmax_graph_feature, f)
                 pickle.dump(dataset_normalized, f)
 
-        # timer.stop()
-
     def __transform_input_to_data_object_base(self, lines: [str]):
         """Transforms lines of strings read from the raw data file to Data object and returns it.
 
@@ -132,8 +129,6 @@ class RawDataLoader:
         Data
             Data object representing structure of a graph sample.
         """
-        # timer = Timer("transform_input_to_data_object_base")
-        # timer.start()
 
         data_object = Data()
 
@@ -166,8 +161,6 @@ class RawDataLoader:
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
 
-        # timer.stop()
-
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):
@@ -189,9 +182,6 @@ class RawDataLoader:
         return data_object
 
     def __normalize_dataset(self):
-
-        # timer = Timer("normalize_dataset")
-        # timer.start()
 
         """Performs the normalization on Data objects and returns the normalized dataset."""
         num_of_nodes = len(self.dataset_list[0][0].x)
@@ -240,5 +230,3 @@ class RawDataLoader:
                             - self.minmax_node_feature[0, :, ifeat]
                         ),
                     )
-
-        # timer.stop()
