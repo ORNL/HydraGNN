@@ -97,7 +97,7 @@ def print_timers(verbosity):
             " : ",
             round(value, 2),
         )
-        for key, value in Timer.timers_local.items()
+        for key, value in sorted(Timer.timers_local.items(), key=lambda item: item[1], reverse=True)
     ]
 
     # The statistics are the result of global collective operations, so we only print them once
