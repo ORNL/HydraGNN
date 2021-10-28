@@ -32,6 +32,10 @@ def dataset_loading_and_splitting(
     config: {},
     chosen_dataset_option: Dataset,
 ):
+
+    timer = Timer("dataset_loading_and_splitting")
+    timer.start()
+
     if chosen_dataset_option in [item.value for item in Dataset]:
         dataset_chosen, dataset_names = load_data(chosen_dataset_option, config)
         return split_dataset(
@@ -82,8 +86,13 @@ def dataset_loading_and_splitting(
                 perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
             )
 
+    timer.stop() 
+
 
 def create_dataloaders(trainset, valset, testset, batch_size):
+
+    timer = Timer("create_dataloaders")
+    timer.start()
 
     if dist.is_initialized():
 
@@ -115,6 +124,8 @@ def create_dataloaders(trainset, valset, testset, batch_size):
             shuffle=True,
         )
 
+    timer.stop()
+
     return train_loader, val_loader, test_loader
 
 
@@ -124,6 +135,9 @@ def split_dataset(
     batch_size: int,
     perc_train: float,
 ):
+
+    timer = Timer(split_dataset)
+    timer.start()
 
     if len(dataset_names) == 1 and dataset_names[0] == "total":
         dataset = dataset_list[0]
@@ -148,6 +162,8 @@ def split_dataset(
         trainset, valset, testset, batch_size
     )
 
+    timer.stop()
+
     return train_loader, val_loader, test_loader
 
 
@@ -157,6 +173,10 @@ def combine_and_split_datasets(
     batch_size: int,
     perc_train: float,
 ):
+
+    timer = Timer("combine_and_split_datasets")
+    timer.start()
+
     data_size = len(dataset1)
 
     trainset = dataset1[: int(data_size * perc_train)]
@@ -167,10 +187,16 @@ def combine_and_split_datasets(
         trainset, valset, testset, batch_size
     )
 
+    timer.stop()
+
     return train_loader, val_loader, test_loader
 
 
 def load_data(dataset_option, config):
+
+    timer = Timer("load_data")
+    timer.start()
+
     transform_raw_data_to_serialized(config["Dataset"])
     dataset_list = []
     datasetname_list = []
@@ -188,6 +214,8 @@ def load_data(dataset_option, config):
         )
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
+
+    timer.stop()
 
     return dataset_list, datasetname_list
 
