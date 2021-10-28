@@ -36,7 +36,7 @@ def _(config_file: str):
 
 
 @run_prediction.register
-def run_prediction(config: dict):
+def _(config: dict):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
