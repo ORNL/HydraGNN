@@ -19,7 +19,6 @@ from torch_geometric.data import Data
 from torch import tensor
 
 from hydragnn.preprocess.helper_functions import tensor_divide
-from hydragnn.utils.time_utils import Timer
 
 # WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
 
