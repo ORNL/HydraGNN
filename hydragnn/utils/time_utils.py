@@ -118,5 +118,5 @@ def print_timers(verbosity):
                 print_distributed(1, key, " : ", round(value, 2))
                 for key, value in Timer.timers_avg.items()
             ]
-            print_distributed(1, "Number of calls to timers: ")
+        print_distributed(1, "Number of calls to timers: ")
         print_distributed(1, Timer.number_calls)
