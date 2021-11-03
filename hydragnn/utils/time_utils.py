@@ -65,12 +65,11 @@ class Timer:
             torch.distributed.reduce(self.tavg, 0, op=torch.distributed.ReduceOp.SUM)
         self.tavg = self.tavg.item() / world_size
 
-        if self.name:
-            self.timers_local[self.name] += self.elapsed_time
-            self.timers_min[self.name] += self.tmin
-            self.timers_max[self.name] += self.tmax
-            self.timers_avg[self.name] += self.tavg
-            self.number_calls[self.name] += self.calls
+        self.timers_local[self.name] += self.elapsed_time
+        self.timers_min[self.name] += self.tmin
+        self.timers_max[self.name] += self.tmax
+        self.timers_avg[self.name] += self.tavg
+        self.number_calls[self.name] += self.calls
 
         self.running = False
 
