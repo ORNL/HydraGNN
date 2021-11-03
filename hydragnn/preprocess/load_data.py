@@ -210,4 +210,3 @@ def transform_raw_data_to_serialized(config):
 
     if dist.is_initialized():
         dist.barrier()
-

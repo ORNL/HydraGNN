@@ -107,17 +107,23 @@ def print_timers(verbosity):
             print_distributed(1, "Minimum timers: ")
             [
                 print_distributed(1, key, " : ", round(value, 2))
-                for key, value in Timer.timers_min.items()
+                for key, value in sorted(
+                    Timer.timers_min.items(), key=lambda item: item[1], reverse=True
+                )
             ]
             print_distributed(1, "Maximum timers: ")
             [
                 print_distributed(1, key, " : ", round(value, 2))
-                for key, value in Timer.timers_max.items()
+                for key, value in sorted(
+                    Timer.timers_max.items(), key=lambda item: item[1], reverse=True
+                )
             ]
             print_distributed(1, "Average timers: ")
             [
                 print_distributed(1, key, " : ", round(value, 2))
-                for key, value in Timer.timers_avg.items()
+                for key, value in sorted(
+                    Timer.timers_avg.items(), key=lambda item: item[1], reverse=True
+                )
             ]
         print_distributed(1, "Number of calls to timers: ")
         print_distributed(1, Timer.number_calls)
