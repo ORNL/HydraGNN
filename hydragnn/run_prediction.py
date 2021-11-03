@@ -126,5 +126,5 @@ def run_prediction(config: dict):
         predicted_values,
     ) = test(test_loader, model, config["Verbosity"]["level"])
 
-    return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values
     print_timers(verbosity)
+    return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values
