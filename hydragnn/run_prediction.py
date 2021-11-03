@@ -16,6 +16,7 @@ import torch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import setup_ddp
+from hydragnn.utils.time_utils import print_timers
 from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 
@@ -126,3 +127,4 @@ def run_prediction(config: dict):
     ) = test(test_loader, model, config["Verbosity"]["level"])
 
     return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values
+    print_timers(verbosity)
