@@ -16,6 +16,7 @@ import torch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import setup_ddp
+from hydragnn.utils.time_utils import print_timers
 from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 
@@ -45,6 +46,7 @@ def _(config: dict):
 
     world_size, world_rank = setup_ddp()
 
+    verbosity = config["Verbosity"]["level"]
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
 
@@ -125,4 +127,5 @@ def _(config: dict):
         predicted_values,
     ) = test(test_loader, model, config["Verbosity"]["level"])
 
+    print_timers(verbosity)
     return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values

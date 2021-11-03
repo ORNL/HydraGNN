@@ -22,6 +22,7 @@ from hydragnn.models.CGCNNStack import CGCNNStack
 
 from hydragnn.utils.device import get_device
 from hydragnn.utils.print_utils import print_distributed
+from hydragnn.utils.time_utils import Timer
 
 
 def create(
@@ -33,6 +34,8 @@ def create(
     use_gpu: bool = True,
     use_distributed: bool = False,
 ):
+    timer = Timer("create_model")
+    timer.start()
     torch.manual_seed(0)
 
     _, device = get_device(use_gpu, verbosity_level=verbosity_level)
@@ -115,4 +118,5 @@ def create(
     else:
         raise ValueError("Unknown model_type: {0}".format(model_type))
 
+    timer.stop()
     return model

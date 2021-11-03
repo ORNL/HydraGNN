@@ -18,6 +18,7 @@ from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.time_utils import Timer
 
 
 def train_validate_test(
@@ -74,6 +75,10 @@ def train_validate_test(
             output_names=config["Variables_of_interest"]["output_names"],
             iepoch=-1,
         )
+
+    timer = Timer("train_validate_test")
+    timer.start()
+
     for epoch in range(0, num_epoch):
         train_mae, train_taskserr, train_taskserr_nodes = train(
             train_loader, model, optimizer, verbosity
@@ -119,6 +124,8 @@ def train_validate_test(
                 output_names=config["Variables_of_interest"]["output_names"],
                 iepoch=epoch,
             )
+
+    timer.stop()
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
@@ -180,6 +187,7 @@ def train(loader, model, opt, verbosity):
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
             tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
+
     return (
         total_error / len(loader.dataset),
         tasks_error / len(loader.dataset),

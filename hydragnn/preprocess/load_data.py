@@ -25,12 +25,14 @@ from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
 from hydragnn.preprocess.dataset_descriptors import Dataset
 from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.time_utils import Timer
 
 
 def dataset_loading_and_splitting(
     config: {},
     chosen_dataset_option: Dataset,
 ):
+
     if chosen_dataset_option in [item.value for item in Dataset]:
         dataset_chosen, dataset_names = load_data(chosen_dataset_option, config)
         return split_dataset(
@@ -156,6 +158,7 @@ def combine_and_split_datasets(
     batch_size: int,
     perc_train: float,
 ):
+
     data_size = len(dataset1)
 
     trainset = dataset1[: int(data_size * perc_train)]
@@ -170,6 +173,10 @@ def combine_and_split_datasets(
 
 
 def load_data(dataset_option, config):
+
+    timer = Timer("load_data")
+    timer.start()
+
     transform_raw_data_to_serialized(config["Dataset"])
     dataset_list = []
     datasetname_list = []
@@ -187,6 +194,8 @@ def load_data(dataset_option, config):
         )
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
+
+    timer.stop()
 
     return dataset_list, datasetname_list
 

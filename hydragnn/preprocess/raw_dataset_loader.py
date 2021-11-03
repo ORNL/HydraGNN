@@ -20,6 +20,8 @@ from torch import tensor
 
 from hydragnn.preprocess.helper_functions import tensor_divide
 
+# WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
+
 
 class RawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
@@ -126,6 +128,7 @@ class RawDataLoader:
         Data
             Data object representing structure of a graph sample.
         """
+
         data_object = Data()
 
         graph_feat = lines[0].split(None, 2)
@@ -156,6 +159,7 @@ class RawDataLoader:
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
+
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):
@@ -177,6 +181,7 @@ class RawDataLoader:
         return data_object
 
     def __normalize_dataset(self):
+
         """Performs the normalization on Data objects and returns the normalized dataset."""
         num_of_nodes = len(self.dataset_list[0][0].x)
         num_node_features = self.dataset_list[0][0].x.shape[1]
