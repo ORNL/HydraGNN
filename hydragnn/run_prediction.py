@@ -46,6 +46,7 @@ def run_prediction(config: dict):
 
     world_size, world_rank = setup_ddp()
 
+    verbosity = config["Verbosity"]["level"]
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
 
