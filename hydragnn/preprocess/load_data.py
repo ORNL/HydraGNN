@@ -202,9 +202,6 @@ def load_data(dataset_option, config):
 
 def transform_raw_data_to_serialized(config):
 
-    timer = Timer("transform_raw_data_to_serialized")
-    timer.start()
-
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
@@ -214,4 +211,3 @@ def transform_raw_data_to_serialized(config):
     if dist.is_initialized():
         dist.barrier()
 
-    timer.stop()
