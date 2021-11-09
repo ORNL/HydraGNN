@@ -15,14 +15,17 @@ import pytest
 import torch
 import shutil
 
-import hydragnn, hydragnn.unit_tests
+from hydragnn.unit_tests import deterministic_graph_data
+from hydragnn.utils import get_comm_size_and_rank, print_distributed
+from hydragnn.run_training import run_training
+from hydragnn.run_prediction import run_prediction
 
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
-    world_size, rank = hydragnn.utils.get_comm_size_and_rank()
+    world_size, rank = get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -61,22 +64,22 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             if not os.listdir(data_path):
                 num_nodes = config["Dataset"]["num_nodes"]
                 if num_nodes == 4:
-                    hydragnn.unit_tests.deterministic_graph_data(
+                    deterministic_graph_data(
                         data_path,
                         number_unit_cell_y=1,
                         number_configurations=num_samples,
                     )
                 else:
-                    hydragnn.unit_tests.deterministic_graph_data(
+                    deterministic_graph_data(
                         data_path, number_configurations=num_samples
                     )
 
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.
     if model_type == "PNA":
-        hydragnn.run_training(config_file)
+        run_training(config_file)
     else:
-        hydragnn.run_training(config)
+        run_training(config)
 
     (
         error,
@@ -84,7 +87,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
         error_rmse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.run_prediction(config)
+    ) = run_prediction(config)
 
     # Set RMSE and sample error thresholds
     thresholds = {
@@ -103,7 +106,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + " < "
             + str(thresholds[model_type][0])
         )
-        hydragnn.utils.print_distributed(verbosity, "head sum: " + error_str)
+        print_distributed(verbosity, "head sum: " + error_str)
         assert (
             error_head_sum < thresholds[model_type][0]
         ), "RMSE checking failed for sum of head " + str(ihead)
@@ -114,7 +117,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + " < "
             + str(thresholds[model_type][0])
         )
-        hydragnn.utils.print_distributed(verbosity, "head: " + error_str)
+        print_distributed(verbosity, "head: " + error_str)
         assert (
             error_head_rmse < thresholds[model_type][0]
         ), "RMSE checking failed for components of head " + str(ihead)
@@ -146,9 +149,9 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             + " < "
             + str(thresholds[model_type][1])
         )
-        hydragnn.utils.print_distributed(verbosity, "samples avg/min/max: " + error_str)
+        print_distributed(verbosity, "samples avg/min/max: " + error_str)
 
     # Check RMSE error
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
-    hydragnn.utils.print_distributed(verbosity, "total: " + error_str)
+    print_distributed(verbosity, "total: " + error_str)
     assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
