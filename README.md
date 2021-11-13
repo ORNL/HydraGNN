@@ -56,6 +56,10 @@ important:
  - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms`
  - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNA`, `MFC`, `GIN`, `GAT`, `CGCNN`
 
+### Citations
+"HydraGNN: Distributed PyTorch implementation of multi-headed graph convolutional neural networks", Copyright ID#: 81929619
+https://doi.org/10.11578/dc.20211019.2
+
 ## Contributing
 
 We encourage you to contribute to HydraGNN! Please check the
