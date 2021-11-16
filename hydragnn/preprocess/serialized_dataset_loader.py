@@ -15,13 +15,9 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
 from torch_geometric.data import Data
+from torch_geometric.transforms import RadiusGraph
 
 from .dataset_descriptors import AtomFeatures
-from .helper_functions import (
-    distance_3D,
-    order_candidates,
-    resolve_neighbour_conflicts,
-)
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
@@ -66,15 +62,14 @@ class SerializedDataLoader:
             _ = pickle.load(f)
             dataset = pickle.load(f)
 
-        edge_index, edge_distances = self.__compute_edges(
-            data=dataset[0],
-            radius=config["Architecture"]["radius"],
-            max_num_node_neighbours=config["Architecture"]["max_neighbours"],
+        compute_edges = RadiusGraph(
+            r=config["Architecture"]["radius"],
+            loop=True,
+            max_num_neighbors=config["Architecture"]["max_neighbours"],
         )
 
         for data in dataset:
-            data.edge_index = edge_index
-            data.edge_attr = edge_distances
+            data = compute_edges(data)
             self.__update_predicted_values(
                 config["Variables_of_interest"]["type"],
                 config["Variables_of_interest"]["output_index"],
@@ -126,71 +121,6 @@ class SerializedDataLoader:
                 raise ValueError("Unknown output type", type[item])
             output_feature.append(feat_)
         data.y = torch.cat(output_feature, 0)
-
-    def __compute_edges(self, data: Data, radius: float, max_num_node_neighbours: int):
-        """Computes edges of a structure depending on the maximum number of neighbour atoms that each atom can have
-        and radius as a maximum distance of a neighbour.
-
-        Parameters
-        ----------
-        data: Data
-            A Data object representing a structure that has atoms.
-        radius: float
-            Radius or maximum distance of a neighbour atom.
-        max_num_node_neighbours: int
-            Maximum number of neighbour atoms an atom can have.
-
-        Returns
-        ----------
-        torch.tensor
-            Tensor filled with pairs (atom1_index, atom2_index) that represent edges or connections between atoms within the structure.
-        """
-        print_distributed(
-            self.verbosity, "Compute edges of the structure=adjacency matrix."
-        )
-        num_of_atoms = len(data.x)
-        distance_matrix = np.zeros((num_of_atoms, num_of_atoms))
-        candidate_neighbours = {k: [] for k in range(num_of_atoms)}
-
-        print_distributed(
-            self.verbosity, "Computing edge distances and adding candidate neighbours."
-        )
-        for i in iterate_tqdm(range(num_of_atoms), self.verbosity):
-            for j in range(num_of_atoms):
-                distance = distance_3D(data.pos[i], data.pos[j])
-                distance_matrix[i, j] = distance
-                if distance_matrix[i, j] <= radius and i != j:
-                    candidate_neighbours[i].append(j)
-
-        candidate_neighbours = order_candidates(
-            candidate_neighbours=candidate_neighbours,
-            distance_matrix=distance_matrix,
-            verbosity=self.verbosity,
-        )
-
-        print_distributed(self.verbosity, "Resolving neighbour conflicts.")
-        adjacency_matrix = np.zeros((num_of_atoms, num_of_atoms))
-        for point, neighbours in iterate_tqdm(
-            candidate_neighbours.items(), self.verbosity
-        ):
-            neighbours = resolve_neighbour_conflicts(
-                point, list(neighbours), adjacency_matrix, max_num_node_neighbours
-            )
-            adjacency_matrix[point, neighbours] = 1
-            adjacency_matrix[neighbours, point] = 1
-
-        edge_index = torch.tensor(np.nonzero(adjacency_matrix))
-        edge_lengths = (
-            torch.tensor(distance_matrix[np.nonzero(adjacency_matrix)])
-            .reshape((edge_index.shape[1], 1))
-            .type(torch.FloatTensor)
-        )
-        # Normalize the lengths using min-max normalization
-        edge_lengths = (edge_lengths - min(edge_lengths)) / (
-            max(edge_lengths) - min(edge_lengths)
-        )
-
-        return edge_index, edge_lengths
 
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
         """Given the dataset and the percentage of data you want to extract from it, method will

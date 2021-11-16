@@ -18,9 +18,11 @@ import torch
 from torch_geometric.data import Data
 from torch import tensor
 
-from hydragnn.preprocess.helper_functions import tensor_divide
-
 # WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
+
+
+def tensor_divide(x1, x2):
+    return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
 
 
 class RawDataLoader:
