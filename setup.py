@@ -8,11 +8,25 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
+install_requires = [
+    "pickle5",
+    "matplotlib",
+    "tqdm",
+    "tensorboard",
+    "torch>=1.8",
+    "torch-geometric>=1.7.2",
+    "torch-scatter",
+    "torch-sparse",
+]
+test_requires = ["black", "pytest", "pytest-mpi"]
+
 setup(
     name="HydraGNN",
     version="1.0",
     package_dir={"hydragnn": "hydragnn"},
     packages=find_packages(),
+    install_requires=install_requires,
+    extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph convolutional neural networks",
     license="BSD-3",
     long_description=read("README.md"),
