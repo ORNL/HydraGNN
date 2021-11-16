@@ -15,7 +15,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph
+from torch_geometric.transforms import RadiusGraph, Distance
 
 from .dataset_descriptors import AtomFeatures
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
@@ -67,9 +67,11 @@ class SerializedDataLoader:
             loop=True,
             max_num_neighbors=config["Architecture"]["max_neighbours"],
         )
+        compute_edge_lengths = Distance(norm=True, cat=True)
 
         for data in dataset:
             data = compute_edges(data)
+            data = compute_edge_lengths(data)
             self.__update_predicted_values(
                 config["Variables_of_interest"]["type"],
                 config["Variables_of_interest"]["output_index"],
