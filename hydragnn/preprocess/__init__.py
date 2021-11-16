@@ -1,5 +1,4 @@
 from .dataset_descriptors import AtomFeatures, StructureFeatures, Dataset
-from .helper_functions import tensor_divide
 from .load_data import (
     dataset_loading_and_splitting,
     create_dataloaders,
