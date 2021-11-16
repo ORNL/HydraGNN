@@ -27,7 +27,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
-    config_file = os.path.join(os.getcwd(), "examples", ci_input)
+    config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
