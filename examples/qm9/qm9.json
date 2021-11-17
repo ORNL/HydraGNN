@@ -1,0 +1,42 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "radius": 7,
+            "max_neighbours": 5,
+            "hidden_dim": 5,
+            "num_conv_layers": 6,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 5,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25]
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25]
+                }
+            },
+            "task_weights": [1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["tbd"],
+            "output_index": [0],
+            "type": ["graph"],
+            "denormalize_output": true
+        },
+        "Training": {
+            "num_epoch": 1,
+            "perc_train": 0.7,
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "continue": 0,
+            "startfrom": "existing_model"
+        }
+    }
+}
