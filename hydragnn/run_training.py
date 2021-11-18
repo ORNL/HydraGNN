@@ -77,14 +77,11 @@ def _(config: dict):
         and config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]
         == "True"
     ):
-        for dataset_name, _ in config["Dataset"]["path"]["raw"].items():
-            if dataset_name == "total":
-                files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-                break
-            else:
-                files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
-                break
-        dataset_path = files_dir
+        if "total" in config["Dataset"]["path"]["raw"].items():
+            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
+        else:
+            ###used for min/max values loading below
+            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
         with open(dataset_path, "rb") as f:
             node_minmax = pickle.load(f)
             graph_minmax = pickle.load(f)
