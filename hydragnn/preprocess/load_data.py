@@ -23,66 +23,22 @@ except:
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
-from hydragnn.preprocess.dataset_descriptors import Dataset
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 
 
 def dataset_loading_and_splitting(
     config: {},
-    chosen_dataset_option: Dataset,
+    chosen_dataset_option,
 ):
 
-    if chosen_dataset_option in [item.value for item in Dataset]:
-        dataset_chosen, dataset_names = load_data(chosen_dataset_option, config)
-        return split_dataset(
-            dataset_list=dataset_chosen,
-            dataset_names=dataset_names,
-            batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-        )
-    else:
-        # FIXME, should re-normalize mixed datasets based on joint min_max
-        raise ValueError(
-            "Chosen dataset option not yet supported", chosen_dataset_option
-        )
-        dataset_CuAu = load_data(Dataset.CuAu.value, config)
-        dataset_FePt = load_data(Dataset.FePt.value, config)
-        dataset_FeSi = load_data(Dataset.FeSi.value, config)
-        if chosen_dataset_option == Dataset.CuAu_FePt_SHUFFLE:
-            dataset_CuAu.extend(dataset_FePt)
-            dataset_combined = dataset_CuAu
-            shuffle(dataset_combined)
-            return split_dataset(
-                dataset=dataset_combined,
-                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            )
-        elif chosen_dataset_option == Dataset.CuAu_TRAIN_FePt_TEST:
-
-            return combine_and_split_datasets(
-                dataset1=dataset_CuAu,
-                dataset2=dataset_FePt,
-                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            )
-        elif chosen_dataset_option == Dataset.FePt_TRAIN_CuAu_TEST:
-            return combine_and_split_datasets(
-                dataset1=dataset_FePt,
-                dataset2=dataset_CuAu,
-                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            )
-        elif chosen_dataset_option == Dataset.FePt_FeSi_SHUFFLE:
-            dataset_FePt.extend(dataset_FeSi)
-            dataset_combined = dataset_FePt
-            shuffle(dataset_combined)
-            return split_dataset(
-                dataset=dataset_combined,
-                batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
-                perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            )
-
+    dataset_chosen, dataset_names = load_data(chosen_dataset_option, config)
+    return split_dataset(
+        dataset_list=dataset_chosen,
+        dataset_names=dataset_names,
+        batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+        perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
+    )
 
 def create_dataloaders(trainset, valset, testset, batch_size):
 
