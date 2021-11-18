@@ -19,6 +19,7 @@ from hydragnn.utils.distributed import setup_ddp
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
+from hydragnn.postprocess.postprocess import output_denormalize
 
 
 @singledispatch
@@ -130,7 +131,9 @@ def _(config: dict):
     ##output predictions with unit/not normalized
     if config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] == "True":
         true_values, predicted_values = output_denormalize(
-            config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
+            config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"],
+            true_values,
+            predicted_values,
         )
 
     return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values
