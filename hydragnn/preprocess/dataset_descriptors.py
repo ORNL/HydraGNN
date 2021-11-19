@@ -30,12 +30,3 @@ class StructureFeatures(Enum):
     FREE_ENERGY = 0
     CHARGE_DENSITY = 1
     MAGNETIC_MOMENT = 2
-
-
-class Dataset(Enum):
-    """Class is an enum that represents available datasets and their combinations."""
-
-    FePt = "FePt_32atoms"
-    CuAu = "CuAu_32atoms"
-    FeSi = "FeSi_1024atoms"
-    unit_test = "unit_test"
