@@ -15,7 +15,7 @@ import pytest
 import torch
 import shutil
 
-import hydragnn, hydragnn.unit_tests
+import hydragnn, tests
 
 
 @pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
@@ -27,7 +27,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     # Read in config settings and override model type.
-    config_file = os.path.join(os.getcwd(), "examples", ci_input)
+    config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
@@ -61,13 +61,13 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
             if not os.listdir(data_path):
                 num_nodes = config["Dataset"]["num_nodes"]
                 if num_nodes == 4:
-                    hydragnn.unit_tests.deterministic_graph_data(
+                    tests.deterministic_graph_data(
                         data_path,
                         number_unit_cell_y=1,
                         number_configurations=num_samples,
                     )
                 else:
-                    hydragnn.unit_tests.deterministic_graph_data(
+                    tests.deterministic_graph_data(
                         data_path, number_configurations=num_samples
                     )
 
