@@ -35,41 +35,60 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
     if rank == 0:
         num_samples_tot = 500
-        for dataset_name, data_path in config["Dataset"]["path"]["raw"].items():
-            if overwrite_data:
-                shutil.rmtree(data_path)
-            if not os.path.exists(data_path):
-                os.makedirs(data_path)
-            if dataset_name == "total":
-                num_samples = num_samples_tot
-            elif dataset_name == "train":
-                num_samples = int(
-                    num_samples_tot * config["NeuralNetwork"]["Training"]["perc_train"]
-                )
-            elif dataset_name == "test":
-                num_samples = int(
-                    num_samples_tot
-                    * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
-                    * 0.5
-                )
-            elif dataset_name == "validate":
-                num_samples = int(
-                    num_samples_tot
-                    * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
-                    * 0.5
-                )
-            if not os.listdir(data_path):
-                num_nodes = config["Dataset"]["num_nodes"]
-                if num_nodes == 4:
-                    tests.deterministic_graph_data(
-                        data_path,
-                        number_unit_cell_y=1,
-                        number_configurations=num_samples,
+        """
+        currently, pkl data input for unit test only used for local runs, to test this locally, set ci.json as
+        "Dataset": {
+            ...
+            "path": {
+                "raw": {
+                    "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                    "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                    "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+                     },
+            ...
+        """
+        ##check if serialized pickle files or folders for raw files provided
+        PKL_input = False
+        if list(config["Dataset"]["path"]["raw"].values())[0].endswith(".pkl"):
+            PKL_input = True
+        # only generate new datasets, if not pkl
+        if not PKL_input:
+            for dataset_name, data_path in config["Dataset"]["path"]["raw"].items():
+                if overwrite_data:
+                    shutil.rmtree(data_path)
+                if not os.path.exists(data_path):
+                    os.makedirs(data_path)
+                if dataset_name == "total":
+                    num_samples = num_samples_tot
+                elif dataset_name == "train":
+                    num_samples = int(
+                        num_samples_tot
+                        * config["NeuralNetwork"]["Training"]["perc_train"]
                     )
-                else:
-                    tests.deterministic_graph_data(
-                        data_path, number_configurations=num_samples
+                elif dataset_name == "test":
+                    num_samples = int(
+                        num_samples_tot
+                        * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                        * 0.5
                     )
+                elif dataset_name == "validate":
+                    num_samples = int(
+                        num_samples_tot
+                        * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                        * 0.5
+                    )
+                if not os.listdir(data_path):
+                    num_nodes = config["Dataset"]["num_nodes"]
+                    if num_nodes == 4:
+                        tests.deterministic_graph_data(
+                            data_path,
+                            number_unit_cell_y=1,
+                            number_configurations=num_samples,
+                        )
+                    else:
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
 
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.

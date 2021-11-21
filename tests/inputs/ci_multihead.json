@@ -3,7 +3,7 @@
         "level": 0
     },
     "Dataset": {
-        "name": "unit_test",
+        "name": "unit_test_multihead",
         "format": "unit_test",
         "path": {
             "raw": {"total": "dataset/unit_test_multihead"}
