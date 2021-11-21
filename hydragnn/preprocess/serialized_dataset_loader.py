@@ -64,7 +64,7 @@ class SerializedDataLoader:
 
         compute_edges = RadiusGraph(
             r=config["Architecture"]["radius"],
-            loop=True,
+            loop=False,
             max_num_neighbors=config["Architecture"]["max_neighbours"],
         )
 
