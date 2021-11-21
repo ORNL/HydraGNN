@@ -22,7 +22,7 @@
         "Architecture": {
             "model_type": "PNA",
             "radius": 7,
-            "max_neighbours": 5,
+            "max_neighbours": 100000,
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "output_heads": {
