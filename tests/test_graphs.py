@@ -90,8 +90,8 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     thresholds = {
         "PNA": [0.10, 0.25],
         "MFC": [0.10, 0.25],
-        "GIN": [0.10, 0.85],
-        "GAT": [0.80, 0.85],
+        "GIN": [0.10, 0.90],
+        "GAT": [0.80, 0.90],
         "CGCNN": [0.10, 0.40],
     }
     verbosity = 2
