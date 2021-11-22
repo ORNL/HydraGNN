@@ -63,11 +63,7 @@ class SerializedDataLoader:
             _ = pickle.load(f)
             dataset = pickle.load(f)
 
-        compute_edges = RadiusGraph(
-            r=config["Architecture"]["radius"],
-            loop=False,
-            max_num_neighbors=config["Architecture"]["max_neighbours"],
-        )
+        compute_edges = get_radius_graph(config["Architecture"])
         compute_edge_lengths = Distance(norm=False, cat=True)
 
         dataset[:] = [compute_edges(data) for data in dataset]
@@ -165,6 +161,14 @@ class SerializedDataLoader:
             subsample.append(dataset[index])
 
         return subsample
+
+
+def get_radius_graph(config):
+    return RadiusGraph(
+        r=config["radius"],
+        loop=False,
+        max_num_neighbors=config["max_neighbours"],
+    )
 
 
 def update_predicted_values(type: list, index: list, data: Data):
