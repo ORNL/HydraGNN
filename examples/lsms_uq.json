@@ -1,19 +1,18 @@
 {
     "Verbosity": {
-        "level": 2
+        "level": 0
     },
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"total": "FePt"},
+        "path": {"raw": {"total": "FePt"}},
         "format": "LSMS",
-        "compositional_stratified_splitting": true,
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],
             "dim": [1,1,1],
             "column_index": [0,5,6]
         },
         "graph_features":{
-            "name": [ "free_energy_scaled_num_nodes"],
+            "name": [ "free_energy"],
             "dim": [1],
             "column_index": [0]
         }
@@ -23,7 +22,6 @@
             "model_type": "PNA",
             "radius": 7,
             "max_neighbours": 100000,
-            "periodic_boundary_conditions": false,
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "output_heads": {
@@ -35,17 +33,16 @@
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [50,25],
-                    "type": "mlp"
+                    "dim_headlayers": [50,25]
                 }
             },
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["free_energy_scaled_num_nodes","charge_density", "magnetic_moment"],
-            "output_index": [0, 1, 2],
-            "type": ["graph","node","node"],
+            "output_names": ["free_energy"],
+            "output_index": [0],
+            "type": ["graph"],
             "denormalize_output": true
         },
         "Training": {
