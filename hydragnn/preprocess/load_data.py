@@ -138,13 +138,13 @@ def load_data(dataset_option, config):
     datasetname_list = []
 
     ##check if serialized pickle files or folders for raw files provided
-    PKL_input = False
+    pkl_input = False
     if list(config["Dataset"]["path"]["raw"].values())[0].endswith(".pkl"):
-        PKL_input = True
-    if not PKL_input:
+        pkl_input = True
+    if not pkl_input:
         transform_raw_data_to_serialized(config["Dataset"])
     for dataset_name, raw_data_path in config["Dataset"]["path"]["raw"].items():
-        if PKL_input:
+        if pkl_input:
             files_dir = raw_data_path
         else:
             if dataset_name == "total":

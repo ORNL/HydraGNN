@@ -18,7 +18,7 @@ import shutil
 import hydragnn, tests
 
 
-@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
+@pytest.mark.parametrize("model_type", ["PNA", "GIN", "GAT", "MFC", "CGCNN"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
@@ -32,27 +32,47 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    """
+    to test this locally, set ci.json as
+    "Dataset": {
+       ...
+       "path": {
+           "raw": {
+               "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+               "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+               "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+                },
+       ...
+    """
+    # use pkl files if exist by default
+    for dataset_name in config["Dataset"]["path"]["raw"].keys():
+        if dataset_name == "total":
+            pkl_file = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/serialized_dataset/"
+                + config["Dataset"]["name"]
+                + ".pkl"
+            )
+        else:
+            pkl_file = (
+                os.environ["SERIALIZED_DATA_PATH"]
+                + "/serialized_dataset/"
+                + config["Dataset"]["name"]
+                + "_"
+                + dataset_name
+                + ".pkl"
+            )
+        if os.path.exists(pkl_file):
+            config["Dataset"]["path"]["raw"][dataset_name] = pkl_file
 
     if rank == 0:
         num_samples_tot = 500
-        """
-        currently, pkl data input for unit test only used for local runs, to test this locally, set ci.json as
-        "Dataset": {
-            ...
-            "path": {
-                "raw": {
-                    "train": "serialized_dataset/unit_test_singlehead_train.pkl",
-                    "test": "serialized_dataset/unit_test_singlehead_test.pkl",
-                    "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
-                     },
-            ...
-        """
-        ##check if serialized pickle files or folders for raw files provided
-        PKL_input = False
+        # check if serialized pickle files or folders for raw files provided
+        pkl_input = False
         if list(config["Dataset"]["path"]["raw"].values())[0].endswith(".pkl"):
-            PKL_input = True
+            pkl_input = True
         # only generate new datasets, if not pkl
-        if not PKL_input:
+        if not pkl_input:
             for dataset_name, data_path in config["Dataset"]["path"]["raw"].items():
                 if overwrite_data:
                     shutil.rmtree(data_path)
