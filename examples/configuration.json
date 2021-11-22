@@ -37,17 +37,17 @@
                     "dim_headlayers": [50,25]
                 }
             },
-            "task_weights": [1.0, 1.0, 1.0]
+            "task_weights": [1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["free_energy","charge_density", "magnetic_moment"],
-            "output_index": [0, 1, 2],
-            "type": ["graph","node","node"],
+            "output_names": ["free_energy"],
+            "output_index": [0],
+            "type": ["graph"],
             "denormalize_output": "True"
         },
         "Training": {
-            "num_epoch": 20,
+            "num_epoch": 200,
             "perc_train": 0.7,
             "learning_rate": 1e-3,
             "batch_size": 64,
