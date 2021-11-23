@@ -40,7 +40,9 @@ def create(
 
     _, device = get_device(use_gpu, verbosity_level=verbosity_level)
 
-    num_atoms = dataset[0].num_nodes  # FIXME: assumes constant number of atoms
+    # used in NN constructurion of node feature preidction for constant graph size
+    # i.e., self.node_NN_type = "mlp_per_node"
+    num_atoms = dataset[0].num_nodes
 
     if model_type == "GIN":
         model = GINStack(

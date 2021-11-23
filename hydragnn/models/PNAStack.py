@@ -43,16 +43,18 @@ class PNAStack(Base):
         ]
         self.deg = deg
 
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
-        super()._multihead(
+        super().__init__(
+            input_dim,
+            hidden_dim,
             output_dim,
-            num_nodes,
             output_type,
             config_heads,
+            num_nodes,
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+            dropout,
+            num_conv_layers,
         )
 
     def get_conv(self, input_dim, output_dim):

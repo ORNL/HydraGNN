@@ -8,7 +8,6 @@
         "path": {
             "raw": {"total": "dataset/unit_test_multihead"}
         },
-        "num_nodes": 4,
         "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],
@@ -25,34 +24,35 @@
             "model_type": "PNA",
             "radius": 2.0,
             "max_neighbours": 100,
-            "hidden_dim": 4,
-            "num_conv_layers": 3,
+            "hidden_dim": 8,
+            "num_conv_layers": 2,
             "output_heads": {
                 "graph":{
                     "num_sharedlayers": 2,
-                    "dim_sharedlayers": 4,
+                    "dim_sharedlayers": 10,
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10]
+                    "dim_headlayers": [10, 10]
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [10,10]
+                    "dim_headlayers": [10, 10],
+                    "type": "mlp"
                 }
             },
-            "task_weights": [1.0, 4.0, 4.0, 4.0]
+            "task_weights": [20.0, 1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
             "output_names": ["sum_x_x2_x3","x","x2","x3"],
             "output_index": [0,0,1,2],
             "type": ["graph","node","node","node"],
-            "denormalize_output": "False"
+            "denormalize_output": false
         },
         "Training": {
             "num_epoch": 100,
             "perc_train": 0.7,
             "learning_rate": 0.01,
-            "batch_size": 32
+            "batch_size": 16
         }
     }
 }

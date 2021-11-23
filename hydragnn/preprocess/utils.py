@@ -10,18 +10,13 @@
 ##############################################################################
 
 
-def output_denormalize(y_minmax, true_values, predicted_values):
-    for ihead in range(len(y_minmax)):
-        for isamp in range(len(predicted_values[0])):
-            for iatom in range(len(predicted_values[ihead][0])):
-                ymin = y_minmax[ihead][0]
-                ymax = y_minmax[ihead][1]
-
-                predicted_values[ihead][isamp][iatom] = (
-                    predicted_values[ihead][isamp][iatom] * (ymax - ymin) + ymin
-                )
-                true_values[ihead][isamp][iatom] = (
-                    true_values[ihead][isamp][iatom] * (ymax - ymin) + ymin
-                )
-
-    return true_values, predicted_values
+def check_if_graph_size_constant(train_loader, val_loader, test_loader):
+    graph_size_variable = False
+    nodes_num_list = []
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in loader:
+            nodes_num_list.extend(data.num_nodes_list.tolist())
+            if len(list(set(nodes_num_list))) > 1:
+                graph_size_variable = True
+                return graph_size_variable
+    return graph_size_variable

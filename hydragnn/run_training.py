@@ -10,7 +10,6 @@
 ##############################################################################
 
 import sys, os, json
-import pickle
 from functools import singledispatch
 
 import torch
@@ -19,9 +18,15 @@ from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
+from hydragnn.utils.config_utils import (
+    update_config_NN_outputs,
+    update_config_minmax,
+    get_model_output_name_config,
+)
 from hydragnn.models.create import create, get_device
 from hydragnn.train.train_validate_test import train_validate_test
 
@@ -57,62 +62,23 @@ def _(config: dict):
         chosen_dataset_option=config["Dataset"]["name"],
     )
 
-    output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
-    output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
-    config["NeuralNetwork"]["Architecture"]["output_dim"] = []
-    for item in range(len(output_type)):
-        if output_type[item] == "graph":
-            dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
-        elif output_type[item] == "node":
-            dim_item = (
-                config["Dataset"]["node_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_nodes"]
-            )
-        else:
-            raise ValueError("Unknown output type", output_type[item])
-        config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
+    graph_size_variable = check_if_graph_size_constant(
+        train_loader, val_loader, test_loader
+    )
+    config = update_config_NN_outputs(config, graph_size_variable)
 
     if (
         "denormalize_output" in config["NeuralNetwork"]["Variables_of_interest"]
         and config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]
-        == "True"
     ):
         if "total" in config["Dataset"]["path"]["raw"].keys():
             dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
         else:
             ###used for min/max values loading below
             dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
-        with open(dataset_path, "rb") as f:
-            node_minmax = pickle.load(f)
-            graph_minmax = pickle.load(f)
-        config["NeuralNetwork"]["Variables_of_interest"]["x_minmax"] = []
-        config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"] = []
-        feature_indices = [
-            i
-            for i in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        ]
-        for item in feature_indices:
-            config["NeuralNetwork"]["Variables_of_interest"]["x_minmax"].append(
-                node_minmax[:, :, item].tolist()
-            )
-        for item in range(len(output_type)):
-            if output_type[item] == "graph":
-                config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"].append(
-                    graph_minmax[:, output_index[item], None].tolist()
-                )
-            elif output_type[item] == "node":
-                config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"].append(
-                    node_minmax[:, :, output_index[item]].tolist()
-                )
-            else:
-                raise ValueError("Unknown output type", output_type[item])
+        config = update_config_minmax(dataset_path, config)
     else:
-        config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = "False"
-    config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
-        "Variables_of_interest"
-    ]["type"]
+        config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = False
 
     model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
@@ -124,37 +90,7 @@ def _(config: dict):
         verbosity_level=config["Verbosity"]["level"],
     )
 
-    model_with_config_name = (
-        model.__str__()
-        + "-r-"
-        + str(config["NeuralNetwork"]["Architecture"]["radius"])
-        + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
-        + "-ncl-"
-        + str(model.num_conv_layers)
-        + "-hd-"
-        + str(model.hidden_dim)
-        + "-ne-"
-        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
-        + "-lr-"
-        + str(config["NeuralNetwork"]["Training"]["learning_rate"])
-        + "-bs-"
-        + str(config["NeuralNetwork"]["Training"]["batch_size"])
-        + "-data-"
-        + config["Dataset"]["name"]
-        + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
-        + "-task_weights-"
-        + "".join(
-            str(weigh) + "-"
-            for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
-        )
-    )
+    model_with_config_name = get_model_output_name_config(model, config)
 
     device_name, device = get_device(config["Verbosity"]["level"])
     if dist.is_initialized():
