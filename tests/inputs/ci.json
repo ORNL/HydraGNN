@@ -3,7 +3,7 @@
         "level": 0
     },
     "Dataset": {
-        "name": "unit_test",
+        "name": "unit_test_singlehead",
         "format": "unit_test",
         "path": {
             "raw": {"train": "dataset/unit_test_singlehead_train",
