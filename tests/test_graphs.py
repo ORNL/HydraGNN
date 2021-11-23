@@ -68,7 +68,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
     # hence here we decrease the loss weight coefficient for graph-level head in MFC.
     if model_type == "MFC" and ci_input == "ci_multihead.json":
-        config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 1
+        config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
 
     if rank == 0:
         num_samples_tot = 500
@@ -103,18 +103,9 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
                         * 0.5
                     )
                 if not os.listdir(data_path):
-                    num_nodes = config["Dataset"]["num_nodes"]
-                    if num_nodes == 4:
-                        tests.deterministic_graph_data(
-                            data_path,
-                            number_unit_cell_x_range=[1, 2],
-                            number_unit_cell_y_range=[1, 2],
-                            number_configurations=num_samples,
-                        )
-                    else:
-                        tests.deterministic_graph_data(
-                            data_path, number_configurations=num_samples
-                        )
+                    tests.deterministic_graph_data(
+                        data_path, number_configurations=num_samples
+                    )
 
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.

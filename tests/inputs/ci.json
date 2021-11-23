@@ -10,7 +10,6 @@
             "test": "dataset/unit_test_singlehead_test",
             "validate": "dataset/unit_test_singlehead_validate"}
         },
-        "num_nodes": 8,
         "node_features": {
             "name": ["x","x2","x3"],
             "dim": [1, 1, 1],
