@@ -134,14 +134,23 @@ def load_data(dataset_option, config):
     timer = Timer("load_data")
     timer.start()
 
-    transform_raw_data_to_serialized(config["Dataset"])
     dataset_list = []
     datasetname_list = []
+
+    ##check if serialized pickle files or folders for raw files provided
+    pkl_input = False
+    if list(config["Dataset"]["path"]["raw"].values())[0].endswith(".pkl"):
+        pkl_input = True
+    if not pkl_input:
+        transform_raw_data_to_serialized(config["Dataset"])
     for dataset_name, raw_data_path in config["Dataset"]["path"]["raw"].items():
-        if dataset_name == "total":
-            files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
+        if pkl_input:
+            files_dir = raw_data_path
         else:
-            files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}_{dataset_name}.pkl"
+            if dataset_name == "total":
+                files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}.pkl"
+            else:
+                files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{dataset_option}_{dataset_name}.pkl"
 
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
         loader = SerializedDataLoader(config["Verbosity"]["level"])
