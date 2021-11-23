@@ -39,19 +39,23 @@ class GATStack(Base):
         self.heads = heads
         self.negative_slope = negative_slope
 
-        super().__init__(input_dim, hidden_dim, dropout, num_conv_layers)
-
-        super()._multihead(
+        super().__init__(
+            input_dim,
+            hidden_dim,
             output_dim,
-            num_nodes,
             output_type,
             config_heads,
+            num_nodes,
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+            dropout,
+            num_conv_layers,
         )
 
-    def _init_model(self):
+    def _init_conv(self):
+        """Here this function overwrites _init_conv() in Base since it has different implementation
+        in terms of dimensions due to the multi-head attention"""
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))
         self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
@@ -61,6 +65,46 @@ class GATStack(Base):
         conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, False)
         self.convs.append(conv)
         self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+    def _init_node_conv(self):
+        """Here this function overwrites _init_conv() in Base since it has different implementation
+        in terms of dimensions due to the multi-head attention"""
+        # *******convolutional layers for node level predictions*******#
+        # two ways to implement node features from here:
+        # 1. one graph for all node features
+        # 2. one graph for one node features (currently implemented)
+        node_feature_ind = [
+            i for i, head_type in enumerate(self.head_type) if head_type == "node"
+        ]
+        if len(node_feature_ind) == 0:
+            return
+        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+        # In this part, each head has same number of convolutional layers, but can have different output dimension
+        self.convs_node_hidden.append(
+            self.get_conv(self.hidden_dim, self.hidden_dim_node[0], True)
+        )
+        self.batch_norms_node_hidden.append(
+            BatchNorm(self.hidden_dim_node[0] * self.heads)
+        )
+        for ilayer in range(self.num_conv_layers_node - 1):
+            self.convs_node_hidden.append(
+                self.get_conv(
+                    self.hidden_dim_node[ilayer] * self.heads,
+                    self.hidden_dim_node[ilayer + 1],
+                    True,
+                )
+            )
+            self.batch_norms_node_hidden.append(
+                BatchNorm(self.hidden_dim_node[ilayer + 1] * self.heads)
+            )
+        for ihead in node_feature_ind:
+            self.convs_node_output.append(
+                self.get_conv(
+                    self.hidden_dim_node[-1] * self.heads, self.head_dims[ihead], False
+                )
+            )
+            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def get_conv(self, input_dim, output_dim, concat):
         return GATv2Conv(

@@ -112,6 +112,7 @@ class SerializedDataLoader:
             A Data object representing a structure that has atoms.
         """
         output_feature = []
+        data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64)
         for item in range(len(type)):
             if type[item] == "graph":
                 feat_ = torch.reshape(data.y[index[item]], (1, 1))
@@ -120,6 +121,9 @@ class SerializedDataLoader:
             else:
                 raise ValueError("Unknown output type", type[item])
             output_feature.append(feat_)
+            data.y_loc[0, item + 1] = (
+                data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
+            )
         data.y = torch.cat(output_feature, 0)
 
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):

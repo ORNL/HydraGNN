@@ -15,8 +15,13 @@ from functools import singledispatch
 import torch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import setup_ddp
 from hydragnn.utils.time_utils import print_timers
+from hydragnn.utils.config_utils import (
+    update_config_NN_outputs,
+    get_model_output_name_config,
+)
 from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import test
 from hydragnn.postprocess.postprocess import output_denormalize
@@ -48,29 +53,15 @@ def _(config: dict):
     world_size, world_rank = setup_ddp()
 
     verbosity = config["Verbosity"]["level"]
-    output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
-    output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
-
-    config["NeuralNetwork"]["Architecture"]["output_dim"] = []
-    for item in range(len(output_type)):
-        if output_type[item] == "graph":
-            dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
-        elif output_type[item] == "node":
-            dim_item = (
-                config["Dataset"]["node_features"]["dim"][output_index[item]]
-                * config["Dataset"]["num_nodes"]
-            )
-        else:
-            raise ValueError("Unknown output type", output_type[item])
-        config["NeuralNetwork"]["Architecture"]["output_dim"].append(dim_item)
-    config["NeuralNetwork"]["Architecture"]["output_type"] = config["NeuralNetwork"][
-        "Variables_of_interest"
-    ]["type"]
-
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(
         config=config,
         chosen_dataset_option=config["Dataset"]["name"],
     )
+
+    graph_size_variable = check_if_graph_size_constant(
+        train_loader, val_loader, test_loader
+    )
+    config = update_config_NN_outputs(config, graph_size_variable)
 
     model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
@@ -82,38 +73,7 @@ def _(config: dict):
         verbosity_level=config["Verbosity"]["level"],
     )
 
-    model_with_config_name = (
-        model.__str__()
-        + "-r-"
-        + str(config["NeuralNetwork"]["Architecture"]["radius"])
-        + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
-        + "-ncl-"
-        + str(model.num_conv_layers)
-        + "-hd-"
-        + str(model.hidden_dim)
-        + "-ne-"
-        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
-        + "-lr-"
-        + str(config["NeuralNetwork"]["Training"]["learning_rate"])
-        + "-bs-"
-        + str(config["NeuralNetwork"]["Training"]["batch_size"])
-        + "-data-"
-        + config["Dataset"]["name"]
-        + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
-        + "-task_weights-"
-        + "".join(
-            str(weigh) + "-"
-            for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
-        )
-    )
-
+    model_with_config_name = get_model_output_name_config(model, config)
     state_dict = torch.load(
         "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
         map_location="cpu",

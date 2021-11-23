@@ -36,16 +36,18 @@ class CGCNNStack(Base):
 
         # CGCNN does not change embedding dimensions
         # We use input dimension (first argument of constructor) also as hidden dimension (second argument of constructor)
-        super().__init__(input_dim, input_dim, dropout, num_conv_layers)
-
-        super()._multihead(
+        super().__init__(
+            input_dim,
+            input_dim,
             output_dim,
-            num_nodes,
             output_type,
             config_heads,
+            num_nodes,
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+            dropout,
+            num_conv_layers,
         )
 
     def get_conv(self, input_dim, _):
@@ -56,6 +58,30 @@ class CGCNNStack(Base):
             batch_norm=False,
             bias=True,
         )
+
+    def _init_node_conv(self):
+        """It overwrites _init_node_conv() in Base since purely convolutional layers in _init_node_conv() is not implemented yet.
+        Here it serves as a temporary place holder. Purely cgcnn conv is not feasible for node feature predictions with
+        arbitrary output dimensions, unless we combine it with mlp"""
+        # *******convolutional layers for node level predictions******* #
+        node_feature_ind = [
+            i for i, head_type in enumerate(self.head_type) if head_type == "node"
+        ]
+        if len(node_feature_ind) == 0:
+            return
+        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+        # fixme: CGConv layer alone will present the same out dimension with the input, instead of having different "in_channels" and "out_channels" as in the other conv layers;
+        # so to predict output node features with different dimensions from the input node feature's, CGConv can be
+        # combined with, e.g.,mlp
+        for ihead in range(self.num_heads):
+            if (
+                self.head_type[ihead] == "node"
+                and self.config_heads["node"]["type"] == "conv"
+            ):
+                raise ValueError(
+                    '"conv" for node features decoder part in CGCNN is not ready yet. Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "mlp_per_node" in input file.'
+                )
 
     def __str__(self):
         return "CGCNNStack"

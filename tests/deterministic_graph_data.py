@@ -20,9 +20,9 @@ from sklearn.neighbors import KNeighborsRegressor
 def deterministic_graph_data(
     path: str,
     number_configurations: int = 500,
-    number_unit_cell_x: int = 2,
-    number_unit_cell_y: int = 2,
-    number_unit_cell_z: int = 1,
+    number_unit_cell_x_range: list = [1, 3],
+    number_unit_cell_y_range: list = [1, 3],
+    number_unit_cell_z_range: list = [1, 2],
     number_clusters: int = 3,
     number_neighbors: int = 2,
 ):
@@ -52,28 +52,40 @@ def deterministic_graph_data(
     #   NODAL_OUTPUT3(X) = X^3
 
     ###############################################################################################
-
-    number_nodes = 2 * number_unit_cell_x * number_unit_cell_y * number_unit_cell_z
-    positions = torch.zeros(number_nodes, 3)
-
-    assert (
-        number_neighbors < number_nodes
-    ), "Number of neighbors exceeds total number of nodes in the graph"
-
     # We assume that the unit cell is Body Center Cubic (BCC)
-    count_pos = 0
-    for x in range(0, number_unit_cell_x):
-        for y in range(0, number_unit_cell_y):
-            for z in range(0, number_unit_cell_z):
-                positions[count_pos][0] = x
-                positions[count_pos][1] = y
-                positions[count_pos][2] = z
-                positions[count_pos + 1][0] = x + 0.5
-                positions[count_pos + 1][1] = y + 0.5
-                positions[count_pos + 1][2] = z + 0.5
-                count_pos = count_pos + 2
+    number_unit_cell_x = torch.randint(
+        number_unit_cell_x_range[0],
+        number_unit_cell_x_range[1],
+        (number_configurations,),
+    )
+    number_unit_cell_y = torch.randint(
+        number_unit_cell_y_range[0],
+        number_unit_cell_y_range[1],
+        (number_configurations,),
+    )
+    number_unit_cell_z = torch.randint(
+        number_unit_cell_z_range[0],
+        number_unit_cell_z_range[1],
+        (number_configurations,),
+    )
 
-    for configuration in range(0, number_configurations):
+    for configuration in range(number_configurations):
+        count_pos = 0
+        uc_x = number_unit_cell_x[configuration]
+        uc_y = number_unit_cell_y[configuration]
+        uc_z = number_unit_cell_z[configuration]
+        number_nodes = 2 * uc_x * uc_y * uc_z
+        positions = torch.zeros(number_nodes, 3)
+        for x in range(uc_x):
+            for y in range(uc_y):
+                for z in range(uc_z):
+                    positions[count_pos][0] = x
+                    positions[count_pos][1] = y
+                    positions[count_pos][2] = z
+                    positions[count_pos + 1][0] = x + 0.5
+                    positions[count_pos + 1][1] = y + 0.5
+                    positions[count_pos + 1][2] = z + 0.5
+                    count_pos = count_pos + 2
 
         node_ids = torch.tensor([int(i) for i in range(0, number_nodes)]).reshape(
             (number_nodes, 1)
