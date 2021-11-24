@@ -194,7 +194,11 @@ class Base(Module):
         )
         ### encoder part ####
         for conv, batch_norm in zip(self.convs, self.batch_norms):
-            if data.edge_attr is not None:
+            if (data.edge_attr is not None) and (
+                hasattr(self, "edge_dim")
+                and self.edge_dim is not None
+                and self.edge_dim > 0
+            ):
                 c = conv(x=x, edge_index=edge_index, edge_attr=data.edge_attr)
             else:
                 c = conv(x=x, edge_index=edge_index)
