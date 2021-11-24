@@ -1,3 +1,3 @@
 import hydragnn
 
-hydragnn.run_training("./examples/lsms/configuration.json")
+hydragnn.run_training("./examples/lsms/lsms.json")
