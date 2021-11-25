@@ -98,7 +98,6 @@ class SerializedDataLoader:
         feature_indices = [i for i in atom_features]
         data.x = data.x[:, feature_indices]
 
-
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
         """Given the dataset and the percentage of data you want to extract from it, method will
         apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
@@ -146,6 +145,7 @@ class SerializedDataLoader:
             subsample.append(dataset[index])
 
         return subsample
+
 
 def get_radius_graph(config):
     return RadiusGraph(
