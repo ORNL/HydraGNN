@@ -25,3 +25,18 @@ def output_denormalize(y_minmax, true_values, predicted_values):
                 )
 
     return true_values, predicted_values
+
+
+def scaledback_y_data(datasets_list, scaled_index_list, nodes_num_list):
+    """datasets_list: list of datasets to scale back, e.g., [true_values, predicted_values];
+    true_values and predicted_values[num_heads][num_samples][num_atoms]
+    """
+    for idataset in range(len(datasets_list)):
+        for scaled_index in scaled_index_list:
+            head_value = datasets_list[idataset][scaled_index]
+            for isamp in range(len(nodes_num_list)):
+                for iatom in range(len(head_value[isamp])):
+                    datasets_list[idataset][scaled_index][isamp][
+                        iatom
+                    ] *= nodes_num_list[isamp]
+    return datasets_list
