@@ -12,7 +12,7 @@
             "column_index": [0,5,6]
         },
         "graph_features":{
-            "name": [ "free_energy"],
+            "name": [ "free_energy_scaled_num_nodes"],
             "dim": [1],
             "column_index": [0]
         }
@@ -41,7 +41,7 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["free_energy","charge_density", "magnetic_moment"],
+            "output_names": ["free_energy_scaled_num_nodes","charge_density", "magnetic_moment"],
             "output_index": [0, 1, 2],
             "type": ["graph","node","node"],
             "denormalize_output": true
