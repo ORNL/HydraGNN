@@ -89,7 +89,7 @@ def _(config: dict):
     ) = test(test_loader, model, config["Verbosity"]["level"])
 
     ##output predictions with unit/not normalized
-    if config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] == "True":
+    if bool(config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]):
         true_values, predicted_values = output_denormalize(
             config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"],
             true_values,
