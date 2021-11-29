@@ -25,12 +25,12 @@ class Base(Module):
         output_dim: list,
         output_type: list,
         config_heads: {},
-        num_nodes: int,
         ilossweights_hyperp: int,
         loss_weights: list,
         ilossweights_nll: int,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
+        num_nodes: int = None,
     ):
         super().__init__()
         self.input_dim = input_dim
@@ -164,6 +164,9 @@ class Base(Module):
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
+                    assert (
+                        self.num_nodes is not None
+                    ), "num_nodes must be positive integer for MLP"
                     # """if different graphs in the dataset have different size, one MLP is shared across all nodes """
                     head_NN = MLPNode(
                         self.hidden_dim,
