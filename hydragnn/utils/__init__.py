@@ -5,6 +5,7 @@ from .distributed import (
     get_device,
     is_model_distributed,
     get_distributed_model,
+    save_model,
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (

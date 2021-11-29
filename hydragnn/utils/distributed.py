@@ -14,6 +14,7 @@ import re
 
 import torch
 import torch.distributed as dist
+from torch.utils.tensorboard import SummaryWriter
 
 from .print_utils import print_distributed
 
@@ -186,3 +187,11 @@ def get_distributed_model(model, verbosity=0):
                 model, device_ids=[device]
             )
     return model
+
+
+def save_model(model, name, path="./logs/"):
+    _, world_rank = get_comm_size_and_rank()
+    if world_rank == 0:
+        model = get_model_or_module(model)
+        path_name = os.path.join(path, name, name + ".pk")
+        torch.save(model.state_dict(), path_name)

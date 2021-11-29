@@ -165,21 +165,6 @@ def _(config: dict):
         verbosity,
     )
 
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        _, world_rank = get_comm_size_and_rank()
-        if int(world_rank) == 0:
-            torch.save(
-                model.module.state_dict(),
-                "./logs/"
-                + model_with_config_name
-                + "/"
-                + model_with_config_name
-                + ".pk",
-            )
-    else:
-        torch.save(
-            model.state_dict(),
-            "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
-        )
+    save_model(model, model_with_config_name)
 
     print_timers(verbosity)
