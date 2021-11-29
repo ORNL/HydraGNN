@@ -16,7 +16,7 @@ import torch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.utils import check_if_graph_size_constant
-from hydragnn.utils.distributed import setup_ddp
+from hydragnn.utils.distributed import setup_ddp, load_existing_model
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
@@ -74,11 +74,7 @@ def _(config: dict):
     )
 
     model_with_config_name = get_model_output_name_config(model, config)
-    state_dict = torch.load(
-        "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
-        map_location="cpu",
-    )
-    model.load_state_dict(state_dict)
+    load_existing_model(model, model_with_config_name)
 
     (
         error,

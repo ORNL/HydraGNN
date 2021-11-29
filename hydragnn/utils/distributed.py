@@ -202,3 +202,15 @@ def get_summary_writer(name, path="./logs/"):
     if world_rank == 0:
         path_name = os.path.join(path, name)
         writer = SummaryWriter(path_name)
+
+
+def load_existing_model_config(model, config, path="./logs/"):
+    if "continue" in config and config["continue"]:
+        model_name = config["startfrom"]
+        load_existing_model(model, model_name, path)
+
+
+def load_existing_model(model, model_name, path="./logs/"):
+    path_name = os.path.join(path, model_name, model_name + ".pk")
+    state_dict = torch.load(path_name, map_location="cpu")
+    model.load_state_dict(state_dict)

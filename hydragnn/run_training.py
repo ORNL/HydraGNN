@@ -24,6 +24,7 @@ from hydragnn.utils.distributed import (
     get_distributed_model,
     save_model,
     get_summary_writer,
+    load_existing_model_config,
 )
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
@@ -112,20 +113,7 @@ def _(config: dict):
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
         json.dump(config, f)
 
-    if (
-        "continue" in config["NeuralNetwork"]["Training"]
-        and config["NeuralNetwork"]["Training"]["continue"] == 1
-    ):
-        # starting from an existing model
-        modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
-        if not modelstart:
-            modelstart = model_with_config_name
-
-        state_dict = torch.load(
-            f"./logs/{modelstart}/{modelstart}.pk",
-            map_location="cpu",
-        )
-        model.load_state_dict(state_dict)
+    load_existing_model_config(model, config["NeuralNetwork"]["Training"])
 
     print_distributed(
         verbosity,
