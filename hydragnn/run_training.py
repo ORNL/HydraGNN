@@ -120,20 +120,6 @@ def _(config: dict):
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
 
-    if (
-        "continue" in config["NeuralNetwork"]["Training"]
-        and config["NeuralNetwork"]["Training"]["continue"] == 1
-    ):  # starting from an existing model
-        modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
-        if not modelstart:
-            modelstart = model_with_config_name
-
-        state_dict = torch.load(
-            f"./logs/{modelstart}/{modelstart}.pk",
-            map_location="cpu",
-        )
-        model.load_state_dict(state_dict)
-
     train_validate_test(
         model,
         optimizer,
