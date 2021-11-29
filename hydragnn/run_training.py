@@ -30,7 +30,7 @@ from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
-    update_config_minmax,
+    normalize_output_config,
     get_model_output_name_config,
 )
 from hydragnn.models.create import create
@@ -73,18 +73,7 @@ def _(config: dict):
     )
     config = update_config_NN_outputs(config, graph_size_variable)
 
-    if (
-        "denormalize_output" in config["NeuralNetwork"]["Variables_of_interest"]
-        and config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]
-    ):
-        if "total" in config["Dataset"]["path"]["raw"].keys():
-            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-        else:
-            ###used for min/max values loading below
-            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
-        config = update_config_minmax(dataset_path, config)
-    else:
-        config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = False
+    config = normalize_output_config(config)
 
     model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
