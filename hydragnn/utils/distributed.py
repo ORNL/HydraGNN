@@ -195,3 +195,10 @@ def save_model(model, name, path="./logs/"):
         model = get_model_or_module(model)
         path_name = os.path.join(path, name, name + ".pk")
         torch.save(model.state_dict(), path_name)
+
+
+def get_summary_writer(name, path="./logs/"):
+    _, world_rank = get_comm_size_and_rank()
+    if world_rank == 0:
+        path_name = os.path.join(path, name)
+        writer = SummaryWriter(path_name)

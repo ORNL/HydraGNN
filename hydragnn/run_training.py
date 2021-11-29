@@ -14,7 +14,6 @@ from functools import singledispatch
 
 import torch
 import torch.distributed as dist
-from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
@@ -24,6 +23,7 @@ from hydragnn.utils.distributed import (
     get_comm_size_and_rank,
     get_distributed_model,
     save_model,
+    get_summary_writer,
 )
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
@@ -105,13 +105,7 @@ def _(config: dict):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    writer = None
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        _, world_rank = get_comm_size_and_rank()
-        if int(world_rank) == 0:
-            writer = SummaryWriter("./logs/" + model_with_config_name)
-    else:
-        writer = SummaryWriter("./logs/" + model_with_config_name)
+    writer = get_summary_writer(model_with_config_name)
 
     if dist.is_initialized():
         dist.barrier()
