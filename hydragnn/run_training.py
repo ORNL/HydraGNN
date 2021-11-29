@@ -19,8 +19,12 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.utils import check_if_graph_size_constant
-from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
-from hydragnn.utils.device import get_distributed_model
+from hydragnn.utils.distributed import (
+    setup_ddp,
+    get_comm_size_and_rank,
+    get_distributed_model,
+    save_model,
+)
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
