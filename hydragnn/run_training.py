@@ -88,16 +88,15 @@ def _(config: dict):
         ),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
-        verbosity_level=config["Verbosity"]["level"],
+        verbosity_level=verbosity,
     )
 
     model_with_config_name = get_model_output_name_config(model, config)
 
     model = get_distributed_model(model, verbosity)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=config["NeuralNetwork"]["Training"]["learning_rate"]
-    )
+    learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
