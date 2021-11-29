@@ -17,6 +17,7 @@ import torch
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
+from hydragnn.utils.distributed import get_model_or_module
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 
@@ -49,10 +50,8 @@ def train_validate_test(
     task_loss_test = []
     task_loss_val = []
 
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        model = model.module
-    else:
-        model = model
+    model = get_model_or_module(model)
+
     # preparing for results visualization
     ## collecting node feature
     node_feature = []

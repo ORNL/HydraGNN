@@ -3,6 +3,8 @@ from .distributed import (
     get_comm_size_and_rank,
     get_device_list,
     get_device,
+    is_model_distributed,
+    get_distributed_model,
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (

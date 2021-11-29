@@ -163,3 +163,26 @@ def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
     device_name = "cuda:" + str(localrank)
 
     return device_name, torch.device(device_name)
+
+
+def is_model_distributed(model):
+    return isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel)
+
+
+def get_model_or_module(model):
+    if is_model_distributed(model):
+        return model.module
+    else:
+        return model
+
+
+def get_distributed_model(model, verbosity=0):
+    device_name, device = get_device(verbosity)
+    if dist.is_initialized():
+        if device_name == "cpu":
+            model = torch.nn.parallel.DistributedDataParallel(model)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(
+                model, device_ids=[device]
+            )
+    return model
