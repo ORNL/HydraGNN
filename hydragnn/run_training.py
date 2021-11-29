@@ -20,6 +20,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
+from hydragnn.utils.device import get_distributed_model
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
@@ -27,7 +28,7 @@ from hydragnn.utils.config_utils import (
     update_config_minmax,
     get_model_output_name_config,
 )
-from hydragnn.models.create import create, get_device
+from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import train_validate_test
 
 
@@ -92,14 +93,7 @@ def _(config: dict):
 
     model_with_config_name = get_model_output_name_config(model, config)
 
-    device_name, device = get_device(config["Verbosity"]["level"])
-    if dist.is_initialized():
-        if device_name == "cpu":
-            model = torch.nn.parallel.DistributedDataParallel(model)
-        else:
-            model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[device]
-            )
+    model = get_distributed_model(model, verbosity)
 
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=config["NeuralNetwork"]["Training"]["learning_rate"]

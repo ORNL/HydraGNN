@@ -10,7 +10,9 @@
 ##############################################################################
 
 import os
+
 import torch
+import torch.distributed as dist
 
 from .distributed import get_comm_size_and_rank
 from .print_utils import print_distributed
@@ -54,3 +56,15 @@ def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
     device_name = "cuda:" + str(localrank)
 
     return device_name, torch.device(device_name)
+
+
+def get_distributed_model(model, verbosity=0):
+    device_name, device = get_device(verbosity)
+    if dist.is_initialized():
+        if device_name == "cpu":
+            model = torch.nn.parallel.DistributedDataParallel(model)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(
+                model, device_ids=[device]
+            )
+    return model
