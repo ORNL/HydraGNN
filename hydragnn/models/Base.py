@@ -206,12 +206,14 @@ class Base(Module):
             use_edge_attr = True
 
         ### encoder part ####
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            if use_edge_attr:
+        if use_edge_attr:
+            for conv, batch_norm in zip(self.convs, self.batch_norms):
                 c = conv(x=x, edge_index=edge_index, edge_attr=data.edge_attr)
-            else:
+                x = F.relu(batch_norm(c))
+        else:
+            for conv, batch_norm in zip(self.convs, self.batch_norms):
                 c = conv(x=x, edge_index=edge_index)
-            x = F.relu(batch_norm(c))
+                x = F.relu(batch_norm(c))
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
