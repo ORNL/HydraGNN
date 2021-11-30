@@ -67,7 +67,7 @@ class SerializedDataLoader:
             loop=False,
             max_num_neighbors=config["Architecture"]["max_neighbours"],
         )
-        compute_edge_lengths = Distance(norm=True, cat=True)
+        compute_edge_lengths = Distance(norm=False, cat=True)
 
         for data in dataset:
             data = compute_edges(data)
