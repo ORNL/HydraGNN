@@ -94,8 +94,8 @@ def split_dataset(
         testset = dataset[int(data_size * (perc_train + perc_val)) :]
     elif len(dataset_names) == 3:
         trainset = dataset_list[dataset_names.index("train")]
-        valset = dataset_list[dataset_names.index("test")]
-        testset = dataset_list[dataset_names.index("validate")]
+        valset = dataset_list[dataset_names.index("validate")]
+        testset = dataset_list[dataset_names.index("test")]
     else:
         raise ValueError(
             'Must provide "total" OR "train", "test", "validate" data paths: ',
