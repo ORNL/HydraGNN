@@ -22,6 +22,8 @@ from hydragnn.utils.distributed import (
     setup_ddp,
     get_comm_size_and_rank,
     get_distributed_model,
+)
+from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
     load_existing_model_config,

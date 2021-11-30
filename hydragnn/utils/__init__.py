@@ -5,7 +5,12 @@ from .distributed import (
     get_device,
     is_model_distributed,
     get_distributed_model,
+)
+from .model import (
     save_model,
+    get_summary_writer,
+    load_existing_model,
+    load_existing_model_config,
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (

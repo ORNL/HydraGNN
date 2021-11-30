@@ -16,7 +16,8 @@ import torch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.utils import check_if_graph_size_constant
-from hydragnn.utils.distributed import setup_ddp, load_existing_model
+from hydragnn.utils.distributed import setup_ddp
+from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
