@@ -21,6 +21,10 @@ from hydragnn.utils.model import get_model_or_module
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 
+import os
+from torch.profiler import profile, record_function, ProfilerActivity
+import contextlib
+from unittest.mock import MagicMock
 
 def train_validate_test(
     model,
@@ -37,6 +41,9 @@ def train_validate_test(
     plot_hist_solution=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
+    # setup profile variables
+    global profile_config_name
+    profile_config_name = model_with_config_name
     # total loss tracking for train/vali/test
     total_loss_train = []
     total_loss_val = []
@@ -84,6 +91,9 @@ def train_validate_test(
     timer.start()
 
     for epoch in range(0, num_epoch):
+        # setup profile variables
+        global profile_current_epoch
+        profile_current_epoch = epoch
         train_mae, train_taskserr, train_taskserr_nodes = train(
             train_loader, model, optimizer, verbosity
         )
@@ -188,6 +198,11 @@ def get_head_indices(model, data):
 
     return head_index
 
+def trace_handler(p):
+    rank = os.getenv("RANK")
+    print ('Total number of profiled events: %d at epoch %d'%(len(p.events()), profile_current_epoch))
+    #p.export_chrome_trace("trace%s-%s-%d.json"%(rank, epoch, p.step_num))
+    torch.profiler.tensorboard_trace_handler("./logs/" + profile_config_name)(p)
 
 def train(loader, model, opt, verbosity):
     device = next(model.parameters()).device
@@ -197,20 +212,35 @@ def train(loader, model, opt, verbosity):
     model.train()
 
     total_error = 0
-    for data in iterate_tqdm(loader, verbosity):
-        data = data.to(device)
-        opt.zero_grad()
-        head_index = get_head_indices(model, data)
+    profiler = contextlib.nullcontext(MagicMock(name='step'))
+    if profile_current_epoch == 0:
+        profiler = profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            schedule=torch.profiler.schedule(
+                skip_first=10,
+                wait=5,
+                warmup=1,
+                active=3,
+                repeat=1),
+            on_trace_ready=trace_handler,
+            record_shapes=True,
+            with_stack=True,
+            )
+    with profiler as prof:
+        for data in iterate_tqdm(loader, verbosity):
+            data = data.to(device)
+            opt.zero_grad()
+            head_index = get_head_indices(model, data)
 
-        pred = model(data)
-        loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
+            pred = model(data)
+            loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
 
-        loss.backward()
-        opt.step()
-        total_error += loss.item() * data.num_graphs
-        for itask in range(len(tasks_rmse)):
-            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
-            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
+            loss.backward()
+            opt.step()
+            total_error += loss.item() * data.num_graphs
+            for itask in range(len(tasks_rmse)):
+                tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+                tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
     return (
         total_error / len(loader.dataset),
