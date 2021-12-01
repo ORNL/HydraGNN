@@ -69,9 +69,19 @@ class SerializedDataLoader:
         )
         compute_edge_lengths = Distance(norm=False, cat=True)
 
+        dataset[:] = [compute_edges(data) for data in dataset]
+        dataset[:] = [compute_edge_lengths(data) for data in dataset]
+
+        max_edge_length = torch.Tensor([float("-inf")])
+
         for data in dataset:
-            data = compute_edges(data)
-            data = compute_edge_lengths(data)
+            max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
+
+        # Normalization of the edges
+        for data in dataset:
+            data.edge_attr = data.edge_attr / max_edge_length
+
+        for data in dataset:
             self.__update_predicted_values(
                 config["Variables_of_interest"]["type"],
                 config["Variables_of_interest"]["output_index"],
