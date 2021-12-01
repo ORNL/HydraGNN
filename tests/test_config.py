@@ -13,11 +13,11 @@ import os, json
 import pytest
 
 
-@pytest.mark.parametrize("config_file", ["configuration.json"])
+@pytest.mark.parametrize("config_file", ["lsms.json"])
 @pytest.mark.mpi_skip()
 def pytest_config(config_file):
 
-    config_file = os.path.join("examples", config_file)
+    config_file = os.path.join("examples/lsms", config_file)
     config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
