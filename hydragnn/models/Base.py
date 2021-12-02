@@ -72,6 +72,15 @@ class Base(Module):
             weightabssum = sum(abs(number) for number in self.loss_weights)
             self.loss_weights = [iw / weightabssum for iw in self.loss_weights]
 
+        # Condition to pass edge_attr through forward propagation.
+        self.use_edge_attr = False
+        if (
+            hasattr(self, "edge_dim")
+            and self.edge_dim is not None
+            and self.edge_dim > 0
+        ):
+            self.use_edge_attr = True
+
         self._init_conv()
         self._init_node_conv()
         self._multihead()
@@ -192,9 +201,20 @@ class Base(Module):
             data.edge_index,
             data.batch,
         )
+        use_edge_attr = False
+        if (data.edge_attr is not None) and (self.use_edge_attr):
+            use_edge_attr = True
+
         ### encoder part ####
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            x = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
+        if use_edge_attr:
+            for conv, batch_norm in zip(self.convs, self.batch_norms):
+                c = conv(x=x, edge_index=edge_index, edge_attr=data.edge_attr)
+                x = F.relu(batch_norm(c))
+        else:
+            for conv, batch_norm in zip(self.convs, self.batch_norms):
+                c = conv(x=x, edge_index=edge_index)
+                x = F.relu(batch_norm(c))
+
         #### multi-head decoder part####
         # shared dense layers for graph level output
         x_graph = global_mean_pool(x, batch)
