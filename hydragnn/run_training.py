@@ -47,7 +47,7 @@ def _(config_file: str, log_name=None):
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    run_training(config)
+    run_training(config, log_name)
 
 
 @run_training.register
