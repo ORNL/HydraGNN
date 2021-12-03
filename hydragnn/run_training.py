@@ -14,20 +14,28 @@ from functools import singledispatch
 
 import torch
 import torch.distributed as dist
-from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.utils import check_if_graph_size_constant
-from hydragnn.utils.distributed import setup_ddp, get_comm_size_and_rank
+from hydragnn.utils.distributed import (
+    setup_ddp,
+    get_comm_size_and_rank,
+    get_distributed_model,
+)
+from hydragnn.utils.model import (
+    save_model,
+    get_summary_writer,
+    load_existing_model_config,
+)
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
-    update_config_minmax,
+    normalize_output_config,
     get_model_output_name_config,
 )
-from hydragnn.models.create import create, get_device
+from hydragnn.models.create import create
 from hydragnn.train.train_validate_test import train_validate_test
 
 
@@ -67,18 +75,7 @@ def _(config: dict):
     )
     config = update_config_NN_outputs(config, graph_size_variable)
 
-    if (
-        "denormalize_output" in config["NeuralNetwork"]["Variables_of_interest"]
-        and config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]
-    ):
-        if "total" in config["Dataset"]["path"]["raw"].keys():
-            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-        else:
-            ###used for min/max values loading below
-            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
-        config = update_config_minmax(dataset_path, config)
-    else:
-        config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"] = False
+    config = normalize_output_config(config)
 
     model = create(
         model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
@@ -87,73 +84,32 @@ def _(config: dict):
         ),
         dataset=train_loader.dataset,
         config=config["NeuralNetwork"]["Architecture"],
-        verbosity_level=config["Verbosity"]["level"],
+        verbosity_level=verbosity,
     )
 
     model_with_config_name = get_model_output_name_config(model, config)
 
-    device_name, device = get_device(config["Verbosity"]["level"])
-    if dist.is_initialized():
-        if device_name == "cpu":
-            model = torch.nn.parallel.DistributedDataParallel(model)
-        else:
-            model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[device]
-            )
+    model = get_distributed_model(model, verbosity)
 
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=config["NeuralNetwork"]["Training"]["learning_rate"]
-    )
+    learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    writer = None
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        _, world_rank = get_comm_size_and_rank()
-        if int(world_rank) == 0:
-            writer = SummaryWriter("./logs/" + model_with_config_name)
-    else:
-        writer = SummaryWriter("./logs/" + model_with_config_name)
+    writer = get_summary_writer(model_with_config_name)
 
     if dist.is_initialized():
         dist.barrier()
     with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
         json.dump(config, f)
 
-    if (
-        "continue" in config["NeuralNetwork"]["Training"]
-        and config["NeuralNetwork"]["Training"]["continue"] == 1
-    ):
-        # starting from an existing model
-        modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
-        if not modelstart:
-            modelstart = model_with_config_name
-
-        state_dict = torch.load(
-            f"./logs/{modelstart}/{modelstart}.pk",
-            map_location="cpu",
-        )
-        model.load_state_dict(state_dict)
+    load_existing_model_config(model, config["NeuralNetwork"]["Training"])
 
     print_distributed(
         verbosity,
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
-
-    if (
-        "continue" in config["NeuralNetwork"]["Training"]
-        and config["NeuralNetwork"]["Training"]["continue"] == 1
-    ):  # starting from an existing model
-        modelstart = config["NeuralNetwork"]["Training"]["startfrom"]
-        if not modelstart:
-            modelstart = model_with_config_name
-
-        state_dict = torch.load(
-            f"./logs/{modelstart}/{modelstart}.pk",
-            map_location="cpu",
-        )
-        model.load_state_dict(state_dict)
 
     train_validate_test(
         model,
@@ -168,21 +124,6 @@ def _(config: dict):
         verbosity,
     )
 
-    if isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel):
-        _, world_rank = get_comm_size_and_rank()
-        if int(world_rank) == 0:
-            torch.save(
-                model.module.state_dict(),
-                "./logs/"
-                + model_with_config_name
-                + "/"
-                + model_with_config_name
-                + ".pk",
-            )
-    else:
-        torch.save(
-            model.state_dict(),
-            "./logs/" + model_with_config_name + "/" + model_with_config_name + ".pk",
-        )
+    save_model(model, model_with_config_name)
 
     print_timers(verbosity)
