@@ -34,7 +34,7 @@ from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
     normalize_output_config,
-    get_model_output_name_config,
+    get_log_name_config,
 )
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import train_validate_test
@@ -91,7 +91,7 @@ def _(config: dict):
         verbosity=verbosity,
     )
 
-    model_with_config_name = get_model_output_name_config(model, config)
+    log_name = get_log_name_config(config)
 
     model = get_distributed_model(model, verbosity)
 
@@ -101,11 +101,11 @@ def _(config: dict):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    writer = get_summary_writer(model_with_config_name)
+    writer = get_summary_writer(log_name)
 
     if dist.is_initialized():
         dist.barrier()
-    with open("./logs/" + model_with_config_name + "/config.json", "w") as f:
+    with open("./logs/" + log_name + "/config.json", "w") as f:
         json.dump(config, f)
 
     load_existing_model_config(model, config["NeuralNetwork"]["Training"])
@@ -124,10 +124,10 @@ def _(config: dict):
         writer,
         scheduler,
         config["NeuralNetwork"],
-        model_with_config_name,
+        log_name,
         verbosity,
     )
 
-    save_model(model, model_with_config_name)
+    save_model(model, log_name)
 
     print_timers(verbosity)
