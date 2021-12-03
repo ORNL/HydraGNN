@@ -3,12 +3,18 @@ import os, json
 import torch
 import torch_geometric
 
+# deprecated in torch_geometric 2.0
+try:
+    from torch_geometric.loader import DataLoader
+except:
+    from torch_geometric.data import DataLoader
+
 import hydragnn
 
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
     # Set descriptor as element type.
-    data.x = data.z.float()
+    data.x = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
     data.y = data.y[:, 10]
     hydragnn.preprocess.update_predicted_values(
@@ -16,7 +22,8 @@ def qm9_pre_transform(data):
         var_config["output_index"],
         data,
     )
-    return data
+    device = hydragnn.utils.get_device()
+    return data.to(device)
 
 
 def qm9_pre_filter(data):
@@ -36,34 +43,32 @@ filename = os.path.join(os.path.dirname(__file__), "qm9.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
-arch_config = config["NeuralNetwork"]["Architecture"]
 var_config = config["NeuralNetwork"]["Variables_of_interest"]
-
-# Set the details of outputs of interest.
-arch_config["output_dim"] = [0]
-arch_config["output_type"] = ["graph"]
 
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.setup_ddp()
 
 # Use built-in torch_geometric dataset.
+# Filter function above used to run quick example.
+# NOTE: data is moved to the device in the pre-transform.
+# NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
 dataset = torch_geometric.datasets.QM9(
     root="dataset/qm9", pre_transform=qm9_pre_transform, pre_filter=qm9_pre_filter
 )
-train_loader = torch_geometric.loader.DataLoader(dataset, batch_size=32, shuffle=False)
-
-# Add model changes to config.
-config["NeuralNetwork"]["Architecture"] = arch_config
-config["NeuralNetwork"]["Variables_of_interest"] = var_config
-
-input_dim = len(config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"])
-model = hydragnn.models.create(
-    model_type=arch_config["model_type"],
-    input_dim=input_dim,
-    dataset=dataset,
-    config=arch_config,
-    verbosity_level=verbosity,
+train, val, test = hydragnn.preprocess.split_dataset(
+    dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+    train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+)
+
+config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+
+model = hydragnn.models.create_model_config(
+    config=config["NeuralNetwork"]["Architecture"],
+    verbosity=verbosity,
+)
+model = hydragnn.utils.get_distributed_model(model, verbosity)
 
 learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -72,11 +77,20 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 )
 
 # Run training with the given model and qm9 dataset.
-num_epoch = config["NeuralNetwork"]["Training"]["num_epoch"]
-for epoch in range(0, num_epoch):
-    train_rmse, _, _ = hydragnn.train.train(train_loader, model, optimizer, verbosity)
-    scheduler.step(train_rmse)
+log_name = "qm9_test"
+writer = hydragnn.utils.get_summary_writer(log_name)
+with open("./logs/" + log_name + "/config.json", "w") as f:
+    json.dump(config, f)
 
-    hydragnn.utils.print_distributed(
-        verbosity, f"Epoch: {epoch:02d}, Train RMSE: {train_rmse:.8f}"
-    )
+hydragnn.train.train_validate_test(
+    model,
+    optimizer,
+    train_loader,
+    val_loader,
+    test_loader,
+    writer,
+    scheduler,
+    config["NeuralNetwork"],
+    log_name,
+    verbosity,
+)

@@ -25,13 +25,13 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["tbd"],
+            "output_names": ["energy"],
             "output_index": [0],
             "type": ["graph"],
-            "denormalize_output": true
+            "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 1,
+            "num_epoch": 2,
             "perc_train": 0.7,
             "learning_rate": 1e-3,
             "batch_size": 64,
