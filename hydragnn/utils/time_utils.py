@@ -1,7 +1,6 @@
 import time
 import torch
-from .distributed import get_comm_size_and_rank
-from .device import get_device
+from .distributed import get_comm_size_and_rank, get_device
 from .print_utils import print_distributed
 
 

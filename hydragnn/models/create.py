@@ -20,7 +20,7 @@ from hydragnn.models.GATStack import GATStack
 from hydragnn.models.MFCStack import MFCStack
 from hydragnn.models.CGCNNStack import CGCNNStack
 
-from hydragnn.utils.device import get_device
+from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import Timer
 
