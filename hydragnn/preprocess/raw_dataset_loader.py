@@ -176,10 +176,10 @@ class RawDataLoader:
         Data
             Data object representing structure of a graph sample.
         """
-        num_of_protons = data_object.x[0]
-        charge_density = data_object.x[1]
+        num_of_protons = data_object.x[:, 0]
+        charge_density = data_object.x[:, 1]
         charge_density -= num_of_protons
-        data_object.x[1] = charge_density
+        data_object.x[:, 1] = charge_density
         return data_object
 
     def __normalize_dataset(self):
