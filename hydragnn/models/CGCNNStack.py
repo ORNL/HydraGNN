@@ -42,12 +42,12 @@ class CGCNNStack(Base):
             output_dim,
             output_type,
             config_heads,
-            num_nodes,
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
             dropout,
             num_conv_layers,
+            num_nodes,
         )
 
     def get_conv(self, input_dim, _):
