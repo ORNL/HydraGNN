@@ -23,7 +23,8 @@ from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
     get_model_output_name_config,
 )
-from hydragnn.models.create import create
+from hydragnn.utils.model import calculate_PNA_degree
+from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import test
 from hydragnn.postprocess.postprocess import output_denormalize
 
@@ -64,14 +65,20 @@ def _(config: dict):
     )
     config = update_config_NN_outputs(config, graph_size_variable)
 
-    model = create(
-        model_type=config["NeuralNetwork"]["Architecture"]["model_type"],
-        input_dim=len(
-            config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
-        ),
-        dataset=train_loader.dataset,
+    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
+        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+    )
+    max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
+        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
+    else:
+        deg = None
+    model = create_model_config(
         config=config["NeuralNetwork"]["Architecture"],
-        verbosity_level=config["Verbosity"]["level"],
+        num_nodes=train_loader.dataset[0].num_nodes,
+        max_neighbours=max_neigh,
+        pna_deg=deg,
+        verbosity=config["Verbosity"]["level"],
     )
 
     model_with_config_name = get_model_output_name_config(model, config)
