@@ -39,11 +39,14 @@ def train_validate_test(
     verbosity=0,
     plot_init_solution=True,
     plot_hist_solution=False,
+    profile=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
     # setup profile variables
     global profile_config_name
     profile_config_name = model_with_config_name
+    global profile_enabled
+    profile_enabled = profile
     # total loss tracking for train/vali/test
     total_loss_train = []
     total_loss_val = []
@@ -199,9 +202,7 @@ def get_head_indices(model, data):
     return head_index
 
 def trace_handler(p):
-    rank = os.getenv("RANK")
     print ('Total number of profiled events: %d at epoch %d'%(len(p.events()), profile_current_epoch))
-    #p.export_chrome_trace("trace%s-%s-%d.json"%(rank, epoch, p.step_num))
     torch.profiler.tensorboard_trace_handler("./logs/" + profile_config_name)(p)
 
 def train(loader, model, opt, verbosity):
@@ -213,12 +214,11 @@ def train(loader, model, opt, verbosity):
 
     total_error = 0
     profiler = contextlib.nullcontext(MagicMock(name='step'))
-    if profile_current_epoch == 0:
+    if profile_enabled and (profile_current_epoch == 0):
         profiler = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
             schedule=torch.profiler.schedule(
-                skip_first=10,
-                wait=5,
+                wait=1,
                 warmup=1,
                 active=3,
                 repeat=1),
@@ -228,15 +228,19 @@ def train(loader, model, opt, verbosity):
             )
     with profiler as prof:
         for data in iterate_tqdm(loader, verbosity):
-            data = data.to(device)
-            opt.zero_grad()
-            head_index = get_head_indices(model, data)
-
-            pred = model(data)
-            loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
-
-            loss.backward()
+            with record_function('load'):
+                data = data.to(device)
+            with record_function('zero_grad'):
+                opt.zero_grad()
+            with record_function('get_head_indices'):
+                head_index = get_head_indices(model, data)
+            with record_function('forward'):
+                pred = model(data)
+                loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
+            with record_function('backward'):
+                loss.backward()
             opt.step()
+            prof.step()
             total_error += loss.item() * data.num_graphs
             for itask in range(len(tasks_rmse)):
                 tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
