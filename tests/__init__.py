@@ -1,3 +1,5 @@
 from .deterministic_graph_data import deterministic_graph_data
+from .enthalpy_data import linear_mixing_internal_energy_data
 from .test_config import pytest_config
 from .test_graphs import pytest_train_model
+from .test_enthalpy import pytest_formation_enthalpy
