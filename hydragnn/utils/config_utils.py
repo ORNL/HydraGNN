@@ -9,6 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import pickle
+import os
 
 
 def update_config_NN_outputs(config, graph_size_variable):
