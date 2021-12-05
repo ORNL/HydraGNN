@@ -26,6 +26,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 import contextlib
 from unittest.mock import MagicMock
 
+
 def train_validate_test(
     model,
     optimizer,
@@ -201,9 +202,14 @@ def get_head_indices(model, data):
 
     return head_index
 
+
 def trace_handler(p):
-    print ('Total number of profiled events: %d at epoch %d'%(len(p.events()), profile_current_epoch))
+    print(
+        "Total number of profiled events: %d at epoch %d"
+        % (len(p.events()), profile_current_epoch)
+    )
     torch.profiler.tensorboard_trace_handler("./logs/" + profile_config_name)(p)
+
 
 def train(loader, model, opt, verbosity):
     device = next(model.parameters()).device
@@ -213,31 +219,29 @@ def train(loader, model, opt, verbosity):
     model.train()
 
     total_error = 0
-    profiler = contextlib.nullcontext(MagicMock(name='step'))
+    profiler = contextlib.nullcontext(MagicMock(name="step"))
     if profile_enabled and (profile_current_epoch == 0):
         profiler = profile(
             activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            schedule=torch.profiler.schedule(
-                wait=1,
-                warmup=1,
-                active=3,
-                repeat=1),
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
             on_trace_ready=trace_handler,
             record_shapes=True,
             with_stack=True,
-            )
+        )
     with profiler as prof:
         for data in iterate_tqdm(loader, verbosity):
-            with record_function('load'):
+            with record_function("load"):
                 data = data.to(device)
-            with record_function('zero_grad'):
+            with record_function("zero_grad"):
                 opt.zero_grad()
-            with record_function('get_head_indices'):
+            with record_function("get_head_indices"):
                 head_index = get_head_indices(model, data)
-            with record_function('forward'):
+            with record_function("forward"):
                 pred = model(data)
-                loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
-            with record_function('backward'):
+                loss, tasks_rmse, tasks_nodes = model.loss_rmse(
+                    pred, data.y, head_index
+                )
+            with record_function("backward"):
                 loss.backward()
             opt.step()
             prof.step()
