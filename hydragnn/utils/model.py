@@ -18,6 +18,7 @@ from torch_geometric.utils import degree
 
 from hydragnn.utils.distributed import get_comm_size_and_rank, is_model_distributed
 
+
 def get_model_or_module(model):
     if is_model_distributed(model):
         return model.module

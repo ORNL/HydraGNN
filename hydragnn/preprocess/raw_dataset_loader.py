@@ -102,7 +102,7 @@ class RawDataLoader:
                     dataset[idx] = self.__charge_density_update_for_LSMS(data_object)
 
             # scaled features by number of nodes
-            dataset = self.__scaled_features_per_node_update(dataset)
+            dataset = self.__scale_features_by_num_nodes(dataset)
 
             if dataset_type == "total":
                 serial_data_name = self.raw_dataset_name + ".pkl"
@@ -187,7 +187,7 @@ class RawDataLoader:
         data_object.x[:, 1] = charge_density
         return data_object
 
-    def __scaled_features_per_node_update(self, dataset):
+    def __scale_features_by_num_nodes(self, dataset):
         """Calculate [**]_scaled_num_nodes"""
         scaled_graph_feature_index = [
             i
