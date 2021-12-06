@@ -26,10 +26,7 @@ from hydragnn.utils.config_utils import (
 from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import test
-from hydragnn.postprocess.postprocess import (
-    output_denormalize,
-    unscale_features_by_num_nodes,
-)
+from hydragnn.postprocess.postprocess import output_denormalize
 
 
 @singledispatch
@@ -102,21 +99,5 @@ def _(config: dict):
             true_values,
             predicted_values,
         )
-        output_names = config["NeuralNetwork"]["Variables_of_interest"]["output_names"]
-        scaled_feature_index = [
-            i
-            for i in range(len(output_names))
-            if "_scaled_num_nodes" in output_names[i]
-        ]
-        if len(scaled_feature_index) > 0:
-            ##scale back total energy
-            nodes_num_list = []
-            for data in test_loader:
-                nodes_num_list.extend(data.num_nodes_list.tolist())
-            [true_values, predicted_values] = unscale_features_by_num_nodes(
-                [true_values, predicted_values],
-                scaled_feature_index,
-                nodes_num_list,
-            )
 
     return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values

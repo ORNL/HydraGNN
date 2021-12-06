@@ -15,10 +15,7 @@ import numpy as np
 import torch
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
-from hydragnn.postprocess.postprocess import (
-    output_denormalize,
-    unscale_features_by_num_nodes,
-)
+from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.model import get_model_or_module
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
@@ -144,18 +141,6 @@ def train_validate_test(
         true_values, predicted_values = output_denormalize(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
-        output_names = config["Variables_of_interest"]["output_names"]
-        scaled_feature_index = [
-            i
-            for i in range(len(output_names))
-            if "_scaled_num_nodes" in output_names[i]
-        ]
-        if len(scaled_feature_index) > 0:
-            [true_values, predicted_values] = unscale_features_by_num_nodes(
-                [true_values, predicted_values],
-                scaled_feature_index,
-                nodes_num_list,
-            )
 
     ######result visualization######
     visualizer.create_plot_global(
