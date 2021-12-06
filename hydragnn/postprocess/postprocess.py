@@ -12,31 +12,29 @@
 
 def output_denormalize(y_minmax, true_values, predicted_values):
     for ihead in range(len(y_minmax)):
-        for isamp in range(len(predicted_values[0])):
+        for isample in range(len(predicted_values[0])):
             for iatom in range(len(predicted_values[ihead][0])):
                 ymin = y_minmax[ihead][0]
                 ymax = y_minmax[ihead][1]
 
-                predicted_values[ihead][isamp][iatom] = (
-                    predicted_values[ihead][isamp][iatom] * (ymax - ymin) + ymin
+                predicted_values[ihead][isample][iatom] = (
+                    predicted_values[ihead][isample][iatom] * (ymax - ymin) + ymin
                 )
-                true_values[ihead][isamp][iatom] = (
-                    true_values[ihead][isamp][iatom] * (ymax - ymin) + ymin
+                true_values[ihead][isample][iatom] = (
+                    true_values[ihead][isample][iatom] * (ymax - ymin) + ymin
                 )
 
     return true_values, predicted_values
 
 
-def scaledback_y_data(datasets_list, scaled_index_list, nodes_num_list):
+def unscale_features_by_num_nodes(datasets_list, scaled_index_list, nodes_num_list):
     """datasets_list: list of datasets to scale back, e.g., [true_values, predicted_values];
     true_values and predicted_values[num_heads][num_samples][num_atoms]
     """
-    for idataset in range(len(datasets_list)):
+    for dataset in datasets_list:
         for scaled_index in scaled_index_list:
-            head_value = datasets_list[idataset][scaled_index]
-            for isamp in range(len(nodes_num_list)):
-                for iatom in range(len(head_value[isamp])):
-                    datasets_list[idataset][scaled_index][isamp][
-                        iatom
-                    ] *= nodes_num_list[isamp]
+            head_value = dataset[scaled_index]
+            for isample in range(len(nodes_num_list)):
+                for iatom in range(len(head_value[isample])):
+                    dataset[scaled_index][isample][iatom] *= nodes_num_list[isample]
     return datasets_list
