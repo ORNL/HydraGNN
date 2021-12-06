@@ -26,7 +26,10 @@ from hydragnn.utils.config_utils import (
 from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import test
-from hydragnn.postprocess.postprocess import output_denormalize, scaledback_y_data
+from hydragnn.postprocess.postprocess import (
+    output_denormalize,
+    unscale_features_by_num_nodes,
+)
 
 
 @singledispatch
@@ -111,7 +114,7 @@ def _(config: dict):
             if "_scaled_num_nodes" in output_names[i]
         ]
         if len(scaled_feature_index) > 0:
-            [true_values, predicted_values] = scaledback_y_data(
+            [true_values, predicted_values] = unscale_features_by_num_nodes(
                 [true_values, predicted_values],
                 scaled_feature_index,
                 nodes_num_list,
