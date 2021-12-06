@@ -38,3 +38,19 @@ def unscale_features_by_num_nodes(datasets_list, scaled_index_list, nodes_num_li
                 for iatom in range(len(head_value[isample])):
                     dataset[scaled_index][isample][iatom] *= nodes_num_list[isample]
     return datasets_list
+
+
+def unscale_features_by_num_nodes_config(config, datasets_list, nodes_num_list):
+    output_names = config["NeuralNetwork"]["Variables_of_interest"]["output_names"]
+    scaled_feature_index = [
+        i for i in range(len(output_names)) if "_scaled_num_nodes" in output_names[i]
+    ]
+    if len(scaled_feature_index) > 0:
+        assert (
+            config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"],
+            "'unscale_features_by_num_nodes_config' should only be used together with 'output_denormalize'",
+        )
+        datasets_list = unscale_features_by_num_nodes(
+            datasets_list, scaled_feature_index, nodes_num_list
+        )
+    return datasets_list
