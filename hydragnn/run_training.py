@@ -129,7 +129,6 @@ def _(config: dict):
         config["NeuralNetwork"],
         model_with_config_name,
         verbosity,
-        profile=profile,
     )
 
     save_model(model, model_with_config_name)

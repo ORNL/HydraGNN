@@ -20,9 +20,12 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.model import get_model_or_module
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profile import Profiler
 
 import os
-from torch.profiler import profile, record_function, ProfilerActivity
+
+# from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import record_function
 import contextlib
 from unittest.mock import MagicMock
 
@@ -40,14 +43,8 @@ def train_validate_test(
     verbosity=0,
     plot_init_solution=True,
     plot_hist_solution=False,
-    profile=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
-    # setup profile variables
-    global profile_config_name
-    profile_config_name = model_with_config_name
-    global profile_enabled
-    profile_enabled = profile
     # total loss tracking for train/vali/test
     total_loss_train = []
     total_loss_val = []
@@ -91,15 +88,17 @@ def train_validate_test(
             iepoch=-1,
         )
 
+    profiler = Profiler("./logs/" + model_with_config_name)
+    if "Profile" in config:
+        profiler.setup(config["Profile"])
+
     timer = Timer("train_validate_test")
     timer.start()
 
     for epoch in range(0, num_epoch):
-        # setup profile variables
-        global profile_current_epoch
-        profile_current_epoch = epoch
+        profiler.set_current_epoch(epoch)
         train_mae, train_taskserr, train_taskserr_nodes = train(
-            train_loader, model, optimizer, verbosity
+            train_loader, model, optimizer, verbosity, profiler=profiler
         )
         val_mae, val_taskserr, val_taskserr_nodes = validate(
             val_loader, model, verbosity
@@ -203,15 +202,7 @@ def get_head_indices(model, data):
     return head_index
 
 
-def trace_handler(p):
-    print(
-        "Total number of profiled events: %d at epoch %d"
-        % (len(p.events()), profile_current_epoch)
-    )
-    torch.profiler.tensorboard_trace_handler("./logs/" + profile_config_name)(p)
-
-
-def train(loader, model, opt, verbosity):
+def train(loader, model, opt, verbosity, profiler=None):
     device = next(model.parameters()).device
     tasks_error = np.zeros(model.num_heads)
     tasks_noderr = np.zeros(model.num_heads)
@@ -219,15 +210,8 @@ def train(loader, model, opt, verbosity):
     model.train()
 
     total_error = 0
-    profiler = contextlib.nullcontext(MagicMock(name="step"))
-    if profile_enabled and (profile_current_epoch == 0):
-        profiler = profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
-            on_trace_ready=trace_handler,
-            record_shapes=True,
-            with_stack=True,
-        )
+    if profiler is None:
+        profiler = contextlib.nullcontext(MagicMock(name="step"))
     with profiler as prof:
         for data in iterate_tqdm(loader, verbosity):
             with record_function("load"):
