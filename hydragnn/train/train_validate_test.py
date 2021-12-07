@@ -24,7 +24,6 @@ from hydragnn.utils.profile import Profiler
 
 import os
 
-# from torch.profiler import profile, record_function, ProfilerActivity
 from torch.profiler import record_function
 import contextlib
 from unittest.mock import MagicMock
