@@ -17,6 +17,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
 from hydragnn.utils.distributed import get_comm_size_and_rank, is_model_distributed
+from collections import OrderedDict
 
 
 def get_model_or_module(model):
@@ -50,6 +51,14 @@ def load_existing_model_config(model, config, path="./logs/"):
 def load_existing_model(model, model_name, path="./logs/"):
     path_name = os.path.join(path, model_name, model_name + ".pk")
     state_dict = torch.load(path_name, map_location="cpu")
+
+    if is_model_distributed(model):
+        ddp_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            k = "module." + k
+            ddp_state_dict[k] = v
+        state_dict = ddp_state_dict
+
     model.load_state_dict(state_dict)
 
 
