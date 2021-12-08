@@ -41,10 +41,6 @@ def train_validate_test(
     total_loss_train = []
     total_loss_val = []
     total_loss_test = []
-    # loss tracking of summation across all nodes for node feature predictions
-    task_loss_train_sum = []
-    task_loss_test_sum = []
-    task_loss_val_sum = []
     # loss tracking for each head/task
     task_loss_train = []
     task_loss_test = []
@@ -70,9 +66,9 @@ def train_validate_test(
     visualizer.num_nodes_plot()
 
     if plot_init_solution:  # visualizing of initial conditions
-        test_res = test(test_loader, model, verbosity)
-        true_values = test_res[3]
-        predicted_values = test_res[4]
+        test_results = test(test_loader, model, verbosity)
+        true_values = test_results[2]
+        predicted_values = test_results[3]
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
@@ -84,18 +80,14 @@ def train_validate_test(
     timer.start()
 
     for epoch in range(0, num_epoch):
-        train_rmse, train_taskserr, train_taskserr_nodes = train(
-            train_loader, model, optimizer, verbosity
-        )
-        val_rmse, val_taskserr, val_taskserr_nodes = validate(
-            val_loader, model, verbosity
-        )
-        test_res = test(test_loader, model, verbosity)
+        train_rmse, train_taskserr = train(train_loader, model, optimizer, verbosity)
+        val_rmse, val_taskserr = validate(val_loader, model, verbosity)
+        test_results = test(test_loader, model, verbosity)
         scheduler.step(val_rmse)
         if writer is not None:
             writer.add_scalar("train error", train_rmse, epoch)
             writer.add_scalar("validate error", val_rmse, epoch)
-            writer.add_scalar("test error", test_res[0], epoch)
+            writer.add_scalar("test error", test_results[0], epoch)
             for ivar in range(model.num_heads):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
@@ -103,25 +95,21 @@ def train_validate_test(
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train RMSE: {train_rmse:.8f}, Val RMSE: {val_rmse:.8f}, "
-            f"Test RMSE: {test_res[0]:.8f}",
+            f"Test RMSE: {test_results[0]:.8f}",
         )
         print_distributed(verbosity, "Tasks RMSE:", train_taskserr)
 
         total_loss_train.append(train_rmse)
         total_loss_val.append(val_rmse)
-        total_loss_test.append(test_res[0])
-        task_loss_train_sum.append(train_taskserr)
-        task_loss_val_sum.append(val_taskserr)
-        task_loss_test_sum.append(test_res[1])
-
-        task_loss_train.append(train_taskserr_nodes)
-        task_loss_val.append(val_taskserr_nodes)
-        task_loss_test.append(test_res[2])
+        total_loss_test.append(test_results[0])
+        task_loss_train.append(train_taskserr)
+        task_loss_val.append(val_taskserr)
+        task_loss_test.append(test_results[1])
 
         ###tracking the solution evolving with training
         if plot_hist_solution:
-            true_values = test_res[3]
-            predicted_values = test_res[4]
+            true_values = test_results[2]
+            predicted_values = test_results[3]
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
@@ -132,7 +120,7 @@ def train_validate_test(
     timer.stop()
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
-    test_rmse, test_taskserr, test_taskserr_nodes, true_values, predicted_values = test(
+    test_rmse, test_taskserr, true_values, predicted_values = test(
         test_loader, model, verbosity
     )
 
@@ -158,9 +146,6 @@ def train_validate_test(
         total_loss_train,
         total_loss_val,
         total_loss_test,
-        task_loss_train_sum,
-        task_loss_val_sum,
-        task_loss_test_sum,
         task_loss_train,
         task_loss_val,
         task_loss_test,
@@ -192,7 +177,6 @@ def get_head_indices(model, data):
 def train(loader, model, opt, verbosity):
     device = next(model.parameters()).device
     tasks_error = np.zeros(model.num_heads)
-    tasks_noderr = np.zeros(model.num_heads)
 
     model.train()
 
@@ -203,19 +187,17 @@ def train(loader, model, opt, verbosity):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        loss, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
+        loss, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
 
         loss.backward()
         opt.step()
         total_error += loss.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
-            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
     return (
         total_error / len(loader.dataset),
         tasks_error / len(loader.dataset),
-        tasks_noderr / len(loader.dataset),
     )
 
 
@@ -226,23 +208,20 @@ def validate(loader, model, verbosity):
 
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
-    tasks_noderr = np.zeros(model.num_heads)
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
         data = data.to(device)
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
+        error, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
-            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
 
     return (
         total_error / len(loader.dataset),
         tasks_error / len(loader.dataset),
-        tasks_noderr / len(loader.dataset),
     )
 
 
@@ -253,7 +232,6 @@ def test(loader, model, verbosity):
 
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
-    tasks_noderr = np.zeros(model.num_heads)
     model.eval()
     true_values = [[] for _ in range(model.num_heads)]
     predicted_values = [[] for _ in range(model.num_heads)]
@@ -269,11 +247,10 @@ def test(loader, model, verbosity):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        error, tasks_rmse, tasks_nodes = model.loss_rmse(pred, data.y, head_index)
+        error, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
-            tasks_noderr[itask] += tasks_nodes[itask].item() * data.num_graphs
         ytrue = data.y
         istart = 0
         for ihead in range(model.num_heads):
@@ -288,7 +265,6 @@ def test(loader, model, verbosity):
     return (
         total_error / len(loader.dataset),
         tasks_error / len(loader.dataset),
-        tasks_noderr / len(loader.dataset),
         true_values,
         predicted_values,
     )

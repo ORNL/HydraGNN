@@ -555,9 +555,6 @@ class Visualizer:
         total_loss_train,
         total_loss_val,
         total_loss_test,
-        task_loss_train_sum,
-        task_loss_val_sum,
-        task_loss_test_sum,
         task_loss_train,
         task_loss_val,
         task_loss_test,
@@ -571,9 +568,6 @@ class Visualizer:
                 total_loss_train,
                 total_loss_val,
                 total_loss_test,
-                task_loss_train_sum,
-                task_loss_val_sum,
-                task_loss_test_sum,
                 task_loss_train,
                 task_loss_val,
                 task_loss_test,
@@ -583,11 +577,11 @@ class Visualizer:
             fhist,
         )
         fhist.close()
-        num_tasks = len(task_loss_train_sum[0])
+        num_tasks = len(task_loss_train[0])
         if num_tasks > 0:
-            task_loss_train_sum = np.array(task_loss_train_sum)
-            task_loss_val_sum = np.array(task_loss_val_sum)
-            task_loss_test_sum = np.array(task_loss_test_sum)
+            task_loss_train = np.array(task_loss_train)
+            task_loss_val = np.array(task_loss_val)
+            task_loss_test = np.array(task_loss_test)
             nrow = 2
         fig, axs = plt.subplots(nrow, num_tasks, figsize=(16, 6 * nrow))
         axs = axs.flatten()
@@ -601,17 +595,17 @@ class Visualizer:
         ax.legend()
         for iext in range(1, num_tasks):
             axs[iext].axis("off")
-        for ivar in range(task_loss_train_sum.shape[1]):
+        for ivar in range(task_loss_train.shape[1]):
             ax = axs[num_tasks + ivar]
-            ax.plot(task_loss_train_sum[:, ivar], label="train")
-            ax.plot(task_loss_val_sum[:, ivar], label="validation")
-            ax.plot(task_loss_test_sum[:, ivar], "--", label="test")
+            ax.plot(task_loss_train[:, ivar], label="train")
+            ax.plot(task_loss_val[:, ivar], label="validation")
+            ax.plot(task_loss_test[:, ivar], "--", label="test")
             ax.set_title(task_names[ivar] + ", {:.4f}".format(task_weights[ivar]))
             ax.set_xlabel("Epochs")
             ax.set_yscale("log")
             if ivar == 0:
                 ax.legend()
-        for iext in range(num_tasks + task_loss_train_sum.shape[1], axs.size):
+        for iext in range(num_tasks + task_loss_train.shape[1], axs.size):
             axs[iext].axis("off")
         plt.subplots_adjust(
             left=0.1, bottom=0.08, right=0.98, top=0.9, wspace=0.25, hspace=0.3
