@@ -38,13 +38,13 @@ def train_validate_test(
 ):
     num_epoch = config["Training"]["num_epoch"]
     # total loss tracking for train/vali/test
-    total_loss_train = []
-    total_loss_val = []
-    total_loss_test = []
+    total_loss_train = [None] * num_epoch
+    total_loss_val = [None] * num_epoch
+    total_loss_test = [None] * num_epoch
     # loss tracking for each head/task
-    task_loss_train = []
-    task_loss_test = []
-    task_loss_val = []
+    task_loss_train = [None] * num_epoch
+    task_loss_test = [None] * num_epoch
+    task_loss_val = [None] * num_epoch
 
     model = get_model_or_module(model)
 
@@ -66,9 +66,7 @@ def train_validate_test(
     visualizer.num_nodes_plot()
 
     if plot_init_solution:  # visualizing of initial conditions
-        test_results = test(test_loader, model, verbosity)
-        true_values = test_results[2]
-        predicted_values = test_results[3]
+        _, _, true_values, predicted_values = test(test_loader, model, verbosity)
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
@@ -82,12 +80,14 @@ def train_validate_test(
     for epoch in range(0, num_epoch):
         train_rmse, train_taskserr = train(train_loader, model, optimizer, verbosity)
         val_rmse, val_taskserr = validate(val_loader, model, verbosity)
-        test_results = test(test_loader, model, verbosity)
+        test_rmse, test_taskserr, true_values, predicted_values = test(
+            test_loader, model, verbosity
+        )
         scheduler.step(val_rmse)
         if writer is not None:
             writer.add_scalar("train error", train_rmse, epoch)
             writer.add_scalar("validate error", val_rmse, epoch)
-            writer.add_scalar("test error", test_results[0], epoch)
+            writer.add_scalar("test error", test_rmse, epoch)
             for ivar in range(model.num_heads):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
@@ -95,21 +95,19 @@ def train_validate_test(
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train RMSE: {train_rmse:.8f}, Val RMSE: {val_rmse:.8f}, "
-            f"Test RMSE: {test_results[0]:.8f}",
+            f"Test RMSE: {test_rmse:.8f}",
         )
         print_distributed(verbosity, "Tasks RMSE:", train_taskserr)
 
-        total_loss_train.append(train_rmse)
-        total_loss_val.append(val_rmse)
-        total_loss_test.append(test_results[0])
-        task_loss_train.append(train_taskserr)
-        task_loss_val.append(val_taskserr)
-        task_loss_test.append(test_results[1])
+        total_loss_train[epoch] = train_rmse
+        total_loss_val[epoch] = val_rmse
+        total_loss_test[epoch] = test_rmse
+        task_loss_train[epoch] = train_taskserr
+        task_loss_val[epoch] = val_taskserr
+        task_loss_test[epoch] = test_taskserr
 
         ###tracking the solution evolving with training
         if plot_hist_solution:
-            true_values = test_results[2]
-            predicted_values = test_results[3]
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
