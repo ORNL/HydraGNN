@@ -132,12 +132,12 @@ def get_device_list():
     return available_gpus
 
 
-def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
+def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
 
     available_gpus = get_device_list()
     if not use_gpu or not available_gpus:
         print_distributed(verbosity_level, "Using CPU")
-        return "cpu", torch.device("cpu")
+        return "cpu"
 
     world_size, world_rank = get_comm_size_and_rank()
     if rank_per_model != 1:
@@ -162,7 +162,18 @@ def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
 
     device_name = "cuda:" + str(localrank)
 
-    return device_name, torch.device(device_name)
+    return device_name
+
+
+def get_device_from_name(name: str):
+
+    return torch.device(name)
+
+
+def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
+
+    name = get_device_name(use_gpu, rank_per_model, verbosity_level)
+    return get_device_from_name(name)
 
 
 def is_model_distributed(model):
@@ -170,11 +181,12 @@ def is_model_distributed(model):
 
 
 def get_distributed_model(model, verbosity=0):
-    device_name, device = get_device(verbosity)
+    device_name = get_device_name(verbosity)
     if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
         else:
+            device = get_device_from_name(device_name)
             model = torch.nn.parallel.DistributedDataParallel(
                 model, device_ids=[device]
             )
