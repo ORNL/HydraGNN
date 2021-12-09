@@ -86,7 +86,6 @@ def _(config: dict):
 
     (
         error,
-        error_sumofnodes_task,
         error_rmse_task,
         true_values,
         predicted_values,
@@ -100,4 +99,4 @@ def _(config: dict):
             predicted_values,
         )
 
-    return error, error_sumofnodes_task, error_rmse_task, true_values, predicted_values
+    return error, error_rmse_task, true_values, predicted_values
