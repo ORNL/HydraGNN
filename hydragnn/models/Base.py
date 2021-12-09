@@ -271,8 +271,7 @@ class Base(Module):
     def loss_hpweighted(self, pred, value, head_index):
         # weights for different tasks as hyper-parameters
         tot_loss = 0
-        tasks_rmseloss = []
-        tasks_nodes = []
+        tasks_rmse = []
         for ihead in range(self.num_heads):
             head_pre = pred[ihead]
             pred_shape = head_pre.shape
@@ -284,13 +283,9 @@ class Base(Module):
             tot_loss += (
                 torch.sqrt(F.mse_loss(head_pre, head_val)) * self.loss_weights[ihead]
             )
-            tasks_nodes.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
-            # loss of summation across nodes/atoms
-            tasks_rmseloss.append(
-                torch.sqrt(F.mse_loss(torch.sum(head_pre, 1), torch.sum(head_val, 1)))
-            )
+            tasks_rmse.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
 
-        return tot_loss, tasks_rmseloss, tasks_nodes
+        return tot_loss, tasks_rmse
 
     def __str__(self):
         return "Base"

@@ -118,7 +118,6 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     (
         error,
-        error_sumofnodes_task,
         error_rmse_task,
         true_values,
         predicted_values,
@@ -136,17 +135,6 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     verbosity = 2
 
     for ihead in range(len(true_values)):
-        error_head_sum = error_sumofnodes_task[ihead] / len(true_values[ihead][0])
-        error_str = (
-            str("{:.6f}".format(error_head_sum))
-            + " < "
-            + str(thresholds[model_type][0])
-        )
-        hydragnn.utils.print_distributed(verbosity, "head sum: " + error_str)
-        assert (
-            error_head_sum < thresholds[model_type][0]
-        ), "RMSE checking failed for sum of head " + str(ihead)
-
         error_head_rmse = error_rmse_task[ihead]
         error_str = (
             str("{:.6f}".format(error_head_rmse))
