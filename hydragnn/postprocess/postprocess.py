@@ -41,15 +41,14 @@ def unscale_features_by_num_nodes(datasets_list, scaled_index_list, nodes_num_li
 
 
 def unscale_features_by_num_nodes_config(config, datasets_list, nodes_num_list):
-    output_names = config["NeuralNetwork"]["Variables_of_interest"]["output_names"]
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    output_names = var_config["output_names"]
     scaled_feature_index = [
         i for i in range(len(output_names)) if "_scaled_num_nodes" in output_names[i]
     ]
     if len(scaled_feature_index) > 0:
-        assert (
-            config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"],
-            "'unscale_features_by_num_nodes_config' should only be used together with 'output_denormalize'",
-        )
+        use_denorm = var_config["denormalize_output"]
+        assert use_denorm, "Cannot unscale features without 'denormalize_output'"
         datasets_list = unscale_features_by_num_nodes(
             datasets_list, scaled_feature_index, nodes_num_list
         )
