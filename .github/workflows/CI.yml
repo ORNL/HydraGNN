@@ -48,5 +48,5 @@ jobs:
       - name: Run pytest
         run: |
           pip list
-          python -m pytest -rfEP
-          mpirun -n 2 python -m pytest -rfEP --with-mpi
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning
+          mpirun -n 2 python -m pytest -rfEP -W error -W ignore::DeprecationWarning --with-mpi
