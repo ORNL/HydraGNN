@@ -123,6 +123,8 @@ class Visualizer:
             maximum = np.max((ax.get_xlim(), ax.get_ylim()))
             ax.set_xlim(minimum, maximum)
             ax.set_ylim(minimum, maximum)
+        
+        add_identity(ax, color='r', ls='--')
 
     def create_plot_global_analysis(
         self, varname, true_values, predicted_values, save_plot=True
@@ -549,6 +551,19 @@ class Visualizer:
             else:
                 fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
             plt.close()
+
+    def add_identity(axes, *line_args, **line_kwargs):
+	identity, = axes.plot([], [], *line_args, **line_kwargs)
+	def callback(axes):
+		low_x, high_x = axes.get_xlim()
+		low_y, high_y = axes.get_ylim()
+		low = max(low_x, low_y)
+		high = min(high_x, high_y)
+		identity.set_data([low, high], [low, high])
+	callback(axes)
+	axes.callbacks.connect('xlim_changed', callback)
+	axes.callbacks.connect('ylim_changed', callback)
+	return axes
 
     def plot_history(
         self,
