@@ -124,7 +124,7 @@ class Visualizer:
             ax.set_xlim(minimum, maximum)
             ax.set_ylim(minimum, maximum)
 
-        add_identity(ax, color="r", ls="--")
+        self.add_identity(ax, color="r", ls="--")
 
     def create_plot_global_analysis(
         self, varname, true_values, predicted_values, save_plot=True
