@@ -552,7 +552,7 @@ class Visualizer:
                 fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
             plt.close()
 
-    def add_identity(axes, *line_args, **line_kwargs):
+    def add_identity(self, axes, *line_args, **line_kwargs):
         (identity,) = axes.plot([], [], *line_args, **line_kwargs)
 
         def callback(axes):
