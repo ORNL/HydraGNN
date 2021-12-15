@@ -16,7 +16,11 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
 
-from hydragnn.utils.distributed import get_comm_size_and_rank, get_device, is_model_distributed
+from hydragnn.utils.distributed import (
+    get_comm_size_and_rank,
+    get_device,
+    is_model_distributed,
+)
 from collections import OrderedDict
 
 
