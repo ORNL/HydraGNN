@@ -1,3 +1,14 @@
+##############################################################################
+# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
 import time
 import torch
 from .distributed import get_comm_size_and_rank, get_device
@@ -49,7 +60,6 @@ class Timer:
         self.elapsed_time = time.perf_counter() - self.start_time
         self.start_time = None
 
-        _, self.device = get_device()
         self.tmin = torch.Tensor([self.elapsed_time]).to(self.device)
         self.tmax = torch.Tensor([self.elapsed_time]).to(self.device)
         self.tavg = torch.Tensor([self.elapsed_time]).to(self.device)
