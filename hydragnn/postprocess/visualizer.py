@@ -113,7 +113,7 @@ class Visualizer:
         y_label=None,
         xylim_equal=False,
     ):
-        ax.scatter(x, y, s=s, edgecolor='b', marker=marker, facecolor="none")
+        ax.scatter(x, y, s=s, edgecolor="b", marker=marker, facecolor="none")
 
         ax.set_title(title)
         ax.set_xlabel(x_label)
