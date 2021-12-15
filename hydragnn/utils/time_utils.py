@@ -49,7 +49,6 @@ class Timer:
         self.elapsed_time = time.perf_counter() - self.start_time
         self.start_time = None
 
-        _, self.device = get_device()
         self.tmin = torch.Tensor([self.elapsed_time]).to(self.device)
         self.tmax = torch.Tensor([self.elapsed_time]).to(self.device)
         self.tavg = torch.Tensor([self.elapsed_time]).to(self.device)
