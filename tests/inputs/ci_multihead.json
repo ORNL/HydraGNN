@@ -5,6 +5,7 @@
     "Dataset": {
         "name": "unit_test_multihead",
         "format": "unit_test",
+        "stratified_splitting": false,
         "path": {
             "total": "dataset/unit_test_multihead"
         },
@@ -51,6 +52,7 @@
         "Training": {
             "num_epoch": 100,
             "perc_train": 0.7,
+            "stratify_splitting": false,
             "learning_rate": 0.01,
             "batch_size": 16
         }

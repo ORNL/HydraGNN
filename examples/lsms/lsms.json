@@ -6,6 +6,7 @@
         "name": "FePt_32atoms",
         "path": {"total": "FePt"},
         "format": "LSMS",
+        "stratified_splitting": true,
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],
             "dim": [1,1,1],

@@ -11,7 +11,7 @@
 
 import os
 
-import numpy as np
+import collections
 import torch
 import torch.distributed as dist
 
@@ -26,6 +26,16 @@ from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 import pickle
+
+from sklearn.model_selection import StratifiedShuffleSplit
+
+# function to return key for any value
+def get_keys(dictionary, val):
+    keys = []
+    for key, value in dictionary.items():
+        if val == value:
+            keys.append(key)
+    return keys
 
 
 def dataset_loading_and_splitting(config: {}):
@@ -82,19 +92,127 @@ def create_dataloaders(trainset, valset, testset, batch_size):
 
     return train_loader, val_loader, test_loader
 
+def split_dataset(
+    dataset: [],
+    perc_train: float,
+    stratify_splitting: bool,
+):
 
-def split_dataset(dataset: [], perc_train: float):
+    if (
+        len(dataset_names) == 1
+        and dataset_names[0] == "total"
+        and not stratify_splitting
+    ):
+        dataset = dataset_list[0]
+        perc_val = (1 - perc_train) / 2
+        data_size = len(dataset)
+        trainset = dataset[: int(data_size * perc_train)]
+        valset = dataset[
+            int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
+        ]
+        testset = dataset[int(data_size * (perc_train + perc_val)) :]
+    elif len(dataset_names) == 1 and dataset_names[0] == "total" and stratify_splitting:
+        dataset = dataset_list[0]
+        perc_val = (1 - perc_train) / 2
+        data_size = len(dataset)
+        trainset, valset, testset = stratified_splitting(dataset, perc_train)
 
-    perc_val = (1 - perc_train) / 2
-    data_size = len(dataset)
-    trainset = dataset[: int(data_size * perc_train)]
-    valset = dataset[
-        int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
-    ]
-    testset = dataset[int(data_size * (perc_train + perc_val)) :]
+    elif len(dataset_names) == 3:
+        trainset = dataset_list[dataset_names.index("train")]
+        valset = dataset_list[dataset_names.index("validate")]
+        testset = dataset_list[dataset_names.index("test")]
+    else:
+        raise ValueError(
+            'Must provide "total" OR "train", "test", "validate" data paths: ',
+            dataset_names,
+        )
 
     return trainset, valset, testset
 
+def stratified_splitting(dataset, perc_train):
+    """Given the dataset and the percentage of data you want to extract from it, method will
+    apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
+    In the case of the structures dataset where each structure contains 2 types of atoms, the category will
+    be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
+    Parameters
+    ----------
+    dataset: [Data]
+        A list of Data objects representing a structure that has atoms.
+    subsample_percentage: float
+        Percentage of the dataset.
+    Returns
+    ----------
+    [Data]
+        Subsample of the original dataset constructed using stratified sampling.
+    """
+    dataset_categories = []
+
+    for data in dataset:
+        frequencies = torch.bincount(data.x[:, 0].int())
+        frequencies = sorted(frequencies[frequencies > 0].tolist())
+        category = 0
+        for index, frequency in enumerate(frequencies):
+            category += frequency * (100 ** index)
+        dataset_categories.append(category)
+
+    train_indices = []
+    val_test_indices = []
+    trainset = []
+    val_test_set = []
+
+    sss = StratifiedShuffleSplit(n_splits=1, train_size=perc_train, random_state=0)
+
+    for train_index, val_test_index in sss.split(dataset, dataset_categories):
+        train_indices = train_index.tolist()
+        val_test_indices = val_test_index.tolist()
+
+    for index in train_indices:
+        trainset.append(dataset[index])
+
+    for index in val_test_indices:
+        val_test_set.append(dataset[index])
+
+    val_indices = []
+    test_indices = []
+    valset = []
+    testset = []
+    dataset_categories = []
+
+    for data in val_test_set:
+        frequencies = torch.bincount(data.x[:, 0].int())
+        frequencies = sorted(frequencies[frequencies > 0].tolist())
+        category = 0
+        for index, frequency in enumerate(frequencies):
+            category += frequency * (100 ** index)
+        dataset_categories.append(category)
+
+    counter = collections.Counter(dataset_categories)
+    keys = get_keys(counter, 1)
+    augmented_data = []
+    augmented_data_category = []
+
+    for data, category in zip(val_test_set, dataset_categories):
+        if category in keys:
+            # Data augmentation on unique elements to allow additional splitting
+            augmented_data.append(data)
+            augmented_data_category.append(category)
+
+    val_test_set.extend(augmented_data)
+    dataset_categories.extend(augmented_data_category)
+
+    sss = StratifiedShuffleSplit(n_splits=1, train_size=0.5, random_state=0)
+
+    for val_index, test_index in sss.split(val_test_set, dataset_categories):
+        val_indices = val_index.tolist()
+        test_indices = test_index.tolist()
+
+    for index in val_indices:
+        valset.append(dataset[index])
+
+    for index in test_indices:
+        testset.append(dataset[index])
+
+    return trainset, valset, testset
 
 def load_train_val_test_sets(config):
 
@@ -155,6 +273,7 @@ def total_to_train_val_test_pkls(config):
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
+        stratify_splitting=config["Dataset"]["stratified_splitting"]
     )
     serialized_dir = os.path.dirname(file_dir)
     config["Dataset"]["path"] = {}
