@@ -85,7 +85,7 @@ def create_model(
     timer.start()
     torch.manual_seed(0)
 
-    device = get_device(use_gpu, verbosity_level=verbosity)
+    _, device = get_device(use_gpu, verbosity_level=verbosity)
 
     if model_type == "GIN":
         model = GINStack(
