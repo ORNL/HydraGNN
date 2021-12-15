@@ -18,6 +18,7 @@ from torch_geometric.data import Data
 from torch_geometric.transforms import RadiusGraph, Distance
 
 from .dataset_descriptors import AtomFeatures
+from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
 
@@ -81,7 +82,10 @@ class SerializedDataLoader:
         for data in dataset:
             data.edge_attr = data.edge_attr / max_edge_length
 
+        # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
+        device = get_device(verbosity_level=self.verbosity)
         for data in dataset:
+            data.to(device)
             self.__update_predicted_values(
                 config["Variables_of_interest"]["type"],
                 config["Variables_of_interest"]["output_index"],
