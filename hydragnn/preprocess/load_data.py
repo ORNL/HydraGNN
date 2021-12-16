@@ -38,14 +38,15 @@ def dataset_loading_and_splitting(
         dataset_names=dataset_names,
         batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
+        verbosity=config["Verbosity"]["level"],
     )
 
 
-def create_dataloaders(trainset, valset, testset, batch_size):
+def create_dataloaders(trainset, valset, testset, batch_size, verbosity=0):
 
     # Move data to the device, if used.
-    # FIXME: this does not respect the choice set by use_gpu or verbosity
-    device = get_device()
+    # FIXME: this does not respect the choice set by use_gpu
+    device = get_device(verbosity_level=verbosity)
     if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
@@ -84,10 +85,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
 
 
 def split_dataset(
-    dataset_list: [],
-    dataset_names: [],
-    batch_size: int,
-    perc_train: float,
+    dataset_list: [], dataset_names: [], batch_size: int, perc_train: float, verbosity=0
 ):
 
     if len(dataset_names) == 1 and dataset_names[0] == "total":
@@ -110,17 +108,14 @@ def split_dataset(
         )
 
     train_loader, val_loader, test_loader = create_dataloaders(
-        trainset, valset, testset, batch_size
+        trainset, valset, testset, batch_size, verbosity
     )
 
     return train_loader, val_loader, test_loader
 
 
 def combine_and_split_datasets(
-    dataset1: [],
-    dataset2: [],
-    batch_size: int,
-    perc_train: float,
+    dataset1: [], dataset2: [], batch_size: int, perc_train: float, verbosity=0
 ):
 
     data_size = len(dataset1)
@@ -130,7 +125,7 @@ def combine_and_split_datasets(
     testset = dataset2
 
     train_loader, val_loader, test_loader = create_dataloaders(
-        trainset, valset, testset, batch_size
+        trainset, valset, testset, batch_size, verbosity
     )
 
     return train_loader, val_loader, test_loader
