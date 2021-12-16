@@ -23,7 +23,7 @@ except:
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
-from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.distributed import get_comm_size_and_rank, get_device
 from hydragnn.utils.time_utils import Timer
 
 
@@ -43,6 +43,9 @@ def dataset_loading_and_splitting(
 
 def create_dataloaders(trainset, valset, testset, batch_size):
 
+    # Move data to the device, if used.
+    # FIXME: this does not respect the choice set by use_gpu or verbosity
+    device = get_device()
     if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
@@ -58,6 +61,10 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         test_loader = DataLoader(
             testset, batch_size=batch_size, shuffle=False, sampler=test_sampler
         )
+
+        for loader in [train_loader, val_loader, test_loader]:
+            for data in loader:
+                data.to(device)
 
     else:
 
