@@ -193,8 +193,6 @@ def train(
     verbosity,
     profiler=contextlib.nullcontext(MagicMock(name="step")),
 ):
-    device = next(model.parameters()).device
-
     tasks_error = np.zeros(model.num_heads)
 
     model.train()
@@ -202,8 +200,6 @@ def train(
     total_error = 0
     with profiler as prof:
         for data in iterate_tqdm(loader, verbosity):
-            with record_function("load"):
-                data = data.to(device)
             with record_function("zero_grad"):
                 opt.zero_grad()
             with record_function("get_head_indices"):

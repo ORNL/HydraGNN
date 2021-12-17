@@ -5,9 +5,9 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 
 class Profiler(torch.profiler.profile):
-    def __init__(self, prefix, enabled=False, target_epoch=0):
+    def __init__(self, prefix, enable=False, target_epoch=0):
         self.prefix = prefix
-        self.enabled = enabled
+        self.enable = enable
         self.target_epoch = target_epoch
         self.current_epoch = -1
 
@@ -30,7 +30,7 @@ class Profiler(torch.profiler.profile):
                 pass
             return val
 
-        self.enabled = tryget("enabled", 0) == 1
+        self.enable = tryget("enable", 0) == 1
         self.target_epoch = tryget("target_epoch", 0)
 
     def trace_handler(self, p):
@@ -44,17 +44,17 @@ class Profiler(torch.profiler.profile):
         self.current_epoch = current_epoch
 
     def __enter__(self):
-        if self.enabled and (self.target_epoch == self.current_epoch):
+        if self.enable and (self.target_epoch == self.current_epoch):
             return super(Profiler, self).__enter__()
         else:
             return self.null_profiler.__enter__()
 
     def __exit__(self, type, value, traceback):
-        if self.enabled and (self.target_epoch == self.current_epoch):
+        if self.enable and (self.target_epoch == self.current_epoch):
             super(Profiler, self).__exit__(type, value, traceback)
 
     def step(self):
-        if self.enabled:
+        if self.enable:
             super(Profiler, self).step()
 
     def reset(self):
