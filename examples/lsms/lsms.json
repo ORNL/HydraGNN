@@ -4,7 +4,7 @@
     },
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"raw": {"total": "FePt"}},
+        "path": {"total": "FePt"},
         "format": "LSMS",
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],

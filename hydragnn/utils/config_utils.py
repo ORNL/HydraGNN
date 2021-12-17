@@ -46,7 +46,7 @@ def update_config_NN_outputs(config, graph_size_variable):
 def normalize_output_config(config):
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
     if "denormalize_output" in var_config and var_config["denormalize_output"]:
-        if "total" in config["Dataset"]["path"]["raw"].keys():
+        if "total" in config["Dataset"]["path"].keys():
             dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
         else:
             ###used for min/max values loading below
