@@ -130,6 +130,24 @@ def split_dataset(
 
     return train_loader, val_loader, test_loader
 
+def combine_and_split_datasets(
+    dataset1: [],
+    dataset2: [],
+    batch_size: int,
+    perc_train: float,
+):
+
+    data_size = len(dataset1)
+
+    trainset = dataset1[: int(data_size * perc_train)]
+    valset = dataset1[int(data_size * perc_train) :]
+    testset = dataset2
+
+    train_loader, val_loader, test_loader = create_dataloaders(
+        trainset, valset, testset, batch_size
+    )
+
+    return train_loader, val_loader, test_loader
 
 def stratified_splitting(dataset, perc_train):
     """Given the dataset and the percentage of data you want to extract from it, method will
