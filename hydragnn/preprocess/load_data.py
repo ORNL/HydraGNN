@@ -92,6 +92,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
 
     return train_loader, val_loader, test_loader
 
+
 def split_dataset(
     dataset: [],
     perc_train: float,
@@ -127,7 +128,8 @@ def split_dataset(
             dataset_names,
         )
 
-    return trainset, valset, testset
+    return train_loader, val_loader, test_loader
+
 
 def stratified_splitting(dataset, perc_train):
     """Given the dataset and the percentage of data you want to extract from it, method will
@@ -214,6 +216,7 @@ def stratified_splitting(dataset, perc_train):
 
     return trainset, valset, testset
 
+
 def load_train_val_test_sets(config):
 
     timer = Timer("load_data")
@@ -273,7 +276,7 @@ def total_to_train_val_test_pkls(config):
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-        stratify_splitting=config["Dataset"]["stratified_splitting"]
+        stratify_splitting=config["Dataset"]["stratified_splitting"],
     )
     serialized_dir = os.path.dirname(file_dir)
     config["Dataset"]["path"] = {}
