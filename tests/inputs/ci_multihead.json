@@ -6,7 +6,7 @@
         "name": "unit_test_multihead",
         "format": "unit_test",
         "path": {
-            "raw": {"total": "dataset/unit_test_multihead"}
+            "total": "dataset/unit_test_multihead"
         },
         "node_features": {
             "name": ["x","x2","x3"],

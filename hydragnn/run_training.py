@@ -66,10 +66,7 @@ def _(config: dict):
     world_size, world_rank = setup_ddp()
 
     verbosity = config["Verbosity"]["level"]
-    train_loader, val_loader, test_loader = dataset_loading_and_splitting(
-        config=config,
-        chosen_dataset_option=config["Dataset"]["name"],
-    )
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
     graph_size_variable = check_if_graph_size_constant(
         train_loader, val_loader, test_loader
