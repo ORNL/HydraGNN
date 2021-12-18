@@ -35,15 +35,13 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     "Dataset": {
        ...
        "path": {
-           "raw": {
                "train": "serialized_dataset/unit_test_singlehead_train.pkl",
                "test": "serialized_dataset/unit_test_singlehead_test.pkl",
                "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
-                },
        ...
     """
     # use pkl files if exist by default
-    for dataset_name in config["Dataset"]["path"]["raw"].keys():
+    for dataset_name in config["Dataset"]["path"].keys():
         if dataset_name == "total":
             pkl_file = (
                 os.environ["SERIALIZED_DATA_PATH"]
@@ -61,7 +59,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
                 + ".pkl"
             )
         if os.path.exists(pkl_file):
-            config["Dataset"]["path"]["raw"][dataset_name] = pkl_file
+            config["Dataset"]["path"][dataset_name] = pkl_file
 
     # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
     # hence here we decrease the loss weight coefficient for graph-level head in MFC.
@@ -76,11 +74,11 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         num_samples_tot = 500
         # check if serialized pickle files or folders for raw files provided
         pkl_input = False
-        if list(config["Dataset"]["path"]["raw"].values())[0].endswith(".pkl"):
+        if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
             pkl_input = True
         # only generate new datasets, if not pkl
         if not pkl_input:
-            for dataset_name, data_path in config["Dataset"]["path"]["raw"].items():
+            for dataset_name, data_path in config["Dataset"]["path"].items():
                 if overwrite_data:
                     shutil.rmtree(data_path)
                 if not os.path.exists(data_path):

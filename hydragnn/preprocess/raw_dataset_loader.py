@@ -64,7 +64,7 @@ class RawDataLoader:
         self.graph_feature_col = config["graph_features"]["column_index"]
         self.raw_dataset_name = config["name"]
         self.data_format = config["format"]
-        self.path_dictionary = config["path"]["raw"]
+        self.path_dictionary = config["path"]
 
     def load_raw_data(self):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
