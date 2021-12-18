@@ -99,11 +99,7 @@ def split_dataset(
     stratify_splitting: bool,
 ):
 
-    if (
-        len(dataset_names) == 1
-        and dataset_names[0] == "total"
-        and not stratify_splitting
-    ):
+    if not stratify_splitting:
         dataset = dataset_list[0]
         perc_val = (1 - perc_train) / 2
         data_size = len(dataset)
@@ -112,21 +108,11 @@ def split_dataset(
             int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
         ]
         testset = dataset[int(data_size * (perc_train + perc_val)) :]
-    elif len(dataset_names) == 1 and dataset_names[0] == "total" and stratify_splitting:
+    else:
         dataset = dataset_list[0]
         perc_val = (1 - perc_train) / 2
         data_size = len(dataset)
         trainset, valset, testset = stratified_splitting(dataset, perc_train)
-
-    elif len(dataset_names) == 3:
-        trainset = dataset_list[dataset_names.index("train")]
-        valset = dataset_list[dataset_names.index("validate")]
-        testset = dataset_list[dataset_names.index("test")]
-    else:
-        raise ValueError(
-            'Must provide "total" OR "train", "test", "validate" data paths: ',
-            dataset_names,
-        )
 
     return train_loader, val_loader, test_loader
 
