@@ -100,7 +100,6 @@ def split_dataset(
 ):
 
     if not stratify_splitting:
-        dataset = dataset_list[0]
         perc_val = (1 - perc_train) / 2
         data_size = len(dataset)
         trainset = dataset[: int(data_size * perc_train)]
@@ -109,9 +108,6 @@ def split_dataset(
         ]
         testset = dataset[int(data_size * (perc_train + perc_val)) :]
     else:
-        dataset = dataset_list[0]
-        perc_val = (1 - perc_train) / 2
-        data_size = len(dataset)
         trainset, valset, testset = stratified_splitting(dataset, perc_train)
 
     return train_loader, val_loader, test_loader
