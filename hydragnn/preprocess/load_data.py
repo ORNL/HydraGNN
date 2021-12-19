@@ -11,7 +11,7 @@
 
 import os
 
-import numpy as np
+import collections
 import torch
 import torch.distributed as dist
 
