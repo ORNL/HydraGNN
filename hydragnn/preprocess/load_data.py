@@ -110,7 +110,7 @@ def split_dataset(
     else:
         trainset, valset, testset = stratified_splitting(dataset, perc_train)
 
-    return train_loader, val_loader, test_loader
+    return trainset, valset, testset
 
 
 def combine_and_split_datasets(
