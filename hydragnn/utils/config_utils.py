@@ -46,11 +46,14 @@ def update_config_NN_outputs(config, graph_size_variable):
 def normalize_output_config(config):
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
     if "denormalize_output" in var_config and var_config["denormalize_output"]:
-        if "total" in config["Dataset"]["path"].keys():
-            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
+        ###loading min/max values from input data file. Only one path is needed
+        if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+            dataset_path = list(config["Dataset"]["path"].values())[0]
         else:
-            ###used for min/max values loading below
-            dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
+            if "total" in config["Dataset"]["path"].keys():
+                dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
+            else:
+                dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
         var_config = update_config_minmax(dataset_path, var_config)
     else:
         var_config["denormalize_output"] = False
