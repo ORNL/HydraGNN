@@ -84,17 +84,17 @@ def update_config_minmax(dataset_path, config):
     return config
 
 
-def get_model_output_name_config(model, config):
+def get_log_name_config(config):
     return (
-        model.__str__()
+        config["NeuralNetwork"]["Architecture"]["model_type"]
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-mnnn-"
         + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
-        + str(model.num_conv_layers)
+        + str(config["NeuralNetwork"]["Architecture"]["num_conv_layers"])
         + "-hd-"
-        + str(model.hidden_dim)
+        + str(config["NeuralNetwork"]["Architecture"]["hidden_dim"])
         + "-ne-"
         + str(config["NeuralNetwork"]["Training"]["num_epoch"])
         + "-lr-"

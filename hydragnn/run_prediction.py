@@ -21,8 +21,8 @@ from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
-    get_model_output_name_config,
     normalize_output_config,
+    get_log_name_config,
 )
 from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.models.create import create_model_config
@@ -81,8 +81,8 @@ def _(config: dict):
         verbosity=config["Verbosity"]["level"],
     )
 
-    model_with_config_name = get_model_output_name_config(model, config)
-    load_existing_model(model, model_with_config_name)
+    log_name = get_log_name_config(config)
+    load_existing_model(model, log_name)
 
     (
         error,
