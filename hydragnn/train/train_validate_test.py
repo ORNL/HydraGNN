@@ -90,9 +90,11 @@ def train_validate_test(
 
     for epoch in range(0, num_epoch):
         profiler.set_current_epoch(epoch)
-        train_rmse, train_taskserr = train(
-            train_loader, model, optimizer, verbosity, profiler=profiler
-        )
+
+        with profiler as prof:
+            train_rmse, train_taskserr = train(
+                train_loader, model, optimizer, verbosity, profiler=prof
+            )
         val_rmse, val_taskserr = validate(val_loader, model, verbosity)
         test_rmse, test_taskserr, true_values, predicted_values = test(
             test_loader, model, verbosity
@@ -198,22 +200,21 @@ def train(
     model.train()
 
     total_error = 0
-    with profiler as prof:
-        for data in iterate_tqdm(loader, verbosity):
-            with record_function("zero_grad"):
-                opt.zero_grad()
-            with record_function("get_head_indices"):
-                head_index = get_head_indices(model, data)
-            with record_function("forward"):
-                pred = model(data)
-                loss, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
-            with record_function("backward"):
-                loss.backward()
-            opt.step()
-            prof.step()
-            total_error += loss.item() * data.num_graphs
-            for itask in range(len(tasks_rmse)):
-                tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+    for data in iterate_tqdm(loader, verbosity):
+        with record_function("zero_grad"):
+            opt.zero_grad()
+        with record_function("get_head_indices"):
+            head_index = get_head_indices(model, data)
+        with record_function("forward"):
+            pred = model(data)
+            loss, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
+        with record_function("backward"):
+            loss.backward()
+        opt.step()
+        profiler.step()
+        total_error += loss.item() * data.num_graphs
+        for itask in range(len(tasks_rmse)):
+            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
 
     return (
         total_error / len(loader.dataset),
