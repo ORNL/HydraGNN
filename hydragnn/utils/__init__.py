@@ -18,5 +18,5 @@ from .time_utils import Timer, print_timers
 from .config_utils import (
     update_config_NN_outputs,
     update_config_minmax,
-    get_model_output_name_config,
+    get_log_name_config,
 )
