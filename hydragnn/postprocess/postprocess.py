@@ -12,11 +12,10 @@
 
 def output_denormalize(y_minmax, true_values, predicted_values):
     for ihead in range(len(y_minmax)):
-        for isample in range(len(predicted_values[0])):
-            for iatom in range(len(predicted_values[ihead][0])):
-                ymin = y_minmax[ihead][0]
-                ymax = y_minmax[ihead][1]
-
+        ymin = y_minmax[ihead][0]
+        ymax = y_minmax[ihead][1]
+        for isample in range(len(predicted_values[ihead])):
+            for iatom in range(len(predicted_values[ihead][isample])):
                 predicted_values[ihead][isample][iatom] = (
                     predicted_values[ihead][isample][iatom] * (ymax - ymin) + ymin
                 )
