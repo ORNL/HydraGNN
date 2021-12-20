@@ -20,6 +20,13 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.model import get_model_or_module
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profile import Profiler
+
+import os
+
+from torch.profiler import record_function
+import contextlib
+from unittest.mock import MagicMock
 
 
 def train_validate_test(
@@ -74,11 +81,20 @@ def train_validate_test(
             iepoch=-1,
         )
 
+    profiler = Profiler("./logs/" + model_with_config_name)
+    if "Profile" in config:
+        profiler.setup(config["Profile"])
+
     timer = Timer("train_validate_test")
     timer.start()
 
     for epoch in range(0, num_epoch):
-        train_rmse, train_taskserr = train(train_loader, model, optimizer, verbosity)
+        profiler.set_current_epoch(epoch)
+
+        with profiler as prof:
+            train_rmse, train_taskserr = train(
+                train_loader, model, optimizer, verbosity, profiler=prof
+            )
         val_rmse, val_taskserr = validate(val_loader, model, verbosity)
         test_rmse, test_taskserr, true_values, predicted_values = test(
             test_loader, model, verbosity
@@ -172,21 +188,30 @@ def get_head_indices(model, data):
     return head_index
 
 
-def train(loader, model, opt, verbosity):
+def train(
+    loader,
+    model,
+    opt,
+    verbosity,
+    profiler=contextlib.nullcontext(MagicMock(name="step")),
+):
     tasks_error = np.zeros(model.num_heads)
 
     model.train()
 
     total_error = 0
     for data in iterate_tqdm(loader, verbosity):
-        opt.zero_grad()
-        head_index = get_head_indices(model, data)
-
-        pred = model(data)
-        loss, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
-
-        loss.backward()
+        with record_function("zero_grad"):
+            opt.zero_grad()
+        with record_function("get_head_indices"):
+            head_index = get_head_indices(model, data)
+        with record_function("forward"):
+            pred = model(data)
+            loss, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
+        with record_function("backward"):
+            loss.backward()
         opt.step()
+        profiler.step()
         total_error += loss.item() * data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
