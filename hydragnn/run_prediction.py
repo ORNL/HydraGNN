@@ -22,6 +22,7 @@ from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config_NN_outputs,
     get_model_output_name_config,
+    normalize_output_config,
 )
 from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.models.create import create_model_config
@@ -61,6 +62,8 @@ def _(config: dict):
         train_loader, val_loader, test_loader
     )
     config = update_config_NN_outputs(config, graph_size_variable)
+
+    config = normalize_output_config(config)
 
     config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
