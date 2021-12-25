@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Lupo Pasini"
+  given-names: "Massimiliano"
+  orcid: "https://orcid.org/0000-0002-4980-6924"
+- family-names: "Reeve"
+  given-names: "Samuel Temple"
+  orcid: "https://orcid.org/0000-0002-4250-9476"
+- family-names: "Zhang"
+  given-names: "Pei"
+  orcid: "https://orcid.org/0000-0002-8351-0529"
+- family-names: "Choi"
+  given-names: "Jong Youl"
+  orcid: "https://orcid.org/0000-0002-6459-6152"
+title: "HydraGNN - Distributed PyTorch implementation of multi-headed graph convolutional neural networks"
+version: 1.0.0
+doi: 10.11578/dc.20211019.2
+date-released: 2021-10-19
+url: "https://github.com/ORNL/HydraGNN"
