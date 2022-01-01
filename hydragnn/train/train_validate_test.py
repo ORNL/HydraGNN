@@ -204,7 +204,7 @@ def train(
     model,
     opt,
     verbosity,
-    profiler=contextlib.nullcontext(MagicMock(name="step")),
+    profiler=Profiler(),
 ):
     tasks_error = np.zeros(model.num_heads)
 
