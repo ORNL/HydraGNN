@@ -5,7 +5,7 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 
 class Profiler(torch.profiler.profile):
-    def __init__(self, prefix, enable=False, target_epoch=0):
+    def __init__(self, prefix="", enable=False, target_epoch=0):
         self.prefix = prefix
         self.enable = enable
         self.target_epoch = target_epoch
