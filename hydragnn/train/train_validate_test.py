@@ -176,14 +176,25 @@ def get_head_indices(model, data):
     y_loc = data.y_loc
     # head size for each sample
     total_size = y_loc[:, -1]
-    head_index = []
+    # feature index for all heads
+    head_index = [None] * model.num_heads
+    # intermediate work list
+    head_ind_temporary = [None] * batch_size
+    # track the start loc of each sample
+    sample_start = torch.cumsum(total_size, dim=0) - total_size
+    sample_start = sample_start.view(-1, 1)
+    # shape (batch_size, model.num_heads), start and end of each head for each sample
+    start_index = sample_start + y_loc[:, :-1]
+    end_index = sample_start + y_loc[:, 1:]
+
+    # a large index tensor pool for all element in data.y
+    index_range = torch.arange(0, end_index[-1, -1], device=y_loc.device)
     for ihead in range(model.num_heads):
-        _head_ind = []
         for isample in range(batch_size):
-            istart = sum(total_size[:isample]) + y_loc[isample, ihead]
-            iend = sum(total_size[:isample]) + y_loc[isample, ihead + 1]
-            [_head_ind.append(ind) for ind in range(istart, iend)]
-        head_index.append(_head_ind)
+            head_ind_temporary[isample] = index_range[
+                start_index[isample, ihead] : end_index[isample, ihead]
+            ]
+        head_index[ihead] = torch.cat(head_ind_temporary, dim=0)
 
     return head_index
 
