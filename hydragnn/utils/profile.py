@@ -3,6 +3,8 @@ import contextlib
 from unittest.mock import MagicMock
 from torch.profiler import profile, record_function, ProfilerActivity
 
+from hydragnn.utils.distributed import get_device_name
+
 
 class Profiler(torch.profiler.profile):
     def __init__(self, prefix="", enable=False, target_epoch=0):
@@ -11,8 +13,13 @@ class Profiler(torch.profiler.profile):
         self.target_epoch = target_epoch
         self.current_epoch = -1
 
+        # FIXME: can remove check for cuda when torch-1.9 is requireds
+        activities = [ProfilerActivity.CPU]
+        device = get_device_name()
+        if "cuda" in device:
+            activities.append(ProfilerActivity.CUDA)
         super(Profiler, self).__init__(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+            activities=activities,
             schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
             on_trace_ready=self.trace_handler,
             record_shapes=True,
