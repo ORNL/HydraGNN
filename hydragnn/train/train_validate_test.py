@@ -59,9 +59,9 @@ def train_validate_test(
     ## collecting node feature
     node_feature = []
     nodes_num_list = []
-    for data in test_loader:
+    for data in test_loader.dataset:
         node_feature.extend(data.x.tolist())
-        nodes_num_list.extend(data.num_nodes_list.tolist())
+        nodes_num_list.append(data.num_nodes)
 
     visualizer = Visualizer(
         model_with_config_name,
