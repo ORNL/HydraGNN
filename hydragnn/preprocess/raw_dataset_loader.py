@@ -166,7 +166,6 @@ class RawDataLoader:
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
-        data_object.num_nodes_list = data_object.pos.shape[0]
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):
