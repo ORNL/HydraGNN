@@ -14,8 +14,8 @@ def check_if_graph_size_constant(train_loader, val_loader, test_loader):
     graph_size_variable = False
     nodes_num_list = []
     for loader in [train_loader, val_loader, test_loader]:
-        for data in loader:
-            nodes_num_list.extend(data.num_nodes_list.tolist())
+        for data in loader.dataset:
+            nodes_num_list.append(data.num_nodes)
             if len(list(set(nodes_num_list))) > 1:
                 graph_size_variable = True
                 return graph_size_variable
