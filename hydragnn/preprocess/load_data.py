@@ -12,6 +12,7 @@
 import os
 
 import collections
+import math
 import torch
 import torch.distributed as dist
 
@@ -117,7 +118,7 @@ def stratified_splitting(dataset, perc_train):
     """Given the dataset and the percentage of data you want to extract from it, method will
     apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
     In the case of the structures dataset where each structure contains 2 types of atoms, the category will
-    be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
+    be constructed in a way: number of atoms of type 1 + number of atoms of type 2 * 100.
     Parameters
     ----------
     dataset: [Data]
@@ -131,12 +132,31 @@ def stratified_splitting(dataset, perc_train):
     """
     dataset_categories = []
 
+    elements_set = torch.FloatTensor()
+    max_graph_size = 0
+
+    # Identify all the elements present in at least one configuration
     for data in dataset:
-        frequencies = torch.bincount(data.x[:, 0].int())
-        frequencies = sorted(frequencies[frequencies > 0].tolist())
+        max_graph_size = max(max_graph_size, data.num_nodes)
+        elements = torch.unique(data.x[:, 0])
+        elements_set = torch.cat((elements_set, elements), 0)
+
+    elements_set = torch.unique(elements_set)
+    dictionary = {}
+    power_ten = math.ceil(math.log10(max_graph_size))
+
+    for index, element in enumerate(list(elements_set)):
+        dictionary[element.item()] = index
+
+    print(dictionary)
+
+    for data in dataset:
+        elements, frequencies = torch.unique(data.x[:, 0], return_counts=True)
         category = 0
-        for index, frequency in enumerate(frequencies):
-            category += frequency * (100 ** index)
+        for element, frequency in zip(elements, frequencies):
+            category += frequency.item() * (
+                10 ** (power_ten * dictionary[element.item()])
+            )
         dataset_categories.append(category)
 
     train_indices = []
@@ -145,6 +165,20 @@ def stratified_splitting(dataset, perc_train):
     val_test_set = []
 
     sss = StratifiedShuffleSplit(n_splits=1, train_size=perc_train, random_state=0)
+
+    counter = collections.Counter(dataset_categories)
+    keys = get_keys(counter, 1)
+    augmented_data = []
+    augmented_data_category = []
+
+    for data, category in zip(dataset, dataset_categories):
+        if category in keys:
+            # Data augmentation on unique elements to allow additional splitting
+            augmented_data.append(data)
+            augmented_data_category.append(category)
+
+    dataset.extend(augmented_data)
+    dataset_categories.extend(augmented_data_category)
 
     for train_index, val_test_index in sss.split(dataset, dataset_categories):
         train_indices = train_index.tolist()
@@ -163,11 +197,12 @@ def stratified_splitting(dataset, perc_train):
     dataset_categories = []
 
     for data in val_test_set:
-        frequencies = torch.bincount(data.x[:, 0].int())
-        frequencies = sorted(frequencies[frequencies > 0].tolist())
+        elements, frequencies = torch.unique(data.x[:, 0], return_counts=True)
         category = 0
-        for index, frequency in enumerate(frequencies):
-            category += frequency * (100 ** index)
+        for element, frequency in zip(elements, frequencies):
+            category += frequency.item() * (
+                10 ** (power_ten * dictionary[element.item()])
+            )
         dataset_categories.append(category)
 
     counter = collections.Counter(dataset_categories)
