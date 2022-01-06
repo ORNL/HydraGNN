@@ -226,10 +226,10 @@ def stratified_splitting(dataset, perc_train):
         test_indices = test_index.tolist()
 
     for index in val_indices:
-        valset.append(dataset[index])
+        valset.append(val_test_set[index])
 
     for index in test_indices:
-        testset.append(dataset[index])
+        testset.append(val_test_set[index])
 
     return trainset, valset, testset
 
