@@ -16,7 +16,7 @@ def qm9_pre_transform(data):
     # Set descriptor as element type.
     data.x = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
-    data.y = data.y[:, 10]
+    data.y = data.y[:, 10] / len(data.x)
     hydragnn.preprocess.update_predicted_values(
         var_config["type"],
         var_config["output_index"],

@@ -16,7 +16,7 @@ def md17_pre_transform(data):
     # Set descriptor as element type.
     data.x = data.z.float().view(-1, 1)
     # Only predict energy (index 0 of 2 properties) for this run.
-    data.y = data.energy
+    data.y = data.energy / len(data.x)
     hydragnn.preprocess.update_predicted_values(
         var_config["type"],
         var_config["output_index"],
