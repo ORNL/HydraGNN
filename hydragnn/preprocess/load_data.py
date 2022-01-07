@@ -174,7 +174,7 @@ def stratified_splitting(dataset, perc_train):
     for data, category in zip(dataset, dataset_categories):
         if category in keys:
             # Data augmentation on unique elements to allow additional splitting
-            augmented_data.append(data)
+            augmented_data.append(data.clone())
             augmented_data_category.append(category)
 
     dataset.extend(augmented_data)
@@ -213,7 +213,7 @@ def stratified_splitting(dataset, perc_train):
     for data, category in zip(val_test_set, dataset_categories):
         if category in keys:
             # Data augmentation on unique elements to allow additional splitting
-            augmented_data.append(data)
+            augmented_data.append(data.clone())
             augmented_data_category.append(category)
 
     val_test_set.extend(augmented_data)
