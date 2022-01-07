@@ -109,12 +109,14 @@ def split_dataset(
         ]
         testset = dataset[int(data_size * (perc_train + perc_val)) :]
     else:
-        trainset, valset, testset = stratified_splitting(dataset, perc_train)
+        trainset, valset, testset = compositional_stratified_splitting(
+            dataset, perc_train
+        )
 
     return trainset, valset, testset
 
 
-def stratified_splitting(dataset, perc_train):
+def compositional_stratified_splitting(dataset, perc_train):
     """Given the dataset and the percentage of data you want to extract from it, method will
     apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
     In the case of the structures dataset where each structure contains 2 types of atoms, the category will
@@ -147,8 +149,6 @@ def stratified_splitting(dataset, perc_train):
 
     for index, element in enumerate(list(elements_set)):
         dictionary[element.item()] = index
-
-    print(dictionary)
 
     for data in dataset:
         elements, frequencies = torch.unique(data.x[:, 0], return_counts=True)
@@ -293,7 +293,7 @@ def total_to_train_val_test_pkls(config):
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-        stratify_splitting=config["Dataset"]["stratified_splitting"],
+        stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
     )
     serialized_dir = os.path.dirname(file_dir)
     config["Dataset"]["path"] = {}
