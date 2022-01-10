@@ -15,6 +15,7 @@ import collections
 import math
 import torch
 import torch.distributed as dist
+import torch_geometric
 
 # FIXME: deprecated in torch_geometric 2.0
 try:
@@ -28,7 +29,9 @@ from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 import pickle
 
+import sklearn
 from sklearn.model_selection import StratifiedShuffleSplit
+
 
 # function to return key for any value
 def get_keys(dictionary, val):
@@ -39,8 +42,95 @@ def get_keys(dictionary, val):
     return keys
 
 
-def dataset_loading_and_splitting(config: {}):
+def get_max_graph_size(dataset: torch_geometric.data.dataset):
+    max_graph_size = int(0)
+    for data in dataset:
+        max_graph_size = max(max_graph_size, data.num_nodes)
+    return max_graph_size
 
+
+def get_elements_set(dataset: torch_geometric.data.dataset):
+    ## Identify all the elements present in at least one configuration
+    elements_set = torch.FloatTensor()
+
+    for data in dataset:
+        elements = torch.unique(data.x[:, 0])
+        elements_set = torch.cat((elements_set, elements), 0)
+
+    elements_set = torch.unique(elements_set)
+
+    return elements_set
+
+
+def create_dictionary_from_elements_set(elements_set: list):
+    dictionary = {}
+
+    for index, element in enumerate(list(elements_set)):
+        dictionary[element.item()] = index
+
+    return dictionary
+
+
+def create_dataset_categories(dataset: torch_geometric.data.dataset):
+    max_graph_size = get_max_graph_size(dataset)
+    power_ten = math.ceil(math.log10(max_graph_size))
+    elements_set = get_elements_set(dataset)
+    elements_dictionary = create_dictionary_from_elements_set(elements_set)
+
+    dataset_categories = []
+
+    for data in dataset:
+        elements, frequencies = torch.unique(data.x[:, 0], return_counts=True)
+        category = 0
+        for element, frequency in zip(elements, frequencies):
+            category += frequency.item() * (
+                10 ** (power_ten * elements_dictionary[element.item()])
+            )
+        dataset_categories.append(category)
+
+    return dataset_categories
+
+
+def duplicate_unique_data_samples(dataset, dataset_categories):
+    counter = collections.Counter(dataset_categories)
+    keys = get_keys(counter, 1)
+    augmented_data = []
+    augmented_data_category = []
+
+    for data, category in zip(dataset, dataset_categories):
+        if category in keys:
+            # Data augmentation on unique elements to allow additional splitting
+            augmented_data.append(data.clone())
+            augmented_data_category.append(category)
+
+    dataset.extend(augmented_data)
+    dataset_categories.extend(augmented_data_category)
+
+    return dataset, dataset_categories
+
+
+def generate_partition(
+    sss: sklearn.model_selection.StratifiedShuffleSplit, dataset, dataset_categories
+):
+    parition1_indices = []
+    partition2_indices = []
+    partition1_set = []
+    partition2_set = []
+
+    for train_index, val_test_index in sss.split(dataset, dataset_categories):
+        parition1_indices = train_index.tolist()
+        partition2_indices = val_test_index.tolist()
+
+    for index in parition1_indices:
+        partition1_set.append(dataset[index])
+
+    for index in partition2_indices:
+        partition2_set.append(dataset[index])
+
+    return partition1_set, partition2_set
+
+
+def dataset_loading_and_splitting(config: {}):
     ##check if serialized pickle files or folders for raw files provided
     if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
         transform_raw_data_to_serialized(config["Dataset"])
@@ -60,7 +150,6 @@ def dataset_loading_and_splitting(config: {}):
 
 
 def create_dataloaders(trainset, valset, testset, batch_size):
-
     if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
@@ -99,7 +188,6 @@ def split_dataset(
     perc_train: float,
     stratify_splitting: bool,
 ):
-
     if not stratify_splitting:
         perc_val = (1 - perc_train) / 2
         data_size = len(dataset)
@@ -119,8 +207,8 @@ def split_dataset(
 def compositional_stratified_splitting(dataset, perc_train):
     """Given the dataset and the percentage of data you want to extract from it, method will
     apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
-    In the case of the structures dataset where each structure contains 2 types of atoms, the category will
-    be constructed in a way: number of atoms of type 1 + number of atoms of type 2 * 100.
+    In the case each structure contains 2 types of atoms, the category will
+    be constructed as such: number of atoms of type 1 + number of atoms of type 2 * 100.
     Parameters
     ----------
     dataset: [Data]
@@ -132,110 +220,30 @@ def compositional_stratified_splitting(dataset, perc_train):
     [Data]
         Subsample of the original dataset constructed using stratified sampling.
     """
-    dataset_categories = []
+    dataset_categories = create_dataset_categories(dataset)
+    dataset, dataset_categories = duplicate_unique_data_samples(
+        dataset, dataset_categories
+    )
 
-    elements_set = torch.FloatTensor()
-    max_graph_size = 0
+    sss_train = StratifiedShuffleSplit(
+        n_splits=1, train_size=perc_train, random_state=0
+    )
+    trainset, val_test_set = generate_partition(sss_train, dataset, dataset_categories)
 
-    # Identify all the elements present in at least one configuration
-    for data in dataset:
-        max_graph_size = max(max_graph_size, data.num_nodes)
-        elements = torch.unique(data.x[:, 0])
-        elements_set = torch.cat((elements_set, elements), 0)
+    val_test_dataset_categories = create_dataset_categories(val_test_set)
+    val_test_set, val_test_dataset_categories = duplicate_unique_data_samples(
+        val_test_set, val_test_dataset_categories
+    )
 
-    elements_set = torch.unique(elements_set)
-    dictionary = {}
-    power_ten = math.ceil(math.log10(max_graph_size))
-
-    for index, element in enumerate(list(elements_set)):
-        dictionary[element.item()] = index
-
-    for data in dataset:
-        elements, frequencies = torch.unique(data.x[:, 0], return_counts=True)
-        category = 0
-        for element, frequency in zip(elements, frequencies):
-            category += frequency.item() * (
-                10 ** (power_ten * dictionary[element.item()])
-            )
-        dataset_categories.append(category)
-
-    train_indices = []
-    val_test_indices = []
-    trainset = []
-    val_test_set = []
-
-    sss = StratifiedShuffleSplit(n_splits=1, train_size=perc_train, random_state=0)
-
-    counter = collections.Counter(dataset_categories)
-    keys = get_keys(counter, 1)
-    augmented_data = []
-    augmented_data_category = []
-
-    for data, category in zip(dataset, dataset_categories):
-        if category in keys:
-            # Data augmentation on unique elements to allow additional splitting
-            augmented_data.append(data.clone())
-            augmented_data_category.append(category)
-
-    dataset.extend(augmented_data)
-    dataset_categories.extend(augmented_data_category)
-
-    for train_index, val_test_index in sss.split(dataset, dataset_categories):
-        train_indices = train_index.tolist()
-        val_test_indices = val_test_index.tolist()
-
-    for index in train_indices:
-        trainset.append(dataset[index])
-
-    for index in val_test_indices:
-        val_test_set.append(dataset[index])
-
-    val_indices = []
-    test_indices = []
-    valset = []
-    testset = []
-    dataset_categories = []
-
-    for data in val_test_set:
-        elements, frequencies = torch.unique(data.x[:, 0], return_counts=True)
-        category = 0
-        for element, frequency in zip(elements, frequencies):
-            category += frequency.item() * (
-                10 ** (power_ten * dictionary[element.item()])
-            )
-        dataset_categories.append(category)
-
-    counter = collections.Counter(dataset_categories)
-    keys = get_keys(counter, 1)
-    augmented_data = []
-    augmented_data_category = []
-
-    for data, category in zip(val_test_set, dataset_categories):
-        if category in keys:
-            # Data augmentation on unique elements to allow additional splitting
-            augmented_data.append(data.clone())
-            augmented_data_category.append(category)
-
-    val_test_set.extend(augmented_data)
-    dataset_categories.extend(augmented_data_category)
-
-    sss = StratifiedShuffleSplit(n_splits=1, train_size=0.5, random_state=0)
-
-    for val_index, test_index in sss.split(val_test_set, dataset_categories):
-        val_indices = val_index.tolist()
-        test_indices = test_index.tolist()
-
-    for index in val_indices:
-        valset.append(val_test_set[index])
-
-    for index in test_indices:
-        testset.append(val_test_set[index])
+    sss_valtest = StratifiedShuffleSplit(n_splits=1, train_size=0.5, random_state=0)
+    valset, testset = generate_partition(
+        sss_valtest, val_test_set, val_test_dataset_categories
+    )
 
     return trainset, valset, testset
 
 
 def load_train_val_test_sets(config):
-
     timer = Timer("load_data")
     timer.start()
 
@@ -266,7 +274,6 @@ def load_train_val_test_sets(config):
 
 
 def transform_raw_data_to_serialized(config):
-
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
