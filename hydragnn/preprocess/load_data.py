@@ -30,8 +30,6 @@ from hydragnn.utils.time_utils import Timer
 import pickle
 
 import sklearn
-from sklearn.model_selection import StratifiedShuffleSplit
-
 
 # function to return key for any value
 def get_keys(dictionary, val):
@@ -225,7 +223,7 @@ def compositional_stratified_splitting(dataset, perc_train):
         dataset, dataset_categories
     )
 
-    sss_train = StratifiedShuffleSplit(
+    sss_train = sklearn.model_selection.StratifiedShuffleSplit(
         n_splits=1, train_size=perc_train, random_state=0
     )
     trainset, val_test_set = generate_partition(sss_train, dataset, dataset_categories)
@@ -235,7 +233,9 @@ def compositional_stratified_splitting(dataset, perc_train):
         val_test_set, val_test_dataset_categories
     )
 
-    sss_valtest = StratifiedShuffleSplit(n_splits=1, train_size=0.5, random_state=0)
+    sss_valtest = sklearn.model_selection.StratifiedShuffleSplit(
+        n_splits=1, train_size=0.5, random_state=0
+    )
     valset, testset = generate_partition(
         sss_valtest, val_test_set, val_test_dataset_categories
     )
