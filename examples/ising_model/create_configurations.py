@@ -104,6 +104,6 @@ if __name__ == "__main__":
     os.makedirs(dir)
 
     number_atoms_per_dimension = 3
-    configurational_historam_cutoff = 100
+    configurational_histogram_cutoff = 100
 
-    create_dataset(number_atoms_per_dimension, configurational_historam_cutoff, dir)
+    create_dataset(number_atoms_per_dimension, configurational_histogram_cutoff, dir)
