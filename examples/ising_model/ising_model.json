@@ -5,7 +5,7 @@
     "Dataset": {
         "name": "ising_model_27atoms",
         "path": {"total": "./dataset/ising_model_data"},
-        "format": "LSMS",
+        "format": "unit_test",
         "node_features": {
             "name": ["atom_input_feature","magnetic_moment"],
             "dim": [1,1],
@@ -22,7 +22,7 @@
             "model_type": "PNA",
             "radius": 7,
             "max_neighbours": 100000,
-            "hidden_dim": 5,
+            "hidden_dim": 10,
             "num_conv_layers": 6,
             "output_heads": {
                 "graph":{

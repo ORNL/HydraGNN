@@ -50,7 +50,7 @@ def E_dimensionless(config, L):
                 )
                 total_energy += -nb * S
 
-                atomic_features[count_pos, 0] = np.random.random() * config[x, y, z]
+                atomic_features[count_pos, 0] = config[x, y, z]
                 atomic_features[count_pos, 1:4] = positions[count_pos, :]
                 atomic_features[count_pos, 4] = config[x, y, z]
 
@@ -104,6 +104,6 @@ if __name__ == "__main__":
     os.makedirs(dir)
 
     number_atoms_per_dimension = 3
-    configurational_histogram_cutoff = 100
+    configurational_histogram_cutoff = 1000
 
     create_dataset(number_atoms_per_dimension, configurational_histogram_cutoff, dir)
