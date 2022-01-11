@@ -51,8 +51,7 @@
             "perc_train": 0.7,
             "learning_rate": 1e-3,
             "batch_size": 64,
-            "continue": 0,
-            "startfrom": "existing_model"
+            "continue": 0
         }
     }
 }
