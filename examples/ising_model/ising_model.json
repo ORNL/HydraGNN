@@ -1,0 +1,58 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "Dataset": {
+        "name": "ising_model_27atoms",
+        "path": {"total": "./dataset/ising_model_data"},
+        "format": "LSMS",
+        "node_features": {
+            "name": ["atom_input_feature","magnetic_moment"],
+            "dim": [1,1],
+            "column_index": [0,4]
+        },
+        "graph_features":{
+            "name": [ "total_energy"],
+            "dim": [1],
+            "column_index": [0]
+        }
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "radius": 7,
+            "max_neighbours": 100000,
+            "hidden_dim": 5,
+            "num_conv_layers": 6,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 5,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25]
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0, 1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["total_energy","magnetic_moment"],
+            "output_index": [0, 1],
+            "type": ["graph","node"],
+            "denormalize_output": true
+        },
+        "Training": {
+            "num_epoch": 20,
+            "perc_train": 0.7,
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "continue": 0,
+            "startfrom": "existing_model"
+        }
+    }
+}
