@@ -23,7 +23,7 @@ except:
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
-from hydragnn.preprocess.compositional_stratified_splitting import (
+from hydragnn.preprocess.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
 from hydragnn.utils.distributed import get_comm_size_and_rank
