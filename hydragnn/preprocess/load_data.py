@@ -40,40 +40,40 @@ def get_keys(dictionary, val):
     return keys
 
 
-def get_max_graph_size(dataset: torch_geometric.data.dataset):
+def get_max_graph_size(dataset):
     max_graph_size = int(0)
     for data in dataset:
         max_graph_size = max(max_graph_size, data.num_nodes)
     return max_graph_size
 
 
-def get_elements_set(dataset: torch_geometric.data.dataset):
+def get_elements_list(dataset):
     ## Identify all the elements present in at least one configuration
-    elements_set = torch.FloatTensor()
+    elements_list = torch.FloatTensor()
 
     for data in dataset:
         elements = torch.unique(data.x[:, 0])
-        elements_set = torch.cat((elements_set, elements), 0)
+        elements_list = torch.cat((elements_list, elements), 0)
 
-    elements_set = torch.unique(elements_set)
+    elements_list = torch.unique(elements_list)
 
-    return elements_set
+    return elements_list
 
 
-def create_dictionary_from_elements_set(elements_set: list):
+def create_dictionary_from_elements_list(elements_list: list):
     dictionary = {}
 
-    for index, element in enumerate(list(elements_set)):
+    for index, element in enumerate(elements_list):
         dictionary[element.item()] = index
 
     return dictionary
 
 
-def create_dataset_categories(dataset: torch_geometric.data.dataset):
+def create_dataset_categories(dataset):
     max_graph_size = get_max_graph_size(dataset)
     power_ten = math.ceil(math.log10(max_graph_size))
-    elements_set = get_elements_set(dataset)
-    elements_dictionary = create_dictionary_from_elements_set(elements_set)
+    elements_list = get_elements_list(dataset)
+    elements_dictionary = create_dictionary_from_elements_list(elements_list)
 
     dataset_categories = []
 
