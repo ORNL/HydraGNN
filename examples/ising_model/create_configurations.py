@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 from sympy.utilities.iterables import multiset_permutations
 import scipy.special
+import math
 
 
 def write_to_file(total_energy, atomic_features, count_config, dir):
@@ -51,9 +52,9 @@ def E_dimensionless(config, L):
                 )
                 total_energy += -nb * S
 
-                atomic_features[count_pos, 0] = (config[x, y, z] + 1) / 2
+                atomic_features[count_pos, 0] = config[x, y, z]
                 atomic_features[count_pos, 1:4] = positions[count_pos, :]
-                atomic_features[count_pos, 4] = config[x, y, z]
+                atomic_features[count_pos, 4] = math.sin(math.pi * config[x, y, z] / 2)
 
                 count_pos = count_pos + 1
 
@@ -76,7 +77,9 @@ def create_dataset(L, histogram_cutoff, dir):
         # the hard cutoff threshold, a random configurational subset is picked
         if scipy.special.binom(L ** 3, num_downs) > histogram_cutoff:
             for num_config in range(0, histogram_cutoff):
+                random_scaling = np.random.random((L ** 3,))
                 config = np.random.permutation(primal_configuration)
+                config = np.multiply(config, random_scaling)
                 config = np.reshape(config, (L, L, L))
                 total_energy, atomic_features = E_dimensionless(config, L)
 
