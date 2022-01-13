@@ -35,9 +35,9 @@ def E_dimensionless(config, L):
     for z in range(L):
         for y in range(L):
             for x in range(L):
-                positions[count_pos, 0] = x - 1
-                positions[count_pos, 1] = y - 1
-                positions[count_pos, 2] = z - 1
+                positions[count_pos, 0] = x
+                positions[count_pos, 1] = y
+                positions[count_pos, 2] = z
 
                 S = config[x, y, z]
                 nb = (
