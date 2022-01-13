@@ -29,6 +29,13 @@ def write_to_file(total_energy, atomic_features, count_config, dir):
 def E_dimensionless(config, L):
     total_energy = 0
 
+    spin = np.zeros_like(config)
+
+    for z in range(L):
+        for y in range(L):
+            for x in range(L):
+                spin[x, y, z] = math.sin(math.pi * config[x, y, z] / 2)
+
     count_pos = 0
     number_nodes = L ** 3
     positions = np.zeros((number_nodes, 3))
@@ -40,21 +47,21 @@ def E_dimensionless(config, L):
                 positions[count_pos, 1] = y
                 positions[count_pos, 2] = z
 
-                S = config[x, y, z]
+                S = spin[x, y, z]
                 nb = (
-                    config[(x + 1) % L, y, z]
-                    + config[x, (y + 1) % L, z]
-                    + config[(x - 1) % L, y, z]
-                    + config[x, (y - 1) % L, z]
-                    + config[x, y, z]
-                    + config[x, y, (z + 1) % L]
-                    + config[x, y, (z - 1) % L]
+                    spin[(x + 1) % L, y, z]
+                    + spin[x, (y + 1) % L, z]
+                    + spin[(x - 1) % L, y, z]
+                    + spin[x, (y - 1) % L, z]
+                    + spin[x, y, z]
+                    + spin[x, y, (z + 1) % L]
+                    + spin[x, y, (z - 1) % L]
                 )
                 total_energy += -nb * S
 
                 atomic_features[count_pos, 0] = config[x, y, z]
                 atomic_features[count_pos, 1:4] = positions[count_pos, :]
-                atomic_features[count_pos, 4] = math.sin(math.pi * config[x, y, z] / 2)
+                atomic_features[count_pos, 4] = spin[x, y, z]
 
                 count_pos = count_pos + 1
 
@@ -107,7 +114,7 @@ if __name__ == "__main__":
         shutil.rmtree(dir)
     os.makedirs(dir)
 
-    number_atoms_per_dimension = 3
-    configurational_histogram_cutoff = 1000
+    number_atoms_per_dimension = 5
+    configurational_histogram_cutoff = 100
 
     create_dataset(number_atoms_per_dimension, configurational_histogram_cutoff, dir)
