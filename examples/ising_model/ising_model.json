@@ -7,7 +7,7 @@
         "path": {"total": "./dataset/ising_model"},
         "format": "unit_test",
         "node_features": {
-            "name": ["atom_input_feature","magnetic_moment"],
+            "name": ["atom_type","spin"],
             "dim": [1,1],
             "column_index": [0,4]
         },
@@ -41,7 +41,7 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["total_energy","magnetic_moment"],
+            "output_names": ["total_energy","spin"],
             "output_index": [0, 1],
             "type": ["graph","node"],
             "denormalize_output": true

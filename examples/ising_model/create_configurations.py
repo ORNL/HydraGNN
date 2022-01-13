@@ -51,7 +51,7 @@ def E_dimensionless(config, L):
                 )
                 total_energy += -nb * S
 
-                atomic_features[count_pos, 0] = config[x, y, z]
+                atomic_features[count_pos, 0] = (config[x, y, z] + 1) / 2
                 atomic_features[count_pos, 1:4] = positions[count_pos, :]
                 atomic_features[count_pos, 4] = config[x, y, z]
 
