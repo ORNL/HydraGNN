@@ -1,6 +1,7 @@
 import os
 import shutil
 import numpy as np
+from tqdm import tqdm
 from sympy.utilities.iterables import multiset_permutations
 import scipy.special
 
@@ -65,7 +66,7 @@ def create_dataset(L, histogram_cutoff, dir):
 
     count_config = 0
 
-    for num_downs in range(0, L ** 3):
+    for num_downs in tqdm(range(0, L ** 3)):
 
         primal_configuration = np.ones((L ** 3,))
         for down in range(0, num_downs):
