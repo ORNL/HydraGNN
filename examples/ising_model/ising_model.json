@@ -4,7 +4,7 @@
     },
     "Dataset": {
         "name": "ising_model_27atoms",
-        "path": {"total": "./dataset/ising_model_data"},
+        "path": {"total": "./dataset/ising_model"},
         "format": "unit_test",
         "node_features": {
             "name": ["atom_input_feature","magnetic_moment"],

@@ -98,7 +98,7 @@ def create_dataset(L, histogram_cutoff, dir):
 
 if __name__ == "__main__":
 
-    dir = "../../dataset/ising_model_data"
+    dir = os.path.join(os.path.dirname(__file__), "../../dataset/ising_model")
     if os.path.exists(dir):
         shutil.rmtree(dir)
     os.makedirs(dir)
