@@ -114,7 +114,7 @@ if __name__ == "__main__":
         shutil.rmtree(dir)
     os.makedirs(dir)
 
-    number_atoms_per_dimension = 5
-    configurational_histogram_cutoff = 100
+    number_atoms_per_dimension = 3
+    configurational_histogram_cutoff = 1000
 
     create_dataset(number_atoms_per_dimension, configurational_histogram_cutoff, dir)

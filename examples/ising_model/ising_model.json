@@ -22,7 +22,7 @@
             "model_type": "PNA",
             "radius": 7,
             "max_neighbours": 100000,
-            "hidden_dim": 10,
+            "hidden_dim": 20,
             "num_conv_layers": 6,
             "output_heads": {
                 "graph":{
@@ -47,7 +47,7 @@
             "denormalize_output": true
         },
         "Training": {
-            "num_epoch": 20,
+            "num_epoch": 200,
             "perc_train": 0.7,
             "learning_rate": 1e-3,
             "batch_size": 64,
