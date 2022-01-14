@@ -11,9 +11,9 @@
 
 import os
 
-import numpy as np
 import torch
 import torch.distributed as dist
+import torch_geometric
 
 # FIXME: deprecated in torch_geometric 2.0
 try:
@@ -23,13 +23,15 @@ except:
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
+from hydragnn.preprocess.compositional_data_splitting import (
+    compositional_stratified_splitting,
+)
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 import pickle
 
 
 def dataset_loading_and_splitting(config: {}):
-
     ##check if serialized pickle files or folders for raw files provided
     if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
         transform_raw_data_to_serialized(config["Dataset"])
@@ -49,7 +51,6 @@ def dataset_loading_and_splitting(config: {}):
 
 
 def create_dataloaders(trainset, valset, testset, batch_size):
-
     if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
@@ -83,21 +84,28 @@ def create_dataloaders(trainset, valset, testset, batch_size):
     return train_loader, val_loader, test_loader
 
 
-def split_dataset(dataset: [], perc_train: float):
-
-    perc_val = (1 - perc_train) / 2
-    data_size = len(dataset)
-    trainset = dataset[: int(data_size * perc_train)]
-    valset = dataset[
-        int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
-    ]
-    testset = dataset[int(data_size * (perc_train + perc_val)) :]
+def split_dataset(
+    dataset: [],
+    perc_train: float,
+    stratify_splitting: bool,
+):
+    if not stratify_splitting:
+        perc_val = (1 - perc_train) / 2
+        data_size = len(dataset)
+        trainset = dataset[: int(data_size * perc_train)]
+        valset = dataset[
+            int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
+        ]
+        testset = dataset[int(data_size * (perc_train + perc_val)) :]
+    else:
+        trainset, valset, testset = compositional_stratified_splitting(
+            dataset, perc_train
+        )
 
     return trainset, valset, testset
 
 
 def load_train_val_test_sets(config):
-
     timer = Timer("load_data")
     timer.start()
 
@@ -128,7 +136,6 @@ def load_train_val_test_sets(config):
 
 
 def transform_raw_data_to_serialized(config):
-
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
@@ -155,6 +162,7 @@ def total_to_train_val_test_pkls(config):
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
+        stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
     )
     serialized_dir = os.path.dirname(file_dir)
     config["Dataset"]["path"] = {}

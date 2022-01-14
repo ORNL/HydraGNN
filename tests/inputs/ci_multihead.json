@@ -5,6 +5,7 @@
     "Dataset": {
         "name": "unit_test_multihead",
         "format": "unit_test",
+        "compositional_stratified_splitting": true,
         "path": {
             "total": "dataset/unit_test_multihead"
         },

@@ -9,3 +9,4 @@ from .load_data import (
 )
 from .serialized_dataset_loader import SerializedDataLoader
 from .raw_dataset_loader import RawDataLoader
+from .compositional_data_splitting import compositional_stratified_splitting
