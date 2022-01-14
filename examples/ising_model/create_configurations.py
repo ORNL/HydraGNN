@@ -26,7 +26,7 @@ def write_to_file(total_energy, atomic_features, count_config, dir):
 
 
 # 3D Ising model
-def E_dimensionless(config, L):
+def E_dimensionless(config, L, spin_function):
     total_energy = 0
 
     spin = np.zeros_like(config)
@@ -34,7 +34,7 @@ def E_dimensionless(config, L):
     for z in range(L):
         for y in range(L):
             for x in range(L):
-                spin[x, y, z] = math.sin(math.pi * config[x, y, z] / 2)
+                spin[x, y, z] = spin_function(config[x, y, z])
 
     count_pos = 0
     number_nodes = L ** 3
@@ -70,7 +70,7 @@ def E_dimensionless(config, L):
     return total_energy, atomic_features
 
 
-def create_dataset(L, histogram_cutoff, dir):
+def create_dataset(L, histogram_cutoff, dir, spin_function=lambda x: x):
 
     count_config = 0
 
@@ -88,7 +88,9 @@ def create_dataset(L, histogram_cutoff, dir):
                 config = np.random.permutation(primal_configuration)
                 config = np.multiply(config, random_scaling)
                 config = np.reshape(config, (L, L, L))
-                total_energy, atomic_features = E_dimensionless(config, L)
+                total_energy, atomic_features = E_dimensionless(
+                    config, L, spin_function
+                )
 
                 write_to_file(total_energy, atomic_features, count_config, dir)
 
@@ -100,7 +102,9 @@ def create_dataset(L, histogram_cutoff, dir):
             for config in multiset_permutations(primal_configuration):
                 config = np.array(config)
                 config = np.reshape(config, (L, L, L))
-                total_energy, atomic_features = E_dimensionless(config, L)
+                total_energy, atomic_features = E_dimensionless(
+                    config, L, spin_function
+                )
 
                 write_to_file(total_energy, atomic_features, count_config, dir)
 
@@ -117,4 +121,8 @@ if __name__ == "__main__":
     number_atoms_per_dimension = 3
     configurational_histogram_cutoff = 1000
 
-    create_dataset(number_atoms_per_dimension, configurational_histogram_cutoff, dir)
+    # Use sine function as non-linear extension of Ising model
+    spin_func = lambda x: math.sin(math.pi * x / 2)
+    create_dataset(
+        number_atoms_per_dimension, configurational_histogram_cutoff, dir, spin_func
+    )
