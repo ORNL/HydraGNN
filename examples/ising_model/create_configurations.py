@@ -26,10 +26,13 @@ def write_to_file(total_energy, atomic_features, count_config, dir):
 
 
 # 3D Ising model
-def E_dimensionless(config, L, spin_function):
+def E_dimensionless(config, L, spin_function, scale_spin):
     total_energy = 0
-
     spin = np.zeros_like(config)
+
+    if scale_spin:
+        random_scaling = np.random.random((L, L, L))
+        config = np.multiply(config, random_scaling)
 
     for z in range(L):
         for y in range(L):
@@ -70,7 +73,9 @@ def E_dimensionless(config, L, spin_function):
     return total_energy, atomic_features
 
 
-def create_dataset(L, histogram_cutoff, dir, spin_function=lambda x: x):
+def create_dataset(
+    L, histogram_cutoff, dir, spin_function=lambda x: x, scale_spin=False
+):
 
     count_config = 0
 
@@ -84,12 +89,10 @@ def create_dataset(L, histogram_cutoff, dir, spin_function=lambda x: x):
         # the hard cutoff threshold, a random configurational subset is picked
         if scipy.special.binom(L ** 3, num_downs) > histogram_cutoff:
             for num_config in range(0, histogram_cutoff):
-                random_scaling = np.random.random((L ** 3,))
                 config = np.random.permutation(primal_configuration)
-                config = np.multiply(config, random_scaling)
                 config = np.reshape(config, (L, L, L))
                 total_energy, atomic_features = E_dimensionless(
-                    config, L, spin_function
+                    config, L, spin_function, scale_spin
                 )
 
                 write_to_file(total_energy, atomic_features, count_config, dir)
@@ -103,7 +106,7 @@ def create_dataset(L, histogram_cutoff, dir, spin_function=lambda x: x):
                 config = np.array(config)
                 config = np.reshape(config, (L, L, L))
                 total_energy, atomic_features = E_dimensionless(
-                    config, L, spin_function
+                    config, L, spin_function, scale_spin
                 )
 
                 write_to_file(total_energy, atomic_features, count_config, dir)
@@ -122,7 +125,12 @@ if __name__ == "__main__":
     configurational_histogram_cutoff = 1000
 
     # Use sine function as non-linear extension of Ising model
+    # Use randomized scaling of the spin magnitudes
     spin_func = lambda x: math.sin(math.pi * x / 2)
     create_dataset(
-        number_atoms_per_dimension, configurational_histogram_cutoff, dir, spin_func
+        number_atoms_per_dimension,
+        configurational_histogram_cutoff,
+        dir,
+        spin_function=spin_func,
+        scale_spin=True,
     )
