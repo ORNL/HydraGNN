@@ -26,24 +26,9 @@ from hydragnn.utils.time_utils import Timer
 
 def create_model_config(
     config: dict,
-    max_neighbours: int = None,
-    num_nodes: int = None,
-    pna_deg: torch.tensor = None,
     verbosity: int = 0,
     use_gpu: bool = True,
-    use_distributed: bool = False,
 ):
-    edge_dim = None
-    edge_models = ["PNA", "CGCNN"]
-    if "edge_features" in config and config["edge_features"]:
-        assert (
-            config["model_type"] in edge_models
-        ), "Edge features can only be used with PNA and CGCNN."
-        edge_dim = len(config["edge_features"])
-    elif config["model_type"] == "CGCNN":
-        # CG always needs an integer edge_dim
-        # PNA would fail with integer edge_dim without edge_attr
-        edge_dim = 0
 
     return create_model(
         config["model_type"],
@@ -55,12 +40,11 @@ def create_model_config(
         config["output_heads"],
         config["task_weights"],
         config["max_neighbours"],
-        num_nodes,
-        edge_dim,
-        pna_deg,
+        config["num_nodes"],
+        config["edge_dim"],
+        config["pna_deg"],
         verbosity,
         use_gpu,
-        use_distributed,
     )
 
 
@@ -79,7 +63,6 @@ def create_model(
     pna_deg: torch.tensor = None,
     verbosity: int = 0,
     use_gpu: bool = True,
-    use_distributed: bool = False,
 ):
     timer = Timer("create_model")
     timer.start()

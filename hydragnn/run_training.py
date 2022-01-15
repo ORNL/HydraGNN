@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import sys, os, json
+import os, json
 from functools import singledispatch
 
 import torch
@@ -17,23 +17,19 @@ import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
-from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import (
     setup_ddp,
-    get_comm_size_and_rank,
     get_distributed_model,
 )
 from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
     load_existing_model_config,
-    calculate_PNA_degree,
 )
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
-    update_config_NN_outputs,
-    normalize_output_config,
+    check_update_config,
     get_log_name_config,
 )
 from hydragnn.models.create import create_model_config
@@ -48,7 +44,6 @@ def run_training(config):
 @run_training.register
 def _(config_file: str):
 
-    config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
 
@@ -68,31 +63,11 @@ def _(config: dict):
     verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
-    graph_size_variable = check_if_graph_size_constant(
-        train_loader, val_loader, test_loader
-    )
-    config = update_config_NN_outputs(config, graph_size_variable)
+    config = check_update_config(config, train_loader, val_loader, test_loader)
 
-    config = normalize_output_config(config)
-
-    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
-        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
-    )
-    max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
-    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
-    else:
-        deg = None
     model = create_model_config(
-        config=config["NeuralNetwork"]["Architecture"],
-        num_nodes=train_loader.dataset[0].num_nodes,
-        max_neighbours=max_neigh,
-        pna_deg=deg,
-        verbosity=verbosity,
+        config=config["NeuralNetwork"]["Architecture"], verbosity=verbosity
     )
-
-    log_name = get_log_name_config(config)
-
     model = get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
@@ -101,6 +76,7 @@ def _(config: dict):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    log_name = get_log_name_config(config)
     writer = get_summary_writer(log_name)
 
     if dist.is_initialized():
