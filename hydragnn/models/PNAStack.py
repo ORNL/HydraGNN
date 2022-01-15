@@ -19,7 +19,7 @@ from .Base import Base
 class PNAStack(Base):
     def __init__(
         self,
-        deg: torch.Tensor,
+        deg: list,
         input_dim: int,
         output_dim: list,
         output_type: list,
@@ -42,7 +42,7 @@ class PNAStack(Base):
             "attenuation",
             "linear",
         ]
-        self.deg = deg
+        self.deg = torch.Tensor(deg)
         self.edge_dim = edge_dim
 
         super().__init__(

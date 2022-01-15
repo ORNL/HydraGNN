@@ -12,19 +12,13 @@
 import json, os
 from functools import singledispatch
 
-import torch
-
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
-from hydragnn.preprocess.utils import check_if_graph_size_constant
 from hydragnn.utils.distributed import setup_ddp
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
-    update_config_NN_outputs,
-    normalize_output_config,
+    check_update_config,
     get_log_name_config,
 )
-from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import test
 from hydragnn.postprocess.postprocess import output_denormalize
@@ -38,7 +32,6 @@ def run_prediction(config):
 @run_prediction.register
 def _(config_file: str):
 
-    config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
 
@@ -55,29 +48,12 @@ def _(config: dict):
 
     world_size, world_rank = setup_ddp()
 
-    verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
-    graph_size_variable = check_if_graph_size_constant(
-        train_loader, val_loader, test_loader
-    )
-    config = update_config_NN_outputs(config, graph_size_variable)
+    config = check_update_config(config, train_loader, val_loader, test_loader)
 
-    config = normalize_output_config(config)
-
-    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
-        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
-    )
-    max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
-    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
-    else:
-        deg = None
     model = create_model_config(
         config=config["NeuralNetwork"]["Architecture"],
-        num_nodes=train_loader.dataset[0].num_nodes,
-        max_neighbours=max_neigh,
-        pna_deg=deg,
         verbosity=config["Verbosity"]["level"],
     )
 

@@ -10,6 +10,57 @@
 ##############################################################################
 import pickle
 import os
+from hydragnn.preprocess.utils import check_if_graph_size_constant
+from hydragnn.utils.model import calculate_PNA_degree
+
+
+def check_update_config(config, train_loader, val_loader, test_loader):
+    """check if config input consistent and update config with model and datasets"""
+
+    graph_size_variable = check_if_graph_size_constant(
+        train_loader, val_loader, test_loader
+    )
+
+    config = update_config_NN_outputs(config, graph_size_variable)
+
+    config = normalize_output_config(config)
+
+    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
+        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+    )
+
+    max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
+        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
+        config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
+    else:
+        config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
+
+    config["NeuralNetwork"]["Architecture"]["num_nodes"] = train_loader.dataset[
+        0
+    ].num_nodes
+
+    config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
+        config["NeuralNetwork"]["Architecture"]
+    )
+
+    return config
+
+
+def update_config_edge_dim(config):
+
+    config["edge_dim"] = None
+    edge_models = ["PNA", "CGCNN"]
+    if "edge_features" in config and config["edge_features"]:
+        assert (
+            config["model_type"] in edge_models
+        ), "Edge features can only be used with PNA and CGCNN."
+        config["edge_dim"] = len(config["edge_features"])
+    elif config["model_type"] == "CGCNN":
+        # CG always needs an integer edge_dim
+        # PNA would fail with integer edge_dim without edge_attr
+        config["edge_dim"] = 0
+    return config
 
 
 def update_config_NN_outputs(config, graph_size_variable):
