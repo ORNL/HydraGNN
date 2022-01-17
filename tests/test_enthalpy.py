@@ -14,27 +14,51 @@ import pandas
 import numpy as np
 import hydragnn, tests
 import pytest
-from utils.lsms.convert_total_energy_to_formation_gibbs import (
-    compute_formation_enthalpy,
+from utils.lsms import (
+    convert_raw_data_energy_to_gibbs,
 )
 
 
 def unittest_formation_enthalpy():
 
-    path_to_dir = "dataset/unit_test_enthalpy/"
-    tests.linear_mixing_internal_energy_data(path_to_dir)
+    dir = "dataset/unit_test_enthalpy"
+    if not os.path.exists(dir):
+        os.makedirs(dir)
 
-    check_sum = 0
+    # Create random samples.
+    num_config = 10
+    tests.deterministic_graph_data(
+        dir,
+        num_config,
+        number_types=2,
+        linear_only=True,
+    )
 
-    for filename in os.listdir(path_to_dir):
+    # Create pure components.
+    tests.deterministic_graph_data(
+        dir,
+        number_configurations=1,
+        configuration_start=num_config,
+        number_types=1,
+        types=[0],
+        linear_only=True,
+    )
+    tests.deterministic_graph_data(
+        dir,
+        number_configurations=1,
+        configuration_start=num_config + 1,
+        number_types=1,
+        types=[1],
+        linear_only=True,
+    )
 
-        _, _, _, enthalpy = compute_formation_enthalpy(
-            path_to_dir + filename, [0, 1], [0, 1]
-        )
+    convert_raw_data_energy_to_gibbs(dir, [0, 1])
 
-        check_sum = check_sum + enthalpy
-
-    assert 0 == check_sum
+    new_dir = dir + "_gibbs_energy"
+    for filename in os.listdir(new_dir):
+        path = os.path.join(new_dir, filename)
+        enthalpy = np.loadtxt(path, max_rows=1)
+        assert enthalpy == 0
 
 
 @pytest.mark.mpi_skip()
