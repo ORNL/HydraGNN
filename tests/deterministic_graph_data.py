@@ -20,11 +20,62 @@ from sklearn.neighbors import KNeighborsRegressor
 def deterministic_graph_data(
     path: str,
     number_configurations: int = 500,
-    number_unit_cell_x_range: list = [1, 3],
-    number_unit_cell_y_range: list = [1, 3],
-    number_unit_cell_z_range: list = [1, 2],
+    configuration_start: int = 0,
+    unit_cell_x_range: list = [1, 3],
+    unit_cell_y_range: list = [1, 3],
+    unit_cell_z_range: list = [1, 2],
     number_types: int = 3,
+    types: list = None,
     number_neighbors: int = 2,
+    linear_only=False,
+):
+    if types == None:
+        types = range(number_types)
+
+    # We assume that the unit cell is Body Center Cubic (BCC)
+    unit_cell_x = torch.randint(
+        unit_cell_x_range[0],
+        unit_cell_x_range[1],
+        (number_configurations,),
+    )
+    unit_cell_y = torch.randint(
+        unit_cell_y_range[0],
+        unit_cell_y_range[1],
+        (number_configurations,),
+    )
+    unit_cell_z = torch.randint(
+        unit_cell_z_range[0],
+        unit_cell_z_range[1],
+        (number_configurations,),
+    )
+
+    for configuration in range(number_configurations):
+        uc_x = unit_cell_x[configuration]
+        uc_y = unit_cell_y[configuration]
+        uc_z = unit_cell_z[configuration]
+        create_configuration(
+            path,
+            configuration,
+            configuration_start,
+            uc_x,
+            uc_y,
+            uc_z,
+            types,
+            number_neighbors,
+            linear_only,
+        )
+
+
+def create_configuration(
+    path,
+    configuration,
+    configuration_start,
+    uc_x,
+    uc_y,
+    uc_z,
+    types,
+    number_neighbors,
+    linear_only,
 ):
     ###############################################################################################
     ###################################   STRUCTURE OF THE DATA  ##################################
@@ -52,83 +103,68 @@ def deterministic_graph_data(
     #   NODAL_OUTPUT3(X) = X^3
 
     ###############################################################################################
-    # We assume that the unit cell is Body Center Cubic (BCC)
-    number_unit_cell_x = torch.randint(
-        number_unit_cell_x_range[0],
-        number_unit_cell_x_range[1],
-        (number_configurations,),
-    )
-    number_unit_cell_y = torch.randint(
-        number_unit_cell_y_range[0],
-        number_unit_cell_y_range[1],
-        (number_configurations,),
-    )
-    number_unit_cell_z = torch.randint(
-        number_unit_cell_z_range[0],
-        number_unit_cell_z_range[1],
-        (number_configurations,),
-    )
+    count_pos = 0
+    number_nodes = 2 * uc_x * uc_y * uc_z
+    positions = torch.zeros(number_nodes, 3)
+    for x in range(uc_x):
+        for y in range(uc_y):
+            for z in range(uc_z):
+                positions[count_pos][0] = x
+                positions[count_pos][1] = y
+                positions[count_pos][2] = z
+                positions[count_pos + 1][0] = x + 0.5
+                positions[count_pos + 1][1] = y + 0.5
+                positions[count_pos + 1][2] = z + 0.5
+                count_pos = count_pos + 2
 
-    for configuration in range(number_configurations):
-        count_pos = 0
-        uc_x = number_unit_cell_x[configuration]
-        uc_y = number_unit_cell_y[configuration]
-        uc_z = number_unit_cell_z[configuration]
-        number_nodes = 2 * uc_x * uc_y * uc_z
-        positions = torch.zeros(number_nodes, 3)
-        for x in range(uc_x):
-            for y in range(uc_y):
-                for z in range(uc_z):
-                    positions[count_pos][0] = x
-                    positions[count_pos][1] = y
-                    positions[count_pos][2] = z
-                    positions[count_pos + 1][0] = x + 0.5
-                    positions[count_pos + 1][1] = y + 0.5
-                    positions[count_pos + 1][2] = z + 0.5
-                    count_pos = count_pos + 2
+    node_ids = torch.tensor(range(number_nodes), dtype=torch.int64).reshape(
+        (number_nodes, 1)
+    )
+    node_feature = torch.randint(min(types), max(types) + 1, (number_nodes, 1))
 
-        node_ids = torch.tensor([int(i) for i in range(0, number_nodes)]).reshape(
-            (number_nodes, 1)
-        )
-        node_feature = torch.randint(0, number_types, (number_nodes, 1))
-
-        # We use a K neraest neighbor model to average nodal features and simulate a message passing between neighboring nodes
+    if linear_only:
+        node_output_x = node_feature
+    else:
+        # We use a K nearest neighbor model to average nodal features and simulate a message passing between neighboring nodes
         knn = KNeighborsRegressor(number_neighbors)
         knn.fit(positions, node_feature)
         node_output_x = torch.Tensor(knn.predict(positions))
-        node_output_x_square = node_output_x ** 2
-        node_output_x_cube = node_output_x ** 3
 
-        updated_table = torch.cat(
-            (
-                node_feature,
-                node_ids,
-                positions,
-                node_output_x,
-                node_output_x_square,
-                node_output_x_cube,
-            ),
-            1,
-        )
-        numpy_updated_table = updated_table.detach().numpy()
+    node_output_x_square = node_output_x ** 2
+    node_output_x_cube = node_output_x ** 3
 
+    updated_table = torch.cat(
+        (
+            node_feature,
+            node_ids,
+            positions,
+            node_output_x,
+            node_output_x_square,
+            node_output_x_cube,
+        ),
+        1,
+    )
+    updated_table = updated_table.detach().numpy()
+
+    if linear_only:
+        total_value = torch.sum(node_output_x)
+    else:
         total_value = (
             torch.sum(node_output_x)
             + torch.sum(node_output_x_square)
             + torch.sum(node_output_x_cube)
         )
-        numpy_total_value = total_value.detach().numpy()
-        numpy_string_total_value = numpy.array2string(numpy_total_value)
+    filetxt = numpy.array2string(total_value.detach().numpy())
 
-        filetxt = numpy_string_total_value
+    for index in range(0, number_nodes):
+        numpy_row = updated_table[index, :]
+        numpy_string_row = numpy.array2string(
+            numpy_row, precision=2, separator="\t", suppress_small=True
+        )
+        filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
-        for index in range(0, number_nodes):
-            numpy_row = numpy_updated_table[index, :]
-            numpy_string_row = numpy.array2string(
-                numpy_row, precision=2, separator="\t", suppress_small=True
-            )
-            filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
-
-        filename = os.path.join(path, "output" + str(configuration) + ".txt")
-        with open(filename, "w") as f:
-            f.write(filetxt)
+    filename = os.path.join(
+        path, "output" + str(configuration + configuration_start) + ".txt"
+    )
+    with open(filename, "w") as f:
+        f.write(filetxt)
