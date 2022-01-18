@@ -17,6 +17,26 @@ import torch.distributed as dist
 
 from .print_utils import print_distributed
 
+import psutil
+
+
+def find_ifname(myaddr):
+    """
+    Find socket ifname for a given ip adress. This is for "GLOO" ddp setup.
+    Usage example:
+        find_ifname("127.0.0.1") will return a network interface name, such as "lo". "lo0", etc.
+    """
+    ifname = None
+    for nic, addrs in psutil.net_if_addrs().items():
+        for addr in addrs:
+            if addr.address == myaddr:
+                ifname = nic
+                break
+        if ifname is not None:
+            break
+
+    return ifname
+
 
 def parse_slurm_nodelist(nodelist):
     """
@@ -86,7 +106,6 @@ def get_comm_size_and_rank():
 
 
 def setup_ddp():
-
     """ "Initialize DDP"""
 
     if dist.is_nccl_available() and torch.cuda.is_available():
@@ -115,6 +134,17 @@ def setup_ddp():
         os.environ["MASTER_PORT"] = master_port
         os.environ["WORLD_SIZE"] = str(world_size)
         os.environ["RANK"] = str(world_rank)
+
+        if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
+            ifname = find_ifname(master_addr)
+            os.environ["GLOO_SOCKET_IFNAME"] = ifname
+
+        if world_rank == 0:
+            print(
+                "Distributed data parallel: %s master at %s:%s"
+                % (backend, master_addr, master_port)
+            )
+
         if not dist.is_initialized():
             dist.init_process_group(
                 backend=backend, rank=int(world_rank), world_size=int(world_size)
