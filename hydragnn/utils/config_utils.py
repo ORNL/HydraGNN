@@ -10,36 +10,105 @@
 ##############################################################################
 import pickle
 import os
+from hydragnn.preprocess.utils import check_if_graph_size_constant
+from hydragnn.utils.model import calculate_PNA_degree
 
 
-def update_config_NN_outputs(config, graph_size_variable):
-    """ "Extract architecture output dimensions and set node-level prediction architecture"""
+def update_config(config, train_loader, val_loader, test_loader):
+    """check if config input consistent and update config with model and datasets"""
+
+    graph_size_variable = check_if_graph_size_constant(
+        train_loader, val_loader, test_loader
+    )
+
+    if "Dataset" in config:
+        check_output_dim_consistent(train_loader.dataset[0], config)
+
+    config["NeuralNetwork"] = update_config_NN_outputs(
+        config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
+    )
+
+    config = normalize_output_config(config)
+
+    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
+        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+    )
+
+    max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
+        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
+        config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
+    else:
+        config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
+
+    config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
+        config["NeuralNetwork"]["Architecture"]
+    )
+
+    return config
+
+
+def update_config_edge_dim(config):
+
+    config["edge_dim"] = None
+    edge_models = ["PNA", "CGCNN"]
+    if "edge_features" in config and config["edge_features"]:
+        assert (
+            config["model_type"] in edge_models
+        ), "Edge features can only be used with PNA and CGCNN."
+        config["edge_dim"] = len(config["edge_features"])
+    elif config["model_type"] == "CGCNN":
+        # CG always needs an integer edge_dim
+        # PNA would fail with integer edge_dim without edge_attr
+        config["edge_dim"] = 0
+    return config
+
+
+def check_output_dim_consistent(data, config):
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
 
+    for ihead in range(len(output_type)):
+        if output_type[ihead] == "graph":
+            assert (
+                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+                == config["Dataset"]["graph_features"]["dim"][output_index[ihead]]
+            )
+        elif output_type[ihead] == "node":
+            assert (
+                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+            ) // data.num_nodes == config["Dataset"]["node_features"]["dim"][
+                output_index[ihead]
+            ]
+
+
+def update_config_NN_outputs(config, data, graph_size_variable):
+    """ "Extract architecture output dimensions and set node-level prediction architecture"""
+
+    output_type = config["Variables_of_interest"]["type"]
     dims_list = []
-    for item in range(len(output_type)):
-        if output_type[item] == "graph":
-            dim_item = config["Dataset"]["graph_features"]["dim"][output_index[item]]
-        elif output_type[item] == "node":
+    for ihead in range(len(output_type)):
+        if output_type[ihead] == "graph":
+            dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+        elif output_type[ihead] == "node":
             if (
                 graph_size_variable
-                and config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
-                    "type"
-                ]
+                and config["Architecture"]["output_heads"]["node"]["type"]
                 == "mlp_per_node"
             ):
                 raise ValueError(
                     '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
                 )
-
-            dim_item = config["Dataset"]["node_features"]["dim"][output_index[item]]
+            dim_item = (
+                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+            ) // data.num_nodes
         else:
-            raise ValueError("Unknown output type", output_type[item])
+            raise ValueError("Unknown output type", output_type[ihead])
         dims_list.append(dim_item)
-    config["NeuralNetwork"]["Architecture"]["output_dim"] = dims_list
-    config["NeuralNetwork"]["Architecture"]["output_type"] = output_type
+    config["Architecture"]["output_dim"] = dims_list
+    config["Architecture"]["output_type"] = output_type
+    config["Architecture"]["num_nodes"] = data.num_nodes
     return config
 
 

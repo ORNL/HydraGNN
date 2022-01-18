@@ -26,7 +26,6 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     # Read in config settings and override model type.
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
-    config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
