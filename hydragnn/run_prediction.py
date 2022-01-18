@@ -16,7 +16,7 @@ from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import setup_ddp
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.config_utils import (
-    check_update_config,
+    update_config,
     get_log_name_config,
 )
 from hydragnn.models.create import create_model_config
@@ -50,7 +50,7 @@ def _(config: dict):
 
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
-    config = check_update_config(config, train_loader, val_loader, test_loader)
+    config = update_config(config, train_loader, val_loader, test_loader)
 
     model = create_model_config(
         config=config["NeuralNetwork"]["Architecture"],

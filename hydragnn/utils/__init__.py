@@ -16,7 +16,7 @@ from .model import (
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (
-    check_update_config,
+    update_config,
     update_config_minmax,
     get_log_name_config,
 )
