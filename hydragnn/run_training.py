@@ -29,7 +29,7 @@ from hydragnn.utils.model import (
 from hydragnn.utils.print_utils import print_distributed
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
-    check_update_config,
+    update_config,
     get_log_name_config,
 )
 from hydragnn.models.create import create_model_config
@@ -63,7 +63,7 @@ def _(config: dict):
     verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
-    config = check_update_config(config, train_loader, val_loader, test_loader)
+    config = update_config(config, train_loader, val_loader, test_loader)
 
     model = create_model_config(
         config=config["NeuralNetwork"]["Architecture"], verbosity=verbosity
