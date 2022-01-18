@@ -23,7 +23,7 @@ def deterministic_graph_data(
     number_unit_cell_x_range: list = [1, 3],
     number_unit_cell_y_range: list = [1, 3],
     number_unit_cell_z_range: list = [1, 2],
-    number_clusters: int = 3,
+    number_types: int = 3,
     number_neighbors: int = 2,
 ):
     ###############################################################################################
@@ -90,36 +90,36 @@ def deterministic_graph_data(
         node_ids = torch.tensor([int(i) for i in range(0, number_nodes)]).reshape(
             (number_nodes, 1)
         )
-        cluster_ids_x = torch.randint(0, number_clusters, (number_nodes, 1))
+        node_output_x = torch.randint(0, number_types, (number_nodes, 1))
 
-        node_feature = cluster_ids_x
-        cluster_ids_x_square = node_feature ** 2
-        cluster_ids_x_cube = node_feature ** 3
+        node_feature = node_output_x
+        node_output_x_square = node_feature ** 2
+        node_output_x_cube = node_feature ** 3
 
         # We use a K neraest neighbor model to average nodal features and simulate a message passing between neighboring nodes
         knn = KNeighborsRegressor(number_neighbors)
         knn.fit(positions, node_feature)
         node_feature = torch.Tensor(knn.predict(positions))
-        cluster_ids_x_square = node_feature ** 2
-        cluster_ids_x_cube = node_feature ** 3
+        node_output_x_square = node_feature ** 2
+        node_output_x_cube = node_feature ** 3
 
         updated_table = torch.cat(
             (
                 node_feature,
                 node_ids,
                 positions,
-                cluster_ids_x,
-                cluster_ids_x_square,
-                cluster_ids_x_cube,
+                node_output_x,
+                node_output_x_square,
+                node_output_x_cube,
             ),
             1,
         )
         numpy_updated_table = updated_table.detach().numpy()
 
         total_value = (
-            torch.sum(cluster_ids_x)
-            + torch.sum(cluster_ids_x_square)
-            + torch.sum(cluster_ids_x_cube)
+            torch.sum(node_output_x)
+            + torch.sum(node_output_x_square)
+            + torch.sum(node_output_x_cube)
         )
         numpy_total_value = total_value.detach().numpy()
         numpy_string_total_value = numpy.array2string(numpy_total_value)
