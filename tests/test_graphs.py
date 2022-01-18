@@ -122,12 +122,12 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     # Set RMSE and sample error thresholds
     thresholds = {
-        "PNA": [0.10, 0.25],
-        "MFC": [0.10, 0.50],
-        "GIN": [0.15, 0.90],
-        "GAT": [0.80, 0.95],
+        "PNA": [0.20, 0.75],
+        "MFC": [0.20, 0.99],
+        "GIN": [0.25, 0.75],
+        "GAT": [0.60, 0.99],
         # fixme: error for cgcnn will be reduced after edge attributes being implemented
-        "CGCNN": [0.30, 0.95],
+        "CGCNN": [0.50, 0.95],
     }
     verbosity = 2
 
