@@ -1,6 +1,6 @@
 {
     "Verbosity": {
-        "level": 1
+        "level": 0
     },
     "Dataset": {
         "name": "unit_test_singlehead",
