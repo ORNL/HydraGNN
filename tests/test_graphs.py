@@ -126,9 +126,11 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         "MFC": [0.20, 0.99],
         "GIN": [0.25, 0.75],
         "GAT": [0.60, 0.99],
-        # fixme: error for cgcnn will be reduced after edge attributes being implemented
         "CGCNN": [0.50, 0.95],
     }
+    if use_lengths:
+        thresholds["CGCNN"] = [0.10, 0.30]
+        thresholds["PNA"] = [0.10, 0.40]
     verbosity = 2
 
     for ihead in range(len(true_values)):
