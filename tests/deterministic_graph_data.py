@@ -90,18 +90,14 @@ def deterministic_graph_data(
         node_ids = torch.tensor([int(i) for i in range(0, number_nodes)]).reshape(
             (number_nodes, 1)
         )
-        node_output_x = torch.randint(0, number_types, (number_nodes, 1))
-
-        node_feature = node_output_x
-        node_output_x_square = node_feature ** 2
-        node_output_x_cube = node_feature ** 3
+        node_feature = torch.randint(0, number_types, (number_nodes, 1))
 
         # We use a K neraest neighbor model to average nodal features and simulate a message passing between neighboring nodes
         knn = KNeighborsRegressor(number_neighbors)
         knn.fit(positions, node_feature)
-        node_feature = torch.Tensor(knn.predict(positions))
-        node_output_x_square = node_feature ** 2
-        node_output_x_cube = node_feature ** 3
+        node_output_x = torch.Tensor(knn.predict(positions))
+        node_output_x_square = node_output_x ** 2
+        node_output_x_cube = node_output_x ** 3
 
         updated_table = torch.cat(
             (
