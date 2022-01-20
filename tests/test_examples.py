@@ -9,33 +9,18 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import os, json
+import os
 import pytest
 
+import subprocess
 
-@pytest.mark.parametrize("config_file", ["lsms/lsms.json"])
+
+@pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_config(config_file):
+def pytest_examples(example):
+    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+    file_path = os.path.join(path, example + ".py")
+    return_code = subprocess.call(["python", file_path])
 
-    config_file = os.path.join("examples", config_file)
-    config = {}
-    with open(config_file, "r") as f:
-        config = json.load(f)
-
-    expected = {
-        "Dataset": [
-            "name",
-            "path",
-            "format",
-            "num_nodes",
-            "node_features",
-            "graph_features",
-        ],
-        "NeuralNetwork": ["Architecture", "Variables_of_interest", "Training"],
-    }
-
-    for category in expected.keys():
-        assert category in config, "Missing required input category"
-
-        for input in category:
-            assert input in category, "Missing required input"
+    # Check the file ran without error.
+    assert return_code == 0
