@@ -7,6 +7,7 @@ from .distributed import (
     get_device_from_name,
     is_model_distributed,
     get_distributed_model,
+    setup_ddp,
 )
 from .model import (
     save_model,

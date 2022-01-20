@@ -47,6 +47,8 @@ jobs:
           git diff --exit-code
       - name: Run pytest
         run: |
+          # FIXME: install
+          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
           python -m pytest -rfEP -W error -W ignore::DeprecationWarning
           mpirun -n 2 python -m pytest -rfEP -W error -W ignore::DeprecationWarning --with-mpi

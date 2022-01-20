@@ -63,11 +63,7 @@ class SerializedDataLoader:
             _ = pickle.load(f)
             dataset = pickle.load(f)
 
-        compute_edges = RadiusGraph(
-            r=config["Architecture"]["radius"],
-            loop=False,
-            max_num_neighbors=config["Architecture"]["max_neighbours"],
-        )
+        compute_edges = get_radius_graph(config["Architecture"])
         compute_edge_lengths = Distance(norm=False, cat=True)
 
         dataset[:] = [compute_edges(data) for data in dataset]
@@ -86,7 +82,7 @@ class SerializedDataLoader:
         device = get_device(verbosity_level=self.verbosity)
         for data in dataset:
             data.to(device)
-            self.__update_predicted_values(
+            update_predicted_values(
                 config["Variables_of_interest"]["type"],
                 config["Variables_of_interest"]["output_index"],
                 data,
@@ -117,32 +113,6 @@ class SerializedDataLoader:
         """
         feature_indices = [i for i in atom_features]
         data.x = data.x[:, feature_indices]
-
-    def __update_predicted_values(self, type: list, index: list, data: Data):
-        """Updates values of the structure we want to predict. Predicted value is represented by integer value.
-        Parameters
-        ----------
-        type: "graph" level or "node" level
-        index: index/location in data.y for graph level and in data.x for node level
-        data: Data
-            A Data object representing a structure that has atoms.
-        """
-        output_feature = []
-        data.y_loc = torch.zeros(
-            1, len(type) + 1, dtype=torch.int64, device=data.y.device
-        )
-        for item in range(len(type)):
-            if type[item] == "graph":
-                feat_ = torch.reshape(data.y[index[item]], (1, 1))
-            elif type[item] == "node":
-                feat_ = torch.reshape(data.x[:, index[item]], (-1, 1))
-            else:
-                raise ValueError("Unknown output type", type[item])
-            output_feature.append(feat_)
-            data.y_loc[0, item + 1] = (
-                data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
-            )
-        data.y = torch.cat(output_feature, 0)
 
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
         """Given the dataset and the percentage of data you want to extract from it, method will
@@ -191,3 +161,34 @@ class SerializedDataLoader:
             subsample.append(dataset[index])
 
         return subsample
+
+
+def get_radius_graph(config):
+    return RadiusGraph(
+        r=config["radius"],
+        loop=False,
+        max_num_neighbors=config["max_neighbours"],
+    )
+
+
+def update_predicted_values(type: list, index: list, data: Data):
+    """Updates values of the structure we want to predict. Predicted value is represented by integer value.
+    Parameters
+    ----------
+    type: "graph" level or "node" level
+    index: index/location in data.y for graph level and in data.x for node level
+    data: Data
+        A Data object representing a structure that has atoms.
+    """
+    output_feature = []
+    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.y.device)
+    for item in range(len(type)):
+        if type[item] == "graph":
+            feat_ = torch.reshape(data.y[index[item]], (1, 1))
+        elif type[item] == "node":
+            feat_ = torch.reshape(data.x[:, index[item]], (-1, 1))
+        else:
+            raise ValueError("Unknown output type", type[item])
+        output_feature.append(feat_)
+        data.y_loc[0, item + 1] = data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
+    data.y = torch.cat(output_feature, 0)
