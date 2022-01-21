@@ -120,7 +120,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         predicted_values,
     ) = hydragnn.run_prediction(config)
 
-    # Set RMSE and sample avg/max error thresholds
+    # Set RMSE and sample MAE/max error thresholds
     thresholds = {
         "PNA": [0.20, 0.20, 0.75],
         "MFC": [0.20, 0.20, 0.99],
@@ -145,34 +145,27 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
             error_head_rmse < thresholds[model_type][0]
         ), "Head RMSE checking failed for " + str(ihead)
 
-        head_true = true_values[ihead]
-        head_pred = predicted_values[ihead]
+        head_true = torch.tensor(true_values[ihead])
+        head_pred = torch.tensor(predicted_values[ihead])
         # Check individual samples
-        sample_error_sum = 0.0
-        sample_error_max = 0.0
-        for true_value, predicted_value in zip(head_true, head_pred):
-            for idim in range(len(true_value)):
-                sample_error = abs(true_value[idim] - predicted_value[idim])
-                sample_error_sum += sample_error
-                if sample_error > sample_error_max:
-                    sample_error_max = sample_error
-        num_samples = len(head_pred) * len(true_value)
-        sample_error_avg = sample_error_sum / num_samples
+        mae = torch.nn.L1Loss()
+        sample_mean_abs_error = mae(head_true, head_pred)
+        sample_max_abs_error = torch.max(torch.abs(head_true - head_pred))
         error_str = (
-            "{:.6f}".format(sample_error_avg)
+            "{:.6f}".format(sample_mean_abs_error)
             + " < "
             + str(thresholds[model_type][1])
             + " / "
-            + "{:.6f}".format(sample_error_max)
+            + "{:.6f}".format(sample_max_abs_error)
             + " < "
             + str(thresholds[model_type][2])
         )
-        hydragnn.utils.print_distributed(verbosity, "samples avg/max: " + error_str)
+        hydragnn.utils.print_distributed(verbosity, "samples MAE/max: " + error_str)
         assert (
-            sample_error_avg < thresholds[model_type][1]
-        ), "Avg. sample checking failed!"
+            sample_mean_abs_error < thresholds[model_type][1]
+        ), "MAE sample checking failed!"
         assert (
-            sample_error_max < thresholds[model_type][2]
+            sample_max_abs_error < thresholds[model_type][2]
         ), "Max. sample checking failed!"
 
     # Check RMSE error
