@@ -120,15 +120,17 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         predicted_values,
     ) = hydragnn.run_prediction(config)
 
-    # Set RMSE and sample error thresholds
+    # Set RMSE and sample MAE/max error thresholds
     thresholds = {
-        "PNA": [0.10, 0.25],
-        "MFC": [0.10, 0.50],
-        "GIN": [0.15, 0.90],
-        "GAT": [0.80, 0.95],
-        # fixme: error for cgcnn will be reduced after edge attributes being implemented
-        "CGCNN": [0.30, 0.95],
+        "PNA": [0.20, 0.20, 0.75],
+        "MFC": [0.20, 0.20, 0.99],
+        "GIN": [0.25, 0.20, 0.75],
+        "GAT": [0.60, 0.70, 0.99],
+        "CGCNN": [0.50, 0.20, 0.95],
     }
+    if use_lengths:
+        thresholds["CGCNN"] = [0.10, 0.10, 0.30]
+        thresholds["PNA"] = [0.10, 0.10, 0.40]
     verbosity = 2
 
     for ihead in range(len(true_values)):
@@ -141,34 +143,30 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         hydragnn.utils.print_distributed(verbosity, "head: " + error_str)
         assert (
             error_head_rmse < thresholds[model_type][0]
-        ), "RMSE checking failed for components of head " + str(ihead)
+        ), "Head RMSE checking failed for " + str(ihead)
 
-        head_true = true_values[ihead]
-        head_pred = predicted_values[ihead]
+        head_true = torch.tensor(true_values[ihead])
+        head_pred = torch.tensor(predicted_values[ihead])
         # Check individual samples
-        sample_error_sum = 0.0
-        sample_error_min = 1.0
-        sample_error_max = 0.0
-        for true_value, predicted_value in zip(head_true, head_pred):
-            for idim in range(len(true_value)):
-                sample_error = abs(true_value[idim] - predicted_value[idim])
-                sample_error_sum += sample_error
-                if sample_error < sample_error_min:
-                    sample_error_min = sample_error
-                if sample_error > sample_error_max:
-                    sample_error_max = sample_error
-        num_samples = len(head_pred) * len(true_value)
+        mae = torch.nn.L1Loss()
+        sample_mean_abs_error = mae(head_true, head_pred)
+        sample_max_abs_error = torch.max(torch.abs(head_true - head_pred))
         error_str = (
-            "{:.6f}".format(sample_error_sum / num_samples)
-            + " / "
-            + "{:.6f}".format(sample_error_min)
-            + " / "
-            + "{:.6f}".format(sample_error_max)
+            "{:.6f}".format(sample_mean_abs_error)
             + " < "
             + str(thresholds[model_type][1])
+            + " / "
+            + "{:.6f}".format(sample_max_abs_error)
+            + " < "
+            + str(thresholds[model_type][2])
         )
-        hydragnn.utils.print_distributed(verbosity, "samples avg/min/max: " + error_str)
-        assert sample_error_max < thresholds[model_type][1], "Samples checking failed!"
+        hydragnn.utils.print_distributed(verbosity, "samples MAE/max: " + error_str)
+        assert (
+            sample_mean_abs_error < thresholds[model_type][1]
+        ), "MAE sample checking failed!"
+        assert (
+            sample_max_abs_error < thresholds[model_type][2]
+        ), "Max. sample checking failed!"
 
     # Check RMSE error
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
