@@ -21,6 +21,10 @@ from .dataset_descriptors import AtomFeatures
 from hydragnn.preprocess import get_radius_graph_config
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.preprocess.utils import (
+    get_radius_graph_config,
+    get_radius_graph_pbc_config,
+)
 
 
 class SerializedDataLoader:
@@ -65,14 +69,26 @@ class SerializedDataLoader:
             dataset = pickle.load(f)
 
         rotational_invariance = NormalizeRotation(max_points=-1, sort=False)
-        compute_edges = get_radius_graph_config(config["NeuralNetwork"]["Architecture"])
-        compute_edge_lengths = Distance(norm=False, cat=True)
-
         if config["Dataset"]["rotational_invariance"]:
             dataset[:] = [rotational_invariance(data) for data in dataset]
 
+        if config["NeuralNetwork"]["Architecture"]["periodic_boundary_conditions"]:
+            # edge lengths already added manually if using PBC, so no need to call Distance.
+            compute_edges = get_radius_graph_pbc_config(
+                config["NeuralNetwork"]["Architecture"]
+            )
+        else:
+            compute_edges = get_radius_graph_config(
+                config["NeuralNetwork"]["Architecture"]
+            )
+            compute_edge_lengths = Distance(norm=False, cat=True)
+
         dataset[:] = [compute_edges(data) for data in dataset]
-        dataset[:] = [compute_edge_lengths(data) for data in dataset]
+
+        # edge lengths already added manually if using PBC.
+        if not config["NeuralNetwork"]["Architecture"]["periodic_boundary_conditions"]:
+            compute_edge_lengths = Distance(norm=False, cat=True)
+            dataset[:] = [compute_edge_lengths(data) for data in dataset]
 
         max_edge_length = torch.Tensor([float("-inf")])
 
