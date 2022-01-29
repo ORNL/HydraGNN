@@ -86,11 +86,21 @@ def logging_init(prefix, rank):
     logging.basicConfig(level=logging.DEBUG, format=fmt, handlers=handlers)
 
 
-def log(*args, logtype="debug", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
+"""
+uage: info (str1, str2, ...). Use just like print. "[rank:INFO]" will be prefixed.
+"""
 
 
 def info(*args, logtype="info", sep=" "):
+    getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+"""
+uage: log (str1, str2, ...). Use just like print. "[rank:DEBUG]" will be prefixed.
+"""
+
+
+def log(*args, logtype="debug", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
