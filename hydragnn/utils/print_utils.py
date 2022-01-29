@@ -13,6 +13,10 @@ from tqdm import tqdm
 
 import torch.distributed as dist
 
+import logging
+from pathlib import Path
+from datetime import datetime
+
 
 def print_nothing(*args, **kwargs):
     pass
@@ -21,17 +25,17 @@ def print_nothing(*args, **kwargs):
 def print_master(*args, **kwargs):
 
     if not dist.is_initialized():
-        print(*args, **kwargs)
+        info(*args, **kwargs)
 
     else:
         world_rank = dist.get_rank()
         if 0 == world_rank:
-            print(*args, **kwargs)
+            info(*args, **kwargs)
 
 
 def print_all_processes(*args, **kwargs):
 
-    print(*args, **kwargs)
+    info(*args, **kwargs)
 
 
 """
@@ -63,3 +67,32 @@ def iterate_tqdm(iterator, verbosity_level):
         return tqdm(iterator)
     else:
         return iterator
+
+
+"""
+Setup logging to print messages for both screen and file.
+"""
+
+
+def logging_init(prefix, rank):
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+
+    fmt = "[%d:%%(levelname)s] %%(message)s" % (rank)
+    handlers = [logging.StreamHandler()]
+    Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
+    # suffix = datetime.now().strftime("%Y%m%d-%H%M%S")
+    fname = "./logs/%s/run.log" % (prefix)
+    handlers.append(logging.FileHandler(fname))
+    logging.basicConfig(level=logging.DEBUG, format=fmt, handlers=handlers)
+
+
+def log(*args, logtype="debug", sep=" "):
+    getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+def info(*args, logtype="info", sep=" "):
+    getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+def debug(*args, logtype="debug", sep=" "):
+    getattr(logging, logtype)(sep.join(map(str, args)))

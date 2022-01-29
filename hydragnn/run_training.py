@@ -26,7 +26,7 @@ from hydragnn.utils.model import (
     get_summary_writer,
     load_existing_model_config,
 )
-from hydragnn.utils.print_utils import print_distributed
+from hydragnn.utils.print_utils import print_distributed, logging_init, log, info
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config,
@@ -59,6 +59,9 @@ def _(config: dict):
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     world_size, world_rank = setup_ddp()
+
+    prefix = get_log_name_config(config)
+    logging_init(prefix, world_rank)
 
     verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
