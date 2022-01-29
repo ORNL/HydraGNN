@@ -26,7 +26,7 @@ from hydragnn.utils.model import (
     get_summary_writer,
     load_existing_model_config,
 )
-from hydragnn.utils.print_utils import print_distributed, logging_init, log, info
+from hydragnn.utils.print_utils import print_distributed, logging_init
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config,
