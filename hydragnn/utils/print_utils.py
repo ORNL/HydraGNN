@@ -25,17 +25,17 @@ def print_nothing(*args, **kwargs):
 def print_master(*args, **kwargs):
 
     if not dist.is_initialized():
-        info(*args, **kwargs)
+        LOG(*args, **kwargs)
 
     else:
         world_rank = dist.get_rank()
         if 0 == world_rank:
-            info(*args, **kwargs)
+            LOG(*args, **kwargs)
 
 
 def print_all_processes(*args, **kwargs):
 
-    info(*args, **kwargs)
+    LOG(*args, **kwargs)
 
 
 """
@@ -92,7 +92,7 @@ uage: info (str1, str2, ...). Use just like print. "[rank:INFO]" will be prefixe
 """
 
 
-def info(*args, logtype="info", sep=" "):
+def LOG(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
@@ -101,9 +101,5 @@ uage: log (str1, str2, ...). Use just like print. "[rank:DEBUG]" will be prefixe
 """
 
 
-def log(*args, logtype="debug", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def debug(*args, logtype="debug", sep=" "):
+def DEBUG(*args, logtype="debug", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
