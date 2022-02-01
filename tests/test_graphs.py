@@ -123,10 +123,10 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     # Set RMSE and sample MAE/max error thresholds
     thresholds = {
         "PNA": [0.20, 0.20, 0.75],
-        "MFC": [0.20, 0.20, 0.99],
+        "MFC": [0.20, 0.20, 1.5],
         "GIN": [0.25, 0.20, 0.75],
         "GAT": [0.60, 0.70, 0.99],
-        "CGCNN": [0.50, 0.20, 0.95],
+        "CGCNN": [0.50, 0.40, 0.95],
     }
     if use_lengths:
         thresholds["CGCNN"] = [0.10, 0.10, 0.30]
