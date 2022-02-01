@@ -74,7 +74,7 @@ Setup logging to print messages for both screen and file.
 """
 
 
-def logging_init(prefix, rank):
+def setup_log(prefix, rank):
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
 
     fmt = "[%d:%%(levelname)s] %%(message)s" % (rank)
