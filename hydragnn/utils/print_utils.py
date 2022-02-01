@@ -88,7 +88,7 @@ def setup_log(prefix, rank):
 
 
 """
-uage: info (str1, str2, ...). Use just like print. "[rank:INFO]" will be prefixed.
+uage: LOG(str1, str2, ...). Use just like print. "[rank:INFO]" will be prefixed.
 """
 
 
@@ -97,7 +97,7 @@ def LOG(*args, logtype="info", sep=" "):
 
 
 """
-uage: log (str1, str2, ...). Use just like print. "[rank:DEBUG]" will be prefixed.
+uage: DEBUG(str1, str2, ...). Use just like print. "[rank:DEBUG]" will be prefixed.
 """
 
 
