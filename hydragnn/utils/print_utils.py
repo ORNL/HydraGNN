@@ -82,7 +82,8 @@ def logging_init(prefix, rank):
     Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
     # suffix = datetime.now().strftime("%Y%m%d-%H%M%S")
     fname = "./logs/%s/run.log" % (prefix)
-    handlers.append(logging.FileHandler(fname))
+    handlers.append(logging.FileHandler(fname, delay=True))
+
     logging.basicConfig(level=logging.DEBUG, format=fmt, handlers=handlers)
 
 
