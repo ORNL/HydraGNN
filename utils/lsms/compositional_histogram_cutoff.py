@@ -1,48 +1,63 @@
-import scipy.special
-import math
 import os
 import shutil
-import pandas
 import numpy as np
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
-def compositional_cutoff_histogram(path_to_dir, elements_list, histogram_cutoff=1000):
-
-    new_dataset_path = path_to_dir[:-1] + "_histogram_cutoff/"
-
-    if os.path.exists(new_dataset_path):
-        shutil.rmtree(new_dataset_path)
-    os.makedirs(new_dataset_path)
-
-    element_counter = dict()
-    composition_counter = dict()
-
-    for filename in os.listdir(path_to_dir):
-
-        for atom_type in elements_list:
-            element_counter[atom_type] = 0
-
-        df = pandas.read_csv(path_to_dir + filename, header=None, skiprows=1)
-        num_atoms = df.shape[0]
-        for atom_index in range(0, num_atoms):
-            row = df[0][atom_index].split()
-            atom_type_str = row[0]
-            element_counter[atom_type_str] += 1
-
-        if element_counter[elements_list[0]] in composition_counter:
-            composition_counter[element_counter[elements_list[0]]] = (
-                composition_counter[element_counter[elements_list[0]]] + 1
-            )
-        else:
-            composition_counter[element_counter[elements_list[0]]] = 1
-
-        if composition_counter[element_counter[elements_list[0]]] <= histogram_cutoff:
-            df = pandas.read_csv(path_to_dir + filename, header=None)
-            df.to_csv(new_dataset_path + filename, header=None, index=None)
+def find_bin(comp, nbins):
+    bins = np.linspace(0, 1, nbins)
+    for bi in range(len(bins) - 1):
+        if comp > bins[bi] and comp < bins[bi + 1]:
+            return bi
+    return nbins - 1
 
 
-if __name__ == "__main__":
-    compositional_cutoff_histogram(
-        "./FePt/", elements_list=["26", "78"], histogram_cutoff=1000
-    )
+def compositional_histogram_cutoff(
+    dir,
+    elements_list,
+    histogram_cutoff,
+    num_bins,
+    overwrite_data=False,
+    create_plots=True,
+):
+
+    if dir.endswith("/"):
+        dir = dir[:-1]
+    new_dir = dir + "_histogram_cutoff/"
+
+    if os.path.exists(new_dir):
+        if overwrite_data:
+            shutil.rmtree(new_dir)
+    if not os.path.exists(new_dir):
+        os.makedirs(new_dir)
+
+    comp_final = []
+    comp_all = np.zeros([num_bins])
+    for filename in tqdm(os.listdir(dir)):
+
+        path = os.path.join(dir, filename)
+        # This is LSMS specific - it assumes only one header line and only atoms following.
+        atoms = np.loadtxt(path, skiprows=1)
+
+        elements, counts = np.unique(atoms[:, 0], return_counts=True)
+        num_atoms = atoms.shape[0]
+        # This will result in composition of 1.0 for any pure element.
+        composition = counts[0] / num_atoms
+
+        b = find_bin(composition, num_bins)
+        comp_all[b] += 1
+        if comp_all[b] < histogram_cutoff:
+            comp_final.append(composition)
+            new_path = os.path.join(new_dir, filename)
+            os.symlink(path, new_path)
+
+    if create_plots:
+        plt.figure(0)
+        plt.hist(comp_final, bins=num_bins)
+        plt.savefig("composition_histogram_cutoff.png")
+
+        plt.figure(1)
+        w = 1 / num_bins
+        plt.bar(np.linspace(0, 1, num_bins), comp_all, width=w)
+        plt.savefig("composition_initial.png")
