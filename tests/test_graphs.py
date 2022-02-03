@@ -129,7 +129,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         "CGCNN": [0.50, 0.40, 0.95],
     }
     if use_lengths:
-        thresholds["CGCNN"] = [0.10, 0.10, 0.30]
+        thresholds["CGCNN"] = [0.10, 0.10, 0.40]
         thresholds["PNA"] = [0.10, 0.10, 0.40]
     verbosity = 2
 
