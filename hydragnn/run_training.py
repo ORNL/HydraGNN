@@ -37,12 +37,12 @@ from hydragnn.train.train_validate_test import train_validate_test
 
 
 @singledispatch
-def run_training(config):
+def run_training(config, log_name=None):
     raise TypeError("Input must be filename string or configuration dictionary.")
 
 
 @run_training.register
-def _(config_file: str):
+def _(config_file: str, log_name=None):
 
     with open(config_file, "r") as f:
         config = json.load(f)
@@ -51,7 +51,7 @@ def _(config_file: str):
 
 
 @run_training.register
-def _(config: dict):
+def _(config: dict, log_name=None):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
@@ -79,7 +79,8 @@ def _(config: dict):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    log_name = get_log_name_config(config)
+    if log_name is None:
+        log_name = get_log_name_config(config)
     writer = get_summary_writer(log_name)
 
     if dist.is_initialized():
