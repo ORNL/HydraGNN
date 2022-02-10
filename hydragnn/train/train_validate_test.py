@@ -200,12 +200,10 @@ def get_head_indices(model, data):
 
 
 def train(
-    loader,
-    model,
-    opt,
-    verbosity,
-    profiler=Profiler(),
+    loader, model, opt, verbosity, profiler=None,
 ):
+    if profiler is None:
+        profiler = Profiler()
     tasks_error = np.zeros(model.num_heads)
 
     model.train()
