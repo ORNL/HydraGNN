@@ -82,7 +82,7 @@ def setup_log(prefix):
 
 def log(*args, sep=" ", rank=None):
     """
-    Helper function to print/log messages. 
+    Helper function to print/log messages.
     rank parameter is to limit which rank should print. if rank is None, all processes print.
     """
     if rank is None:

@@ -200,7 +200,11 @@ def get_head_indices(model, data):
 
 
 def train(
-    loader, model, opt, verbosity, profiler=None,
+    loader,
+    model,
+    opt,
+    verbosity,
+    profiler=None,
 ):
     if profiler is None:
         profiler = Profiler()
