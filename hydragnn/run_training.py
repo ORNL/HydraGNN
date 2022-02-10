@@ -58,8 +58,8 @@ def _(config: dict):
     except:
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
+    setup_log(get_log_name_config(config))
     world_size, world_rank = setup_ddp()
-    setup_log(get_log_name_config(config), world_size)
 
     verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
