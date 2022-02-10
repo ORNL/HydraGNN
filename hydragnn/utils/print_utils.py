@@ -18,26 +18,6 @@ from pathlib import Path
 from datetime import datetime
 
 
-def print_nothing(*args, **kwargs):
-    pass
-
-
-def print_master(*args, **kwargs):
-
-    if not dist.is_initialized():
-        LOG(*args, **kwargs)
-
-    else:
-        world_rank = dist.get_rank()
-        if 0 == world_rank:
-            LOG(*args, **kwargs)
-
-
-def print_all_processes(*args, **kwargs):
-
-    LOG(*args, **kwargs)
-
-
 """
 Verbosity options for printing
 0 - > nothing
@@ -46,6 +26,19 @@ Verbosity options for printing
 3 -> all MPI processes print the basic
 4 -> all MPI processes print the basic, , progression bars included
 """
+
+
+def print_nothing(*args):
+    pass
+
+
+def print_master(*args):
+    log(*args, rank=0)
+
+
+def print_all_processes(*args):
+    log(*args)
+
 
 switcher = {
     0: print_nothing,
@@ -56,10 +49,9 @@ switcher = {
 }
 
 
-def print_distributed(verbosity_level, *args, **kwargs):
-
+def print_distributed(verbosity_level, *args):
     print_verbose = switcher.get(verbosity_level)
-    return print_verbose(*args, **kwargs)
+    return print_verbose(*args)
 
 
 def iterate_tqdm(iterator, verbosity_level):
@@ -69,37 +61,36 @@ def iterate_tqdm(iterator, verbosity_level):
         return iterator
 
 
-"""
-Setup logging to print messages for both screen and file.
-"""
+def setup_log(prefix):
+    """
+    Setup logging to print messages for both screen and file.
+    """
+    from .distributed import init_comm_size_and_rank
 
+    world_size, world_rank = init_comm_size_and_rank()
 
-def setup_log(prefix, rank):
-    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    fmt = "%d: %%(message)s" % (world_rank)
 
-    fmt = "[%d:%%(levelname)s] %%(message)s" % (rank)
     handlers = [logging.StreamHandler()]
     Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
-    # suffix = datetime.now().strftime("%Y%m%d-%H%M%S")
     fname = "./logs/%s/run.log" % (prefix)
     handlers.append(logging.FileHandler(fname, delay=True))
 
-    logging.basicConfig(level=logging.DEBUG, format=fmt, handlers=handlers)
+    logging.basicConfig(level=logging.NOTSET, format=fmt, handlers=handlers, force=True)
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("torch").setLevel(logging.WARNING)
 
 
-"""
-uage: LOG(str1, str2, ...). Use just like print. "[rank:INFO]" will be prefixed.
-"""
+def log(*args, sep=" ", rank=None):
+    """
+    Helper function to print/log messages. 
+    rank parameter is to limit which rank should print. if rank is None, all processes print.
+    """
+    if rank is None:
+        logging.info(sep.join(map(str, args)))
+    else:
+        from .distributed import init_comm_size_and_rank
 
-
-def LOG(*args, logtype="info", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-"""
-uage: DEBUG(str1, str2, ...). Use just like print. "[rank:DEBUG]" will be prefixed.
-"""
-
-
-def DEBUG(*args, logtype="debug", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
+        world_size, world_rank = init_comm_size_and_rank()
+        if rank == world_rank:
+            logging.info(sep.join(map(str, args)))
