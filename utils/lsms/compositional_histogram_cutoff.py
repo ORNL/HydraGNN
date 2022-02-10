@@ -41,8 +41,14 @@ def compositional_histogram_cutoff(
         atoms = np.loadtxt(path, skiprows=1)
 
         elements, counts = np.unique(atoms[:, 0], return_counts=True)
+
+        # Fixup for the pure component cases.
+        for e, elem in enumerate(elements_list):
+            if elem not in elements:
+                elements = np.insert(elements, e, elem)
+                counts = np.insert(counts, e, 0)
+
         num_atoms = atoms.shape[0]
-        # This will result in composition of 1.0 for any pure element.
         composition = counts[0] / num_atoms
 
         b = find_bin(composition, num_bins)
