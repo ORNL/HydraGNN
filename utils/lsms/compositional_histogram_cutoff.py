@@ -21,6 +21,9 @@ def compositional_histogram_cutoff(
     overwrite_data=False,
     create_plots=True,
 ):
+    """
+    Downselect LSMS data with maximum number of samples per binary composition.
+    """
 
     if dir.endswith("/"):
         dir = dir[:-1]
