@@ -29,6 +29,9 @@ def compositional_histogram_cutoff(
     if os.path.exists(new_dir):
         if overwrite_data:
             shutil.rmtree(new_dir)
+        else:
+            print("Exiting: path to histogram cutoff data already exists")
+            return
     if not os.path.exists(new_dir):
         os.makedirs(new_dir)
 
