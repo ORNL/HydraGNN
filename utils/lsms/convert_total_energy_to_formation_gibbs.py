@@ -18,6 +18,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
+# This is LSMS specific - it assumes only one header line and only atoms following.
 def read_file(path):
     with open(path, "r") as rf:
         txt = rf.readlines()
@@ -27,7 +28,7 @@ def read_file(path):
 
 
 def convert_raw_data_energy_to_gibbs(
-    dir, elements_list, temperature_kelvin=0, create_plots=False
+    dir, elements_list, temperature_kelvin=0, overwrite_data=False, create_plots=True
 ):
     # NOTE: This works only for binary alloys
 
@@ -36,8 +37,10 @@ def convert_raw_data_energy_to_gibbs(
     new_dir = dir + "_gibbs_energy/"
 
     if os.path.exists(new_dir):
-        shutil.rmtree(new_dir)
-    os.makedirs(new_dir)
+        if overwrite_data:
+            shutil.rmtree(new_dir)
+    if not os.path.exists(new_dir):
+        os.makedirs(new_dir)
 
     elements_list = sorted(elements_list)
     pure_elements_energy = dict()
