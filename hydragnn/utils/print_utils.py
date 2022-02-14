@@ -69,15 +69,21 @@ def setup_log(prefix):
     world_size, world_rank = init_comm_size_and_rank()
 
     fmt = "%d: %%(message)s" % (world_rank)
+    logFormatter = logging.Formatter(fmt)
 
-    handlers = [logging.StreamHandler()]
+    logger = logging.getLogger("hydragnn")
+    logger.setLevel(logging.DEBUG)
+
     Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
     fname = "./logs/%s/run.log" % (prefix)
-    handlers.append(logging.FileHandler(fname, delay=True))
+    fileHandler = logging.FileHandler(fname)
 
-    logging.basicConfig(level=logging.NOTSET, format=fmt, handlers=handlers, force=True)
-    logging.getLogger("matplotlib").setLevel(logging.WARNING)
-    logging.getLogger("torch").setLevel(logging.WARNING)
+    fileHandler.setFormatter(logFormatter)
+    logger.addHandler(fileHandler)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    logger.addHandler(consoleHandler)
 
 
 def log(*args, sep=" ", rank=None):
@@ -85,11 +91,13 @@ def log(*args, sep=" ", rank=None):
     Helper function to print/log messages.
     rank parameter is to limit which rank should print. if rank is None, all processes print.
     """
+    logger = logging.getLogger("hydragnn")
+
     if rank is None:
-        logging.info(sep.join(map(str, args)))
+        logger.info(sep.join(map(str, args)))
     else:
         from .distributed import init_comm_size_and_rank
 
         world_size, world_rank = init_comm_size_and_rank()
         if rank == world_rank:
-            logging.info(sep.join(map(str, args)))
+            logger.info(sep.join(map(str, args)))

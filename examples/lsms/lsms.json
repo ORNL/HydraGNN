@@ -48,7 +48,7 @@
             "denormalize_output": true
         },
         "Training": {
-            "num_epoch": 20,
+            "num_epoch": 2,
             "perc_train": 0.7,
             "learning_rate": 1e-3,
             "batch_size": 64,
