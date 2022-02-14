@@ -139,11 +139,11 @@ def setup_ddp():
             ifname = find_ifname(master_addr)
             os.environ["GLOO_SOCKET_IFNAME"] = ifname
 
-        if world_rank == 0:
-            print(
-                "Distributed data parallel: %s master at %s:%s"
-                % (backend, master_addr, master_port)
-            )
+        print_distributed(
+            1,
+            "Distributed data parallel: %s master at %s:%s"
+            % (backend, master_addr, master_port),
+        )
 
         if not dist.is_initialized():
             dist.init_process_group(

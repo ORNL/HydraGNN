@@ -49,6 +49,10 @@ var_config = config["NeuralNetwork"]["Variables_of_interest"]
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
+log_name = "md17_test"
+# Enable print to log file.
+hydragnn.utils.setup_log(log_name)
+
 # Use built-in torch_geometric dataset.
 # Filter function above used to run quick example.
 # NOTE: data is moved to the device in the pre-transform.
@@ -87,7 +91,6 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 )
 
 # Run training with the given model and qm9 dataset.
-log_name = "md17_test"
 writer = hydragnn.utils.get_summary_writer(log_name)
 with open("./logs/" + log_name + "/config.json", "w") as f:
     json.dump(config, f)
