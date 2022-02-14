@@ -26,7 +26,7 @@ from hydragnn.utils.model import (
     get_summary_writer,
     load_existing_model_config,
 )
-from hydragnn.utils.print_utils import print_distributed
+from hydragnn.utils.print_utils import print_distributed, setup_log
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config,
@@ -58,6 +58,7 @@ def _(config: dict):
     except:
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
+    setup_log(get_log_name_config(config))
     world_size, world_rank = setup_ddp()
 
     verbosity = config["Verbosity"]["level"]

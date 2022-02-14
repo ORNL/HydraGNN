@@ -13,25 +13,8 @@ from tqdm import tqdm
 
 import torch.distributed as dist
 
-
-def print_nothing(*args, **kwargs):
-    pass
-
-
-def print_master(*args, **kwargs):
-
-    if not dist.is_initialized():
-        print(*args, **kwargs)
-
-    else:
-        world_rank = dist.get_rank()
-        if 0 == world_rank:
-            print(*args, **kwargs)
-
-
-def print_all_processes(*args, **kwargs):
-
-    print(*args, **kwargs)
+import logging
+from pathlib import Path
 
 
 """
@@ -43,6 +26,19 @@ Verbosity options for printing
 4 -> all MPI processes print the basic, , progression bars included
 """
 
+
+def print_nothing(*args):
+    pass
+
+
+def print_master(*args):
+    log(*args, rank=0)
+
+
+def print_all_processes(*args):
+    log(*args)
+
+
 switcher = {
     0: print_nothing,
     1: print_master,
@@ -52,10 +48,9 @@ switcher = {
 }
 
 
-def print_distributed(verbosity_level, *args, **kwargs):
-
+def print_distributed(verbosity_level, *args):
     print_verbose = switcher.get(verbosity_level)
-    return print_verbose(*args, **kwargs)
+    return print_verbose(*args)
 
 
 def iterate_tqdm(iterator, verbosity_level):
@@ -63,3 +58,46 @@ def iterate_tqdm(iterator, verbosity_level):
         return tqdm(iterator)
     else:
         return iterator
+
+
+def setup_log(prefix):
+    """
+    Setup logging to print messages for both screen and file.
+    """
+    from .distributed import init_comm_size_and_rank
+
+    world_size, world_rank = init_comm_size_and_rank()
+
+    fmt = "%d: %%(message)s" % (world_rank)
+    logFormatter = logging.Formatter(fmt)
+
+    logger = logging.getLogger("hydragnn")
+    logger.setLevel(logging.DEBUG)
+
+    Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
+    fname = "./logs/%s/run.log" % (prefix)
+    fileHandler = logging.FileHandler(fname)
+
+    fileHandler.setFormatter(logFormatter)
+    logger.addHandler(fileHandler)
+
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logFormatter)
+    logger.addHandler(consoleHandler)
+
+
+def log(*args, sep=" ", rank=None):
+    """
+    Helper function to print/log messages.
+    rank parameter is to limit which rank should print. if rank is None, all processes print.
+    """
+    logger = logging.getLogger("hydragnn")
+
+    if rank is None:
+        logger.info(sep.join(map(str, args)))
+    else:
+        from .distributed import init_comm_size_and_rank
+
+        world_size, world_rank = init_comm_size_and_rank()
+        if rank == world_rank:
+            logger.info(sep.join(map(str, args)))

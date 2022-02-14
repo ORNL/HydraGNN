@@ -207,8 +207,10 @@ def train(
     model,
     opt,
     verbosity,
-    profiler=Profiler(),
+    profiler=None,
 ):
+    if profiler is None:
+        profiler = Profiler()
     tasks_error = np.zeros(model.num_heads)
 
     model.train()

@@ -1,4 +1,4 @@
-from .print_utils import print_distributed, iterate_tqdm
+from .print_utils import print_distributed, iterate_tqdm, setup_log
 from .distributed import (
     get_comm_size_and_rank,
     get_device_list,
