@@ -123,7 +123,7 @@ def load_train_val_test_sets(config):
         loader = SerializedDataLoader(config["Verbosity"]["level"])
         dataset = loader.load_serialized_data(
             dataset_path=files_dir,
-            config=config["NeuralNetwork"],
+            config=config,
         )
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
