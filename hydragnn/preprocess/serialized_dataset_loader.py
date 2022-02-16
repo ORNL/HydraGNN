@@ -63,7 +63,7 @@ class SerializedDataLoader:
             _ = pickle.load(f)
             dataset = pickle.load(f)
 
-        compute_edges = get_radius_graph(config["Architecture"])
+        compute_edges = get_radius_graph(config["NeuralNetwork"]["Architecture"])
         compute_edge_lengths = Distance(norm=False, cat=True)
 
         dataset[:] = [compute_edges(data) for data in dataset]
@@ -83,18 +83,22 @@ class SerializedDataLoader:
         for data in dataset:
             data.to(device)
             update_predicted_values(
-                config["Variables_of_interest"]["type"],
-                config["Variables_of_interest"]["output_index"],
+                config["NeuralNetwork"]["Variables_of_interest"]["type"],
+                config["NeuralNetwork"]["Variables_of_interest"]["output_index"],
                 data,
             )
             self.__update_atom_features(
-                config["Variables_of_interest"]["input_node_features"], data
+                config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"],
+                data,
             )
 
-        if "subsample_percentage" in config["Variables_of_interest"].keys():
+        if (
+            "subsample_percentage"
+            in config["NeuralNetwork"]["Variables_of_interest"].keys()
+        ):
             return self.__stratified_sampling(
                 dataset=dataset,
-                subsample_percentage=config["Variables_of_interest"][
+                subsample_percentage=config["NeuralNetwork"]["Variables_of_interest"][
                     "subsample_percentage"
                 ],
             )
