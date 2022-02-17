@@ -18,6 +18,7 @@ import torch.distributed as dist
 from .print_utils import print_distributed
 
 import psutil
+import socket
 
 
 def find_ifname(myaddr):
@@ -26,10 +27,11 @@ def find_ifname(myaddr):
     Usage example:
         find_ifname("127.0.0.1") will return a network interface name, such as "lo". "lo0", etc.
     """
+    _ipaddr = socket.gethostbyname(myaddr)
     ifname = None
     for nic, addrs in psutil.net_if_addrs().items():
         for addr in addrs:
-            if addr.address == myaddr:
+            if addr.address == _ipaddr:
                 ifname = nic
                 break
         if ifname is not None:
@@ -137,7 +139,8 @@ def setup_ddp():
 
         if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
             ifname = find_ifname(master_addr)
-            os.environ["GLOO_SOCKET_IFNAME"] = ifname
+            if ifname is not None:
+                os.environ["GLOO_SOCKET_IFNAME"] = ifname
 
         print_distributed(
             1,
