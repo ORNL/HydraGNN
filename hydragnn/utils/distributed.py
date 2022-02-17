@@ -27,11 +27,11 @@ def find_ifname(myaddr):
     Usage example:
         find_ifname("127.0.0.1") will return a network interface name, such as "lo". "lo0", etc.
     """
-    _ipaddr = socket.gethostbyname(myaddr)
+    ipaddr = socket.gethostbyname(myaddr)
     ifname = None
     for nic, addrs in psutil.net_if_addrs().items():
         for addr in addrs:
-            if addr.address == _ipaddr:
+            if addr.address == ipaddr:
                 ifname = nic
                 break
         if ifname is not None:
