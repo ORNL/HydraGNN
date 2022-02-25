@@ -6,6 +6,7 @@
         "name": "unit_test_multihead",
         "format": "unit_test",
         "compositional_stratified_splitting": true,
+        "rotational_invariance": false,
         "path": {
             "total": "dataset/unit_test_multihead"
         },

@@ -15,7 +15,7 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance
+from torch_geometric.transforms import RadiusGraph, Distance, NormalizeRotation
 
 from .dataset_descriptors import AtomFeatures
 from hydragnn.utils.distributed import get_device
@@ -63,8 +63,12 @@ class SerializedDataLoader:
             _ = pickle.load(f)
             dataset = pickle.load(f)
 
+        rotational_invariance = NormalizeRotation(max_points=-1, sort=False)
         compute_edges = get_radius_graph(config["NeuralNetwork"]["Architecture"])
         compute_edge_lengths = Distance(norm=False, cat=True)
+
+        if config["Dataset"]["rotational_invariance"]:
+            dataset[:] = [rotational_invariance(data) for data in dataset]
 
         dataset[:] = [compute_edges(data) for data in dataset]
         dataset[:] = [compute_edge_lengths(data) for data in dataset]

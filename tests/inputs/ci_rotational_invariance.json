@@ -1,0 +1,6 @@
+{
+    "Architecture": {
+        "radius": 7.0,
+        "max_neighbours": 100000
+    }
+}
