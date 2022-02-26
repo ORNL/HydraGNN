@@ -48,6 +48,22 @@ def check_data_samples_equivalence(data1, data2, tol):
     return x_bool and pos_bool and y_bool and edge_bool
 
 
+def get_radius_graph(radius, max_neighbours, loop=False):
+    return RadiusGraph(
+        r=radius,
+        loop=loop,
+        max_num_neighbors=max_neighbours,
+    )
+
+
+def get_radius_graph_pbc(radius, max_neighbours, loop=False):
+    return RadiusGraphPBC(
+        r=radius,
+        loop=loop,
+        max_num_neighbors=max_neighbours,
+    )
+
+
 def get_radius_graph_config(config, loop=False):
     return RadiusGraph(
         r=config["radius"],
@@ -77,11 +93,7 @@ class RadiusGraphPBC(RadiusGraph):
         assert hasattr(
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
-        assert hasattr(
-            data, "atom_types"
-        ), "The data must contain information about the atoms types. Can be a chemical symbol (str) or an atomic number (int)."
         ase_atom_object = ase.Atoms(
-            symbols=data.atom_types,
             positions=data.pos,
             cell=data.supercell_size,
             pbc=True,
@@ -103,7 +115,7 @@ class RadiusGraphPBC(RadiusGraph):
             1
         ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
 
-        data.edge_attr = torch.tensor(edge_length)
+        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(1)
 
         return data
 

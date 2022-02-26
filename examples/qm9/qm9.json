@@ -39,5 +39,10 @@
             "continue": 0,
             "startfrom": "existing_model"
         }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
     }
 }

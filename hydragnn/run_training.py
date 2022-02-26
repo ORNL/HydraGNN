@@ -67,6 +67,9 @@ def _(config: dict):
     )
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    plot_init_solution = config["Visualization"]["plot_init_solution"]
+    plot_hist_solution = config["Visualization"]["plot_hist_solution"]
+    create_plots = config["Visualization"]["create_plots"]
 
     model = create_model_config(
         config=config["NeuralNetwork"]["Architecture"], verbosity=verbosity
@@ -106,6 +109,9 @@ def _(config: dict):
         config["NeuralNetwork"],
         log_name,
         verbosity,
+        plot_init_solution,
+        plot_hist_solution,
+        create_plots,
     )
 
     save_model(model, log_name)

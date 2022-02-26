@@ -59,5 +59,10 @@
             "learning_rate": 0.02,
             "batch_size": 32
         }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
     }
 }
