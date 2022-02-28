@@ -1,5 +1,5 @@
 from .dataset_descriptors import AtomFeatures, StructureFeatures
-from .utils import check_if_graph_size_constant
+from .utils import check_if_graph_size_variable
 from .load_data import (
     dataset_loading_and_splitting,
     create_dataloaders,

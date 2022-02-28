@@ -10,14 +10,14 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_constant
+from hydragnn.preprocess.utils import check_if_graph_size_variable
 from hydragnn.utils.model import calculate_PNA_degree
 
 
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
-    graph_size_variable = check_if_graph_size_constant(
+    graph_size_variable = check_if_graph_size_variable(
         train_loader, val_loader, test_loader
     )
 
