@@ -10,7 +10,7 @@
 ##############################################################################
 
 
-def check_if_graph_size_constant(train_loader, val_loader, test_loader):
+def check_if_graph_size_variable(train_loader, val_loader, test_loader):
     graph_size_variable = False
     nodes_num_list = []
     for loader in [train_loader, val_loader, test_loader]:
