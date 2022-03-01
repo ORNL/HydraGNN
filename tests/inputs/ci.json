@@ -5,6 +5,8 @@
     "Dataset": {
         "name": "unit_test_singlehead",
         "format": "unit_test",
+        "compositional_stratified_splitting": true,
+        "rotational_invariance": false,
         "path": {
             "train": "dataset/unit_test_singlehead_train",
             "test": "dataset/unit_test_singlehead_test",
