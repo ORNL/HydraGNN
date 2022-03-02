@@ -1,189 +1,37 @@
 import os, json
-import torch
-
-# deprecated in torch_geometric 2.0
-try:
-    from torch_geometric.loader import DataLoader
-except:
-    from torch_geometric.data import DataLoader
-
-import hydragnn
-import pickle, csv
 import matplotlib.pyplot as plt
-import sys
+from qm9_utils import *
 
-#########################################################
-from rdkit import Chem
-from rdkit.Chem.rdchem import BondType as BT
-from rdkit.Chem.rdchem import HybridizationType
-import torch.nn.functional as F
-from torch_scatter import scatter
-from torch_geometric.data import Data
-
-##################################################################################################################
-node_attribute_names = [
-    "atomH",
-    "atomC",
-    "atomN",
-    "atomO",
-    "atomF",
-    "atomicnumber",
-    "IsAromatic",
-    "HSP",
-    "HSP2",
-    "HSP3",
-    "Hprop",
-]
-graph_feature_names = ["HOMO (eV)", "LUMO (eV)", "GAP (eV)"]
-HAR2EV = 27.211386246
-datafile_cut = os.path.join(os.path.dirname(__file__), "dataset/gdb9_gap_cut.csv")
+graph_feature_names = ["HOMO(eV)", "LUMO(eV)", "GAP(eV)"]
+dirpwd = os.path.dirname(__file__)
+datafile_cut = os.path.join(dirpwd, "dataset/gdb9_gap_cut.csv")
 trainvaltest_splitlists = os.path.join(
-    os.path.dirname(__file__), "dataset/qm9_train_test_val_idx_lists.pkl"
+    dirpwd, "dataset/qm9_train_test_val_idx_lists.pkl"
 )
-trainset_statistics = os.path.join(
-    os.path.dirname(__file__), "dataset/qm9_statistics.pkl"
-)
-input_filename = os.path.join(os.path.dirname(__file__), "qm9_orbitals.json")
+trainset_statistics = os.path.join(dirpwd, "dataset/qm9_statistics.pkl")
 ##################################################################################################################
-# Set this path for output.
-try:
-    os.environ["SERIALIZED_DATA_PATH"]
-except:
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
+inputfilesubstr = sys.argv[1]
+input_filename = os.path.join(dirpwd, "qm9_" + inputfilesubstr + ".json")
+##################################################################################################################
 # Configurable run choices (JSON file that accompanies this example script).
 with open(input_filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
 var_config = config["NeuralNetwork"]["Variables_of_interest"]
-var_config["output_names"] = graph_feature_names
+var_config["output_names"] = [
+    graph_feature_names[item] for ihead, item in enumerate(var_config["output_index"])
+]
 var_config["input_node_feature_names"] = node_attribute_names
-
+ymax_feature, ymin_feature, ymean_feature, ystd_feature = get_trainset_stat(
+    trainset_statistics
+)
+var_config["ymean"] = ymean_feature.tolist()
+var_config["ystd"] = ystd_feature.tolist()
+##################################################################################################################
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.setup_ddp()
 ##################################################################################################################
-##################################################################################################################
-def get_splitlists(filedir):
-    with open(filedir, "rb") as f:
-        train_filelist = pickle.load(f)
-        val_filelist = pickle.load(f)
-        test_filelist = pickle.load(f)
-    return train_filelist, val_filelist, test_filelist
-
-
-def get_trainset_stat(filedir):
-    with open(filedir, "rb") as f:
-        max_feature = pickle.load(f)
-        min_feature = pickle.load(f)
-        mean_feature = pickle.load(f)
-        std_feature = pickle.load(f)
-    return max_feature, min_feature, mean_feature, std_feature
-
-
-def datasets_load(datafile, splitlistfile):
-    train_filelist, val_filelist, test_filelist = get_splitlists(splitlistfile)
-    trainset = []
-    valset = []
-    testset = []
-    trainsmiles = []
-    valsmiles = []
-    testsmiles = []
-    trainidxs = []
-    validxs = []
-    testidxs = []
-    with open(datafile, "r") as file:
-        csvreader = csv.reader(file)
-        print(next(csvreader))
-        for row in csvreader:
-            if row[0] in train_filelist:
-                trainsmiles.append(row[1])
-                trainset.append([float(x) * HAR2EV for x in row[2:]])
-                trainidxs.append(int(row[0][4:]))
-            elif row[0] in val_filelist:
-                valsmiles.append(row[1])
-                valset.append([float(x) * HAR2EV for x in row[2:]])
-                validxs.append(int(row[0][4:]))
-            elif row[0] in test_filelist:
-                testsmiles.append(row[1])
-                testset.append([float(x) * HAR2EV for x in row[2:]])
-                testidxs.append(int(row[0][4:]))
-            else:
-                print("unknown file name: ", row[0])
-                sys.exit(0)
-    return (
-        [trainsmiles, valsmiles, testsmiles],
-        [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
-        [trainidxs, validxs, testidxs],
-    )
-
-
-def generate_graphdata(idx, simlestr, ytarget):
-    types = {"H": 0, "C": 1, "N": 2, "O": 3, "F": 4}
-    bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
-
-    mol = Chem.MolFromSmiles(simlestr, sanitize=False)  # , removeHs=False)
-    N = mol.GetNumAtoms()
-
-    type_idx = []
-    atomic_number = []
-    aromatic = []
-    sp = []
-    sp2 = []
-    sp3 = []
-    for atom in mol.GetAtoms():
-        type_idx.append(types[atom.GetSymbol()])
-        atomic_number.append(atom.GetAtomicNum())
-        aromatic.append(1 if atom.GetIsAromatic() else 0)
-        hybridization = atom.GetHybridization()
-        sp.append(1 if hybridization == HybridizationType.SP else 0)
-        sp2.append(1 if hybridization == HybridizationType.SP2 else 0)
-        sp3.append(1 if hybridization == HybridizationType.SP3 else 0)
-
-    z = torch.tensor(atomic_number, dtype=torch.long)
-
-    row, col, edge_type = [], [], []
-    for bond in mol.GetBonds():
-        start, end = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
-        row += [start, end]
-        col += [end, start]
-        edge_type += 2 * [bonds[bond.GetBondType()]]
-
-    edge_index = torch.tensor([row, col], dtype=torch.long)
-    edge_type = torch.tensor(edge_type, dtype=torch.long)
-    edge_attr = F.one_hot(edge_type, num_classes=len(bonds)).to(torch.float)
-
-    perm = (edge_index[0] * N + edge_index[1]).argsort()
-    edge_index = edge_index[:, perm]
-    edge_attr = edge_attr[perm]
-
-    row, col = edge_index
-    hs = (z == 1).to(torch.float)
-    num_hs = scatter(hs[row], col, dim_size=N).tolist()
-
-    x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
-    x2 = (
-        torch.tensor([atomic_number, aromatic, sp, sp2, sp3, num_hs], dtype=torch.float)
-        .t()
-        .contiguous()
-    )
-    x = torch.cat([x1.to(torch.float), x2], dim=-1)
-
-    y = ytarget.squeeze()
-
-    data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y, idx=idx)
-
-    hydragnn.preprocess.update_predicted_values(
-        var_config["type"],
-        var_config["output_index"],
-        data,
-    )
-
-    device = hydragnn.utils.get_device()
-    return data.to(device)
-
-
-##################################################################################################################
-##################################################################################################################
+norm_yflag = False  # True
 smiles_sets, values_sets, idxs_sets = datasets_load(
     datafile_cut, trainvaltest_splitlists
 )
@@ -191,6 +39,13 @@ dataset_lists = [[] for dataset in values_sets]
 for idataset, (smileset, valueset, idxset) in enumerate(
     zip(smiles_sets, values_sets, idxs_sets)
 ):
+    if norm_yflag:
+        valueset = (valueset - torch.tensor(var_config["ymean"])) / torch.tensor(
+            var_config["ystd"]
+        )
+        print(valueset[:, 0].mean(), valueset[:, 0].std())
+        print(valueset[:, 1].mean(), valueset[:, 1].std())
+        print(valueset[:, 2].mean(), valueset[:, 2].std())
     for smilestr, ytarget, idx in zip(smileset, valueset, idxset):
         dataset_lists[idataset].append(generate_graphdata(idx, smilestr, ytarget))
 trainset = dataset_lists[0]
@@ -221,10 +76,8 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-log_name = "qm9_orbitals"
-# Enable print to log file.
+log_name = "qm9_" + inputfilesubstr + "_eV_fullx"
 hydragnn.utils.setup_log(log_name)
-
 writer = hydragnn.utils.get_summary_writer(log_name)
 with open("./logs/" + log_name + "/config.json", "w") as f:
     json.dump(config, f)
