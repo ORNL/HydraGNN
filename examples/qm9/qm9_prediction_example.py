@@ -7,11 +7,9 @@ import numpy as np
 graph_feature_names = ["HOMO (eV)", "LUMO (eV)", "GAP (eV)"]
 dirpwd = os.path.dirname(__file__)
 # gdb_5700,c1nc2c([nH]1)CCO2,-0.1883,0.0258,0.2141
+idx = 5700
 smilestr = "c1nc2c([nH]1)CCO2"
 gap_true = 0.2141 * HAR2EV
-idx = 5700
-##idx and gap_true can be replaced by random numbers when use
-data_graph = generate_graphdata(idx, smilestr, gap_true)
 ##################################################################################################################
 ##load trained model directory
 log_name = "qm9_gap_eV_fullx"
@@ -25,8 +23,6 @@ model = hydragnn.models.create_model_config(
 )
 hydragnn.utils.load_existing_model(model, log_name, path="./logs/")
 ##################################################################################################################
-pred = model(data_graph)
-print(
-    "For gdb_", idx, "gap (eV), true = ", gap_true, " predicted = ", pred[0][0].item()
-)
+gap_pred = gapfromsmiles(smilestr, model)
+print("For gdb_", idx, "gap (eV), true = ", gap_true, " predicted = ", gap_pred)
 ##################################################################################################################

@@ -86,6 +86,15 @@ node_attribute_names = [
 ]
 
 
+def gapfromsmiles(smilestr, model):
+    ##idx and gap_true can be replaced by random numbers when use
+    idx = 5700
+    gap_rand = 0.0
+    data_graph = generate_graphdata(idx, smilestr, gap_rand)
+    pred = model(data_graph)
+    return pred[0][0].item()
+
+
 def generate_graphdata(idx, simlestr, ytarget, var_config=None):
     types = {"H": 0, "C": 1, "N": 2, "O": 3, "F": 4}
     bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
