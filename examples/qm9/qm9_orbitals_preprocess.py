@@ -2,16 +2,18 @@ import os
 import torch
 import pickle, csv
 import matplotlib.pyplot as plt
+from rdkit import Chem
+from rdkit.Chem.Descriptors import NumRadicalElectrons
 
 ##################################################################################################################
-uncharact_list = "./dataset/uncharacterized.txt"
+uncharact_list = os.path.join(os.path.dirname(__file__), "dataset/uncharacterized.txt")
 with open(uncharact_list, "r") as f:
     skip = ["gdb_" + str(int(x.split()[0])) for x in f.read().split("\n")[9:-2]]
 
 var_names = ["HOMO (eV)", "LUMO (eV)", "GAP (eV)"]
 HAR2EV = 27.211386246
-datafile = "./dataset/gdb9_gap.csv"
-datafile_cut = "./dataset/gdb9_gap_cut.csv"
+datafile = os.path.join(os.path.dirname(__file__), "dataset/gdb9_gap.csv")
+datafile_cut = os.path.join(os.path.dirname(__file__), "dataset/gdb9_gap_cut.csv")
 
 fileid_list = []
 values_list = []
@@ -23,6 +25,8 @@ with open(datafile, "r") as file:
         csvnewwriter.writerow(header)
         for row in csvreader:
             if row[0] in skip:
+                continue
+            if NumRadicalElectrons(Chem.MolFromSmiles(row[1])) > 0:
                 continue
             csvnewwriter.writerow(row)
             fileid_list.append(row[0])
@@ -58,14 +62,18 @@ print(torch.mean(train_tensor, 0))
 print(torch.std(train_tensor, 0))
 
 outputfile_name = "qm9_statistics.pkl"
-with open(os.path.join("./dataset/", outputfile_name), "wb") as f:
+with open(
+    os.path.join(os.path.dirname(__file__), "dataset/" + outputfile_name), "wb"
+) as f:
     pickle.dump(torch.max(train_tensor, 0)[0].numpy(), f)
     pickle.dump(torch.min(train_tensor, 0)[0].numpy(), f)
     pickle.dump(torch.mean(train_tensor, 0).numpy(), f)
     pickle.dump(torch.std(train_tensor, 0).numpy(), f)
 
 outputfile_name = "qm9_train_test_val_idx_lists.pkl"
-with open(os.path.join("./dataset/", outputfile_name), "wb") as f:
+with open(
+    os.path.join(os.path.dirname(__file__), "dataset/" + outputfile_name), "wb"
+) as f:
     pickle.dump(idx_train_list, f)
     pickle.dump(idx_val_list, f)
     pickle.dump(idx_test_list, f)
@@ -88,5 +96,7 @@ for idata, dataset, datasetname in zip(
             ax.set_title(datasetname + ", " + str(len(xfeat)))
         ax.set_xlabel(var_names[ifeat])
 
-fig.savefig("./dataset/qm9_train_val_test_hist.png")
+fig.savefig(
+    os.path.join(os.path.dirname(__file__), "dataset/qm9_train_val_test_hist.png")
+)
 plt.close()
