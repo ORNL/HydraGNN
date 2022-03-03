@@ -33,6 +33,18 @@ def get_trainset_stat(filedir):
     return max_feature, min_feature, mean_feature, std_feature
 
 
+def datasets_load_gap(datafile):
+    smiles = []
+    yvals = []
+    with open(datafile, "r") as file:
+        csvreader = csv.reader(file)
+        print(next(csvreader))
+        for row in csvreader:
+            smiles.append(row[1])
+            yvals.append(float(row[-1]) * HAR2EV)
+    return smiles, yvals
+
+
 def datasets_load(datafile, splitlistfile):
     train_filelist, val_filelist, test_filelist = get_splitlists(splitlistfile)
     trainset = []
@@ -151,7 +163,7 @@ def generate_graphdata(idx, simlestr, ytarget, var_config=None):
 
     x = torch.cat([x1.to(torch.float), x2], dim=-1)
     # x = torch.tensor([atomic_number], dtype=torch.float).view(-1,1)
-    print(x)
+    # print(x)
 
     y = ytarget  # .squeeze()
 
