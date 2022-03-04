@@ -71,7 +71,6 @@ class RadiusGraphPBC(RadiusGraph):
 
     def __call__(self, data):
         data.edge_attr = None
-        data.pbc = True
         assert (
             "batch" not in data
         ), "Periodic boundary conditions not currently supported on batches."
@@ -90,26 +89,21 @@ class RadiusGraphPBC(RadiusGraph):
         # ‘i’ : first atom index
         # ‘j’ : second atom index
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        edge_src, edge_dst = ase.neighborlist.neighbor_list(
-            "ij", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+        edge_src, edge_dst, edge_length = ase.neighborlist.neighbor_list(
+            "ijd", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
         )
-        distance_matrix = ase_atom_object.get_all_distances(mic=True)
         data.edge_index = torch.stack(
             [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0
         )
 
-        # remove duplicate edges
+        # ensure no duplicate edges
+        num_edges = data.edge_index.size(1)
         data.coalesce()
+        assert num_edges == data.edge_index.size(
+            1
+        ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
 
-        # remove self loops in a graph
-        if not self.loop:
-            data.edge_index = remove_self_loops(data.edge_index, None)[0]
-
-        data.edge_attr = torch.zeros(data.edge_index.shape[1], 1)
-        for index in range(0, data.edge_index.shape[1]):
-            data.edge_attr[index, 0] = distance_matrix[
-                data.edge_index[0, index], data.edge_index[1, index]
-            ]
+        data.edge_attr = torch.tensor(edge_length)
 
         return data
 
