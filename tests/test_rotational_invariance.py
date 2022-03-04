@@ -69,7 +69,6 @@ def check_rotational_invariance(
 
 def unittest_rotational_invariance(tol=1e-14):
     config_file = "./tests/inputs/ci_rotational_invariance.json"
-    config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
     compute_edges = get_radius_graph_config(config["Architecture"], loop=False)

@@ -77,7 +77,6 @@ def unittest_periodic_boundary_conditions(
 
 def pytest_periodic_h2():
     config_file = "./tests/inputs/ci_periodic.json"
-    config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
 

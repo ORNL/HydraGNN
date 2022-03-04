@@ -18,7 +18,6 @@ import pytest
 def pytest_config(config_file):
 
     config_file = os.path.join("examples", config_file)
-    config = {}
     with open(config_file, "r") as f:
         config = json.load(f)
 
