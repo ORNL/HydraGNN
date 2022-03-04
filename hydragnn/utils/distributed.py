@@ -107,15 +107,19 @@ def get_comm_size_and_rank():
     return int(world_size), int(world_rank)
 
 
-def setup_ddp():
-    """ "Initialize DDP"""
+def setup_ddp(backend=None, verbosity=1):
+    """Initialize DDP
 
-    if dist.is_nccl_available() and torch.cuda.is_available():
+    backend: str
+        Parallel backend (nccl, gloo, mpi): default to nccl for Cuda and gloo for CPU
+    """
+    if backend is None:
         backend = "nccl"
-    elif torch.distributed.is_gloo_available():
-        backend = "gloo"
-    else:
-        raise RuntimeError("No parallel backends available")
+        if not torch.cuda.is_available():
+            backend = "gloo"
+
+    if backend not in ["nccl", "gloo", "mpi"]:
+        raise RuntimeError('Parallel backend not available: "{0}"'.format(backend))
 
     world_size, world_rank = init_comm_size_and_rank()
 
@@ -131,7 +135,7 @@ def setup_ddp():
         ## The following is CADES specific
         master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
 
-    try:
+    if backend in ["nccl", "gloo"]:
         os.environ["MASTER_ADDR"] = master_addr
         os.environ["MASTER_PORT"] = master_port
         os.environ["WORLD_SIZE"] = str(world_size)
@@ -142,18 +146,22 @@ def setup_ddp():
             if ifname is not None:
                 os.environ["GLOO_SOCKET_IFNAME"] = ifname
 
-        print_distributed(
-            1,
-            "Distributed data parallel: %s master at %s:%s"
-            % (backend, master_addr, master_port),
-        )
-
+    try:
         if not dist.is_initialized():
             dist.init_process_group(
                 backend=backend, rank=int(world_rank), world_size=int(world_size)
             )
     except KeyError:
-        print("DDP has to be initialized within a job - Running in sequential mode")
+        backend = "none"
+        message = "Not able to initialize DDP - running in sequential mode"
+
+    if backend in ["nccl", "gloo"]:
+        message = "Distributed data parallel: {0} master at {1}:{2}".format(
+            backend, master_addr, master_port
+        )
+    elif backend == "mpi":
+        message = "Distributed data parallel: mpi"
+    print_distributed(verbosity, message)
 
     return world_size, world_rank
 
@@ -188,9 +196,10 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
             localrank = int(os.environ["SLURM_LOCALID"])
 
         if localrank >= torch.cuda.device_count():
-            print(
+            print_distributed(
+                verbosity_level,
                 "WARN: localrank is greater than the available device count - %d %d"
-                % (localrank, torch.cuda.device_count())
+                % (localrank, torch.cuda.device_count()),
             )
 
     device_name = "cuda:" + str(localrank)

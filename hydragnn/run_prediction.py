@@ -25,28 +25,28 @@ from hydragnn.postprocess.postprocess import output_denormalize
 
 
 @singledispatch
-def run_prediction(config):
+def run_prediction(config, backend=None):
     raise TypeError("Input must be filename string or configuration dictionary.")
 
 
 @run_prediction.register
-def _(config_file: str):
+def _(config_file: str, backend=None):
 
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    run_prediction(config)
+    run_prediction(config, backend)
 
 
 @run_prediction.register
-def _(config: dict):
+def _(config: dict, backend=None):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
     except:
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
-    world_size, world_rank = setup_ddp()
+    world_size, world_rank = setup_ddp(backend)
 
     train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
         config=config

@@ -37,21 +37,21 @@ from hydragnn.train.train_validate_test import train_validate_test
 
 
 @singledispatch
-def run_training(config):
+def run_training(config, backend=None):
     raise TypeError("Input must be filename string or configuration dictionary.")
 
 
 @run_training.register
-def _(config_file: str):
+def _(config_file: str, backend=None):
 
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    run_training(config)
+    run_training(config, backend)
 
 
 @run_training.register
-def _(config: dict):
+def _(config: dict, backend=None):
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]
@@ -59,7 +59,7 @@ def _(config: dict):
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     setup_log(get_log_name_config(config))
-    world_size, world_rank = setup_ddp()
+    world_size, world_rank = setup_ddp(backend)
 
     verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
