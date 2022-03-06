@@ -18,6 +18,7 @@ from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.GATStack import GATStack
 from hydragnn.models.MFCStack import MFCStack
 from hydragnn.models.CGCNNStack import CGCNNStack
+from hydragnn.models.SAGEStack import SAGEStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed
@@ -147,6 +148,17 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+        )
+    elif model_type == "SAGE":
+        model = SAGEStack(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            num_nodes=num_nodes,
+            hidden_dim=hidden_dim,
+            num_conv_layers=num_conv_layers,
+            output_type=output_type,
+            config_heads=output_heads,
+            loss_weights=task_weights,
         )
 
     else:
