@@ -28,6 +28,7 @@ class MFCStack(Base):
         max_degree: int,
         hidden_dim: int,
         config_heads: {},
+        freeze_conv=False,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
@@ -46,6 +47,7 @@ class MFCStack(Base):
             ilossweights_hyperp,
             loss_weights,
             ilossweights_nll,
+            freeze_conv,
             dropout,
             num_conv_layers,
             num_nodes,
