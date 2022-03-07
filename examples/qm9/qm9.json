@@ -7,6 +7,7 @@
             "model_type": "GIN",
             "radius": 7,
             "max_neighbours": 5,
+            "periodic_boundary_conditions": false,
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "output_heads": {

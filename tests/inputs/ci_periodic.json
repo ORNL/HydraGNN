@@ -1,0 +1,8 @@
+{
+    "Architecture": {
+        "radius": 0.9,
+        "periodic": "True",
+        "max_neighbours": 100000,
+        "predicted_value_option": 1
+    }
+}
