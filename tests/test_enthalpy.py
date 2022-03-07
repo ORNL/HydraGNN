@@ -52,7 +52,7 @@ def unittest_formation_enthalpy():
         linear_only=True,
     )
 
-    convert_raw_data_energy_to_gibbs(dir, [0, 1])
+    convert_raw_data_energy_to_gibbs(dir, [0, 1], create_plots=False)
 
     new_dir = dir + "_gibbs_energy"
     for filename in os.listdir(new_dir):
