@@ -1,0 +1,27 @@
+pipeline {
+    triggers {
+        issueCommentTrigger('.*test this please.*')
+    }
+    agent none
+
+    stages {
+        stage('Build') {
+            parallel {
+                stage('CUDA-10.2') {
+                    agent {
+                        dockerfile {
+                            filename 'Dockerfile'
+                            dir 'docker'
+                            additionalBuildArgs '--build-arg BASE=nvidia/cuda:10.2-devel'
+                            label 'nvidia-docker && volta'
+                            args '--env NVIDIA_VISIBLE_DEVICES=$NVIDIA_VISIBLE_DEVICES'
+                        }
+                    }
+                    steps {
+                        sh 'python -m pytest'
+                    }
+                }
+            }
+        }
+    }
+}
