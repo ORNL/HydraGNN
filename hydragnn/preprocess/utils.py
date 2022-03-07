@@ -11,6 +11,10 @@
 
 import torch
 from torch_geometric.transforms import RadiusGraph
+from torch_geometric.utils import remove_self_loops
+
+import ase
+import ase.neighborlist
 
 
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
@@ -50,3 +54,58 @@ def get_radius_graph_config(config, loop=False):
         loop=loop,
         max_num_neighbors=config["max_neighbours"],
     )
+
+
+def get_radius_graph_pbc_config(config, loop=False):
+    return RadiusGraphPBC(
+        r=config["radius"],
+        loop=loop,
+        max_num_neighbors=config["max_neighbours"],
+    )
+
+
+class RadiusGraphPBC(RadiusGraph):
+    r"""Creates edges based on node positions :obj:`pos` to all points within a
+    given distance, including periodic images.
+    """
+
+    def __call__(self, data):
+        data.edge_attr = None
+        assert (
+            "batch" not in data
+        ), "Periodic boundary conditions not currently supported on batches."
+        assert hasattr(
+            data, "supercell_size"
+        ), "The data must contain the size of the supercell to apply periodic boundary conditions."
+        assert hasattr(
+            data, "atom_types"
+        ), "The data must contain information about the atoms types. Can be a chemical symbol (str) or an atomic number (int)."
+        ase_atom_object = ase.Atoms(
+            symbols=data.atom_types,
+            positions=data.pos,
+            cell=data.supercell_size,
+            pbc=True,
+        )
+        # ‘i’ : first atom index
+        # ‘j’ : second atom index
+        # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
+        edge_src, edge_dst, edge_length = ase.neighborlist.neighbor_list(
+            "ijd", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+        )
+        data.edge_index = torch.stack(
+            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0
+        )
+
+        # ensure no duplicate edges
+        num_edges = data.edge_index.size(1)
+        data.coalesce()
+        assert num_edges == data.edge_index.size(
+            1
+        ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
+
+        data.edge_attr = torch.tensor(edge_length)
+
+        return data
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(r={self.r})"
