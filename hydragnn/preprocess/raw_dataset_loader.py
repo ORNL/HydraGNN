@@ -93,7 +93,6 @@ class RawDataLoader:
                     filepath=os.path.join(raw_data_path, filename)
                 )
                 dataset.append(data_object)
-                f.close()
 
             if self.data_format == "LSMS":
                 for idx, data_object in enumerate(dataset):
@@ -164,6 +163,8 @@ class RawDataLoader:
                     it_comp = self.node_feature_col[item] + icomp
                     node_feature.append(float(node_feat[it_comp].strip()))
             node_feature_matrix.append(node_feature)
+
+        f.close()
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
