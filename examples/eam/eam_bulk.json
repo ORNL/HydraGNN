@@ -1,0 +1,61 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "Dataset": {
+        "name": "NiNb",
+        "path": {"total": "BULK_DATA"},
+        "format": "CFG",
+        "compositional_stratified_splitting": true,
+	"rotational_invariance": true,
+        "node_features": {
+            "name": ["num_of_protons", "atomic_masses", "atomic_energy"],
+            "dim": [1,1,1],
+            "column_index": [0,1,2]
+        },
+        "graph_features":{
+            "name": ["bulk_modulus"],
+            "dim": [3],
+            "column_index": [0,1,2]
+        }
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "radius": 7,
+            "max_neighbours": 100000,
+	    "edge_features": ["lengths"],
+	    "periodic_boundary_conditions": false,
+            "hidden_dim": 50,
+            "num_conv_layers": 10,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 5,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25]
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["bulk_modulus"],
+            "output_index": [0,1,2],
+            "type": ["graph"],
+            "denormalize_output": true
+        },
+        "Training": {
+            "num_epoch": 200,
+            "perc_train": 0.7,
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "continue": 0
+        }
+    }
+}

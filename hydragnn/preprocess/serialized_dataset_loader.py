@@ -198,7 +198,7 @@ def update_predicted_values(type: list, index: list, data: Data):
         A Data object representing a structure that has atoms.
     """
     output_feature = []
-    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.y.device)
+    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
     for item in range(len(type)):
         if type[item] == "graph":
             feat_ = torch.reshape(data.y[index[item]], (1, 1))

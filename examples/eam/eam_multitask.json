@@ -1,0 +1,62 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "Dataset": {
+        "name": "NiNb",
+        "path": {"total": "FCC_Ni_Nb"},
+        "format": "CFG",
+        "compositional_stratified_splitting": true,
+	"rotational_invariance": true,
+        "node_features": {
+            "name": ["num_of_protons", "atomic_mass", "atomic_energy", "atomic_force"],
+            "dim": [1,1,1,3],
+            "column_index": [0,1,2,3,4,5]
+        },
+        "graph_features":{
+            "name": [],
+            "dim": [],
+            "column_index": []
+        }
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "radius": 7,
+            "max_neighbours": 100000,
+	    "edge_features": ["lengths"],
+	    "periodic_boundary_conditions": true,
+            "hidden_dim": 50,
+            "num_conv_layers": 6,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 5,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25]
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0, 1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["atomic_energy","atomic_forces"],
+            "output_index": [2, 3],
+            "type": ["node","node"],
+            "denormalize_output": true
+        },
+        "Training": {
+            "num_epoch": 20,
+            "perc_train": 0.7,
+            "learning_rate": 1e-3,
+            "batch_size": 64,
+            "continue": 0,
+            "startfrom": "existing_model"
+        }
+    }
+}
