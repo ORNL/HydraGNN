@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
 import sys
+from hydragnn.utils.distributed import get_device
 
 
 class Base(Module):
@@ -35,6 +36,7 @@ class Base(Module):
         num_nodes: int = None,
     ):
         super().__init__()
+        self.device = get_device()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
@@ -223,6 +225,7 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
+        data.to(self.device)
         x, edge_index, batch = (
             data.x,
             data.edge_index,
