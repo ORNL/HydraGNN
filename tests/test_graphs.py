@@ -17,9 +17,9 @@ import shutil
 
 import hydragnn, tests
 
+
 # Main unit test function called by pytest wrappers.
 def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False):
-
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()

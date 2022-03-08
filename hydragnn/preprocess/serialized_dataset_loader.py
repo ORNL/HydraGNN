@@ -137,7 +137,7 @@ class SerializedDataLoader:
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
         for data in dataset:
-            #data.to(device)
+            # data.to(device)
             update_predicted_values(
                 self.variables_type,
                 self.output_index,
