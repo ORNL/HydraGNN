@@ -89,10 +89,8 @@ class RawDataLoader:
             for filename in os.listdir(raw_data_path):
                 if filename == ".DS_Store":
                     continue
-                f = open(os.path.join(raw_data_path, filename), "r", encoding="utf-8")
-                all_lines = f.readlines()
                 data_object = self.__transform_input_to_data_object_base(
-                    lines=all_lines
+                    filepath=os.path.join(raw_data_path, filename)
                 )
                 dataset.append(data_object)
                 f.close()
@@ -123,7 +121,7 @@ class RawDataLoader:
                 pickle.dump(self.minmax_graph_feature, f)
                 pickle.dump(dataset_normalized, f)
 
-    def __transform_input_to_data_object_base(self, lines: [str]):
+    def __transform_input_to_data_object_base(self, filepath):
         """Transforms lines of strings read from the raw data file to Data object and returns it.
 
         Parameters
@@ -135,6 +133,9 @@ class RawDataLoader:
         Data
             Data object representing structure of a graph sample.
         """
+
+        f = open(filepath, "r", encoding="utf-8")
+        lines = f.readlines()
 
         data_object = Data()
 
