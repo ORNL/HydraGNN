@@ -52,7 +52,6 @@ class SAGEStack(Base):
         return SAGEConv(
             in_channels=input_dim,
             out_channels=output_dim,
-            root_weight=False,
         )
 
     def __str__(self):

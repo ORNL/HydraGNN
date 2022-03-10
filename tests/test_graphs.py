@@ -122,7 +122,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     # Set RMSE and sample MAE/max error thresholds
     thresholds = {
-        "SAGE": [0.45, 0.45, 0.75],
+        "SAGE": [0.20, 0.20, 0.75],
         "PNA": [0.20, 0.20, 0.75],
         "MFC": [0.20, 0.20, 1.5],
         "GIN": [0.25, 0.20, 0.75],
