@@ -211,11 +211,11 @@ def train(
 ):
     if profiler is None:
         profiler = Profiler()
-    tasks_error = np.zeros(model.num_heads)
-
-    model.train()
 
     total_error = 0
+    tasks_error = np.zeros(model.num_heads)
+    num_samples_total = 0
+    model.train()
     for data in iterate_tqdm(loader, verbosity):
         with record_function("zero_grad"):
             opt.zero_grad()
@@ -229,12 +229,12 @@ def train(
         opt.step()
         profiler.step()
         total_error += loss.item() * data.num_graphs
+        num_samples_total += data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
-
     return (
-        total_error / len(loader.dataset),
-        tasks_error / len(loader.dataset),
+        total_error / num_samples_total,
+        tasks_error / num_samples_total,
     )
 
 
@@ -243,6 +243,7 @@ def validate(loader, model, verbosity):
 
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
+    num_samples_total = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
         head_index = get_head_indices(model, data)
@@ -250,12 +251,13 @@ def validate(loader, model, verbosity):
         pred = model(data)
         error, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
+        num_samples_total += data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
 
     return (
-        total_error / len(loader.dataset),
-        tasks_error / len(loader.dataset),
+        total_error / num_samples_total,
+        tasks_error / num_samples_total,
     )
 
 
@@ -264,6 +266,7 @@ def test(loader, model, verbosity):
 
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
+    num_samples_total = 0
     model.eval()
     true_values = [[] for _ in range(model.num_heads)]
     predicted_values = [[] for _ in range(model.num_heads)]
@@ -280,6 +283,7 @@ def test(loader, model, verbosity):
         pred = model(data)
         error, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
+        num_samples_total += data.num_graphs
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
         ytrue = data.y
@@ -294,8 +298,8 @@ def test(loader, model, verbosity):
             predicted_values[ihead].extend(pred[ihead].tolist())
 
     return (
-        total_error / len(loader.dataset),
-        tasks_error / len(loader.dataset),
+        total_error / num_samples_total,
+        tasks_error / num_samples_total,
         true_values,
         predicted_values,
     )
