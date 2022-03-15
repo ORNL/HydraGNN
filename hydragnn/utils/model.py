@@ -67,7 +67,9 @@ def load_existing_model(model, model_name, path="./logs/"):
 
 
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    #deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    device = dataset[0].x.device
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(device)
     for data in dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())

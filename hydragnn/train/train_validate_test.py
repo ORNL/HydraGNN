@@ -212,11 +212,15 @@ def train(
     if profiler is None:
         profiler = Profiler()
 
+    
+    device = next(model.parameters()).device
+
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
     num_samples_total = 0
     model.train()
     for data in iterate_tqdm(loader, verbosity):
+        data=data.to(device)
         with record_function("zero_grad"):
             opt.zero_grad()
         with record_function("get_head_indices"):
@@ -244,8 +248,11 @@ def validate(loader, model, verbosity):
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
     num_samples_total = 0
+    device = next(model.parameters()).device
+
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
+        data=data.to(device)
         head_index = get_head_indices(model, data)
 
         pred = model(data)
@@ -267,6 +274,8 @@ def test(loader, model, verbosity):
     total_error = 0
     tasks_error = np.zeros(model.num_heads)
     num_samples_total = 0
+    device = next(model.parameters()).device
+
     model.eval()
     true_values = [[] for _ in range(model.num_heads)]
     predicted_values = [[] for _ in range(model.num_heads)]
@@ -278,6 +287,7 @@ def test(loader, model, verbosity):
             for ihead in range(model.num_heads)
         ]
     for data in iterate_tqdm(loader, verbosity):
+        data=data.to(device)
         head_index = get_head_indices(model, data)
 
         pred = model(data)
