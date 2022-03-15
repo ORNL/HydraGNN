@@ -21,8 +21,8 @@ from .Base import Base
 class GATStack(Base):
     def __init__(
         self,
-        heads: int = 6,
-        negative_slope: float = 0.05,
+        heads: int,
+        negative_slope: float,
         *args,
         **kwargs,
     ):

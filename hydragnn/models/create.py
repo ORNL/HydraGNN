@@ -76,72 +76,74 @@ def create_model(
     # Note: model-specific inputs must come first.
     if model_type == "GIN":
         model = GINStack(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            hidden_dim=hidden_dim,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "PNA":
         assert pna_deg is not None, "PNA requires degree input."
         model = PNAStack(
-            deg=pna_deg,
-            edge_dim=edge_dim,
-            input_dim=input_dim,
-            output_dim=output_dim,
-            num_nodes=num_nodes,
-            hidden_dim=hidden_dim,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            pna_deg,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "GAT":
         model = GATStack(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            hidden_dim=hidden_dim,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            6,
+            0.05,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "MFC":
         assert max_neighbours is not None, "MFC requires max_neighbours input."
         model = MFCStack(
-            max_degree=max_neighbours,
-            input_dim=input_dim,
-            output_dim=output_dim,
-            num_nodes=num_nodes,
-            hidden_dim=hidden_dim,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            max_neighbours,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "CGCNN":
         model = CGCNNStack(
-            edge_dim=edge_dim,
-            input_dim=input_dim,
-            output_dim=output_dim,
-            output_type=output_type,
-            config_heads=output_heads,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
+            edge_dim,
+            input_dim,
+            output_dim,
+            output_type,
+            output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     else:
