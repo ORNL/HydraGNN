@@ -73,6 +73,7 @@ def create_model(
 
     device = get_device(use_gpu, verbosity_level=verbosity)
 
+    # Note: model-specific inputs must come first.
     if model_type == "GIN":
         model = GINStack(
             input_dim=input_dim,
@@ -90,6 +91,7 @@ def create_model(
         assert pna_deg is not None, "PNA requires degree input."
         model = PNAStack(
             deg=pna_deg,
+            edge_dim=edge_dim,
             input_dim=input_dim,
             output_dim=output_dim,
             num_nodes=num_nodes,
@@ -98,7 +100,6 @@ def create_model(
             output_type=output_type,
             config_heads=output_heads,
             loss_weights=task_weights,
-            edge_dim=edge_dim,
             freeze_conv=freeze_conv,
         )
 
@@ -118,11 +119,11 @@ def create_model(
     elif model_type == "MFC":
         assert max_neighbours is not None, "MFC requires max_neighbours input."
         model = MFCStack(
+            max_degree=max_neighbours,
             input_dim=input_dim,
             output_dim=output_dim,
             num_nodes=num_nodes,
             hidden_dim=hidden_dim,
-            max_degree=max_neighbours,
             num_conv_layers=num_conv_layers,
             output_type=output_type,
             config_heads=output_heads,
@@ -132,14 +133,14 @@ def create_model(
 
     elif model_type == "CGCNN":
         model = CGCNNStack(
+            edge_dim=edge_dim,
             input_dim=input_dim,
             output_dim=output_dim,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
             output_type=output_type,
             config_heads=output_heads,
+            num_nodes=num_nodes,
+            num_conv_layers=num_conv_layers,
             loss_weights=task_weights,
-            edge_dim=edge_dim,
             freeze_conv=freeze_conv,
         )
 

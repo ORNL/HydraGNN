@@ -20,20 +20,9 @@ class PNAStack(Base):
     def __init__(
         self,
         deg: list,
-        input_dim: int,
-        output_dim: list,
-        output_type: list,
-        num_nodes: int,
-        hidden_dim: int,
-        config_heads: {},
-        freeze_conv=False,
-        edge_dim: int = None,
-        dropout: float = 0.25,
-        num_conv_layers: int = 16,
-        ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
-        loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
-        ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper
-        # https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
+        edge_dim: int,
+        *args,
+        **kwargs,
     ):
 
         self.aggregators = ["mean", "min", "max", "std"]
@@ -46,20 +35,7 @@ class PNAStack(Base):
         self.deg = torch.Tensor(deg)
         self.edge_dim = edge_dim
 
-        super().__init__(
-            input_dim,
-            hidden_dim,
-            output_dim,
-            output_type,
-            config_heads,
-            ilossweights_hyperp,
-            loss_weights,
-            ilossweights_nll,
-            freeze_conv,
-            dropout,
-            num_conv_layers,
-            num_nodes,
-        )
+        super().__init__(*args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
         return PNAConv(
