@@ -25,9 +25,9 @@ class Base(Module):
         output_dim: list,
         output_type: list,
         config_heads: {},
-        ilossweights_hyperp: int,
-        loss_weights: list,
-        ilossweights_nll: int,
+        ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
+        loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
+        ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
         freeze_conv=False,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
