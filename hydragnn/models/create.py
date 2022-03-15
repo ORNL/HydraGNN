@@ -49,6 +49,7 @@ def create_model_config(
     )
 
 
+# FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
 def create_model(
     model_type: str,
     input_dim: int,
