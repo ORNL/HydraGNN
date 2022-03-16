@@ -1,6 +1,6 @@
 {
     "Verbosity": {
-        "level": 4
+        "level": 0
     },
     "Dataset": {
         "name": "unit_test_multihead_vector",
@@ -16,7 +16,7 @@
             "column_index": [0, 6]
         },
         "graph_features":{
-            "name": [ "sums"],
+            "name": [ "sums_vec"],
             "dim": [2],
             "column_index": [0]
         }
@@ -46,7 +46,7 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["sums","x","x2x3_vec"],
+            "output_names": ["sums_vec","x","x2x3_vec"],
             "output_index": [0,0,1],
             "type": ["graph","node","node"],
             "denormalize_output": false
@@ -61,6 +61,6 @@
     "Visualization": {
         "plot_init_solution": true,
         "plot_hist_solution": false,
-        "create_plots": false
+        "create_plots": true
     }
 }

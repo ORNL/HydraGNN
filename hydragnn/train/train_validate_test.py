@@ -291,12 +291,10 @@ def test(loader, model, verbosity):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
         ytrue = data.y
         for ihead in range(model.num_heads):
-            head_pre = pred[ihead]
+            head_pre = pred[ihead].reshape(-1, 1)
             head_val = ytrue[head_index[ihead]]
-            if head_val.shape != head_pre.shape:
-                head_val = torch.reshape(head_val, head_pre.shape)
             true_values[ihead].extend(head_val.tolist())
-            predicted_values[ihead].extend(pred[ihead].tolist())
+            predicted_values[ihead].extend(head_pre.tolist())
 
     return (
         total_error / num_samples_local,

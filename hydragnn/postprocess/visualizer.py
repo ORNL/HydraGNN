@@ -458,6 +458,57 @@ class Visualizer:
                     )
                 plt.close()
 
+    def create_scatter_plot_vec(
+        self,
+        varname,
+        true_values,
+        predicted_values,
+        head_dim,
+        iepoch=None,
+        save_plot=True,
+    ):
+        """Creates scatter plots for true and predicted values of vector variable varname."""
+
+        predicted_vec = np.reshape(np.asarray(predicted_values), (-1, head_dim))
+        true_vec = np.reshape(np.asarray(true_values), (-1, head_dim))
+        num_samples = true_vec.shape[0]
+
+        markers_vec = ["o", "s", "d"]  # different markers for three vector components
+        nrow = floor(sqrt(head_dim))
+        ncol = ceil(head_dim / nrow)
+        fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 4, nrow * 4))
+        axs = axs.flatten()
+        for icomp in range(head_dim):
+            ax = axs[icomp]
+            self.__scatter_impl(
+                ax,
+                true_vec[:, icomp],
+                predicted_vec[:, icomp],
+                s=6,
+                c="b",
+                marker=markers_vec[icomp],
+                title="comp:" + str(icomp),
+                xylim_equal=True,
+            )
+        for iext in range(head_dim, axs.size):
+            axs[iext].axis("off")
+        plt.subplots_adjust(
+            left=0.1, bottom=0.12, right=0.98, top=0.9, wspace=0.2, hspace=0.25
+        )
+
+        if save_plot:
+            if iepoch:
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/"
+                    + varname
+                    + "_"
+                    + str(iepoch).zfill(4)
+                    + ".png"
+                )
+            else:
+                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+            plt.close()
+
     def create_scatter_plot_nodes_vec(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
@@ -636,12 +687,13 @@ class Visualizer:
     ):
         """Creates scatter plots for all head predictions."""
         for ihead in range(self.num_heads):
-            if self.head_dims[ihead] == 3:
+            if self.head_dims[ihead] > 1:
                 # vector output
-                self.create_scatter_plot_nodes_vec(
+                self.create_scatter_plot_vec(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
+                    self.head_dims[ihead],
                     iepoch,
                 )
             else:

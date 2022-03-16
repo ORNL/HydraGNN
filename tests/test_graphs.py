@@ -151,8 +151,6 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         head_pred = torch.tensor(predicted_values[ihead])
         # Check individual samples
         mae = torch.nn.L1Loss()
-        if head_true.shape != head_pred.shape:
-            head_pred = torch.reshape(head_pred, head_true.shape)
         sample_mean_abs_error = mae(head_true, head_pred)
         sample_max_abs_error = torch.max(torch.abs(head_true - head_pred))
         error_str = (
