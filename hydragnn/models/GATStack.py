@@ -21,39 +21,16 @@ from .Base import Base
 class GATStack(Base):
     def __init__(
         self,
-        input_dim: int,
-        output_dim: list,
-        output_type: list,
-        num_nodes: int,
-        hidden_dim: int,
-        config_heads: {},
-        freeze_conv=False,
-        heads: int = 6,
-        negative_slope: float = 0.05,
-        dropout: float = 0.25,
-        num_conv_layers: int = 16,
-        ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
-        loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
-        ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
+        heads: int,
+        negative_slope: float,
+        *args,
+        **kwargs,
     ):
         # note that self.heads is a parameter in GATConv, not the num_heads in the output part
         self.heads = heads
         self.negative_slope = negative_slope
 
-        super().__init__(
-            input_dim,
-            hidden_dim,
-            output_dim,
-            output_type,
-            config_heads,
-            ilossweights_hyperp,
-            loss_weights,
-            ilossweights_nll,
-            freeze_conv,
-            dropout,
-            num_conv_layers,
-            num_nodes,
-        )
+        super().__init__(*args, **kwargs)
 
     def _init_conv(self):
         """Here this function overwrites _init_conv() in Base since it has different implementation
