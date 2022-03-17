@@ -28,6 +28,7 @@ class Base(Module):
         ilossweights_hyperp: int,
         loss_weights: list,
         ilossweights_nll: int,
+        freeze_conv=False,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
@@ -81,7 +82,12 @@ class Base(Module):
         ):
             self.use_edge_attr = True
 
+        # Option to only train final property layers.
+        self.freeze_conv = freeze_conv
+
         self._init_conv()
+        if self.freeze_conv:
+            self._freeze_conv()
         self._init_node_conv()
         self._multihead()
 
@@ -92,6 +98,12 @@ class Base(Module):
             conv = self.get_conv(self.hidden_dim, self.hidden_dim)
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
+
+    def _freeze_conv(self):
+        for module in [self.convs, self.batch_norms]:
+            for layer in module:
+                for param in layer.parameters():
+                    param.requires_grad = False
 
     def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
