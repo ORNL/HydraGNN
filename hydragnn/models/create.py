@@ -39,6 +39,7 @@ def create_model_config(
         config["output_type"],
         config["output_heads"],
         config["task_weights"],
+        config["freeze_conv_layers"],
         config["max_neighbours"],
         config["num_nodes"],
         config["edge_dim"],
@@ -57,6 +58,7 @@ def create_model(
     output_type: str,
     output_heads: dict,
     task_weights: list,
+    freeze_conv: bool = False,
     max_neighbours: int = None,
     num_nodes: int = None,
     edge_dim: int = None,
@@ -80,6 +82,7 @@ def create_model(
             output_type=output_type,
             config_heads=output_heads,
             loss_weights=task_weights,
+            freeze_conv=freeze_conv,
         )
 
     elif model_type == "PNA":
@@ -95,6 +98,7 @@ def create_model(
             config_heads=output_heads,
             loss_weights=task_weights,
             edge_dim=edge_dim,
+            freeze_conv=freeze_conv,
         )
 
     elif model_type == "GAT":
@@ -107,6 +111,7 @@ def create_model(
             output_type=output_type,
             config_heads=output_heads,
             loss_weights=task_weights,
+            freeze_conv=freeze_conv,
         )
 
     elif model_type == "MFC":
@@ -121,6 +126,7 @@ def create_model(
             output_type=output_type,
             config_heads=output_heads,
             loss_weights=task_weights,
+            freeze_conv=freeze_conv,
         )
 
     elif model_type == "CGCNN":
@@ -133,6 +139,7 @@ def create_model(
             config_heads=output_heads,
             loss_weights=task_weights,
             edge_dim=edge_dim,
+            freeze_conv=freeze_conv,
         )
 
     else:

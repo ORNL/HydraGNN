@@ -45,6 +45,9 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]
     )
 
+    if "freeze_conv_layers" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["freeze_conv_layers"] = False
+
     return config
 
 
