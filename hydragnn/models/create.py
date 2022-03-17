@@ -104,9 +104,12 @@ def create_model(
         )
 
     elif model_type == "GAT":
+        # FIXME: expose options to users
+        heads = 6
+        negative_slope = 0.05
         model = GATStack(
-            6,
-            0.05,
+            heads,
+            negative_slope,
             input_dim,
             hidden_dim,
             output_dim,
