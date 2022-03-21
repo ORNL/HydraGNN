@@ -25,6 +25,7 @@ from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
     load_existing_model_config,
+    print_model,
 )
 from hydragnn.utils.print_utils import print_distributed, setup_log
 from hydragnn.utils.time_utils import print_timers
@@ -87,7 +88,8 @@ def _(config: dict):
     with open("./logs/" + log_name + "/config.json", "w") as f:
         json.dump(config, f)
 
-    load_existing_model_config(model, config["NeuralNetwork"]["Training"])
+    load_existing_model_config(model, optimizer, config["NeuralNetwork"]["Training"])
+    print_model(model)
 
     print_distributed(
         verbosity,
@@ -108,6 +110,6 @@ def _(config: dict):
         verbosity,
     )
 
-    save_model(model, log_name)
+    save_model(model, optimizer, log_name)
 
     print_timers(verbosity)

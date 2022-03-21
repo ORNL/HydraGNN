@@ -15,6 +15,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
+from .print_utils import print_master
 
 from hydragnn.utils.distributed import (
     get_comm_size_and_rank,
@@ -31,12 +32,18 @@ def get_model_or_module(model):
         return model
 
 
-def save_model(model, name, path="./logs/"):
+def save_model(model, optimizer, name, path="./logs/"):
+    """Save both model and optimizer state in a single checkpoint file"""
     _, world_rank = get_comm_size_and_rank()
     if world_rank == 0:
-        model = get_model_or_module(model)
         path_name = os.path.join(path, name, name + ".pk")
-        torch.save(model.state_dict(), path_name)
+        torch.save(
+            {
+                "model_state_dict": model.state_dict(),
+                "optimizer_state_dict": optimizer.state_dict(),
+            },
+            path_name,
+        )
 
 
 def get_summary_writer(name, path="./logs/"):
@@ -46,24 +53,20 @@ def get_summary_writer(name, path="./logs/"):
         writer = SummaryWriter(path_name)
 
 
-def load_existing_model_config(model, config, path="./logs/"):
+def load_existing_model_config(model, optimizer, config, path="./logs/"):
     if "continue" in config and config["continue"]:
         model_name = config["startfrom"]
-        load_existing_model(model, model_name, path)
+        load_existing_model(model, optimizer, model_name, path)
 
 
-def load_existing_model(model, model_name, path="./logs/"):
+def load_existing_model(model, optimizer, model_name, path="./logs/"):
+    """Load both model and optimizer state from a single checkpoint file"""
+    _, world_rank = get_comm_size_and_rank()
     path_name = os.path.join(path, model_name, model_name + ".pk")
-    state_dict = torch.load(path_name, map_location="cpu")
-
-    if is_model_distributed(model):
-        ddp_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            k = "module." + k
-            ddp_state_dict[k] = v
-        state_dict = ddp_state_dict
-
-    model.load_state_dict(state_dict)
+    map_location = {"cuda:%d" % 0: "cuda:%d" % world_rank}
+    checkpoint = torch.load(path_name, map_location=map_location)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
 
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
@@ -72,3 +75,14 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
     return deg
+
+
+def print_model(model):
+    """print model's parameter size layer by layer"""
+    num_params = 0
+    for k, v in model.state_dict().items():
+        print_master("%50s\t%20s\t%10d" % (k, list(v.shape), v.numel()))
+        num_params += v.numel()
+    print_master("-" * 50)
+    print_master("%50s\t%20s\t%10d" % ("Total", "", num_params))
+    print_master("All (total, MB): %d %g" % (num_params, num_params * 4 / 1024 / 1024))
