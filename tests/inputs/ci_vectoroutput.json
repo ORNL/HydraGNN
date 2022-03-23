@@ -38,7 +38,7 @@
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [10, 10],
+                    "dim_headlayers": [40, 10],
                     "type": "mlp"
                 }
             },
