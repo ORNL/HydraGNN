@@ -120,11 +120,9 @@ def load_train_val_test_sets(config):
         else:
             files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-        loader = SerializedDataLoader(config["Verbosity"]["level"])
-        dataset = loader.load_serialized_data(
-            dataset_path=files_dir,
-            config=config,
-        )
+        loader = SerializedDataLoader(config)
+        dataset = loader.load_serialized_data(dataset_path=files_dir)
+
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
 

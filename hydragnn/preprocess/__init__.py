@@ -2,6 +2,8 @@ from .dataset_descriptors import AtomFeatures, StructureFeatures
 
 from .utils import (
     check_if_graph_size_variable,
+    get_radius_graph,
+    get_radius_graph_pbc,
     get_radius_graph_config,
     get_radius_graph_pbc_config,
     RadiusGraphPBC,

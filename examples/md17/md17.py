@@ -17,9 +17,13 @@ def md17_pre_transform(data):
     data.x = data.z.float().view(-1, 1)
     # Only predict energy (index 0 of 2 properties) for this run.
     data.y = data.energy / len(data.x)
+    graph_features_dim = [1]
+    node_feature_dim = [1]
     hydragnn.preprocess.update_predicted_values(
         var_config["type"],
         var_config["output_index"],
+        graph_features_dim,
+        node_feature_dim,
         data,
     )
     data = compute_edges(data)

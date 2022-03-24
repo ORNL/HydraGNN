@@ -128,9 +128,11 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         "GAT": [0.60, 0.70, 0.99],
         "CGCNN": [0.50, 0.40, 0.95],
     }
-    if use_lengths:
+    if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.15, 0.15, 0.40]
         thresholds["PNA"] = [0.10, 0.10, 0.40]
+    if use_lengths and "vector" in ci_input:
+        thresholds["PNA"] = [0.15, 0.10, 0.75]
     verbosity = 2
 
     for ihead in range(len(true_values)):
@@ -149,6 +151,8 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         head_pred = torch.tensor(predicted_values[ihead])
         # Check individual samples
         mae = torch.nn.L1Loss()
+        if head_true.shape != head_pred.shape:
+            head_pred = torch.reshape(head_pred, head_true.shape)
         sample_mean_abs_error = mae(head_true, head_pred)
         sample_max_abs_error = torch.max(torch.abs(head_true - head_pred))
         error_str = (
@@ -185,3 +189,9 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 @pytest.mark.parametrize("model_type", ["PNA", "CGCNN"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
+
+
+# Test vector output
+@pytest.mark.parametrize("model_type", ["PNA"])
+def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
+    unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)

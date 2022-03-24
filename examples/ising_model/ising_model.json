@@ -54,5 +54,10 @@
             "batch_size": 64,
             "continue": 0
         }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
     }
 }
