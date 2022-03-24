@@ -149,12 +149,15 @@ def create_configuration(
     if linear_only:
         total_value = torch.sum(node_output_x)
     else:
+        total_value_linear = torch.sum(node_output_x)
         total_value = (
             torch.sum(node_output_x)
             + torch.sum(node_output_x_square)
             + torch.sum(node_output_x_cube)
         )
     filetxt = numpy.array2string(total_value.detach().numpy())
+    if not linear_only:
+        filetxt += "\t" + numpy.array2string(total_value_linear.detach().numpy())
 
     for index in range(0, number_nodes):
         numpy_row = updated_table[index, :]

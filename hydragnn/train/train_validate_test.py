@@ -43,6 +43,7 @@ def train_validate_test(
     verbosity=0,
     plot_init_solution=True,
     plot_hist_solution=False,
+    create_plots=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
     # total loss tracking for train/vali/test
@@ -64,16 +65,17 @@ def train_validate_test(
         node_feature.extend(data.x.tolist())
         nodes_num_list.append(data.num_nodes)
 
-    visualizer = Visualizer(
-        model_with_config_name,
-        node_feature=node_feature,
-        num_heads=model.num_heads,
-        head_dims=model.head_dims,
-        num_nodes_list=nodes_num_list,
-    )
-    visualizer.num_nodes_plot()
+    if create_plots:
+        visualizer = Visualizer(
+            model_with_config_name,
+            node_feature=node_feature,
+            num_heads=model.num_heads,
+            head_dims=model.head_dims,
+            num_nodes_list=nodes_num_list,
+        )
+        visualizer.num_nodes_plot()
 
-    if plot_init_solution:  # visualizing of initial conditions
+    if create_plots and plot_init_solution:  # visualizing of initial conditions
         _, _, true_values, predicted_values = test(test_loader, model, verbosity)
         visualizer.create_scatter_plots(
             true_values,
@@ -147,28 +149,29 @@ def train_validate_test(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
 
-    ######result visualization######
-    visualizer.create_plot_global(
-        true_values,
-        predicted_values,
-        output_names=config["Variables_of_interest"]["output_names"],
-    )
-    visualizer.create_scatter_plots(
-        true_values,
-        predicted_values,
-        output_names=config["Variables_of_interest"]["output_names"],
-    )
-    ######plot loss history#####
-    visualizer.plot_history(
-        total_loss_train,
-        total_loss_val,
-        total_loss_test,
-        task_loss_train,
-        task_loss_val,
-        task_loss_test,
-        model.loss_weights,
-        config["Variables_of_interest"]["output_names"],
-    )
+    if create_plots:
+        ######result visualization######
+        visualizer.create_plot_global(
+            true_values,
+            predicted_values,
+            output_names=config["Variables_of_interest"]["output_names"],
+        )
+        visualizer.create_scatter_plots(
+            true_values,
+            predicted_values,
+            output_names=config["Variables_of_interest"]["output_names"],
+        )
+        ######plot loss history#####
+        visualizer.plot_history(
+            total_loss_train,
+            total_loss_val,
+            total_loss_test,
+            task_loss_train,
+            task_loss_val,
+            task_loss_test,
+            model.loss_weights,
+            config["Variables_of_interest"]["output_names"],
+        )
 
 
 def get_head_indices(model, data):
@@ -287,13 +290,11 @@ def test(loader, model, verbosity):
         for itask in range(len(tasks_rmse)):
             tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
         ytrue = data.y
-        istart = 0
         for ihead in range(model.num_heads):
             head_pre = pred[ihead]
-            pred_shape = head_pre.shape
-            iend = istart + pred_shape[0] * pred_shape[1]
             head_val = ytrue[head_index[ihead]]
-            istart = iend
+            if head_val.shape != head_pre.shape:
+                head_val = torch.reshape(head_val, head_pre.shape)
             true_values[ihead].extend(head_val.tolist())
             predicted_values[ihead].extend(pred[ihead].tolist())
 
