@@ -36,6 +36,7 @@ def save_model(model, optimizer, name, path="./logs/"):
     """Save both model and optimizer state in a single checkpoint file"""
     _, world_rank = get_comm_size_and_rank()
     if world_rank == 0:
+        model = get_model_or_module(model)
         path_name = os.path.join(path, name, name + ".pk")
         torch.save(
             {
@@ -53,20 +54,28 @@ def get_summary_writer(name, path="./logs/"):
         writer = SummaryWriter(path_name)
 
 
-def load_existing_model_config(model, optimizer, config, path="./logs/"):
+def load_existing_model_config(model, config, path="./logs/", optimizer=None):
     if "continue" in config and config["continue"]:
         model_name = config["startfrom"]
-        load_existing_model(model, optimizer, model_name, path)
+        load_existing_model(model, model_name, path, optimizer)
 
 
-def load_existing_model(model, optimizer, model_name, path="./logs/"):
+def load_existing_model(model, model_name, path="./logs/", optimizer=None):
     """Load both model and optimizer state from a single checkpoint file"""
     _, world_rank = get_comm_size_and_rank()
     path_name = os.path.join(path, model_name, model_name + ".pk")
     map_location = {"cuda:%d" % 0: "cuda:%d" % world_rank}
     checkpoint = torch.load(path_name, map_location=map_location)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    state_dict = checkpoint["model_state_dict"]
+    if is_model_distributed(model):
+        ddp_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            k = "module." + k
+            ddp_state_dict[k] = v
+        state_dict = ddp_state_dict
+    model.load_state_dict(state_dict)
+    if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
 
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
