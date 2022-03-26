@@ -2,6 +2,32 @@ import os, json
 import matplotlib.pyplot as plt
 from ogb_utils import *
 
+import logging
+import sys
+from tqdm import tqdm
+from mpi4py import MPI
+from itertools import chain
+
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+
+def info(*args, logtype='info', sep=' '):
+    getattr(logging, logtype)(sep.join(map(str, args)))
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+comm_size = comm.Get_size()
+
+## Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%%(asctime)s,%%(msecs)d %%(levelname)s (rank %d): %%(message)s"%(rank),
+    datefmt="%H:%M:%S",
+)
+
 graph_feature_names = ["GAP"]
 dirpwd = os.path.dirname(__file__)
 datafile = os.path.join(dirpwd, "dataset/pcqm4m_gap.csv")
@@ -39,11 +65,31 @@ for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
         print(valueset[:, 0].mean(), valueset[:, 0].std())
         print(valueset[:, 1].mean(), valueset[:, 1].std())
         print(valueset[:, 2].mean(), valueset[:, 2].std())
-    for smilestr, ytarget in zip(smileset, valueset):
-        dataset_lists[idataset].append(generate_graphdata(smilestr, ytarget,var_config))
-trainset = dataset_lists[0]
-valset = dataset_lists[1]
-testset = dataset_lists[2]
+
+    rx = list(nsplit(range(len(smileset)), comm_size))[rank]
+    info ("Subset range:", rx.start, rx.stop)
+    ## local portion
+    _smileset = smileset[rx.start:rx.stop]
+    _valueset = valueset[rx.start:rx.stop]
+    info ("local smileset size:", len(_smileset))
+
+    for smilestr, ytarget in iterate_tqdm(zip(_smileset, _valueset), verbosity, total=len(_smileset)):
+        data = generate_graphdata(smilestr, ytarget,var_config)
+        dataset_lists[idataset].append(data)
+
+## local data
+_trainset = dataset_lists[0]
+_valset = dataset_lists[1]
+_testset = dataset_lists[2]
+
+## Collect all datas with MPI_Allgather
+trainset_list = comm.allgather(_trainset)
+valset_list = comm.allgather(_valset)
+testset_list = comm.allgather(_testset)
+
+trainset = list(chain(*trainset_list))
+valset = list(chain(*valset_list))
+testset = list(chain(*testset_list))
 
 (
     train_loader,
@@ -92,6 +138,9 @@ hydragnn.train.train_validate_test(
 
 hydragnn.utils.save_model(model, log_name)
 hydragnn.utils.print_timers(verbosity)
+
+if rank > 0:
+    sys.exit(0)
 ##################################################################################################################
 for ifeat in range(len(var_config["output_index"])):
     fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
