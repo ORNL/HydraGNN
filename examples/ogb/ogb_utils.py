@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.data import Data
 import hydragnn
+import random
 
 ##################################################################################################################
 ##################################################################################################################
@@ -46,7 +47,7 @@ def datasets_load_gap(datafile):
     return smiles, yvals
 
 
-def datasets_load(datafile):
+def datasets_load(datafile, sampling=None):
     trainset = []
     valset = []
     testset = []
@@ -60,6 +61,8 @@ def datasets_load(datafile):
         csvreader = csv.reader(file)
         print(next(csvreader))
         for row in csvreader:
+            if (sampling is not None) and (random.random() > sampling):
+                continue
             if row[1] == "train":
                 trainsmiles.append(row[0])
                 trainset.append([float(row[-1])])
