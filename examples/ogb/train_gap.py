@@ -93,9 +93,21 @@ with open('_ogb-%d.pickle'%rank, 'wb') as f:
     pickle.dump([_trainset, _valset, _testset], f)
 
 ## Collect all datas with MPI_Allgather
-trainset_list = comm.allgather(_trainset)
-valset_list = comm.allgather(_valset)
-testset_list = comm.allgather(_testset)
+## (2022/03) jyc: too big to use with MPI
+# trainset_list = comm.allgather(_trainset)
+# valset_list = comm.allgather(_valset)
+# testset_list = comm.allgather(_testset)
+
+trainset_list = list()
+valset_list = list()
+testset_list = list()
+for i in range(comm_size):
+    fname = '_ogb-%d.pickle'%i
+    with open('_ogb-%d.pickle'%i, 'rb') as f:
+        tr, val, ts = pickle.load(f)
+    trainset_list.append(tr)
+    valset_list.append(val)
+    testset_list.append(ts)
 
 trainset = list(chain(*trainset_list))
 valset = list(chain(*valset_list))
