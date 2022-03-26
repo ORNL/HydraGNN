@@ -7,6 +7,8 @@ import sys
 from tqdm import tqdm
 from mpi4py import MPI
 from itertools import chain
+import argparse
+import pickle
 
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
@@ -16,6 +18,11 @@ def info(*args, logtype='info', sep=' '):
 def nsplit(a, n):
     k, m = divmod(len(a), n)
     return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+
+parser = argparse.ArgumentParser()
+parser.add_argument('inputfilesubstr', help='input file substr')
+parser.add_argument('--sampling', type=float, help='sampling ratio', default=None)
+args = parser.parse_args()
 
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
@@ -33,7 +40,7 @@ dirpwd = os.path.dirname(__file__)
 datafile = os.path.join(dirpwd, "dataset/pcqm4m_gap.csv")
 trainset_statistics = os.path.join(dirpwd, "dataset/statistics.pkl")
 ##################################################################################################################
-inputfilesubstr = sys.argv[1]
+inputfilesubstr = args.inputfilesubstr
 input_filename = os.path.join(dirpwd, "ogb_" + inputfilesubstr + ".json")
 ##################################################################################################################
 # Configurable run choices (JSON file that accompanies this example script).
@@ -55,7 +62,7 @@ var_config["ystd"] = ystd_feature.tolist()
 world_size, world_rank = hydragnn.utils.setup_ddp()
 ##################################################################################################################
 norm_yflag = False  # True
-smiles_sets, values_sets = datasets_load(datafile)
+smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling)
 dataset_lists = [[] for dataset in values_sets]
 for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
     if norm_yflag:
@@ -81,6 +88,9 @@ for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
 _trainset = dataset_lists[0]
 _valset = dataset_lists[1]
 _testset = dataset_lists[2]
+
+with open('_ogb-%d.pickle'%rank, 'wb') as f:
+    pickle.dump([_trainset, _valset, _testset], f)
 
 ## Collect all datas with MPI_Allgather
 trainset_list = comm.allgather(_trainset)
