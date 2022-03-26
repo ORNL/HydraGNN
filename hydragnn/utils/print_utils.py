@@ -53,9 +53,9 @@ def print_distributed(verbosity_level, *args):
     return print_verbose(*args)
 
 
-def iterate_tqdm(iterator, verbosity_level):
+def iterate_tqdm(iterator, verbosity_level, *args, **kwargs):
     if (0 == dist.get_rank() and 2 == verbosity_level) or 4 == verbosity_level:
-        return tqdm(iterator)
+        return tqdm(iterator, *args, **kwargs)
     else:
         return iterator
 
