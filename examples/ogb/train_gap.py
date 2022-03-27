@@ -12,6 +12,71 @@ import pickle
 
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
+import numpy as np
+import adios2 as ad2
+
+import torch_geometric.data
+from torch import tensor
+
+class AdioGGO:
+    def __init__(self, filename, comm):
+        self.filename = filename
+        self.comm = comm
+        self.rank = comm.Get_rank()
+        self.size = comm.Get_size()
+
+        self.dataset = list()
+        self.adios = ad2.ADIOS()
+        self.io = self.adios.DeclareIO(self.filename)
+
+    def add(self, data: torch_geometric.data.Data):
+        if isinstance(data, list):
+            for x in data:
+                self.dataset.append(x)
+        elif isinstance(data, torch_geometric.data.Data):
+            self.dataset.append(data)
+        else:
+            raise Exception("Unsuppored data type yet.")
+
+    def save(self):
+        self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
+        ns = self.comm.allgather(len(self.dataset))
+        ns.insert(0, 0)
+        offset = sum(ns[:rank+1])
+        
+        self.io.DefineAttribute("ndata", np.array(sum(ns)))
+        if len(self.dataset)>0:
+            self.io.DefineAttribute("keys", self.dataset[0].keys)
+
+        for i, data in enumerate(self.dataset):
+            varinfo_list = list()
+            for k in data.keys:
+                val = data[k].cpu().numpy()
+                assert (val.data.contiguous)
+                varinfo_list.append((k, val))
+            
+            gname = 'data_%d'%(i+offset)
+            for vname, val in varinfo_list:
+                var = self.io.DefineVariable("%s/%s"%(gname, vname), val, [], [], val.shape, ad2.ConstantDims)
+                self.writer.Put(var, val)
+            
+        self.writer.Close()
+    
+    def load(self):
+        with ad2.open(self.filename, "r",  MPI.COMM_SELF) as f:
+            keys = f.read_attribute_string('keys')
+            ndata = f.read_attribute('ndata').item()
+            vars = f.available_variables()
+            for i in range(ndata):
+                data_object = torch_geometric.data.Data()
+                for k in keys:
+                    _ = tensor(f.read("data_%d/%s"%(i, k)))
+                    exec("data_object.%s = _" % (k))
+                self.dataset.append(data_object)
+
+        return self.dataset
+
+
 def info(*args, logtype='info', sep=' '):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -22,6 +87,8 @@ def nsplit(a, n):
 parser = argparse.ArgumentParser()
 parser.add_argument('inputfilesubstr', help='input file substr')
 parser.add_argument('--sampling', type=float, help='sampling ratio', default=None)
+parser.add_argument('--notrain', action='store_true')
+parser.add_argument('--readbp', action='store_true')
 args = parser.parse_args()
 
 comm = MPI.COMM_WORLD
@@ -61,57 +128,62 @@ var_config["ystd"] = ystd_feature.tolist()
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.setup_ddp()
 ##################################################################################################################
-norm_yflag = False  # True
-smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling)
-dataset_lists = [[] for dataset in values_sets]
-for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
-    if norm_yflag:
-        valueset = (valueset - torch.tensor(var_config["ymean"])) / torch.tensor(
-            var_config["ystd"]
-        )
-        print(valueset[:, 0].mean(), valueset[:, 0].std())
-        print(valueset[:, 1].mean(), valueset[:, 1].std())
-        print(valueset[:, 2].mean(), valueset[:, 2].std())
 
-    rx = list(nsplit(range(len(smileset)), comm_size))[rank]
-    info ("Subset range:", rx.start, rx.stop)
-    ## local portion
-    _smileset = smileset[rx.start:rx.stop]
-    _valueset = valueset[rx.start:rx.stop]
-    info ("local smileset size:", len(_smileset))
+if not args.readbp:
+    norm_yflag = False  # True
+    smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling)
+    dataset_lists = [[] for dataset in values_sets]
+    for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
+        if norm_yflag:
+            valueset = (valueset - torch.tensor(var_config["ymean"])) / torch.tensor(
+                var_config["ystd"]
+            )
+            print(valueset[:, 0].mean(), valueset[:, 0].std())
+            print(valueset[:, 1].mean(), valueset[:, 1].std())
+            print(valueset[:, 2].mean(), valueset[:, 2].std())
 
-    for smilestr, ytarget in iterate_tqdm(zip(_smileset, _valueset), verbosity, total=len(_smileset)):
-        data = generate_graphdata(smilestr, ytarget,var_config)
-        dataset_lists[idataset].append(data)
+        rx = list(nsplit(range(len(smileset)), comm_size))[rank]
+        info ("subset range:", rx.start, rx.stop)
+        ## local portion
+        _smileset = smileset[rx.start:rx.stop]
+        _valueset = valueset[rx.start:rx.stop]
+        info ("local smileset size:", len(_smileset))
 
-## local data
-_trainset = dataset_lists[0]
-_valset = dataset_lists[1]
-_testset = dataset_lists[2]
+        for smilestr, ytarget in iterate_tqdm(zip(_smileset, _valueset), verbosity, total=len(_smileset)):
+            data = generate_graphdata(smilestr, ytarget,var_config)
+            dataset_lists[idataset].append(data)
 
-with open('_ogb-%d.pickle'%rank, 'wb') as f:
-    pickle.dump([_trainset, _valset, _testset], f)
+    ## local data
+    _trainset = dataset_lists[0]
+    _valset = dataset_lists[1]
+    _testset = dataset_lists[2]
 
-## Collect all datas with MPI_Allgather
-## (2022/03) jyc: too big to use with MPI
-# trainset_list = comm.allgather(_trainset)
-# valset_list = comm.allgather(_valset)
-# testset_list = comm.allgather(_testset)
+    adwriter = AdioGGO("ogb_gap_trainset.bp", comm)
+    adwriter.add(_trainset)
+    adwriter.save()
 
-trainset_list = list()
-valset_list = list()
-testset_list = list()
-for i in range(comm_size):
-    fname = '_ogb-%d.pickle'%i
-    with open('_ogb-%d.pickle'%i, 'rb') as f:
-        tr, val, ts = pickle.load(f)
-    trainset_list.append(tr)
-    valset_list.append(val)
-    testset_list.append(ts)
+    adwriter = AdioGGO("ogb_gap_valset.bp", comm)
+    adwriter.add(_valset)
+    adwriter.save()
 
-trainset = list(chain(*trainset_list))
-valset = list(chain(*valset_list))
-testset = list(chain(*testset_list))
+    adwriter = AdioGGO("ogb_gap_testset.bp", comm)
+    adwriter.add(_testset)
+    adwriter.save()
+else:
+    adreader = AdioGGO("ogb_gap_trainset.bp", comm)
+    trainset = adreader.load()
+
+    adreader = AdioGGO("ogb_gap_valset.bp", comm)
+    valset = adreader.load()
+
+    adreader = AdioGGO("ogb_gap_testset.bp", comm)
+    testset = adreader.load()
+
+    info("Adios load")
+    info("trainset,valset,testset size: %d %d %d"%(len(trainset), len(valset), len(testset)))
+
+if args.notrain:
+    sys.exit(0)
 
 (
     train_loader,
