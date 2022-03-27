@@ -26,7 +26,7 @@ class AdioGGO:
         self.size = comm.Get_size()
 
         self.dataset = list()
-        self.adios = ad2.ADIOS()
+        self.adios = ad2.ADIOS(self.comm)
         self.io = self.adios.DeclareIO(self.filename)
 
     def add(self, data: torch_geometric.data.Data):
@@ -39,6 +39,7 @@ class AdioGGO:
             raise Exception("Unsuppored data type yet.")
 
     def save(self):
+        info('Adios writing:', self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         ns = self.comm.allgather(len(self.dataset))
         ns.insert(0, 0)
@@ -57,8 +58,8 @@ class AdioGGO:
             
             gname = 'data_%d'%(i+offset)
             for vname, val in varinfo_list:
-                var = self.io.DefineVariable("%s/%s"%(gname, vname), val, [], [], val.shape, ad2.ConstantDims)
-                self.writer.Put(var, val)
+                var = self.io.DefineVariable("%s/%s"%(gname, vname), val, val.shape, [0,]*len(val.shape), val.shape, ad2.ConstantDims)
+                self.writer.Put(var, val, ad2.Mode.Sync)
             
         self.writer.Close()
     
