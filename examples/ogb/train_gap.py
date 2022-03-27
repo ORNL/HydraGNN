@@ -8,7 +8,7 @@ from tqdm import tqdm
 from mpi4py import MPI
 from itertools import chain
 import argparse
-import pickle
+import time
 
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 
@@ -26,7 +26,7 @@ class AdioGGO:
         self.size = comm.Get_size()
 
         self.dataset = list()
-        self.adios = ad2.ADIOS(self.comm)
+        self.adios = ad2.ADIOS()
         self.io = self.adios.DeclareIO(self.filename)
 
     def add(self, data: torch_geometric.data.Data):
@@ -39,7 +39,8 @@ class AdioGGO:
             raise Exception("Unsuppored data type yet.")
 
     def save(self):
-        info('Adios writing:', self.filename)
+        t0 = time.time()
+        info('Adios saving:', self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         ns = self.comm.allgather(len(self.dataset))
         ns.insert(0, 0)
@@ -62,8 +63,12 @@ class AdioGGO:
                 self.writer.Put(var, val, ad2.Mode.Sync)
             
         self.writer.Close()
+        t1 = time.time()
+        info("Adios saving time (sec): ", (t1-t0))
     
     def load(self):
+        t0 = time.time()
+        info('Adios reading:', self.filename)
         with ad2.open(self.filename, "r",  MPI.COMM_SELF) as f:
             keys = f.read_attribute_string('keys')
             ndata = f.read_attribute('ndata').item()
@@ -75,6 +80,8 @@ class AdioGGO:
                     exec("data_object.%s = _" % (k))
                 self.dataset.append(data_object)
 
+        t1 = time.time()
+        info("Adios reading time (sec): ", (t1-t0))
         return self.dataset
 
 
