@@ -18,6 +18,8 @@ import adios2 as ad2
 import torch_geometric.data
 from torch import tensor
 
+import copy
+
 class AdioGGO:
     def __init__(self, filename, comm):
         self.filename = filename
@@ -117,7 +119,7 @@ class AdioGGO:
                     vdim = variable_dim[k]
                     start[vdim] = variable_offset[k][i]
                     count[vdim] = variable_count[k][i]
-                    val = f.read(k, start, count)
+                    val = copy.deepcopy(f.read(k, start, count))
                     # info (i, k, start, count, val.shape)
 
                     _ = tensor(val)
