@@ -47,7 +47,9 @@ def datasets_load_gap(datafile):
     return smiles, yvals
 
 
-def datasets_load(datafile, sampling=None):
+def datasets_load(datafile, sampling=None, seed=None):
+    if seed is not None:
+        random.seed(seed)
     trainset = []
     valset = []
     testset = []

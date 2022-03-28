@@ -41,6 +41,97 @@ class AdioGGO:
     def save(self):
         t0 = time.time()
         info('Adios saving:', self.filename)
+        ns = self.comm.allgather(len(self.dataset))
+        ns.insert(0, 0)
+        offset = sum(ns[:self.rank+1])
+
+        self.io.DefineAttribute("ndata", np.array(sum(ns)))
+        if len(self.dataset)>0:
+            data = self.dataset[0]
+            self.io.DefineAttribute("keys", data.keys)
+            keys = sorted(data.keys)
+
+        self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
+        for k in keys:
+            arr_list = [ data[k].cpu().numpy() for data in self.dataset ]
+            m0 = np.min([ x.shape for x in arr_list ], axis=0)
+            m1 = np.max([ x.shape for x in arr_list ], axis=0)
+            wh = np.where(m0 != m1)[0]
+            assert (len(wh) < 2)
+            vdim = wh[0] if len(wh) == 1 else 1
+            val = np.concatenate(arr_list, axis=vdim)
+            assert (val.data.contiguous)
+            shape_list = self.comm.allgather(list(val.shape))
+            offset = [0,]*len(val.shape)
+            for i in range(rank):
+                offset[vdim] += shape_list[i][vdim]
+            global_shape = shape_list[0]
+            for i in range(1, self.size):
+                global_shape[vdim] += shape_list[i][vdim]
+            info ("k,shape", k, global_shape, offset, val.shape)
+            var = self.io.DefineVariable(k, val, global_shape, offset, val.shape, ad2.ConstantDims)
+            self.writer.Put(var, val, ad2.Mode.Sync)
+
+            self.io.DefineAttribute("%s/variable_dim"%k, np.array(vdim))
+            vcount = np.array([ x.shape[vdim] for x in arr_list ])
+            vcount_sum_list = self.comm.allgather(vcount.sum())
+            
+            offset_arr = np.zeros_like(vcount)
+            offset_arr[1:] = np.cumsum(vcount)[:-1]
+            offset = sum(vcount_sum_list[:rank])
+            offset_arr += offset
+
+            var = self.io.DefineVariable("%s/variable_count"%k, vcount, [global_shape[vdim],], [offset,], [len(vcount),], ad2.ConstantDims)
+            self.writer.Put(var, vcount, ad2.Mode.Sync)
+
+            var = self.io.DefineVariable("%s/variable_offset"%k, offset_arr, [global_shape[vdim],], [offset,], [len(vcount),], ad2.ConstantDims)
+            self.writer.Put(var, offset_arr, ad2.Mode.Sync)
+
+        self.writer.Close()
+        t1 = time.time()
+        info("Adios saving time (sec): ", (t1-t0))
+
+    def load(self):
+        t0 = time.time()
+        info('Adios reading:', self.filename)
+        with ad2.open(self.filename, "r",  MPI.COMM_SELF) as f:
+            vars = f.available_variables()
+            keys = f.read_attribute_string('keys')
+            ndata = f.read_attribute('ndata').item()
+
+            variable_count = dict()
+            variable_offset = dict()
+            variable_dim = dict()
+            for k in keys:
+                variable_count[k] = f.read("%s/variable_count"%k)
+                variable_offset[k] = f.read("%s/variable_offset"%k)
+                variable_dim[k] = f.read_attribute("%s/variable_dim"%k).item()
+
+            for i in range(ndata):
+                data_object = torch_geometric.data.Data()
+                for k in keys:
+                    shape = f.available_variables()[k]['Shape']
+                    ishape = [ int(x.strip(',')) for x in shape.strip().split() ]
+                    start = [0,] * len(ishape)
+                    count = ishape
+                    vdim = variable_dim[k]
+                    start[vdim] = variable_offset[k][i]
+                    count[vdim] = variable_count[k][i]
+                    val = f.read(k, start, count)
+                    # info (i, k, start, count, val.shape)
+
+                    _ = tensor(val)
+                    exec("data_object.%s = _" % (k))
+                self.dataset.append(data_object)
+        
+        t1 = time.time()
+        info("Adios reading time (sec): ", (t1-t0))
+        return self.dataset
+            
+
+    def save_v1(self):
+        t0 = time.time()
+        info('Adios saving:', self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         ns = self.comm.allgather(len(self.dataset))
         ns.insert(0, 0)
@@ -59,14 +150,14 @@ class AdioGGO:
             
             gname = 'data_%d'%(i+offset)
             for vname, val in varinfo_list:
-                var = self.io.DefineVariable("%s/%s"%(gname, vname), val, val.shape, [0,]*len(val.shape), val.shape, ad2.ConstantDims)
+                var = self.io.DefineVariable("%s/%s"%(gname, vname), val, [], [], val.shape, ad2.ConstantDims)
                 self.writer.Put(var, val, ad2.Mode.Sync)
             
         self.writer.Close()
         t1 = time.time()
         info("Adios saving time (sec): ", (t1-t0))
     
-    def load(self):
+    def load_v1(self):
         t0 = time.time()
         info('Adios reading:', self.filename)
         with ad2.open(self.filename, "r",  MPI.COMM_SELF) as f:
@@ -106,7 +197,7 @@ comm_size = comm.Get_size()
 ## Set up logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%%(asctime)s,%%(msecs)d %%(levelname)s (rank %d): %%(message)s"%(rank),
+    format="%%(levelname)s (rank %d): %%(message)s"%(rank),
     datefmt="%H:%M:%S",
 )
 
@@ -139,7 +230,8 @@ world_size, world_rank = hydragnn.utils.setup_ddp()
 
 if not args.readbp:
     norm_yflag = False  # True
-    smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling)
+    smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling, seed=43)
+    info([ len(x) for x in values_sets ])
     dataset_lists = [[] for dataset in values_sets]
     for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
         if norm_yflag:
@@ -151,7 +243,7 @@ if not args.readbp:
             print(valueset[:, 2].mean(), valueset[:, 2].std())
 
         rx = list(nsplit(range(len(smileset)), comm_size))[rank]
-        info ("subset range:", rx.start, rx.stop)
+        info ("subset range:", idataset, len(smileset), rx.start, rx.stop)
         ## local portion
         _smileset = smileset[rx.start:rx.stop]
         _valueset = valueset[rx.start:rx.stop]
