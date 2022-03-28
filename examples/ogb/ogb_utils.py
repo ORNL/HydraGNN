@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.data import Data
 import hydragnn
-
 ##################################################################################################################
 ##################################################################################################################
 
@@ -278,7 +277,8 @@ def generate_graphdata(simlestr, ytarget, var_config=None):
 
     y = ytarget  # .squeeze()
 
-    data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y)
+    #data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y)
+    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
     if var_config is not None:
         hydragnn.preprocess.update_predicted_values(
             var_config["type"],
@@ -286,6 +286,6 @@ def generate_graphdata(simlestr, ytarget, var_config=None):
             data,
         )
 
-    device = hydragnn.utils.get_device()
+    #device = hydragnn.utils.get_device()
     return data
     #return data.to(device)
