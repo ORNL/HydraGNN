@@ -112,7 +112,7 @@ class AdioGGO:
                 ## load full data first
                 data[k] = f.read(k)
 
-            for i in iterate_tqdm(range(ndata), 2):
+            for i in iterate_tqdm(range(ndata), verbosity_level=2):
                 data_object = torch_geometric.data.Data()
                 for k in keys:
                     shape = f.available_variables()[k]['Shape']
@@ -122,20 +122,11 @@ class AdioGGO:
                     vdim = variable_dim[k]
                     start[vdim] = variable_offset[k][i]
                     count[vdim] = variable_count[k][i]
-                    if count[vdim] > 1000000000:
-                        import ipdb; ipdb.set_trace()
                     slice_list = list()
                     for n0,n1 in zip(start, count):
-                        # info (n0, n1, n0+n1)
                         slice_list.append(slice(n0,n0+n1))
                     val = data[k][tuple(slice_list)]
                                         
-                    # if np.prod(count) > 0:
-                    #     val = f.read(k, start, count)
-                    # else:
-                    #     val = np.zeros(count)
-                    # info (i, k, start, count, val.shape)
-
                     _ = tensor(val)
                     exec("data_object.%s = _" % (k))
                 self.dataset.append(data_object)
