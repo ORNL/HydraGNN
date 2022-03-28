@@ -56,8 +56,6 @@ class AdioGGO:
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         for k in keys:
             arr_list = [ data[k].cpu().numpy() for data in self.dataset ]
-            for x in arr_list:
-                assert (x.size > 0)
             m0 = np.min([ x.shape for x in arr_list ], axis=0)
             m1 = np.max([ x.shape for x in arr_list ], axis=0)
             wh = np.where(m0 != m1)[0]
@@ -121,8 +119,10 @@ class AdioGGO:
                     vdim = variable_dim[k]
                     start[vdim] = variable_offset[k][i]
                     count[vdim] = variable_count[k][i]
-                    # val = copy.deepcopy(f.read(k, start, count))
-                    val = f.read(k, start, count)
+                    if np.prod(count) > 0:
+                        val = f.read(k, start, count)
+                    else:
+                        val = np.zeros(count)
                     # info (i, k, start, count, val.shape)
 
                     _ = tensor(val)
