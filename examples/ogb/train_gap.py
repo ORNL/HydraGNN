@@ -18,6 +18,9 @@ import adios2 as ad2
 import torch_geometric.data
 from torch import tensor
 
+import warnings
+warnings.filterwarnings("error")
+
 class AdioGGO:
     def __init__(self, filename, comm):
         self.filename = filename
@@ -42,8 +45,7 @@ class AdioGGO:
         t0 = time.time()
         info('Adios saving:', self.filename)
         ns = self.comm.allgather(len(self.dataset))
-        ns.insert(0, 0)
-        offset = sum(ns[:self.rank+1])
+        ns_offset = sum(ns[:self.rank])
 
         self.io.DefineAttribute("ndata", np.array(sum(ns)))
         if len(self.dataset)>0:
@@ -68,23 +70,23 @@ class AdioGGO:
             global_shape = shape_list[0]
             for i in range(1, self.size):
                 global_shape[vdim] += shape_list[i][vdim]
-            info ("k,shape", k, global_shape, offset, val.shape)
+            # info ("k,val shape", k, global_shape, offset, val.shape)
             var = self.io.DefineVariable(k, val, global_shape, offset, val.shape, ad2.ConstantDims)
             self.writer.Put(var, val, ad2.Mode.Sync)
 
             self.io.DefineAttribute("%s/variable_dim"%k, np.array(vdim))
+
             vcount = np.array([ x.shape[vdim] for x in arr_list ])
-            vcount_sum_list = self.comm.allgather(vcount.sum())
+            assert (len(vcount) == len(self.dataset))
             
             offset_arr = np.zeros_like(vcount)
             offset_arr[1:] = np.cumsum(vcount)[:-1]
-            offset = sum(vcount_sum_list[:rank])
-            offset_arr += offset
+            offset_arr += offset[vdim]
 
-            var = self.io.DefineVariable("%s/variable_count"%k, vcount, [global_shape[vdim],], [offset,], [len(vcount),], ad2.ConstantDims)
+            var = self.io.DefineVariable("%s/variable_count"%k, vcount, [sum(ns),], [ns_offset,], [len(vcount),], ad2.ConstantDims)
             self.writer.Put(var, vcount, ad2.Mode.Sync)
 
-            var = self.io.DefineVariable("%s/variable_offset"%k, offset_arr, [global_shape[vdim],], [offset,], [len(vcount),], ad2.ConstantDims)
+            var = self.io.DefineVariable("%s/variable_offset"%k, offset_arr, [sum(ns),], [ns_offset,], [len(vcount),], ad2.ConstantDims)
             self.writer.Put(var, offset_arr, ad2.Mode.Sync)
 
         self.writer.Close()
@@ -102,25 +104,36 @@ class AdioGGO:
             variable_count = dict()
             variable_offset = dict()
             variable_dim = dict()
+            data = dict()
             for k in keys:
                 variable_count[k] = f.read("%s/variable_count"%k)
                 variable_offset[k] = f.read("%s/variable_offset"%k)
                 variable_dim[k] = f.read_attribute("%s/variable_dim"%k).item()
+                ## load full data first
+                data[k] = f.read(k)
 
             for i in iterate_tqdm(range(ndata), 2):
                 data_object = torch_geometric.data.Data()
                 for k in keys:
                     shape = f.available_variables()[k]['Shape']
-                    ishape = [ int(x.strip(',')) for x in shape.strip().split() ]
+                    ishape = [ int(x.strip(','), 16) for x in shape.strip().split() ]
                     start = [0,] * len(ishape)
                     count = ishape
                     vdim = variable_dim[k]
                     start[vdim] = variable_offset[k][i]
                     count[vdim] = variable_count[k][i]
-                    if np.prod(count) > 0:
-                        val = f.read(k, start, count)
-                    else:
-                        val = np.zeros(count)
+                    if count[vdim] > 1000000000:
+                        import ipdb; ipdb.set_trace()
+                    slice_list = list()
+                    for n0,n1 in zip(start, count):
+                        # info (n0, n1, n0+n1)
+                        slice_list.append(slice(n0,n0+n1))
+                    val = data[k][tuple(slice_list)]
+                                        
+                    # if np.prod(count) > 0:
+                    #     val = f.read(k, start, count)
+                    # else:
+                    #     val = np.zeros(count)
                     # info (i, k, start, count, val.shape)
 
                     _ = tensor(val)
