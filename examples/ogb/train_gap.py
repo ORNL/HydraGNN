@@ -111,6 +111,8 @@ class AdioGGO:
                 variable_dim[k] = f.read_attribute("%s/variable_dim"%k).item()
                 ## load full data first
                 data[k] = f.read(k)
+            t2 = time.time()
+            info("Adios reading time (sec): ", (t2-t0))
 
             for i in iterate_tqdm(range(ndata), verbosity_level=2):
                 data_object = torch_geometric.data.Data()
@@ -132,7 +134,7 @@ class AdioGGO:
                 self.dataset.append(data_object)
         
         t1 = time.time()
-        info("Adios reading time (sec): ", (t1-t0))
+        info("Data loading time (sec): ", (t1-t0))
         return self.dataset
             
 
