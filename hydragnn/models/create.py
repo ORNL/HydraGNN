@@ -41,6 +41,7 @@ def create_model_config(
         config["task_weights"],
         config["num_conv_layers"],
         config["freeze_conv_layers"],
+        config["initial_bias"],
         config["num_nodes"],
         config["max_neighbours"],
         config["edge_dim"],
@@ -61,6 +62,7 @@ def create_model(
     task_weights: list,
     num_conv_layers: int,
     freeze_conv: bool = False,
+    initial_bias: float = None,
     num_nodes: int = None,
     max_neighbours: int = None,
     edge_dim: int = None,
@@ -84,6 +86,7 @@ def create_model(
             output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
@@ -100,6 +103,7 @@ def create_model(
             output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
@@ -118,6 +122,7 @@ def create_model(
             output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
@@ -133,6 +138,7 @@ def create_model(
             output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
@@ -146,6 +152,7 @@ def create_model(
             output_heads,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
