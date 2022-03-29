@@ -41,14 +41,17 @@ class Visualizer:
         Creates scatter/conditonal mean/error pdf plots from the true and predicted values of variable varname.
         For node level output, statistics across all nodes, l2 length and sum, are also considered for analysis.
         (file: varname +"_scatter_condm_err.png")
-    create_scatter_plot_variable(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
-        Creates scatter plots for true_values and predicted values of variable varname at iepoch.
+    create_parity_plot_and_error_histogram_scalar(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
+        Creates scatter plots for true_values and predicted values and error histogram.
         (file: varname + ".png")
-    create_error_histogram_plot_nodes(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
-        Creates error histogram plot for the true and predicted values of variable varname at iepoch.[node level]
+    create_parity_plot_vector(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
+        Creates scatter plots for true_values and predicted values and error histogram.
+        (file: varname + ".png")
+    create_error_histogram_per_node(self, varname, true_values, predicted_values, iepoch=None, save_plot=True)
+        Creates error histogram plot for the true and predicted values per node.
         (file: varname+"_error_hist1d_"+ str(iepoch).zfill(4)+ ".png" or varname+"_error_hist1d.png" )
-    create_scatter_plot_nodes_vec(self, varname, true_values, predicted_values, iepoch=None, save_plot=True):
-        Creates scatter plots for true and predicted values of vector variable varname.
+    create_parity_plot_per_node_vector(self, varname, true_values, predicted_values, iepoch=None, save_plot=True):
+        Creates scatter plots per node for true and predicted values of length 3 vector variable varname.
         (file: varname+"_"+ str(iepoch).zfill(4) + ".png" or varname+".png" )
 
     #create plots for all heads
@@ -274,7 +277,7 @@ class Visualizer:
         else:
             plt.show()
 
-    def create_scatter_plot_variable(
+    def create_parity_plot_and_error_histogram_scalar(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
         """Creates scatter plots for true_values and predicted values of variable varname at iepoch."""
@@ -378,7 +381,7 @@ class Visualizer:
             plt.close()
         return
 
-    def create_error_histogram_plot_nodes(
+    def create_error_histogram_per_node(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
         """Creates error histogram plot for true and predicted values of variable varname at iepoch.[node level]"""
@@ -458,7 +461,7 @@ class Visualizer:
                     )
                 plt.close()
 
-    def create_scatter_plot_vec(
+    def create_parity_plot_vector(
         self,
         varname,
         true_values,
@@ -509,7 +512,8 @@ class Visualizer:
                 fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
             plt.close()
 
-    def create_scatter_plot_nodes_vec(
+    # FIXME: this function is currently unused and is explicitly written for 3d vectors.
+    def create_parity_plot_per_node_vector(
         self, varname, true_values, predicted_values, iepoch=None, save_plot=True
     ):
         """Creates scatter plots for true and predicted values of vector variable varname[nodel level]."""
@@ -689,7 +693,7 @@ class Visualizer:
         for ihead in range(self.num_heads):
             if self.head_dims[ihead] > 1:
                 # vector output
-                self.create_scatter_plot_vec(
+                self.create_parity_plot_vector(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
@@ -697,13 +701,13 @@ class Visualizer:
                     iepoch,
                 )
             else:
-                self.create_scatter_plot_variable(
+                self.create_parity_plot_and_error_histogram_scalar(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
                     iepoch,
                 )
-                self.create_error_histogram_plot_nodes(
+                self.create_error_histogram_per_node(
                     output_names[ihead],
                     true_values[ihead],
                     predicted_values[ihead],
