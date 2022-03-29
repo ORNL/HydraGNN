@@ -42,7 +42,7 @@ def datasets_load_gap(datafile):
             smiles.append(row[0])
             strset.append(row[1])
             yvals.append(float(row[-1]))
-    return smiles, yvals
+    return smiles, yvals, strset
 
 
 def datasets_load(datafile):
