@@ -29,6 +29,7 @@ class Base(Module):
         loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
         freeze_conv=False,
+        initial_bias=None,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
@@ -84,12 +85,16 @@ class Base(Module):
 
         # Option to only train final property layers.
         self.freeze_conv = freeze_conv
+        # Option to set initially large output bias (UQ).
+        self.initial_bias = initial_bias
 
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
         self._init_node_conv()
         self._multihead()
+        if self.initial_bias is not None:
+            self._set_bias()
 
     def _init_conv(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
@@ -104,6 +109,13 @@ class Base(Module):
             for layer in module:
                 for param in layer.parameters():
                     param.requires_grad = False
+
+    def _set_bias(self):
+        for head, type in zip(self.heads_NN, self.head_type):
+            # FIXME: we only currently enable this for graph outputs.
+            if type == "graph":
+                # Set the bias of the last linear layer to a large value (UQ)
+                head[-1].bias.data.fill_(self.initial_bias)
 
     def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
