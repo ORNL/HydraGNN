@@ -78,7 +78,7 @@ train, val, test = hydragnn.preprocess.split_dataset(
 config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
 
 model = hydragnn.models.create_model_config(
-    config=config["NeuralNetwork"]["Architecture"],
+    config=config["NeuralNetwork"],
     verbosity=verbosity,
 )
 model = hydragnn.utils.get_distributed_model(model, verbosity)

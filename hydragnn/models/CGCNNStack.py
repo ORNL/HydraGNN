@@ -24,6 +24,7 @@ class CGCNNStack(Base):
         output_dim,
         output_type,
         config_heads,
+        loss_function_type,
         **kwargs,
     ):
         self.edge_dim = edge_dim
@@ -38,6 +39,7 @@ class CGCNNStack(Base):
             output_dim,
             output_type,
             config_heads,
+            loss_function_type,
             **kwargs,
         )
 

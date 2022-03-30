@@ -55,8 +55,7 @@ def _(config: dict):
     config = update_config(config, train_loader, val_loader, test_loader)
 
     model = create_model_config(
-        config=config["NeuralNetwork"]["Architecture"],
-        verbosity=config["Verbosity"]["level"],
+        config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
 
     log_name = get_log_name_config(config)
