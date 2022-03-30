@@ -355,9 +355,10 @@ if args.notrain:
     trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
-import ipdb; ipdb.set_trace()
-
+t0 = time.time()
 config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+t1 = time.time()
+info("update_config (sec): ", (t1-t0))
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"]["Architecture"],
