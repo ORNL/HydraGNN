@@ -16,7 +16,7 @@ import numpy as np
 import adios2 as ad2
 
 import torch_geometric.data
-from torch import tensor
+import torch
 
 import warnings
 warnings.filterwarnings("error")
@@ -129,7 +129,7 @@ class AdioGGO:
                         slice_list.append(slice(n0,n0+n1))
                     val = data[k][tuple(slice_list)]
                                         
-                    _ = tensor(val)
+                    _ = torch.tensor(val)
                     exec("data_object.%s = _" % (k))
                 self.dataset.append(data_object)
         
@@ -176,7 +176,7 @@ class AdioGGO:
             for i in range(ndata):
                 data_object = torch_geometric.data.Data()
                 for k in keys:
-                    _ = tensor(f.read("data_%d/%s"%(i, k)))
+                    _ = torch.tensor(f.read("data_%d/%s"%(i, k)))
                     exec("data_object.%s = _" % (k))
                 self.dataset.append(data_object)
 
@@ -184,6 +184,52 @@ class AdioGGO:
         info("Adios reading time (sec): ", (t1-t0))
         return self.dataset
 
+class OGBDataset(torch.utils.data.Dataset):
+    def __init__(self, filename):
+        t0 = time.time()
+        self.filename = filename
+        info('Adios reading:', self.filename)
+        with ad2.open(self.filename, "r",  MPI.COMM_SELF) as f:
+            self.vars = f.available_variables()
+            self.keys = f.read_attribute_string('keys')
+            self.ndata = f.read_attribute('ndata').item()
+
+            self.variable_count = dict()
+            self.variable_offset = dict()
+            self.variable_dim = dict()
+            self.data = dict()
+            for k in self.keys:
+                self.variable_count[k] = f.read("%s/variable_count"%k)
+                self.variable_offset[k] = f.read("%s/variable_offset"%k)
+                self.variable_dim[k] = f.read_attribute("%s/variable_dim"%k).item()
+                ## load full data first
+                self.data[k] = f.read(k)
+            t2 = time.time()
+            info("Adios reading time (sec): ", (t2-t0))
+        t1 = time.time()
+        info("Data loading time (sec): ", (t1-t0))
+
+    def __len__(self):
+        return self.ndata
+        
+    def __getitem__(self, idx):
+        data_object = torch_geometric.data.Data()
+        for k in self.keys:
+            shape = self.vars[k]['Shape']
+            ishape = [ int(x.strip(','), 16) for x in shape.strip().split() ]
+            start = [0,] * len(ishape)
+            count = ishape
+            vdim = self.variable_dim[k]
+            start[vdim] = self.variable_offset[k][idx]
+            count[vdim] = self.variable_count[k][idx]
+            slice_list = list()
+            for n0,n1 in zip(start, count):
+                slice_list.append(slice(n0,n0+n1))
+            val = self.data[k][tuple(slice_list)]
+                                
+            _ = torch.tensor(val)
+            exec("data_object.%s = _" % (k))
+        return data_object
 
 def info(*args, logtype='info', sep=' '):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -197,6 +243,7 @@ parser.add_argument('inputfilesubstr', help='input file substr')
 parser.add_argument('--sampling', type=float, help='sampling ratio', default=None)
 parser.add_argument('--notrain', action='store_true')
 parser.add_argument('--readbp', action='store_true')
+parser.add_argument('--usedsclass', action='store_true')
 args = parser.parse_args()
 
 comm = MPI.COMM_WORLD
@@ -237,7 +284,7 @@ var_config["ystd"] = ystd_feature.tolist()
 world_size, world_rank = hydragnn.utils.setup_ddp()
 ##################################################################################################################
 
-if not args.readbp:
+if (not args.readbp) and (not args.usedsclass):
     norm_yflag = False  # True
     smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling, seed=43)
     info([ len(x) for x in values_sets ])
@@ -278,7 +325,7 @@ if not args.readbp:
     adwriter = AdioGGO("ogb_gap_testset.bp", comm)
     adwriter.add(_testset)
     adwriter.save()
-else:
+elif args.readbp:
     adreader = AdioGGO("ogb_gap_trainset.bp", comm)
     trainset = adreader.load()
 
@@ -290,6 +337,11 @@ else:
 
     info("Adios load")
     info("trainset,valset,testset size: %d %d %d"%(len(trainset), len(valset), len(testset)))
+
+elif args.usedsclass:
+    trainset = OGBDataset("ogb_gap_trainset.bp")
+    valset = OGBDataset("ogb_gap_valset.bp")
+    testset = OGBDataset("ogb_gap_testset.bp")
 
 if args.notrain:
     sys.exit(0)
@@ -303,6 +355,7 @@ if args.notrain:
     trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
+import ipdb; ipdb.set_trace()
 
 config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
 
