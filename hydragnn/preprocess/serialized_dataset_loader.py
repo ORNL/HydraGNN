@@ -231,26 +231,25 @@ def update_predicted_values(
     """
     output_feature = []
     data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
-    index_counter_global_y = 0
     for item in range(len(type)):
         if type[item] == "graph":
+            index_counter_global_y = sum(graph_feature_dim[: index[item]])
             feat_ = torch.reshape(
                 data.y[
                     index_counter_global_y : index_counter_global_y
-                    + graph_feature_dim[item]
+                    + graph_feature_dim[index[item]]
                 ],
-                (graph_feature_dim[item], 1),
+                (graph_feature_dim[index[item]], 1),
             )
-            index_counter_global_y = index_counter_global_y + graph_feature_dim[item]
             # after the global features are spanned, we need to iterate over the nodal features
             # to do so, the counter of the nodal features need to start from the last value of counter for the graph nodel feature
         elif type[item] == "node":
-            index_counter_nodal_y = index[item]
+            index_counter_nodal_y = sum(node_feature_dim[: index[item]])
             feat_ = torch.reshape(
                 data.x[
                     :,
                     index_counter_nodal_y : (
-                        index_counter_nodal_y + node_feature_dim[index_counter_nodal_y]
+                        index_counter_nodal_y + node_feature_dim[index[item]]
                     ),
                 ],
                 (-1, 1),
