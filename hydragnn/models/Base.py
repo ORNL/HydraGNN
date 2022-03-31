@@ -244,7 +244,10 @@ class Base(Module):
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
-        x_graph = global_mean_pool(x, batch.to(x.device))
+        if batch is None:
+            x_graph = x.mean(dim=0, keepdim=True)
+        else:
+            x_graph = global_mean_pool(x, batch.to(x.device))
         outputs = []
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
