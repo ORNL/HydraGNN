@@ -64,7 +64,7 @@ def unittest_model_prediction(config):
 
 
 # test loading and predictiong of a saved model from previous training
-def pytest_model_pred():
+def pytest_model_loadpred():
     model_type = "PNA"
     ci_input = "ci_multihead.json"
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
@@ -80,13 +80,14 @@ def pytest_model_pred():
     if not (os.path.isfile(modelfile) and os.path.isfile(config_file)):
         print("Model or configure file not found: ", modelfile, config_file)
         case_exist = False
-    with open(config_file, "r") as f:
-        config = json.load(f)
-    for dataset_name, raw_data_path in config["Dataset"]["path"].items():
-        if not os.path.isfile(raw_data_path):
-            print(dataset_name, "dataset not found: ", raw_data_path)
-            case_exist = False
-            break
+    else:
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        for dataset_name, raw_data_path in config["Dataset"]["path"].items():
+            if not os.path.isfile(raw_data_path):
+                print(dataset_name, "dataset not found: ", raw_data_path)
+                case_exist = False
+                break
     if not case_exist:
         unittest_train_model(
             config["NeuralNetwork"]["Architecture"]["model_type"],
