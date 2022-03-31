@@ -11,14 +11,14 @@
             "total": "dataset/unit_test_multihead"
         },
         "node_features": {
-            "name": ["x","x2x3_vec"],
-            "dim": [1, 2],
-            "column_index": [0, 6]
+            "name": ["xx2_vec","x","x2x3_vec"],
+            "dim": [2, 1, 2],
+            "column_index": [0, 0, 6]
         },
         "graph_features":{
-            "name": [ "sums_vec"],
-            "dim": [2],
-            "column_index": [0]
+            "name": ["sum","sums_vec","sum_linear"],
+            "dim": [1, 2, 1],
+            "column_index": [0, 0, 1]
         }
     },
     "NeuralNetwork": {
@@ -42,17 +42,17 @@
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0, 1.0, 1.0]
+            "task_weights": [1.0, 1.0, 1.0,1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["sums_vec","x","x2x3_vec"],
-            "output_index": [0,0,1],
-            "type": ["graph","node","node"],
+            "output_names": ["x2x3_vec","sum","sums_vec","sum_linear","x","xx2_vec"],
+            "output_index": [ 2, 0, 1, 2, 1, 0],
+            "type": ["node","graph","graph","graph","node","node"],
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 100,
+            "num_epoch": 80,
             "perc_train": 0.7,
             "learning_rate": 0.01,
             "batch_size": 16
