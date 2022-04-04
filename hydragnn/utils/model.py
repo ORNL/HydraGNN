@@ -67,22 +67,12 @@ def load_existing_model(model, model_name, path="./logs/"):
     model.load_state_dict(state_dict)
 
 
-def calculate_PNA_degree(dataset: [Data], max_neighbours):
-    # deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
-    device = dataset[0].x.device
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(device)
-    for data in dataset:
-        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        deg += torch.bincount(d, minlength=deg.numel())
-    return deg
-
-
 def nsplit(a, n):
     k, m = divmod(len(a), n)
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def calculate_PNA_degree_parallel(loader, max_neighbours):
+def calculate_PNA_degree(loader, max_neighbours):
     # deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     device = loader.dataset[0].x.device
     if dist.get_backend() == "nccl":
