@@ -12,6 +12,7 @@
 import os
 
 import torch
+import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
@@ -22,7 +23,6 @@ from hydragnn.utils.distributed import (
     is_model_distributed,
 )
 from collections import OrderedDict
-from mpi4py import MPI
 
 def get_model_or_module(model):
     if is_model_distributed(model):
@@ -83,13 +83,10 @@ def calculate_PNA_degree_parallel(loader, max_neighbours):
     #deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     device = loader.dataset[0].x.device
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long, device=device)
+    world_size, world_rank = get_comm_size_and_rank()
 
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    comm_size = comm.Get_size()
-
-    rx = list(nsplit(range(len(loader)), comm_size))[rank]
-    print (rank, ": PNA degree calculation subset:", len(loader), rx.start, rx.stop)
+    rx = list(nsplit(range(len(loader)), world_size))[world_rank]
+    print (world_rank, ": PNA degree calculation subset:", len(loader), rx.start, rx.stop)
 
     ## Parallel processing
     for i in range(rx.start, rx.stop):
@@ -98,5 +95,5 @@ def calculate_PNA_degree_parallel(loader, max_neighbours):
         deg += torch.bincount(d, minlength=deg.numel())
     
     ## Allreduce from everytone
-    deg = comm.allreduce(deg, MPI.SUM)
+    dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg
