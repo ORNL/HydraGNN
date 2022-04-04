@@ -82,6 +82,8 @@ def nsplit(a, n):
 def calculate_PNA_degree_parallel(loader, max_neighbours):
     #deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     device = loader.dataset[0].x.device
+    if dist.get_backend() == "nccl":
+        device = get_device()
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long, device=device)
     world_size, world_rank = get_comm_size_and_rank()
 
@@ -92,6 +94,8 @@ def calculate_PNA_degree_parallel(loader, max_neighbours):
     for i in range(rx.start, rx.stop):
         data = loader.dataset[i]
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        if dist.get_backend() == "nccl":
+            d = d.to(device)
         deg += torch.bincount(d, minlength=deg.numel())
     
     ## Allreduce from everytone

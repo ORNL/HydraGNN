@@ -5,6 +5,9 @@ from ogb_utils import *
 import logging
 import sys
 from tqdm import tqdm
+import mpi4py
+mpi4py.rc.initialize = False
+mpi4py.rc.finalize = False
 from mpi4py import MPI
 from itertools import chain
 import argparse
@@ -270,17 +273,6 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
-comm_size = comm.Get_size()
-
-## Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%%(levelname)s (rank %d): %%(message)s" % (rank),
-    datefmt="%H:%M:%S",
-)
-
 graph_feature_names = ["GAP"]
 dirpwd = os.path.dirname(__file__)
 datafile = os.path.join(dirpwd, "dataset/pcqm4m_gap.csv")
@@ -307,6 +299,21 @@ var_config["ystd"] = ystd_feature.tolist()
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.setup_ddp()
 ##################################################################################################################
+
+## With MPI backend, the following should be called after ddp
+if not MPI.Is_initialized():
+    MPI.Init()
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+comm_size = comm.Get_size()
+
+## Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%%(levelname)s (rank %d): %%(message)s" % (rank),
+    datefmt="%H:%M:%S",
+)
+
 
 if args.preonly:
     norm_yflag = False  # True
@@ -413,8 +420,8 @@ hydragnn.train.train_validate_test(
 hydragnn.utils.save_model(model, log_name)
 hydragnn.utils.print_timers(verbosity)
 
-if rank > 0:
-    sys.exit(0)
+sys.exit(0)
+
 ##################################################################################################################
 for ifeat in range(len(var_config["output_index"])):
     fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
