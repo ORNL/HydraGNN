@@ -9,11 +9,9 @@ def selected_optimizer(model, config):
     elif config["optimizer"] == "Adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "Adadelta":
-        optimizer = torch.optim.Adamdelta(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "Adagrad":
-        optimizer = torch.optim.Adamgrad(model.parameters(), lr=config["learning_rate"])
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "Adamax":
         optimizer = torch.optim.Adamax(model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "AdamW":
