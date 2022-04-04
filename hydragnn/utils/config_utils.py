@@ -50,6 +50,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["initial_bias"] = None
 
+    if "optimizer" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["optimizer"] = "AdamW"
+
     return config
 
 
