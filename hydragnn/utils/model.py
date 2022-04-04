@@ -22,7 +22,7 @@ from hydragnn.utils.distributed import (
     is_model_distributed,
 )
 from collections import OrderedDict
-
+from mpi4py import MPI
 
 def get_model_or_module(model):
     if is_model_distributed(model):
@@ -73,4 +73,30 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
     for data in dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
+    return deg
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+
+def calculate_PNA_degree_parallel(loader, max_neighbours):
+    #deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    device = loader.dataset[0].x.device
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long, device=device)
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    comm_size = comm.Get_size()
+
+    rx = list(nsplit(range(len(loader)), comm_size))[rank]
+    print (rank, ": PNA degree calculation subset:", len(loader), rx.start, rx.stop)
+
+    ## Parallel processing
+    for i in range(rx.start, rx.stop):
+        data = loader.dataset[i]
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    
+    ## Allreduce from everytone
+    deg = comm.allreduce(deg, MPI.SUM)
     return deg
