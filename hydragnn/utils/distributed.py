@@ -110,7 +110,9 @@ def get_comm_size_and_rank():
 def setup_ddp():
     """ "Initialize DDP"""
 
-    if dist.is_nccl_available() and torch.cuda.is_available():
+    if os.getenv("HYDRAGNN_BACKEND") is not None:
+        backend =os.environ["HYDRAGNN_BACKEND"]
+    elif dist.is_nccl_available() and torch.cuda.is_available():
         backend = "nccl"
     elif torch.distributed.is_gloo_available():
         backend = "gloo"
@@ -132,10 +134,11 @@ def setup_ddp():
         master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
 
     try:
-        os.environ["MASTER_ADDR"] = master_addr
-        os.environ["MASTER_PORT"] = master_port
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(world_rank)
+        if backend in ["nccl", "gloo"]:
+            os.environ["MASTER_ADDR"] = master_addr
+            os.environ["MASTER_PORT"] = master_port
+            os.environ["WORLD_SIZE"] = str(world_size)
+            os.environ["RANK"] = str(world_rank)
 
         if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
             ifname = find_ifname(master_addr)
@@ -149,9 +152,8 @@ def setup_ddp():
         )
 
         if not dist.is_initialized():
-            dist.init_process_group(
-                backend=backend, rank=int(world_rank), world_size=int(world_size)
-            )
+            dist.init_process_group(backend=backend, init_method='env://')
+
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
 
