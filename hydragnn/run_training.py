@@ -90,7 +90,9 @@ def _(config: dict):
     with open("./logs/" + log_name + "/config.json", "w") as f:
         json.dump(config, f)
 
-    load_existing_model_config(model, config["NeuralNetwork"]["Training"])
+    load_existing_model_config(
+        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+    )
 
     print_distributed(
         verbosity,
@@ -114,6 +116,6 @@ def _(config: dict):
         create_plots,
     )
 
-    save_model(model, log_name)
+    save_model(model, optimizer, log_name)
 
     print_timers(verbosity)
