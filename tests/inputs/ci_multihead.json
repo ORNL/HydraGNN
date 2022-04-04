@@ -52,6 +52,7 @@
             "denormalize_output": false
         },
         "Training": {
+            "optimizer": "AdamW",
             "num_epoch": 100,
             "perc_train": 0.7,
             "learning_rate": 0.01,
