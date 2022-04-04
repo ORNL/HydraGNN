@@ -21,3 +21,5 @@ from .config_utils import (
     update_config_minmax,
     get_log_name_config,
 )
+
+from .optimizer import selected_optimizer
