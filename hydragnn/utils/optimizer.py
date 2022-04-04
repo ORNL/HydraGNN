@@ -1,7 +1,7 @@
 import torch
 
 
-def selected_optimizer(model, config):
+def select_optimizer(model, config):
     optimizer = None
 
     if config["optimizer"] == "SGD":

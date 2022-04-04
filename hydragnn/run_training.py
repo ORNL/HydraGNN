@@ -32,7 +32,7 @@ from hydragnn.utils.config_utils import (
     update_config,
     get_log_name_config,
 )
-from hydragnn.utils.optimizer import selected_optimizer
+from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import train_validate_test
 
@@ -77,7 +77,7 @@ def _(config: dict):
     )
     model = get_distributed_model(model, verbosity)
 
-    optimizer = selected_optimizer(model, config["NeuralNetwork"]["Training"])
+    optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"])
 
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001

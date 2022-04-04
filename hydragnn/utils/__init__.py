@@ -22,4 +22,4 @@ from .config_utils import (
     get_log_name_config,
 )
 
-from .optimizer import selected_optimizer
+from .optimizer import select_optimizer
