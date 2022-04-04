@@ -111,7 +111,7 @@ def setup_ddp():
     """ "Initialize DDP"""
 
     if os.getenv("HYDRAGNN_BACKEND") is not None:
-        backend =os.environ["HYDRAGNN_BACKEND"]
+        backend = os.environ["HYDRAGNN_BACKEND"]
     elif dist.is_nccl_available() and torch.cuda.is_available():
         backend = "nccl"
     elif torch.distributed.is_gloo_available():
@@ -152,7 +152,7 @@ def setup_ddp():
         )
 
         if not dist.is_initialized():
-            dist.init_process_group(backend=backend, init_method='env://')
+            dist.init_process_group(backend=backend, init_method="env://")
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")

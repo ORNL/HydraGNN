@@ -24,6 +24,7 @@ from hydragnn.utils.distributed import (
 )
 from collections import OrderedDict
 
+
 def get_model_or_module(model):
     if is_model_distributed(model):
         return model.module
@@ -67,7 +68,7 @@ def load_existing_model(model, model_name, path="./logs/"):
 
 
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
-    #deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    # deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     device = dataset[0].x.device
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(device)
     for data in dataset:
@@ -75,12 +76,14 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
         deg += torch.bincount(d, minlength=deg.numel())
     return deg
 
+
 def nsplit(a, n):
     k, m = divmod(len(a), n)
-    return (a[i*k+min(i, m):(i+1)*k+min(i+1, m)] for i in range(n))
+    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+
 
 def calculate_PNA_degree_parallel(loader, max_neighbours):
-    #deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    # deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     device = loader.dataset[0].x.device
     if dist.get_backend() == "nccl":
         device = get_device()
@@ -88,7 +91,9 @@ def calculate_PNA_degree_parallel(loader, max_neighbours):
     world_size, world_rank = get_comm_size_and_rank()
 
     rx = list(nsplit(range(len(loader)), world_size))[world_rank]
-    print (world_rank, ": PNA degree calculation subset:", len(loader), rx.start, rx.stop)
+    print(
+        world_rank, ": PNA degree calculation subset:", len(loader), rx.start, rx.stop
+    )
 
     ## Parallel processing
     for i in range(rx.start, rx.stop):
@@ -97,7 +102,7 @@ def calculate_PNA_degree_parallel(loader, max_neighbours):
         if dist.get_backend() == "nccl":
             d = d.to(device)
         deg += torch.bincount(d, minlength=deg.numel())
-    
+
     ## Allreduce from everytone
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg
