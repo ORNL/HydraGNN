@@ -44,7 +44,7 @@ def datasets_load_gap(datafile):
             smiles.append(row[0])
             strset.append(row[1])
             yvals.append(float(row[-1]))
-    return smiles, yvals
+    return smiles, yvals, strset
 
 
 def datasets_load(datafile, sampling=None, seed=None):
@@ -184,9 +184,9 @@ def generate_graphdata_checkelement(simlestr, ytarget, var_config=None):
     sp3 = []
     for atom in mol.GetAtoms():
         try:
-           type_idx.append(types[atom.GetSymbol()])
+            type_idx.append(types[atom.GetSymbol()])
         except:
-           print(atom.GetSymbol())
+            print(atom.GetSymbol())
 
 
 def generate_graphdata(simlestr, ytarget, var_config=None):
@@ -283,14 +283,13 @@ def generate_graphdata(simlestr, ytarget, var_config=None):
 
     y = ytarget  # .squeeze()
 
-    data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y)
+    # data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y)
+    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
     if var_config is not None:
         hydragnn.preprocess.update_predicted_values(
-            var_config["type"],
-            var_config["output_index"],
-            data,
+            var_config["type"], var_config["output_index"], data,
         )
 
-    device = hydragnn.utils.get_device()
+    # device = hydragnn.utils.get_device()
     return data
-    #return data.to(device)
+    # return data.to(device)
