@@ -421,6 +421,9 @@ hydragnn.train.train_validate_test(
 hydragnn.utils.save_model(model, log_name)
 hydragnn.utils.print_timers(verbosity)
 
+if not MPI.Is_finalized():
+    MPI.Finalize()
+
 sys.exit(0)
 
 ##################################################################################################################
