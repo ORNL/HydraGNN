@@ -213,6 +213,7 @@ class OGBDataset(torch.utils.data.Dataset):
     def __init__(self, filename):
         t0 = time.time()
         self.filename = filename
+        self.data_object = dict()
         info("Adios reading:", self.filename)
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
             self.vars = f.available_variables()
@@ -238,22 +239,26 @@ class OGBDataset(torch.utils.data.Dataset):
         return self.ndata
 
     def __getitem__(self, idx):
-        data_object = torch_geometric.data.Data()
-        for k in self.keys:
-            shape = self.vars[k]["Shape"]
-            ishape = [int(x.strip(","), 16) for x in shape.strip().split()]
-            start = [0,] * len(ishape)
-            count = ishape
-            vdim = self.variable_dim[k]
-            start[vdim] = self.variable_offset[k][idx]
-            count[vdim] = self.variable_count[k][idx]
-            slice_list = list()
-            for n0, n1 in zip(start, count):
-                slice_list.append(slice(n0, n0 + n1))
-            val = self.data[k][tuple(slice_list)]
+        if idx in self.data_object:
+            data_object = self.data_object[idx]
+        else:
+            data_object = torch_geometric.data.Data()
+            for k in self.keys:
+                shape = self.vars[k]["Shape"]
+                ishape = [int(x.strip(","), 16) for x in shape.strip().split()]
+                start = [0,] * len(ishape)
+                count = ishape
+                vdim = self.variable_dim[k]
+                start[vdim] = self.variable_offset[k][idx]
+                count[vdim] = self.variable_count[k][idx]
+                slice_list = list()
+                for n0, n1 in zip(start, count):
+                    slice_list.append(slice(n0, n0 + n1))
+                val = self.data[k][tuple(slice_list)]
 
-            _ = torch.tensor(val)
-            exec("data_object.%s = _" % (k))
+                _ = torch.tensor(val)
+                exec("data_object.%s = _" % (k))
+                self.data_object[idx] = data_object
         return data_object
 
 
