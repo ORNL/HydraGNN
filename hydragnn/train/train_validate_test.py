@@ -139,7 +139,7 @@ def train_validate_test(
     timer.stop()
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
-    test_rmse, test_taskserr, true_values, predicted_values = test(
+    test_loss, test_taskserr, true_values, predicted_values = test(
         test_loader, model, verbosity
     )
 
