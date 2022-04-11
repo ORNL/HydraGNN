@@ -49,8 +49,10 @@ def dataset_loading_and_splitting(config: {}):
         batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
     )
 
+
 def worker_init_fn(worker_id):
-    print ("Worker init (id): %d"%(worker_id))
+    print("Worker init (id): %d" % (worker_id))
+
 
 def create_dataloaders(trainset, valset, testset, batch_size):
     sampler_list = []
@@ -60,8 +62,17 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
         test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
 
+        num_workers = 0
+        if os.getenv("HYDRAGNN_NUM_WORKERS") is not None:
+            num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
+
         train_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler, num_workers=4, worker_init_fn=worker_init_fn
+            trainset,
+            batch_size=batch_size,
+            shuffle=False,
+            sampler=train_sampler,
+            num_workers=num_workers,
+            worker_init_fn=worker_init_fn,
         )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
@@ -74,24 +85,14 @@ def create_dataloaders(trainset, valset, testset, batch_size):
     else:
 
         train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(
-            valset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
-        test_loader = DataLoader(
-            testset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
+        val_loader = DataLoader(valset, batch_size=batch_size, shuffle=True,)
+        test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True,)
 
     return train_loader, val_loader, test_loader, sampler_list
 
 
 def split_dataset(
-    dataset: [],
-    perc_train: float,
-    stratify_splitting: bool,
+    dataset: [], perc_train: float, stratify_splitting: bool,
 ):
     if not stratify_splitting:
         perc_val = (1 - perc_train) / 2
@@ -123,10 +124,7 @@ def load_train_val_test_sets(config):
             files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
         loader = SerializedDataLoader(config["Verbosity"]["level"])
-        dataset = loader.load_serialized_data(
-            dataset_path=files_dir,
-            config=config,
-        )
+        dataset = loader.load_serialized_data(dataset_path=files_dir, config=config,)
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
 
