@@ -276,7 +276,9 @@ if __name__ == "__main__":
     parser.add_argument("inputfilesubstr", help="input file substr")
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
     parser.add_argument(
-        "--preonly", action="store_true", help="preprocess only. Adios saving and no train"
+        "--preonly",
+        action="store_true",
+        help="preprocess only. Adios saving and no train",
     )
     args = parser.parse_args()
 
@@ -294,7 +296,8 @@ if __name__ == "__main__":
     verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
     var_config["output_names"] = [
-        graph_feature_names[item] for ihead, item in enumerate(var_config["output_index"])
+        graph_feature_names[item]
+        for ihead, item in enumerate(var_config["output_index"])
     ]
     var_config["input_node_feature_names"] = node_attribute_names
     ymax_feature, ymin_feature, ymean_feature, ystd_feature = get_trainset_stat(
@@ -321,17 +324,18 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-
     if args.preonly:
         norm_yflag = False  # True
-        smiles_sets, values_sets = datasets_load(datafile, sampling=args.sampling, seed=43)
+        smiles_sets, values_sets = datasets_load(
+            datafile, sampling=args.sampling, seed=43
+        )
         info([len(x) for x in values_sets])
         dataset_lists = [[] for dataset in values_sets]
         for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
             if norm_yflag:
-                valueset = (valueset - torch.tensor(var_config["ymean"])) / torch.tensor(
-                    var_config["ystd"]
-                )
+                valueset = (
+                    valueset - torch.tensor(var_config["ymean"])
+                ) / torch.tensor(var_config["ystd"])
                 print(valueset[:, 0].mean(), valueset[:, 0].std())
                 print(valueset[:, 1].mean(), valueset[:, 1].std())
                 print(valueset[:, 2].mean(), valueset[:, 2].std())
@@ -488,13 +492,21 @@ if __name__ == "__main__":
         ax.set_title("train, " + str(len(trainset)))
         ax = axs[1]
         ax.plot(
-            [item for i in range(len(valset)) for item in valset[i].x[:, ifeat].tolist()],
+            [
+                item
+                for i in range(len(valset))
+                for item in valset[i].x[:, ifeat].tolist()
+            ],
             "bo",
         )
         ax.set_title("validate, " + str(len(valset)))
         ax = axs[2]
         ax.plot(
-            [item for i in range(len(testset)) for item in testset[i].x[:, ifeat].tolist()],
+            [
+                item
+                for i in range(len(testset))
+                for item in testset[i].x[:, ifeat].tolist()
+            ],
             "bo",
         )
         ax.set_title("test, " + str(len(testset)))
