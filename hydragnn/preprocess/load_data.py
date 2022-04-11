@@ -49,6 +49,8 @@ def dataset_loading_and_splitting(config: {}):
         batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
     )
 
+def worker_init_fn(worker_id):
+    print ("Worker init (id): %d"%(worker_id))
 
 def create_dataloaders(trainset, valset, testset, batch_size):
     sampler_list = []
@@ -59,7 +61,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
 
         train_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler
+            trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler, num_workers=4, worker_init_fn=worker_init_fn
         )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
