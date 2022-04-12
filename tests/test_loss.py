@@ -17,8 +17,9 @@ import shutil
 import hydragnn, tests
 
 
-# Main unit test function called by pytest wrappers.
-def unittest_train_model(loss_function_type, ci_input, overwrite_data=False):
+# Loss function unit test called by pytest wrappers.
+# Note the intent of this test is to make sure all interfaces work - it does not assert anything
+def unittest_loss_functions(loss_function_type, ci_input, overwrite_data=False):
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -102,9 +103,9 @@ def unittest_train_model(loss_function_type, ci_input, overwrite_data=False):
     hydragnn.run_training(config)
 
 
-# Test across all models with both single/multihead
+# Test all supported loss function types. Separate input file because only 2 steps are run.
 @pytest.mark.parametrize("loss_function_type", ["mse", "mae", "rmse"])
-def pytest_train_model(
+def pytest_loss_functions(
     loss_function_type, ci_input="ci_loss_function.json", overwrite_data=False
 ):
-    unittest_train_model(loss_function_type, ci_input, overwrite_data)
+    unittest_loss_functions(loss_function_type, ci_input, overwrite_data)
