@@ -28,16 +28,7 @@ def unittest_loss_functions(loss_function_type, ci_input, overwrite_data=False):
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
     with open(config_file, "r") as f:
         config = json.load(f)
-    """
-    to test this locally, set ci.json as
-    "Dataset": {
-       ...
-       "path": {
-               "train": "serialized_dataset/unit_test_singlehead_train.pkl",
-               "test": "serialized_dataset/unit_test_singlehead_test.pkl",
-               "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
-       ...
-    """
+
     # use pkl files if exist by default
     for dataset_name in config["Dataset"]["path"].keys():
         if dataset_name == "total":
@@ -97,15 +88,13 @@ def unittest_loss_functions(loss_function_type, ci_input, overwrite_data=False):
                     )
 
     config["NeuralNetwork"]["Training"]["loss_function_type"] = loss_function_type
+    config["NeuralNetwork"]["Training"]["num_epoch"] = 2
 
-    # Since the config file uses PNA already, test the file overload here.
-    # All the other models need to use the locally modified dictionary.
+    # Make sure training works with each loss function.
     hydragnn.run_training(config)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.
 @pytest.mark.parametrize("loss_function_type", ["mse", "mae", "rmse"])
-def pytest_loss_functions(
-    loss_function_type, ci_input="ci_loss_function.json", overwrite_data=False
-):
+def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
     unittest_loss_functions(loss_function_type, ci_input, overwrite_data)
