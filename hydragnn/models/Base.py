@@ -14,6 +14,7 @@ from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
+from hydragnn.utils.model import loss_function_selection
 import sys
 
 
@@ -25,6 +26,7 @@ class Base(Module):
         output_dim: list,
         output_type: list,
         config_heads: dict,
+        loss_function_type: str,
         ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
         loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
@@ -55,6 +57,7 @@ class Base(Module):
         self.convs_node_output = ModuleList()
         self.batch_norms_node_output = ModuleList()
 
+        self.loss_function = loss_function_selection(loss_function_type)
         self.ilossweights_nll = ilossweights_nll
         self.ilossweights_hyperp = ilossweights_hyperp
         if self.ilossweights_hyperp * self.ilossweights_nll == 1:
@@ -268,7 +271,7 @@ class Base(Module):
                 outputs.append(x_node)
         return outputs
 
-    def loss_rmse(self, pred, value, head_index):
+    def loss(self, pred, value, head_index):
         if self.ilossweights_nll == 1:
             return self.loss_nll(pred, value, head_index)
         elif self.ilossweights_hyperp == 1:
@@ -277,10 +280,10 @@ class Base(Module):
     def loss_nll(self, pred, value, head_index):
         # negative log likelihood loss
         # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
-        # fixme
+        # fixme: Pei said that right now this is never used
         raise ValueError("loss_nll() not ready yet")
         nll_loss = 0
-        tasks_rmseloss = []
+        tasks_mseloss = []
         loss = GaussianNLLLoss()
         for ihead in range(self.num_heads):
             head_pre = pred[ihead][:, :-1]
@@ -291,14 +294,14 @@ class Base(Module):
                 head_val = torch.reshape(head_val, pred_shape)
             head_var = torch.exp(pred[ihead][:, -1])
             nll_loss += loss(head_pre, head_val, head_var)
-            tasks_rmseloss.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
+            tasks_mseloss.append(F.mse_loss(head_pre, head_val))
 
-        return nll_loss, tasks_rmseloss, []
+        return nll_loss, tasks_mseloss, []
 
     def loss_hpweighted(self, pred, value, head_index):
         # weights for different tasks as hyper-parameters
         tot_loss = 0
-        tasks_rmse = []
+        tasks_loss = []
         for ihead in range(self.num_heads):
             head_pre = pred[ihead]
             pred_shape = head_pre.shape
@@ -308,11 +311,11 @@ class Base(Module):
                 head_val = torch.reshape(head_val, pred_shape)
 
             tot_loss += (
-                torch.sqrt(F.mse_loss(head_pre, head_val)) * self.loss_weights[ihead]
+                self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
             )
-            tasks_rmse.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
+            tasks_loss.append(self.loss_function(head_pre, head_val))
 
-        return tot_loss, tasks_rmse
+        return tot_loss, tasks_loss
 
     def __str__(self):
         return "Base"

@@ -115,7 +115,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     (
         error,
-        error_rmse_task,
+        error_mse_task,
         true_values,
         predicted_values,
     ) = hydragnn.run_prediction(config)
@@ -137,15 +137,15 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     verbosity = 2
 
     for ihead in range(len(true_values)):
-        error_head_rmse = error_rmse_task[ihead]
+        error_head_mse = error_mse_task[ihead]
         error_str = (
-            str("{:.6f}".format(error_head_rmse))
+            str("{:.6f}".format(error_head_mse))
             + " < "
             + str(thresholds[model_type][0])
         )
         hydragnn.utils.print_distributed(verbosity, "head: " + error_str)
         assert (
-            error_head_rmse < thresholds[model_type][0]
+            error_head_mse < thresholds[model_type][0]
         ), "Head RMSE checking failed for " + str(ihead)
 
         head_true = torch.tensor(true_values[ihead])

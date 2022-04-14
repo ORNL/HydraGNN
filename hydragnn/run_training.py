@@ -62,7 +62,6 @@ def _(config: dict):
     setup_log(get_log_name_config(config))
     world_size, world_rank = setup_ddp()
 
-    verbosity = config["Verbosity"]["level"]
     train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
         config=config
     )
@@ -73,9 +72,9 @@ def _(config: dict):
     create_plots = config["Visualization"]["create_plots"]
 
     model = create_model_config(
-        config=config["NeuralNetwork"]["Architecture"], verbosity=verbosity
+        config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
-    model = get_distributed_model(model, verbosity)
+    model = get_distributed_model(model, config["Verbosity"]["level"])
 
     optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"])
 
@@ -96,7 +95,7 @@ def _(config: dict):
     )
 
     print_distributed(
-        verbosity,
+        config["Verbosity"]["level"],
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
 
@@ -111,7 +110,7 @@ def _(config: dict):
         scheduler,
         config["NeuralNetwork"],
         log_name,
-        verbosity,
+        config["Verbosity"]["level"],
         plot_init_solution,
         plot_hist_solution,
         create_plots,
@@ -119,4 +118,4 @@ def _(config: dict):
 
     save_model(model, optimizer, log_name)
 
-    print_timers(verbosity)
+    print_timers(config["Verbosity"]["level"])
