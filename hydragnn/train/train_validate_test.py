@@ -97,32 +97,32 @@ def train_validate_test(
             sampler.set_epoch(epoch)
 
         with profiler as prof:
-            train_rmse, train_taskserr = train(
+            train_loss, train_taskserr = train(
                 train_loader, model, optimizer, verbosity, profiler=prof
             )
-        val_rmse, val_taskserr = validate(val_loader, model, verbosity)
-        test_rmse, test_taskserr, true_values, predicted_values = test(
+        val_loss, val_taskserr = validate(val_loader, model, verbosity)
+        test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader, model, verbosity
         )
-        scheduler.step(val_rmse)
+        scheduler.step(val_loss)
         if writer is not None:
-            writer.add_scalar("train error", train_rmse, epoch)
-            writer.add_scalar("validate error", val_rmse, epoch)
-            writer.add_scalar("test error", test_rmse, epoch)
+            writer.add_scalar("train error", train_loss, epoch)
+            writer.add_scalar("validate error", val_loss, epoch)
+            writer.add_scalar("test error", test_loss, epoch)
             for ivar in range(model.num_heads):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
                 )
         print_distributed(
             verbosity,
-            f"Epoch: {epoch:02d}, Train RMSE: {train_rmse:.8f}, Val RMSE: {val_rmse:.8f}, "
-            f"Test RMSE: {test_rmse:.8f}",
+            f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
+            f"Test Loss: {test_loss:.8f}",
         )
-        print_distributed(verbosity, "Tasks RMSE:", train_taskserr)
+        print_distributed(verbosity, "Tasks Loss:", train_taskserr)
 
-        total_loss_train[epoch] = train_rmse
-        total_loss_val[epoch] = val_rmse
-        total_loss_test[epoch] = test_rmse
+        total_loss_train[epoch] = train_loss
+        total_loss_val[epoch] = val_loss
+        total_loss_test[epoch] = test_loss
         task_loss_train[epoch] = train_taskserr
         task_loss_val[epoch] = val_taskserr
         task_loss_test[epoch] = test_taskserr
@@ -139,7 +139,7 @@ def train_validate_test(
     timer.stop()
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
-    test_rmse, test_taskserr, true_values, predicted_values = test(
+    test_loss, test_taskserr, true_values, predicted_values = test(
         test_loader, model, verbosity
     )
 
@@ -226,15 +226,15 @@ def train(
             head_index = get_head_indices(model, data)
         with record_function("forward"):
             pred = model(data)
-            loss, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
+            loss, tasks_loss = model.loss(pred, data.y, head_index)
         with record_function("backward"):
             loss.backward()
         opt.step()
         profiler.step()
         total_error += loss.item() * data.num_graphs
         num_samples_local += data.num_graphs
-        for itask in range(len(tasks_rmse)):
-            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+        for itask in range(len(tasks_loss)):
+            tasks_error[itask] += tasks_loss[itask].item() * data.num_graphs
     return (
         total_error / num_samples_local,
         tasks_error / num_samples_local,
@@ -252,11 +252,11 @@ def validate(loader, model, verbosity):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        error, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
+        error, tasks_loss = model.loss(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
         num_samples_local += data.num_graphs
-        for itask in range(len(tasks_rmse)):
-            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+        for itask in range(len(tasks_loss)):
+            tasks_error[itask] += tasks_loss[itask].item() * data.num_graphs
 
     return (
         total_error / num_samples_local,
@@ -284,11 +284,11 @@ def test(loader, model, verbosity):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        error, tasks_rmse = model.loss_rmse(pred, data.y, head_index)
+        error, tasks_loss = model.loss(pred, data.y, head_index)
         total_error += error.item() * data.num_graphs
         num_samples_local += data.num_graphs
-        for itask in range(len(tasks_rmse)):
-            tasks_error[itask] += tasks_rmse[itask].item() * data.num_graphs
+        for itask in range(len(tasks_loss)):
+            tasks_error[itask] += tasks_loss[itask].item() * data.num_graphs
         ytrue = data.y
         for ihead in range(model.num_heads):
             head_pre = pred[ihead].reshape(-1, 1)

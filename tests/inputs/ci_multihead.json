@@ -55,6 +55,7 @@
             "optimizer": "AdamW",
             "num_epoch": 100,
             "perc_train": 0.7,
+            "loss_function_type": "mse",
             "learning_rate": 0.01,
             "batch_size": 16
         }

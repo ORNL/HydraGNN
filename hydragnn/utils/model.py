@@ -25,6 +25,17 @@ from hydragnn.utils.distributed import (
 from collections import OrderedDict
 
 
+def loss_function_selection(loss_function_string: str):
+    if loss_function_string == "mse":
+        return torch.nn.functional.mse_loss
+    elif loss_function_string == "mae":
+        return torch.nn.functional.l1_loss
+    elif loss_function_string == "smooth_l1":
+        return torch.nn.SmoothL1Loss
+    elif loss_function_string == "rmse":
+        return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
+
+
 def get_model_or_module(model):
     if is_model_distributed(model):
         return model.module

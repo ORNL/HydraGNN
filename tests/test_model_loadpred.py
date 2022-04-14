@@ -26,7 +26,7 @@ def unittest_model_prediction(config):
     ) = hydragnn.preprocess.load_data.dataset_loading_and_splitting(config=config)
 
     model = hydragnn.models.create.create_model_config(
-        config=config["NeuralNetwork"]["Architecture"],
+        config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
     )
 
