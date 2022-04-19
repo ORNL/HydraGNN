@@ -172,7 +172,7 @@ class OGBDataset(torch.utils.data.Dataset):
     def download(self):
         path = download_url(self.url, self.prefix)
         extract_tar(path, self.prefix)
-        os.unlink(path)
+        # os.unlink(path)
 
     def __len__(self):
         return self.ndata
