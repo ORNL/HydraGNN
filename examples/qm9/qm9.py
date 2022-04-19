@@ -19,13 +19,6 @@ def qm9_pre_transform(data):
     data.y = data.y[:, 10] / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
-    hydragnn.preprocess.update_predicted_values(
-        var_config["type"],
-        var_config["output_index"],
-        graph_features_dim,
-        node_feature_dim,
-        data,
-    )
     device = hydragnn.utils.get_device()
     return data.to(device)
 
