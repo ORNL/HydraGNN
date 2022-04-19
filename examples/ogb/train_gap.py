@@ -56,7 +56,6 @@ class AdioGGO:
         for label in self.dataset:
             if len(self.dataset[label]) < 1:
                 continue
-            print("label", label)
             ns = self.comm.allgather(len(self.dataset[label]))
             ns_offset = sum(ns[: self.rank])
 
@@ -172,9 +171,8 @@ class OGBDataset(torch.utils.data.Dataset):
 
     def download(self):
         path = download_url(self.url, self.prefix)
-        print("path", path)
         extract_tar(path, self.prefix)
-        # os.unlink(path)
+        os.unlink(path)
 
     def __len__(self):
         return self.ndata
