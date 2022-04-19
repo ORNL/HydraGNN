@@ -130,17 +130,24 @@ class AdioGGO:
 
 
 class OGBDataset(torch.utils.data.Dataset):
-    def __init__(self, filename, label):
-        self.url = 'https://www.dropbox.com/s/7qe3zppbicw9vxj/ogb_gap.bp.tar.gz?dl=0'
+    def __init__(self, filename, label, comm):
+        self.url = (
+            "https://dl.dropboxusercontent.com/s/7qe3zppbicw9vxj/ogb_gap.bp.tar.gz"
+        )
         t0 = time.time()
         self.filename = filename
         self.label = label
+        self.comm = comm
+        self.rank = comm.Get_rank()
+
         self.data_object = dict()
         info("Adios reading:", self.filename)
-        if not os.path.exists(filename):
-            self.raw_dir = os.path.dirname(self.filename)
-            self.download()
-        MPI.COMM_WORLD.Barrier()
+
+        if self.rank == 0:
+            if not os.path.exists(filename):
+                self.prefix = os.path.dirname(self.filename)
+                self.download()
+        comm.Barrier()
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
             self.vars = f.available_variables()
             self.keys = f.read_attribute_string("%s/keys" % label)
@@ -164,9 +171,9 @@ class OGBDataset(torch.utils.data.Dataset):
         info("Data loading time (sec): ", (t1 - t0))
 
     def download(self):
-        path = download_url(self.url, './')
-        print ("path", path)
-        extract_tar(path, './')
+        path = download_url(self.url, self.prefix)
+        print("path", path)
+        extract_tar(path, self.prefix)
         # os.unlink(path)
 
     def __len__(self):
@@ -299,9 +306,9 @@ if __name__ == "__main__":
 
     timer = Timer("load_data")
     timer.start()
-    trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset")
-    valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset")
-    testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset")
+    trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm)
+    valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm)
+    testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm)
 
     info("Adios load")
     info(
