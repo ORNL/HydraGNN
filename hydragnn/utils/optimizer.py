@@ -1,4 +1,11 @@
 import torch
+from .distributed import get_device_name
+
+deepspeed_available = True
+try:
+    import deepspeed
+except ImportError:
+    deepspeed_available = False
 
 
 def select_optimizer(model, config):
@@ -16,14 +23,16 @@ def select_optimizer(model, config):
         optimizer = torch.optim.Adamax(model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "AdamW":
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
-    elif config["optimizer"] == "LBFGS":
-        optimizer = torch.optim.LBFGS(model.parameters(), lr=config["learning_rate"])
-    elif config["optimizer"] == "SparseAdam":
-        optimizer = torch.optim.SparseAdam(
+    elif config["optimizer"] == "RMSprop":
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=config["learning_rate"])
+    elif config["optimizer"] == "FusedLAMB":
+        assert deepspeed_available, "deepspeed package not installed"
+        assert (
+            "cpu" != get_device_name()
+        ), "GPUs not available to use FusedLAMB optimizer from deepspeed package"
+        optimizer = deepspeed.ops.lamb.FusedLamb(
             model.parameters(), lr=config["learning_rate"]
         )
-    elif config["optimizer"] == "RMSProp":
-        optimizer = torch.optim.RMSProp(model.parameters(), lr=config["learning_rate"])
     else:
         raise NameError("The string used to identify the optimizer is NOT recognized")
 
