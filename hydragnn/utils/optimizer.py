@@ -25,7 +25,7 @@ def select_optimizer(model, config):
         optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
     elif config["optimizer"] == "RMSprop":
         optimizer = torch.optim.RMSprop(model.parameters(), lr=config["learning_rate"])
-    elif config["optimizer"] == "LAMB":
+    elif config["optimizer"] == "FusedLAMB":
         assert deepspeed_available, "deepspeed package not installed"
         assert (
             "cpu" != get_device_name()

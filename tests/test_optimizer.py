@@ -92,7 +92,7 @@ def unittest_optimizers(optimizer_type, ci_input, overwrite_data=False):
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
 
     # Make sure training works with each optimizer.
-    if config["NeuralNetwork"]["Training"]["optimizer"] == "LAMB":
+    if config["NeuralNetwork"]["Training"]["optimizer"] == "FusedLAMB":
 
         deepspeed_available = True
         try:
@@ -114,7 +114,7 @@ def unittest_optimizers(optimizer_type, ci_input, overwrite_data=False):
 # Test all supported loss function types. Separate input file because only 2 steps are run.
 @pytest.mark.parametrize(
     "optimizer_type",
-    ["SGD", "Adam", "Adadelta", "Adagrad", "Adamax", "AdamW", "RMSprop", "LAMB"],
+    ["SGD", "Adam", "Adadelta", "Adagrad", "Adamax", "AdamW", "RMSprop", "FusedLAMB"],
 )
 def pytest_optimizers(optimizer_type, ci_input="ci.json", overwrite_data=False):
     unittest_optimizers(optimizer_type, ci_input, overwrite_data)
