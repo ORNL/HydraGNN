@@ -91,30 +91,14 @@ def unittest_optimizers(optimizer_type, ci_input, overwrite_data=False):
     config["NeuralNetwork"]["Training"]["optimizer"] = optimizer_type
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
 
-    # Make sure training works with each optimizer.
-    if config["NeuralNetwork"]["Training"]["optimizer"] == "FusedLAMB":
-
-        deepspeed_available = True
-        try:
-            import deepspeed
-        except ImportError:
-            deepspeed_available = False
-
-        try:
-            hydragnn.run_training(config)
-        except:
-            if not (deepspeed_available or "cpu" != get_device_name()):
-                return True
-            else:
-                return False
-    else:
-        hydragnn.run_training(config)
+    hydragnn.run_training(config)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.
+# FusedLAMB should be tested on GPUs
 @pytest.mark.parametrize(
     "optimizer_type",
-    ["SGD", "Adam", "Adadelta", "Adagrad", "Adamax", "AdamW", "RMSprop", "FusedLAMB"],
+    ["SGD", "Adam", "Adadelta", "Adagrad", "Adamax", "AdamW", "RMSprop"],
 )
 def pytest_optimizers(optimizer_type, ci_input="ci.json", overwrite_data=False):
     unittest_optimizers(optimizer_type, ci_input, overwrite_data)
