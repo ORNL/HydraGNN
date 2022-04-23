@@ -132,7 +132,11 @@ class RawDataLoader:
             ## Random shuffle
             random.shuffle(filelist)
             if self.comm is not None:
+                x = np.array(len(filelist))
+                y = self.comm.allreduce(x, op=MPI.MAX)
+                assert (x == y)
                 filelist = list(nsplit(filelist, self.comm_size))[self.rank]
+                log ("local filelist", len(filelist))
             for name in filelist:
                 if name == ".DS_Store":
                     continue

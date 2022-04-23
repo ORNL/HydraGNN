@@ -357,6 +357,7 @@ if __name__ == "__main__":
             scale_spin=True,
             comm=comm,
         )
+        comm.Barrier()
 
         config["Dataset"]["path"] = {"total": "./dataset/%s" % modelname}
         hydragnn.preprocess.transform_raw_data_to_serialized_parallel(
