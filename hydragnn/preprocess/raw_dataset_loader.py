@@ -128,8 +128,9 @@ class RawDataLoader:
                 len(os.listdir(raw_data_path)) > 0
             ), "No data files provided in {}!".format(raw_data_path)
 
-            filelist = os.listdir(raw_data_path)
-            ## Random shuffle
+            filelist = sorted(os.listdir(raw_data_path))
+            ## Random shuffle with reproducibility (both in single and multi processing)
+            random.seed(43)
             random.shuffle(filelist)
             if self.comm is not None:
                 x = np.array(len(filelist))
