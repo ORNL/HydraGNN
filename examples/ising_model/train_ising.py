@@ -27,6 +27,15 @@ import warnings
 
 from torch_geometric.data import download_url, extract_tar
 
+## For create_configurations
+import shutil
+from sympy.utilities.iterables import multiset_permutations
+import scipy.special
+import math
+
+from create_configurations import create_dataset
+
+
 class AdioGGO:
     def __init__(self, filename, comm):
         self.filename = filename
@@ -126,6 +135,7 @@ class AdioGGO:
         t1 = time.time()
         info("Adios saving time (sec): ", (t1 - t0))
 
+
 class IsingDataset(torch.utils.data.Dataset):
     def __init__(self, filename, label, comm):
         self.url = (
@@ -198,6 +208,7 @@ class IsingDataset(torch.utils.data.Dataset):
                 self.data_object[idx] = data_object
         return data_object
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -206,12 +217,22 @@ def nsplit(a, n):
     k, m = divmod(len(a), n)
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--preonly",
         action="store_true",
         help="preprocess only. Adios saving and no train",
+    )
+    parser.add_argument(
+        "--natoms", type=int, default=3, help="number_atoms_per_dimension",
+    )
+    parser.add_argument(
+        "--cutoff", type=int, default=1000, help="configurational_histogram_cutoff",
+    )
+    parser.add_argument(
+        "--bpfile", default=1000, help="adios file to read",
     )
     args = parser.parse_args()
 
@@ -225,7 +246,7 @@ if __name__ == "__main__":
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.setup_ddp()
     ##################################################################################################################
-    
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     comm_size = comm.Get_size()
@@ -241,14 +262,44 @@ if __name__ == "__main__":
         os.environ["SERIALIZED_DATA_PATH"]
     except:
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-        
+
     if args.preonly:
+        dir = os.path.join(os.path.dirname(__file__), "../../dataset/ising_model")
+        if os.path.exists(dir):
+            shutil.rmtree(dir)
+        os.makedirs(dir)
+
+        number_atoms_per_dimension = args.natoms
+        configurational_histogram_cutoff = args.cutoff
+
+        info("Generating ... ")
+        info("number_atoms_per_dimension", number_atoms_per_dimension)
+        info("configurational_histogram_cutoff", configurational_histogram_cutoff)
+
+        # Use sine function as non-linear extension of Ising model
+        # Use randomized scaling of the spin magnitudes
+        spin_func = lambda x: math.sin(math.pi * x / 2)
+        create_dataset(
+            number_atoms_per_dimension,
+            configurational_histogram_cutoff,
+            dir,
+            spin_function=spin_func,
+            scale_spin=True,
+        )
 
         hydragnn.preprocess.transform_raw_data_to_serialized(config["Dataset"])
         hydragnn.preprocess.total_to_train_val_test_pkls(config)
-        trainset, valset, testset = hydragnn.preprocess.load_data.load_train_val_test_sets(config)
+        (
+            trainset,
+            valset,
+            testset,
+        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config)
 
-        adwriter = AdioGGO("examples/ising_model/dataset/ising.bp", comm)
+        fname = "ising_%d_%d.bp" % (
+            number_atoms_per_dimension,
+            configurational_histogram_cutoff,
+        )
+        adwriter = AdioGGO("examples/ising_model/dataset/%s.bp" % fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
         adwriter.add("testset", testset)
@@ -259,9 +310,10 @@ if __name__ == "__main__":
     timer.start()
 
     info("Adios load")
-    trainset = IsingDataset("examples/ising_model/dataset/ising.bp", "trainset", comm)
-    valset = IsingDataset("examples/ising_model/dataset/ising.bp", "valset", comm)
-    testset = IsingDataset("examples/ising_model/dataset/ising.bp", "testset", comm)
+    fname = "examples/ising_model/dataset/%s" % (args.bpfile)
+    trainset = IsingDataset(fname, "trainset", comm)
+    valset = IsingDataset(fname, "valset", comm)
+    testset = IsingDataset(fname, "testset", comm)
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
