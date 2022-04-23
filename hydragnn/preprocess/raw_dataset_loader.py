@@ -19,11 +19,31 @@ from torch import tensor
 
 from ase.io.cfg import read_cfg
 
+try:
+    from mpi4py import MPI
+except ImportError:
+    pass
+
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
+import random
+
 # WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
 
 
 def tensor_divide(x1, x2):
     return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
+
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+def comm_reduce(x, comm, op):
+    y = np.zeros_like(x)
+    assert x.dtype == np.double
+    comm.Allreduce([x, MPI.DOUBLE], [y, MPI.DOUBLE], op)
+    return y
 
 
 class RawDataLoader:
@@ -37,7 +57,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, comm=None):
         """
         config:
           shows the dataset path the target variables information, e.g, location and dimension, in data file
@@ -55,6 +75,14 @@ class RawDataLoader:
         graph_feature_col: list,
           list of column location/index (start location if dim>1) of graph features
         """
+        self.comm = None
+        self.rank = 0
+        self.comm_size = 1
+        if comm is not None:
+            self.comm = comm
+            self.rank = comm.Get_rank()
+            self.comm_size = comm.Get_size()
+
         self.dataset_list = []
         self.serial_data_name_list = []
         self.node_feature_name = (
@@ -100,7 +128,12 @@ class RawDataLoader:
                 len(os.listdir(raw_data_path)) > 0
             ), "No data files provided in {}!".format(raw_data_path)
 
-            for name in os.listdir(raw_data_path):
+            filelist = os.listdir(raw_data_path)
+            ## Random shuffle
+            random.shuffle(filelist)
+            if self.comm is not None:
+                filelist = list(nsplit(filelist, self.comm_size))[self.rank]
+            for name in filelist:
                 if name == ".DS_Store":
                     continue
                 # if the directory contains file, iterate over them
@@ -356,6 +389,22 @@ class RawDataLoader:
                         self.minmax_node_feature[1, ifeat],
                     )
                     n_index_start = n_index_end
+
+        if self.comm is not None:
+            ## Gather minmax in parallel
+            self.minmax_graph_feature[0, :] = comm_reduce(
+                self.minmax_graph_feature[0, :], self.comm, MPI.MIN
+            )
+            self.minmax_graph_feature[1, :] = comm_reduce(
+                self.minmax_graph_feature[1, :], self.comm, MPI.MAX
+            )
+            self.minmax_node_feature[0, :] = comm_reduce(
+                self.minmax_node_feature[0, :], self.comm, MPI.MIN
+            )
+            self.minmax_node_feature[1, :] = comm_reduce(
+                self.minmax_node_feature[1, :], self.comm, MPI.MAX
+            )
+
         for dataset in self.dataset_list:
             for data in dataset:
                 g_index_start = 0

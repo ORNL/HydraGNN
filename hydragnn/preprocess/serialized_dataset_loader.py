@@ -27,6 +27,11 @@ from hydragnn.preprocess.utils import (
     get_radius_graph_pbc_config,
 )
 
+try:
+    from mpi4py import MPI
+except ImportError:
+    pass
+
 
 class SerializedDataLoader:
     """A class used for loading existing structures from files that are lists of serialized structures.
@@ -38,7 +43,15 @@ class SerializedDataLoader:
     Constructor
     """
 
-    def __init__(self, config):
+    def __init__(self, config, comm=None):
+        self.comm = None
+        self.rank = 0
+        self.comm_size = 1
+        if comm is not None:
+            self.comm = comm
+            self.rank = comm.Get_rank()
+            self.comm_size = comm.Get_size()
+
         self.verbosity = config["Verbosity"]["level"]
         self.node_feature_name = config["Dataset"]["node_features"]["name"]
         self.node_feature_dim = config["Dataset"]["node_features"]["dim"]
@@ -106,15 +119,11 @@ class SerializedDataLoader:
         if self.periodic_boundary_conditions:
             # edge lengths already added manually if using PBC, so no need to call Distance.
             compute_edges = get_radius_graph_pbc(
-                radius=self.radius,
-                loop=False,
-                max_neighbours=self.max_neighbours,
+                radius=self.radius, loop=False, max_neighbours=self.max_neighbours,
             )
         else:
             compute_edges = get_radius_graph(
-                radius=self.radius,
-                loop=False,
-                max_neighbours=self.max_neighbours,
+                radius=self.radius, loop=False, max_neighbours=self.max_neighbours,
             )
             compute_edge_lengths = Distance(norm=False, cat=True)
 
@@ -130,6 +139,12 @@ class SerializedDataLoader:
         for data in dataset:
             max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
 
+        if self.comm is not None:
+            ## Gather max in parallel
+            x = max_edge_length.detach().cpu().numpy()
+            x = self.comm.allreduce(x, op=MPI.MAX)
+            max_edge_length = torch.Tensor(x)
+
         # Normalization of the edges
         for data in dataset:
             data.edge_attr = data.edge_attr / max_edge_length
@@ -137,7 +152,8 @@ class SerializedDataLoader:
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
         for data in dataset:
-            data.to(device)
+            ## (2022/04) jyc: no need for parallel loading
+            # data.to(device)
             update_predicted_values(
                 self.variables_type,
                 self.output_index,

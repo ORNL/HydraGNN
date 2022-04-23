@@ -15,6 +15,7 @@ from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
+from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
 
 import numpy as np
 import adios2 as ad2
@@ -33,7 +34,71 @@ from sympy.utilities.iterables import multiset_permutations
 import scipy.special
 import math
 
-from create_configurations import create_dataset
+from create_configurations import E_dimensionless
+
+
+def write_to_file(total_energy, atomic_features, count_config, dir, prefix):
+
+    numpy_string_total_value = np.array2string(total_energy)
+
+    filetxt = numpy_string_total_value
+
+    for index in range(0, atomic_features.shape[0]):
+        numpy_row = atomic_features[index, :]
+        numpy_string_row = np.array2string(
+            numpy_row, precision=2, separator="\t", suppress_small=True
+        )
+        filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
+
+        filename = os.path.join(dir, prefix + str(count_config) + ".txt")
+        with open(filename, "w") as f:
+            f.write(filetxt)
+
+
+def create_dataset_mpi(
+    L, histogram_cutoff, dir, spin_function=lambda x: x, scale_spin=False, comm=None
+):
+    rank = comm.Get_rank()
+    comm_size = comm.Get_size()
+
+    count_config = 0
+    rx = list(nsplit(range(0, L ** 3), comm_size))[rank]
+    info("rx", rx.start, rx.stop)
+
+    for num_downs in iterate_tqdm(range(rx.start, rx.stop), verbosity_level=2):
+        prefix = "output_%d_" % num_downs
+
+        primal_configuration = np.ones((L ** 3,))
+        for down in range(0, num_downs):
+            primal_configuration[down] = -1.0
+
+        # If the current composition has a total number of possible configurations above
+        # the hard cutoff threshold, a random configurational subset is picked
+        if scipy.special.binom(L ** 3, num_downs) > histogram_cutoff:
+            for num_config in range(0, histogram_cutoff):
+                config = np.random.permutation(primal_configuration)
+                config = np.reshape(config, (L, L, L))
+                total_energy, atomic_features = E_dimensionless(
+                    config, L, spin_function, scale_spin
+                )
+
+                write_to_file(total_energy, atomic_features, count_config, dir, prefix)
+
+                count_config = count_config + 1
+
+        # If the current composition has a total number of possible configurations smaller
+        # than the hard cutoff, then all possible permutations are generated
+        else:
+            for config in multiset_permutations(primal_configuration):
+                config = np.array(config)
+                config = np.reshape(config, (L, L, L))
+                total_energy, atomic_features = E_dimensionless(
+                    config, L, spin_function, scale_spin
+                )
+
+                write_to_file(total_energy, atomic_features, count_config, dir, prefix)
+
+                count_config = count_config + 1
 
 
 class AdioGGO:
@@ -79,7 +144,7 @@ class AdioGGO:
                 m1 = np.max([x.shape for x in arr_list], axis=0)
                 wh = np.where(m0 != m1)[0]
                 assert len(wh) < 2
-                vdim = wh[0] if len(wh) == 1 else 1
+                vdim = wh[0] if len(wh) == 1 else len(arr_list[0].shape) - 1
                 val = np.concatenate(arr_list, axis=vdim)
                 assert val.data.contiguous
                 shape_list = self.comm.allgather(list(val.shape))
@@ -138,9 +203,7 @@ class AdioGGO:
 
 class IsingDataset(torch.utils.data.Dataset):
     def __init__(self, filename, label, comm):
-        self.url = (
-            "https://dl.dropboxusercontent.com/s/7qe3zppbicw9vxj/ogb_gap.bp.tar.gz"
-        )
+        self.url = None
         t0 = time.time()
         self.filename = filename
         self.label = label
@@ -264,13 +327,20 @@ if __name__ == "__main__":
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     if args.preonly:
-        dir = os.path.join(os.path.dirname(__file__), "../../dataset/ising_model")
-        if os.path.exists(dir):
-            shutil.rmtree(dir)
-        os.makedirs(dir)
-
         number_atoms_per_dimension = args.natoms
         configurational_histogram_cutoff = args.cutoff
+
+        modelname = "ising_model_%d_%d" % (
+            number_atoms_per_dimension,
+            configurational_histogram_cutoff,
+        )
+
+        dir = os.path.join(os.path.dirname(__file__), "../../dataset/%s" % modelname)
+        if rank == 0:
+            if os.path.exists(dir):
+                shutil.rmtree(dir)
+            os.makedirs(dir)
+        comm.Barrier()
 
         info("Generating ... ")
         info("number_atoms_per_dimension", number_atoms_per_dimension)
@@ -279,27 +349,27 @@ if __name__ == "__main__":
         # Use sine function as non-linear extension of Ising model
         # Use randomized scaling of the spin magnitudes
         spin_func = lambda x: math.sin(math.pi * x / 2)
-        create_dataset(
+        create_dataset_mpi(
             number_atoms_per_dimension,
             configurational_histogram_cutoff,
             dir,
             spin_function=spin_func,
             scale_spin=True,
+            comm=comm,
         )
 
-        hydragnn.preprocess.transform_raw_data_to_serialized(config["Dataset"])
+        config["Dataset"]["path"] = {"total": "./dataset/%s" % modelname}
+        hydragnn.preprocess.transform_raw_data_to_serialized_parallel(
+            config["Dataset"], comm=comm
+        )
         hydragnn.preprocess.total_to_train_val_test_pkls(config)
         (
             trainset,
             valset,
             testset,
-        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config)
+        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, comm=comm)
 
-        fname = "ising_%d_%d.bp" % (
-            number_atoms_per_dimension,
-            configurational_histogram_cutoff,
-        )
-        adwriter = AdioGGO("examples/ising_model/dataset/%s.bp" % fname, comm)
+        adwriter = AdioGGO("examples/ising_model/dataset/%s.bp" % modelname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
         adwriter.add("testset", testset)

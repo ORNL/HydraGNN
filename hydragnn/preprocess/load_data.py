@@ -72,24 +72,14 @@ def create_dataloaders(trainset, valset, testset, batch_size):
     else:
 
         train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(
-            valset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
-        test_loader = DataLoader(
-            testset,
-            batch_size=batch_size,
-            shuffle=True,
-        )
+        val_loader = DataLoader(valset, batch_size=batch_size, shuffle=True,)
+        test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True,)
 
     return train_loader, val_loader, test_loader, sampler_list
 
 
 def split_dataset(
-    dataset: [],
-    perc_train: float,
-    stratify_splitting: bool,
+    dataset: [], perc_train: float, stratify_splitting: bool,
 ):
     if not stratify_splitting:
         perc_val = (1 - perc_train) / 2
@@ -107,7 +97,7 @@ def split_dataset(
     return trainset, valset, testset
 
 
-def load_train_val_test_sets(config):
+def load_train_val_test_sets(config, comm=None):
     timer = Timer("load_data")
     timer.start()
 
@@ -120,7 +110,7 @@ def load_train_val_test_sets(config):
         else:
             files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-        loader = SerializedDataLoader(config)
+        loader = SerializedDataLoader(config, comm=comm)
         dataset = loader.load_serialized_data(dataset_path=files_dir)
 
         dataset_list.append(dataset)
@@ -144,6 +134,11 @@ def transform_raw_data_to_serialized(config):
 
     if dist.is_initialized():
         dist.barrier()
+
+
+def transform_raw_data_to_serialized_parallel(config, comm):
+    loader = RawDataLoader(config, comm=comm)
+    loader.load_raw_data()
 
 
 def total_to_train_val_test_pkls(config):
