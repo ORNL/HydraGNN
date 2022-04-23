@@ -136,12 +136,7 @@ def transform_raw_data_to_serialized(config):
         dist.barrier()
 
 
-def transform_raw_data_to_serialized_parallel(config, comm):
-    loader = RawDataLoader(config, comm=comm)
-    loader.load_raw_data()
-
-
-def total_to_train_val_test_pkls(config):
+def total_to_train_val_test_pkls(config, comm=None):
     _, rank = get_comm_size_and_rank()
 
     if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
@@ -149,6 +144,7 @@ def total_to_train_val_test_pkls(config):
     else:
         file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
     # if "total" raw dataset is provided, generate train/val/test pkl files and update config dict.
+    print("Read total pkl", file_dir)
     with open(file_dir, "rb") as f:
         minmax_node_feature = pickle.load(f)
         minmax_graph_feature = pickle.load(f)
@@ -168,7 +164,13 @@ def total_to_train_val_test_pkls(config):
         config["Dataset"]["path"][dataset_type] = (
             serialized_dir + "/" + serial_data_name
         )
-        if rank == 0:
+        if (comm is None) and (rank == 0):
+            with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
+                pickle.dump(minmax_node_feature, f)
+                pickle.dump(minmax_graph_feature, f)
+                pickle.dump(dataset, f)
+        elif comm is not None:
+            ## parallel processing
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(minmax_node_feature, f)
                 pickle.dump(minmax_graph_feature, f)

@@ -135,9 +135,9 @@ class RawDataLoader:
             if self.comm is not None:
                 x = np.array(len(filelist))
                 y = self.comm.allreduce(x, op=MPI.MAX)
-                assert (x == y)
+                assert x == y
                 filelist = list(nsplit(filelist, self.comm_size))[self.rank]
-                log ("local filelist", len(filelist))
+                log("local filelist", len(filelist))
             for name in filelist:
                 if name == ".DS_Store":
                     continue
@@ -180,6 +180,7 @@ class RawDataLoader:
         for serial_data_name, dataset_normalized in zip(
             self.serial_data_name_list, self.dataset_list
         ):
+            print("serial_data_name", serial_data_name)
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(self.minmax_node_feature, f)
                 pickle.dump(self.minmax_graph_feature, f)
@@ -395,8 +396,8 @@ class RawDataLoader:
                     )
                     n_index_start = n_index_end
 
+        ## Gather minmax in parallel
         if self.comm is not None:
-            ## Gather minmax in parallel
             self.minmax_graph_feature[0, :] = comm_reduce(
                 self.minmax_graph_feature[0, :], self.comm, MPI.MIN
             )

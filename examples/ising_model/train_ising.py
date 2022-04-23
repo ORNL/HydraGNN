@@ -46,7 +46,7 @@ def write_to_file(total_energy, atomic_features, count_config, dir, prefix):
     for index in range(0, atomic_features.shape[0]):
         numpy_row = atomic_features[index, :]
         numpy_string_row = np.array2string(
-            numpy_row, precision=2, separator="\t", suppress_small=True
+            numpy_row, separator="\t", suppress_small=True
         )
         filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
@@ -109,8 +109,12 @@ class AdioGGO:
         self.size = comm.Get_size()
 
         self.dataset = dict()
+        self.attributes = dict()
         self.adios = ad2.ADIOS()
         self.io = self.adios.DeclareIO(self.filename)
+
+    def add_global(self, vname, arr):
+        self.attributes[vname] = arr
 
     def add(self, label, data: torch_geometric.data.Data):
         if label not in self.dataset:
@@ -126,6 +130,7 @@ class AdioGGO:
         t0 = time.time()
         info("Adios saving:", self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
+        total_ns = 0
         for label in self.dataset:
             if len(self.dataset[label]) < 1:
                 continue
@@ -133,6 +138,8 @@ class AdioGGO:
             ns_offset = sum(ns[: self.rank])
 
             self.io.DefineAttribute("%s/ndata" % label, np.array(sum(ns)))
+            total_ns += sum(ns)
+
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 self.io.DefineAttribute("%s/keys" % label, data.keys)
@@ -196,6 +203,10 @@ class AdioGGO:
                 )
                 self.writer.Put(var, offset_arr, ad2.Mode.Sync)
 
+        self.io.DefineAttribute("total_ndata", np.array(total_ns))
+        for vname in self.attributes:
+            self.io.DefineAttribute(vname, self.attributes[vname])
+
         self.writer.Close()
         t1 = time.time()
         info("Adios saving time (sec): ", (t1 - t0))
@@ -214,12 +225,14 @@ class IsingDataset(torch.utils.data.Dataset):
         info("Adios reading:", self.filename)
 
         if self.rank == 0:
-            if not os.path.exists(filename):
+            if not os.path.exists(filename) and self.url is not None:
                 self.prefix = os.path.dirname(self.filename)
                 self.download()
         comm.Barrier()
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
             self.vars = f.available_variables()
+            self.attrs = f.available_attributes()
+
             self.keys = f.read_attribute_string("%s/keys" % label)
             self.ndata = f.read_attribute("%s/ndata" % label).item()
 
@@ -234,9 +247,13 @@ class IsingDataset(torch.utils.data.Dataset):
                     "%s/%s/variable_dim" % (label, k)
                 ).item()
                 ## load full data first
-                self.data[k] = f.read("%s/%s" % (label, k))
+                self.data[k] = f.read("%s/%s" % (label, k))            
+
+            self.minmax_graph_feature = f.read_attribute("minmax_graph_feature").reshape((2,-1))
+            self.minmax_node_feature = f.read_attribute("minmax_node_feature").reshape((2,-1))
             t2 = time.time()
             info("Adios reading time (sec): ", (t2 - t0))
+
         t1 = time.time()
         info("Data loading time (sec): ", (t1 - t0))
 
@@ -289,13 +306,10 @@ if __name__ == "__main__":
         help="preprocess only. Adios saving and no train",
     )
     parser.add_argument(
-        "--natoms", type=int, default=3, help="number_atoms_per_dimension",
+        "--natom", type=int, default=3, help="number_atoms_per_dimension",
     )
     parser.add_argument(
         "--cutoff", type=int, default=1000, help="configurational_histogram_cutoff",
-    )
-    parser.add_argument(
-        "--bpfile", default=1000, help="adios file to read",
     )
     args = parser.parse_args()
 
@@ -326,15 +340,15 @@ if __name__ == "__main__":
     except:
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
+    number_atoms_per_dimension = args.natom
+    configurational_histogram_cutoff = args.cutoff
+
+    modelname = "ising_model_%d_%d" % (
+        number_atoms_per_dimension,
+        configurational_histogram_cutoff,
+    )
+
     if args.preonly:
-        number_atoms_per_dimension = args.natoms
-        configurational_histogram_cutoff = args.cutoff
-
-        modelname = "ising_model_%d_%d" % (
-            number_atoms_per_dimension,
-            configurational_histogram_cutoff,
-        )
-
         dir = os.path.join(os.path.dirname(__file__), "../../dataset/%s" % modelname)
         if rank == 0:
             if os.path.exists(dir):
@@ -359,11 +373,18 @@ if __name__ == "__main__":
         )
         comm.Barrier()
 
+        ## (2022/04) jyc: for parallel processing, make each pkl file local for each MPI process
+        ## Read raw and save total in pkl
+        ## Related: hydragnn.preprocess.transform_raw_data_to_serialized
         config["Dataset"]["path"] = {"total": "./dataset/%s" % modelname}
-        hydragnn.preprocess.transform_raw_data_to_serialized_parallel(
-            config["Dataset"], comm=comm
-        )
-        hydragnn.preprocess.total_to_train_val_test_pkls(config)
+        config["Dataset"]["name"] = "%s_%d" % (modelname, rank)
+        loader = RawDataLoader(config["Dataset"], comm=comm)
+        loader.load_raw_data()
+
+        ## Read total pkl and split (no graph object conversion)
+        hydragnn.preprocess.total_to_train_val_test_pkls(config, comm=comm)
+
+        ## Read each pkl and graph object conversion with max-edge normalization
         (
             trainset,
             valset,
@@ -374,6 +395,8 @@ if __name__ == "__main__":
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
         adwriter.add("testset", testset)
+        adwriter.add_global("minmax_node_feature", loader.minmax_node_feature)
+        adwriter.add_global("minmax_graph_feature", loader.minmax_graph_feature)
         adwriter.save()
         sys.exit(0)
 
@@ -381,7 +404,7 @@ if __name__ == "__main__":
     timer.start()
 
     info("Adios load")
-    fname = "examples/ising_model/dataset/%s" % (args.bpfile)
+    fname = "examples/ising_model/dataset/%s.bp" % (modelname)
     trainset = IsingDataset(fname, "trainset", comm)
     valset = IsingDataset(fname, "valset", comm)
     testset = IsingDataset(fname, "testset", comm)
@@ -399,7 +422,12 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
+    ## FIXME: no minmax read in bp file. Currently read old pkl file 
+    config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"] = trainset.minmax_node_feature
+    config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"] = trainset.minmax_graph_feature
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
+    del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
     timer.stop()
 
     verbosity = config["Verbosity"]["level"]

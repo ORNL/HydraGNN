@@ -144,9 +144,14 @@ def normalize_output_config(config):
 
 def update_config_minmax(dataset_path, config):
     """load minimum and maximum values from dataset_path, if need denormalize,"""
-    with open(dataset_path, "rb") as f:
-        node_minmax = pickle.load(f)
-        graph_minmax = pickle.load(f)
+    ## Check first if "minmax_graph_feature" and "minmax_graph_feature"
+    if "minmax_node_feature" not in config and "minmax_graph_feature" not in config:
+        with open(dataset_path, "rb") as f:
+            node_minmax = pickle.load(f)
+            graph_minmax = pickle.load(f)
+    else:
+        node_minmax = config["minmax_node_feature"]
+        graph_minmax = config["minmax_graph_feature"]
     config["x_minmax"] = []
     config["y_minmax"] = []
     feature_indices = [i for i in config["input_node_features"]]
