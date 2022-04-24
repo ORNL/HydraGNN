@@ -428,7 +428,7 @@ if __name__ == "__main__":
     )
     timer.stop()
 
-    ## FIXME: no minmax read in bp file. Currently read old pkl file
+    ## Set minmax read from bp file
     config["NeuralNetwork"]["Variables_of_interest"][
         "minmax_node_feature"
     ] = trainset.minmax_node_feature

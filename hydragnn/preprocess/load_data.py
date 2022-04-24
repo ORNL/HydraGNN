@@ -30,6 +30,8 @@ from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 import pickle
 
+from hydragnn.utils.print_utils import print_distributed, log
+
 
 def dataset_loading_and_splitting(config: {}):
     ##check if serialized pickle files or folders for raw files provided
@@ -50,6 +52,10 @@ def dataset_loading_and_splitting(config: {}):
     )
 
 
+def worker_init_fn(worker_id):
+    log("Worker init (id): %d" % (worker_id))
+
+
 def create_dataloaders(trainset, valset, testset, batch_size):
     sampler_list = []
     if dist.is_initialized():
@@ -58,8 +64,17 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
         test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
 
+        num_workers = 0
+        if os.getenv("HYDRAGNN_NUM_WORKERS") is not None:
+            num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
+
         train_loader = DataLoader(
-            trainset, batch_size=batch_size, shuffle=False, sampler=train_sampler
+            trainset,
+            batch_size=batch_size,
+            shuffle=False,
+            sampler=train_sampler,
+            num_workers=num_workers,
+            worker_init_fn=worker_init_fn,
         )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
