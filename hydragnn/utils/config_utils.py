@@ -11,7 +11,7 @@
 import pickle
 import os
 from hydragnn.preprocess.utils import check_if_graph_size_variable
-from hydragnn.utils.model import calculate_PNA_degree_dist
+from hydragnn.utils.model import calculate_PNA_degree_dist, calculate_PNA_degree_mpi
 
 
 def update_config(config, train_loader, val_loader, test_loader):
