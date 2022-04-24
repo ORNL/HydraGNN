@@ -102,11 +102,13 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
 
 def calculate_PNA_degree_dist(loader, max_neighbours):
     assert(torch.distributed.is_initialized())
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     for i, data in enumerate(loader):
+        data.to(get_device())
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        deg += torch.bincount(d, minlength=deg.numel())
-    torch.distributed.all_reduce(deg, op=torch.distributed.ReduceOp.SUM)
+        _deg = torch.bincount(d, minlength=deg.numel())
+        torch.distributed.all_reduce(_deg, op=torch.distributed.ReduceOp.SUM)
+        deg += _deg
     return deg
 
 
