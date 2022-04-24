@@ -10,7 +10,7 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_variable
+from hydragnn.preprocess.utils import check_if_graph_size_variable_mpi
 from hydragnn.utils.model import calculate_PNA_degree_mpi, calculate_PNA_degree_dist
 from hydragnn.utils import print_distributed
 import time
@@ -20,11 +20,11 @@ def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
     t0 = time.time()
-    graph_size_variable = check_if_graph_size_variable(
+    graph_size_variable = check_if_graph_size_variable_mpi(
         train_loader, val_loader, test_loader
     )
     t1 = time.time()
-    print_distributed(3, "update_config: check_if_graph_size_variable (sec): ", (t1 - t0))
+    print_distributed(3, "update_config: check_if_graph_size_variable_mpi (sec): ", (t1 - t0))
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)

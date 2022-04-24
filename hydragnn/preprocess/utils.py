@@ -9,6 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+from mmap import mmap
 import torch
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.utils import remove_self_loops
@@ -16,18 +17,37 @@ from torch_geometric.utils import remove_self_loops
 import ase
 import ase.neighborlist
 
+from mpi4py import MPI
+from tqdm import tqdm
+import numpy as np
 
+## This function can be slow if dataset is too large. Use with caution.
+## Recommend to use check_if_graph_size_variable_mpi
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
     graph_size_variable = False
     nodes_num_list = []
     for loader in [train_loader, val_loader, test_loader]:
         for data in loader.dataset:
             nodes_num_list.append(data.num_nodes)
-            if len(list(set(nodes_num_list))) > 1:
-                graph_size_variable = True
-                return graph_size_variable
+        if len(list(set(nodes_num_list))) > 1:
+            graph_size_variable = True
+            return graph_size_variable
     return graph_size_variable
 
+def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
+    assert MPI.Is_initialized()
+    graph_size_variable = False
+    nodes_num_list = []
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in tqdm(loader):
+            nodes_num_list.append(data.num_nodes)
+        np.min(nodes_num_list)
+        mn = MPI.COMM_WORLD.allreduce(np.min(nodes_num_list), op=MPI.MIN)
+        mx = MPI.COMM_WORLD.allreduce(np.max(nodes_num_list), op=MPI.MAX)
+        if mn != mx:
+            graph_size_variable = True
+            return graph_size_variable
+    return graph_size_variable
 
 def check_data_samples_equivalence(data1, data2, tol):
     x_bool = data1.x.shape == data2.x.shape
