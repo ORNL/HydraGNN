@@ -12,11 +12,14 @@ import pickle
 import os
 from hydragnn.preprocess.utils import check_if_graph_size_variable
 from hydragnn.utils.model import calculate_PNA_degree_mpi, calculate_PNA_degree_dist
+from hydragnn.utils import print_distributed
+import time
 
 
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
+    t0 = time.time()
     graph_size_variable = check_if_graph_size_variable(
         train_loader, val_loader, test_loader
     )
@@ -27,8 +30,12 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
     )
+    t1 = time.time()
+    print_distributed(3, "update_config: update_config_NN_outputs (sec): ", (t1 - t0))
 
     config = normalize_output_config(config)
+    t2 = time.time()
+    print_distributed(3, "Adios saving time (sec): ", (t2 - t1))
 
     config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
@@ -43,6 +50,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
+    t3 = time.time()
+    print_distributed(3, "update_config: calculate_PNA_degree (sec): ", (t3 - t2))
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -58,6 +67,8 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
+    t4 = time.time()
+    print_distributed(3, "update_config: update_config_edge_dim (sec): ", (t4 - t3))
 
     return config
 
