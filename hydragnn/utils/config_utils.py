@@ -23,6 +23,8 @@ def update_config(config, train_loader, val_loader, test_loader):
     graph_size_variable = check_if_graph_size_variable(
         train_loader, val_loader, test_loader
     )
+    t1 = time.time()
+    print_distributed(3, "update_config: check_if_graph_size_variable (sec): ", (t1 - t0))
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
@@ -30,12 +32,10 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
     )
-    t1 = time.time()
-    print_distributed(3, "update_config: update_config_NN_outputs (sec): ", (t1 - t0))
 
     config = normalize_output_config(config)
     t2 = time.time()
-    print_distributed(3, "Adios saving time (sec): ", (t2 - t1))
+    print_distributed(3, "update_config: update_config_NN_outputs (sec): ", (t2 - t1))
 
     config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
