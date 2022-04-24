@@ -39,6 +39,7 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
+## mpi4py with buffer-like object for MPI.MIN and MPI.MAX
 def comm_reduce(x, comm, op):
     y = np.zeros_like(x)
     assert x.dtype == np.double

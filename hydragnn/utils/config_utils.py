@@ -11,7 +11,7 @@
 import pickle
 import os
 from hydragnn.preprocess.utils import check_if_graph_size_variable
-from hydragnn.utils.model import calculate_PNA_degree_dist, calculate_PNA_degree_mpi
+from hydragnn.utils.model import calculate_PNA_degree_mpi, calculate_PNA_degree_dist
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -36,8 +36,10 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
         deg = calculate_PNA_degree_mpi(train_loader, max_neigh)
+        print("deg", deg.sum())
+        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
+        print("deg", deg.sum())
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
@@ -89,10 +91,10 @@ def check_output_dim_consistent(data, config):
             )
         elif output_type[ihead] == "node":
             assert (
-                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-            ) // data.num_nodes == config["Dataset"]["node_features"]["dim"][
-                output_index[ihead]
-            ]
+                (data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item())
+                // data.num_nodes
+                == config["Dataset"]["node_features"]["dim"][output_index[ihead]]
+            )
 
 
 def update_config_NN_outputs(config, data, graph_size_variable):

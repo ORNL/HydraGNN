@@ -26,6 +26,7 @@ from collections import OrderedDict
 from mpi4py import MPI
 import time
 
+
 def loss_function_selection(loss_function_string: str):
     if loss_function_string == "mse":
         return torch.nn.functional.mse_loss
@@ -89,9 +90,10 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
     if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
+
 ## This function may cause OOM if dataset is too large
 ## to fit in a single GPU (i.e., with DDP). Use with caution.
-## Recommend to use calculate_PNA_degree_dist
+## Recommend to use calculate_PNA_degree_mpi or calculate_PNA_degree_dist
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for data in dataset:
@@ -99,22 +101,9 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
         deg += torch.bincount(d, minlength=deg.numel())
     return deg
 
-def calculate_PNA_degree_dist(loader, max_neighbours):
-    assert(torch.distributed.is_initialized())
-    t0 = time.time()
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
-    for i, data in enumerate(loader):
-        data.to(get_device())
-        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        _deg = torch.bincount(d, minlength=deg.numel())
-        torch.distributed.all_reduce(_deg, op=torch.distributed.ReduceOp.SUM)
-        deg += _deg
-    t1 = time.time()
-    print("calculate_PNA_degree_dist (sec): ", (t1 - t0))
-    return deg
 
 def calculate_PNA_degree_mpi(loader, max_neighbours):
-    assert(MPI.Is_initialized())
+    assert MPI.Is_initialized()
     t0 = time.time()
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for i, data in enumerate(loader):
@@ -124,7 +113,22 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
     _deg = MPI.COMM_WORLD.allreduce(_deg, op=MPI.SUM)
     deg = torch.from_numpy(_deg)
     t1 = time.time()
-    print("calculate_PNA_degree_mpi (sec): ", (t1 - t0))
+    # print("calculate_PNA_degree_mpi (sec): ", (t1 - t0))
+    return deg
+
+
+def calculate_PNA_degree_dist(loader, max_neighbours):
+    assert torch.distributed.is_initialized()
+    t0 = time.time()
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    for i, data in enumerate(loader):
+        data.to(get_device())
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        _deg = torch.bincount(d, minlength=deg.numel())
+        torch.distributed.all_reduce(_deg, op=torch.distributed.ReduceOp.SUM)
+        deg += _deg
+    t1 = time.time()
+    # print("calculate_PNA_degree_dist (sec): ", (t1 - t0))
     return deg
 
 
