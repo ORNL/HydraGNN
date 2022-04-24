@@ -23,7 +23,8 @@ from hydragnn.utils.distributed import (
     is_model_distributed,
 )
 from collections import OrderedDict
-
+from mpi4py import MPI
+import time
 
 def loss_function_selection(loss_function_string: str):
     if loss_function_string == "mse":
@@ -96,12 +97,11 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
     for data in dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
-        print (i, d, deg.numel())
-        import pdb; pdb.set_trace()
     return deg
 
 def calculate_PNA_degree_dist(loader, max_neighbours):
     assert(torch.distributed.is_initialized())
+    t0 = time.time()
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
     for i, data in enumerate(loader):
         data.to(get_device())
@@ -109,6 +109,22 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
         _deg = torch.bincount(d, minlength=deg.numel())
         torch.distributed.all_reduce(_deg, op=torch.distributed.ReduceOp.SUM)
         deg += _deg
+    t1 = time.time()
+    print("calculate_PNA_degree_dist (sec): ", (t1 - t0))
+    return deg
+
+def calculate_PNA_degree_mpi(loader, max_neighbours):
+    assert(MPI.Is_initialized())
+    t0 = time.time()
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+    for i, data in enumerate(loader):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    _deg = deg.detach().cpu().numpy()
+    _deg = MPI.COMM_WORLD.allreduce(_deg, op=MPI.SUM)
+    deg = torch.from_numpy(_deg)
+    t1 = time.time()
+    print("calculate_PNA_degree_mpi (sec): ", (t1 - t0))
     return deg
 
 

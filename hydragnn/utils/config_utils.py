@@ -37,6 +37,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
         deg = calculate_PNA_degree_dist(train_loader, max_neigh)
+        deg = calculate_PNA_degree_mpi(train_loader, max_neigh)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
