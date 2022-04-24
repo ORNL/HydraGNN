@@ -427,6 +427,7 @@ if __name__ == "__main__":
     )
     t2 = time.time()
     info("create_dataloaders (sec): ", (t2 - t1))
+    timer.stop()
 
     ## FIXME: no minmax read in bp file. Currently read old pkl file 
     config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"] = trainset.minmax_node_feature
@@ -436,7 +437,6 @@ if __name__ == "__main__":
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
     t3 = time.time()
     info("update_config (sec): ", (t3 - t2))
-    timer.stop()
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(
