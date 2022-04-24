@@ -88,13 +88,25 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
     if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
-
+## This function may cause OOM if dataset is too large
+## to fit in a single GPU (i.e., with DDP). Use with caution.
+## Recommend to use calculate_PNA_degree_dist
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for data in dataset:
-        data.to(get_device())
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
+        print (i, d, deg.numel())
+        import pdb; pdb.set_trace()
+    return deg
+
+def calculate_PNA_degree_dist(loader, max_neighbours):
+    assert(torch.distributed.is_initialized())
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+    for i, data in enumerate(loader):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    torch.distributed.all_reduce(deg, op=torch.distributed.ReduceOp.SUM)
     return deg
 
 

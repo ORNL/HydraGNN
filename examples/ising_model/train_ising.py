@@ -16,6 +16,7 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
+from hydragnn.utils.model import print_model
 
 import numpy as np
 import adios2 as ad2
@@ -434,6 +435,10 @@ if __name__ == "__main__":
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"], verbosity=verbosity,
     )
+    if rank == 0:
+        print_model(model)
+    comm.Barrier()
+    
     model = hydragnn.utils.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]

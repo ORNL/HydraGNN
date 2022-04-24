@@ -11,7 +11,7 @@
 import pickle
 import os
 from hydragnn.preprocess.utils import check_if_graph_size_variable
-from hydragnn.utils.model import calculate_PNA_degree
+from hydragnn.utils.model import calculate_PNA_degree_dist
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -36,7 +36,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
+        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
