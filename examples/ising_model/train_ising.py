@@ -24,6 +24,7 @@ import adios2 as ad2
 import torch_geometric.data
 import torch
 import torch.distributed as dist
+torch.multiprocessing.set_start_method('fork', force=True)
 
 import warnings
 
