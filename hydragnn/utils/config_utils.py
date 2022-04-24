@@ -19,12 +19,9 @@ import time
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
-    t0 = time.time()
     graph_size_variable = check_if_graph_size_variable_mpi(
         train_loader, val_loader, test_loader
     )
-    t1 = time.time()
-    print_distributed(3, "update_config: check_if_graph_size_variable_mpi (sec): ", (t1 - t0))
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
@@ -34,8 +31,6 @@ def update_config(config, train_loader, val_loader, test_loader):
     )
 
     config = normalize_output_config(config)
-    t2 = time.time()
-    print_distributed(3, "update_config: update_config_NN_outputs (sec): ", (t2 - t1))
 
     config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
@@ -44,14 +39,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
         deg = calculate_PNA_degree_mpi(train_loader, max_neigh)
-        print("deg", deg.sum())
-        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
-        print("deg", deg.sum())
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
-    t3 = time.time()
-    print_distributed(3, "update_config: calculate_PNA_degree (sec): ", (t3 - t2))
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -67,8 +57,6 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
-    t4 = time.time()
-    print_distributed(3, "update_config: update_config_edge_dim (sec): ", (t4 - t3))
 
     return config
 
@@ -114,7 +102,6 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     output_type = config["Variables_of_interest"]["type"]
     dims_list = []
     for ihead in range(len(output_type)):
-        print_distributed (1, "update_config_NN_outputs", ihead)
         if output_type[ihead] == "graph":
             dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
         elif output_type[ihead] == "node":

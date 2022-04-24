@@ -248,10 +248,14 @@ class IsingDataset(torch.utils.data.Dataset):
                     "%s/%s/variable_dim" % (label, k)
                 ).item()
                 ## load full data first
-                self.data[k] = f.read("%s/%s" % (label, k))            
+                self.data[k] = f.read("%s/%s" % (label, k))
 
-            self.minmax_graph_feature = f.read_attribute("minmax_graph_feature").reshape((2,-1))
-            self.minmax_node_feature = f.read_attribute("minmax_node_feature").reshape((2,-1))
+            self.minmax_graph_feature = f.read_attribute(
+                "minmax_graph_feature"
+            ).reshape((2, -1))
+            self.minmax_node_feature = f.read_attribute("minmax_node_feature").reshape(
+                (2, -1)
+            )
             t2 = time.time()
             info("Adios reading time (sec): ", (t2 - t0))
 
@@ -404,7 +408,6 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
 
-    t0 = time.time()
     info("Adios load")
     fname = "examples/ising_model/dataset/%s.bp" % (modelname)
     trainset = IsingDataset(fname, "trainset", comm)
@@ -414,8 +417,6 @@ if __name__ == "__main__":
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
-    t1 = time.time()
-    info("Adios read (sec): ", (t1 - t0))
 
     (
         train_loader,
@@ -425,18 +426,18 @@ if __name__ == "__main__":
     ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
-    t2 = time.time()
-    info("create_dataloaders (sec): ", (t2 - t1))
     timer.stop()
 
-    ## FIXME: no minmax read in bp file. Currently read old pkl file 
-    config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"] = trainset.minmax_node_feature
-    config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"] = trainset.minmax_graph_feature
+    ## FIXME: no minmax read in bp file. Currently read old pkl file
+    config["NeuralNetwork"]["Variables_of_interest"][
+        "minmax_node_feature"
+    ] = trainset.minmax_node_feature
+    config["NeuralNetwork"]["Variables_of_interest"][
+        "minmax_graph_feature"
+    ] = trainset.minmax_graph_feature
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
-    t3 = time.time()
-    info("update_config (sec): ", (t3 - t2))
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(

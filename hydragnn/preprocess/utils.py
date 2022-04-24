@@ -18,7 +18,6 @@ import ase
 import ase.neighborlist
 
 from mpi4py import MPI
-from tqdm import tqdm
 import numpy as np
 
 ## This function can be slow if dataset is too large. Use with caution.
@@ -34,12 +33,13 @@ def check_if_graph_size_variable(train_loader, val_loader, test_loader):
             return graph_size_variable
     return graph_size_variable
 
+
 def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
     assert MPI.Is_initialized()
     graph_size_variable = False
     nodes_num_list = []
     for loader in [train_loader, val_loader, test_loader]:
-        for data in tqdm(loader):
+        for data in loader:
             nodes_num_list.append(data.num_nodes)
         np.min(nodes_num_list)
         mn = MPI.COMM_WORLD.allreduce(np.min(nodes_num_list), op=MPI.MIN)
@@ -48,6 +48,7 @@ def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
             graph_size_variable = True
             return graph_size_variable
     return graph_size_variable
+
 
 def check_data_samples_equivalence(data1, data2, tol):
     x_bool = data1.x.shape == data2.x.shape
@@ -69,34 +70,22 @@ def check_data_samples_equivalence(data1, data2, tol):
 
 
 def get_radius_graph(radius, max_neighbours, loop=False):
-    return RadiusGraph(
-        r=radius,
-        loop=loop,
-        max_num_neighbors=max_neighbours,
-    )
+    return RadiusGraph(r=radius, loop=loop, max_num_neighbors=max_neighbours,)
 
 
 def get_radius_graph_pbc(radius, max_neighbours, loop=False):
-    return RadiusGraphPBC(
-        r=radius,
-        loop=loop,
-        max_num_neighbors=max_neighbours,
-    )
+    return RadiusGraphPBC(r=radius, loop=loop, max_num_neighbors=max_neighbours,)
 
 
 def get_radius_graph_config(config, loop=False):
     return RadiusGraph(
-        r=config["radius"],
-        loop=loop,
-        max_num_neighbors=config["max_neighbours"],
+        r=config["radius"], loop=loop, max_num_neighbors=config["max_neighbours"],
     )
 
 
 def get_radius_graph_pbc_config(config, loop=False):
     return RadiusGraphPBC(
-        r=config["radius"],
-        loop=loop,
-        max_num_neighbors=config["max_neighbours"],
+        r=config["radius"], loop=loop, max_num_neighbors=config["max_neighbours"],
     )
 
 
@@ -114,9 +103,7 @@ class RadiusGraphPBC(RadiusGraph):
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
         ase_atom_object = ase.Atoms(
-            positions=data.pos,
-            cell=data.supercell_size,
-            pbc=True,
+            positions=data.pos, cell=data.supercell_size, pbc=True,
         )
         # ‘i’ : first atom index
         # ‘j’ : second atom index
