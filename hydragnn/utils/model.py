@@ -113,7 +113,7 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
     _deg = MPI.COMM_WORLD.allreduce(_deg, op=MPI.SUM)
     deg = torch.from_numpy(_deg)
     t1 = time.time()
-    # print("calculate_PNA_degree_mpi (sec): ", (t1 - t0))
+    print("calculate_PNA_degree_mpi (sec): ", (t1 - t0))
     return deg
 
 
@@ -128,7 +128,7 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
         torch.distributed.all_reduce(_deg, op=torch.distributed.ReduceOp.SUM)
         deg += _deg
     t1 = time.time()
-    # print("calculate_PNA_degree_dist (sec): ", (t1 - t0))
+    print("calculate_PNA_degree_dist (sec): ", (t1 - t0))
     return deg
 
 
