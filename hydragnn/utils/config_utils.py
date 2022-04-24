@@ -114,6 +114,7 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     output_type = config["Variables_of_interest"]["type"]
     dims_list = []
     for ihead in range(len(output_type)):
+        print_distributed (1, "update_config_NN_outputs", ihead)
         if output_type[ihead] == "graph":
             dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
         elif output_type[ihead] == "node":
