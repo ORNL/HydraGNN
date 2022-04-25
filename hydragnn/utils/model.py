@@ -102,6 +102,7 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
     return deg
 
 
+## MPI causing problem with num_workers>0 which using torch.multiprocessing
 def calculate_PNA_degree_mpi(loader, max_neighbours):
     assert MPI.Is_initialized()
     t0 = time.time()

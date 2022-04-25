@@ -17,9 +17,6 @@ from torch_geometric.utils import remove_self_loops
 import ase
 import ase.neighborlist
 
-from mpi4py import MPI
-import numpy as np
-
 ## This function can be slow if dataset is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_mpi
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
@@ -47,6 +44,28 @@ def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
         if mn != mx:
             graph_size_variable = True
             return graph_size_variable
+    return graph_size_variable
+
+
+def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
+    from hydragnn.utils.distributed import get_device
+
+    assert torch.distributed.is_initialized()
+    graph_size_variable = False
+    mn = train_loader.dataset[0].num_nodes
+    mx = train_loader.dataset[0].num_nodes
+    for loader in [train_loader, val_loader, test_loader]:
+        for i, data in enumerate(loader):
+            for i in range(data.num_graphs):
+                mn = min(data[i].num_nodes, mn)
+                mx = max(data[i].num_nodes, mn)
+    mn = torch.tensor(mn).to(get_device())
+    mx = torch.tensor(mx).to(get_device())
+    torch.distributed.all_reduce(mn, op=torch.distributed.ReduceOp.MIN)
+    torch.distributed.all_reduce(mx, op=torch.distributed.ReduceOp.MAX)
+    if mn != mx:
+        graph_size_variable = True
+    print("graph_size_variable", graph_size_variable)
     return graph_size_variable
 
 

@@ -10,7 +10,7 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_variable_mpi
+from hydragnn.preprocess.utils import check_if_graph_size_variable_dist
 from hydragnn.utils.model import calculate_PNA_degree_mpi, calculate_PNA_degree_dist
 from hydragnn.utils import print_distributed
 import time
@@ -19,7 +19,7 @@ import time
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
-    graph_size_variable = check_if_graph_size_variable_mpi(
+    graph_size_variable = check_if_graph_size_variable_dist(
         train_loader, val_loader, test_loader
     )
 
@@ -38,7 +38,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree_mpi(train_loader, max_neigh)
+        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
