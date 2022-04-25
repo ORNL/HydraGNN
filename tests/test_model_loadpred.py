@@ -22,7 +22,6 @@ def unittest_model_prediction(config):
         train_loader,
         val_loader,
         test_loader,
-        sampler_list,
     ) = hydragnn.preprocess.load_data.dataset_loading_and_splitting(config=config)
 
     model = hydragnn.models.create.create_model_config(
