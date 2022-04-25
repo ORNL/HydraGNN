@@ -62,9 +62,7 @@ def _(config: dict):
     setup_log(get_log_name_config(config))
     world_size, world_rank = setup_ddp()
 
-    train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
-        config=config
-    )
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
     config = update_config(config, train_loader, val_loader, test_loader)
     plot_init_solution = config["Visualization"]["plot_init_solution"]
@@ -105,7 +103,6 @@ def _(config: dict):
         train_loader,
         val_loader,
         test_loader,
-        sampler_list,
         writer,
         scheduler,
         config["NeuralNetwork"],
