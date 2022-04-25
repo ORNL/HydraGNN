@@ -35,7 +35,6 @@ def train_validate_test(
     train_loader,
     val_loader,
     test_loader,
-    sampler_list,
     writer,
     scheduler,
     config,
@@ -93,8 +92,9 @@ def train_validate_test(
 
     for epoch in range(0, num_epoch):
         profiler.set_current_epoch(epoch)
-        for sampler in sampler_list:
-            sampler.set_epoch(epoch)
+        for dataloader in [train_loader, val_loader, test_loader]:
+            if getattr(dataloader.sampler, "set_epoch", None) is not None:
+                dataloader.sampler.set_epoch(epoch)
 
         with profiler as prof:
             train_loss, train_taskserr = train(

@@ -48,9 +48,7 @@ def _(config: dict):
 
     world_size, world_rank = setup_ddp()
 
-    train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
-        config=config
-    )
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
     config = update_config(config, train_loader, val_loader, test_loader)
 
