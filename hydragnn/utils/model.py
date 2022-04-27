@@ -91,7 +91,7 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
 
 ## This function may cause OOM if dataset is too large
 ## to fit in a single GPU (i.e., with DDP). Use with caution.
-## Recommend to use calculate_PNA_degree_mpi or calculate_PNA_degree_dist
+## Recommend to use calculate_PNA_degree_dist
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for data in dataset:
