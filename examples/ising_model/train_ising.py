@@ -24,7 +24,8 @@ import adios2 as ad2
 import torch_geometric.data
 import torch
 import torch.distributed as dist
-torch.multiprocessing.set_start_method('fork', force=True)
+
+torch.multiprocessing.set_start_method("fork", force=True)
 
 import warnings
 
@@ -384,18 +385,18 @@ if __name__ == "__main__":
         ## Related: hydragnn.preprocess.transform_raw_data_to_serialized
         config["Dataset"]["path"] = {"total": "./dataset/%s" % modelname}
         config["Dataset"]["name"] = "%s_%d" % (modelname, rank)
-        loader = RawDataLoader(config["Dataset"], comm=comm)
+        loader = RawDataLoader(config["Dataset"], dist=True)
         loader.load_raw_data()
 
         ## Read total pkl and split (no graph object conversion)
-        hydragnn.preprocess.total_to_train_val_test_pkls(config, comm=comm)
+        hydragnn.preprocess.total_to_train_val_test_pkls(config, isdist=True)
 
         ## Read each pkl and graph object conversion with max-edge normalization
         (
             trainset,
             valset,
             testset,
-        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, comm=comm)
+        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, isdist=True)
 
         adwriter = AdioGGO("examples/ising_model/dataset/%s.bp" % modelname, comm)
         adwriter.add("trainset", trainset)

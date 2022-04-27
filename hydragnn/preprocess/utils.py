@@ -9,7 +9,6 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-from mmap import mmap
 import torch
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.utils import remove_self_loops

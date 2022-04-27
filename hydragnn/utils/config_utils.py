@@ -11,7 +11,7 @@
 import pickle
 import os
 from hydragnn.preprocess.utils import check_if_graph_size_variable_dist
-from hydragnn.utils.model import calculate_PNA_degree_mpi, calculate_PNA_degree_dist
+from hydragnn.utils.model import calculate_PNA_degree_dist
 from hydragnn.utils import print_distributed
 import time
 

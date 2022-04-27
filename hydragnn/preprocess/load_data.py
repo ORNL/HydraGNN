@@ -112,7 +112,7 @@ def split_dataset(
     return trainset, valset, testset
 
 
-def load_train_val_test_sets(config, comm=None):
+def load_train_val_test_sets(config, isdist=False):
     timer = Timer("load_data")
     timer.start()
 
@@ -125,7 +125,7 @@ def load_train_val_test_sets(config, comm=None):
         else:
             files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-        loader = SerializedDataLoader(config, comm=comm)
+        loader = SerializedDataLoader(config, dist=isdist)
         dataset = loader.load_serialized_data(dataset_path=files_dir)
 
         dataset_list.append(dataset)
@@ -151,7 +151,7 @@ def transform_raw_data_to_serialized(config):
         dist.barrier()
 
 
-def total_to_train_val_test_pkls(config, comm=None):
+def total_to_train_val_test_pkls(config, isdist=False):
     _, rank = get_comm_size_and_rank()
 
     if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
@@ -179,13 +179,13 @@ def total_to_train_val_test_pkls(config, comm=None):
         config["Dataset"]["path"][dataset_type] = (
             serialized_dir + "/" + serial_data_name
         )
-        if (comm is None) and (rank == 0):
+        if (not isdist) and (rank == 0):
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(minmax_node_feature, f)
                 pickle.dump(minmax_graph_feature, f)
                 pickle.dump(dataset, f)
-        elif comm is not None:
-            ## parallel processing
+        elif isdist:
+            ## parallel processing. Everyone need to read own total pickle data
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(minmax_node_feature, f)
                 pickle.dump(minmax_graph_feature, f)

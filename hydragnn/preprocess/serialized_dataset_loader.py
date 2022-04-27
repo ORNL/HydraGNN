@@ -27,11 +27,6 @@ from hydragnn.preprocess.utils import (
     get_radius_graph_pbc_config,
 )
 
-try:
-    from mpi4py import MPI
-except ImportError:
-    pass
-
 
 class SerializedDataLoader:
     """A class used for loading existing structures from files that are lists of serialized structures.
@@ -43,15 +38,7 @@ class SerializedDataLoader:
     Constructor
     """
 
-    def __init__(self, config, comm=None):
-        self.comm = None
-        self.rank = 0
-        self.comm_size = 1
-        if comm is not None:
-            self.comm = comm
-            self.rank = comm.Get_rank()
-            self.comm_size = comm.Get_size()
-
+    def __init__(self, config, dist=False):
         self.verbosity = config["Verbosity"]["level"]
         self.node_feature_name = config["Dataset"]["node_features"]["name"]
         self.node_feature_dim = config["Dataset"]["node_features"]["dim"]
@@ -82,6 +69,12 @@ class SerializedDataLoader:
         assert len(self.node_feature_name) == len(self.node_feature_col)
         assert len(self.graph_feature_name) == len(self.graph_feature_dim)
         assert len(self.graph_feature_name) == len(self.graph_feature_col)
+
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
 
     """
     Methods
@@ -139,11 +132,14 @@ class SerializedDataLoader:
         for data in dataset:
             max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
 
-        if self.comm is not None:
+        if self.dist:
             ## Gather max in parallel
-            x = max_edge_length.detach().cpu().numpy()
-            x = self.comm.allreduce(x, op=MPI.MAX)
-            max_edge_length = torch.Tensor(x)
+            device = max_edge_length.device
+            max_edge_length.to(get_device())
+            torch.distributed.all_reduce(
+                max_edge_length, op=torch.distributed.ReduceOp.MAX
+            )
+            max_edge_length.to(device)
 
         # Normalization of the edges
         for data in dataset:
