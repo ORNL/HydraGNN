@@ -159,7 +159,6 @@ def total_to_train_val_test_pkls(config, isdist=False):
     else:
         file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
     # if "total" raw dataset is provided, generate train/val/test pkl files and update config dict.
-    print("Read total pkl", file_dir)
     with open(file_dir, "rb") as f:
         minmax_node_feature = pickle.load(f)
         minmax_graph_feature = pickle.load(f)

@@ -180,7 +180,6 @@ class RawDataLoader:
         for serial_data_name, dataset_normalized in zip(
             self.serial_data_name_list, self.dataset_list
         ):
-            print("serial_data_name", serial_data_name)
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(self.minmax_node_feature, f)
                 pickle.dump(self.minmax_graph_feature, f)
