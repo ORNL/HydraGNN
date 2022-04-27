@@ -87,22 +87,34 @@ def check_data_samples_equivalence(data1, data2, tol):
 
 
 def get_radius_graph(radius, max_neighbours, loop=False):
-    return RadiusGraph(r=radius, loop=loop, max_num_neighbors=max_neighbours,)
+    return RadiusGraph(
+        r=radius,
+        loop=loop,
+        max_num_neighbors=max_neighbours,
+    )
 
 
 def get_radius_graph_pbc(radius, max_neighbours, loop=False):
-    return RadiusGraphPBC(r=radius, loop=loop, max_num_neighbors=max_neighbours,)
+    return RadiusGraphPBC(
+        r=radius,
+        loop=loop,
+        max_num_neighbors=max_neighbours,
+    )
 
 
 def get_radius_graph_config(config, loop=False):
     return RadiusGraph(
-        r=config["radius"], loop=loop, max_num_neighbors=config["max_neighbours"],
+        r=config["radius"],
+        loop=loop,
+        max_num_neighbors=config["max_neighbours"],
     )
 
 
 def get_radius_graph_pbc_config(config, loop=False):
     return RadiusGraphPBC(
-        r=config["radius"], loop=loop, max_num_neighbors=config["max_neighbours"],
+        r=config["radius"],
+        loop=loop,
+        max_num_neighbors=config["max_neighbours"],
     )
 
 
@@ -120,7 +132,9 @@ class RadiusGraphPBC(RadiusGraph):
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
         ase_atom_object = ase.Atoms(
-            positions=data.pos, cell=data.supercell_size, pbc=True,
+            positions=data.pos,
+            cell=data.supercell_size,
+            pbc=True,
         )
         # ‘i’ : first atom index
         # ‘j’ : second atom index

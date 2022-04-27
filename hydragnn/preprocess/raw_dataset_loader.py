@@ -72,7 +72,7 @@ class RawDataLoader:
           list of dimensions of graph features
         graph_feature_col: list,
           list of column location/index (start location if dim>1) of graph features
-        
+
         dist: True if RawDataLoder is distributed (i.e., each RawDataLoader will read different subset of data)
         """
 

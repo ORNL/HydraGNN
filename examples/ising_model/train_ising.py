@@ -65,19 +65,19 @@ def create_dataset_mpi(
     comm_size = comm.Get_size()
 
     count_config = 0
-    rx = list(nsplit(range(0, L ** 3), comm_size))[rank]
+    rx = list(nsplit(range(0, L**3), comm_size))[rank]
     info("rx", rx.start, rx.stop)
 
     for num_downs in iterate_tqdm(range(rx.start, rx.stop), verbosity_level=2):
         prefix = "output_%d_" % num_downs
 
-        primal_configuration = np.ones((L ** 3,))
+        primal_configuration = np.ones((L**3,))
         for down in range(0, num_downs):
             primal_configuration[down] = -1.0
 
         # If the current composition has a total number of possible configurations above
         # the hard cutoff threshold, a random configurational subset is picked
-        if scipy.special.binom(L ** 3, num_downs) > histogram_cutoff:
+        if scipy.special.binom(L**3, num_downs) > histogram_cutoff:
             for num_config in range(0, histogram_cutoff):
                 config = np.random.permutation(primal_configuration)
                 config = np.reshape(config, (L, L, L))
@@ -158,7 +158,9 @@ class AdioGGO:
                 val = np.concatenate(arr_list, axis=vdim)
                 assert val.data.contiguous
                 shape_list = self.comm.allgather(list(val.shape))
-                offset = [0,] * len(val.shape)
+                offset = [
+                    0,
+                ] * len(val.shape)
                 for i in range(rank):
                     offset[vdim] += shape_list[i][vdim]
                 global_shape = shape_list[0]
@@ -189,9 +191,15 @@ class AdioGGO:
                 var = self.io.DefineVariable(
                     "%s/%s/variable_count" % (label, k),
                     vcount,
-                    [sum(ns),],
-                    [ns_offset,],
-                    [len(vcount),],
+                    [
+                        sum(ns),
+                    ],
+                    [
+                        ns_offset,
+                    ],
+                    [
+                        len(vcount),
+                    ],
                     ad2.ConstantDims,
                 )
                 self.writer.Put(var, vcount, ad2.Mode.Sync)
@@ -199,9 +207,15 @@ class AdioGGO:
                 var = self.io.DefineVariable(
                     "%s/%s/variable_offset" % (label, k),
                     offset_arr,
-                    [sum(ns),],
-                    [ns_offset,],
-                    [len(vcount),],
+                    [
+                        sum(ns),
+                    ],
+                    [
+                        ns_offset,
+                    ],
+                    [
+                        len(vcount),
+                    ],
                     ad2.ConstantDims,
                 )
                 self.writer.Put(var, offset_arr, ad2.Mode.Sync)
@@ -280,7 +294,9 @@ class IsingDataset(torch.utils.data.Dataset):
             for k in self.keys:
                 shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                 ishape = [int(x.strip(","), 16) for x in shape.strip().split()]
-                start = [0,] * len(ishape)
+                start = [
+                    0,
+                ] * len(ishape)
                 count = ishape
                 vdim = self.variable_dim[k]
                 start[vdim] = self.variable_offset[k][idx]
@@ -313,10 +329,16 @@ if __name__ == "__main__":
         help="preprocess only. Adios saving and no train",
     )
     parser.add_argument(
-        "--natom", type=int, default=3, help="number_atoms_per_dimension",
+        "--natom",
+        type=int,
+        default=3,
+        help="number_atoms_per_dimension",
     )
     parser.add_argument(
-        "--cutoff", type=int, default=1000, help="configurational_histogram_cutoff",
+        "--cutoff",
+        type=int,
+        default=1000,
+        help="configurational_histogram_cutoff",
     )
     args = parser.parse_args()
 
@@ -443,7 +465,8 @@ if __name__ == "__main__":
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"], verbosity=verbosity,
+        config=config["NeuralNetwork"],
+        verbosity=verbosity,
     )
     if rank == 0:
         print_model(model)

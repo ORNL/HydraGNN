@@ -112,11 +112,15 @@ class SerializedDataLoader:
         if self.periodic_boundary_conditions:
             # edge lengths already added manually if using PBC, so no need to call Distance.
             compute_edges = get_radius_graph_pbc(
-                radius=self.radius, loop=False, max_neighbours=self.max_neighbours,
+                radius=self.radius,
+                loop=False,
+                max_neighbours=self.max_neighbours,
             )
         else:
             compute_edges = get_radius_graph(
-                radius=self.radius, loop=False, max_neighbours=self.max_neighbours,
+                radius=self.radius,
+                loop=False,
+                max_neighbours=self.max_neighbours,
             )
             compute_edge_lengths = Distance(norm=False, cat=True)
 
@@ -208,7 +212,7 @@ class SerializedDataLoader:
             frequencies = sorted(frequencies[frequencies > 0].tolist())
             category = 0
             for index, frequency in enumerate(frequencies):
-                category += frequency * (100 ** index)
+                category += frequency * (100**index)
             dataset_categories.append(category)
 
         subsample_indices = []
