@@ -128,10 +128,11 @@ class RawDataLoader:
             ), "No data files provided in {}!".format(raw_data_path)
 
             filelist = sorted(os.listdir(raw_data_path))
-            ## Random shuffle with reproducibility (both in single and multi processing)
-            random.seed(43)
-            random.shuffle(filelist)
             if self.dist:
+                ## Random shuffle filelist to avoid the same test/validation set
+                random.seed(43)
+                random.shuffle(filelist)
+
                 x = torch.tensor(len(filelist), requires_grad=False).to(get_device())
                 y = x.clone().detach().requires_grad_(False)
                 torch.distributed.all_reduce(x, op=torch.distributed.ReduceOp.MAX)
