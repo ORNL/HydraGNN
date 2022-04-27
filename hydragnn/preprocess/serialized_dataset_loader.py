@@ -135,11 +135,11 @@ class SerializedDataLoader:
         if self.dist:
             ## Gather max in parallel
             device = max_edge_length.device
-            max_edge_length.to(get_device())
+            max_edge_length = max_edge_length.to(get_device())
             torch.distributed.all_reduce(
                 max_edge_length, op=torch.distributed.ReduceOp.MAX
             )
-            max_edge_length.to(device)
+            max_edge_length = max_edge_length.to(device)
 
         # Normalization of the edges
         for data in dataset:

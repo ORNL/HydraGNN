@@ -64,7 +64,6 @@ def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
     torch.distributed.all_reduce(mx, op=torch.distributed.ReduceOp.MAX)
     if mn != mx:
         graph_size_variable = True
-    print("graph_size_variable", graph_size_variable)
     return graph_size_variable
 
 
