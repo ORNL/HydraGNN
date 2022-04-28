@@ -194,6 +194,16 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
             )
 
     device_name = "cuda:" + str(localrank)
+    print(
+        "Hello from",
+        socket.gethostname(),
+        device_name,
+        torch.cuda.device_count(),
+        "world_rank=",
+        world_rank,
+        "world_size=",
+        world_size,
+    )
 
     return device_name
 
@@ -219,6 +229,7 @@ def get_distributed_model(model, verbosity=0):
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
         else:
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             device = get_device_from_name(device_name)
             model = torch.nn.parallel.DistributedDataParallel(
                 model, device_ids=[device]
