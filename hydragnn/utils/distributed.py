@@ -194,16 +194,6 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
             )
 
     device_name = "cuda:" + str(localrank)
-    print(
-        "Hello from",
-        socket.gethostname(),
-        device_name,
-        torch.cuda.device_count(),
-        "world_rank=",
-        world_rank,
-        "world_size=",
-        world_size,
-    )
 
     return device_name
 
@@ -225,6 +215,19 @@ def is_model_distributed(model):
 
 def get_distributed_model(model, verbosity=0):
     device_name = get_device_name(verbosity)
+
+    world_size, world_rank = get_comm_size_and_rank()
+    print(
+        "Hello from",
+        socket.gethostname(),
+        device_name,
+        torch.cuda.device_count(),
+        "world_rank=",
+        world_rank,
+        "world_size=",
+        world_size,
+    )
+
     if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
