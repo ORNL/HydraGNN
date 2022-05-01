@@ -31,7 +31,7 @@ def qm9_pre_transform(data):
 
 
 def qm9_pre_filter(data):
-    return data.idx[0] < num_samples
+    return data.idx < num_samples
 
 
 # Set this path for output.
