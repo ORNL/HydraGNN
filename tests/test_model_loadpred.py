@@ -29,6 +29,8 @@ def unittest_model_prediction(config):
         verbosity=config["Verbosity"]["level"],
     )
 
+    model = hydragnn.utils.get_distributed_model(model, config["Verbosity"]["level"])
+
     log_name = hydragnn.utils.config_utils.get_log_name_config(config)
     hydragnn.utils.model.load_existing_model(model, log_name)
 
@@ -47,7 +49,7 @@ def unittest_model_prediction(config):
     yloc = graph_sample.y_loc.squeeze()
 
     mae = torch.nn.L1Loss()
-    for ihead in range(model.num_heads):
+    for ihead in range(model.module.num_heads):
         head_true = torch.tensor(true_values[ihead])
         head_pred = torch.tensor(predicted_values[ihead])
         test_mae = mae(head_true, head_pred)

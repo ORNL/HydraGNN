@@ -125,13 +125,16 @@ class Base(Module):
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
+        if (
+            "node" not in self.config_heads
+            or self.config_heads["node"]["type"] != "conv"
+        ):
+            return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
         # In this part, each head has same number of convolutional layers, but can have different output dimension
         self.convs_node_hidden.append(
             self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
@@ -190,6 +193,8 @@ class Base(Module):
             elif self.head_type[ihead] == "node":
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
+                self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+                self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
                 if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
                     assert (
                         self.num_nodes is not None
@@ -341,6 +346,8 @@ class MLPNode(Module):
                 denselayers.append(ReLU())
             denselayers.append(Linear(hidden_dim_node[-1], output_dim))
             self.mlp.append(Sequential(*denselayers))
+            if self.node_type == "mlp":
+                break
 
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""

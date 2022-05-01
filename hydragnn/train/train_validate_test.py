@@ -29,6 +29,7 @@ import contextlib
 from unittest.mock import MagicMock
 from hydragnn.utils.distributed import get_comm_size_and_rank
 import torch.distributed as dist
+import pickle
 
 
 def train_validate_test(
@@ -47,7 +48,6 @@ def train_validate_test(
     create_plots=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
-    model = get_model_or_module(model)
 
     device = train_loader.dataset[0].y.device
     # total loss tracking for train/vali/test
@@ -55,9 +55,9 @@ def train_validate_test(
     total_loss_val = torch.zeros(num_epoch, device=device)
     total_loss_test = torch.zeros(num_epoch, device=device)
     # loss tracking for each head/task
-    task_loss_train = torch.zeros((num_epoch, model.num_heads), device=device)
-    task_loss_test = torch.zeros((num_epoch, model.num_heads), device=device)
-    task_loss_val = torch.zeros((num_epoch, model.num_heads), device=device)
+    task_loss_train = torch.zeros((num_epoch, model.module.num_heads), device=device)
+    task_loss_test = torch.zeros((num_epoch, model.module.num_heads), device=device)
+    task_loss_val = torch.zeros((num_epoch, model.module.num_heads), device=device)
 
     # preparing for results visualization
     ## collecting node feature
@@ -71,8 +71,8 @@ def train_validate_test(
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
-            num_heads=model.num_heads,
-            head_dims=model.head_dims,
+            num_heads=model.module.num_heads,
+            head_dims=model.module.head_dims,
             num_nodes_list=nodes_num_list,
         )
         visualizer.num_nodes_plot()
@@ -116,7 +116,7 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(model.num_heads):
+            for ivar in range(model.module.num_heads):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
                 )
@@ -182,7 +182,7 @@ def train_validate_test(
             task_loss_train,
             task_loss_val,
             task_loss_test,
-            model.loss_weights,
+            model.module.loss_weights,
             config["Variables_of_interest"]["output_names"],
         )
 
@@ -196,19 +196,19 @@ def get_head_indices(model, data):
     # head size for each sample
     total_size = y_loc[:, -1]
     # feature index for all heads
-    head_index = [None] * model.num_heads
+    head_index = [None] * model.module.num_heads
     # intermediate work list
     head_ind_temporary = [None] * batch_size
     # track the start loc of each sample
     sample_start = torch.cumsum(total_size, dim=0) - total_size
     sample_start = sample_start.view(-1, 1)
-    # shape (batch_size, model.num_heads), start and end of each head for each sample
+    # shape (batch_size, model.module.num_heads), start and end of each head for each sample
     start_index = sample_start + y_loc[:, :-1]
     end_index = sample_start + y_loc[:, 1:]
 
     # a large index tensor pool for all element in data.y
     index_range = torch.arange(0, end_index[-1, -1], device=y_loc.device)
-    for ihead in range(model.num_heads):
+    for ihead in range(model.module.num_heads):
         for isample in range(batch_size):
             head_ind_temporary[isample] = index_range[
                 start_index[isample, ihead] : end_index[isample, ihead]
@@ -289,16 +289,10 @@ def train(
     if profiler is None:
         profiler = Profiler()
 
-    # _, world_rank = get_comm_size_and_rank()
-
     total_error = 0
-    tasks_error = torch.zeros(model.num_heads, device=loader.dataset[0].y.device)
+    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
     num_samples_local = 0
     model.train()
-
-    # for name, param in model.named_parameters():
-    #       if param.requires_grad:
-    #            print("world_rank=", world_rank, name)
 
     for data in iterate_tqdm(loader, verbosity):
         with record_function("zero_grad"):
@@ -307,16 +301,10 @@ def train(
             head_index = get_head_indices(model, data)
         with record_function("forward"):
             pred = model(data)
-            loss, tasks_loss = model.loss(pred, data.y, head_index)
+            loss, tasks_loss = model.module.loss(pred, data.y, head_index)
         with record_function("backward"):
             loss.backward()
-        # for name, param in model.graph_shared.named_parameters():
-        #    if param.requires_grad:
-        #        print("grad, world_rank=", world_rank, name, param.grad)
         opt.step()
-        # for name, param in model.graph_shared.named_parameters():
-        #    if param.requires_grad:
-        #        print("data, world_rank=", world_rank, name, param.data)
         profiler.step()
         with torch.no_grad():
             total_error += loss * data.num_graphs
@@ -333,14 +321,14 @@ def train(
 def validate(loader, model, verbosity, reduce_gpus=True):
 
     total_error = 0
-    tasks_error = torch.zeros(model.num_heads, device=loader.dataset[0].y.device)
+    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
     num_samples_local = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        error, tasks_loss = model.loss(pred, data.y, head_index)
+        error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -357,14 +345,14 @@ def validate(loader, model, verbosity, reduce_gpus=True):
 def test(loader, model, verbosity, reduce_gpus=True, return_samples=True):
 
     total_error = 0
-    tasks_error = torch.zeros(model.num_heads, device=loader.dataset[0].y.device)
+    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
     num_samples_local = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
-        error, tasks_loss = model.loss(pred, data.y, head_index)
+        error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -372,26 +360,26 @@ def test(loader, model, verbosity, reduce_gpus=True, return_samples=True):
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    true_values = [[] for _ in range(model.num_heads)]
-    predicted_values = [[] for _ in range(model.num_heads)]
+    true_values = [[] for _ in range(model.module.num_heads)]
+    predicted_values = [[] for _ in range(model.module.num_heads)]
     if return_samples:
         for data in loader:
             head_index = get_head_indices(model, data)
             ytrue = data.y
             pred = model(data)
-            for ihead in range(model.num_heads):
+            for ihead in range(model.module.num_heads):
                 head_pre = pred[ihead].reshape(-1, 1)
                 head_val = ytrue[head_index[ihead]]
                 true_values[ihead].append(head_val)
                 predicted_values[ihead].append(head_pre)
-        for ihead in range(model.num_heads):
+        for ihead in range(model.module.num_heads):
             predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
             true_values[ihead] = torch.cat(true_values[ihead], dim=0)
 
     if reduce_gpus:
         test_error, tasks_error = get_reduced_stat(test_error, tasks_error)
         if len(true_values[0]) > 0:
-            for ihead in range(model.num_heads):
+            for ihead in range(model.module.num_heads):
                 true_values[ihead] = gather_head_values(true_values[ihead])
                 predicted_values[ihead] = gather_head_values(predicted_values[ihead])
 
