@@ -72,7 +72,11 @@ def _(config: dict):
     model = create_model_config(
         config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
-    model = get_distributed_model(model, config["Verbosity"]["level"])
+    model = get_distributed_model(
+        model,
+        config["Verbosity"]["level"],
+        SyncBatchNorm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+    )
 
     optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"])
 

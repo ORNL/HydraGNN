@@ -56,7 +56,11 @@ def _(config: dict):
         config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
 
-    model = get_distributed_model(model, config["Verbosity"]["level"])
+    model = get_distributed_model(
+        model,
+        config["Verbosity"]["level"],
+        SyncBatchNorm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+    )
 
     log_name = get_log_name_config(config)
     load_existing_model(model, log_name)
