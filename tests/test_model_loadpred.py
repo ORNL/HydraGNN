@@ -50,8 +50,8 @@ def unittest_model_prediction(config):
 
     mae = torch.nn.L1Loss()
     for ihead in range(model.module.num_heads):
-        head_true = torch.tensor(true_values[ihead])
-        head_pred = torch.tensor(predicted_values[ihead])
+        head_true = true_values[ihead]
+        head_pred = predicted_values[ihead]
         test_mae = mae(head_true, head_pred)
         print("For head ", ihead, "; MAE of test set =", test_mae)
         assert test_mae < thresholds[0], "MAE sample checking failed for test set!"

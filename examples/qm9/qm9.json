@@ -16,10 +16,6 @@
                     "dim_sharedlayers": 5,
                     "num_headlayers": 2,
                     "dim_headlayers": [50,25]
-                },
-                "node": {
-                    "num_headlayers": 2,
-                    "dim_headlayers": [50,25]
                 }
             },
             "task_weights": [1.0]
