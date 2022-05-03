@@ -94,7 +94,6 @@ class Base(Module):
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
-        self._init_node_conv()
         self._multihead()
         if self.initial_bias is not None:
             self._set_bias()
@@ -169,6 +168,11 @@ class Base(Module):
                 denselayers.append(ReLU())
             self.graph_shared = Sequential(*denselayers)
 
+        if "node" in self.config_heads:
+            self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+            self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+            self._init_node_conv()
+
         inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
@@ -193,8 +197,6 @@ class Base(Module):
             elif self.head_type[ihead] == "node":
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
-                self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-                self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
                 if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
                     assert (
                         self.num_nodes is not None
