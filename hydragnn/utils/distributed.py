@@ -214,7 +214,7 @@ def is_model_distributed(model):
 
 
 def get_distributed_model(model, verbosity=0, SyncBatchNorm=False):
-    device_name = get_device_name(verbosity)
+    device_name = get_device_name(verbosity_level=verbosity)
 
     world_size, world_rank = get_comm_size_and_rank()
     print(
