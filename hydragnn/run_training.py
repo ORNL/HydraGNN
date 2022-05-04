@@ -75,7 +75,7 @@ def _(config: dict):
     model = get_distributed_model(
         model,
         config["Verbosity"]["level"],
-        SyncBatchNorm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+        sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
     )
 
     optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"])
