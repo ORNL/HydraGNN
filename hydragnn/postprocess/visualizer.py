@@ -119,7 +119,7 @@ class Visualizer:
 
         ax.scatter(x, y, s=s, edgecolor="b", marker=marker, facecolor="none")
 
-        ax.set_title(title + ", len=" + str(len(x)))
+        ax.set_title(title + ", number of samples =" + str(len(x)))
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         if xylim_equal:

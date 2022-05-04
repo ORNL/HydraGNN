@@ -213,7 +213,7 @@ def is_model_distributed(model):
     return isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel)
 
 
-def get_distributed_model(model, verbosity=0, SyncBatchNorm=False):
+def get_distributed_model(model, verbosity=0, sync_batch_norm=False):
     device_name = get_device_name(verbosity_level=verbosity)
 
     world_size, world_rank = get_comm_size_and_rank()
@@ -232,7 +232,7 @@ def get_distributed_model(model, verbosity=0, SyncBatchNorm=False):
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
         else:
-            if SyncBatchNorm:
+            if sync_batch_norm:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             device = get_device_from_name(device_name)
             model = torch.nn.parallel.DistributedDataParallel(

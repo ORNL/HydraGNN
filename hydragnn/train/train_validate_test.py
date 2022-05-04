@@ -17,7 +17,6 @@ import torch
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
-from hydragnn.utils.model import get_model_or_module
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
@@ -108,7 +107,7 @@ def train_validate_test(
             test_loader,
             model,
             verbosity,
-            reduce_gpus=True,
+            reduce_ranks=True,
             return_samples=plot_hist_solution,
         )
         scheduler.step(val_loss)
@@ -125,7 +124,9 @@ def train_validate_test(
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
             f"Test Loss: {test_loss:.8f}",
         )
-        print_distributed(verbosity, "Tasks Loss:", train_taskserr)
+        print_distributed(
+            verbosity, "Tasks Loss:", [taskerr.item() for taskerr in train_taskserr]
+        )
 
         total_loss_train[epoch] = train_loss
         total_loss_val[epoch] = val_loss
@@ -146,10 +147,12 @@ def train_validate_test(
     timer.stop()
 
     # reduce loss statistics across all processes
-    reduce_loss_stat(
-        [total_loss_train, total_loss_val, total_loss_test],
-        [task_loss_train, task_loss_val, task_loss_test],
-    )
+    total_loss_train = reduce_values_ranks(total_loss_train)
+    total_loss_val = reduce_values_ranks(total_loss_val)
+    total_loss_test = reduce_values_ranks(total_loss_test)
+    task_loss_train = reduce_values_ranks(task_loss_train)
+    task_loss_val = reduce_values_ranks(task_loss_val)
+    task_loss_test = reduce_values_ranks(task_loss_test)
 
     # At the end of training phase, do the one test run for visualizer to get latest predictions
     test_loss, test_taskserr, true_values, predicted_values = test(
@@ -219,28 +222,15 @@ def get_head_indices(model, data):
 
 
 @torch.no_grad()
-def reduce_loss_stat(total_loss_list, task_loss_list):
-    # gather error statistics across all processes
+def reduce_values_ranks(local_tensor):
     if dist.get_world_size() > 1:
-        for total_error, tasks_error in zip(total_loss_list, task_loss_list):
-            dist.all_reduce(total_error, op=dist.ReduceOp.SUM)
-            total_error = total_error / dist.get_world_size()
-            dist.all_reduce(tasks_error, op=dist.ReduceOp.SUM)
-            tasks_error = tasks_error / dist.get_world_size()
+        dist.all_reduce(local_tensor, op=dist.ReduceOp.SUM)
+        local_tensor = local_tensor / dist.get_world_size()
+    return local_tensor
 
 
 @torch.no_grad()
-def get_reduced_stat(total_error, tasks_error):
-    if dist.get_world_size() > 1:
-        dist.all_reduce(total_error, op=dist.ReduceOp.SUM)
-        total_error = total_error / dist.get_world_size()
-        dist.all_reduce(tasks_error, op=dist.ReduceOp.SUM)
-        tasks_error = tasks_error / dist.get_world_size()
-    return total_error, tasks_error
-
-
-@torch.no_grad()
-def gather_head_values(head_values):
+def gather_tensor_ranks(head_values):
     if dist.get_world_size() > 1:
         size_local = torch.tensor(
             [head_values.shape[0]], dtype=torch.int64, device=head_values.device
@@ -318,7 +308,7 @@ def train(
 
 
 @torch.no_grad()
-def validate(loader, model, verbosity, reduce_gpus=True):
+def validate(loader, model, verbosity, reduce_ranks=True):
 
     total_error = 0
     tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
@@ -336,13 +326,14 @@ def validate(loader, model, verbosity, reduce_gpus=True):
 
     val_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    if reduce_gpus:
-        val_error, tasks_error = get_reduced_stat(val_error, tasks_error)
+    if reduce_ranks:
+        val_error = reduce_values_ranks(val_error)
+        tasks_error = reduce_values_ranks(tasks_error)
     return val_error, tasks_error
 
 
 @torch.no_grad()
-def test(loader, model, verbosity, reduce_gpus=True, return_samples=True):
+def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
 
     total_error = 0
     tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
@@ -376,11 +367,12 @@ def test(loader, model, verbosity, reduce_gpus=True, return_samples=True):
             predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
             true_values[ihead] = torch.cat(true_values[ihead], dim=0)
 
-    if reduce_gpus:
-        test_error, tasks_error = get_reduced_stat(test_error, tasks_error)
+    if reduce_ranks:
+        test_error = reduce_values_ranks(test_error)
+        tasks_error = reduce_values_ranks(tasks_error)
         if len(true_values[0]) > 0:
             for ihead in range(model.module.num_heads):
-                true_values[ihead] = gather_head_values(true_values[ihead])
-                predicted_values[ihead] = gather_head_values(predicted_values[ihead])
+                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
+                predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
 
     return test_error, tasks_error, true_values, predicted_values
