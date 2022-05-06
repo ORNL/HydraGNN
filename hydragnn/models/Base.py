@@ -94,7 +94,6 @@ class Base(Module):
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
-        self._init_node_conv()
         self._multihead()
         if self.initial_bias is not None:
             self._set_bias()
@@ -125,13 +124,16 @@ class Base(Module):
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
+        if (
+            "node" not in self.config_heads
+            or self.config_heads["node"]["type"] != "conv"
+        ):
+            return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
         # In this part, each head has same number of convolutional layers, but can have different output dimension
         self.convs_node_hidden.append(
             self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
@@ -166,6 +168,11 @@ class Base(Module):
                 denselayers.append(ReLU())
             self.graph_shared = Sequential(*denselayers)
 
+        if "node" in self.config_heads:
+            self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+            self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+            self._init_node_conv()
+
         inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
@@ -191,6 +198,7 @@ class Base(Module):
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
+                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
                     assert (
                         self.num_nodes is not None
                     ), "num_nodes must be positive integer for MLP"
@@ -198,7 +206,7 @@ class Base(Module):
                     head_NN = MLPNode(
                         self.hidden_dim,
                         self.head_dims[ihead],
-                        self.num_nodes,
+                        self.num_mlp,
                         self.hidden_dim_node,
                         self.config_heads["node"]["type"],
                     )
@@ -322,15 +330,15 @@ class Base(Module):
 
 
 class MLPNode(Module):
-    def __init__(self, input_dim, output_dim, num_nodes, hidden_dim_node, node_type):
+    def __init__(self, input_dim, output_dim, num_mlp, hidden_dim_node, node_type):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.num_nodes = num_nodes
         self.node_type = node_type
+        self.num_mlp = num_mlp
 
         self.mlp = ModuleList()
-        for inode in range(self.num_nodes):
+        for _ in range(self.num_mlp):
             denselayers = []
             denselayers.append(Linear(self.input_dim, hidden_dim_node[0]))
             denselayers.append(ReLU())
