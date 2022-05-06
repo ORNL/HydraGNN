@@ -52,13 +52,16 @@ class GATStack(Base):
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
+        if (
+            "node" not in self.config_heads
+            or self.config_heads["node"]["type"] != "conv"
+        ):
+            return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
         # In this part, each head has same number of convolutional layers, but can have different output dimension
         self.convs_node_hidden.append(
             self.get_conv(self.hidden_dim, self.hidden_dim_node[0], True)

@@ -22,13 +22,14 @@ def unittest_model_prediction(config):
         train_loader,
         val_loader,
         test_loader,
-        sampler_list,
     ) = hydragnn.preprocess.load_data.dataset_loading_and_splitting(config=config)
 
     model = hydragnn.models.create.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
     )
+
+    model = hydragnn.utils.get_distributed_model(model, config["Verbosity"]["level"])
 
     log_name = hydragnn.utils.config_utils.get_log_name_config(config)
     hydragnn.utils.model.load_existing_model(model, log_name)
@@ -48,9 +49,9 @@ def unittest_model_prediction(config):
     yloc = graph_sample.y_loc.squeeze()
 
     mae = torch.nn.L1Loss()
-    for ihead in range(model.num_heads):
-        head_true = torch.tensor(true_values[ihead])
-        head_pred = torch.tensor(predicted_values[ihead])
+    for ihead in range(model.module.num_heads):
+        head_true = true_values[ihead]
+        head_pred = predicted_values[ihead]
         test_mae = mae(head_true, head_pred)
         print("For head ", ihead, "; MAE of test set =", test_mae)
         assert test_mae < thresholds[0], "MAE sample checking failed for test set!"
