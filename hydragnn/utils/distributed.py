@@ -216,18 +216,6 @@ def is_model_distributed(model):
 def get_distributed_model(model, verbosity=0, sync_batch_norm=False):
     device_name = get_device_name(verbosity_level=verbosity)
 
-    world_size, world_rank = get_comm_size_and_rank()
-    print(
-        "Hello from",
-        socket.gethostname(),
-        device_name,
-        torch.cuda.device_count(),
-        "world_rank=",
-        world_rank,
-        "world_size=",
-        world_size,
-    )
-
     if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(model)
