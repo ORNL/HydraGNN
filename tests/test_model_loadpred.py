@@ -36,7 +36,7 @@ def unittest_model_prediction(config):
     model.eval()
     # two checkings
     # 1. entire test set
-    thresholds = [0.2, 0.75]
+    thresholds = [0.2, 0.80]
     _, _, true_values, predicted_values = hydragnn.train.test(
         test_loader, model, config["Verbosity"]["level"]
     )
