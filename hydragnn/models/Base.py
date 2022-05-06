@@ -198,6 +198,7 @@ class Base(Module):
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
+                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
                     assert (
                         self.num_nodes is not None
                     ), "num_nodes must be positive integer for MLP"
@@ -205,7 +206,7 @@ class Base(Module):
                     head_NN = MLPNode(
                         self.hidden_dim,
                         self.head_dims[ihead],
-                        self.num_nodes,
+                        self.num_mlp,
                         self.hidden_dim_node,
                         self.config_heads["node"]["type"],
                     )
@@ -329,15 +330,15 @@ class Base(Module):
 
 
 class MLPNode(Module):
-    def __init__(self, input_dim, output_dim, num_nodes, hidden_dim_node, node_type):
+    def __init__(self, input_dim, output_dim, num_mlp, hidden_dim_node, node_type):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.num_nodes = num_nodes
         self.node_type = node_type
+        self.num_mlp = num_mlp
 
         self.mlp = ModuleList()
-        for inode in range(self.num_nodes):
+        for _ in range(self.num_mlp):
             denselayers = []
             denselayers.append(Linear(self.input_dim, hidden_dim_node[0]))
             denselayers.append(ReLU())
@@ -348,8 +349,6 @@ class MLPNode(Module):
                 denselayers.append(ReLU())
             denselayers.append(Linear(hidden_dim_node[-1], output_dim))
             self.mlp.append(Sequential(*denselayers))
-            if self.node_type == "mlp":
-                break
 
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
