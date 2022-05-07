@@ -1,6 +1,6 @@
 {
     "Verbosity": {
-        "level": 1
+        "level": 2
     },
     "NeuralNetwork": {
         "Architecture": {

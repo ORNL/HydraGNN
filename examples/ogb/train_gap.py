@@ -75,7 +75,9 @@ class AdioGGO:
                 val = np.concatenate(arr_list, axis=vdim)
                 assert val.data.contiguous
                 shape_list = self.comm.allgather(list(val.shape))
-                offset = [0,] * len(val.shape)
+                offset = [
+                    0,
+                ] * len(val.shape)
                 for i in range(rank):
                     offset[vdim] += shape_list[i][vdim]
                 global_shape = shape_list[0]
@@ -106,9 +108,15 @@ class AdioGGO:
                 var = self.io.DefineVariable(
                     "%s/%s/variable_count" % (label, k),
                     vcount,
-                    [sum(ns),],
-                    [ns_offset,],
-                    [len(vcount),],
+                    [
+                        sum(ns),
+                    ],
+                    [
+                        ns_offset,
+                    ],
+                    [
+                        len(vcount),
+                    ],
                     ad2.ConstantDims,
                 )
                 self.writer.Put(var, vcount, ad2.Mode.Sync)
@@ -116,9 +124,15 @@ class AdioGGO:
                 var = self.io.DefineVariable(
                     "%s/%s/variable_offset" % (label, k),
                     offset_arr,
-                    [sum(ns),],
-                    [ns_offset,],
-                    [len(vcount),],
+                    [
+                        sum(ns),
+                    ],
+                    [
+                        ns_offset,
+                    ],
+                    [
+                        len(vcount),
+                    ],
                     ad2.ConstantDims,
                 )
                 self.writer.Put(var, offset_arr, ad2.Mode.Sync)
@@ -185,7 +199,9 @@ class OGBDataset(torch.utils.data.Dataset):
             for k in self.keys:
                 shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                 ishape = [int(x.strip(","), 16) for x in shape.strip().split()]
-                start = [0,] * len(ishape)
+                start = [
+                    0,
+                ] * len(ishape)
                 count = ishape
                 vdim = self.variable_dim[k]
                 start[vdim] = self.variable_offset[k][idx]
@@ -314,11 +330,7 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
+    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
@@ -326,7 +338,8 @@ if __name__ == "__main__":
     timer.stop()
 
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"], verbosity=verbosity,
+        config=config["NeuralNetwork"],
+        verbosity=verbosity,
     )
     model = hydragnn.utils.get_distributed_model(model, verbosity)
 
@@ -356,7 +369,7 @@ if __name__ == "__main__":
         verbosity,
     )
 
-    hydragnn.utils.save_model(model, log_name)
+    hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
     sys.exit(0)
