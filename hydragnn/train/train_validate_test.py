@@ -20,6 +20,7 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
+from hydragnn.utils.distributed import get_device
 
 import os
 
@@ -279,8 +280,8 @@ def train(
     if profiler is None:
         profiler = Profiler()
 
-    total_error = 0
-    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
+    total_error = torch.tensor(0.0, device=get_device())
+    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.train()
 
@@ -310,8 +311,8 @@ def train(
 @torch.no_grad()
 def validate(loader, model, verbosity, reduce_ranks=True):
 
-    total_error = 0
-    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
+    total_error = torch.tensor(0.0, device=get_device())
+    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
@@ -335,8 +336,8 @@ def validate(loader, model, verbosity, reduce_ranks=True):
 @torch.no_grad()
 def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
 
-    total_error = 0
-    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
+    total_error = torch.tensor(0.0, device=get_device())
+    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
