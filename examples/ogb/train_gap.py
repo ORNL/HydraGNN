@@ -318,7 +318,6 @@ if __name__ == "__main__":
         train_loader,
         val_loader,
         test_loader,
-        sampler_list,
     ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
@@ -327,7 +326,7 @@ if __name__ == "__main__":
     timer.stop()
 
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"]["Architecture"], verbosity=verbosity,
+        config=config["NeuralNetwork"], verbosity=verbosity,
     )
     model = hydragnn.utils.get_distributed_model(model, verbosity)
 
@@ -350,7 +349,6 @@ if __name__ == "__main__":
         train_loader,
         val_loader,
         test_loader,
-        sampler_list,
         writer,
         scheduler,
         config["NeuralNetwork"],
