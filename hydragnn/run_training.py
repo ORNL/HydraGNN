@@ -32,6 +32,7 @@ from hydragnn.utils.config_utils import (
     update_config,
     get_log_name_config,
 )
+from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import train_validate_test
 
@@ -61,20 +62,24 @@ def _(config: dict):
     setup_log(get_log_name_config(config))
     world_size, world_rank = setup_ddp()
 
-    verbosity = config["Verbosity"]["level"]
-    train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
-        config=config
-    )
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    plot_init_solution = config["Visualization"]["plot_init_solution"]
+    plot_hist_solution = config["Visualization"]["plot_hist_solution"]
+    create_plots = config["Visualization"]["create_plots"]
 
     model = create_model_config(
-        config=config["NeuralNetwork"]["Architecture"], verbosity=verbosity
+        config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
-    model = get_distributed_model(model, verbosity)
+    model = get_distributed_model(
+        model,
+        config["Verbosity"]["level"],
+        sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+    )
 
-    learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"])
+
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
@@ -87,10 +92,12 @@ def _(config: dict):
     with open("./logs/" + log_name + "/config.json", "w") as f:
         json.dump(config, f)
 
-    load_existing_model_config(model, config["NeuralNetwork"]["Training"])
+    load_existing_model_config(
+        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+    )
 
     print_distributed(
-        verbosity,
+        config["Verbosity"]["level"],
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
 
@@ -100,14 +107,16 @@ def _(config: dict):
         train_loader,
         val_loader,
         test_loader,
-        sampler_list,
         writer,
         scheduler,
         config["NeuralNetwork"],
         log_name,
-        verbosity,
+        config["Verbosity"]["level"],
+        plot_init_solution,
+        plot_hist_solution,
+        create_plots,
     )
 
-    save_model(model, log_name)
+    save_model(model, optimizer, log_name)
 
-    print_timers(verbosity)
+    print_timers(config["Verbosity"]["level"])

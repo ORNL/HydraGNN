@@ -18,6 +18,7 @@ from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.GATStack import GATStack
 from hydragnn.models.MFCStack import MFCStack
 from hydragnn.models.CGCNNStack import CGCNNStack
+from hydragnn.models.SAGEStack import SAGEStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed
@@ -31,34 +32,41 @@ def create_model_config(
 ):
 
     return create_model(
-        config["model_type"],
-        config["input_dim"],
-        config["output_dim"],
-        config["hidden_dim"],
-        config["num_conv_layers"],
-        config["output_type"],
-        config["output_heads"],
-        config["task_weights"],
-        config["max_neighbours"],
-        config["num_nodes"],
-        config["edge_dim"],
-        config["pna_deg"],
+        config["Architecture"]["model_type"],
+        config["Architecture"]["input_dim"],
+        config["Architecture"]["hidden_dim"],
+        config["Architecture"]["output_dim"],
+        config["Architecture"]["output_type"],
+        config["Architecture"]["output_heads"],
+        config["Training"]["loss_function_type"],
+        config["Architecture"]["task_weights"],
+        config["Architecture"]["num_conv_layers"],
+        config["Architecture"]["freeze_conv_layers"],
+        config["Architecture"]["initial_bias"],
+        config["Architecture"]["num_nodes"],
+        config["Architecture"]["max_neighbours"],
+        config["Architecture"]["edge_dim"],
+        config["Architecture"]["pna_deg"],
         verbosity,
         use_gpu,
     )
 
 
+# FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
 def create_model(
     model_type: str,
     input_dim: int,
-    output_dim: int,
     hidden_dim: int,
-    num_conv_layers: int,
-    output_type: str,
+    output_dim: list,
+    output_type: list,
     output_heads: dict,
+    loss_function_type: str,
     task_weights: list,
-    max_neighbours: int = None,
+    num_conv_layers: int,
+    freeze_conv: bool = False,
+    initial_bias: float = None,
     num_nodes: int = None,
+    max_neighbours: int = None,
     edge_dim: int = None,
     pna_deg: torch.tensor = None,
     verbosity: int = 0,
@@ -70,69 +78,104 @@ def create_model(
 
     device = get_device(use_gpu, verbosity_level=verbosity)
 
+    # Note: model-specific inputs must come first.
     if model_type == "GIN":
         model = GINStack(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            hidden_dim=hidden_dim,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
             loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "PNA":
         assert pna_deg is not None, "PNA requires degree input."
         model = PNAStack(
-            deg=pna_deg,
-            input_dim=input_dim,
-            output_dim=output_dim,
-            num_nodes=num_nodes,
-            hidden_dim=hidden_dim,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            pna_deg,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
             loss_weights=task_weights,
-            edge_dim=edge_dim,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "GAT":
+        # FIXME: expose options to users
+        heads = 6
+        negative_slope = 0.05
         model = GATStack(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            hidden_dim=hidden_dim,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            heads,
+            negative_slope,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
             loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "MFC":
         assert max_neighbours is not None, "MFC requires max_neighbours input."
         model = MFCStack(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            num_nodes=num_nodes,
-            hidden_dim=hidden_dim,
-            max_degree=max_neighbours,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            max_neighbours,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
             loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     elif model_type == "CGCNN":
         model = CGCNNStack(
-            input_dim=input_dim,
-            output_dim=output_dim,
-            num_nodes=num_nodes,
-            num_conv_layers=num_conv_layers,
-            output_type=output_type,
-            config_heads=output_heads,
+            edge_dim,
+            input_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
             loss_weights=task_weights,
-            edge_dim=edge_dim,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+
+    elif model_type == "SAGE":
+        model = SAGEStack(
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
         )
 
     else:

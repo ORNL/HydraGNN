@@ -9,7 +9,6 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import numpy as np
 import pickle
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -22,24 +21,62 @@ from hydragnn.preprocess import get_radius_graph_config
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.preprocess.utils import (
+    get_radius_graph,
+    get_radius_graph_pbc,
     get_radius_graph_config,
     get_radius_graph_pbc_config,
 )
 
 
 class SerializedDataLoader:
+    """A class used for loading existing structures from files that are lists of serialized structures.
+    Most of the class methods are hidden, because from outside a caller needs only to know about
+    load_serialized_data method.
+    """
 
     """
     Constructor
     """
 
-    def __init__(self, verbosity: int):
-        self.verbosity = verbosity
+    def __init__(self, config, dist=False):
+        self.verbosity = config["Verbosity"]["level"]
+        self.node_feature_name = config["Dataset"]["node_features"]["name"]
+        self.node_feature_dim = config["Dataset"]["node_features"]["dim"]
+        self.node_feature_col = config["Dataset"]["node_features"]["column_index"]
+        self.graph_feature_name = config["Dataset"]["graph_features"]["name"]
+        self.graph_feature_dim = config["Dataset"]["graph_features"]["dim"]
+        self.graph_feature_col = config["Dataset"]["graph_features"]["column_index"]
+        self.rotational_invariance = config["Dataset"]["rotational_invariance"]
+        self.periodic_boundary_conditions = config["NeuralNetwork"]["Architecture"][
+            "periodic_boundary_conditions"
+        ]
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+        self.variables = config["NeuralNetwork"]["Variables_of_interest"]
+        self.variables_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
+        self.output_index = config["NeuralNetwork"]["Variables_of_interest"][
+            "output_index"
+        ]
+        self.input_node_features = config["NeuralNetwork"]["Variables_of_interest"][
+            "input_node_features"
+        ]
+        self.subsample_percentage = None
 
-    """A class used for loading existing structures from files that are lists of serialized structures.
-    Most of the class methods are hidden, because from outside a caller needs only to know about
-    load_serialized_data method.
+        # In situations where someone already provides the .pkl filed with data
+        # the asserts from raw_dataset_loader are not performed
+        # Therefore, we need to re-check consistency
+        assert len(self.node_feature_name) == len(self.node_feature_dim)
+        assert len(self.node_feature_name) == len(self.node_feature_col)
+        assert len(self.graph_feature_name) == len(self.graph_feature_dim)
+        assert len(self.graph_feature_name) == len(self.graph_feature_col)
 
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
+    """
     Methods
     -------
     load_serialized_data(dataset_path: str, config: dict)
@@ -47,7 +84,7 @@ class SerializedDataLoader:
         atom and structure features are updated.
     """
 
-    def load_serialized_data(self, dataset_path: str, config):
+    def load_serialized_data(self, dataset_path: str):
         """Loads the serialized structures data from specified path, computes new edges for the structures based on the maximum number of neighbours and radius. Additionally,
         atom and structure features are updated.
 
@@ -69,24 +106,28 @@ class SerializedDataLoader:
             dataset = pickle.load(f)
 
         rotational_invariance = NormalizeRotation(max_points=-1, sort=False)
-        if config["Dataset"]["rotational_invariance"]:
+        if self.rotational_invariance:
             dataset[:] = [rotational_invariance(data) for data in dataset]
 
-        if config["NeuralNetwork"]["Architecture"]["periodic_boundary_conditions"]:
+        if self.periodic_boundary_conditions:
             # edge lengths already added manually if using PBC, so no need to call Distance.
-            compute_edges = get_radius_graph_pbc_config(
-                config["NeuralNetwork"]["Architecture"]
+            compute_edges = get_radius_graph_pbc(
+                radius=self.radius,
+                loop=False,
+                max_neighbours=self.max_neighbours,
             )
         else:
-            compute_edges = get_radius_graph_config(
-                config["NeuralNetwork"]["Architecture"]
+            compute_edges = get_radius_graph(
+                radius=self.radius,
+                loop=False,
+                max_neighbours=self.max_neighbours,
             )
             compute_edge_lengths = Distance(norm=False, cat=True)
 
         dataset[:] = [compute_edges(data) for data in dataset]
 
         # edge lengths already added manually if using PBC.
-        if not config["NeuralNetwork"]["Architecture"]["periodic_boundary_conditions"]:
+        if not self.periodic_boundary_conditions:
             compute_edge_lengths = Distance(norm=False, cat=True)
             dataset[:] = [compute_edge_lengths(data) for data in dataset]
 
@@ -95,6 +136,15 @@ class SerializedDataLoader:
         for data in dataset:
             max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
 
+        if self.dist:
+            ## Gather max in parallel
+            device = max_edge_length.device
+            max_edge_length = max_edge_length.to(get_device())
+            torch.distributed.all_reduce(
+                max_edge_length, op=torch.distributed.ReduceOp.MAX
+            )
+            max_edge_length = max_edge_length.to(device)
+
         # Normalization of the edges
         for data in dataset:
             data.edge_attr = data.edge_attr / max_edge_length
@@ -102,26 +152,22 @@ class SerializedDataLoader:
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
         for data in dataset:
-            data.to(device)
+            ## (2022/04) jyc: no need for parallel loading
+            # data.to(device)
             update_predicted_values(
-                config["NeuralNetwork"]["Variables_of_interest"]["type"],
-                config["NeuralNetwork"]["Variables_of_interest"]["output_index"],
-                data,
-            )
-            self.__update_atom_features(
-                config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"],
+                self.variables_type,
+                self.output_index,
+                self.graph_feature_dim,
+                self.node_feature_dim,
                 data,
             )
 
-        if (
-            "subsample_percentage"
-            in config["NeuralNetwork"]["Variables_of_interest"].keys()
-        ):
+            self.__update_atom_features(self.input_node_features, data)
+
+        if "subsample_percentage" in self.variables.keys():
+            self.subsample_percentage = self.variables["subsample_percentage"]
             return self.__stratified_sampling(
-                dataset=dataset,
-                subsample_percentage=config["NeuralNetwork"]["Variables_of_interest"][
-                    "subsample_percentage"
-                ],
+                dataset=dataset, subsample_percentage=self.subsample_percentage
             )
 
         return dataset
@@ -157,7 +203,6 @@ class SerializedDataLoader:
         [Data]
             Subsample of the original dataset constructed using stratified sampling.
         """
-        unique_values = torch.unique(dataset[0].x[:, 0]).tolist()
         dataset_categories = []
         print_distributed(
             self.verbosity, "Computing the categories for the whole dataset."
@@ -188,22 +233,43 @@ class SerializedDataLoader:
         return subsample
 
 
-def update_predicted_values(type: list, index: list, data: Data):
+def update_predicted_values(
+    type: list, index: list, graph_feature_dim: list, node_feature_dim: list, data: Data
+):
     """Updates values of the structure we want to predict. Predicted value is represented by integer value.
     Parameters
     ----------
     type: "graph" level or "node" level
     index: index/location in data.y for graph level and in data.x for node level
+    graph_feature_dim: list of integers to trak the dimension of each graph level feature
     data: Data
         A Data object representing a structure that has atoms.
     """
     output_feature = []
-    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.y.device)
+    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
     for item in range(len(type)):
         if type[item] == "graph":
-            feat_ = torch.reshape(data.y[index[item]], (1, 1))
+            index_counter_global_y = sum(graph_feature_dim[: index[item]])
+            feat_ = torch.reshape(
+                data.y[
+                    index_counter_global_y : index_counter_global_y
+                    + graph_feature_dim[index[item]]
+                ],
+                (graph_feature_dim[index[item]], 1),
+            )
+            # after the global features are spanned, we need to iterate over the nodal features
+            # to do so, the counter of the nodal features need to start from the last value of counter for the graph nodel feature
         elif type[item] == "node":
-            feat_ = torch.reshape(data.x[:, index[item]], (-1, 1))
+            index_counter_nodal_y = sum(node_feature_dim[: index[item]])
+            feat_ = torch.reshape(
+                data.x[
+                    :,
+                    index_counter_nodal_y : (
+                        index_counter_nodal_y + node_feature_dim[index[item]]
+                    ),
+                ],
+                (-1, 1),
+            )
         else:
             raise ValueError("Unknown output type", type[item])
         output_feature.append(feat_)

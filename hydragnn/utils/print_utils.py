@@ -72,6 +72,7 @@ def setup_log(prefix):
     logFormatter = logging.Formatter(fmt)
 
     logger = logging.getLogger("hydragnn")
+    logger.propagate = False
     logger.setLevel(logging.DEBUG)
 
     Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)

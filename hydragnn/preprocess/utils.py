@@ -16,16 +16,54 @@ from torch_geometric.utils import remove_self_loops
 import ase
 import ase.neighborlist
 
-
+## This function can be slow if dataset is too large. Use with caution.
+## Recommend to use check_if_graph_size_variable_dist
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
     graph_size_variable = False
     nodes_num_list = []
     for loader in [train_loader, val_loader, test_loader]:
         for data in loader.dataset:
             nodes_num_list.append(data.num_nodes)
-            if len(list(set(nodes_num_list))) > 1:
-                graph_size_variable = True
-                return graph_size_variable
+        if len(list(set(nodes_num_list))) > 1:
+            graph_size_variable = True
+            return graph_size_variable
+    return graph_size_variable
+
+
+def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
+    assert MPI.Is_initialized()
+    graph_size_variable = False
+    nodes_num_list = []
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in loader:
+            nodes_num_list.append(data.num_nodes)
+        np.min(nodes_num_list)
+        mn = MPI.COMM_WORLD.allreduce(np.min(nodes_num_list), op=MPI.MIN)
+        mx = MPI.COMM_WORLD.allreduce(np.max(nodes_num_list), op=MPI.MAX)
+        if mn != mx:
+            graph_size_variable = True
+            return graph_size_variable
+    return graph_size_variable
+
+
+def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
+    from hydragnn.utils.distributed import get_device
+
+    assert torch.distributed.is_initialized()
+    graph_size_variable = False
+    mn = train_loader.dataset[0].num_nodes
+    mx = train_loader.dataset[0].num_nodes
+    for loader in [train_loader, val_loader, test_loader]:
+        for i, data in enumerate(loader):
+            for i in range(data.num_graphs):
+                mn = min(data[i].num_nodes, mn)
+                mx = max(data[i].num_nodes, mn)
+    mn = torch.tensor(mn).to(get_device())
+    mx = torch.tensor(mx).to(get_device())
+    torch.distributed.all_reduce(mn, op=torch.distributed.ReduceOp.MIN)
+    torch.distributed.all_reduce(mx, op=torch.distributed.ReduceOp.MAX)
+    if mn != mx:
+        graph_size_variable = True
     return graph_size_variable
 
 
@@ -46,6 +84,22 @@ def check_data_samples_equivalence(data1, data2, tol):
     edge_bool = all(found)
 
     return x_bool and pos_bool and y_bool and edge_bool
+
+
+def get_radius_graph(radius, max_neighbours, loop=False):
+    return RadiusGraph(
+        r=radius,
+        loop=loop,
+        max_num_neighbors=max_neighbours,
+    )
+
+
+def get_radius_graph_pbc(radius, max_neighbours, loop=False):
+    return RadiusGraphPBC(
+        r=radius,
+        loop=loop,
+        max_num_neighbors=max_neighbours,
+    )
 
 
 def get_radius_graph_config(config, loop=False):
@@ -77,11 +131,7 @@ class RadiusGraphPBC(RadiusGraph):
         assert hasattr(
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
-        assert hasattr(
-            data, "atom_types"
-        ), "The data must contain information about the atoms types. Can be a chemical symbol (str) or an atomic number (int)."
         ase_atom_object = ase.Atoms(
-            symbols=data.atom_types,
             positions=data.pos,
             cell=data.supercell_size,
             pbc=True,
@@ -103,7 +153,7 @@ class RadiusGraphPBC(RadiusGraph):
             1
         ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
 
-        data.edge_attr = torch.tensor(edge_length)
+        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(1)
 
         return data
 

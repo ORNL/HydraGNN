@@ -16,10 +16,6 @@
                     "dim_sharedlayers": 5,
                     "num_headlayers": 2,
                     "dim_headlayers": [50,25]
-                },
-                "node": {
-                    "num_headlayers": 2,
-                    "dim_headlayers": [50,25]
                 }
             },
             "task_weights": [1.0]
@@ -32,12 +28,19 @@
             "denormalize_output": false
         },
         "Training": {
+            "optimizer": "AdamW",
             "num_epoch": 2,
             "perc_train": 0.7,
+            "loss_function_type": "mse",
             "learning_rate": 1e-3,
             "batch_size": 64,
             "continue": 0,
             "startfrom": "existing_model"
         }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
     }
 }

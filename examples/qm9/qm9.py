@@ -17,9 +17,13 @@ def qm9_pre_transform(data):
     data.x = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
     data.y = data.y[:, 10] / len(data.x)
+    graph_features_dim = [1]
+    node_feature_dim = [1]
     hydragnn.preprocess.update_predicted_values(
         var_config["type"],
         var_config["output_index"],
+        graph_features_dim,
+        node_feature_dim,
         data,
     )
     device = hydragnn.utils.get_device()
@@ -27,7 +31,7 @@ def qm9_pre_transform(data):
 
 
 def qm9_pre_filter(data):
-    return data.idx[0] < num_samples
+    return data.idx < num_samples
 
 
 # Set this path for output.
@@ -62,19 +66,14 @@ dataset = torch_geometric.datasets.QM9(
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
-(
-    train_loader,
-    val_loader,
-    test_loader,
-    sampler_list,
-) = hydragnn.preprocess.create_dataloaders(
+(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
 config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
 
 model = hydragnn.models.create_model_config(
-    config=config["NeuralNetwork"]["Architecture"],
+    config=config["NeuralNetwork"],
     verbosity=verbosity,
 )
 model = hydragnn.utils.get_distributed_model(model, verbosity)
@@ -96,7 +95,6 @@ hydragnn.train.train_validate_test(
     train_loader,
     val_loader,
     test_loader,
-    sampler_list,
     writer,
     scheduler,
     config["NeuralNetwork"],

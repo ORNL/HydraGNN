@@ -12,17 +12,36 @@
 import os
 import numpy as np
 import pickle
-import pathlib
 
 import torch
 from torch_geometric.data import Data
 from torch import tensor
+
+from ase.io.cfg import read_cfg
+
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.distributed import get_device
+
+import random
 
 # WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
 
 
 def tensor_divide(x1, x2):
     return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
+
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+## All-reduce with numpy array
+def comm_reduce(x, op):
+    tx = torch.tensor(x, requires_grad=True).to(get_device())
+    torch.distributed.all_reduce(tx, op=op)
+    y = tx.detach().cpu().numpy()
+    return y
 
 
 class RawDataLoader:
@@ -36,7 +55,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, dist=False):
         """
         config:
           shows the dataset path the target variables information, e.g, location and dimension, in data file
@@ -53,18 +72,40 @@ class RawDataLoader:
           list of dimensions of graph features
         graph_feature_col: list,
           list of column location/index (start location if dim>1) of graph features
+
+        dist: True if RawDataLoder is distributed (i.e., each RawDataLoader will read different subset of data)
         """
+
         self.dataset_list = []
         self.serial_data_name_list = []
-        self.node_feature_name = config["node_features"]["name"]
+        self.node_feature_name = (
+            config["node_features"]["name"]
+            if config["node_features"]["name"] is not None
+            else None
+        )
         self.node_feature_dim = config["node_features"]["dim"]
         self.node_feature_col = config["node_features"]["column_index"]
-        self.graph_feature_name = config["graph_features"]["name"]
+        self.graph_feature_name = (
+            config["graph_features"]["name"]
+            if config["graph_features"]["name"] is not None
+            else None
+        )
         self.graph_feature_dim = config["graph_features"]["dim"]
         self.graph_feature_col = config["graph_features"]["column_index"]
         self.raw_dataset_name = config["name"]
         self.data_format = config["format"]
         self.path_dictionary = config["path"]
+
+        assert len(self.node_feature_name) == len(self.node_feature_dim)
+        assert len(self.node_feature_name) == len(self.node_feature_col)
+        assert len(self.graph_feature_name) == len(self.graph_feature_dim)
+        assert len(self.graph_feature_name) == len(self.graph_feature_col)
+
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
 
     def load_raw_data(self):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
@@ -86,13 +127,38 @@ class RawDataLoader:
                 len(os.listdir(raw_data_path)) > 0
             ), "No data files provided in {}!".format(raw_data_path)
 
-            for filename in os.listdir(raw_data_path):
-                if filename == ".DS_Store":
+            filelist = sorted(os.listdir(raw_data_path))
+            if self.dist:
+                ## Random shuffle filelist to avoid the same test/validation set
+                random.seed(43)
+                random.shuffle(filelist)
+
+                x = torch.tensor(len(filelist), requires_grad=False).to(get_device())
+                y = x.clone().detach().requires_grad_(False)
+                torch.distributed.all_reduce(x, op=torch.distributed.ReduceOp.MAX)
+                assert x == y
+                filelist = list(nsplit(filelist, self.world_size))[self.rank]
+                log("local filelist", len(filelist))
+            for name in filelist:
+                if name == ".DS_Store":
                     continue
-                data_object = self.__transform_input_to_data_object_base(
-                    filepath=os.path.join(raw_data_path, filename)
-                )
-                dataset.append(data_object)
+                # if the directory contains file, iterate over them
+                if os.path.isfile(os.path.join(raw_data_path, name)):
+                    data_object = self.__transform_input_to_data_object_base(
+                        filepath=os.path.join(raw_data_path, name)
+                    )
+                    if not isinstance(data_object, type(None)):
+                        dataset.append(data_object)
+                # if the directory contains subdirectories, explore their content
+                elif os.path.isdir(os.path.join(raw_data_path, name)):
+                    dir_name = os.path.join(raw_data_path, name)
+                    for subname in os.listdir(dir_name):
+                        if os.path.isfile(os.path.join(dir_name, subname)):
+                            data_object = self.__transform_input_to_data_object_base(
+                                filepath=os.path.join(dir_name, subname)
+                            )
+                            if not isinstance(data_object, type(None)):
+                                dataset.append(data_object)
 
             if self.data_format == "LSMS":
                 for idx, data_object in enumerate(dataset):
@@ -121,7 +187,18 @@ class RawDataLoader:
                 pickle.dump(dataset_normalized, f)
 
     def __transform_input_to_data_object_base(self, filepath):
-        """Transforms lines of strings read from the raw data file to Data object and returns it.
+        if self.data_format == "LSMS" or self.data_format == "unit_test":
+            data_object = self.__transform_LSMS_input_to_data_object_base(
+                filepath=filepath
+            )
+        elif self.data_format == "CFG":
+            data_object = self.__transform_CFG_input_to_data_object_base(
+                filepath=filepath
+            )
+        return data_object
+
+    def __transform_CFG_input_to_data_object_base(self, filepath):
+        """Transforms lines of strings read from the raw data CFG file to Data object and returns it.
 
         Parameters
         ----------
@@ -133,11 +210,76 @@ class RawDataLoader:
             Data object representing structure of a graph sample.
         """
 
-        f = open(filepath, "r", encoding="utf-8")
-        lines = f.readlines()
+        if filepath.endswith(".cfg"):
+
+            data_object = self.__transform_ASE_object_to_data_object(filepath)
+
+            return data_object
+
+        else:
+            return None
+
+    def __transform_ASE_object_to_data_object(self, filepath):
+
+        # FIXME:
+        #  this still assumes bulk modulus is specific to the CFG format.
+        #  To deal with multiple files across formats, one should generalize this function
+        #  by moving the reading of the .bulk file in a standalone routine.
+        #  Morevoer, this approach assumes tha there is only one global feature to look at,
+        #  and that this global feature is specicially retrieveable in a file with the string *bulk* inside.
+
+        ase_object = read_cfg(filepath)
 
         data_object = Data()
 
+        data_object.supercell_size = tensor(ase_object.cell.array).float()
+        data_object.pos = tensor(ase_object.arrays["positions"]).float()
+        proton_numbers = np.expand_dims(ase_object.arrays["numbers"], axis=1)
+        masses = np.expand_dims(ase_object.arrays["masses"], axis=1)
+        c_peratom = np.expand_dims(ase_object.arrays["c_peratom"], axis=1)
+        fx = np.expand_dims(ase_object.arrays["fx"], axis=1)
+        fy = np.expand_dims(ase_object.arrays["fy"], axis=1)
+        fz = np.expand_dims(ase_object.arrays["fz"], axis=1)
+        node_feature_matrix = np.concatenate(
+            (proton_numbers, masses, c_peratom, fx, fy, fz), axis=1
+        )
+        data_object.x = tensor(node_feature_matrix).float()
+
+        filename_without_extension = os.path.splitext(filepath)[0]
+
+        if os.path.exists(os.path.join(filename_without_extension + ".bulk")):
+            filename_bulk = os.path.join(filename_without_extension + ".bulk")
+            f = open(filename_bulk, "r", encoding="utf-8")
+            lines = f.readlines()
+            graph_feat = lines[0].split(None, 2)
+            g_feature = []
+            # collect graph features
+            for item in range(len(self.graph_feature_dim)):
+                for icomp in range(self.graph_feature_dim[item]):
+                    it_comp = self.graph_feature_col[item] + icomp
+                    g_feature.append(float(graph_feat[it_comp].strip()))
+            data_object.y = tensor(g_feature)
+
+        return data_object
+
+    def __transform_LSMS_input_to_data_object_base(self, filepath):
+        """Transforms lines of strings read from the raw data LSMS file to Data object and returns it.
+
+        Parameters
+        ----------
+        lines:
+          content of data file with all the graph information
+        Returns
+        ----------
+        Data
+            Data object representing structure of a graph sample.
+        """
+
+        data_object = Data()
+
+        f = open(filepath, "r", encoding="utf-8")
+
+        lines = f.readlines()
         graph_feat = lines[0].split(None, 2)
         g_feature = []
         # collect graph features
@@ -202,20 +344,22 @@ class RawDataLoader:
         ]
 
         for idx, data_object in enumerate(dataset):
-            dataset[idx].y[scaled_graph_feature_index] = (
-                dataset[idx].y[scaled_graph_feature_index] / data_object.num_nodes
-            )
-            dataset[idx].x[:, scaled_node_feature_index] = (
-                dataset[idx].x[:, scaled_node_feature_index] / data_object.num_nodes
-            )
+            if dataset[idx].y is not None:
+                dataset[idx].y[scaled_graph_feature_index] = (
+                    dataset[idx].y[scaled_graph_feature_index] / data_object.num_nodes
+                )
+            if dataset[idx].x is not None:
+                dataset[idx].x[:, scaled_node_feature_index] = (
+                    dataset[idx].x[:, scaled_node_feature_index] / data_object.num_nodes
+                )
 
         return dataset
 
     def __normalize_dataset(self):
 
         """Performs the normalization on Data objects and returns the normalized dataset."""
-        num_node_features = self.dataset_list[0][0].x.shape[1]
-        num_graph_features = len(self.dataset_list[0][0].y)
+        num_node_features = len(self.node_feature_dim)
+        num_graph_features = len(self.graph_feature_dim)
 
         self.minmax_graph_feature = np.full((2, num_graph_features), np.inf)
         # [0,...]:minimum values; [1,...]: maximum values
@@ -225,38 +369,75 @@ class RawDataLoader:
         for dataset in self.dataset_list:
             for data in dataset:
                 # find maximum and minimum values for graph level features
+                g_index_start = 0
                 for ifeat in range(num_graph_features):
+                    g_index_end = g_index_start + self.graph_feature_dim[ifeat]
                     self.minmax_graph_feature[0, ifeat] = min(
-                        data.y[ifeat], self.minmax_graph_feature[0, ifeat]
+                        torch.min(data.y[g_index_start:g_index_end]),
+                        self.minmax_graph_feature[0, ifeat],
                     )
                     self.minmax_graph_feature[1, ifeat] = max(
-                        data.y[ifeat], self.minmax_graph_feature[1, ifeat]
+                        torch.max(data.y[g_index_start:g_index_end]),
+                        self.minmax_graph_feature[1, ifeat],
                     )
+                    g_index_start = g_index_end
+
                 # find maximum and minimum values for node level features
+                n_index_start = 0
                 for ifeat in range(num_node_features):
-                    self.minmax_node_feature[0, ifeat] = np.minimum(
-                        np.amin(data.x[:, ifeat].numpy()),
+                    n_index_end = n_index_start + self.node_feature_dim[ifeat]
+                    self.minmax_node_feature[0, ifeat] = min(
+                        torch.min(data.x[:, n_index_start:n_index_end]),
                         self.minmax_node_feature[0, ifeat],
                     )
-                    self.minmax_node_feature[1, ifeat] = np.maximum(
-                        np.amax(data.x[:, ifeat].numpy()),
+                    self.minmax_node_feature[1, ifeat] = max(
+                        torch.max(data.x[:, n_index_start:n_index_end]),
                         self.minmax_node_feature[1, ifeat],
                     )
+                    n_index_start = n_index_end
+
+        ## Gather minmax in parallel
+        if self.dist:
+            self.minmax_graph_feature[0, :] = comm_reduce(
+                self.minmax_graph_feature[0, :], torch.distributed.ReduceOp.MIN
+            )
+            self.minmax_graph_feature[1, :] = comm_reduce(
+                self.minmax_graph_feature[1, :], torch.distributed.ReduceOp.MAX
+            )
+            self.minmax_node_feature[0, :] = comm_reduce(
+                self.minmax_node_feature[0, :], torch.distributed.ReduceOp.MIN
+            )
+            self.minmax_node_feature[1, :] = comm_reduce(
+                self.minmax_node_feature[1, :], torch.distributed.ReduceOp.MAX
+            )
+
         for dataset in self.dataset_list:
             for data in dataset:
+                g_index_start = 0
                 for ifeat in range(num_graph_features):
-                    data.y[ifeat] = tensor_divide(
-                        (data.y[ifeat] - self.minmax_graph_feature[0, ifeat]),
+                    g_index_end = g_index_start + self.graph_feature_dim[ifeat]
+                    data.y[g_index_start:g_index_end] = tensor_divide(
+                        (
+                            data.y[g_index_start:g_index_end]
+                            - self.minmax_graph_feature[0, ifeat]
+                        ),
                         (
                             self.minmax_graph_feature[1, ifeat]
                             - self.minmax_graph_feature[0, ifeat]
                         ),
                     )
+                    g_index_start = g_index_end
+                n_index_start = 0
                 for ifeat in range(num_node_features):
-                    data.x[:, ifeat] = tensor_divide(
-                        (data.x[:, ifeat] - self.minmax_node_feature[0, ifeat]),
+                    n_index_end = n_index_start + self.node_feature_dim[ifeat]
+                    data.x[:, n_index_start:n_index_end] = tensor_divide(
+                        (
+                            data.x[:, n_index_start:n_index_end]
+                            - self.minmax_node_feature[0, ifeat]
+                        ),
                         (
                             self.minmax_node_feature[1, ifeat]
                             - self.minmax_node_feature[0, ifeat]
                         ),
                     )
+                    n_index_start = n_index_end

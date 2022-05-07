@@ -13,7 +13,7 @@ import json, os
 from functools import singledispatch
 
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
-from hydragnn.utils.distributed import setup_ddp
+from hydragnn.utils.distributed import setup_ddp, get_distributed_model
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.config_utils import (
     update_config,
@@ -48,15 +48,18 @@ def _(config: dict):
 
     world_size, world_rank = setup_ddp()
 
-    train_loader, val_loader, test_loader, sampler_list = dataset_loading_and_splitting(
-        config=config
-    )
+    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
     config = update_config(config, train_loader, val_loader, test_loader)
 
     model = create_model_config(
-        config=config["NeuralNetwork"]["Architecture"],
-        verbosity=config["Verbosity"]["level"],
+        config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
+    )
+
+    model = get_distributed_model(
+        model,
+        config["Verbosity"]["level"],
+        sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
     )
 
     log_name = get_log_name_config(config)

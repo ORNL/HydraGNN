@@ -115,38 +115,41 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     (
         error,
-        error_rmse_task,
+        error_mse_task,
         true_values,
         predicted_values,
     ) = hydragnn.run_prediction(config)
 
     # Set RMSE and sample MAE/max error thresholds
     thresholds = {
-        "PNA": [0.20, 0.20, 0.75],
+        "SAGE": [0.20, 0.20, 0.80],
+        "PNA": [0.20, 0.20, 0.80],
         "MFC": [0.20, 0.20, 1.5],
         "GIN": [0.25, 0.20, 0.75],
         "GAT": [0.60, 0.70, 0.99],
         "CGCNN": [0.50, 0.40, 0.95],
     }
-    if use_lengths:
+    if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.15, 0.15, 0.40]
         thresholds["PNA"] = [0.10, 0.10, 0.40]
+    if use_lengths and "vector" in ci_input:
+        thresholds["PNA"] = [0.2, 0.15, 0.85]
     verbosity = 2
 
     for ihead in range(len(true_values)):
-        error_head_rmse = error_rmse_task[ihead]
+        error_head_mse = error_mse_task[ihead]
         error_str = (
-            str("{:.6f}".format(error_head_rmse))
+            str("{:.6f}".format(error_head_mse))
             + " < "
             + str(thresholds[model_type][0])
         )
         hydragnn.utils.print_distributed(verbosity, "head: " + error_str)
         assert (
-            error_head_rmse < thresholds[model_type][0]
+            error_head_mse < thresholds[model_type][0]
         ), "Head RMSE checking failed for " + str(ihead)
 
-        head_true = torch.tensor(true_values[ihead])
-        head_pred = torch.tensor(predicted_values[ihead])
+        head_true = true_values[ihead]
+        head_pred = predicted_values[ihead]
         # Check individual samples
         mae = torch.nn.L1Loss()
         sample_mean_abs_error = mae(head_true, head_pred)
@@ -175,7 +178,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
 
 # Test across all models with both single/multihead
-@pytest.mark.parametrize("model_type", ["GIN", "GAT", "MFC", "PNA", "CGCNN"])
+@pytest.mark.parametrize("model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "CGCNN"])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
     unittest_train_model(model_type, ci_input, False, overwrite_data)
@@ -185,3 +188,9 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 @pytest.mark.parametrize("model_type", ["PNA", "CGCNN"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
+
+
+# Test vector output
+@pytest.mark.parametrize("model_type", ["PNA"])
+def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
+    unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)

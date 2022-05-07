@@ -14,7 +14,9 @@ from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
+from hydragnn.utils.model import loss_function_selection
 import sys
+from hydragnn.utils.distributed import get_device
 
 
 class Base(Module):
@@ -24,15 +26,19 @@ class Base(Module):
         hidden_dim: int,
         output_dim: list,
         output_type: list,
-        config_heads: {},
-        ilossweights_hyperp: int,
-        loss_weights: list,
-        ilossweights_nll: int,
+        config_heads: dict,
+        loss_function_type: str,
+        ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
+        loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
+        ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
+        freeze_conv=False,
+        initial_bias=None,
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
     ):
         super().__init__()
+        self.device = get_device()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
@@ -53,6 +59,7 @@ class Base(Module):
         self.convs_node_output = ModuleList()
         self.batch_norms_node_output = ModuleList()
 
+        self.loss_function = loss_function_selection(loss_function_type)
         self.ilossweights_nll = ilossweights_nll
         self.ilossweights_hyperp = ilossweights_hyperp
         if self.ilossweights_hyperp * self.ilossweights_nll == 1:
@@ -81,9 +88,17 @@ class Base(Module):
         ):
             self.use_edge_attr = True
 
+        # Option to only train final property layers.
+        self.freeze_conv = freeze_conv
+        # Option to set initially large output bias (UQ).
+        self.initial_bias = initial_bias
+
         self._init_conv()
-        self._init_node_conv()
+        if self.freeze_conv:
+            self._freeze_conv()
         self._multihead()
+        if self.initial_bias is not None:
+            self._set_bias()
 
     def _init_conv(self):
         self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
@@ -93,18 +108,34 @@ class Base(Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
+    def _freeze_conv(self):
+        for module in [self.convs, self.batch_norms]:
+            for layer in module:
+                for param in layer.parameters():
+                    param.requires_grad = False
+
+    def _set_bias(self):
+        for head, type in zip(self.heads_NN, self.head_type):
+            # FIXME: we only currently enable this for graph outputs.
+            if type == "graph":
+                # Set the bias of the last linear layer to a large value (UQ)
+                head[-1].bias.data.fill_(self.initial_bias)
+
     def _init_node_conv(self):
         # *******convolutional layers for node level predictions*******#
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
+        if (
+            "node" not in self.config_heads
+            or self.config_heads["node"]["type"] != "conv"
+        ):
+            return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
         # In this part, each head has same number of convolutional layers, but can have different output dimension
         self.convs_node_hidden.append(
             self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
@@ -139,6 +170,11 @@ class Base(Module):
                 denselayers.append(ReLU())
             self.graph_shared = Sequential(*denselayers)
 
+        if "node" in self.config_heads:
+            self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
+            self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+            self._init_node_conv()
+
         inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
@@ -164,6 +200,7 @@ class Base(Module):
                 self.node_NN_type = self.config_heads["node"]["type"]
                 head_NN = ModuleList()
                 if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
+                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
                     assert (
                         self.num_nodes is not None
                     ), "num_nodes must be positive integer for MLP"
@@ -171,7 +208,7 @@ class Base(Module):
                     head_NN = MLPNode(
                         self.hidden_dim,
                         self.head_dims[ihead],
-                        self.num_nodes,
+                        self.num_mlp,
                         self.hidden_dim_node,
                         self.config_heads["node"]["type"],
                     )
@@ -199,6 +236,7 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
+        data = data.to(self.device)
         x, edge_index, batch = (
             data.x,
             data.edge_index,
@@ -244,7 +282,7 @@ class Base(Module):
                 outputs.append(x_node)
         return outputs
 
-    def loss_rmse(self, pred, value, head_index):
+    def loss(self, pred, value, head_index):
         if self.ilossweights_nll == 1:
             return self.loss_nll(pred, value, head_index)
         elif self.ilossweights_hyperp == 1:
@@ -253,10 +291,10 @@ class Base(Module):
     def loss_nll(self, pred, value, head_index):
         # negative log likelihood loss
         # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
-        # fixme
+        # fixme: Pei said that right now this is never used
         raise ValueError("loss_nll() not ready yet")
         nll_loss = 0
-        tasks_rmseloss = []
+        tasks_mseloss = []
         loss = GaussianNLLLoss()
         for ihead in range(self.num_heads):
             head_pre = pred[ihead][:, :-1]
@@ -267,14 +305,14 @@ class Base(Module):
                 head_val = torch.reshape(head_val, pred_shape)
             head_var = torch.exp(pred[ihead][:, -1])
             nll_loss += loss(head_pre, head_val, head_var)
-            tasks_rmseloss.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
+            tasks_mseloss.append(F.mse_loss(head_pre, head_val))
 
-        return nll_loss, tasks_rmseloss, []
+        return nll_loss, tasks_mseloss, []
 
     def loss_hpweighted(self, pred, value, head_index):
         # weights for different tasks as hyper-parameters
         tot_loss = 0
-        tasks_rmse = []
+        tasks_loss = []
         for ihead in range(self.num_heads):
             head_pre = pred[ihead]
             pred_shape = head_pre.shape
@@ -284,26 +322,26 @@ class Base(Module):
                 head_val = torch.reshape(head_val, pred_shape)
 
             tot_loss += (
-                torch.sqrt(F.mse_loss(head_pre, head_val)) * self.loss_weights[ihead]
+                self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
             )
-            tasks_rmse.append(torch.sqrt(F.mse_loss(head_pre, head_val)))
+            tasks_loss.append(self.loss_function(head_pre, head_val))
 
-        return tot_loss, tasks_rmse
+        return tot_loss, tasks_loss
 
     def __str__(self):
         return "Base"
 
 
 class MLPNode(Module):
-    def __init__(self, input_dim, output_dim, num_nodes, hidden_dim_node, node_type):
+    def __init__(self, input_dim, output_dim, num_mlp, hidden_dim_node, node_type):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
-        self.num_nodes = num_nodes
         self.node_type = node_type
+        self.num_mlp = num_mlp
 
         self.mlp = ModuleList()
-        for inode in range(self.num_nodes):
+        for _ in range(self.num_mlp):
             denselayers = []
             denselayers.append(Linear(self.input_dim, hidden_dim_node[0]))
             denselayers.append(ReLU())

@@ -30,6 +30,8 @@ from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 import pickle
 
+from hydragnn.utils.print_utils import print_distributed, log
+
 
 def dataset_loading_and_splitting(config: {}):
     ##check if serialized pickle files or folders for raw files provided
@@ -51,11 +53,10 @@ def dataset_loading_and_splitting(config: {}):
 
 
 def worker_init_fn(worker_id):
-    print("Worker init (id): %d" % (worker_id))
+    log("Worker init (id): %d" % (worker_id))
 
 
 def create_dataloaders(trainset, valset, testset, batch_size):
-    sampler_list = []
     if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
@@ -80,7 +81,6 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         test_loader = DataLoader(
             testset, batch_size=batch_size, shuffle=False, sampler=test_sampler
         )
-        sampler_list = [train_sampler, val_sampler, test_sampler]
 
     else:
 
@@ -88,7 +88,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         val_loader = DataLoader(valset, batch_size=batch_size, shuffle=True,)
         test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True,)
 
-    return train_loader, val_loader, test_loader, sampler_list
+    return train_loader, val_loader, test_loader
 
 
 def split_dataset(
@@ -110,7 +110,7 @@ def split_dataset(
     return trainset, valset, testset
 
 
-def load_train_val_test_sets(config):
+def load_train_val_test_sets(config, isdist=False):
     timer = Timer("load_data")
     timer.start()
 
@@ -123,8 +123,9 @@ def load_train_val_test_sets(config):
         else:
             files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-        loader = SerializedDataLoader(config["Verbosity"]["level"])
-        dataset = loader.load_serialized_data(dataset_path=files_dir, config=config,)
+        loader = SerializedDataLoader(config, dist=isdist)
+        dataset = loader.load_serialized_data(dataset_path=files_dir)
+
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)
 
@@ -148,7 +149,7 @@ def transform_raw_data_to_serialized(config):
         dist.barrier()
 
 
-def total_to_train_val_test_pkls(config):
+def total_to_train_val_test_pkls(config, isdist=False):
     _, rank = get_comm_size_and_rank()
 
     if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
@@ -175,7 +176,13 @@ def total_to_train_val_test_pkls(config):
         config["Dataset"]["path"][dataset_type] = (
             serialized_dir + "/" + serial_data_name
         )
-        if rank == 0:
+        if (not isdist) and (rank == 0):
+            with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
+                pickle.dump(minmax_node_feature, f)
+                pickle.dump(minmax_graph_feature, f)
+                pickle.dump(dataset, f)
+        elif isdist:
+            ## parallel processing. Everyone need to read own total pickle data
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(minmax_node_feature, f)
                 pickle.dump(minmax_graph_feature, f)

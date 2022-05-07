@@ -13,25 +13,20 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import ModuleList
-from torch_geometric.nn import GINConv, BatchNorm
+from torch_geometric.nn import SAGEConv, BatchNorm
 
 from .Base import Base
 
 
-class GINStack(Base):
+class SAGEStack(Base):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
-        return GINConv(
-            nn.Sequential(
-                nn.Linear(input_dim, output_dim),
-                nn.ReLU(),
-                nn.Linear(output_dim, output_dim),
-            ),
-            eps=100.0,
-            train_eps=True,
+        return SAGEConv(
+            in_channels=input_dim,
+            out_channels=output_dim,
         )
 
     def __str__(self):
-        return "GINStack"
+        return "SAGEStack"

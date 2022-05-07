@@ -3,30 +3,31 @@
         "level": 2
     },
     "Dataset": {
-        "name": "FePt_32atoms",
-        "path": {"total": "FePt_enthalpy"},
-        "format": "LSMS",
+        "name": "NiNb",
+        "path": {"total": "FCC_Ni_Nb"},
+        "format": "CFG",
         "compositional_stratified_splitting": true,
-        "rotational_invariance": true,
+	"rotational_invariance": true,
         "node_features": {
-            "name": ["num_of_protons","charge_density", "magnetic_moment"],
+            "name": ["num_of_protons", "atomic_masses", "atomic_energy"],
             "dim": [1,1,1],
-            "column_index": [0,5,6]
+            "column_index": [0,1,2]
         },
         "graph_features":{
-            "name": [ "free_energy_scaled_num_nodes"],
-            "dim": [1],
-            "column_index": [0]
+            "name": [],
+            "dim": [],
+            "column_index": []
         }
     },
     "NeuralNetwork": {
         "Architecture": {
             "model_type": "PNA",
-            "radius": 7,
+            "radius": 3,
             "max_neighbours": 100000,
-            "periodic_boundary_conditions": false,
-            "hidden_dim": 5,
-            "num_conv_layers": 6,
+	    "edge_features": ["lengths"],
+	    "periodic_boundary_conditions": true,
+            "hidden_dim": 50,
+            "num_conv_layers": 10,
             "output_heads": {
                 "graph":{
                     "num_sharedlayers": 2,
@@ -40,24 +41,23 @@
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0, 1.0, 1.0]
+            "task_weights": [1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["free_energy_scaled_num_nodes","charge_density", "magnetic_moment"],
-            "output_index": [0, 1, 2],
-            "type": ["graph","node","node"],
+            "output_names": ["atomic_energy"],
+            "output_index": [2],
+            "type": ["node"],
             "denormalize_output": true
         },
         "Training": {
             "optimizer": "AdamW",
-            "num_epoch": 2,
+            "num_epoch": 200,
             "perc_train": 0.7,
             "loss_function_type": "mse",
             "learning_rate": 1e-3,
             "batch_size": 64,
-            "continue": 0,
-            "startfrom": "existing_model"
+            "continue": 0
         }
     },
     "Visualization": {

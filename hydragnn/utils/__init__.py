@@ -14,6 +14,7 @@ from .model import (
     get_summary_writer,
     load_existing_model,
     load_existing_model_config,
+    loss_function_selection,
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (
@@ -21,3 +22,5 @@ from .config_utils import (
     update_config_minmax,
     get_log_name_config,
 )
+
+from .optimizer import select_optimizer
