@@ -116,9 +116,10 @@ class Visualizer:
         y_label=None,
         xylim_equal=False,
     ):
+
         ax.scatter(x, y, s=s, edgecolor="b", marker=marker, facecolor="none")
 
-        ax.set_title(title)
+        ax.set_title(title + ", number of samples =" + str(len(x)))
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         if xylim_equal:
@@ -282,6 +283,8 @@ class Visualizer:
     ):
         """Creates scatter plots for true_values and predicted values of variable varname at iepoch."""
 
+        true_values = true_values.cpu().detach().numpy()
+        predicted_values = predicted_values.cpu().detach().numpy()
         nshape = np.asarray(predicted_values).shape
         if nshape[1] == 1:
             fig, axs = plt.subplots(1, 2, figsize=(12, 6))
@@ -298,7 +301,7 @@ class Visualizer:
 
             ax = axs[1]
             hist1d, bin_edges = np.histogram(
-                np.array(predicted_values) - np.array(true_values),
+                predicted_values - true_values,
                 bins=40,
                 density=True,
             )
@@ -386,7 +389,7 @@ class Visualizer:
     ):
         """Creates error histogram plot for true and predicted values of variable varname at iepoch.[node level]"""
 
-        nshape = np.asarray(predicted_values).shape
+        nshape = predicted_values.shape
         if nshape[1] == 1:
             return
         else:
@@ -652,16 +655,16 @@ class Visualizer:
         fhist.close()
         num_tasks = len(task_loss_train[0])
         if num_tasks > 0:
-            task_loss_train = np.array(task_loss_train)
-            task_loss_val = np.array(task_loss_val)
-            task_loss_test = np.array(task_loss_test)
+            task_loss_train = task_loss_train.cpu().detach().numpy()
+            task_loss_val = task_loss_val.cpu().detach().numpy()
+            task_loss_test = task_loss_test.cpu().detach().numpy()
             nrow = 2
         fig, axs = plt.subplots(nrow, num_tasks, figsize=(16, 6 * nrow))
         axs = axs.flatten()
         ax = axs[0]
-        ax.plot(total_loss_train, "-", label="train")
-        ax.plot(total_loss_val, ":", label="validation")
-        ax.plot(total_loss_test, "--", label="test")
+        ax.plot(total_loss_train.cpu().detach().numpy(), "-", label="train")
+        ax.plot(total_loss_val.cpu().detach().numpy(), ":", label="validation")
+        ax.plot(total_loss_test.cpu().detach().numpy(), "--", label="test")
         ax.set_title("total loss")
         ax.set_xlabel("Epochs")
         ax.set_yscale("log")
@@ -691,36 +694,40 @@ class Visualizer:
     ):
         """Creates scatter plots for all head predictions."""
         for ihead in range(self.num_heads):
+            head_true = true_values[ihead].cpu()
+            head_pred = predicted_values[ihead].cpu()
             if self.head_dims[ihead] > 1:
                 # vector output
                 self.create_parity_plot_vector(
                     output_names[ihead],
-                    true_values[ihead],
-                    predicted_values[ihead],
+                    head_true,
+                    head_pred,
                     self.head_dims[ihead],
                     iepoch,
                 )
             else:
                 self.create_parity_plot_and_error_histogram_scalar(
                     output_names[ihead],
-                    true_values[ihead],
-                    predicted_values[ihead],
+                    head_true,
+                    head_pred,
                     iepoch,
                 )
                 self.create_error_histogram_per_node(
                     output_names[ihead],
-                    true_values[ihead],
-                    predicted_values[ihead],
+                    head_true,
+                    head_pred,
                     iepoch,
                 )
 
     def create_plot_global(self, true_values, predicted_values, output_names=None):
         """Creates global analysis for all head predictons, e.g., scatter/condmean/error pdf plot."""
         for ihead in range(self.num_heads):
+            head_true = true_values[ihead].cpu()
+            head_pred = predicted_values[ihead].cpu()
             self.create_plot_global_analysis(
                 output_names[ihead],
-                true_values[ihead],
-                predicted_values[ihead],
+                head_true,
+                head_pred,
                 save_plot=True,
             )
 

@@ -57,7 +57,6 @@ def worker_init_fn(worker_id):
 
 
 def create_dataloaders(trainset, valset, testset, batch_size):
-    sampler_list = []
     if dist.is_initialized():
 
         train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
@@ -82,7 +81,6 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         test_loader = DataLoader(
             testset, batch_size=batch_size, shuffle=False, sampler=test_sampler
         )
-        sampler_list = [train_sampler, val_sampler, test_sampler]
 
     else:
 
@@ -98,7 +96,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
             shuffle=True,
         )
 
-    return train_loader, val_loader, test_loader, sampler_list
+    return train_loader, val_loader, test_loader
 
 
 def split_dataset(

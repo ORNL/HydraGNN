@@ -20,6 +20,7 @@ from .print_utils import print_master
 from hydragnn.utils.distributed import (
     get_comm_size_and_rank,
     get_device,
+    get_device_name,
     is_model_distributed,
 )
 from collections import OrderedDict
@@ -75,7 +76,7 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
     """Load both model and optimizer state from a single checkpoint file"""
     _, world_rank = get_comm_size_and_rank()
     path_name = os.path.join(path, model_name, model_name + ".pk")
-    map_location = {"cuda:%d" % 0: "cuda:%d" % world_rank}
+    map_location = {"cuda:%d" % 0: get_device_name()}
     checkpoint = torch.load(path_name, map_location=map_location)
     state_dict = checkpoint["model_state_dict"]
     if is_model_distributed(model):

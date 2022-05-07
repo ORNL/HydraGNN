@@ -122,8 +122,8 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
     # Set RMSE and sample MAE/max error thresholds
     thresholds = {
-        "SAGE": [0.20, 0.20, 0.75],
-        "PNA": [0.20, 0.20, 0.75],
+        "SAGE": [0.20, 0.20, 0.80],
+        "PNA": [0.20, 0.20, 0.80],
         "MFC": [0.20, 0.20, 1.5],
         "GIN": [0.25, 0.20, 0.75],
         "GAT": [0.60, 0.70, 0.99],
@@ -148,8 +148,8 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
             error_head_mse < thresholds[model_type][0]
         ), "Head RMSE checking failed for " + str(ihead)
 
-        head_true = torch.tensor(true_values[ihead])
-        head_pred = torch.tensor(predicted_values[ihead])
+        head_true = true_values[ihead]
+        head_pred = predicted_values[ihead]
         # Check individual samples
         mae = torch.nn.L1Loss()
         sample_mean_abs_error = mae(head_true, head_pred)
