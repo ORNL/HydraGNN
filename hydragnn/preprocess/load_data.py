@@ -85,14 +85,24 @@ def create_dataloaders(trainset, valset, testset, batch_size):
     else:
 
         train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(valset, batch_size=batch_size, shuffle=True,)
-        test_loader = DataLoader(testset, batch_size=batch_size, shuffle=True,)
+        val_loader = DataLoader(
+            valset,
+            batch_size=batch_size,
+            shuffle=True,
+        )
+        test_loader = DataLoader(
+            testset,
+            batch_size=batch_size,
+            shuffle=True,
+        )
 
     return train_loader, val_loader, test_loader
 
 
 def split_dataset(
-    dataset: [], perc_train: float, stratify_splitting: bool,
+    dataset: [],
+    perc_train: float,
+    stratify_splitting: bool,
 ):
     if not stratify_splitting:
         perc_val = (1 - perc_train) / 2

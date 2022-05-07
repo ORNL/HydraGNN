@@ -92,10 +92,10 @@ def check_output_dim_consistent(data, config):
             )
         elif output_type[ihead] == "node":
             assert (
-                (data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item())
-                // data.num_nodes
-                == config["Dataset"]["node_features"]["dim"][output_index[ihead]]
-            )
+                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+            ) // data.num_nodes == config["Dataset"]["node_features"]["dim"][
+                output_index[ihead]
+            ]
 
 
 def update_config_NN_outputs(config, data, graph_size_variable):

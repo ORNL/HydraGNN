@@ -286,7 +286,6 @@ def train(
     model.train()
 
     for data in iterate_tqdm(loader, verbosity):
-        data=data.to(device)
         with record_function("zero_grad"):
             opt.zero_grad()
         with record_function("get_head_indices"):
@@ -317,7 +316,6 @@ def validate(loader, model, verbosity, reduce_ranks=True):
     num_samples_local = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
-        data=data.to(device)
         head_index = get_head_indices(model, data)
 
         pred = model(data)
@@ -343,7 +341,6 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     num_samples_local = 0
     model.eval()
     for data in iterate_tqdm(loader, verbosity):
-        data=data.to(device)
         head_index = get_head_indices(model, data)
 
         pred = model(data)
