@@ -49,7 +49,7 @@ def train_validate_test(
 ):
     num_epoch = config["Training"]["num_epoch"]
 
-    device = train_loader.dataset[0].y.device
+    device = get_device()
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
     total_loss_val = torch.zeros(num_epoch, device=device)
@@ -233,6 +233,7 @@ def reduce_values_ranks(local_tensor):
 @torch.no_grad()
 def gather_tensor_ranks(head_values):
     if dist.get_world_size() > 1:
+        head_values = head_values.to(get_device())
         size_local = torch.tensor(
             [head_values.shape[0]], dtype=torch.int64, device=head_values.device
         )
