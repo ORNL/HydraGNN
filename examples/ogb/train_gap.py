@@ -372,6 +372,8 @@ if __name__ == "__main__":
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
+    sys.exit(0)
+
     ##################################################################################################################
     for ifeat in range(len(var_config["output_index"])):
         fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
