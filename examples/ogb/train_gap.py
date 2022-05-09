@@ -372,8 +372,6 @@ if __name__ == "__main__":
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
-    sys.exit(0)
-
     ##################################################################################################################
     for ifeat in range(len(var_config["output_index"])):
         fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
@@ -383,7 +381,7 @@ if __name__ == "__main__":
         ax = axs[0]
         ax.scatter(
             range(len(trainset)),
-            [trainset[i].cpu().y[ifeat] for i in range(len(trainset))],
+            [trainset[i].y[ifeat].item() for i in range(len(trainset))],
             edgecolor="b",
             facecolor="none",
         )
@@ -391,7 +389,7 @@ if __name__ == "__main__":
         ax = axs[1]
         ax.scatter(
             range(len(valset)),
-            [valset[i].cpu().y[ifeat] for i in range(len(valset))],
+            [valset[i].y[ifeat].item() for i in range(len(valset))],
             edgecolor="b",
             facecolor="none",
         )
@@ -399,7 +397,7 @@ if __name__ == "__main__":
         ax = axs[2]
         ax.scatter(
             range(len(testset)),
-            [testset[i].cpu().y[ifeat] for i in range(len(testset))],
+            [testset[i].y[ifeat].item() for i in range(len(testset))],
             edgecolor="b",
             facecolor="none",
         )
