@@ -166,7 +166,8 @@ def train_validate_test(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
 
-    if create_plots:
+    _, rank = get_comm_size_and_rank()
+    if create_plots and (rank==0):
         ######result visualization######
         visualizer.create_plot_global(
             true_values,
