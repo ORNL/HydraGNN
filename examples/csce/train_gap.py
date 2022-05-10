@@ -285,7 +285,7 @@ if __name__ == "__main__":
 
     graph_feature_names = ["GAP"]
     dirpwd = os.path.dirname(__file__)
-    datafile = os.path.join(dirpwd, "dataset/csce_gap_synth_1M.csv")
+    datafile = os.path.join(dirpwd, "dataset/csce_gap_synth.csv")
     # trainset_statistics = os.path.join(dirpwd, "dataset/statistics.pkl")
     ##################################################################################################################
     inputfilesubstr = args.inputfilesubstr
@@ -371,9 +371,9 @@ if __name__ == "__main__":
 
     timer = Timer("load_data")
     timer.start()
-    trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm)
-    valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm)
-    testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm)
+    trainset = OGBDataset("examples/csce/dataset/csce_gap.bp", "trainset", comm)
+    valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
+    testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
 
     info("Adios load")
     info(
