@@ -228,6 +228,7 @@ class OGBDataset(torch.utils.data.Dataset):
         if not self.fullmemcache:
             self.f.close()
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -279,7 +280,8 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
     return (
         [trainsmiles, valsmiles, testsmiles],
         [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
-        np.mean(values_all), np.std(values_all)
+        np.mean(values_all),
+        np.std(values_all),
     )
 
 
