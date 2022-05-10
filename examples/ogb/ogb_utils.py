@@ -286,8 +286,14 @@ def generate_graphdata(simlestr, ytarget, var_config=None):
     # data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y)
     data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
     if var_config is not None:
+        graph_features_dim = [1]
+        node_feature_dim = [1]
         hydragnn.preprocess.update_predicted_values(
-            var_config["type"], var_config["output_index"], data,
+            var_config["type"],
+            var_config["output_index"],
+            graph_features_dim,
+            node_feature_dim,
+            data,
         )
 
     # device = hydragnn.utils.get_device()
