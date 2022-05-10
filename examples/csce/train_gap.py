@@ -226,7 +226,7 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.8, 0.1, 0.1]):
+def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.04]):
     if seed is not None:
         random.seed(seed)
     smiles_all = []
