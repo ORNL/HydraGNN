@@ -51,20 +51,21 @@ def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
 
     assert torch.distributed.is_initialized()
     graph_size_variable = False
-    mn = train_loader.dataset[0].num_nodes
-    mx = train_loader.dataset[0].num_nodes
+    nodes_num_list = []
     for loader in [train_loader, val_loader, test_loader]:
-        for i, data in enumerate(loader):
-            for i in range(data.num_graphs):
-                mn = min(data[i].num_nodes, mn)
-                mx = max(data[i].num_nodes, mn)
-    mn = torch.tensor(mn).to(get_device())
-    mx = torch.tensor(mx).to(get_device())
-    torch.distributed.all_reduce(mn, op=torch.distributed.ReduceOp.MIN)
-    torch.distributed.all_reduce(mx, op=torch.distributed.ReduceOp.MAX)
-    if mn != mx:
-        graph_size_variable = True
-    return graph_size_variable
+        for data in loader:
+            nodes_num_list.append(data.num_nodes)
+            if len(list(set(nodes_num_list))) > 1:
+                graph_size_variable = True
+                break
+        if graph_size_variable:
+            break
+
+    b = 1 if graph_size_variable else 0
+    b = torch.tensor(b).to(get_device())
+    torch.distributed.all_reduce(b, op=torch.distributed.ReduceOp.SUM)
+    reduced = True if b.item() > 0 else False
+    return reduced
 
 
 def check_data_samples_equivalence(data1, data2, tol):
