@@ -143,7 +143,7 @@ class AdioGGO:
 
 
 class OGBDataset(torch.utils.data.Dataset):
-    def __init__(self, filename, label, comm):
+    def __init__(self, filename, label, comm, fullmemcache=False):
         self.url = (
             "https://dl.dropboxusercontent.com/s/7qe3zppbicw9vxj/ogb_gap.bp.tar.gz"
         )
@@ -152,6 +152,7 @@ class OGBDataset(torch.utils.data.Dataset):
         self.label = label
         self.comm = comm
         self.rank = comm.Get_rank()
+        self.fullmemcache = fullmemcache
 
         self.data_object = dict()
         info("Adios reading:", self.filename)
@@ -176,12 +177,16 @@ class OGBDataset(torch.utils.data.Dataset):
                 self.variable_dim[k] = f.read_attribute(
                     "%s/%s/variable_dim" % (label, k)
                 ).item()
-                ## load full data first
-                self.data[k] = f.read("%s/%s" % (label, k))
+                if self.fullmemcache:
+                    ## load full data first
+                    self.data[k] = f.read("%s/%s" % (label, k))
             t2 = time.time()
             info("Adios reading time (sec): ", (t2 - t0))
         t1 = time.time()
         info("Data loading time (sec): ", (t1 - t0))
+
+        if not self.fullmemcache:
+            self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
 
     def download(self):
         path = download_url(self.url, self.prefix)
@@ -198,7 +203,7 @@ class OGBDataset(torch.utils.data.Dataset):
             data_object = torch_geometric.data.Data()
             for k in self.keys:
                 shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
-                ishape = [int(x.strip(","), 16) for x in shape.strip().split()]
+                ishape = [int(x.strip(",")) for x in shape.strip().split()]
                 start = [
                     0,
                 ] * len(ishape)
@@ -206,16 +211,22 @@ class OGBDataset(torch.utils.data.Dataset):
                 vdim = self.variable_dim[k]
                 start[vdim] = self.variable_offset[k][idx]
                 count[vdim] = self.variable_count[k][idx]
-                slice_list = list()
-                for n0, n1 in zip(start, count):
-                    slice_list.append(slice(n0, n0 + n1))
-                val = self.data[k][tuple(slice_list)]
+                if self.fullmemcache:
+                    slice_list = list()
+                    for n0, n1 in zip(start, count):
+                        slice_list.append(slice(n0, n0 + n1))
+                    val = self.data[k][tuple(slice_list)]
+                else:
+                    val = self.f.read("%s/%s" % (self.label, k), start, count)
 
-                _ = torch.tensor(val)
-                exec("data_object.%s = _" % (k))
+                v = torch.tensor(val)
+                exec("data_object.%s = v" % (k))
                 self.data_object[idx] = data_object
         return data_object
 
+    def __del__(self):
+        if not self.fullmemcache:
+            self.f.close()
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
