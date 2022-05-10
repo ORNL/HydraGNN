@@ -289,10 +289,11 @@ def generate_graphdata(simlestr, ytarget, var_config=None):
         graph_features_dim = [1]
         node_feature_dim = [1]
         hydragnn.preprocess.update_predicted_values(
-            var_config["type"], var_config["output_index"],
+            var_config["type"],
+            var_config["output_index"],
             graph_features_dim,
             node_feature_dim,
-            data
+            data,
         )
 
     # device = hydragnn.utils.get_device()
