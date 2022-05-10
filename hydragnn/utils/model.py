@@ -16,7 +16,7 @@ import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
-from .print_utils import print_master
+from .print_utils import print_master, iterate_tqdm
 
 from hydragnn.utils.distributed import (
     get_comm_size_and_rank,
@@ -89,12 +89,7 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for data in dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        if dist.get_backend() == "nccl":
-            d = d.to(device)
         deg += torch.bincount(d, minlength=deg.numel())
-
-    ## Allreduce from everytone
-    dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg
 
 
@@ -112,15 +107,14 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
 
 
 def calculate_PNA_degree_dist(loader, max_neighbours):
-    assert torch.distributed.is_initialized()
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
-    for data in loader:
-        data = data.to(get_device())
+    assert dist.is_initialized()
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+    for data in iterate_tqdm(loader, 2, desc="Calculate PNA degree"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
-
-    ## Allreduce from everytone
+    deg = deg.to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
+    deg = deg.cpu()
     return deg
 
 
