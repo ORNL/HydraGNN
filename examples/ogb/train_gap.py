@@ -335,9 +335,10 @@ if __name__ == "__main__":
 
     timer = Timer("load_data")
     timer.start()
-    trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm)
-    valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm)
-    testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm)
+    opt = {"preload": True}
+    trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt)
+    valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
+    testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
 
     info("Adios load")
     info(
@@ -348,11 +349,6 @@ if __name__ == "__main__":
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
-
-    ## Loader warming-up: good for Adios with no preload
-    for loader in [train_loader, val_loader, test_loader]:
-        for data in iterate_tqdm(loader, verbosity, desc="Loader warming up"):
-            pass
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     timer.stop()
