@@ -143,7 +143,7 @@ class AdioGGO:
 
 
 class OGBDataset(torch.utils.data.Dataset):
-    def __init__(self, filename, label, comm, fullmemcache=False):
+    def __init__(self, filename, label, comm, preload=False):
         self.url = (
             "https://dl.dropboxusercontent.com/s/7qe3zppbicw9vxj/ogb_gap.bp.tar.gz"
         )
@@ -152,7 +152,7 @@ class OGBDataset(torch.utils.data.Dataset):
         self.label = label
         self.comm = comm
         self.rank = comm.Get_rank()
-        self.fullmemcache = fullmemcache
+        self.preload = preload
 
         self.data_object = dict()
         info("Adios reading:", self.filename)
@@ -177,7 +177,7 @@ class OGBDataset(torch.utils.data.Dataset):
                 self.variable_dim[k] = f.read_attribute(
                     "%s/%s/variable_dim" % (label, k)
                 ).item()
-                if self.fullmemcache:
+                if self.preload:
                     ## load full data first
                     self.data[k] = f.read("%s/%s" % (label, k))
             t2 = time.time()
@@ -185,7 +185,7 @@ class OGBDataset(torch.utils.data.Dataset):
         t1 = time.time()
         info("Data loading time (sec): ", (t1 - t0))
 
-        if not self.fullmemcache:
+        if not self.preload:
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
 
     def download(self):
@@ -211,7 +211,7 @@ class OGBDataset(torch.utils.data.Dataset):
                 vdim = self.variable_dim[k]
                 start[vdim] = self.variable_offset[k][idx]
                 count[vdim] = self.variable_count[k][idx]
-                if self.fullmemcache:
+                if self.preload:
                     slice_list = list()
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
@@ -225,7 +225,7 @@ class OGBDataset(torch.utils.data.Dataset):
         return data_object
 
     def __del__(self):
-        if not self.fullmemcache:
+        if not self.preload:
             self.f.close()
 
 
@@ -397,6 +397,11 @@ if __name__ == "__main__":
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
+
+    ## Loader warming-up: good for Adios with no preload
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in iterate_tqdm(loader, verbosity, desc="Loader warming up"):
+            pass
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     timer.stop()
