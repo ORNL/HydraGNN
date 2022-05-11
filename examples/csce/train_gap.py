@@ -25,6 +25,11 @@ import warnings
 
 from torch_geometric.data import download_url, extract_tar
 
+try:
+    import gptl4py as gp
+except ImportError:
+    import gptl4py_dummy as gp
+
 warnings.filterwarnings("error")
 
 
@@ -196,7 +201,9 @@ class OGBDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.ndata
 
+    @gp.profile
     def __getitem__(self, idx):
+        info("getitem", idx)
         if idx in self.data_object:
             data_object = self.data_object[idx]
         else:
@@ -221,7 +228,7 @@ class OGBDataset(torch.utils.data.Dataset):
 
                 v = torch.tensor(val)
                 exec("data_object.%s = v" % (k))
-                self.data_object[idx] = data_object
+            self.data_object[idx] = data_object
         return data_object
 
     def __del__(self):
@@ -382,6 +389,7 @@ if __name__ == "__main__":
 
         sys.exit(0)
 
+    gp.initialize()
     timer = Timer("load_data")
     timer.start()
     trainset = OGBDataset("examples/csce/dataset/csce_gap.bp", "trainset", comm)
@@ -397,6 +405,16 @@ if __name__ == "__main__":
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
+
+    ## Loader warming-up: good for Adios with no preload
+    for loader in [train_loader, train_loader]:
+        for data in iterate_tqdm(loader, verbosity, desc="Loader warming up"):
+            break
+
+    gp.pr_file("csce_gp_timing.%d" % rank)
+    gp.pr_summary_file("csce_gp_timing.summary")
+    gp.finalize()
+    sys.exit(0)
 
     ## Loader warming-up: good for Adios with no preload
     for loader in [train_loader, val_loader, test_loader]:
