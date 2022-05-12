@@ -233,11 +233,8 @@ class OGBDataset(torch.utils.data.Dataset):
                 with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
                     self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
 
-            for idx in iterate_tqdm(
-                sorted(self.preflight_list), 2, desc="AdiosOGB populate"
-            ):
-                if idx < i or idx >= i + dn:
-                    continue
+            filtered = filter(lambda x: x >= i and x < i + dn, self.preflight_list)
+            for idx in iterate_tqdm(sorted(filtered), 2, desc="AdiosOGB populate"):
                 data_object = torch_geometric.data.Data()
                 for k in self.keys:
                     shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
