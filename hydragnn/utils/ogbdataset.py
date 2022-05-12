@@ -2,7 +2,7 @@ from mpi4py import MPI
 import time
 import os
 
-from .print_utils import print_distributed, log
+from .print_utils import print_distributed, log, iterate_tqdm
 
 import numpy as np
 import adios2 as ad2
@@ -233,7 +233,7 @@ class OGBDataset(torch.utils.data.Dataset):
                 with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
                     self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
 
-            for idx in sorted(self.preflight_list):
+            for idx in iterate_tqdm(sorted(self.preflight_list), 2, desc="AdiosOGB populate"):
                 if idx < i or idx >= i + dn:
                     continue
                 data_object = torch_geometric.data.Data()
