@@ -289,7 +289,7 @@ def train(
     num_samples_local = 0
     model.train()
 
-    for data in iterate_tqdm(loader, verbosity):
+    for data in iterate_tqdm(loader, verbosity, desc="Train"):
         with record_function("zero_grad"):
             opt.zero_grad()
         with record_function("get_head_indices"):
@@ -319,7 +319,7 @@ def validate(loader, model, verbosity, reduce_ranks=True):
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
-    for data in iterate_tqdm(loader, verbosity):
+    for data in iterate_tqdm(loader, verbosity, desc="Validate"):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
@@ -344,7 +344,7 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
-    for data in iterate_tqdm(loader, verbosity):
+    for data in iterate_tqdm(loader, verbosity, desc="Test"):
         head_index = get_head_indices(model, data)
 
         pred = model(data)
