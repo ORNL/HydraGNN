@@ -190,7 +190,9 @@ if __name__ == "__main__":
     timer.start()
     trainset = OGBDataset("examples/csce/dataset/csce_gap.bp", "trainset", comm)
     valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
-    testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
+    testset = OGBDataset(
+        "examples/csce/dataset/csce_gap.bp", "testset", comm, preload=True
+    )
 
     info("Adios load")
     info(
@@ -205,8 +207,7 @@ if __name__ == "__main__":
     ## Loader pre-flight and populate data
     trainset.preflight = True
     valset.preflight = True
-    testset.preflight = True
-    for loader in [train_loader, val_loader, test_loader]:
+    for loader in [train_loader, val_loader]:
         for data in loader:
             pass
         loader.dataset.populate()

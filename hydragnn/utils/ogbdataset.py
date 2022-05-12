@@ -233,7 +233,9 @@ class OGBDataset(torch.utils.data.Dataset):
                 with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
                     self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
 
-            for idx in iterate_tqdm(sorted(self.preflight_list), 2, desc="AdiosOGB populate"):
+            for idx in iterate_tqdm(
+                sorted(self.preflight_list), 2, desc="AdiosOGB populate"
+            ):
                 if idx < i or idx >= i + dn:
                     continue
                 data_object = torch_geometric.data.Data()
@@ -257,4 +259,8 @@ class OGBDataset(torch.utils.data.Dataset):
                     v = torch.tensor(val)
                     exec("data_object.%s = v" % (k))
                 self.data_object[idx] = data_object
+
+        for k in self.keys:
+            del self._data[k]
+
         self.preflight = False

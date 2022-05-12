@@ -63,7 +63,9 @@ def train_validate_test(
     ## collecting node feature
     node_feature = []
     nodes_num_list = []
-    for data in test_loader.dataset:
+    for data in iterate_tqdm(
+        test_loader.dataset, verbosity, desc="Collecting node feature"
+    ):
         node_feature.extend(data.x.tolist())
         nodes_num_list.append(data.num_nodes)
 
@@ -167,7 +169,7 @@ def train_validate_test(
         )
 
     _, rank = get_comm_size_and_rank()
-    if create_plots and (rank==0):
+    if create_plots and (rank == 0):
         ######result visualization######
         visualizer.create_plot_global(
             true_values,
