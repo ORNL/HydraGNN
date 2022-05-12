@@ -10,6 +10,9 @@ import adios2 as ad2
 import torch_geometric.data
 import torch
 
+from multiprocessing.shared_memory import SharedMemory
+from multiprocessing.managers import SharedMemoryManager
+
 try:
     import gptl4py as gp
 except ImportError:
@@ -131,24 +134,35 @@ class AdiosOGB:
 
 
 class OGBDataset(torch.utils.data.Dataset):
-    def __init__(self, filename, label, comm, preload=False):
+    def __init__(self, filename, label, comm, preload=True, shmem=False):
         t0 = time.time()
         self.filename = filename
         self.label = label
         self.comm = comm
-        self.rank = comm.Get_rank()
+        self.rank = self.comm.Get_rank()
+
+        self.nrank_per_node = self.comm.Get_size()
+        if os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE"):
+            ## Summit
+            self.nrank_per_node = int(os.environ["OMPI_COMM_WORLD_LOCAL_SIZE"])
+        self.local_rank = self.rank % self.nrank_per_node
+        log("local_rank", self.local_rank)
+
+        self.data = dict()
         self.preload = preload
         self.preflight = False
         self.preflight_list = list()
+        self.shmem = shmem
+        self.smm = None
+        if self.shmem:
+            self.shm = dict()
+            self.local_comm = self.comm.Split(
+                self.rank // self.nrank_per_node, self.rank
+            )
 
         self.data_object = dict()
         log("Adios reading:", self.filename)
 
-        if self.rank == 0:
-            if not os.path.exists(filename):
-                self.prefix = os.path.dirname(self.filename)
-                self.download()
-        comm.Barrier()
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
             self.vars = f.available_variables()
             self.keys = f.read_attribute_string("%s/keys" % label)
@@ -157,7 +171,7 @@ class OGBDataset(torch.utils.data.Dataset):
             self.variable_count = dict()
             self.variable_offset = dict()
             self.variable_dim = dict()
-            self.data = dict()
+
             for k in self.keys:
                 self.variable_count[k] = f.read("%s/%s/variable_count" % (label, k))
                 self.variable_offset[k] = f.read("%s/%s/variable_offset" % (label, k))
@@ -167,6 +181,73 @@ class OGBDataset(torch.utils.data.Dataset):
                 if self.preload:
                     ## load full data first
                     self.data[k] = f.read("%s/%s" % (label, k))
+                elif self.shmem:
+                    if self.local_rank == 0:
+                        adios = ad2.ADIOS()
+                        io = adios.DeclareIO("ogb_read")
+                        reader = io.Open(self.filename, ad2.Mode.Read, MPI.COMM_SELF)
+                        var = io.InquireVariable("%s/%s" % (label, k))
+
+                        if var.Type() == "double":
+                            dtype = np.float64
+                        elif var.Type() == "float":
+                            dtype = np.float32
+                        elif var.Type() == "int32_t":
+                            dtype = np.int32
+                        elif var.Type() == "int64_t":
+                            dtype = np.int64
+                        else:
+                            raise ValueError(var.Type())
+
+                        nbytes = np.prod(var.Shape()) * np.dtype(dtype).itemsize
+                        self.shm[k] = SharedMemory(create=True, size=nbytes)
+                        log(
+                            "SHM:0:",
+                            self.label,
+                            k,
+                            self.shm[k].name,
+                            type(self.shm[k].name),
+                            var.Shape(),
+                            nbytes,
+                        )
+                        arr = np.ndarray(
+                            var.Shape(), dtype=dtype, buffer=self.shm[k].buf
+                        )
+                        reader.Get(var, arr, ad2.Mode.Sync)
+                        reader.Close()
+                        self.data[k] = arr
+                        self.local_comm.bcast(self.shm[k].name, root=0)
+                    else:
+                        name = None
+                        name = self.local_comm.bcast(name, root=0)
+                        self.shm[k] = SharedMemory(name=name)
+
+                        shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                        ishape = [int(x.strip(",")) for x in shape.strip().split()]
+
+                        vartype = self.vars["%s/%s" % (self.label, k)]["Type"]
+                        if vartype == "double":
+                            dtype = np.float64
+                        elif vartype == "float":
+                            dtype = np.float32
+                        elif vartype == "int32_t":
+                            dtype = np.int32
+                        elif vartype == "int64_t":
+                            dtype = np.int64
+                        else:
+                            raise ValueError(vartype)
+
+                        arr = np.ndarray(ishape, dtype=dtype, buffer=self.shm[k].buf)
+                        self.data[k] = arr
+                        log(
+                            "SHM:1:",
+                            self.label,
+                            k,
+                            self.shm[k].name,
+                            arr.nbytes,
+                            ishape,
+                        )
+
             t2 = time.time()
             log("Adios reading time (sec): ", (t2 - t0))
         t1 = time.time()
@@ -197,12 +278,13 @@ class OGBDataset(torch.utils.data.Dataset):
                 vdim = self.variable_dim[k]
                 start[vdim] = self.variable_offset[k][idx]
                 count[vdim] = self.variable_count[k][idx]
-                if self.preload:
+                if self.preload or self.shmem:
                     slice_list = list()
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self.data[k][tuple(slice_list)]
                 else:
+                    log("getitem out-of-memory:", self.label, k, idx)
                     val = self.f.read("%s/%s" % (self.label, k), start, count)
 
                 v = torch.tensor(val)
@@ -210,9 +292,20 @@ class OGBDataset(torch.utils.data.Dataset):
             self.data_object[idx] = data_object
         return data_object
 
+    def unlink(self):
+        if self.shmem:
+            for k in self.keys:
+                self.shm[k].close()
+                if self.local_rank == 0:
+                    self.shm[k].unlink()
+
     def __del__(self):
         if not self.preload:
             self.f.close()
+        try:
+            self.unlink(self)
+        except:
+            pass
 
     @gp.profile
     def populate(self):

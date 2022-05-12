@@ -188,11 +188,11 @@ if __name__ == "__main__":
     gp.initialize()
     timer = Timer("load_data")
     timer.start()
-    trainset = OGBDataset("examples/csce/dataset/csce_gap.bp", "trainset", comm)
-    valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
-    testset = OGBDataset(
-        "examples/csce/dataset/csce_gap.bp", "testset", comm, preload=True
+    trainset = OGBDataset(
+        "examples/csce/dataset/csce_gap.bp", "trainset", comm, preload=False, shmem=True
     )
+    valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
+    testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
 
     info("Adios load")
     info(
@@ -204,14 +204,18 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    ## Loader pre-flight and populate data
-    trainset.preflight = True
-    valset.preflight = True
-    for loader in [train_loader, val_loader]:
+    for loader in [
+        train_loader,
+    ]:
+        loader.sampler.set_epoch(0)
         for data in loader:
             pass
-        loader.dataset.populate()
-    gp.reset_timer("__getitem__")
+        loader.sampler.set_epoch(1)
+        for data in loader:
+            pass
+
+    info("Done.")
+    sys.exit(0)
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     timer.stop()
