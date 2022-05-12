@@ -21,9 +21,12 @@ import adios2 as ad2
 import torch_geometric.data
 import torch
 
-import warnings
+try:
+    import gptl4py as gp
+except ImportError:
+    import gptl4py_dummy as gp
 
-from torch_geometric.data import download_url, extract_tar
+import warnings
 
 warnings.filterwarnings("error")
 
@@ -144,15 +147,14 @@ class AdioGGO:
 
 class OGBDataset(torch.utils.data.Dataset):
     def __init__(self, filename, label, comm, preload=False):
-        self.url = (
-            "https://dl.dropboxusercontent.com/s/7qe3zppbicw9vxj/ogb_gap.bp.tar.gz"
-        )
         t0 = time.time()
         self.filename = filename
         self.label = label
         self.comm = comm
         self.rank = comm.Get_rank()
         self.preload = preload
+        self.preflight = False
+        self.preflight_list = list()
 
         self.data_object = dict()
         info("Adios reading:", self.filename)
@@ -188,15 +190,14 @@ class OGBDataset(torch.utils.data.Dataset):
         if not self.preload:
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
 
-    def download(self):
-        path = download_url(self.url, self.prefix)
-        extract_tar(path, self.prefix)
-        # os.unlink(path)
-
     def __len__(self):
         return self.ndata
 
+    @gp.profile
     def __getitem__(self, idx):
+        if self.preflight:
+            self.preflight_list.append(idx)
+            return torch_geometric.data.Data()
         if idx in self.data_object:
             data_object = self.data_object[idx]
         else:
@@ -221,12 +222,57 @@ class OGBDataset(torch.utils.data.Dataset):
 
                 v = torch.tensor(val)
                 exec("data_object.%s = v" % (k))
-                self.data_object[idx] = data_object
+            self.data_object[idx] = data_object
         return data_object
 
     def __del__(self):
         if not self.preload:
             self.f.close()
+
+    @gp.profile
+    def populate(self):
+        dn = 2_000_000
+        self._data = dict()
+        for i in range(0, self.ndata, dn):
+            for k in self.keys:
+                shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                ishape = [int(x.strip(",")) for x in shape.strip().split()]
+                start = [
+                    0,
+                ] * len(ishape)
+                count = list(ishape)
+                vdim = self.variable_dim[k]
+                start[vdim] = self.variable_offset[k][i]
+                count[vdim] = self.variable_count[k][i : i + dn].sum()
+
+                with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
+                    self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
+
+            for idx in sorted(self.preflight_list):
+                if idx < i or idx >= i + dn:
+                    continue
+                data_object = torch_geometric.data.Data()
+                for k in self.keys:
+                    shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                    ishape = [int(x.strip(",")) for x in shape.strip().split()]
+                    start = [
+                        0,
+                    ] * len(ishape)
+                    count = list(ishape)
+                    vdim = self.variable_dim[k]
+                    start[vdim] = (
+                        self.variable_offset[k][idx] - self.variable_offset[k][i]
+                    )
+                    count[vdim] = self.variable_count[k][idx]
+                    slice_list = list()
+                    for n0, n1 in zip(start, count):
+                        slice_list.append(slice(n0, n0 + n1))
+                    val = self._data[k][tuple(slice_list)]
+
+                    v = torch.tensor(val)
+                    exec("data_object.%s = v" % (k))
+                self.data_object[idx] = data_object
+        self.preflight = False
 
 
 def info(*args, logtype="info", sep=" "):
@@ -333,6 +379,7 @@ if __name__ == "__main__":
 
         sys.exit(0)
 
+    gp.initialize()
     timer = Timer("load_data")
     timer.start()
     opt = {"preload": True}
@@ -389,6 +436,9 @@ if __name__ == "__main__":
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
+    gp.pr_file("ogb_gp_timing.%d" % rank)
+    gp.pr_summary_file("ogb_gp_timing.summary")
+    gp.finalize()
     sys.exit(0)
 
     ##################################################################################################################
