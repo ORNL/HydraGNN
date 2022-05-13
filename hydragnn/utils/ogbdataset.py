@@ -201,15 +201,6 @@ class OGBDataset(torch.utils.data.Dataset):
 
                         nbytes = np.prod(var.Shape()) * np.dtype(dtype).itemsize
                         self.shm[k] = SharedMemory(create=True, size=nbytes)
-                        log(
-                            "SHM:0:",
-                            self.label,
-                            k,
-                            self.shm[k].name,
-                            type(self.shm[k].name),
-                            var.Shape(),
-                            nbytes,
-                        )
                         arr = np.ndarray(
                             var.Shape(), dtype=dtype, buffer=self.shm[k].buf
                         )
@@ -239,14 +230,6 @@ class OGBDataset(torch.utils.data.Dataset):
 
                         arr = np.ndarray(ishape, dtype=dtype, buffer=self.shm[k].buf)
                         self.data[k] = arr
-                        log(
-                            "SHM:1:",
-                            self.label,
-                            k,
-                            self.shm[k].name,
-                            arr.nbytes,
-                            ishape,
-                        )
 
             t2 = time.time()
             log("Adios reading time (sec): ", (t2 - t0))
@@ -284,7 +267,7 @@ class OGBDataset(torch.utils.data.Dataset):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self.data[k][tuple(slice_list)]
                 else:
-                    log("getitem out-of-memory:", self.label, k, idx)
+                    # log("getitem out-of-memory:", self.label, k, idx)
                     val = self.f.read("%s/%s" % (self.label, k), start, count)
 
                 v = torch.tensor(val)
