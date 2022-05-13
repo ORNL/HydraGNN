@@ -204,19 +204,6 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    for loader in [
-        train_loader,
-    ]:
-        loader.sampler.set_epoch(0)
-        for data in loader:
-            pass
-        loader.sampler.set_epoch(1)
-        for data in loader:
-            pass
-
-    info("Done.")
-    sys.exit(0)
-
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     timer.stop()
 
