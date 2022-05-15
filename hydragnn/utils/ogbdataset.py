@@ -145,6 +145,10 @@ class OGBDataset(torch.utils.data.Dataset):
         if os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE"):
             ## Summit
             self.nrank_per_node = int(os.environ["OMPI_COMM_WORLD_LOCAL_SIZE"])
+        if os.getenv("SLURM_NTASKS_PER_NODE"):
+            ## Perlmutter
+            self.nrank_per_node = int(os.environ["SLURM_NTASKS_PER_NODE"])
+
         self.local_rank = self.rank % self.nrank_per_node
         log("local_rank", self.local_rank)
 
