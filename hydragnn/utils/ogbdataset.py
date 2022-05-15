@@ -16,7 +16,7 @@ from multiprocessing.managers import SharedMemoryManager
 try:
     import gptl4py as gp
 except ImportError:
-    import gptl4py_dummy as gp
+    import hydragnn.utils.gptl4py_dummy as gp
 
 
 class AdiosOGB:
