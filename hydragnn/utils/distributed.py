@@ -129,6 +129,8 @@ def setup_ddp():
         ## source: https://www.olcf.ornl.gov/wp-content/uploads/2019/12/Scaling-DL-on-Summit.pdf
         ## The following is Summit specific
         master_addr = os.environ["LSB_HOSTS"].split()[1]
+    elif os.getenv("LSB_MCPU_HOSTS") is not None:
+        master_addr = os.environ["LSB_MCPU_HOSTS"].split()[2]
     elif os.getenv("SLURM_NODELIST") is not None:
         ## The following is CADES specific
         master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
