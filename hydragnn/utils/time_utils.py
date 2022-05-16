@@ -14,6 +14,10 @@ import torch
 from .distributed import get_comm_size_and_rank, get_device
 from .print_utils import print_distributed
 
+try:
+    import gptl4py as gp
+except ImportError:
+    import hydragnn.utils.gptl4py_dummy as gp
 
 class TimerError(Exception):
     """A custom exception used to report errors in use of Timer class"""
@@ -52,11 +56,13 @@ class Timer:
         self.running = True
         self.calls = self.calls + 1
         self.start_time = time.perf_counter()
+        gp.start(self.name)
 
     def stop(self):
         if self.start_time is None:
             raise TimerError(f"Timer is not running. Use .start() to start it")
 
+        gp.stop(self.name)
         self.elapsed_time = time.perf_counter() - self.start_time
         self.start_time = None
 
