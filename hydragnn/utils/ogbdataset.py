@@ -240,7 +240,7 @@ class OGBDataset(torch.utils.data.Dataset):
         t1 = time.time()
         log("Data loading time (sec): ", (t1 - t0))
 
-        if not self.preload:
+        if not self.preload and not self.shmem:
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
 
     def __len__(self):
@@ -287,7 +287,7 @@ class OGBDataset(torch.utils.data.Dataset):
                     self.shm[k].unlink()
 
     def __del__(self):
-        if not self.preload:
+        if not self.preload and not self.shmem:
             self.f.close()
         try:
             self.unlink(self)
