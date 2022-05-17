@@ -88,6 +88,55 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
     )
 
 
+## Torch Dataset for CSCE CSV format
+class CSCEDatasetFactory:
+    def __init__(
+        self, datafile, sampling=1.0, seed=43, var_config=None, norm_yflag=False
+    ):
+        self.var_config = var_config
+
+        ## Read full data
+        smiles_sets, values_sets, ymean_feature, ystd_feature = csce_datasets_load(
+            datafile, sampling=sampling, seed=seed
+        )
+        ymean = ymean_feature.tolist()
+        ystd = ystd_feature.tolist()
+
+        info([len(x) for x in values_sets])
+        self.dataset_lists = list()
+        for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
+            if norm_yflag:
+                valueset = (valueset - torch.tensor(ymean)) / torch.tensor(ystd)
+                # print(valueset[:, 0].mean(), valueset[:, 0].std())
+                # print(valueset[:, 1].mean(), valueset[:, 1].std())
+                # print(valueset[:, 2].mean(), valueset[:, 2].std())
+            self.dataset_lists.append((smileset, valueset))
+
+    def get(self, label):
+        ## Set only assigned label data
+        labelnames = ["trainset", "valset", "testset"]
+        index = labelnames.index(label)
+
+        smileset, valueset = self.dataset_lists[index]
+        return (smileset, valueset)
+
+
+class CSCEDataset(torch.utils.data.Dataset):
+    def __init__(self, datasetfactory, label):
+        self.smileset, self.valueset = datasetfactory.get(label)
+        self.var_config = datasetfactory.var_config
+
+    def __len__(self):
+        return len(self.smileset)
+
+    @gp.profile
+    def __getitem__(self, idx):
+        smilestr = self.smileset[idx]
+        ytarget = self.valueset[idx]
+        data = generate_graphdata(smilestr, ytarget, self.var_config)
+        return data
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("inputfilesubstr", help="input file substr")
@@ -97,6 +146,7 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only. Adios saving and no train",
     )
+    parser.add_argument("--noadios", action="store_true", help="no adios dataset")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -188,11 +238,25 @@ if __name__ == "__main__":
     gp.initialize()
     timer = Timer("load_data")
     timer.start()
-    trainset = OGBDataset(
-        "examples/csce/dataset/csce_gap.bp", "trainset", comm, preload=False, shmem=True
-    )
-    valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
-    testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
+    if not args.noadios:
+        trainset = OGBDataset(
+            "examples/csce/dataset/csce_gap.bp",
+            "trainset",
+            comm,
+            preload=False,
+            shmem=True,
+        )
+        valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
+        testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
+    else:
+        fact = CSCEDatasetFactory(
+            "examples/csce/dataset/csce_gap_synth.csv",
+            args.sampling,
+            var_config=var_config,
+        )
+        trainset = CSCEDataset(fact, "trainset")
+        valset = CSCEDataset(fact, "valset")
+        testset = CSCEDataset(fact, "testset")
 
     info("Adios load")
     info(
