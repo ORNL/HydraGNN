@@ -50,6 +50,7 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only. Adios saving and no train",
     )
+    parser.add_argument("--shmem", action="store_true", help="use shmem")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -137,7 +138,16 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
     opt = {"preload": True}
-    trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt)
+    if args.shmem:
+        trainset = OGBDataset(
+            "examples/ogb/dataset/ogb_gap.bp",
+            "trainset",
+            comm,
+            preload=False,
+            shmem=True,
+        )
+    else:
+        trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt)
     valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
     testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
 
@@ -220,7 +230,12 @@ if __name__ == "__main__":
             print(head_pred.shape, head_true.shape)
 
             ax.scatter(
-                head_true, head_pred, s=7, linewidth=0.5, edgecolor="b", facecolor="none"
+                head_true,
+                head_pred,
+                s=7,
+                linewidth=0.5,
+                edgecolor="b",
+                facecolor="none",
             )
             minv = np.minimum(np.amin(head_pred), np.amin(head_true))
             maxv = np.maximum(np.amax(head_pred), np.amax(head_true))
