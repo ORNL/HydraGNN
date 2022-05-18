@@ -310,6 +310,10 @@ if __name__ == "__main__":
     gp.pr_file("csce_gp_timing.%d" % rank)
     gp.pr_summary_file("csce_gp_timing.summary")
     gp.finalize()
+
+    if args.shmem:
+        trainset.unlink()
+
     sys.exit(0)
 
     ##################################################################################################################
