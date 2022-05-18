@@ -41,6 +41,51 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
+## Torch Dataset for CSCE CSV format
+class OGBRawDatasetFactory:
+    def __init__(self, datafile, var_config, sampling=1.0, seed=43, norm_yflag=False):
+        self.var_config = var_config
+
+        ## Read full data
+        smiles_sets, values_sets = datasets_load(datafile, sampling=sampling, seed=seed)
+        ymean = var_config["ymean"]
+        ystd = var_config["ystd"]
+
+        info([len(x) for x in values_sets])
+        self.dataset_lists = list()
+        for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
+            if norm_yflag:
+                valueset = (valueset - torch.tensor(ymean)) / torch.tensor(ystd)
+                # print(valueset[:, 0].mean(), valueset[:, 0].std())
+                # print(valueset[:, 1].mean(), valueset[:, 1].std())
+                # print(valueset[:, 2].mean(), valueset[:, 2].std())
+            self.dataset_lists.append((smileset, valueset))
+
+    def get(self, label):
+        ## Set only assigned label data
+        labelnames = ["trainset", "valset", "testset"]
+        index = labelnames.index(label)
+
+        smileset, valueset = self.dataset_lists[index]
+        return (smileset, valueset)
+
+
+class OGBRawDataset(torch.utils.data.Dataset):
+    def __init__(self, datasetfactory, label):
+        self.smileset, self.valueset = datasetfactory.get(label)
+        self.var_config = datasetfactory.var_config
+
+    def __len__(self):
+        return len(self.smileset)
+
+    @gp.profile
+    def __getitem__(self, idx):
+        smilestr = self.smileset[idx]
+        ytarget = self.valueset[idx]
+        data = generate_graphdata(smilestr, ytarget, self.var_config)
+        return data
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("inputfilesubstr", help="input file substr")
@@ -51,6 +96,7 @@ if __name__ == "__main__":
         help="preprocess only. Adios saving and no train",
     )
     parser.add_argument("--shmem", action="store_true", help="use shmem")
+    parser.add_argument("--noadios", action="store_true", help="no adios dataset")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -138,18 +184,30 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
     opt = {"preload": True}
-    if args.shmem:
-        trainset = OGBDataset(
-            "examples/ogb/dataset/ogb_gap.bp",
-            "trainset",
-            comm,
-            preload=False,
-            shmem=True,
-        )
+    if not args.noadios:
+        if args.shmem:
+            trainset = OGBDataset(
+                "examples/ogb/dataset/ogb_gap.bp",
+                "trainset",
+                comm,
+                preload=False,
+                shmem=True,
+            )
+        else:
+            trainset = OGBDataset(
+                "examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt
+            )
+        valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
+        testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
     else:
-        trainset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt)
-    valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
-    testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
+        fact = OGBRawDatasetFactory(
+            "examples/ogb/dataset/pcqm4m_gap.csv",
+            var_config=var_config,
+            sampling=args.sampling,
+        )
+        trainset = OGBRawDataset(fact, "trainset")
+        valset = OGBRawDataset(fact, "valset")
+        testset = OGBRawDataset(fact, "testset")
 
     info("Adios load")
     info(
