@@ -277,8 +277,8 @@ if __name__ == "__main__":
                 loader, model, verbosity
             )
             ihead = 0
-            head_true = np.asarray(true_values[ihead]).squeeze()
-            head_pred = np.asarray(predicted_values[ihead]).squeeze()
+            head_true = np.asarray(true_values[ihead].cpu()).squeeze()
+            head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
             ifeat = var_config["output_index"][ihead]
             outtype = var_config["type"][ihead]
             varname = graph_feature_names[ifeat]
