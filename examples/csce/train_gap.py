@@ -311,7 +311,7 @@ if __name__ == "__main__":
     gp.pr_summary_file("csce_gp_timing.summary")
     gp.finalize()
 
-    if args.shmem:
+    if not args.noadios:
         trainset.unlink()
 
     sys.exit(0)
