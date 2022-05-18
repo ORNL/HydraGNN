@@ -266,7 +266,7 @@ if __name__ == "__main__":
     if args.shmem:
         trainset.unlink()
 
-    if args.mae and rank == 0:
+    if args.mae:
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
         isub = -1
@@ -308,7 +308,8 @@ if __name__ == "__main__":
                 maxv - 0.1 * (maxv - minv),
                 "MAE: {:.2f}".format(error_mae),
             )
-        fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
+        if rank == 0:
+            fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
         plt.close()
 
     sys.exit(0)
