@@ -307,8 +307,8 @@ if __name__ == "__main__":
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
-    gp.pr_file("csce_gp_timing.%d" % rank)
-    gp.pr_summary_file("csce_gp_timing.summary")
+    gp.pr_file("./logs/%s/gp_timing.%d" % (log_name, rank))
+    gp.pr_summary_file("./logs/%s/gp_timing.summary" % (log_name))
     gp.finalize()
 
     if not args.noadios:
