@@ -295,7 +295,7 @@ def train(
     num_samples_local = 0
     model.train()
 
-    for data in iterate_tqdm(loader, verbosity, desc="Train"):
+    for i, data in iterate_tqdm(enumerate(loader), verbosity, desc="Train"):
         with record_function("zero_grad"):
             gp.start("zero_grad")
             opt.zero_grad()
@@ -322,6 +322,10 @@ def train(
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        
+        ## (2022/05) jyc: Temporary fix - stop iteration after profile is done
+        if profiler.enable and profiler.done:
+            break
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
