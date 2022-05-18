@@ -97,6 +97,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--shmem", action="store_true", help="use shmem")
     parser.add_argument("--noadios", action="store_true", help="no adios dataset")
+    parser.add_argument("--mae", action="store_true", help="do mae calculation")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -262,7 +263,7 @@ if __name__ == "__main__":
     gp.pr_summary_file("ogb_gp_timing.summary")
     gp.finalize()
 
-    if rank == 0:
+    if args.mae and rank == 0:
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
         isub = -1
