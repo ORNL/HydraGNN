@@ -263,9 +263,6 @@ if __name__ == "__main__":
     gp.pr_summary_file("./logs/%s/gp_timing.summary" % (log_name))
     gp.finalize()
 
-    if args.shmem:
-        trainset.unlink()
-
     if args.mae:
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
@@ -311,6 +308,9 @@ if __name__ == "__main__":
         if rank == 0:
             fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
         plt.close()
+
+    if args.shmem:
+        trainset.unlink()
 
     sys.exit(0)
 

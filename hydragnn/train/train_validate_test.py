@@ -36,6 +36,7 @@ try:
 except ImportError:
     import hydragnn.utils.gptl4py_dummy as gp
 
+
 def train_validate_test(
     model,
     optimizer,
@@ -65,15 +66,15 @@ def train_validate_test(
 
     # preparing for results visualization
     ## collecting node feature
-    node_feature = []
-    nodes_num_list = []
-    for data in iterate_tqdm(
-        test_loader.dataset, verbosity, desc="Collecting node feature"
-    ):
-        node_feature.extend(data.x.tolist())
-        nodes_num_list.append(data.num_nodes)
-
     if create_plots:
+        node_feature = []
+        nodes_num_list = []
+        for data in iterate_tqdm(
+            test_loader.dataset, verbosity, desc="Collecting node feature"
+        ):
+            node_feature.extend(data.x.tolist())
+            nodes_num_list.append(data.num_nodes)
+
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
@@ -322,7 +323,7 @@ def train(
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-        
+
         ## (2022/05) jyc: Temporary fix - stop iteration after profile is done
         if isinstance(profiler, Profiler) and profiler.enable and profiler.done:
             break

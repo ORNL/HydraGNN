@@ -301,7 +301,7 @@ if __name__ == "__main__":
         config["NeuralNetwork"],
         log_name,
         verbosity,
-        create_plots=True,
+        create_plots=False,  ## Set false. CSCE data is too big
     )
 
     hydragnn.utils.save_model(model, optimizer, log_name)
@@ -310,6 +310,52 @@ if __name__ == "__main__":
     gp.pr_file("./logs/%s/gp_timing.%d" % (log_name, rank))
     gp.pr_summary_file("./logs/%s/gp_timing.summary" % (log_name))
     gp.finalize()
+
+    if args.mae:
+        ##################################################################################################################
+        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+        isub = -1
+        for loader, setname in zip(
+            [train_loader, val_loader, test_loader], ["train", "val", "test"]
+        ):
+            error, rmse_task, true_values, predicted_values = hydragnn.train.test(
+                loader, model, verbosity
+            )
+            ihead = 0
+            head_true = np.asarray(true_values[ihead].cpu()).squeeze()
+            head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
+            ifeat = var_config["output_index"][ihead]
+            outtype = var_config["type"][ihead]
+            varname = graph_feature_names[ifeat]
+
+            isub += 1
+            ax = axs[isub]
+            error_mae = np.mean(np.abs(head_pred - head_true))
+            error_rmse = np.sqrt(np.mean(np.abs(head_pred - head_true) ** 2))
+            print(varname, ": ev, mae=", error_mae, ", rmse= ", error_rmse)
+            print(rmse_task[ihead])
+            print(head_pred.shape, head_true.shape)
+
+            ax.scatter(
+                head_true,
+                head_pred,
+                s=7,
+                linewidth=0.5,
+                edgecolor="b",
+                facecolor="none",
+            )
+            minv = np.minimum(np.amin(head_pred), np.amin(head_true))
+            maxv = np.maximum(np.amax(head_pred), np.amax(head_true))
+            ax.plot([minv, maxv], [minv, maxv], "r--")
+            ax.set_title(setname + "; " + varname + " (eV)", fontsize=16)
+            ax.text(
+                minv + 0.1 * (maxv - minv),
+                maxv - 0.1 * (maxv - minv),
+                "MAE: {:.2f}".format(error_mae),
+            )
+        if rank == 0:
+            fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
+        plt.close()
 
     if not args.noadios:
         trainset.unlink()
