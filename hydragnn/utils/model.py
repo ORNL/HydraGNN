@@ -114,7 +114,7 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
         deg += torch.bincount(d, minlength=deg.numel())
     deg = deg.to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
-    deg = deg.cpu()
+    deg = deg.detach().cpu()
     return deg
 
 
