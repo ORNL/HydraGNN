@@ -25,7 +25,7 @@
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 200,
+            "num_epoch": 2,
             "learning_rate": 1e-3,
             "batch_size": 128,
             "continue": 0,

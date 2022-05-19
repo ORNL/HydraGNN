@@ -109,9 +109,11 @@ def train_validate_test(
                 dataloader.sampler.set_epoch(epoch)
 
         with profiler as prof:
+            gp.start("train")
             train_loss, train_taskserr = train(
                 train_loader, model, optimizer, verbosity, profiler=prof
             )
+            gp.stop("train")
         val_loss, val_taskserr = validate(val_loader, model, verbosity)
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
@@ -297,7 +299,9 @@ def train(
     num_samples_local = 0
     model.train()
 
+    gp.start("dataload")
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
+        gp.stop("dataload")
         with record_function("zero_grad"):
             gp.start("zero_grad")
             opt.zero_grad()
@@ -328,6 +332,9 @@ def train(
         ## (2022/05) jyc: Temporary fix - stop iteration after profile is done
         if isinstance(profiler, Profiler) and profiler.enable and profiler.done:
             break
+
+        gp.start("dataload")
+    gp.stop("dataload")
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
