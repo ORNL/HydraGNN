@@ -21,6 +21,7 @@ import adios2 as ad2
 
 import torch_geometric.data
 import torch
+import torch.distributed as dist
 
 try:
     import gptl4py as gp
@@ -147,6 +148,7 @@ if __name__ == "__main__":
         help="preprocess only. Adios saving and no train",
     )
     parser.add_argument("--noadios", action="store_true", help="no adios dataset")
+    parser.add_argument("--mae", action="store_true", help="do mae calculation")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
