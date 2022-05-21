@@ -15,12 +15,14 @@ import time
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset
+from hydragnn.utils.model import print_model
 
 import numpy as np
 import adios2 as ad2
 
 import torch_geometric.data
 import torch
+import torch.distributed as dist
 
 try:
     import gptl4py as gp
@@ -228,6 +230,10 @@ if __name__ == "__main__":
         verbosity=verbosity,
     )
     model = hydragnn.utils.get_distributed_model(model, verbosity)
+
+    if rank == 0:
+        print_model(model)
+    dist.barrier()
 
     learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
