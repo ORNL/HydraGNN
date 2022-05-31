@@ -32,6 +32,7 @@ import pickle
 
 from hydragnn.utils.print_utils import print_master, log
 
+
 def dataset_loading_and_splitting(config: {}):
     ##check if serialized pickle files or folders for raw files provided
     if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
@@ -73,6 +74,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
                 ## on Summit and Perlmutter due to process-based spawn/fork.
                 ## Use multiprocess (https://github.com/uqfoundation/multiprocess) which is based on threading.
                 import multiprocess as mp
+
                 mp_context = mp.get_context()
                 print_master("Using multiprocess")
             except:
@@ -85,7 +87,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
             sampler=train_sampler,
             num_workers=num_workers,
             worker_init_fn=worker_init_fn,
-            multiprocessing_context=mp_context
+            multiprocessing_context=mp_context,
         )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
