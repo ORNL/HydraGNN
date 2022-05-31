@@ -30,13 +30,7 @@ from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.time_utils import Timer
 import pickle
 
-from hydragnn.utils.print_utils import print_distributed, log
-
-## (2022/05) jyc: Having a trouble on using MPI and python multiprocessing module together
-## on Summit and Perlmutter due to process-based spawn/fork.
-## Use multiprocess (https://github.com/uqfoundation/multiprocess) which is based on threading.
-# import multiprocess as mp
-
+from hydragnn.utils.print_utils import print_master, log
 
 def dataset_loading_and_splitting(config: {}):
     ##check if serialized pickle files or folders for raw files provided
@@ -58,7 +52,7 @@ def dataset_loading_and_splitting(config: {}):
 
 
 def worker_init_fn(worker_id):
-    log("Worker init (id): %d" % (worker_id))
+    print_master("Worker init (id): %d" % (worker_id))
 
 
 def create_dataloaders(trainset, valset, testset, batch_size):
@@ -72,6 +66,18 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         if os.getenv("HYDRAGNN_NUM_WORKERS") is not None:
             num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
 
+        mp_context = None
+        if num_workers > 0:
+            try:
+                ## (2022/05) jyc: Having a trouble on using MPI and python multiprocessing module together
+                ## on Summit and Perlmutter due to process-based spawn/fork.
+                ## Use multiprocess (https://github.com/uqfoundation/multiprocess) which is based on threading.
+                import multiprocess as mp
+                mp_context = mp.get_context()
+                print_master("Using multiprocess")
+            except:
+                pass
+
         train_loader = DataLoader(
             trainset,
             batch_size=batch_size,
@@ -79,7 +85,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
             sampler=train_sampler,
             num_workers=num_workers,
             worker_init_fn=worker_init_fn,
-            # multiprocessing_context=mp.get_context()
+            multiprocessing_context=mp_context
         )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
