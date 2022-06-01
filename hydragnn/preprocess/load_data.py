@@ -68,6 +68,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
             num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
 
         mp_context = None
+        persistent_workers = False
         if num_workers > 0:
             try:
                 ## (2022/05) jyc: Having a trouble on using MPI and python multiprocessing module together
@@ -76,6 +77,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
                 import multiprocess as mp
 
                 mp_context = mp.get_context()
+                persistent_workers = True
                 print_master("Using multiprocess")
             except:
                 pass
@@ -88,6 +90,7 @@ def create_dataloaders(trainset, valset, testset, batch_size):
             num_workers=num_workers,
             worker_init_fn=worker_init_fn,
             multiprocessing_context=mp_context,
+            persistent_workers=persistent_workers,
         )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
