@@ -190,6 +190,12 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
+    log_name = "csce_" + inputfilesubstr + "_eV_fullx"
+    hydragnn.utils.setup_log(log_name)
+    writer = hydragnn.utils.get_summary_writer(log_name)
+    with open("./logs/" + log_name + "/config.json", "w") as f:
+        json.dump(config, f)
+
     if args.preonly:
         norm_yflag = False  # True
 
@@ -285,11 +291,6 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    log_name = "csce_" + inputfilesubstr + "_eV_fullx"
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
     ##################################################################################################################
 
     hydragnn.train.train_validate_test(
