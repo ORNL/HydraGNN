@@ -21,7 +21,7 @@ class Profiler(torch.profiler.profile):
             activities.append(ProfilerActivity.CUDA)
         super(Profiler, self).__init__(
             activities=activities,
-            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+            schedule=torch.profiler.schedule(wait=5, warmup=3, active=3, repeat=1),
             on_trace_ready=self.trace_handler,
             record_shapes=True,
             with_stack=True,
