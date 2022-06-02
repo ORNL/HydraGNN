@@ -247,6 +247,10 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    hydragnn.utils.load_existing_model_config(
+        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+    )
+
     ##################################################################################################################
 
     hydragnn.train.train_validate_test(

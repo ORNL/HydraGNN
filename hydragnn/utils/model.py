@@ -68,6 +68,7 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
     """Load both model and optimizer state from a single checkpoint file"""
     path_name = os.path.join(path, model_name, model_name + ".pk")
     map_location = {"cuda:%d" % 0: get_device_name()}
+    print_master("Load existing model:", path_name)
     checkpoint = torch.load(path_name, map_location=map_location)
     state_dict = checkpoint["model_state_dict"]
     ## To be compatible with old checkpoint which was not written as a ddp model
