@@ -10,6 +10,7 @@
 ##############################################################################
 
 import os
+import socket
 
 import torch
 import torch.distributed as dist
@@ -32,6 +33,152 @@ import pickle
 
 from hydragnn.utils.print_utils import print_master, log
 
+from typing import List, Optional, Union
+from torch_geometric.data import Batch, Dataset
+from torch_geometric.data.data import BaseData
+from torch.utils.data.dataloader import _DatasetKind
+
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+import multiprocessing as mp
+import queue
+import time
+import sys
+
+
+def parse_omp_places(envstr):
+    """
+    Parse OMP_PLACES env string to get list of places
+    Usage example:
+        parse_omp_places(os.environ["OMP_PLACES"])
+    Input examples:
+        "{0:4},{4:4},{8:4},{12:4},{16:4},{20:4},{24:4}"
+    """
+    plist = list()
+    for block in re.findall(r"({[\d,:]+})", envstr):
+        start, cnt = list(map(int, re.findall(r"\d+", block)))
+        for i in range(start, start + cnt):
+            plist.append(i)
+    return plist
+
+
+class HydraSimpleDataLoader(DataLoader):
+    def __init__(self, dataset: Union[Dataset, List[BaseData]], **kwargs):
+        super(HydraDataLoader, self).__init__(dataset, **kwargs)
+        self._dataset_fetcher = _DatasetKind.create_fetcher(
+            self._dataset_kind,
+            self.dataset,
+            self._auto_collation,
+            self.collate_fn,
+            self.drop_last,
+        )
+
+        log("num_workers:", self.num_workers)
+        log("len:", len(self._index_sampler))
+
+    def __iter__(self):
+        self._num_yielded = 0
+        self._sampler_iter = iter(self._index_sampler)
+        return self
+
+    def __next__(self):
+        self._num_yielded += 1
+        index = next(self._sampler_iter)
+        data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
+        return data
+
+
+class HydraDataLoader(DataLoader):
+    def __init__(self, dataset: Union[Dataset, List[BaseData]], **kwargs):
+        super(HydraDataLoader, self).__init__(dataset, **kwargs)
+        self._dataset_fetcher = _DatasetKind.create_fetcher(
+            self._dataset_kind,
+            self.dataset,
+            self._auto_collation,
+            self.collate_fn,
+            self.drop_last,
+        )
+
+        ## List of threads job (futures)
+        self.fs = queue.Queue()
+
+        log("num_workers:", self.num_workers)
+        log("len:", len(self._index_sampler))
+
+    @staticmethod
+    def worker_init(counter):
+        with counter.get_lock():
+            counter.value += 1
+            # pidmap[os.getpid()] = (args.nworkers+1)*rank + counter.value
+        affinity = None
+        if hasattr(os, "sched_getaffinity"):
+            affinity_check = os.getenv("HYDRAGNN_AFFINITY")
+            if affinity_check == "OMP":
+                affinity = parse_omp_places(os.getenv("OMP_PLACES"))
+            else:
+                affinity = list(os.sched_getaffinity(0))
+
+            core_per_thread = 4
+            offset = 4
+            affinity_mask = set(
+                affinity[
+                    core_per_thread * counter.value
+                    + offset : core_per_thread * counter.value
+                    + offset
+                    + core_per_thread
+                ]
+            )
+            os.sched_setaffinity(0, affinity_mask)
+            affinity = os.sched_getaffinity(0)
+
+        hostname = socket.gethostname()
+        log(
+            f"Worker: pid={os.getpid()} hostname={hostname} ID={counter.value} affinity={affinity}"
+        )
+        return 0
+
+    @staticmethod
+    def fetch(dataset, ibatch, index):
+        batch = [dataset[i] for i in index]
+        hostname = socket.gethostname()
+        # log (f"Worker done: pid={os.getpid()} hostname={hostname} ibatch={ibatch}")
+        return (ibatch, Batch.from_data_list(batch))
+
+    def __iter__(self):
+        log("Iterator reset")
+        ## Check previous futures
+        if self.fs.qsize() > 0:
+            log("Clearn previous futures:", self.fs.qsize())
+            for future in iter(self.fs.get, None):
+                future.cancel()
+
+        ## Resetting
+        self._num_yielded = 0
+        self._sampler_iter = iter(self._index_sampler)
+        self.fs_iter = iter(self.fs.get, None)
+        counter = mp.Value("i", 0)
+        executor = ThreadPoolExecutor(
+            max_workers=self.num_workers,
+            initializer=self.worker_init,
+            initargs=(counter,),
+        )
+        for i in range(len(self._index_sampler)):
+            index = next(self._sampler_iter)
+            future = executor.submit(self.fetch, self.dataset, i, index)
+            self.fs.put(future)
+        self.fs.put(None)
+        # log ("Submit all done.")
+        return self
+
+    def __next__(self):
+        # log ("Getting next", self._num_yielded)
+        future = next(self.fs_iter)
+        ibatch, data = future.result()
+        # log (f"Future done: ibatch={ibatch}", data.num_graphs)
+        if self.pin_memory:
+            data = torch.utils.data._utils.pin_memory.pin_memory(data)
+        self._num_yielded += 1
+        return data
+
 
 def dataset_loading_and_splitting(config: {}):
     ##check if serialized pickle files or folders for raw files provided
@@ -52,10 +199,6 @@ def dataset_loading_and_splitting(config: {}):
     )
 
 
-def worker_init_fn(worker_id):
-    print_master("Worker init (id): %d" % (worker_id))
-
-
 def create_dataloaders(trainset, valset, testset, batch_size):
     if dist.is_initialized():
 
@@ -63,35 +206,33 @@ def create_dataloaders(trainset, valset, testset, batch_size):
         val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
         test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
 
+        pin_memory = True
+        persistent_workers = False
         num_workers = 0
         if os.getenv("HYDRAGNN_NUM_WORKERS") is not None:
             num_workers = int(os.environ["HYDRAGNN_NUM_WORKERS"])
 
-        mp_context = None
-        persistent_workers = False
-        if num_workers > 0:
-            try:
-                ## (2022/05) jyc: Having a trouble on using MPI and python multiprocessing module together
-                ## on Summit and Perlmutter due to process-based spawn/fork.
-                ## Use multiprocess (https://github.com/uqfoundation/multiprocess) which is based on threading.
-                import multiprocess as mp
+        use_custom_dataloader = 0
+        if os.getenv("HYDRAGNN_CUSTOM_DATALOADER") is not None:
+            use_custom_dataloader = int(os.environ["HYDRAGNN_CUSTOM_DATALOADER"])
 
-                mp_context = mp.get_context()
-                persistent_workers = True
-                print_master("Using multiprocess")
-            except:
-                pass
-
-        train_loader = DataLoader(
-            trainset,
-            batch_size=batch_size,
-            shuffle=False,
-            sampler=train_sampler,
-            num_workers=num_workers,
-            worker_init_fn=worker_init_fn,
-            multiprocessing_context=mp_context,
-            persistent_workers=persistent_workers,
-        )
+        if use_custom_dataloader == 1:
+            train_loader = HydraDataLoader(
+                trainset,
+                batch_size=batch_size,
+                sampler=train_sampler,
+                num_workers=num_workers,
+            )
+        else:
+            train_loader = DataLoader(
+                trainset,
+                batch_size=batch_size,
+                shuffle=False,
+                sampler=train_sampler,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+                persistent_workers=persistent_workers,
+            )
         val_loader = DataLoader(
             valset, batch_size=batch_size, shuffle=False, sampler=val_sampler
         )
