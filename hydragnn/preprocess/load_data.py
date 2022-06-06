@@ -33,6 +33,7 @@ import pickle
 
 from hydragnn.utils.print_utils import print_master, log
 
+from torch_geometric.data import Batch, Dataset
 from torch.utils.data.dataloader import _DatasetKind
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
