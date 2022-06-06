@@ -33,9 +33,6 @@ import pickle
 
 from hydragnn.utils.print_utils import print_master, log
 
-from typing import List, Optional, Union
-from torch_geometric.data import Batch, Dataset
-from torch_geometric.data.data import BaseData
 from torch.utils.data.dataloader import _DatasetKind
 
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -62,7 +59,7 @@ def parse_omp_places(envstr):
 
 
 class HydraSimpleDataLoader(DataLoader):
-    def __init__(self, dataset: Union[Dataset, List[BaseData]], **kwargs):
+    def __init__(self, dataset, **kwargs):
         super(HydraDataLoader, self).__init__(dataset, **kwargs)
         self._dataset_fetcher = _DatasetKind.create_fetcher(
             self._dataset_kind,
@@ -88,7 +85,7 @@ class HydraSimpleDataLoader(DataLoader):
 
 
 class HydraDataLoader(DataLoader):
-    def __init__(self, dataset: Union[Dataset, List[BaseData]], **kwargs):
+    def __init__(self, dataset, **kwargs):
         super(HydraDataLoader, self).__init__(dataset, **kwargs)
         self._dataset_fetcher = _DatasetKind.create_fetcher(
             self._dataset_kind,
