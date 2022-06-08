@@ -41,6 +41,7 @@ import multiprocessing as mp
 import queue
 import time
 import sys
+import re
 
 
 def parse_omp_places(envstr):
@@ -220,6 +221,8 @@ def create_dataloaders(trainset, valset, testset, batch_size):
                 batch_size=batch_size,
                 sampler=train_sampler,
                 num_workers=num_workers,
+                pin_memory=pin_memory,
+                persistent_workers=persistent_workers,
             )
         else:
             train_loader = DataLoader(
