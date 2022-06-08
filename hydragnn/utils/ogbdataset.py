@@ -134,7 +134,9 @@ class AdiosOGB:
 
 
 class OGBDataset(torch.utils.data.Dataset):
-    def __init__(self, filename, label, comm, preload=True, shmem=False):
+    def __init__(
+        self, filename, label, comm, preload=True, shmem=False, enable_cache=True
+    ):
         t0 = time.time()
         self.filename = filename
         self.label = label
@@ -164,7 +166,8 @@ class OGBDataset(torch.utils.data.Dataset):
                 self.rank // self.nrank_per_node, self.rank
             )
 
-        self.data_object = dict()
+        self.enable_cache = enable_cache
+        self.cache = dict()
         log("Adios reading:", self.filename)
 
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
@@ -251,8 +254,8 @@ class OGBDataset(torch.utils.data.Dataset):
         if self.preflight:
             self.preflight_list.append(idx)
             return torch_geometric.data.Data()
-        if idx in self.data_object:
-            data_object = self.data_object[idx]
+        if idx in self.cache:
+            data_object = self.cache[idx]
         else:
             data_object = torch_geometric.data.Data()
             for k in self.keys:
@@ -276,7 +279,8 @@ class OGBDataset(torch.utils.data.Dataset):
 
                 v = torch.tensor(val)
                 exec("data_object.%s = v" % (k))
-            self.data_object[idx] = data_object
+            if self.enable_cache:
+                self.cache[idx] = data_object
         return data_object
 
     def unlink(self):
@@ -335,7 +339,7 @@ class OGBDataset(torch.utils.data.Dataset):
 
                     v = torch.tensor(val)
                     exec("data_object.%s = v" % (k))
-                self.data_object[idx] = data_object
+                self.cache[idx] = data_object
 
         for k in self.keys:
             del self._data[k]

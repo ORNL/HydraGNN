@@ -253,6 +253,7 @@ if __name__ == "__main__":
             comm,
             preload=False,
             shmem=True,
+            enable_cache=False,
         )
         valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
         testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
