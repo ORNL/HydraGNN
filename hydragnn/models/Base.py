@@ -161,8 +161,8 @@ class Base(Module):
         if "graph" in self.config_heads:
             denselayers = []
             dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
-            denselayers.append(ReLU())
             denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
+            denselayers.append(ReLU())
             for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
                 denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
                 denselayers.append(ReLU())
@@ -264,18 +264,14 @@ class Base(Module):
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                x_graph_head = x_graph.clone()
-                x_graph_head = self.graph_shared(x_graph_head)
+                x_graph_head = self.graph_shared(x_graph)
                 outputs.append(headloc(x_graph_head))
             else:
-                x_node = x.clone()
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        x_node = F.relu(
-                            batch_norm(conv(x=x_node, edge_index=edge_index))
-                        )
+                        x_node = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
                 else:
-                    x_node = headloc(x=x_node, batch=batch)
+                    x_node = headloc(x=x, batch=batch)
                 outputs.append(x_node)
         return outputs
 
@@ -365,14 +361,14 @@ class MLPNode(Module):
         return out
 
     def forward(self, x: torch.Tensor, batch: torch.Tensor):
-        outs = torch.zeros(
-            (x.shape[0], self.output_dim),
-            dtype=x.dtype,
-            device=x.device,
-        )
         if self.node_type == "mlp":
             outs = self.mlp[0](x)
         else:
+            outs = torch.zeros(
+                (x.shape[0], self.output_dim),
+                dtype=x.dtype,
+                device=x.device,
+            )
             x_nodes = self.node_features_reshape(x, batch)
             for inode in range(self.num_nodes):
                 inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
