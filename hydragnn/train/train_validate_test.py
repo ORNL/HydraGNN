@@ -21,7 +21,7 @@ from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.preprocess.load_data import HydraDataLoader
+from hydragnn.preprocess.load_data import HydraDataLoader
 
 import os
 
