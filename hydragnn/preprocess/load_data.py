@@ -99,6 +99,7 @@ class HydraDataLoader(DataLoader):
 
         ## List of threads job (futures)
         self.fs = queue.Queue()
+        self.device = None
 
         log("num_workers:", self.num_workers)
         log("len:", len(self._index_sampler))
@@ -133,11 +134,16 @@ class HydraDataLoader(DataLoader):
         return 0
 
     @staticmethod
-    def fetch(dataset, ibatch, index):
+    def fetch(dataset, ibatch, index, pin_memory=False, device=None):
         batch = [dataset[i] for i in index]
-        hostname = socket.gethostname()
+        # hostname = socket.gethostname()
         # log (f"Worker done: pid={os.getpid()} hostname={hostname} ibatch={ibatch}")
-        return (ibatch, Batch.from_data_list(batch))
+        data = Batch.from_data_list(batch)
+        if pin_memory:
+            data = torch.utils.data._utils.pin_memory.pin_memory(data)
+        if device is not None:
+            data.to(device)
+        return (ibatch, data)
 
     def __iter__(self):
         log("Iterator reset")
@@ -159,7 +165,14 @@ class HydraDataLoader(DataLoader):
         )
         for i in range(len(self._index_sampler)):
             index = next(self._sampler_iter)
-            future = executor.submit(self.fetch, self.dataset, i, index)
+            future = executor.submit(
+                self.fetch,
+                self.dataset,
+                i,
+                index,
+                pin_memory=self.pin_memory,
+                device=self.device,
+            )
             self.fs.put(future)
         self.fs.put(None)
         # log ("Submit all done.")
@@ -170,8 +183,6 @@ class HydraDataLoader(DataLoader):
         future = next(self.fs_iter)
         ibatch, data = future.result()
         # log (f"Future done: ibatch={ibatch}", data.num_graphs)
-        if self.pin_memory:
-            data = torch.utils.data._utils.pin_memory.pin_memory(data)
         self._num_yielded += 1
         return data
 

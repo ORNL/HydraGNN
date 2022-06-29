@@ -16,6 +16,7 @@ from .load_data import (
     split_dataset,
     transform_raw_data_to_serialized,
     total_to_train_val_test_pkls,
+    HydraDataLoader,
 )
 from .serialized_dataset_loader import (
     SerializedDataLoader,

@@ -21,6 +21,7 @@ from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device
+from hydragnn.utils.preprocess.load_data import HydraDataLoader
 
 import os
 
@@ -298,6 +299,8 @@ def train(
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.train()
+    if isinstance(loader, HydraDataLoader):
+        loader.device = get_device()
 
     gp.start("dataload")
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
@@ -335,6 +338,8 @@ def train(
 
         gp.start("dataload")
     gp.stop("dataload")
+    if isinstance(loader, HydraDataLoader):
+        loader.device = None
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
