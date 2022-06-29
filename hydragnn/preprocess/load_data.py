@@ -105,8 +105,8 @@ class HydraDataLoader(DataLoader):
         log("len:", len(self._index_sampler))
 
     @staticmethod
-    def worker_init(counter, core_width=1, core_offset=0):
-        core_width = 1
+    def worker_init(counter):
+        core_width = 2
         if os.getenv("HYDRAGNN_AFFINITY_WIDTH") is not None:
             core_width = int(os.environ["HYDRAGNN_AFFINITY_WIDTH"])
 
