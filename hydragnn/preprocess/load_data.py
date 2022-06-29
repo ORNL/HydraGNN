@@ -105,10 +105,19 @@ class HydraDataLoader(DataLoader):
         log("len:", len(self._index_sampler))
 
     @staticmethod
-    def worker_init(counter, core_per_thread=4, offset=4):
+    def worker_init(counter, core_width=1, core_offset=0):
+        core_width = 1
+        if os.getenv("HYDRAGNN_AFFINITY_WIDTH") is not None:
+            core_width = int(os.environ["HYDRAGNN_AFFINITY_WIDTH"])
+
+        core_offset = 0
+        if os.getenv("HYDRAGNN_AFFINITY_OFFSET") is not None:
+            core_offset = int(os.environ["HYDRAGNN_AFFINITY_OFFSET"])
+
         with counter.get_lock():
             wid = counter.value
             counter.value += 1
+
         affinity = None
         if hasattr(os, "sched_getaffinity"):
             affinity_check = os.getenv("HYDRAGNN_AFFINITY")
@@ -119,9 +128,9 @@ class HydraDataLoader(DataLoader):
 
             affinity_mask = set(
                 affinity[
-                    core_per_thread * wid
-                    + offset : core_per_thread * (wid + 1)
-                    + offset
+                    core_width * wid
+                    + core_offset : core_width * (wid + 1)
+                    + core_offset
                 ]
             )
             os.sched_setaffinity(0, affinity_mask)
