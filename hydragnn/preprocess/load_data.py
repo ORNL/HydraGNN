@@ -104,10 +104,10 @@ class HydraDataLoader(DataLoader):
         log("len:", len(self._index_sampler))
 
     @staticmethod
-    def worker_init(counter):
+    def worker_init(counter, core_per_thread=4, offset=4):
         with counter.get_lock():
+            wid = counter.value
             counter.value += 1
-            # pidmap[os.getpid()] = (args.nworkers+1)*rank + counter.value
         affinity = None
         if hasattr(os, "sched_getaffinity"):
             affinity_check = os.getenv("HYDRAGNN_AFFINITY")
@@ -116,14 +116,11 @@ class HydraDataLoader(DataLoader):
             else:
                 affinity = list(os.sched_getaffinity(0))
 
-            core_per_thread = 4
-            offset = 4
             affinity_mask = set(
                 affinity[
-                    core_per_thread * counter.value
-                    + offset : core_per_thread * counter.value
+                    core_per_thread * wid
+                    + offset : core_per_thread * (wid + 1)
                     + offset
-                    + core_per_thread
                 ]
             )
             os.sched_setaffinity(0, affinity_mask)
@@ -131,7 +128,7 @@ class HydraDataLoader(DataLoader):
 
         hostname = socket.gethostname()
         log(
-            f"Worker: pid={os.getpid()} hostname={hostname} ID={counter.value} affinity={affinity}"
+            f"Worker: pid={os.getpid()} hostname={hostname} ID={wid} affinity={affinity}"
         )
         return 0
 
