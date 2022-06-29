@@ -42,7 +42,9 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.04]):
+def csce_datasets_load(
+    datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.04], findatomtypes=False
+):
     if seed is not None:
         random.seed(seed)
     smiles_all = []
@@ -56,6 +58,10 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
             smiles_all.append(row[1])
             values_all.append([float(row[-2])])
     print("Total:", len(smiles_all), len(values_all))
+    atomtypes_dict = {}
+    if findatomtypes:
+        atomtypes_dict = get_elements_types(smiles_all)
+        print(atomtypes_dict)
 
     a = list(range(len(smiles_all)))
     ix0, ix1, ix2 = np.split(
@@ -86,6 +92,7 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
         [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
         np.mean(values_all),
         np.std(values_all),
+        atomtypes_dict,
     )
 
 
@@ -97,9 +104,13 @@ class CSCEDatasetFactory:
         self.var_config = var_config
 
         ## Read full data
-        smiles_sets, values_sets, ymean_feature, ystd_feature = csce_datasets_load(
-            datafile, sampling=sampling, seed=seed
-        )
+        (
+            smiles_sets,
+            values_sets,
+            ymean_feature,
+            ystd_feature,
+            atomtypes_dict,
+        ) = csce_datasets_load(datafile, sampling=sampling, seed=seed)
         ymean = ymean_feature.tolist()
         ystd = ystd_feature.tolist()
 
@@ -147,6 +158,11 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only. Adios saving and no train",
     )
+    parser.add_argument(
+        "--checkatomtypes",
+        action="store_true",
+        help="check atom types in dataset csv file",
+    )
     parser.add_argument("--noadios", action="store_true", help="no adios dataset")
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     args = parser.parse_args()
@@ -193,17 +209,24 @@ if __name__ == "__main__":
     log_name = "csce_" + inputfilesubstr + "_eV_fullx"
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
 
     if args.preonly:
         norm_yflag = False  # True
 
-        smiles_sets, values_sets, ymean_feature, ystd_feature = csce_datasets_load(
-            datafile, sampling=args.sampling, seed=43
+        (
+            smiles_sets,
+            values_sets,
+            ymean_feature,
+            ystd_feature,
+            atomtypes_dict,
+        ) = csce_datasets_load(
+            datafile, sampling=args.sampling, seed=43, findatomtypes=args.checkatomtypes
         )
         var_config["ymean"] = ymean_feature.tolist()
         var_config["ystd"] = ystd_feature.tolist()
+        if len(atomtypes_dict) > 0:
+            with open("./logs/" + log_name + "/atom_types.json", "w") as f:
+                json.dump(atomtypes_dict, f)
 
         info([len(x) for x in values_sets])
         dataset_lists = [[] for dataset in values_sets]
@@ -253,7 +276,6 @@ if __name__ == "__main__":
             comm,
             preload=False,
             shmem=True,
-            enable_cache=False,
         )
         valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
         testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
@@ -278,6 +300,10 @@ if __name__ == "__main__":
     )
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+
+    with open("./logs/" + log_name + "/config.json", "w") as f:
+        json.dump(config, f)
+
     timer.stop()
 
     model = hydragnn.models.create_model_config(

@@ -85,37 +85,12 @@ def datasets_load(datafile, sampling=None, seed=None):
 
 ##################################################################################################################
 node_attribute_names = [
-    "atomH",
-    "atomB",
     "atomC",
+    "atomF",
+    "atomH",
     "atomN",
     "atomO",
-    "atomF",
-    "atomSi",
-    "atomP",
     "atomS",
-    "atomCl",
-    "atomCa",
-    "atomGe",
-    "atomAs",
-    "atomSe",
-    "atomBr",
-    "atomI",
-    "atomMg",
-    "atomTi",
-    "atomGa",
-    "atomZn",
-    "atomAr",
-    "atomBe",
-    "atomHe",
-    "atomAl",
-    "atomKr",
-    "atomV",
-    "atomNa",
-    "atomLi",
-    "atomCu",
-    "atomNe",
-    "atomNi",
     "atomicnumber",
     "IsAromatic",
     "HSP",
@@ -133,98 +108,31 @@ def gapfromsmiles(smilestr, model):
     return pred[0][0].item()
 
 
-def generate_graphdata_checkelement(simlestr, ytarget, var_config=None):
-    types = {
-        "H": 0,
-        "B": 1,
-        "C": 2,
-        "N": 3,
-        "O": 4,
-        "F": 5,
-        "Si": 6,
-        "P": 7,
-        "S": 8,
-        "Cl": 9,
-        "Ca": 10,
-        "Ge": 11,
-        "As": 12,
-        "Se": 13,
-        "Br": 14,
-        "I": 15,
-        "Mg": 16,
-        "Ti": 17,
-        "Ga": 18,
-        "Zn": 19,
-        "Ar": 20,
-        "Be": 21,
-        "He": 22,
-        "Al": 23,
-        "Kr": 24,
-        "V": 25,
-        "Na": 26,
-        "Li": 27,
-        "Cu": 28,
-        "Ne": 29,
-        "Ni": 30,
-    }
-    bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
+def get_elements_types(smiles_list):
 
     ps = Chem.SmilesParserParams()
     ps.removeHs = False
 
-    mol = Chem.MolFromSmiles(simlestr, ps)  # , sanitize=False , removeHs=False)
-    mol = Chem.AddHs(mol)
-    N = mol.GetNumAtoms()
+    atom_symbols = set()
 
-    type_idx = []
-    atomic_number = []
-    aromatic = []
-    sp = []
-    sp2 = []
-    sp3 = []
-    for atom in mol.GetAtoms():
-        try:
-            type_idx.append(types[atom.GetSymbol()])
-        except:
-            print(atom.GetSymbol())
+    for simlestr in smiles_list:
+        mol = Chem.MolFromSmiles(simlestr, ps)  # , sanitize=False , removeHs=False)
+        mol = Chem.AddHs(mol)
+        for atom in mol.GetAtoms():
+            atom_symbols.add(atom.GetSymbol())
+    atomlist = sorted(atom_symbols)
+    types = {atom: idatom for idatom, atom in enumerate(atomlist)}
+
+    return types
 
 
-def generate_graphdata(simlestr, ytarget, var_config=None):
-    # types = {"H": 0, "C": 1, "N": 2, "O": 3, "F": 4}
-    # B, C, N, O, F, Si, P, S, Cl, Ca, Ge, As, Se, Br, I
-    types = {
-        "H": 0,
-        "B": 1,
-        "C": 2,
-        "N": 3,
-        "O": 4,
-        "F": 5,
-        "Si": 6,
-        "P": 7,
-        "S": 8,
-        "Cl": 9,
-        "Ca": 10,
-        "Ge": 11,
-        "As": 12,
-        "Se": 13,
-        "Br": 14,
-        "I": 15,
-        "Mg": 16,
-        "Ti": 17,
-        "Ga": 18,
-        "Zn": 19,
-        "Ar": 20,
-        "Be": 21,
-        "He": 22,
-        "Al": 23,
-        "Kr": 24,
-        "V": 25,
-        "Na": 26,
-        "Li": 27,
-        "Cu": 28,
-        "Ne": 29,
-        "Ni": 30,
-    }
+def generate_graphdata(
+    simlestr,
+    ytarget,
+    var_config=None,
+    types={"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5},
+):
+
     bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
 
     ps = Chem.SmilesParserParams()
