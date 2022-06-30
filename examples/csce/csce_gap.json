@@ -1,35 +1,57 @@
 {
-    "Verbosity": {
-        "level": 2
-    },
-    "NeuralNetwork": {
-        "Architecture": {
-            "model_type": "PNA",
-            "max_neighbours": 20,
-            "hidden_dim": 55,
-            "num_conv_layers": 6,
-            "output_heads": {
-                "graph":{
-                    "num_sharedlayers": 1,
-                    "dim_sharedlayers": 100,
-                    "num_headlayers": 2,
-                    "dim_headlayers": [50,25]
-                }
-            },
-            "task_weights": [1.0]
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36],
-            "output_index": [0],
-            "type": ["graph"],
-            "denormalize_output": false
-        },
-        "Training": {
-            "num_epoch": 2,
-            "learning_rate": 1e-3,
-            "batch_size": 128,
-            "continue": 0,
-            "startfrom": "existing_model"
+  "Verbosity": {
+    "level": 2
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "model_type": "PNA",
+      "max_neighbours": 20,
+      "hidden_dim": 200,
+      "num_conv_layers": 6,
+      "output_heads": {
+        "graph": {
+          "num_sharedlayers": 1,
+          "dim_sharedlayers": 200,
+          "num_headlayers": 2,
+          "dim_headlayers": [
+            200,
+            200
+          ]
         }
+      },
+      "task_weights": [
+        1
+      ]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "output_index": [
+        0
+      ],
+      "type": [
+        "graph"
+      ],
+      "denormalize_output": false
+    },
+    "Training": {
+      "num_epoch": 10,
+      "learning_rate": 0.001,
+      "batch_size": 128,
+      "continue": 0,
+      "startfrom": "existing_model"
     }
+  }
 }
