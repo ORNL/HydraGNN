@@ -14,7 +14,7 @@ import time
 
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset
+from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset, OGBDatasetPk
 from hydragnn.utils.model import print_model
 
 import numpy as np
@@ -98,8 +98,27 @@ if __name__ == "__main__":
         help="preprocess only. Adios saving and no train",
     )
     parser.add_argument("--shmem", action="store_true", help="use shmem")
-    parser.add_argument("--noadios", action="store_true", help="no adios dataset")
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--adios",
+        help="Adios dataset",
+        action="store_const",
+        dest="format",
+        const="adios",
+    )
+    group.add_argument(
+        "--pickle",
+        help="Pickle dataset",
+        action="store_const",
+        dest="format",
+        const="pickle",
+    )
+    group.add_argument(
+        "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
+    )
+    parser.set_defaults(format="adios")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -170,11 +189,22 @@ if __name__ == "__main__":
             _valueset = valueset[rx.start : rx.stop]
             info("local smileset size:", len(_smileset))
 
-            for smilestr, ytarget in iterate_tqdm(
-                zip(_smileset, _valueset), verbosity, total=len(_smileset)
+            for i, (smilestr, ytarget) in iterate_tqdm(
+                enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
                 data = generate_graphdata(smilestr, ytarget, var_config)
                 dataset_lists[idataset].append(data)
+
+                ## (2022/07) This is for testing to compare with Adios
+                ## pickle write
+                if args.format == "pickle":
+                    setname = ["trainset", "valset", "testset"]
+                    fname = "examples/ogb/dataset/pickle/ogb_gap-%s-%d.pk" % (
+                        setname[idataset],
+                        rx.start + i,
+                    )
+                    with open(fname, "wb") as f:
+                        pickle.dump(data, f)
 
         ## local data
         _trainset = dataset_lists[0]
@@ -193,7 +223,7 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
     opt = {"preload": True}
-    if not args.noadios:
+    if args.format == "adios":
         if args.shmem:
             trainset = OGBDataset(
                 "examples/ogb/dataset/ogb_gap.bp",
@@ -208,7 +238,7 @@ if __name__ == "__main__":
             )
         valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
         testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
-    else:
+    elif args.format == "csv":
         fact = OGBRawDatasetFactory(
             "examples/ogb/dataset/pcqm4m_gap.csv",
             var_config=var_config,
@@ -217,6 +247,12 @@ if __name__ == "__main__":
         trainset = OGBRawDataset(fact, "trainset")
         valset = OGBRawDataset(fact, "valset")
         testset = OGBRawDataset(fact, "testset")
+    elif args.format == "pickle":
+        trainset = OGBDatasetPk("examples/ogb/dataset/pickle", "ogb_gap", "trainset")
+        valset = OGBDatasetPk("examples/ogb/dataset/pickle", "ogb_gap", "valset")
+        testset = OGBDatasetPk("examples/ogb/dataset/pickle", "ogb_gap", "testset")
+    else:
+        raise NotImplementedError("No supported format: %s" % (args.format))
 
     info("Adios load")
     info(

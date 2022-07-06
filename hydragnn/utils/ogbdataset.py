@@ -1,6 +1,8 @@
 from mpi4py import MPI
 import time
 import os
+import glob
+import pickle
 
 from .print_utils import print_distributed, log, iterate_tqdm
 
@@ -345,3 +347,24 @@ class OGBDataset(torch.utils.data.Dataset):
             del self._data[k]
 
         self.preflight = False
+
+
+class OGBDatasetPk(torch.utils.data.Dataset):
+    def __init__(self, basedir, prefix, label):
+        self.basedir = basedir
+        self.prefix = prefix
+        self.label = label
+        self.ndata = len(
+            glob.glob("%s/%s-%s-*.pk" % (self.basedir, self.prefix, self.label))
+        )
+        log("Pickle files:", self.label, self.ndata)
+
+    def __len__(self):
+        return self.ndata
+
+    @gp.profile
+    def __getitem__(self, idx):
+        fname = "%s/%s-%s-%d.pk" % (self.basedir, self.prefix, self.label, idx)
+        with open(fname, "rb") as f:
+            data_object = pickle.load(f)
+        return data_object
