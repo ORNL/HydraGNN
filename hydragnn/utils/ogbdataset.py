@@ -354,9 +354,10 @@ class OGBDatasetPk(torch.utils.data.Dataset):
         self.basedir = basedir
         self.prefix = prefix
         self.label = label
-        self.ndata = len(
-            glob.glob("%s/%s-%s-*.pk" % (self.basedir, self.prefix, self.label))
-        )
+
+        with open("examples/ogb/dataset/pickle/%s.meta" % (self.label)) as f:
+            self.ndata = int(f.read())
+
         log("Pickle files:", self.label, self.ndata)
 
     def __len__(self):

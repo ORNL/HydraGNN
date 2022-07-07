@@ -189,6 +189,13 @@ if __name__ == "__main__":
             _valueset = valueset[rx.start : rx.stop]
             info("local smileset size:", len(_smileset))
 
+            setname = ["trainset", "valset", "testset"]
+            if rank == 0:
+                with open(
+                    "examples/ogb/dataset/pickle/%s.meta" % (setname[idataset]), "w"
+                ) as f:
+                    f.write(str(len(smileset)))
+
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
@@ -198,7 +205,6 @@ if __name__ == "__main__":
                 ## (2022/07) This is for testing to compare with Adios
                 ## pickle write
                 if args.format == "pickle":
-                    setname = ["trainset", "valset", "testset"]
                     fname = "examples/ogb/dataset/pickle/ogb_gap-%s-%d.pk" % (
                         setname[idataset],
                         rx.start + i,
