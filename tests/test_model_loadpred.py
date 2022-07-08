@@ -37,7 +37,7 @@ def unittest_model_prediction(config):
     model.eval()
     # two checkings
     # 1. entire test set
-    thresholds = [0.2, 0.80]
+    thresholds = [0.2]
     _, _, true_values, predicted_values = hydragnn.train.test(
         test_loader, model, config["Verbosity"]["level"]
     )
@@ -55,13 +55,6 @@ def unittest_model_prediction(config):
         test_mae = mae(head_true, head_pred)
         print("For head ", ihead, "; MAE of test set =", test_mae)
         assert test_mae < thresholds[0], "MAE sample checking failed for test set!"
-        head_true = true_sample[yloc[ihead] : yloc[ihead + 1]]
-        head_pred = predicted_sample[ihead].squeeze()
-        error = torch.max(torch.abs(head_true - head_pred)).item()
-        print("For head ", ihead, "; max|true-predicted|=", error)
-        assert error < thresholds[1], "Error checking failed for test sample " + str(
-            isample
-        )
 
 
 # test loading and predictiong of a saved model from previous training
