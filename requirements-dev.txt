@@ -1,4 +1,4 @@
-black==21.5b1
+black==22.6.0
 pre-commit
 pytest
 pytest-mpi
