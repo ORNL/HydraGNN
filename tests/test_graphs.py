@@ -120,20 +120,20 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         predicted_values,
     ) = hydragnn.run_prediction(config)
 
-    # Set RMSE and sample MAE/max error thresholds
+    # Set RMSE and sample MAE error thresholds
     thresholds = {
-        "SAGE": [0.20, 0.20, 0.80],
-        "PNA": [0.20, 0.20, 0.80],
-        "MFC": [0.20, 0.20, 1.5],
-        "GIN": [0.25, 0.20, 0.75],
-        "GAT": [0.60, 0.70, 0.99],
-        "CGCNN": [0.50, 0.40, 0.95],
+        "SAGE": [0.20, 0.20],
+        "PNA": [0.20, 0.20],
+        "MFC": [0.20, 0.20],
+        "GIN": [0.25, 0.20],
+        "GAT": [0.60, 0.70],
+        "CGCNN": [0.50, 0.40],
     }
     if use_lengths and ("vector" not in ci_input):
-        thresholds["CGCNN"] = [0.15, 0.15, 0.40]
-        thresholds["PNA"] = [0.10, 0.10, 0.40]
+        thresholds["CGCNN"] = [0.15, 0.15]
+        thresholds["PNA"] = [0.10, 0.10]
     if use_lengths and "vector" in ci_input:
-        thresholds["PNA"] = [0.2, 0.15, 0.85]
+        thresholds["PNA"] = [0.2, 0.15]
     verbosity = 2
 
     for ihead in range(len(true_values)):
@@ -153,23 +153,14 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         # Check individual samples
         mae = torch.nn.L1Loss()
         sample_mean_abs_error = mae(head_true, head_pred)
-        sample_max_abs_error = torch.max(torch.abs(head_true - head_pred))
         error_str = (
             "{:.6f}".format(sample_mean_abs_error)
             + " < "
             + str(thresholds[model_type][1])
-            + " / "
-            + "{:.6f}".format(sample_max_abs_error)
-            + " < "
-            + str(thresholds[model_type][2])
         )
-        hydragnn.utils.print_distributed(verbosity, "samples MAE/max: " + error_str)
         assert (
             sample_mean_abs_error < thresholds[model_type][1]
         ), "MAE sample checking failed!"
-        assert (
-            sample_max_abs_error < thresholds[model_type][2]
-        ), "Max. sample checking failed!"
 
     # Check RMSE error
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
