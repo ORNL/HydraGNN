@@ -81,44 +81,54 @@ def check_output_dim_consistent(data, config):
 
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
-
-    for ihead in range(len(output_type)):
-        if output_type[ihead] == "graph":
-            assert (
-                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-                == config["Dataset"]["graph_features"]["dim"][output_index[ihead]]
-            )
-        elif output_type[ihead] == "node":
-            assert (
-                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-            ) // data.num_nodes == config["Dataset"]["node_features"]["dim"][
-                output_index[ihead]
-            ]
+    if hasattr(data, "y_loc"):
+        for ihead in range(len(output_type)):
+            if output_type[ihead] == "graph":
+                assert (
+                    data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+                    == config["Dataset"]["graph_features"]["dim"][output_index[ihead]]
+                )
+            elif output_type[ihead] == "node":
+                assert (
+                    data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+                ) // data.num_nodes == config["Dataset"]["node_features"]["dim"][
+                    output_index[ihead]
+                ]
 
 
 def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    dims_list = []
-    for ihead in range(len(output_type)):
-        if output_type[ihead] == "graph":
-            dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-        elif output_type[ihead] == "node":
-            if (
-                graph_size_variable
-                and config["Architecture"]["output_heads"]["node"]["type"]
-                == "mlp_per_node"
-            ):
+    if hasattr(data, "y_loc"):
+        dims_list = []
+        for ihead in range(len(output_type)):
+            if output_type[ihead] == "graph":
+                dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+            elif output_type[ihead] == "node":
+                if (
+                    graph_size_variable
+                    and config["Architecture"]["output_heads"]["node"]["type"]
+                    == "mlp_per_node"
+                ):
+                    raise ValueError(
+                        '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
+                    )
+                dim_item = (
+                    data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
+                ) // data.num_nodes
+            else:
+                raise ValueError("Unknown output type", output_type[ihead])
+            dims_list.append(dim_item)
+    else:
+        for ihead in range(len(output_type)):
+            if output_type[ihead] != "graph":
                 raise ValueError(
-                    '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
+                    "y_loc is needed for outputs that are not at graph levels",
+                    output_type[ihead],
                 )
-            dim_item = (
-                data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-            ) // data.num_nodes
-        else:
-            raise ValueError("Unknown output type", output_type[ihead])
-        dims_list.append(dim_item)
+        dims_list = config["Variables_of_interest"]["output_dim"]
+
     config["Architecture"]["output_dim"] = dims_list
     config["Architecture"]["output_type"] = output_type
     config["Architecture"]["num_nodes"] = data.num_nodes
