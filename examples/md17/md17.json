@@ -3,6 +3,7 @@
         "level": 2
     },
     "NeuralNetwork": {
+        "Profile": {"enable": 1},
         "Architecture": {
             "model_type": "GIN",
             "radius": 7,
@@ -24,6 +25,7 @@
             "input_node_features": [0],
             "output_names": ["energy"],
             "output_index": [0],
+            "output_dim": [1],
             "type": ["graph"],
             "denormalize_output": false
         },
