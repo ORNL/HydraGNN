@@ -32,11 +32,6 @@ from hydragnn.utils.distributed import get_comm_size_and_rank
 import torch.distributed as dist
 import pickle
 
-try:
-    import gptl4py as gp
-except ImportError:
-    import hydragnn.utils.gptl4py_dummy as gp
-
 
 def train_validate_test(
     model,
@@ -103,18 +98,15 @@ def train_validate_test(
     timer.start()
 
     for epoch in range(0, num_epoch):
-        gp.start("epoch")
         profiler.set_current_epoch(epoch)
         for dataloader in [train_loader, val_loader, test_loader]:
             if getattr(dataloader.sampler, "set_epoch", None) is not None:
                 dataloader.sampler.set_epoch(epoch)
 
         with profiler as prof:
-            gp.start("train")
             train_loss, train_taskserr = train(
                 train_loader, model, optimizer, verbosity, profiler=prof
             )
-            gp.stop("train")
         val_loss, val_taskserr = validate(val_loader, model, verbosity)
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
@@ -147,7 +139,6 @@ def train_validate_test(
         task_loss_train[epoch, :] = train_taskserr
         task_loss_val[epoch, :] = val_taskserr
         task_loss_test[epoch, :] = test_taskserr
-        gp.stop("epoch")
 
         ###tracking the solution evolving with training
         if plot_hist_solution:
@@ -337,29 +328,17 @@ def train(
     if isinstance(loader, HydraDataLoader):
         loader.device = get_device()
 
-    gp.start("dataload")
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
-        gp.stop("dataload")
         with record_function("zero_grad"):
-            gp.start("zero_grad")
             opt.zero_grad()
-            gp.stop("zero_grad")
         with record_function("get_head_indices"):
-            gp.start("get_head_indices")
             head_index = get_head_indices(model, data)
-            gp.stop("get_head_indices")
         with record_function("forward"):
-            gp.start("forward")
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
-            gp.stop("forward")
         with record_function("backward"):
-            gp.start("backward")
             loss.backward()
-            gp.stop("backward")
-        gp.start("opt_step")
         opt.step()
-        gp.stop("opt_step")
         profiler.step()
         with torch.no_grad():
             total_error += loss * data.num_graphs
@@ -371,8 +350,6 @@ def train(
         if isinstance(profiler, Profiler) and profiler.enable and profiler.done:
             break
 
-        gp.start("dataload")
-    gp.stop("dataload")
     if isinstance(loader, HydraDataLoader):
         loader.device = None
 

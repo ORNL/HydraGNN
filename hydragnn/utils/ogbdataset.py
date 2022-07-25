@@ -15,11 +15,6 @@ import torch
 from multiprocessing.shared_memory import SharedMemory
 from multiprocessing.managers import SharedMemoryManager
 
-try:
-    import gptl4py as gp
-except ImportError:
-    import hydragnn.utils.gptl4py_dummy as gp
-
 
 class AdiosOGB:
     def __init__(self, filename, comm):
@@ -251,7 +246,6 @@ class OGBDataset(torch.utils.data.Dataset):
     def __len__(self):
         return self.ndata
 
-    @gp.profile
     def __getitem__(self, idx):
         if self.preflight:
             self.preflight_list.append(idx)
@@ -300,7 +294,6 @@ class OGBDataset(torch.utils.data.Dataset):
         except:
             pass
 
-    @gp.profile
     def populate(self):
         dn = 2_000_000
         self._data = dict()
@@ -363,7 +356,6 @@ class OGBDatasetPk(torch.utils.data.Dataset):
     def __len__(self):
         return self.ndata
 
-    @gp.profile
     def __getitem__(self, idx):
         fname = "%s/%s-%s-%d.pk" % (self.basedir, self.prefix, self.label, idx)
         with open(fname, "rb") as f:

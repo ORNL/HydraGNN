@@ -23,11 +23,6 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
-try:
-    import gptl4py as gp
-except ImportError:
-    import hydragnn.utils.gptl4py_dummy as gp
-
 import warnings
 
 warnings.filterwarnings("error")
@@ -141,7 +136,6 @@ class CSCEDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.smileset)
 
-    @gp.profile
     def __getitem__(self, idx):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
@@ -302,7 +296,6 @@ if __name__ == "__main__":
 
         sys.exit(0)
 
-    gp.initialize()
     timer = Timer("load_data")
     timer.start()
     if args.format == "adios":
@@ -378,10 +371,6 @@ if __name__ == "__main__":
 
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
-
-    gp.pr_file("./logs/%s/gp_timing.%d" % (log_name, rank))
-    gp.pr_summary_file("./logs/%s/gp_timing.summary" % (log_name))
-    gp.finalize()
 
     if args.mae:
         ##################################################################################################################
