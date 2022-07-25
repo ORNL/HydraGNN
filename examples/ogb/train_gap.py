@@ -270,6 +270,30 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
+    # (2022/07) This is for CSCE paper to measure times with different file format
+    gp.start("loader_test")
+    for data in iterate_tqdm(train_loader, 2, desc="Data Loader test"):
+        gp.stop("loader_test")
+        gp.start("loader_test")
+        pass
+    gp.stop("loader_test")
+    gp.pr_file("./logs/%s/gp_timing.%d" % (log_name, rank))
+    gp.pr_summary_file("./logs/%s/gp_timing.summary" % (log_name))
+    gp.finalize()
+
+    # (2022/07) This is for CSCE paper
+    if rank == 0:
+        t0 = time.time()
+        while True:
+            time.sleep(5)
+            t1 = time.time()
+            if (t1 - t0) > 30:
+                with open("killme.txt", "w") as f:
+                    f.write(os.getenv("LSB_JOBID"))
+                break
+
+    sys.exit(0)
+
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     timer.stop()
 
@@ -364,6 +388,17 @@ if __name__ == "__main__":
 
     if args.shmem:
         trainset.unlink()
+
+    # (2022/07) This is for CSCE paper
+    if rank == 0:
+        t0 = time.time()
+        while True:
+            time.sleep(5)
+            t1 = time.time()
+            if (t1 - t0) > 30:
+                with open("killme.txt", "w") as f:
+                    f.write(os.getenv("LSB_JOBID"))
+                break
 
     sys.exit(0)
 

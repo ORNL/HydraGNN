@@ -163,8 +163,27 @@ if __name__ == "__main__":
         action="store_true",
         help="check atom types in dataset csv file",
     )
-    parser.add_argument("--noadios", action="store_true", help="no adios dataset")
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--adios",
+        help="Adios dataset",
+        action="store_const",
+        dest="format",
+        const="adios",
+    )
+    group.add_argument(
+        "--pickle",
+        help="Pickle dataset",
+        action="store_const",
+        dest="format",
+        const="pickle",
+    )
+    group.add_argument(
+        "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
+    )
+    parser.set_defaults(format="adios")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -247,11 +266,28 @@ if __name__ == "__main__":
             _valueset = valueset[rx.start : rx.stop]
             info("local smileset size:", len(_smileset))
 
-            for smilestr, ytarget in iterate_tqdm(
-                zip(_smileset, _valueset), verbosity, total=len(_smileset)
+            setname = ["trainset", "valset", "testset"]
+            if rank == 0:
+                with open(
+                    "examples/csce/dataset/pickle/%s.meta" % (setname[idataset]), "w"
+                ) as f:
+                    f.write(str(len(smileset)))
+
+            for i, (smilestr, ytarget) in iterate_tqdm(
+                enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
                 data = generate_graphdata(smilestr, ytarget, var_config)
                 dataset_lists[idataset].append(data)
+
+                ## (2022/07) This is for testing to compare with Adios
+                ## pickle write
+                if args.format == "pickle":
+                    fname = "examples/csce/dataset/pickle/csce_gap-%s-%d.pk" % (
+                        setname[idataset],
+                        rx.start + i,
+                    )
+                    with open(fname, "wb") as f:
+                        pickle.dump(data, f)
 
         ## local data
         _trainset = dataset_lists[0]
@@ -269,7 +305,7 @@ if __name__ == "__main__":
     gp.initialize()
     timer = Timer("load_data")
     timer.start()
-    if not args.noadios:
+    if args.format == "adios":
         trainset = OGBDataset(
             "examples/csce/dataset/csce_gap.bp",
             "trainset",
@@ -279,7 +315,7 @@ if __name__ == "__main__":
         )
         valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
         testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
-    else:
+    elif args.format == "csv":
         fact = CSCEDatasetFactory(
             "examples/csce/dataset/csce_gap_synth.csv",
             args.sampling,
@@ -288,6 +324,8 @@ if __name__ == "__main__":
         trainset = CSCEDataset(fact, "trainset")
         valset = CSCEDataset(fact, "valset")
         testset = CSCEDataset(fact, "testset")
+    else:
+        raise NotImplementedError("No supported format: %s" % (args.format))
 
     info("Adios load")
     info(
