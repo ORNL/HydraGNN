@@ -31,7 +31,9 @@ for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
         print(valueset[:, 1].mean(), valueset[:, 1].std())
         print(valueset[:, 2].mean(), valueset[:, 2].std())
     for smilestr, ytarget in zip(smileset, valueset):
-        dataset_lists[idataset].append(generate_graphdata(smilestr, ytarget,var_config))
+        dataset_lists[idataset].append(
+            generate_graphdata(smilestr, ytarget, var_config)
+        )
 trainset = dataset_lists[0]
 valset = dataset_lists[1]
 testset = dataset_lists[2]
