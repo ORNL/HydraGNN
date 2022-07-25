@@ -1,6 +1,11 @@
 import os, json
 import matplotlib.pyplot as plt
-from ogb_utils import *
+from ogb_utils import (
+    node_attribute_names,
+    get_trainset_stat,
+    datasets_load,
+    generate_graphdata,
+)
 
 import logging
 import sys
@@ -12,6 +17,7 @@ from itertools import chain
 import argparse
 import time
 
+import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset, OGBDatasetPk
