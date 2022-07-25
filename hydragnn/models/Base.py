@@ -272,9 +272,7 @@ class Base(Module):
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        x_node = F.relu(
-                            batch_norm(conv(x=x, edge_index=edge_index))
-                        )
+                        x_node = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
                 else:
                     x_node = headloc(x=x, batch=batch)
                 outputs.append(x_node)
