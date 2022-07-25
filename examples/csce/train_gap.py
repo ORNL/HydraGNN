@@ -269,11 +269,13 @@ if __name__ == "__main__":
             info("local smileset size:", len(_smileset))
 
             setname = ["trainset", "valset", "testset"]
-            if rank == 0:
-                with open(
-                    "examples/csce/dataset/pickle/%s.meta" % (setname[idataset]), "w"
-                ) as f:
-                    f.write(str(len(smileset)))
+            if args.format == "pickle":
+                if rank == 0:
+                    with open(
+                        "examples/csce/dataset/pickle/%s.meta" % (setname[idataset]),
+                        "w",
+                    ) as f:
+                        f.write(str(len(smileset)))
 
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
