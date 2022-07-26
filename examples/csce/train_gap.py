@@ -191,7 +191,6 @@ if __name__ == "__main__":
     graph_feature_names = ["GAP"]
     dirpwd = os.path.dirname(__file__)
     datafile = os.path.join(dirpwd, "dataset/csce_gap_synth.csv")
-    # trainset_statistics = os.path.join(dirpwd, "dataset/statistics.pkl")
     ##################################################################################################################
     inputfilesubstr = args.inputfilesubstr
     input_filename = os.path.join(dirpwd, "csce_" + inputfilesubstr + ".json")
@@ -206,11 +205,6 @@ if __name__ == "__main__":
         for ihead, item in enumerate(var_config["output_index"])
     ]
     var_config["input_node_feature_names"] = node_attribute_names
-    # ymax_feature, ymin_feature, ymean_feature, ystd_feature = get_trainset_stat(
-    #     trainset_statistics
-    # )
-    # var_config["ymean"] = ymean_feature.tolist()
-    # var_config["ystd"] = ystd_feature.tolist()
     ##################################################################################################################
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.setup_ddp()
