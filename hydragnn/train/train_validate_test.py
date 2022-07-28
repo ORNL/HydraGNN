@@ -334,6 +334,7 @@ def train(
         with record_function("get_head_indices"):
             head_index = get_head_indices(model, data)
         with record_function("forward"):
+            data = data.to(get_device())
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
         with record_function("backward"):
@@ -346,7 +347,7 @@ def train(
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
 
-        ## (2022/05) jyc: Temporary fix - stop iteration after profile is done
+        ## stop iteration after profile is done
         if isinstance(profiler, Profiler) and profiler.enable and profiler.done:
             break
 
@@ -367,7 +368,7 @@ def validate(loader, model, verbosity, reduce_ranks=True):
     model.eval()
     for data in iterate_tqdm(loader, verbosity, desc="Validate"):
         head_index = get_head_indices(model, data)
-
+        data = data.to(get_device())
         pred = model(data)
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
@@ -392,7 +393,7 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     model.eval()
     for data in iterate_tqdm(loader, verbosity, desc="Test"):
         head_index = get_head_indices(model, data)
-
+        data = data.to(get_device())
         pred = model(data)
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
@@ -407,6 +408,7 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     if return_samples:
         for data in loader:
             head_index = get_head_indices(model, data)
+            data = data.to(get_device())
             ytrue = data.y
             pred = model(data)
             for ihead in range(model.module.num_heads):

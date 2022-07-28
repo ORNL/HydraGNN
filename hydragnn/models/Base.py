@@ -236,7 +236,6 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
-        data = data.to(self.device)
         x, edge_index, batch = (
             data.x,
             data.edge_index,
