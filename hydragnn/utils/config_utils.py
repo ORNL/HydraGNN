@@ -10,14 +10,16 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_variable
-from hydragnn.utils.model import calculate_PNA_degree
+from hydragnn.preprocess.utils import check_if_graph_size_variable_dist
+from hydragnn.utils.model import calculate_PNA_degree_dist
+from hydragnn.utils import print_distributed
+import time
 
 
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
-    graph_size_variable = check_if_graph_size_variable(
+    graph_size_variable = check_if_graph_size_variable_dist(
         train_loader, val_loader, test_loader
     )
 
@@ -36,7 +38,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree(train_loader.dataset, max_neigh)
+        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
@@ -156,9 +158,14 @@ def normalize_output_config(config):
 
 def update_config_minmax(dataset_path, config):
     """load minimum and maximum values from dataset_path, if need denormalize,"""
-    with open(dataset_path, "rb") as f:
-        node_minmax = pickle.load(f)
-        graph_minmax = pickle.load(f)
+    ## Check first if "minmax_graph_feature" and "minmax_graph_feature"
+    if "minmax_node_feature" not in config and "minmax_graph_feature" not in config:
+        with open(dataset_path, "rb") as f:
+            node_minmax = pickle.load(f)
+            graph_minmax = pickle.load(f)
+    else:
+        node_minmax = config["minmax_node_feature"]
+        graph_minmax = config["minmax_graph_feature"]
     config["x_minmax"] = []
     config["y_minmax"] = []
     feature_indices = [i for i in config["input_node_features"]]

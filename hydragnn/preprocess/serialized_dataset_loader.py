@@ -38,7 +38,7 @@ class SerializedDataLoader:
     Constructor
     """
 
-    def __init__(self, config):
+    def __init__(self, config, dist=False):
         self.verbosity = config["Verbosity"]["level"]
         self.node_feature_name = config["Dataset"]["node_features"]["name"]
         self.node_feature_dim = config["Dataset"]["node_features"]["dim"]
@@ -69,6 +69,12 @@ class SerializedDataLoader:
         assert len(self.node_feature_name) == len(self.node_feature_col)
         assert len(self.graph_feature_name) == len(self.graph_feature_dim)
         assert len(self.graph_feature_name) == len(self.graph_feature_col)
+
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
 
     """
     Methods
@@ -130,6 +136,15 @@ class SerializedDataLoader:
         for data in dataset:
             max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
 
+        if self.dist:
+            ## Gather max in parallel
+            device = max_edge_length.device
+            max_edge_length = max_edge_length.to(get_device())
+            torch.distributed.all_reduce(
+                max_edge_length, op=torch.distributed.ReduceOp.MAX
+            )
+            max_edge_length = max_edge_length.to(device)
+
         # Normalization of the edges
         for data in dataset:
             data.edge_attr = data.edge_attr / max_edge_length
@@ -137,7 +152,8 @@ class SerializedDataLoader:
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
         for data in dataset:
-            data.to(device)
+            ## (2022/04) jyc: no need for parallel loading
+            # data.to(device)
             update_predicted_values(
                 self.variables_type,
                 self.output_index,

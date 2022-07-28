@@ -16,7 +16,7 @@ def write_to_file(total_energy, atomic_features, count_config, dir):
     for index in range(0, atomic_features.shape[0]):
         numpy_row = atomic_features[index, :]
         numpy_string_row = np.array2string(
-            numpy_row, precision=2, separator="\t", suppress_small=True
+            numpy_row, separator="\t", suppress_small=True
         )
         filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
@@ -43,9 +43,9 @@ def E_dimensionless(config, L, spin_function, scale_spin):
     number_nodes = L ** 3
     positions = np.zeros((number_nodes, 3))
     atomic_features = np.zeros((number_nodes, 5))
-    for z in range(L):
+    for x in range(L):
         for y in range(L):
-            for x in range(L):
+            for z in range(L):
                 positions[count_pos, 0] = x
                 positions[count_pos, 1] = y
                 positions[count_pos, 2] = z
