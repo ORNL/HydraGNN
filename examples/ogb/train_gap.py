@@ -1,11 +1,5 @@
 import os, json
 import matplotlib.pyplot as plt
-from ogb_utils import (
-    node_attribute_names,
-    get_trainset_stat,
-    datasets_load,
-    generate_graphdata,
-)
 
 import logging
 import sys
@@ -22,6 +16,11 @@ from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset, OGBDatasetPk
 from hydragnn.utils.model import print_model
+from hydragnn.utils.ogb_utils import (
+    get_node_attribute_name,
+    datasets_load,
+    generate_graphdata,
+)
 
 import numpy as np
 import adios2 as ad2
@@ -33,6 +32,40 @@ import torch.distributed as dist
 import warnings
 
 warnings.filterwarnings("error")
+
+ogb_node_types = {
+    "H": 0,
+    "B": 1,
+    "C": 2,
+    "N": 3,
+    "O": 4,
+    "F": 5,
+    "Si": 6,
+    "P": 7,
+    "S": 8,
+    "Cl": 9,
+    "Ca": 10,
+    "Ge": 11,
+    "As": 12,
+    "Se": 13,
+    "Br": 14,
+    "I": 15,
+    "Mg": 16,
+    "Ti": 17,
+    "Ga": 18,
+    "Zn": 19,
+    "Ar": 20,
+    "Be": 21,
+    "He": 22,
+    "Al": 23,
+    "Kr": 24,
+    "V": 25,
+    "Na": 26,
+    "Li": 27,
+    "Cu": 28,
+    "Ne": 29,
+    "Ni": 30,
+}
 
 
 def info(*args, logtype="info", sep=" "):
@@ -84,7 +117,7 @@ class OGBRawDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
-        data = generate_graphdata(smilestr, ytarget, self.var_config)
+        data = generate_graphdata(smilestr, ytarget, ogb_node_types, self.var_config)
         return data
 
 
@@ -137,7 +170,7 @@ if __name__ == "__main__":
         graph_feature_names[item]
         for ihead, item in enumerate(var_config["output_index"])
     ]
-    var_config["input_node_feature_names"] = node_attribute_names
+    var_config["input_node_feature_names"] = get_node_attribute_name(ogb_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.setup_ddp()
@@ -194,7 +227,7 @@ if __name__ == "__main__":
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
-                data = generate_graphdata(smilestr, ytarget, var_config)
+                data = generate_graphdata(smilestr, ytarget, ogb_node_types, var_config)
                 dataset_lists[idataset].append(data)
 
                 ## (2022/07) This is for testing to compare with Adios

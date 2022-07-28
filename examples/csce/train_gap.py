@@ -1,11 +1,5 @@
 import os, json
 import matplotlib.pyplot as plt
-from ogb_utils import (
-    node_attribute_names,
-    get_trainset_stat,
-    datasets_load,
-    generate_graphdata,
-)
 import random
 import pickle, csv
 
@@ -23,6 +17,10 @@ import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset
+from hydragnn.utils.ogb_utils import (
+    get_node_attribute_name,
+    generate_graphdata,
+)
 
 import numpy as np
 import adios2 as ad2
@@ -34,6 +32,9 @@ import torch.distributed as dist
 import warnings
 
 warnings.filterwarnings("error")
+
+
+csce_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
 
 
 def info(*args, logtype="info", sep=" "):
@@ -147,7 +148,7 @@ class CSCEDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
-        data = generate_graphdata(smilestr, ytarget, self.var_config)
+        data = generate_graphdata(smilestr, ytarget, csce_node_types, self.var_config)
         return data
 
 
@@ -204,7 +205,7 @@ if __name__ == "__main__":
         graph_feature_names[item]
         for ihead, item in enumerate(var_config["output_index"])
     ]
-    var_config["input_node_feature_names"] = node_attribute_names
+    var_config["input_node_feature_names"] = get_node_attribute_name(csce_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.setup_ddp()
@@ -274,7 +275,9 @@ if __name__ == "__main__":
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
-                data = generate_graphdata(smilestr, ytarget, var_config)
+                data = generate_graphdata(
+                    smilestr, ytarget, csce_node_types, var_config
+                )
                 dataset_lists[idataset].append(data)
 
                 ## (2022/07) This is for testing to compare with Adios
