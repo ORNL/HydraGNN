@@ -347,10 +347,6 @@ def train(
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
 
-        ## stop iteration after profile is done
-        if isinstance(profiler, Profiler) and profiler.enable and profiler.done:
-            break
-
     if isinstance(loader, HydraDataLoader):
         loader.device = None
 
