@@ -14,7 +14,7 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.ogbdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
+from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
 from hydragnn.utils.model import print_model
 from hydragnn.utils.ogb_utils import (
     get_node_attribute_name,
