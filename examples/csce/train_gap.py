@@ -16,7 +16,7 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset
+from hydragnn.utils.ogbdataset import AdiosWriter, AdiosDataset
 from hydragnn.utils.ogb_utils import (
     get_node_attribute_name,
     generate_graphdata,
@@ -295,7 +295,7 @@ if __name__ == "__main__":
         _valset = dataset_lists[1]
         _testset = dataset_lists[2]
 
-        adwriter = AdiosOGB("examples/csce/dataset/csce_gap.bp", comm)
+        adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
         adwriter.add("trainset", _trainset)
         adwriter.add("valset", _valset)
         adwriter.add("testset", _testset)
@@ -306,15 +306,15 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
     if args.format == "adios":
-        trainset = OGBDataset(
+        trainset = AdiosDataset(
             "examples/csce/dataset/csce_gap.bp",
             "trainset",
             comm,
             preload=False,
             shmem=True,
         )
-        valset = OGBDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
-        testset = OGBDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
+        valset = AdiosDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
+        testset = AdiosDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
     elif args.format == "csv":
         fact = CSCEDatasetFactory(
             "examples/csce/dataset/csce_gap_synth.csv",

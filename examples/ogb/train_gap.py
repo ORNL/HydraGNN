@@ -14,7 +14,7 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.ogbdataset import AdiosOGB, OGBDataset, OGBDatasetPk
+from hydragnn.utils.ogbdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
 from hydragnn.utils.model import print_model
 from hydragnn.utils.ogb_utils import (
     get_node_attribute_name,
@@ -245,7 +245,7 @@ if __name__ == "__main__":
         _valset = dataset_lists[1]
         _testset = dataset_lists[2]
 
-        adwriter = AdiosOGB("examples/ogb/dataset/ogb_gap.bp", comm)
+        adwriter = AdiosWriter("examples/ogb/dataset/ogb_gap.bp", comm)
         adwriter.add("trainset", _trainset)
         adwriter.add("valset", _valset)
         adwriter.add("testset", _testset)
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     opt = {"preload": True}
     if args.format == "adios":
         if args.shmem:
-            trainset = OGBDataset(
+            trainset = AdiosDataset(
                 "examples/ogb/dataset/ogb_gap.bp",
                 "trainset",
                 comm,
@@ -266,11 +266,11 @@ if __name__ == "__main__":
                 shmem=True,
             )
         else:
-            trainset = OGBDataset(
+            trainset = AdiosDataset(
                 "examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt
             )
-        valset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
-        testset = OGBDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
+        valset = AdiosDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
+        testset = AdiosDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
     elif args.format == "csv":
         fact = OGBRawDatasetFactory(
             "examples/ogb/dataset/pcqm4m_gap.csv",
@@ -281,9 +281,13 @@ if __name__ == "__main__":
         valset = OGBRawDataset(fact, "valset")
         testset = OGBRawDataset(fact, "testset")
     elif args.format == "pickle":
-        trainset = OGBDatasetPk("examples/ogb/dataset/pickle", "ogb_gap", "trainset")
-        valset = OGBDatasetPk("examples/ogb/dataset/pickle", "ogb_gap", "valset")
-        testset = OGBDatasetPk("examples/ogb/dataset/pickle", "ogb_gap", "testset")
+        trainset = SimplePickleDataset(
+            "examples/ogb/dataset/pickle", "ogb_gap", "trainset"
+        )
+        valset = SimplePickleDataset("examples/ogb/dataset/pickle", "ogb_gap", "valset")
+        testset = SimplePickleDataset(
+            "examples/ogb/dataset/pickle", "ogb_gap", "testset"
+        )
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 

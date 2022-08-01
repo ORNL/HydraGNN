@@ -16,7 +16,9 @@ from multiprocessing.shared_memory import SharedMemory
 from multiprocessing.managers import SharedMemoryManager
 
 
-class AdiosOGB:
+class AdiosWriter:
+    """Adios class to write Torch Geometric graph data"""
+
     def __init__(self, filename, comm):
         self.filename = filename
         self.comm = comm
@@ -130,7 +132,9 @@ class AdiosOGB:
         log("Adios saving time (sec): ", (t1 - t0))
 
 
-class OGBDataset(torch.utils.data.Dataset):
+class AdiosDataset(torch.utils.data.Dataset):
+    """Adios dataset class"""
+
     def __init__(
         self, filename, label, comm, preload=True, shmem=False, enable_cache=True
     ):
@@ -313,7 +317,7 @@ class OGBDataset(torch.utils.data.Dataset):
                     self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
 
             filtered = filter(lambda x: x >= i and x < i + dn, self.preflight_list)
-            for idx in iterate_tqdm(sorted(filtered), 2, desc="AdiosOGB populate"):
+            for idx in iterate_tqdm(sorted(filtered), 2, desc="AdiosWriter populate"):
                 data_object = torch_geometric.data.Data()
                 for k in self.keys:
                     shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
@@ -342,13 +346,15 @@ class OGBDataset(torch.utils.data.Dataset):
         self.preflight = False
 
 
-class OGBDatasetPk(torch.utils.data.Dataset):
+class SimplePickleDataset(torch.utils.data.Dataset):
+    """Simple Pickle Dataset"""
+
     def __init__(self, basedir, prefix, label):
         self.basedir = basedir
         self.prefix = prefix
         self.label = label
 
-        with open("examples/ogb/dataset/pickle/%s.meta" % (self.label)) as f:
+        with open("%s/%s.meta" % (self.basedir, self.label)) as f:
             self.ndata = int(f.read())
 
         log("Pickle files:", self.label, self.ndata)
