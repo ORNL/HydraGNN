@@ -26,8 +26,12 @@ class AdiosWriter:
         self.size = comm.Get_size()
 
         self.dataset = dict()
+        self.attributes = dict()
         self.adios = ad2.ADIOS()
         self.io = self.adios.DeclareIO(self.filename)
+
+    def add_global(self, vname, arr):
+        self.attributes[vname] = arr
 
     def add(self, label, data: torch_geometric.data.Data):
         if label not in self.dataset:
@@ -43,6 +47,7 @@ class AdiosWriter:
         t0 = time.time()
         log("Adios saving:", self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
+        total_ns = 0
         for label in self.dataset:
             if len(self.dataset[label]) < 1:
                 continue
@@ -50,6 +55,8 @@ class AdiosWriter:
             ns_offset = sum(ns[: self.rank])
 
             self.io.DefineAttribute("%s/ndata" % label, np.array(sum(ns)))
+            total_ns += sum(ns)
+
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 self.io.DefineAttribute("%s/keys" % label, data.keys)
@@ -127,6 +134,10 @@ class AdiosWriter:
                 )
                 self.writer.Put(var, offset_arr, ad2.Mode.Sync)
 
+        self.io.DefineAttribute("total_ndata", np.array(total_ns))
+        for vname in self.attributes:
+            self.io.DefineAttribute(vname, self.attributes[vname])
+
         self.writer.Close()
         t1 = time.time()
         log("Adios saving time (sec): ", (t1 - t0))
@@ -173,8 +184,17 @@ class AdiosDataset(torch.utils.data.Dataset):
 
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
             self.vars = f.available_variables()
+            self.attrs = f.available_attributes()
             self.keys = f.read_attribute_string("%s/keys" % label)
             self.ndata = f.read_attribute("%s/ndata" % label).item()
+            if "minmax_graph_feature" in self.attrs:
+                self.minmax_graph_feature = f.read_attribute(
+                    "minmax_graph_feature"
+                ).reshape((2, -1))
+            if "minmax_node_feature" in self.attrs:
+                self.minmax_node_feature = f.read_attribute(
+                    "minmax_node_feature"
+                ).reshape((2, -1))
 
             self.variable_count = dict()
             self.variable_offset = dict()

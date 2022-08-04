@@ -6,8 +6,6 @@ import pickle, csv
 import logging
 import sys
 from tqdm import tqdm
-import mpi4py
-
 from mpi4py import MPI
 from itertools import chain
 import argparse
@@ -46,9 +44,7 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
-def csce_datasets_load(
-    datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.04], findatomtypes=False
-):
+def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.04]):
     if seed is not None:
         random.seed(seed)
     smiles_all = []
@@ -63,9 +59,6 @@ def csce_datasets_load(
             values_all.append([float(row[-2])])
     print("Total:", len(smiles_all), len(values_all))
     atomtypes_dict = {}
-    if findatomtypes:
-        atomtypes_dict = get_elements_types(smiles_all)
-        print(atomtypes_dict)
 
     a = list(range(len(smiles_all)))
     ix0, ix1, ix2 = np.split(
@@ -161,11 +154,6 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only. Adios saving and no train",
     )
-    parser.add_argument(
-        "--checkatomtypes",
-        action="store_true",
-        help="check atom types in dataset csv file",
-    )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
 
     group = parser.add_mutually_exclusive_group()
@@ -190,6 +178,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
+    graph_feature_dim = [1]
     dirpwd = os.path.dirname(__file__)
     datafile = os.path.join(dirpwd, "dataset/csce_gap_synth.csv")
     ##################################################################################################################
@@ -205,15 +194,18 @@ if __name__ == "__main__":
         graph_feature_names[item]
         for ihead, item in enumerate(var_config["output_index"])
     ]
-    var_config["input_node_feature_names"] = get_node_attribute_name(csce_node_types)
+    var_config["graph_feature_names"] = graph_feature_names
+    var_config["graph_feature_dims"] = graph_feature_dim
+    (
+        var_config["input_node_feature_names"],
+        var_config["input_node_feature_dims"],
+    ) = get_node_attribute_name(csce_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    world_size, world_rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    comm_size = comm.Get_size()
 
     ## Set up logging
     logging.basicConfig(
@@ -235,9 +227,7 @@ if __name__ == "__main__":
             ymean_feature,
             ystd_feature,
             atomtypes_dict,
-        ) = csce_datasets_load(
-            datafile, sampling=args.sampling, seed=43, findatomtypes=args.checkatomtypes
-        )
+        ) = csce_datasets_load(datafile, sampling=args.sampling, seed=43)
         var_config["ymean"] = ymean_feature.tolist()
         var_config["ystd"] = ystd_feature.tolist()
         if len(atomtypes_dict) > 0:
@@ -246,7 +236,6 @@ if __name__ == "__main__":
 
         info([len(x) for x in values_sets])
         dataset_lists = [[] for dataset in values_sets]
-        # import pdb; pdb.set_trace()
         for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
             if norm_yflag:
                 valueset = (
@@ -429,86 +418,3 @@ if __name__ == "__main__":
         trainset.unlink()
 
     sys.exit(0)
-
-    ##################################################################################################################
-    for ifeat in range(len(var_config["output_index"])):
-        fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
-        plt.subplots_adjust(
-            left=0.08, bottom=0.15, right=0.95, top=0.925, wspace=0.35, hspace=0.1
-        )
-        ax = axs[0]
-        ax.scatter(
-            range(len(trainset)),
-            [trainset[i].y[ifeat].item() for i in range(len(trainset))],
-            edgecolor="b",
-            facecolor="none",
-        )
-        ax.set_title("train, " + str(len(trainset)))
-        ax = axs[1]
-        ax.scatter(
-            range(len(valset)),
-            [valset[i].y[ifeat].item() for i in range(len(valset))],
-            edgecolor="b",
-            facecolor="none",
-        )
-        ax.set_title("validate, " + str(len(valset)))
-        ax = axs[2]
-        ax.scatter(
-            range(len(testset)),
-            [testset[i].y[ifeat].item() for i in range(len(testset))],
-            edgecolor="b",
-            facecolor="none",
-        )
-        ax.set_title("test, " + str(len(testset)))
-        fig.savefig(
-            "./logs/"
-            + log_name
-            + "/ogb_train_val_test_"
-            + var_config["output_names"][ifeat]
-            + ".png"
-        )
-        plt.close()
-
-    for ifeat in range(len(var_config["input_node_features"])):
-        fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
-        plt.subplots_adjust(
-            left=0.08, bottom=0.15, right=0.95, top=0.925, wspace=0.35, hspace=0.1
-        )
-        ax = axs[0]
-        ax.plot(
-            [
-                item
-                for i in range(len(trainset))
-                for item in trainset[i].x[:, ifeat].tolist()
-            ],
-            "bo",
-        )
-        ax.set_title("train, " + str(len(trainset)))
-        ax = axs[1]
-        ax.plot(
-            [
-                item
-                for i in range(len(valset))
-                for item in valset[i].x[:, ifeat].tolist()
-            ],
-            "bo",
-        )
-        ax.set_title("validate, " + str(len(valset)))
-        ax = axs[2]
-        ax.plot(
-            [
-                item
-                for i in range(len(testset))
-                for item in testset[i].x[:, ifeat].tolist()
-            ],
-            "bo",
-        )
-        ax.set_title("test, " + str(len(testset)))
-        fig.savefig(
-            "./logs/"
-            + log_name
-            + "/ogb_train_val_test_"
-            + var_config["input_node_feature_names"][ifeat]
-            + ".png"
-        )
-        plt.close()

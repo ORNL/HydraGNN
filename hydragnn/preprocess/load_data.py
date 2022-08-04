@@ -368,6 +368,7 @@ def total_to_train_val_test_pkls(config, isdist=False):
                 pickle.dump(minmax_graph_feature, f)
                 pickle.dump(dataset, f)
         elif isdist:
+            log("fname", os.path.join(serialized_dir, serial_data_name))
             ## parallel processing. Everyone need to read own total pickle data
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(minmax_node_feature, f)

@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import logging
 import sys
 from tqdm import tqdm
-import mpi4py
-
 from mpi4py import MPI
 from itertools import chain
 import argparse
@@ -155,6 +153,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
+    graph_feature_dim = [1]
     dirpwd = os.path.dirname(__file__)
     datafile = os.path.join(dirpwd, "dataset/pcqm4m_gap.csv")
     ##################################################################################################################
@@ -170,15 +169,18 @@ if __name__ == "__main__":
         graph_feature_names[item]
         for ihead, item in enumerate(var_config["output_index"])
     ]
-    var_config["input_node_feature_names"] = get_node_attribute_name(ogb_node_types)
+    var_config["graph_feature_names"] = graph_feature_names
+    var_config["graph_feature_dims"] = graph_feature_dim
+    (
+        var_config["input_node_feature_names"],
+        var_config["input_node_feature_dims"],
+    ) = get_node_attribute_name(ogb_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    world_size, world_rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    comm_size = comm.Get_size()
 
     ## Set up logging
     logging.basicConfig(
@@ -393,86 +395,3 @@ if __name__ == "__main__":
         trainset.unlink()
 
     sys.exit(0)
-
-    ##################################################################################################################
-    for ifeat in range(len(var_config["output_index"])):
-        fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
-        plt.subplots_adjust(
-            left=0.08, bottom=0.15, right=0.95, top=0.925, wspace=0.35, hspace=0.1
-        )
-        ax = axs[0]
-        ax.scatter(
-            range(len(trainset)),
-            [trainset[i].y[ifeat].item() for i in range(len(trainset))],
-            edgecolor="b",
-            facecolor="none",
-        )
-        ax.set_title("train, " + str(len(trainset)))
-        ax = axs[1]
-        ax.scatter(
-            range(len(valset)),
-            [valset[i].y[ifeat].item() for i in range(len(valset))],
-            edgecolor="b",
-            facecolor="none",
-        )
-        ax.set_title("validate, " + str(len(valset)))
-        ax = axs[2]
-        ax.scatter(
-            range(len(testset)),
-            [testset[i].y[ifeat].item() for i in range(len(testset))],
-            edgecolor="b",
-            facecolor="none",
-        )
-        ax.set_title("test, " + str(len(testset)))
-        fig.savefig(
-            "./logs/"
-            + log_name
-            + "/ogb_train_val_test_"
-            + var_config["output_names"][ifeat]
-            + ".png"
-        )
-        plt.close()
-
-    for ifeat in range(len(var_config["input_node_features"])):
-        fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
-        plt.subplots_adjust(
-            left=0.08, bottom=0.15, right=0.95, top=0.925, wspace=0.35, hspace=0.1
-        )
-        ax = axs[0]
-        ax.plot(
-            [
-                item
-                for i in range(len(trainset))
-                for item in trainset[i].x[:, ifeat].tolist()
-            ],
-            "bo",
-        )
-        ax.set_title("train, " + str(len(trainset)))
-        ax = axs[1]
-        ax.plot(
-            [
-                item
-                for i in range(len(valset))
-                for item in valset[i].x[:, ifeat].tolist()
-            ],
-            "bo",
-        )
-        ax.set_title("validate, " + str(len(valset)))
-        ax = axs[2]
-        ax.plot(
-            [
-                item
-                for i in range(len(testset))
-                for item in testset[i].x[:, ifeat].tolist()
-            ],
-            "bo",
-        )
-        ax.set_title("test, " + str(len(testset)))
-        fig.savefig(
-            "./logs/"
-            + log_name
-            + "/ogb_train_val_test_"
-            + var_config["input_node_feature_names"][ifeat]
-            + ".png"
-        )
-        plt.close()

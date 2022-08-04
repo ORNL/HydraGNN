@@ -94,7 +94,11 @@ def get_node_attribute_name(types):
         "HSP3",
         "Hprop",
     ]
-    return atom_attr_name + extra_attr_name
+    name_list = atom_attr_name + extra_attr_name
+    dims_list = [
+        1,
+    ] * len(name_list)
+    return name_list, dims_list
 
 
 def gapfromsmiles(smilestr, model):
@@ -159,24 +163,16 @@ def generate_graphdata(simlestr, ytarget, types, var_config=None):
     )
 
     x = torch.cat([x1.to(torch.float), x2], dim=-1)
-    # x = torch.tensor([atomic_number], dtype=torch.float).view(-1,1)
-    # print(x)
-
     y = ytarget  # .squeeze()
 
-    # data = Data(x=x, z=z, edge_index=edge_index, edge_attr=edge_attr, y=y)
     data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
     if var_config is not None:
-        graph_features_dim = [1]
-        node_feature_dim = [1]
         hydragnn.preprocess.update_predicted_values(
             var_config["type"],
             var_config["output_index"],
-            graph_features_dim,
-            node_feature_dim,
+            var_config["graph_feature_dims"],
+            var_config["input_node_feature_dims"],
             data,
         )
 
-    # device = hydragnn.utils.get_device()
     return data
-    # return data.to(device)

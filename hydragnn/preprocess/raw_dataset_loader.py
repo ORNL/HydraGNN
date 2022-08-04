@@ -139,6 +139,7 @@ class RawDataLoader:
                 assert x == y
                 filelist = list(nsplit(filelist, self.world_size))[self.rank]
                 log("local filelist", len(filelist))
+
             for name in filelist:
                 if name == ".DS_Store":
                     continue
