@@ -166,6 +166,14 @@ if __name__ == "__main__":
     )
 
     if args.preonly:
+        """
+        Parallel ising data generation step:
+        1. Generate ising data (*.txt) in parallel (create_dataset_mpi)
+        2. Each process reads its own raw dataset (*.txt) (RawDataLoader)
+        3. Save own data into a pkl file (total_to_train_val_test_pkls)
+        4. Read back and split into a train, valid, and test set (load_train_val_test_sets)
+        5. Save as Adios file in parallel
+        """
         dir = os.path.join(os.path.dirname(__file__), "../../dataset/%s" % modelname)
         if rank == 0:
             if os.path.exists(dir):

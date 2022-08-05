@@ -114,7 +114,7 @@ class RawDataLoader:
 
         serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
         if not os.path.exists(serialized_dir):
-            os.mkdir(serialized_dir)
+            os.makedirs(serialized_dir, exist_ok=True)
 
         for dataset_type, raw_data_path in self.path_dictionary.items():
             if not os.path.isabs(raw_data_path):

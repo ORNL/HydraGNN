@@ -33,7 +33,7 @@ class AdiosWriter:
     def add_global(self, vname, arr):
         self.attributes[vname] = arr
 
-    def add(self, label, data: torch_geometric.data.Data):
+    def add(self, label, data):
         if label not in self.dataset:
             self.dataset[label] = list()
         if isinstance(data, list):

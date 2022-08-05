@@ -14,7 +14,7 @@ from tqdm import tqdm
 import torch.distributed as dist
 
 import logging
-from pathlib import Path
+import os
 
 
 """
@@ -75,7 +75,7 @@ def setup_log(prefix):
     logger.propagate = False
     logger.setLevel(logging.DEBUG)
 
-    Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
+    os.makedirs("./logs/%s" % prefix, exist_ok=True)
     fname = "./logs/%s/run.log" % (prefix)
     fileHandler = logging.FileHandler(fname)
 

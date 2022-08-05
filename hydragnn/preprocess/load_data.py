@@ -368,8 +368,8 @@ def total_to_train_val_test_pkls(config, isdist=False):
                 pickle.dump(minmax_graph_feature, f)
                 pickle.dump(dataset, f)
         elif isdist:
-            log("fname", os.path.join(serialized_dir, serial_data_name))
-            ## parallel processing. Everyone need to read own total pickle data
+            ## This is for the ising example.
+            ## Each process writes own pickle data. config["Dataset"]["name"] contains rank info.
             with open(os.path.join(serialized_dir, serial_data_name), "wb") as f:
                 pickle.dump(minmax_node_feature, f)
                 pickle.dump(minmax_graph_feature, f)
