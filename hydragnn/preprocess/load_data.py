@@ -60,7 +60,11 @@ def parse_omp_places(envstr):
     return plist
 
 
-class HydraSimpleDataLoader(DataLoader):
+class SimpleDataLoader(DataLoader):
+    """
+    A naive implementation of a custom dataloader
+    """
+
     def __init__(self, dataset, **kwargs):
         super(HydraDataLoader, self).__init__(dataset, **kwargs)
         self._dataset_fetcher = _DatasetKind.create_fetcher(
@@ -87,6 +91,12 @@ class HydraSimpleDataLoader(DataLoader):
 
 
 class HydraDataLoader(DataLoader):
+    """
+    A custom data loader with multi-threading on a HPC system.
+    This is to overcome a few problems (affinity, hanging, crashing, etc)
+    with Pytorch's multi-threaded DataLoader on Summit and Perlmutter.
+    """
+
     def __init__(self, dataset, **kwargs):
         super(HydraDataLoader, self).__init__(dataset, **kwargs)
         self._dataset_fetcher = _DatasetKind.create_fetcher(
