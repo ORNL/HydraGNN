@@ -90,9 +90,6 @@ class OGBRawDatasetFactory:
         for idataset, (smileset, valueset) in enumerate(zip(smiles_sets, values_sets)):
             if norm_yflag:
                 valueset = (valueset - torch.tensor(ymean)) / torch.tensor(ystd)
-                # print(valueset[:, 0].mean(), valueset[:, 0].std())
-                # print(valueset[:, 1].mean(), valueset[:, 1].std())
-                # print(valueset[:, 2].mean(), valueset[:, 2].std())
             self.dataset_lists.append((smileset, valueset))
 
     def get(self, label):

@@ -95,6 +95,7 @@ class HydraDataLoader(DataLoader):
     A custom data loader with multi-threading on a HPC system.
     This is to overcome a few problems (affinity, hanging, crashing, etc)
     with Pytorch's multi-threaded DataLoader on Summit and Perlmutter.
+    (2022/08) jyc: This is a work-in-progress version. Performance is not verified.
     """
 
     def __init__(self, dataset, **kwargs):
