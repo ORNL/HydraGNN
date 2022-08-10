@@ -254,20 +254,13 @@ if __name__ == "__main__":
 
     timer = Timer("load_data")
     timer.start()
-    opt = {"preload": True}
     if args.format == "adios":
+        opt = {"preload": True, "shmem": False}
         if args.shmem:
-            trainset = AdiosDataset(
-                "examples/ogb/dataset/ogb_gap.bp",
-                "trainset",
-                comm,
-                preload=False,
-                shmem=True,
-            )
-        else:
-            trainset = AdiosDataset(
-                "examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt
-            )
+            opt = {"preload": False, "shmem": True}
+        trainset = AdiosDataset(
+            "examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt
+        )
         valset = AdiosDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
         testset = AdiosDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
     elif args.format == "csv":
