@@ -94,19 +94,6 @@ def calculate_PNA_degree(dataset: [Data], max_neighbours):
     return deg
 
 
-## MPI causing problem with num_workers>0 which using torch.multiprocessing
-def calculate_PNA_degree_mpi(loader, max_neighbours):
-    assert MPI.Is_initialized()
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
-    for i, data in enumerate(loader):
-        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        deg += torch.bincount(d, minlength=deg.numel())
-    _deg = deg.detach().cpu().numpy()
-    _deg = MPI.COMM_WORLD.allreduce(_deg, op=MPI.SUM)
-    deg = torch.from_numpy(_deg)
-    return deg
-
-
 def calculate_PNA_degree_dist(loader, max_neighbours):
     assert dist.is_initialized()
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long)

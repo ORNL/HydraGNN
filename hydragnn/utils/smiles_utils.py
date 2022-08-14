@@ -15,38 +15,6 @@ import random
 ##################################################################################################################
 ##################################################################################################################
 
-
-def get_splitlists(filedir):
-    with open(filedir, "rb") as f:
-        train_filelist = pickle.load(f)
-        val_filelist = pickle.load(f)
-        test_filelist = pickle.load(f)
-    return train_filelist, val_filelist, test_filelist
-
-
-def get_trainset_stat(filedir):
-    with open(filedir, "rb") as f:
-        max_feature = pickle.load(f)
-        min_feature = pickle.load(f)
-        mean_feature = pickle.load(f)
-        std_feature = pickle.load(f)
-    return max_feature, min_feature, mean_feature, std_feature
-
-
-def datasets_load_gap(datafile):
-    smiles = []
-    strset = []
-    yvals = []
-    with open(datafile, "r") as file:
-        csvreader = csv.reader(file)
-        print(next(csvreader))
-        for row in csvreader:
-            smiles.append(row[0])
-            strset.append(row[1])
-            yvals.append(float(row[-1]))
-    return smiles, yvals, strset
-
-
 def datasets_load(datafile, sampling=None, seed=None):
     if seed is not None:
         random.seed(seed)
@@ -99,14 +67,6 @@ def get_node_attribute_name(types):
         1,
     ] * len(name_list)
     return name_list, dims_list
-
-
-def gapfromsmiles(smilestr, model):
-    ## gap_true can be replaced by random numbers when use
-    gap_rand = 0.0
-    data_graph = generate_graphdata(smilestr, gap_rand)
-    pred = model(data_graph)
-    return pred[0][0].item()
 
 
 def generate_graphdata(simlestr, ytarget, types, var_config=None):

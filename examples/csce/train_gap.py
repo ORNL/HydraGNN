@@ -14,8 +14,8 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
-from hydragnn.utils.ogb_utils import (
+from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
+from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata,
 )
@@ -267,15 +267,16 @@ if __name__ == "__main__":
                         pickle.dump(data, f)
 
         ## local data
-        _trainset = dataset_lists[0]
-        _valset = dataset_lists[1]
-        _testset = dataset_lists[2]
+        if args.format == "adios":
+            _trainset = dataset_lists[0]
+            _valset = dataset_lists[1]
+            _testset = dataset_lists[2]
 
-        adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
-        adwriter.add("trainset", _trainset)
-        adwriter.add("valset", _valset)
-        adwriter.add("testset", _testset)
-        adwriter.save()
+            adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
+            adwriter.add("trainset", _trainset)
+            adwriter.add("valset", _valset)
+            adwriter.add("testset", _testset)
+            adwriter.save()
 
         sys.exit(0)
 
@@ -300,6 +301,16 @@ if __name__ == "__main__":
         trainset = CSCEDataset(fact, "trainset")
         valset = CSCEDataset(fact, "valset")
         testset = CSCEDataset(fact, "testset")
+    elif args.format == "pickle":
+        trainset = SimplePickleDataset(
+            "examples/csce/dataset/pickle", "csce_gap", "trainset"
+        )
+        valset = SimplePickleDataset(
+            "examples/csce/dataset/pickle", "csce_gap", "valset"
+        )
+        testset = SimplePickleDataset(
+            "examples/csce/dataset/pickle", "csce_gap", "testset"
+        )
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 

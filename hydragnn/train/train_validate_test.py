@@ -325,8 +325,6 @@ def train(
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.train()
-    if isinstance(loader, HydraDataLoader):
-        loader.device = get_device()
 
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
         with record_function("zero_grad"):
@@ -346,9 +344,6 @@ def train(
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-
-    if isinstance(loader, HydraDataLoader):
-        loader.device = None
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
