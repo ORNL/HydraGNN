@@ -58,7 +58,6 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
             smiles_all.append(row[1])
             values_all.append([float(row[-2])])
     print("Total:", len(smiles_all), len(values_all))
-    atomtypes_dict = {}
 
     a = list(range(len(smiles_all)))
     ix0, ix1, ix2 = np.split(
@@ -89,7 +88,6 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
         [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
         np.mean(values_all),
         np.std(values_all),
-        atomtypes_dict,
     )
 
 
@@ -106,7 +104,6 @@ class CSCEDatasetFactory:
             values_sets,
             ymean_feature,
             ystd_feature,
-            atomtypes_dict,
         ) = csce_datasets_load(datafile, sampling=sampling, seed=seed)
         ymean = ymean_feature.tolist()
         ystd = ystd_feature.tolist()
@@ -223,13 +220,9 @@ if __name__ == "__main__":
             values_sets,
             ymean_feature,
             ystd_feature,
-            atomtypes_dict,
         ) = csce_datasets_load(datafile, sampling=args.sampling, seed=43)
         var_config["ymean"] = ymean_feature.tolist()
         var_config["ystd"] = ystd_feature.tolist()
-        if len(atomtypes_dict) > 0:
-            with open("./logs/" + log_name + "/atom_types.json", "w") as f:
-                json.dump(atomtypes_dict, f)
 
         info([len(x) for x in values_sets])
         dataset_lists = [[] for dataset in values_sets]
@@ -238,9 +231,6 @@ if __name__ == "__main__":
                 valueset = (
                     valueset - torch.tensor(var_config["ymean"])
                 ) / torch.tensor(var_config["ystd"])
-                print(valueset[:, 0].mean(), valueset[:, 0].std())
-                print(valueset[:, 1].mean(), valueset[:, 1].std())
-                print(valueset[:, 2].mean(), valueset[:, 2].std())
 
             rx = list(nsplit(range(len(smileset)), comm_size))[rank]
             info("subset range:", idataset, len(smileset), rx.start, rx.stop)
@@ -368,9 +358,8 @@ if __name__ == "__main__":
     if args.mae:
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-        isub = -1
-        for loader, setname in zip(
-            [train_loader, val_loader, test_loader], ["train", "val", "test"]
+        for isub, (loader, setname) in enumerate(
+            zip([train_loader, val_loader, test_loader], ["train", "val", "test"])
         ):
             error, rmse_task, true_values, predicted_values = hydragnn.train.test(
                 loader, model, verbosity
@@ -382,13 +371,10 @@ if __name__ == "__main__":
             outtype = var_config["type"][ihead]
             varname = graph_feature_names[ifeat]
 
-            isub += 1
             ax = axs[isub]
             error_mae = np.mean(np.abs(head_pred - head_true))
             error_rmse = np.sqrt(np.mean(np.abs(head_pred - head_true) ** 2))
             print(varname, ": ev, mae=", error_mae, ", rmse= ", error_rmse)
-            print(rmse_task[ihead])
-            print(head_pred.shape, head_true.shape)
 
             ax.scatter(
                 head_true,
