@@ -1,5 +1,7 @@
 import os, json
 import matplotlib.pyplot as plt
+import random
+import pickle, csv
 
 import logging
 import sys
@@ -16,7 +18,6 @@ from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset, SimplePickleD
 from hydragnn.utils.model import print_model
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
-    datasets_load,
     generate_graphdata,
 )
 
@@ -75,13 +76,51 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
+def ogb_datasets_load(datafile, sampling=None, seed=None):
+    if seed is not None:
+        random.seed(seed)
+    trainset = []
+    valset = []
+    testset = []
+    trainsmiles = []
+    valsmiles = []
+    testsmiles = []
+    trainidxs = []
+    validxs = []
+    testidxs = []
+    with open(datafile, "r") as file:
+        csvreader = csv.reader(file)
+        print(next(csvreader))
+        for row in csvreader:
+            if (sampling is not None) and (random.random() > sampling):
+                continue
+            if row[1] == "train":
+                trainsmiles.append(row[0])
+                trainset.append([float(row[-1])])
+            elif row[1] == "val":
+                valsmiles.append(row[0])
+                valset.append([float(row[-1])])
+            elif row[1] == "test":
+                testsmiles.append(row[0])
+                testset.append([float(row[-1])])
+            else:
+                print("unknown file name: ", row[0])
+                sys.exit(0)
+    return (
+        [trainsmiles, valsmiles, testsmiles],
+        [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
+    )
+
+
 ## Torch Dataset for CSCE CSV format
 class OGBRawDatasetFactory:
     def __init__(self, datafile, var_config, sampling=1.0, seed=43, norm_yflag=False):
         self.var_config = var_config
 
         ## Read full data
-        smiles_sets, values_sets = datasets_load(datafile, sampling=sampling, seed=seed)
+        smiles_sets, values_sets = ogb_datasets_load(
+            datafile, sampling=sampling, seed=seed
+        )
         ymean = var_config["ymean"]
         ystd = var_config["ystd"]
 
@@ -194,7 +233,7 @@ if __name__ == "__main__":
 
     if args.preonly:
         norm_yflag = False  # True
-        smiles_sets, values_sets = datasets_load(
+        smiles_sets, values_sets = ogb_datasets_load(
             datafile, sampling=args.sampling, seed=43
         )
         info([len(x) for x in values_sets])

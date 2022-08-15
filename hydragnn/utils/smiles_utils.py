@@ -16,43 +16,6 @@ import random
 ##################################################################################################################
 
 
-def datasets_load(datafile, sampling=None, seed=None):
-    if seed is not None:
-        random.seed(seed)
-    trainset = []
-    valset = []
-    testset = []
-    trainsmiles = []
-    valsmiles = []
-    testsmiles = []
-    trainidxs = []
-    validxs = []
-    testidxs = []
-    with open(datafile, "r") as file:
-        csvreader = csv.reader(file)
-        print(next(csvreader))
-        for row in csvreader:
-            if (sampling is not None) and (random.random() > sampling):
-                continue
-            if row[1] == "train":
-                trainsmiles.append(row[0])
-                trainset.append([float(row[-1])])
-            elif row[1] == "val":
-                valsmiles.append(row[0])
-                valset.append([float(row[-1])])
-            elif row[1] == "test":
-                testsmiles.append(row[0])
-                testset.append([float(row[-1])])
-            else:
-                print("unknown file name: ", row[0])
-                sys.exit(0)
-    return (
-        [trainsmiles, valsmiles, testsmiles],
-        [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
-    )
-
-
-##################################################################################################################
 def get_node_attribute_name(types):
     atom_attr_name = ["atom" + k for k in types]
     extra_attr_name = [
