@@ -30,22 +30,6 @@ def check_if_graph_size_variable(train_loader, val_loader, test_loader):
     return graph_size_variable
 
 
-def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
-    assert MPI.Is_initialized()
-    graph_size_variable = False
-    nodes_num_list = []
-    for loader in [train_loader, val_loader, test_loader]:
-        for data in loader:
-            nodes_num_list.append(data.num_nodes)
-        np.min(nodes_num_list)
-        mn = MPI.COMM_WORLD.allreduce(np.min(nodes_num_list), op=MPI.MIN)
-        mx = MPI.COMM_WORLD.allreduce(np.max(nodes_num_list), op=MPI.MAX)
-        if mn != mx:
-            graph_size_variable = True
-            return graph_size_variable
-    return graph_size_variable
-
-
 def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
     from hydragnn.utils.distributed import get_device
 
