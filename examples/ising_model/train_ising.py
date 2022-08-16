@@ -202,7 +202,7 @@ if __name__ == "__main__":
         ## Read raw and save total in pkl
         ## Related: hydragnn.preprocess.transform_raw_data_to_serialized
         config["Dataset"]["path"] = {"total": "./dataset/%s" % modelname}
-        config["Dataset"]["name"] = modelname
+        config["Dataset"]["name"] = "%s_%d" % (modelname, rank)
         loader = RawDataLoader(config["Dataset"], dist=True)
         loader.load_raw_data()
 

@@ -170,8 +170,6 @@ class RawDataLoader:
 
             if dataset_type == "total":
                 serial_data_name = self.raw_dataset_name + ".pkl"
-                if self.dist:
-                    serial_data_name = "%s_%d.pkl" % (self.raw_dataset_name, self.rank)
             else:
                 # append for train; test; validation
                 serial_data_name = self.raw_dataset_name + "_" + dataset_type + ".pkl"
