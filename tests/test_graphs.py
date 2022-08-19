@@ -132,7 +132,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         "CGCNN": [0.50, 0.40],
     }
     if use_lengths and ("vector" not in ci_input):
-        thresholds["CGCNN"] = [0.16, 0.16]
+        thresholds["CGCNN"] = [0.175, 0.175]
         thresholds["PNA"] = [0.10, 0.10]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
