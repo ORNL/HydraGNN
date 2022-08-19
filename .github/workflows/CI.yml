@@ -7,7 +7,7 @@ on:
     branches:
       - main
   schedule:
-    - cron:  '0 3 * * *'
+    - cron:  '0 3 * * 1'
 
 jobs:
   build:
@@ -51,4 +51,4 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
           python -m pytest -rfEP -W error -W ignore::DeprecationWarning --tb=native
-          mpirun -n 2 python -m pytest -rfEP -W error -W ignore::DeprecationWarning --tb=native --with-mpi
+          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning --tb=native --with-mpi
