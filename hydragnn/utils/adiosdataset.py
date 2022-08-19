@@ -195,7 +195,7 @@ class AdiosDataset(torch.utils.data.Dataset):
         shmem: bool, optional
             Option to use shmem to share data between processes in the same node
         enable_cache: bool, optional
-            Opption to cache data object which was already read
+            Option to cache data object which was already read
         """
         t0 = time.time()
         self.filename = filename
