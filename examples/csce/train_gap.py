@@ -146,7 +146,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--preonly",
         action="store_true",
-        help="preprocess only. Adios saving and no train",
+        help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
 
