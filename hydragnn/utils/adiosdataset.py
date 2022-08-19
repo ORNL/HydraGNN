@@ -20,6 +20,14 @@ class AdiosWriter:
     """Adios class to write Torch Geometric graph data"""
 
     def __init__(self, filename, comm):
+        """
+        Parameters
+        ----------
+        filename: str
+            adios filename
+        comm: MPI_comm
+            MPI communicator to use for Adios parallel writing
+        """
         self.filename = filename
         self.comm = comm
         self.rank = comm.Get_rank()
@@ -31,11 +39,32 @@ class AdiosWriter:
         self.io = self.adios.DeclareIO(self.filename)
 
     def add_global(self, vname, arr):
+        """
+        Add attribute to be written in adios file
+
+        Parameters
+        ----------
+        vname: str
+            attribute name
+        arr: numpy array
+            attribute value to be written
+        """
         self.attributes[vname] = arr
 
     def add(self, label, data):
+        """
+        Add labeled data to be written in adios file
+
+        Parameters
+        ----------
+        label: str
+            label name
+        data: PyG data or list of PyG data
+            PyG data to be saved
+        """
         if label not in self.dataset:
             self.dataset[label] = list()
+
         if isinstance(data, list):
             self.dataset[label].extend(data)
         elif isinstance(data, torch_geometric.data.Data):
@@ -44,6 +73,9 @@ class AdiosWriter:
             raise Exception("Unsuppored data type yet.")
 
     def save(self):
+        """
+        Save data into an Adios file
+        """
         t0 = time.time()
         log("Adios saving:", self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
@@ -149,6 +181,22 @@ class AdiosDataset(torch.utils.data.Dataset):
     def __init__(
         self, filename, label, comm, preload=True, shmem=False, enable_cache=True
     ):
+        """
+        Parameters
+        ----------
+        filename: str
+            adios filename
+        label: str
+            data label to load, such as trainset, testing, and valset
+        comm: MPI_comm
+            MPI communicator
+        preload: bool, optional
+            Option to preload all the dataset into a memory
+        shmem: bool, optional
+            Option to use shmem to share data between processes in the same node
+        enable_cache: bool, optional
+            Opption to cache data object which was already read
+        """
         t0 = time.time()
         self.filename = filename
         self.label = label
@@ -168,6 +216,8 @@ class AdiosDataset(torch.utils.data.Dataset):
 
         self.data = dict()
         self.preload = preload
+        ## Preflight option: This is experimental.
+        ## Get the index of data to load first and call "populate" to load data all together
         self.preflight = False
         self.preflight_list = list()
         self.shmem = shmem
@@ -268,13 +318,22 @@ class AdiosDataset(torch.utils.data.Dataset):
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
 
     def __len__(self):
+        """
+        Return the total size of dataset
+        """
         return self.ndata
 
     def __getitem__(self, idx):
+        """
+        Get data with a given index
+        """
         if self.preflight:
+            ## Preflight option: This is experimental.
+            ## Collect only the indeces of data to load. "populate" will load the data later.
             self.preflight_list.append(idx)
             return torch_geometric.data.Data()
         if idx in self.cache:
+            ## Load data from cached buffer
             data_object = self.cache[idx]
         else:
             data_object = torch_geometric.data.Data()
@@ -289,11 +348,13 @@ class AdiosDataset(torch.utils.data.Dataset):
                 start[vdim] = self.variable_offset[k][idx]
                 count[vdim] = self.variable_count[k][idx]
                 if self.preload or self.shmem:
+                    ## Read from memory when preloaded or used with shmem
                     slice_list = list()
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self.data[k][tuple(slice_list)]
                 else:
+                    ## Reading data directly from disk
                     # log("getitem out-of-memory:", self.label, k, idx)
                     val = self.f.read("%s/%s" % (self.label, k), start, count)
 
@@ -304,6 +365,9 @@ class AdiosDataset(torch.utils.data.Dataset):
         return data_object
 
     def unlink(self):
+        """
+        Unlink shmem link
+        """
         if self.shmem:
             for k in self.keys:
                 self.shm[k].close()
@@ -319,6 +383,9 @@ class AdiosDataset(torch.utils.data.Dataset):
             pass
 
     def populate(self):
+        """
+        Populate data when preflight is on
+        """
         dn = 2_000_000
         self._data = dict()
         for i in range(0, self.ndata, dn):
