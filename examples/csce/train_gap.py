@@ -408,7 +408,7 @@ if __name__ == "__main__":
             fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
         plt.close()
 
-    if not args.noadios:
+    if args.format == "adios":
         trainset.unlink()
 
     sys.exit(0)
