@@ -14,7 +14,7 @@ from tqdm import tqdm
 import torch.distributed as dist
 
 import logging
-from pathlib import Path
+import os
 
 
 """
@@ -53,9 +53,9 @@ def print_distributed(verbosity_level, *args):
     return print_verbose(*args)
 
 
-def iterate_tqdm(iterator, verbosity_level):
+def iterate_tqdm(iterator, verbosity_level, *args, **kwargs):
     if (0 == dist.get_rank() and 2 == verbosity_level) or 4 == verbosity_level:
-        return tqdm(iterator)
+        return tqdm(iterator, *args, **kwargs)
     else:
         return iterator
 
@@ -72,9 +72,10 @@ def setup_log(prefix):
     logFormatter = logging.Formatter(fmt)
 
     logger = logging.getLogger("hydragnn")
+    logger.propagate = False
     logger.setLevel(logging.DEBUG)
 
-    Path("./logs/%s" % prefix).mkdir(parents=True, exist_ok=True)
+    os.makedirs("./logs/%s" % prefix, exist_ok=True)
     fname = "./logs/%s/run.log" % (prefix)
     fileHandler = logging.FileHandler(fname)
 

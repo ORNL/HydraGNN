@@ -12,6 +12,7 @@ class Profiler(torch.profiler.profile):
         self.enable = enable
         self.target_epoch = target_epoch
         self.current_epoch = -1
+        self.done = False
 
         # FIXME: can remove check for cuda when torch-1.9 is requireds
         activities = [ProfilerActivity.CPU]
@@ -20,7 +21,7 @@ class Profiler(torch.profiler.profile):
             activities.append(ProfilerActivity.CUDA)
         super(Profiler, self).__init__(
             activities=activities,
-            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=1),
+            schedule=torch.profiler.schedule(wait=5, warmup=3, active=3, repeat=1),
             on_trace_ready=self.trace_handler,
             record_shapes=True,
             with_stack=True,
@@ -46,6 +47,7 @@ class Profiler(torch.profiler.profile):
             % (len(p.events()), self.target_epoch)
         )
         torch.profiler.tensorboard_trace_handler(self.prefix)(p)
+        self.done = True
 
     def set_current_epoch(self, current_epoch):
         self.current_epoch = current_epoch

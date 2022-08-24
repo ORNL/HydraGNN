@@ -13,6 +13,8 @@ import sys, os, json
 import pytest
 
 import torch
+
+torch.manual_seed(97)
 import shutil
 
 import hydragnn, tests

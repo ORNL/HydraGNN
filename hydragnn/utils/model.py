@@ -12,16 +12,16 @@
 import os
 
 import torch
+import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.data import Data
 from torch_geometric.utils import degree
-from .print_utils import print_master
+from .print_utils import print_master, iterate_tqdm
 
 from hydragnn.utils.distributed import (
     get_comm_size_and_rank,
     get_device,
     get_device_name,
-    is_model_distributed,
 )
 from collections import OrderedDict
 
@@ -37,18 +37,10 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
 
 
-def get_model_or_module(model):
-    if is_model_distributed(model):
-        return model.module
-    else:
-        return model
-
-
 def save_model(model, optimizer, name, path="./logs/"):
     """Save both model and optimizer state in a single checkpoint file"""
     _, world_rank = get_comm_size_and_rank()
     if world_rank == 0:
-        model = get_model_or_module(model)
         path_name = os.path.join(path, name, name + ".pk")
         torch.save(
             {
@@ -74,12 +66,13 @@ def load_existing_model_config(model, config, path="./logs/", optimizer=None):
 
 def load_existing_model(model, model_name, path="./logs/", optimizer=None):
     """Load both model and optimizer state from a single checkpoint file"""
-    _, world_rank = get_comm_size_and_rank()
     path_name = os.path.join(path, model_name, model_name + ".pk")
     map_location = {"cuda:%d" % 0: get_device_name()}
+    print_master("Load existing model:", path_name)
     checkpoint = torch.load(path_name, map_location=map_location)
     state_dict = checkpoint["model_state_dict"]
-    if is_model_distributed(model):
+    ## To be compatible with old checkpoint which was not written as a ddp model
+    if not next(iter(state_dict)).startswith("module"):
         ddp_state_dict = OrderedDict()
         for k, v in state_dict.items():
             k = "module." + k
@@ -90,11 +83,26 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
 
+## This function may cause OOM if dataset is too large
+## to fit in a single GPU (i.e., with DDP). Use with caution.
+## Recommend to use calculate_PNA_degree_dist
 def calculate_PNA_degree(dataset: [Data], max_neighbours):
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long).to(get_device())
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for data in dataset:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
+    return deg
+
+
+def calculate_PNA_degree_dist(loader, max_neighbours):
+    assert dist.is_initialized()
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+    for data in iterate_tqdm(loader, 2, desc="Calculate PNA degree"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    deg = deg.to(get_device())
+    dist.all_reduce(deg, op=dist.ReduceOp.SUM)
+    deg = deg.detach().cpu()
     return deg
 
 
