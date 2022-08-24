@@ -20,6 +20,8 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
+from hydragnn.utils.distributed import get_device
+from hydragnn.preprocess.load_data import HydraDataLoader
 
 import os
 
@@ -48,7 +50,7 @@ def train_validate_test(
 ):
     num_epoch = config["Training"]["num_epoch"]
 
-    device = train_loader.dataset[0].y.device
+    device = get_device()
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
     total_loss_val = torch.zeros(num_epoch, device=device)
@@ -60,13 +62,16 @@ def train_validate_test(
 
     # preparing for results visualization
     ## collecting node feature
-    node_feature = []
-    nodes_num_list = []
-    for data in test_loader.dataset:
-        node_feature.extend(data.x.tolist())
-        nodes_num_list.append(data.num_nodes)
-
     if create_plots:
+        node_feature = []
+        nodes_num_list = []
+        ## (2022/05) : FIXME: using test_loader.datast caused a bottleneck for large data
+        for data in iterate_tqdm(
+            test_loader, verbosity, desc="Collecting node feature"
+        ):
+            node_feature.extend(data.x.tolist())
+            nodes_num_list.append(data.num_nodes)
+
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
@@ -165,7 +170,8 @@ def train_validate_test(
             config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
         )
 
-    if create_plots:
+    _, rank = get_comm_size_and_rank()
+    if create_plots and (rank == 0):
         ######result visualization######
         visualizer.create_plot_global(
             true_values,
@@ -267,6 +273,7 @@ def reduce_values_ranks(local_tensor):
 @torch.no_grad()
 def gather_tensor_ranks(head_values):
     if dist.get_world_size() > 1:
+        head_values = head_values.to(get_device())
         size_local = torch.tensor(
             [head_values.shape[0]], dtype=torch.int64, device=head_values.device
         )
@@ -314,17 +321,18 @@ def train(
     if profiler is None:
         profiler = Profiler()
 
-    total_error = 0
-    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
+    total_error = torch.tensor(0.0, device=get_device())
+    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.train()
 
-    for data in iterate_tqdm(loader, verbosity):
+    for data in iterate_tqdm(loader, verbosity, desc="Train"):
         with record_function("zero_grad"):
             opt.zero_grad()
         with record_function("get_head_indices"):
             head_index = get_head_indices(model, data)
         with record_function("forward"):
+            data = data.to(get_device())
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
         with record_function("backward"):
@@ -345,13 +353,13 @@ def train(
 @torch.no_grad()
 def validate(loader, model, verbosity, reduce_ranks=True):
 
-    total_error = 0
-    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
+    total_error = torch.tensor(0.0, device=get_device())
+    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
-    for data in iterate_tqdm(loader, verbosity):
+    for data in iterate_tqdm(loader, verbosity, desc="Validate"):
         head_index = get_head_indices(model, data)
-
+        data = data.to(get_device())
         pred = model(data)
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
@@ -370,13 +378,13 @@ def validate(loader, model, verbosity, reduce_ranks=True):
 @torch.no_grad()
 def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
 
-    total_error = 0
-    tasks_error = torch.zeros(model.module.num_heads, device=loader.dataset[0].y.device)
+    total_error = torch.tensor(0.0, device=get_device())
+    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
-    for data in iterate_tqdm(loader, verbosity):
+    for data in iterate_tqdm(loader, verbosity, desc="Test"):
         head_index = get_head_indices(model, data)
-
+        data = data.to(get_device())
         pred = model(data)
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
@@ -391,6 +399,7 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     if return_samples:
         for data in loader:
             head_index = get_head_indices(model, data)
+            data = data.to(get_device())
             ytrue = data.y
             pred = model(data)
             for ihead in range(model.module.num_heads):

@@ -19,11 +19,29 @@ from torch import tensor
 
 from ase.io.cfg import read_cfg
 
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.distributed import get_device
+
+import random
+
 # WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
 
 
 def tensor_divide(x1, x2):
     return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
+
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+## All-reduce with numpy array
+def comm_reduce(x, op):
+    tx = torch.tensor(x, requires_grad=True).to(get_device())
+    torch.distributed.all_reduce(tx, op=op)
+    y = tx.detach().cpu().numpy()
+    return y
 
 
 class RawDataLoader:
@@ -37,7 +55,7 @@ class RawDataLoader:
         Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, dist=False):
         """
         config:
           shows the dataset path the target variables information, e.g, location and dimension, in data file
@@ -54,7 +72,10 @@ class RawDataLoader:
           list of dimensions of graph features
         graph_feature_col: list,
           list of column location/index (start location if dim>1) of graph features
+
+        dist: True if RawDataLoder is distributed (i.e., each RawDataLoader will read different subset of data)
         """
+
         self.dataset_list = []
         self.serial_data_name_list = []
         self.node_feature_name = (
@@ -80,6 +101,12 @@ class RawDataLoader:
         assert len(self.graph_feature_name) == len(self.graph_feature_dim)
         assert len(self.graph_feature_name) == len(self.graph_feature_col)
 
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
     def load_raw_data(self):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
@@ -87,7 +114,7 @@ class RawDataLoader:
 
         serialized_dir = os.environ["SERIALIZED_DATA_PATH"] + "/serialized_dataset"
         if not os.path.exists(serialized_dir):
-            os.mkdir(serialized_dir)
+            os.makedirs(serialized_dir, exist_ok=True)
 
         for dataset_type, raw_data_path in self.path_dictionary.items():
             if not os.path.isabs(raw_data_path):
@@ -100,7 +127,20 @@ class RawDataLoader:
                 len(os.listdir(raw_data_path)) > 0
             ), "No data files provided in {}!".format(raw_data_path)
 
-            for name in os.listdir(raw_data_path):
+            filelist = sorted(os.listdir(raw_data_path))
+            if self.dist:
+                ## Random shuffle filelist to avoid the same test/validation set
+                random.seed(43)
+                random.shuffle(filelist)
+
+                x = torch.tensor(len(filelist), requires_grad=False).to(get_device())
+                y = x.clone().detach().requires_grad_(False)
+                torch.distributed.all_reduce(x, op=torch.distributed.ReduceOp.MAX)
+                assert x == y
+                filelist = list(nsplit(filelist, self.world_size))[self.rank]
+                log("local filelist", len(filelist))
+
+            for name in filelist:
                 if name == ".DS_Store":
                     continue
                 # if the directory contains file, iterate over them
@@ -356,6 +396,22 @@ class RawDataLoader:
                         self.minmax_node_feature[1, ifeat],
                     )
                     n_index_start = n_index_end
+
+        ## Gather minmax in parallel
+        if self.dist:
+            self.minmax_graph_feature[0, :] = comm_reduce(
+                self.minmax_graph_feature[0, :], torch.distributed.ReduceOp.MIN
+            )
+            self.minmax_graph_feature[1, :] = comm_reduce(
+                self.minmax_graph_feature[1, :], torch.distributed.ReduceOp.MAX
+            )
+            self.minmax_node_feature[0, :] = comm_reduce(
+                self.minmax_node_feature[0, :], torch.distributed.ReduceOp.MIN
+            )
+            self.minmax_node_feature[1, :] = comm_reduce(
+                self.minmax_node_feature[1, :], torch.distributed.ReduceOp.MAX
+            )
+
         for dataset in self.dataset_list:
             for data in dataset:
                 g_index_start = 0
