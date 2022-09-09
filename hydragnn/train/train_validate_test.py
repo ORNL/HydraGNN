@@ -67,7 +67,7 @@ def train_validate_test(
         nodes_num_list = []
         ## (2022/05) : FIXME: using test_loader.datast caused a bottleneck for large data
         for data in iterate_tqdm(
-            test_loader, verbosity, desc="Collecting node feature"
+            test_loader.dataset, verbosity, desc="Collecting node feature"
         ):
             node_feature.extend(data.x.tolist())
             nodes_num_list.append(data.num_nodes)
