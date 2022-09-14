@@ -89,7 +89,6 @@ if __name__ == "__main__":
         ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, isdist=True)
 
         if args.format == "adios":
-            import adios2 as ad2
             from hydragnn.utils.adiosdataset import AdiosWriter
 
             adwriter = AdiosWriter(fname_adios, comm)
@@ -104,7 +103,6 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
     if args.format == "adios":
-        import adios2 as ad2
         from hydragnn.utils.adiosdataset import AdiosDataset
 
         info("Adios load")
