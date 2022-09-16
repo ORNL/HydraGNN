@@ -52,16 +52,20 @@
             "denormalize_output": false
         },
         "Training": {
-            "optimizer": "AdamW",
             "num_epoch": 100,
             "perc_train": 0.7,
             "loss_function_type": "mse",
-            "learning_rate": 0.01,
-            "batch_size": 16
+            "batch_size": 16,
+            "Optimizer": {
+                "type": "AdamW",
+                "use_zero_redundancy": false,
+                "learning_rate": 0.01
+            }
         }
     },
     "Visualization": {
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
-    }}
+    }
+}

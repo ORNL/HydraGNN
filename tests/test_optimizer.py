@@ -20,7 +20,7 @@ from hydragnn.utils.distributed import get_device_name
 
 # Loss function unit test called by pytest wrappers.
 # Note the intent of this test is to make sure all interfaces work - it does not assert anything
-def unittest_optimizers(optimizer_type, ci_input, overwrite_data=False):
+def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False):
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -88,8 +88,9 @@ def unittest_optimizers(optimizer_type, ci_input, overwrite_data=False):
                         data_path, number_configurations=num_samples
                     )
 
-    config["NeuralNetwork"]["Training"]["optimizer"] = optimizer_type
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
+    config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = optimizer_type
+    config["NeuralNetwork"]["Training"]["Optimizer"]["use_zero_redundancy"] = use_zero
 
     hydragnn.run_training(config)
 
@@ -100,5 +101,11 @@ def unittest_optimizers(optimizer_type, ci_input, overwrite_data=False):
     "optimizer_type",
     ["SGD", "Adam", "Adadelta", "Adagrad", "Adamax", "AdamW", "RMSprop"],
 )
-def pytest_optimizers(optimizer_type, ci_input="ci.json", overwrite_data=False):
-    unittest_optimizers(optimizer_type, ci_input, overwrite_data)
+@pytest.mark.parametrize(
+    "use_zero_redundancy",
+    [False, True],
+)
+def pytest_optimizers(
+    optimizer_type, use_zero_redundancy, ci_input="ci.json", overwrite_data=False
+):
+    unittest_optimizers(optimizer_type, use_zero_redundancy, ci_input, overwrite_data)

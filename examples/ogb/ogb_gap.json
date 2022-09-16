@@ -26,10 +26,12 @@
         },
         "Training": {
             "num_epoch": 2,
-            "learning_rate": 1e-3,
             "batch_size": 128,
             "continue": 0,
-            "startfrom": "existing_model"
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "learning_rate": 1e-3
+            }
         }
     }
 }

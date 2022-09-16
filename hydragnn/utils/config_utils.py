@@ -52,8 +52,8 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["initial_bias"] = None
 
-    if "optimizer" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["optimizer"] = "AdamW"
+    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
 
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
@@ -197,7 +197,7 @@ def get_log_name_config(config):
         + "-ne-"
         + str(config["NeuralNetwork"]["Training"]["num_epoch"])
         + "-lr-"
-        + str(config["NeuralNetwork"]["Training"]["learning_rate"])
+        + str(config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"])
         + "-bs-"
         + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-data-"
