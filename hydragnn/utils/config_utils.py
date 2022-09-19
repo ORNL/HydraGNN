@@ -201,7 +201,11 @@ def get_log_name_config(config):
         + "-bs-"
         + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-data-"
-        + config["Dataset"]["name"][: config["Dataset"]["name"].rindex("_")]
+        + config["Dataset"]["name"][
+            : config["Dataset"]["name"].rfind("_")
+            if config["Dataset"]["name"].rfind("_") > 0
+            else None
+        ]
         + "-node_ft-"
         + "".join(
             str(x)
