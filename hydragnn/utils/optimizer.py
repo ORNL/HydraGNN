@@ -118,7 +118,7 @@ def select_zero_redundancy_optimizer(model, config):
 def select_optimizer(model, config):
     use_zero = False
 
-    if "use_zero_redundancy" in config["Optimizer"]["type"]:
+    if "use_zero_redundancy" in config["Optimizer"]:
         use_zero = config["Optimizer"]["use_zero_redundancy"]
 
     if use_zero:
