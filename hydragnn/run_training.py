@@ -78,7 +78,9 @@ def _(config: dict):
         sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
     )
 
-    optimizer = select_optimizer(model, config["NeuralNetwork"]["Training"]["Optimizer"])
+    optimizer = select_optimizer(
+        model, config["NeuralNetwork"]["Training"]["Optimizer"]
+    )
 
     scheduler = ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001

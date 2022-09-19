@@ -13,33 +13,19 @@ def select_standard_optimizer(model, config):
     optimizer = None
 
     if config["type"] == "SGD":
-        optimizer = torch.optim.SGD(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.SGD(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "Adam":
-        optimizer = torch.optim.Adam(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "Adadelta":
-        optimizer = torch.optim.Adadelta(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.Adadelta(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "Adagrad":
-        optimizer = torch.optim.Adagrad(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.Adagrad(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "Adamax":
-        optimizer = torch.optim.Adamax(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.Adamax(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "AdamW":
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.AdamW(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "RMSprop":
-        optimizer = torch.optim.RMSprop(
-            model.parameters(), lr=config["learning_rate"]
-        )
+        optimizer = torch.optim.RMSprop(model.parameters(), lr=config["learning_rate"])
     elif config["type"] == "FusedLAMB":
         assert deepspeed_available, "deepspeed package not installed"
         assert (
