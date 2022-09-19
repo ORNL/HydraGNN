@@ -21,6 +21,11 @@ def info(*args, logtype="info", sep=" "):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--loadexistingsplit",
+        action="store_true",
+        help="loading from existing pickle/adios files with train/test/validate splits",
+    )
+    parser.add_argument(
         "--preonly",
         action="store_true",
         help="preprocess only. Adios or pickle saving and no train",
@@ -66,7 +71,7 @@ if __name__ == "__main__":
     datasetname = config["Dataset"]["name"]
     fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
     config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
-    if args.preonly:
+    if not args.loadexistingsplit:
         for dataset_type, raw_data_path in config["Dataset"]["path"].items():
             if not os.path.isabs(raw_data_path):
                 raw_data_path = os.path.join(dirpwd, raw_data_path)
@@ -98,6 +103,7 @@ if __name__ == "__main__":
             adwriter.add_global("minmax_node_feature", loader.minmax_node_feature)
             adwriter.add_global("minmax_graph_feature", loader.minmax_graph_feature)
             adwriter.save()
+    if args.preonly:
         sys.exit(0)
 
     timer = Timer("load_data")
