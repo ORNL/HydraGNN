@@ -4,10 +4,10 @@
     },
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"total": "FePt_enthalpy"},
+        "path": {"total": "./dataset/FePt_enthalpy"},
         "format": "LSMS",
         "compositional_stratified_splitting": true,
-        "rotational_invariance": true,
+        "rotational_invariance": false,
         "node_features": {
             "name": ["num_of_protons","charge_density", "magnetic_moment"],
             "dim": [1,1,1],
@@ -23,7 +23,7 @@
         "Architecture": {
             "model_type": "PNA",
             "radius": 7,
-            "max_neighbours": 100000,
+            "max_neighbours": 100,
             "periodic_boundary_conditions": false,
             "hidden_dim": 5,
             "num_conv_layers": 6,
