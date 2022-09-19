@@ -40,7 +40,8 @@ def loss_function_selection(loss_function_string: str):
 def save_model(model, optimizer, name, path="./logs/"):
     """Save both model and optimizer state in a single checkpoint file"""
     _, world_rank = get_comm_size_and_rank()
-    optimizer.consolidate_state_dict()
+    if hasattr(optimizer, 'consolidate_state_dict'):
+        optimizer.consolidate_state_dict()
     if world_rank == 0:
         path_name = os.path.join(path, name, name + ".pk")
         torch.save(
