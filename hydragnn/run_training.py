@@ -20,6 +20,7 @@ from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import (
     setup_ddp,
     get_distributed_model,
+    print_peak_memory,
 )
 from hydragnn.utils.model import (
     save_model,
@@ -72,10 +73,17 @@ def _(config: dict):
     model = create_model_config(
         config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
+    print_peak_memory(
+        config["Verbosity"]["level"], "Max memory allocated after creating local model"
+    )
     model = get_distributed_model(
         model,
         config["Verbosity"]["level"],
         sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+    )
+    print_peak_memory(
+        config["Verbosity"]["level"],
+        "Max memory allocated after creating distributed model",
     )
 
     optimizer = select_optimizer(
