@@ -231,3 +231,13 @@ def get_distributed_model(model, verbosity=0, sync_batch_norm=False):
                 model, device_ids=[device]
             )
     return model
+
+
+def print_peak_memory(verbosity_level, prefix):
+    # FIXME: this will have to change when the code can run on AMD gpus
+    if torch.cuda.is_available():
+        device = get_device()
+        print_distributed(
+            verbosity_level,
+            f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ",
+        )

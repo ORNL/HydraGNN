@@ -52,12 +52,14 @@
             "denormalize_output": false
         },
         "Training": {
-            "optimizer": "AdamW",
             "num_epoch": 80,
             "perc_train": 0.7,
             "loss_function_type": "mse",
-            "learning_rate": 0.01,
-            "batch_size": 16
+            "batch_size": 16,
+            "Optimizer":{
+                "type": "AdamW",
+                "learning_rate": 0.01
+            }
         }
     },
     "Visualization": {

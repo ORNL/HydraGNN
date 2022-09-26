@@ -51,13 +51,15 @@
             "denormalize_output": true
         },
         "Training": {
-            "optimizer": "AdamW",
             "num_epoch": 2,
             "perc_train": 0.7,
             "loss_function_type": "mse",
-            "learning_rate": 1e-3,
             "batch_size": 64,
-            "continue": 0
+            "continue": 0,
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            }
         }
     },
     "Visualization": {
