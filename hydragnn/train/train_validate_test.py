@@ -20,7 +20,7 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
-from hydragnn.utils.distributed import get_device
+from hydragnn.utils.distributed import get_device, print_peak_memory
 from hydragnn.preprocess.load_data import HydraDataLoader
 
 import os
@@ -337,7 +337,9 @@ def train(
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
         with record_function("backward"):
             loss.backward()
+        print_peak_memory(verbosity, "Max memory allocated before optimizer step")
         opt.step()
+        print_peak_memory(verbosity, "Max memory allocated after optimizer")
         profiler.step()
         with torch.no_grad():
             total_error += loss * data.num_graphs

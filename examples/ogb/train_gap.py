@@ -343,7 +343,7 @@ if __name__ == "__main__":
         print_model(model)
     dist.barrier()
 
-    learning_rate = config["NeuralNetwork"]["Training"]["learning_rate"]
+    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
