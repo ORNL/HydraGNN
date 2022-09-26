@@ -10,7 +10,6 @@
 ##############################################################################
 
 import os
-import pandas
 import numpy as np
 import hydragnn, tests
 import pytest
