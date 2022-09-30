@@ -21,6 +21,26 @@ pip install -r requirements-dev.txt
 Detailed dependency installation instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Install)
 
+## Installation
+
+After checking out HydgraGNN, we recommend to install HydraGNN in a
+developer mode so that you can use the files in your current location
+and update them if needed:
+```
+python -m pip install -e .
+```
+
+Or, simply type the following in the HydraGNN directory:
+```
+export PYTHONPATH=$PWD:$PYTHONPATH
+```
+
+Alternatively, if you have no plane to update, you can install
+HydraGNN in your python tree as a static package:
+```
+python setup.py install
+```
+
 ## Running the code
 
 There are two main options for running the code; both require a JSON input file
