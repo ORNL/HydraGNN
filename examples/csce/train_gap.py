@@ -14,14 +14,18 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
+from hydragnn.utils.pickledataset import SimplePickleDataset
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata,
 )
 
 import numpy as np
-import adios2 as ad2
+
+try:
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch
@@ -360,7 +364,7 @@ if __name__ == "__main__":
         config["NeuralNetwork"],
         log_name,
         verbosity,
-        create_plots=True,
+        create_plots=False,
     )
 
     hydragnn.utils.save_model(model, optimizer, log_name)
