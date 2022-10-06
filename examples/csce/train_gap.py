@@ -365,7 +365,7 @@ if __name__ == "__main__":
         config["NeuralNetwork"],
         log_name,
         verbosity,
-        create_plots=True,
+        create_plots=False,
     )
 
     hydragnn.utils.save_model(model, optimizer, log_name)

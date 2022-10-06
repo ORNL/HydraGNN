@@ -451,7 +451,6 @@ class SimplePickleDataset(torch.utils.data.Dataset):
 
         if not os.path.exists(self.basedir):
             os.makedirs(self.basedir)
-        print(self.basedir, self.label)
         with open("%s/%s.meta" % (self.basedir, self.label)) as f:
             self.ndata = int(f.read())
 
