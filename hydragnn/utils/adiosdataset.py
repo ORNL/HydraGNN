@@ -2,12 +2,15 @@ from mpi4py import MPI
 import time
 import os
 import glob
-import pickle
 
 from .print_utils import print_distributed, log, iterate_tqdm
 
 import numpy as np
-import adios2 as ad2
+
+try:
+    import adios2 as ad2
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch
@@ -432,25 +435,6 @@ class AdiosDataset(torch.utils.data.Dataset):
 
         self.preflight = False
 
-
-class SimplePickleDataset(torch.utils.data.Dataset):
-    """Simple Pickle Dataset"""
-
-    def __init__(self, basedir, prefix, label):
-        self.basedir = basedir
-        self.prefix = prefix
-        self.label = label
-
-        with open("%s/%s.meta" % (self.basedir, self.label)) as f:
-            self.ndata = int(f.read())
-
-        log("Pickle files:", self.label, self.ndata)
-
-    def __len__(self):
-        return self.ndata
-
-    def __getitem__(self, idx):
-        fname = "%s/%s-%s-%d.pk" % (self.basedir, self.prefix, self.label, idx)
-        with open(fname, "rb") as f:
-            data_object = pickle.load(f)
-        return data_object
+    def __iter__(self):
+        for idx in range(self.ndata):
+            yield self.__getitem__(idx)

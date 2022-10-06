@@ -16,10 +16,13 @@ from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
 from hydragnn.utils.model import print_model
-from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 
 import numpy as np
-import adios2 as ad2
+
+try:
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch
