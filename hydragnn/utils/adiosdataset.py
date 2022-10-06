@@ -460,8 +460,6 @@ class SimplePickleDataset(torch.utils.data.Dataset):
         return self.ndata
 
     def __getitem__(self, idx):
-        if idx >= self.ndata:
-            idx = 0
         fname = "%s/%s-%s-%d.pk" % (self.basedir, self.prefix, self.label, idx)
         with open(fname, "rb") as f:
             data_object = pickle.load(f)
