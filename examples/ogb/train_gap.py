@@ -14,7 +14,7 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
+from hydragnn.utils.adiosdataset import SimplePickleDataset
 from hydragnn.utils.model import print_model
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
@@ -22,7 +22,12 @@ from hydragnn.utils.smiles_utils import (
 )
 
 import numpy as np
-import adios2 as ad2
+
+try:
+    import adios2 as ad2
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch
@@ -253,10 +258,11 @@ if __name__ == "__main__":
 
             setname = ["trainset", "valset", "testset"]
             if args.format == "pickle":
+                dirname = "examples/ogb/dataset/pickle"
                 if rank == 0:
-                    with open(
-                        "examples/ogb/dataset/pickle/%s.meta" % (setname[idataset]), "w"
-                    ) as f:
+                    if not os.path.exists(dirname):
+                        os.makedirs(dirname)
+                    with open("%s/%s.meta" % (dirname, setname[idataset]), "w") as f:
                         f.write(str(len(smileset)))
 
             for i, (smilestr, ytarget) in iterate_tqdm(
@@ -268,7 +274,8 @@ if __name__ == "__main__":
                 ## (2022/07) This is for testing to compare with Adios
                 ## pickle write
                 if args.format == "pickle":
-                    fname = "examples/ogb/dataset/pickle/ogb_gap-%s-%d.pk" % (
+                    fname = "%s/ogb_gap-%s-%d.pk" % (
+                        dirname,
                         setname[idataset],
                         rx.start + i,
                     )
@@ -310,13 +317,10 @@ if __name__ == "__main__":
         valset = OGBRawDataset(fact, "valset")
         testset = OGBRawDataset(fact, "testset")
     elif args.format == "pickle":
-        trainset = SimplePickleDataset(
-            "examples/ogb/dataset/pickle", "ogb_gap", "trainset"
-        )
-        valset = SimplePickleDataset("examples/ogb/dataset/pickle", "ogb_gap", "valset")
-        testset = SimplePickleDataset(
-            "examples/ogb/dataset/pickle", "ogb_gap", "testset"
-        )
+        dirname = "examples/ogb/dataset/pickle"
+        trainset = SimplePickleDataset(dirname, "ogb_gap", "trainset")
+        valset = SimplePickleDataset(dirname, "ogb_gap", "valset")
+        testset = SimplePickleDataset(dirname, "ogb_gap", "testset")
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 

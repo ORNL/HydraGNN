@@ -14,14 +14,19 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset, SimplePickleDataset
+from hydragnn.utils.adiosdataset import SimplePickleDataset
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata,
 )
 
 import numpy as np
-import adios2 as ad2
+
+try:
+    import adios2 as ad2
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch

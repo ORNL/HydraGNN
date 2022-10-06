@@ -7,7 +7,11 @@ import pickle
 from .print_utils import print_distributed, log, iterate_tqdm
 
 import numpy as np
-import adios2 as ad2
+
+try:
+    import adios2 as ad2
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch
@@ -432,6 +436,10 @@ class AdiosDataset(torch.utils.data.Dataset):
 
         self.preflight = False
 
+    def __iter__(self):
+        for idx in range(self.ndata):
+            yield self.__getitem__(idx)
+
 
 class SimplePickleDataset(torch.utils.data.Dataset):
     """Simple Pickle Dataset"""
@@ -441,6 +449,9 @@ class SimplePickleDataset(torch.utils.data.Dataset):
         self.prefix = prefix
         self.label = label
 
+        if not os.path.exists(self.basedir):
+            os.makedirs(self.basedir)
+        print(self.basedir, self.label)
         with open("%s/%s.meta" % (self.basedir, self.label)) as f:
             self.ndata = int(f.read())
 
@@ -450,7 +461,13 @@ class SimplePickleDataset(torch.utils.data.Dataset):
         return self.ndata
 
     def __getitem__(self, idx):
+        if idx >= self.ndata:
+            idx = 0
         fname = "%s/%s-%s-%d.pk" % (self.basedir, self.prefix, self.label, idx)
         with open(fname, "rb") as f:
             data_object = pickle.load(f)
         return data_object
+
+    def __iter__(self):
+        for idx in range(self.ndata):
+            yield self.__getitem__(idx)
