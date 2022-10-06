@@ -20,7 +20,6 @@ from hydragnn.utils.model import print_model
 import numpy as np
 
 try:
-    import adios2 as ad2
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
