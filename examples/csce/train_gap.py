@@ -23,7 +23,6 @@ from hydragnn.utils.smiles_utils import (
 import numpy as np
 
 try:
-    import adios2 as ad2
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass

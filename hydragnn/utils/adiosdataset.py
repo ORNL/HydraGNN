@@ -2,7 +2,6 @@ from mpi4py import MPI
 import time
 import os
 import glob
-import pickle
 
 from .print_utils import print_distributed, log, iterate_tqdm
 
