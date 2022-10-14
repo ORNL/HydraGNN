@@ -223,7 +223,7 @@ def get_head_indices_graph(model, data):
     for ihead in range(model.module.num_heads):
         head_each = torch.arange(head_dims[ihead])
         head_ind_temporary = head_each.repeat(batch_size)
-        head_shift_temporary = torch.repeat_interleave(
+        head_shift_temporary = sum(head_dims[:ihead]) + torch.repeat_interleave(
             torch.arange(batch_size) * head_dimsum, head_dims[ihead]
         )
         head_index[ihead] = head_ind_temporary + head_shift_temporary
