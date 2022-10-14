@@ -73,7 +73,9 @@ class SerializedDataLoader:
             self.spherical_coordinates = config["Dataset"]["Descriptors"][
                 "SphericalCoordinates"
             ]
-            self.point_pair_features = config["Dataset"]["Descriptors"]["PointPairFeatures"]
+            self.point_pair_features = config["Dataset"]["Descriptors"][
+                "PointPairFeatures"
+            ]
 
         self.subsample_percentage = None
 
