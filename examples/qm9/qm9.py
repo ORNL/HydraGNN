@@ -36,7 +36,7 @@ except:
 num_samples = 1000
 
 # Configurable run choices (JSON file that accompanies this example script).
-filename = os.path.join(os.path.dirname(__file__), "qm9.json")
+filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]

@@ -177,7 +177,7 @@ if __name__ == "__main__":
 
     graph_feature_names = ["GAP"]
     graph_feature_dim = [1]
-    dirpwd = os.path.dirname(__file__)
+    dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/csce_gap_synth.csv")
     ##################################################################################################################
     inputfilesubstr = args.inputfilesubstr
