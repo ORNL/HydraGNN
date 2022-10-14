@@ -135,7 +135,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    dirpwd = os.path.dirname(__file__)
+    dirpwd = os.path.dirname(os.path.abspath(__file__))
     input_filename = os.path.join(dirpwd, "ising_model.json")
     with open(input_filename, "r") as f:
         config = json.load(f)
