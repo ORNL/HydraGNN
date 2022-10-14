@@ -65,10 +65,16 @@ class SerializedDataLoader:
         self.input_node_features = config["NeuralNetwork"]["Variables_of_interest"][
             "input_node_features"
         ]
-        self.spherical_coordinates = config["Dataset"]["Descriptors"][
-            "SphericalCoordinates"
-        ]
-        self.point_pair_features = config["Dataset"]["Descriptors"]["PointPairFeatures"]
+
+        self.spherical_coordinates = False
+        self.point_pair_features = False
+
+        if "Descriptors" in config["Dataset"]:
+            self.spherical_coordinates = config["Dataset"]["Descriptors"][
+                "SphericalCoordinates"
+            ]
+            self.point_pair_features = config["Dataset"]["Descriptors"]["PointPairFeatures"]
+
         self.subsample_percentage = None
 
         # In situations where someone already provides the .pkl filed with data
