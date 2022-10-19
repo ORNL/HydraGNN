@@ -70,12 +70,14 @@ class SerializedDataLoader:
         self.point_pair_features = False
 
         if "Descriptors" in config["Dataset"]:
-            self.spherical_coordinates = config["Dataset"]["Descriptors"][
-                "SphericalCoordinates"
-            ]
-            self.point_pair_features = config["Dataset"]["Descriptors"][
-                "PointPairFeatures"
-            ]
+            if "SphericalCoordinates" in config["Dataset"]["Descriptors"]:
+                self.spherical_coordinates = config["Dataset"]["Descriptors"][
+                    "SphericalCoordinates"
+                ]
+            if "PointPairFeatures" in config["Dataset"]["Descriptors"]:
+                self.point_pair_features = config["Dataset"]["Descriptors"][
+                    "PointPairFeatures"
+                ]
 
         self.subsample_percentage = None
 
