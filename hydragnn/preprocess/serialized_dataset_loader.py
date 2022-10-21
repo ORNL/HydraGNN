@@ -14,7 +14,12 @@ from sklearn.model_selection import StratifiedShuffleSplit
 
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, NormalizeRotation
+from torch_geometric.transforms import (
+    Distance,
+    NormalizeRotation,
+    Spherical,
+    PointPairFeatures,
+)
 
 from .dataset_descriptors import AtomFeatures
 from hydragnn.preprocess import get_radius_graph_config
@@ -60,6 +65,20 @@ class SerializedDataLoader:
         self.input_node_features = config["NeuralNetwork"]["Variables_of_interest"][
             "input_node_features"
         ]
+
+        self.spherical_coordinates = False
+        self.point_pair_features = False
+
+        if "Descriptors" in config["Dataset"]:
+            if "SphericalCoordinates" in config["Dataset"]["Descriptors"]:
+                self.spherical_coordinates = config["Dataset"]["Descriptors"][
+                    "SphericalCoordinates"
+                ]
+            if "PointPairFeatures" in config["Dataset"]["Descriptors"]:
+                self.point_pair_features = config["Dataset"]["Descriptors"][
+                    "PointPairFeatures"
+                ]
+
         self.subsample_percentage = None
 
         # In situations where someone already provides the .pkl filed with data
@@ -148,6 +167,13 @@ class SerializedDataLoader:
         # Normalization of the edges
         for data in dataset:
             data.edge_attr = data.edge_attr / max_edge_length
+
+        # Descriptors about topology of the local environment
+        for data in dataset:
+            if self.spherical_coordinates:
+                data = Spherical(data)
+            if self.point_pair_features:
+                data = PointPairFeatures(data)
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
