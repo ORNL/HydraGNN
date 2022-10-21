@@ -139,7 +139,9 @@ class CSCEDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
-        data = generate_graphdata_from_smilestr(smilestr, ytarget, csce_node_types, self.var_config)
+        data = generate_graphdata_from_smilestr(
+            smilestr, ytarget, csce_node_types, self.var_config
+        )
         return data
 
 
