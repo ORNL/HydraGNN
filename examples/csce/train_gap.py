@@ -17,7 +17,7 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.pickledataset import SimplePickleDataset
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
-    generate_graphdata,
+    generate_graphdata_from_smilestr,
 )
 
 import numpy as np
@@ -139,7 +139,7 @@ class CSCEDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
-        data = generate_graphdata(smilestr, ytarget, csce_node_types, self.var_config)
+        data = generate_graphdata_from_smilestr(smilestr, ytarget, csce_node_types, self.var_config)
         return data
 
 
@@ -255,7 +255,7 @@ if __name__ == "__main__":
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
-                data = generate_graphdata(
+                data = generate_graphdata_from_smilestr(
                     smilestr, ytarget, csce_node_types, var_config
                 )
                 dataset_lists[idataset].append(data)
