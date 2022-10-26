@@ -155,7 +155,7 @@ class OGBRawDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
-        data = generate_graphdata_from_smilestr, (
+        data = generate_graphdata_from_smilestr(
             smilestr,
             ytarget,
             ogb_node_types,
@@ -272,7 +272,7 @@ if __name__ == "__main__":
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
-                data = generate_graphdata_from_smilestr, (
+                data = generate_graphdata_from_smilestr(
                     smilestr,
                     ytarget,
                     ogb_node_types,
