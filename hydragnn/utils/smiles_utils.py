@@ -33,13 +33,21 @@ def get_node_attribute_name(types):
     return name_list, dims_list
 
 
-def generate_graphdata(simlestr, ytarget, types, var_config=None):
-    bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
+def generate_graphdata_from_smilestr(simlestr, ytarget, types, var_config=None):
 
     ps = Chem.SmilesParserParams()
     ps.removeHs = False
 
     mol = Chem.MolFromSmiles(simlestr, ps)  # , sanitize=False , removeHs=False)
+
+    data = generate_graphdata_from_rdkit_molecule(mol, ytarget, types, var_config)
+
+    return data
+
+
+def generate_graphdata_from_rdkit_molecule(mol, ytarget, types, var_config=None):
+    bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
+
     mol = Chem.AddHs(mol)
     N = mol.GetNumAtoms()
 
