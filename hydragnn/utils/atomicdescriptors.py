@@ -197,6 +197,6 @@ class atomicdescriptors:
 
 if __name__ == "__main__":
     atomicdescriptor = atomicdescriptors(
-        "./embedding.json", overwritten=True, element_types=None
+        "./embedding.json", overwritten=True, element_types=["C", "H"]
     )
     print(atomicdescriptor.get_atom_features("C"))

@@ -2,3 +2,4 @@ black==21.5b1
 pre-commit
 pytest
 pytest-mpi
+mendeleev
