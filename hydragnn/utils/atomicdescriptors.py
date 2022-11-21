@@ -76,20 +76,10 @@ class atomicdescriptors:
     def get_group_id(self, element):
         if mendeleev.element(element).group_id is not None:
             return mendeleev.element(element).group_id
-        else:  # 59-71
-            print("Warning: manually assign group_id for element: %s" % element)
-            if mendeleev.element(element).atomic_number < 71:
-                return mendeleev.element(element).atomic_number - 57 + 3
-            elif mendeleev.element(element).atomic_number == 71:
-                return 3
-            elif mendeleev.element(element).atomic_number < 103:
-                return mendeleev.element(element).atomic_number - 89 + 3
-            elif mendeleev.element(element).atomic_number == 103:
-                return 3
-            else:
-                raise ValueError(
-                    f"unexpected {mendeleev.element(element).atomic_number}"
-                )
+        else:
+            raise ValueError(
+                f"None is returned by Mendeleev for group_id of element: {element}"
+            )
 
     def get_period(self):
         period = []
@@ -98,18 +88,21 @@ class atomicdescriptors:
         period = F.one_hot(torch.Tensor(period).long(), num_classes=-1)
         return period
 
-    def __listocategorical__(self, list, prop_name, num_classes=10):
-        list_value = [v for v in list if v is not None]
-        if len(list_value) < len(list):
-            print(
-                f"Warning: None is identified in property, {prop_name}, of some elements. It will be replaced with the minimum value of property for all available elements."
+    def __listocategorical__(self, prop_list, prop_name, num_classes=10):
+
+        None_elements = [
+            ele for ele, item in zip(self.element_types, prop_list) if item is None
+        ]
+        if len(None_elements) > 0:
+            raise ValueError(
+                f"None is identified in Mendeleev property, {prop_name}, of elements, {None_elements}"
             )
-        minval = min(list_value)
-        maxval = max(list_value)
+
+        minval = min(prop_list)
+        maxval = max(prop_list)
         delval = (maxval - minval) / num_classes
-        list = [v if v is not None else minval for v in list]
         categories = [
-            min(int((item - minval) / delval), num_classes - 1) for item in list
+            min(int((item - minval) / delval), num_classes - 1) for item in prop_list
         ]
         return categories
 
