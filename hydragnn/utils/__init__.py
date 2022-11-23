@@ -24,3 +24,4 @@ from .config_utils import (
 )
 
 from .optimizer import select_optimizer
+from .atomicdescriptors import atomicdescriptors
