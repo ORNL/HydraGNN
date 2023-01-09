@@ -11,6 +11,101 @@ except:
 
 import hydragnn
 
+# FIXME: temporary treatment for url issue in md17; will update if pytorch geometric corrected
+from typing import Optional, Callable, List
+import os.path as osp
+import numpy as np
+from torch_geometric.data import InMemoryDataset, download_url, extract_zip, Data
+
+
+class myMD17(InMemoryDataset):
+    url = "http://quantum-machine.org/gdml/data/npz"
+    file_names = {"uracil": "md17_uracil.npz"}
+
+    def __init__(
+        self,
+        root: str,
+        name: str,
+        train: Optional[bool] = None,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = None,
+    ):
+        self.name = name
+        assert name in self.file_names
+        super().__init__(root, transform, pre_transform, pre_filter)
+
+        if len(self.processed_file_names) == 1 and train is not None:
+            raise ValueError(
+                f"'{self.name}' dataset does not provide pre-defined splits "
+                f"but 'train' argument is set to '{train}'"
+            )
+        elif len(self.processed_file_names) == 2 and train is None:
+            raise ValueError(
+                f"'{self.name}' dataset does provide pre-defined splits but "
+                f"'train' argument was not specified"
+            )
+
+        idx = 0 if train is None or train else 1
+        self.data, self.slices = torch.load(self.processed_paths[idx])
+
+    def mean(self) -> float:
+        return float(self.data.energy.mean())
+
+    @property
+    def raw_dir(self) -> str:
+        print(self.root)
+        name = self.file_names[self.name].split(".")[0]
+        print(osp.join(self.root, name, "raw"))
+        return osp.join(self.root, name, "raw")
+
+    @property
+    def processed_dir(self) -> str:
+        name = self.file_names[self.name].split(".")[0]
+        return osp.join(self.root, name, "processed")
+
+    @property
+    def raw_file_names(self) -> List[str]:
+        name = self.file_names[self.name]
+        if name[-4:] == ".zip":
+            return [name[:-4] + "-train.npz", name[:-4] + "-test.npz"]
+        else:
+            return [name]
+
+    @property
+    def processed_file_names(self) -> List[str]:
+        name = self.file_names[self.name]
+        return ["train.pt", "test.pt"] if name[-4:] == ".zip" else ["data.pt"]
+
+    def download(self):
+        url = f"{self.url}/{self.file_names[self.name]}"
+        path = download_url(url, self.raw_dir)
+        print(path)
+        if url[-4:] == ".zip":
+            extract_zip(path, self.raw_dir)
+            os.unlink(path)
+
+    def process(self):
+        it = zip(self.raw_paths, self.processed_paths)
+        for raw_path, processed_path in it:
+            raw_data = np.load(raw_path)
+            z = torch.from_numpy(raw_data["z"]).to(torch.long)
+            pos = torch.from_numpy(raw_data["R"]).to(torch.float)
+            energy = torch.from_numpy(raw_data["E"]).to(torch.float)
+            force = torch.from_numpy(raw_data["F"]).to(torch.float)
+
+            data_list = []
+            for i in range(pos.size(0)):
+                data = Data(z=z, pos=pos[i], energy=energy[i], force=force[i])
+                if self.pre_filter is not None and not self.pre_filter(data):
+                    continue
+                if self.pre_transform is not None:
+                    data = self.pre_transform(data)
+                data_list.append(data)
+
+            torch.save(self.collate(data_list), processed_path)
+
+
 # Update each sample prior to loading.
 def md17_pre_transform(data):
     # Set descriptor as element type.
@@ -56,7 +151,7 @@ hydragnn.utils.setup_log(log_name)
 # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
 compute_edges = hydragnn.preprocess.get_radius_graph_config(arch_config)
 
-dataset = torch_geometric.datasets.MD17(
+dataset = myMD17(
     root="dataset/md17",
     name="uracil",
     pre_transform=md17_pre_transform,
