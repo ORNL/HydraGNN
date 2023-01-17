@@ -44,7 +44,7 @@ def comm_reduce(x, op):
     return y
 
 
-class RawDataLoader:
+class AbstractRawDataLoader:
     """A class used for loading raw files that contain data representing atom structures, transforms it and stores the structures as file of serialized structures.
     Most of the class methods are hidden, because from outside a caller needs only to know about
     load_raw_data method.
@@ -145,7 +145,7 @@ class RawDataLoader:
                     continue
                 # if the directory contains file, iterate over them
                 if os.path.isfile(os.path.join(raw_data_path, name)):
-                    data_object = self.__transform_input_to_data_object_base(
+                    data_object = self.transform_input_to_data_object_base(
                         filepath=os.path.join(raw_data_path, name)
                     )
                     if not isinstance(data_object, type(None)):
@@ -155,18 +155,14 @@ class RawDataLoader:
                     dir_name = os.path.join(raw_data_path, name)
                     for subname in os.listdir(dir_name):
                         if os.path.isfile(os.path.join(dir_name, subname)):
-                            data_object = self.__transform_input_to_data_object_base(
+                            data_object = self.transform_input_to_data_object_base(
                                 filepath=os.path.join(dir_name, subname)
                             )
                             if not isinstance(data_object, type(None)):
                                 dataset.append(data_object)
 
-            if self.data_format == "LSMS":
-                for idx, data_object in enumerate(dataset):
-                    dataset[idx] = self.__charge_density_update_for_LSMS(data_object)
-
             # scaled features by number of nodes
-            dataset = self.__scale_features_by_num_nodes(dataset)
+            dataset = self.scale_features_by_num_nodes(dataset)
 
             if dataset_type == "total":
                 serial_data_name = self.raw_dataset_name + ".pkl"
@@ -177,7 +173,7 @@ class RawDataLoader:
             self.dataset_list.append(dataset)
             self.serial_data_name_list.append(serial_data_name)
 
-        self.__normalize_dataset()
+        self.normalize_dataset()
 
         for serial_data_name, dataset_normalized in zip(
             self.serial_data_name_list, self.dataset_list
@@ -187,151 +183,10 @@ class RawDataLoader:
                 pickle.dump(self.minmax_graph_feature, f)
                 pickle.dump(dataset_normalized, f)
 
-    def __transform_input_to_data_object_base(self, filepath):
-        if self.data_format == "LSMS" or self.data_format == "unit_test":
-            data_object = self.__transform_LSMS_input_to_data_object_base(
-                filepath=filepath
-            )
-        elif self.data_format == "CFG":
-            data_object = self.__transform_CFG_input_to_data_object_base(
-                filepath=filepath
-            )
-        return data_object
+    def transform_input_to_data_object_base(self, filepath):
+        pass
 
-    def __transform_CFG_input_to_data_object_base(self, filepath):
-        """Transforms lines of strings read from the raw data CFG file to Data object and returns it.
-
-        Parameters
-        ----------
-        lines:
-          content of data file with all the graph information
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-
-        if filepath.endswith(".cfg"):
-
-            data_object = self.__transform_ASE_object_to_data_object(filepath)
-
-            return data_object
-
-        else:
-            return None
-
-    def __transform_ASE_object_to_data_object(self, filepath):
-
-        # FIXME:
-        #  this still assumes bulk modulus is specific to the CFG format.
-        #  To deal with multiple files across formats, one should generalize this function
-        #  by moving the reading of the .bulk file in a standalone routine.
-        #  Morevoer, this approach assumes tha there is only one global feature to look at,
-        #  and that this global feature is specicially retrieveable in a file with the string *bulk* inside.
-
-        ase_object = read_cfg(filepath)
-
-        data_object = Data()
-
-        data_object.supercell_size = tensor(ase_object.cell.array).float()
-        data_object.pos = tensor(ase_object.arrays["positions"]).float()
-        proton_numbers = np.expand_dims(ase_object.arrays["numbers"], axis=1)
-        masses = np.expand_dims(ase_object.arrays["masses"], axis=1)
-        c_peratom = np.expand_dims(ase_object.arrays["c_peratom"], axis=1)
-        fx = np.expand_dims(ase_object.arrays["fx"], axis=1)
-        fy = np.expand_dims(ase_object.arrays["fy"], axis=1)
-        fz = np.expand_dims(ase_object.arrays["fz"], axis=1)
-        node_feature_matrix = np.concatenate(
-            (proton_numbers, masses, c_peratom, fx, fy, fz), axis=1
-        )
-        data_object.x = tensor(node_feature_matrix).float()
-
-        filename_without_extension = os.path.splitext(filepath)[0]
-
-        if os.path.exists(os.path.join(filename_without_extension + ".bulk")):
-            filename_bulk = os.path.join(filename_without_extension + ".bulk")
-            f = open(filename_bulk, "r", encoding="utf-8")
-            lines = f.readlines()
-            graph_feat = lines[0].split(None, 2)
-            g_feature = []
-            # collect graph features
-            for item in range(len(self.graph_feature_dim)):
-                for icomp in range(self.graph_feature_dim[item]):
-                    it_comp = self.graph_feature_col[item] + icomp
-                    g_feature.append(float(graph_feat[it_comp].strip()))
-            data_object.y = tensor(g_feature)
-
-        return data_object
-
-    def __transform_LSMS_input_to_data_object_base(self, filepath):
-        """Transforms lines of strings read from the raw data LSMS file to Data object and returns it.
-
-        Parameters
-        ----------
-        lines:
-          content of data file with all the graph information
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-
-        data_object = Data()
-
-        f = open(filepath, "r", encoding="utf-8")
-
-        lines = f.readlines()
-        graph_feat = lines[0].split(None, 2)
-        g_feature = []
-        # collect graph features
-        for item in range(len(self.graph_feature_dim)):
-            for icomp in range(self.graph_feature_dim[item]):
-                it_comp = self.graph_feature_col[item] + icomp
-                g_feature.append(float(graph_feat[it_comp].strip()))
-        data_object.y = tensor(g_feature)
-
-        node_feature_matrix = []
-        node_position_matrix = []
-        for line in lines[1:]:
-            node_feat = line.split(None, 11)
-
-            x_pos = float(node_feat[2].strip())
-            y_pos = float(node_feat[3].strip())
-            z_pos = float(node_feat[4].strip())
-            node_position_matrix.append([x_pos, y_pos, z_pos])
-
-            node_feature = []
-            for item in range(len(self.node_feature_dim)):
-                for icomp in range(self.node_feature_dim[item]):
-                    it_comp = self.node_feature_col[item] + icomp
-                    node_feature.append(float(node_feat[it_comp].strip()))
-            node_feature_matrix.append(node_feature)
-
-        f.close()
-
-        data_object.pos = tensor(node_position_matrix)
-        data_object.x = tensor(node_feature_matrix)
-        return data_object
-
-    def __charge_density_update_for_LSMS(self, data_object: Data):
-        """Calculate charge density for LSMS format
-        Parameters
-        ----------
-        data_object: Data
-            Data object representing structure of a graph sample.
-
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-        num_of_protons = data_object.x[:, 0]
-        charge_density = data_object.x[:, 1]
-        charge_density -= num_of_protons
-        data_object.x[:, 1] = charge_density
-        return data_object
-
-    def __scale_features_by_num_nodes(self, dataset):
+    def scale_features_by_num_nodes(self, dataset):
         """Calculate [**]_scaled_num_nodes"""
         scaled_graph_feature_index = [
             i
@@ -356,7 +211,7 @@ class RawDataLoader:
 
         return dataset
 
-    def __normalize_dataset(self):
+    def normalize_dataset(self):
 
         """Performs the normalization on Data objects and returns the normalized dataset."""
         num_node_features = len(self.node_feature_dim)

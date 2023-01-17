@@ -7,7 +7,7 @@ import argparse
 import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
-from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
+from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.utils.model import print_model
 
 import torch
@@ -80,7 +80,7 @@ if __name__ == "__main__":
             config["Dataset"]["path"][dataset_type] = raw_data_path
 
         ## each process saves its own data file
-        loader = RawDataLoader(config["Dataset"], dist=True)
+        loader = LSMS_RawDataLoader(config["Dataset"], dist=True)
         loader.load_raw_data()
 
         ## Read total pkl and split (no graph object conversion)
