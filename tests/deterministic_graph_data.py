@@ -130,7 +130,7 @@ def create_configuration(
         knn.fit(positions, node_feature)
         node_output_x = torch.Tensor(knn.predict(positions))
 
-    node_output_x_square = node_output_x ** 2
+    node_output_x_square = node_output_x ** 2 + node_feature
     node_output_x_cube = node_output_x ** 3
 
     updated_table = torch.cat(

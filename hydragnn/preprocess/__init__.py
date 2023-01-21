@@ -22,5 +22,6 @@ from .serialized_dataset_loader import (
     SerializedDataLoader,
     update_predicted_values,
 )
-from .raw_dataset_loader import RawDataLoader
+from .lsms_raw_dataset_loader import LSMS_RawDataLoader
+from .cfg_raw_dataset_loader import CFG_RawDataLoader
 from .compositional_data_splitting import compositional_stratified_splitting
