@@ -23,7 +23,8 @@ except:
     from torch_geometric.data import DataLoader
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
-from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
+from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
+from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
 from hydragnn.preprocess.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
@@ -335,7 +336,13 @@ def transform_raw_data_to_serialized(config):
     _, rank = get_comm_size_and_rank()
 
     if rank == 0:
-        loader = RawDataLoader(config)
+        if config["format"] == "LSMS" or config["format"] == "unit_test":
+            loader = LSMS_RawDataLoader(config)
+        elif config["format"] == "CFG":
+            loader = CFG_RawDataLoader(config)
+        else:
+            raise NameError("Data format not recognized for raw data loader")
+
         loader.load_raw_data()
 
     if dist.is_initialized():
