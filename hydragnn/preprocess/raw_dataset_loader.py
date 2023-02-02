@@ -17,6 +17,9 @@ import torch
 from torch_geometric.data import Data
 from torch import tensor
 
+from hydragnn.utils.distributed import get_device
+from hydragnn.utils.print_utils import log
+
 import random
 
 # WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
