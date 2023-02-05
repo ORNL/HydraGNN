@@ -132,7 +132,6 @@ if __name__ == "__main__":
         opt = {
             "preload": True,
             "shmem": False,
-            "distds": False,
         }
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)

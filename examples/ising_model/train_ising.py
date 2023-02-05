@@ -136,7 +136,6 @@ if __name__ == "__main__":
         help="configurational_histogram_cutoff",
     )
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
-    parser.add_argument("--distds", action="store_true", help="distds dataset")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -274,7 +273,6 @@ if __name__ == "__main__":
         opt = {
             "preload": False,
             "shmem": False,
-            "distds": args.distds,
         }
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
@@ -288,25 +286,11 @@ if __name__ == "__main__":
         testset = SimplePickleDataset(basedir, "testset")
         minmax_node_feature = trainset.minmax_node_feature
         minmax_graph_feature = trainset.minmax_graph_feature
-        if args.distds:
-            for dataset in (trainset, valset, testset):
-                rx = list(nsplit(range(len(dataset)), comm_size))[rank]
-                dataset.setsubset(rx)
-            opt = {}
-            trainset = DistDataset(trainset, "trainset", **opt)
-            valset = DistDataset(valset, "valset", **opt)
-            testset = DistDataset(testset, "testset", **opt)
-            trainset.minmax_node_feature = minmax_node_feature
-            trainset.minmax_graph_feature = minmax_graph_feature
 
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
-
-    if args.distds:
-        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
