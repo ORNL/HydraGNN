@@ -7,11 +7,9 @@ import argparse
 import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
-from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.utils.model import print_model
 from hydragnn.utils.rawdataset import LSMSDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.utils.pickledataset import SerializedWriter, SerializedDataset
 from hydragnn.preprocess.load_data import split_dataset
 
 try:
@@ -77,9 +75,9 @@ if __name__ == "__main__":
     )
 
     datasetname = config["Dataset"]["name"]
+    for dataset_type, raw_data_path in config["Dataset"]["path"].items():
+        config["Dataset"]["path"][dataset_type] = os.path.join(dirpwd, raw_data_path)
     if not args.loadexistingsplit:
-        dir = os.path.join(dirpwd, "./dataset/output_files")
-        config["Dataset"]["path"]["total"] = dir
         total = LSMSDataset(config)
 
         trainset, valset, testset = split_dataset(
@@ -101,27 +99,28 @@ if __name__ == "__main__":
             adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
             adwriter.save()
         elif args.format == "pickle":
-            basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
-            SimplePickleWriter(
+            basedir = os.path.join(
+                os.path.dirname(__file__), "dataset", "serialized_dataset"
+            )
+            SerializedWriter(
                 trainset,
                 basedir,
+                datasetname,
                 "trainset",
                 minmax_node_feature=total.minmax_node_feature,
                 minmax_graph_feature=total.minmax_graph_feature,
             )
-            SimplePickleWriter(
+            SerializedWriter(
                 valset,
                 basedir,
+                datasetname,
                 "valset",
-                minmax_node_feature=total.minmax_node_feature,
-                minmax_graph_feature=total.minmax_graph_feature,
             )
-            SimplePickleWriter(
+            SerializedWriter(
                 testset,
                 basedir,
+                datasetname,
                 "testset",
-                minmax_node_feature=total.minmax_node_feature,
-                minmax_graph_feature=total.minmax_graph_feature,
             )
     if args.preonly:
         sys.exit(0)
@@ -141,10 +140,12 @@ if __name__ == "__main__":
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
-        trainset = SimplePickleDataset(basedir, "trainset", preload=True)
-        valset = SimplePickleDataset(basedir, "valset", preload=True)
-        testset = SimplePickleDataset(basedir, "testset", preload=True)
+        basedir = os.path.join(
+            os.path.dirname(__file__), "dataset", "serialized_dataset"
+        )
+        trainset = SerializedDataset(basedir, datasetname, "trainset")
+        valset = SerializedDataset(basedir, datasetname, "valset")
+        testset = SerializedDataset(basedir, datasetname, "testset")
         config["NeuralNetwork"]["Variables_of_interest"]
     else:
         raise ValueError("Unknown data format: %d" % args.format)

@@ -1,5 +1,4 @@
 import os
-import glob
 import pickle
 
 import torch
@@ -29,7 +28,7 @@ class SimplePickleDataset(BaseDataset):
         self.subset = subset
         self.preload = preload
 
-        fname = os.path.join(basedir, "%s-meta.pk" % label)
+        fname = os.path.join(basedir, "%s-meta.pkl" % label)
         with open(fname, "rb") as f:
             self.minmax_node_feature = pickle.load(f)
             self.minmax_graph_feature = pickle.load(f)
@@ -63,7 +62,7 @@ class SimplePickleDataset(BaseDataset):
         """
         Read from disk
         """
-        fname = "%s-%d.pk" % (self.label, k)
+        fname = "%s-%d.pkl" % (self.label, k)
         dirfname = os.path.join(self.basedir, fname)
         if self.use_subdir:
             subdir = str(k // self.nmax_persubdir)
@@ -120,7 +119,7 @@ class SimplePickleWriter:
         if self.rank == 0:
             if not os.path.exists(basedir):
                 os.makedirs(basedir)
-            fname = os.path.join(basedir, "%s-meta.pk" % (label))
+            fname = os.path.join(basedir, "%s-meta.pkl" % (label))
             with open(fname, "wb") as f:
                 pickle.dump(self.minmax_node_feature, f)
                 pickle.dump(self.minmax_graph_feature, f)
@@ -139,10 +138,77 @@ class SimplePickleWriter:
                 os.makedirs(subdir, exist_ok=True)
 
         for i, data in enumerate(self.dataset):
-            fname = "%s-%d.pk" % (label, noffset + i)
+            fname = "%s-%d.pkl" % (label, noffset + i)
             dirfname = os.path.join(basedir, fname)
             if use_subdir:
                 subdir = str((noffset + i) // nmax_persubdir)
                 dirfname = os.path.join(basedir, subdir, fname)
             with open(dirfname, "wb") as f:
                 pickle.dump(data, f)
+
+
+class SerializedDataset(BaseDataset):
+    """Serialized Dataset"""
+
+    def __init__(self, basedir, datasetname, label):
+        """
+        Parameters
+        ----------
+        basedir: basedir
+        datasetname: dataset name
+        label: label
+        """
+        super().__init__()
+
+        self.basedir = basedir
+        self.datasetname = datasetname
+        self.label = label
+
+        fname = os.path.join(basedir, "%s-%s.pkl" % (datasetname, label))
+        with open(fname, "rb") as f:
+            self.minmax_node_feature = pickle.load(f)
+            self.minmax_graph_feature = pickle.load(f)
+            self.dataset = pickle.load(f)
+
+        log("Pickle files:", self.label, len(self.dataset))
+
+    def len(self):
+        return len(self.dataset)
+
+    def get(self, i):
+        return self.dataset[i]
+
+
+class SerializedWriter:
+    """Serialized Dataset Writer"""
+
+    def __init__(
+        self,
+        dataset,
+        basedir,
+        datasetname,
+        label="total",
+        minmax_node_feature=None,
+        minmax_graph_feature=None,
+        comm=MPI.COMM_WORLD,
+    ):
+        """
+        Parameters
+        ----------
+        dataset: locally owned dataset (should be iterable)
+        basedir: basedir
+        datasetname: dataset name
+        label: label
+        nmax: nmax in case of subdir
+        minmax_node_feature: minmax_node_feature
+        minmax_graph_feature: minmax_graph_feature
+        comm: MPI communicator
+        """
+        if not os.path.exists(basedir):
+            os.makedirs(basedir)
+        basename = "%s-%s.pkl" % (datasetname, label)
+        fname = os.path.join(basedir, basename)
+        with open(fname, "wb") as f:
+            pickle.dump(minmax_node_feature, f)
+            pickle.dump(minmax_graph_feature, f)
+            pickle.dump(dataset, f)

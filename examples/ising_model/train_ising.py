@@ -4,18 +4,14 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 import os, json
-import matplotlib.pyplot as plt
 
 import logging
 import sys
-from tqdm import tqdm
 from mpi4py import MPI
-from itertools import chain
 import argparse
-import time
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.print_utils import iterate_tqdm
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
@@ -31,7 +27,6 @@ try:
 except ImportError:
     pass
 
-import torch_geometric.data
 import torch
 import torch.distributed as dist
 

@@ -4,6 +4,10 @@ import torch
 
 
 class BaseDataset(torch.utils.data.Dataset, ABC):
+    """
+    HydraGNN's base dataset. This is abstract class.
+    """
+
     def __init__(self):
         super().__init__()
         self.dataset = list()
