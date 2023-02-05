@@ -10,8 +10,8 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_variable_dist
-from hydragnn.utils.model import calculate_PNA_degree_dist
+from hydragnn.preprocess.utils import check_if_graph_size_variable
+from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.utils import print_distributed
 import time
 
@@ -19,7 +19,7 @@ import time
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
-    graph_size_variable = check_if_graph_size_variable_dist(
+    graph_size_variable = check_if_graph_size_variable(
         train_loader, val_loader, test_loader
     )
 
@@ -38,7 +38,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree_dist(train_loader, max_neigh)
+        deg = calculate_PNA_degree(train_loader, max_neigh)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
@@ -140,8 +140,13 @@ def update_config_NN_outputs(config, data, graph_size_variable):
 def normalize_output_config(config):
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
     if "denormalize_output" in var_config and var_config["denormalize_output"]:
+        if (
+            var_config.get("minmax_node_feature") is not None
+            and var_config.get("minmax_graph_feature") is not None
+        ):
+            dataset_path = None
         ###loading min/max values from input data file. Only one path is needed
-        if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+        elif list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
             dataset_path = list(config["Dataset"]["path"].values())[0]
         else:
             if "total" in config["Dataset"]["path"].keys():

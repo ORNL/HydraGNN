@@ -84,7 +84,10 @@ def duplicate_unique_data_samples(dataset, dataset_categories):
             augmented_data.append(data.clone())
             augmented_data_category.append(category)
 
-    dataset.extend(augmented_data)
+    if isinstance(dataset, list):
+        dataset.extend(augmented_data)
+    else:
+        dataset.dataset.extend(augmented_data)
     dataset_categories.extend(augmented_data_category)
 
     return dataset, dataset_categories

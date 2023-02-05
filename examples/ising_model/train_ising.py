@@ -1,3 +1,8 @@
+import mpi4py
+
+mpi4py.rc.thread_level = "serialized"
+mpi4py.rc.threads = False
+
 import os, json
 import matplotlib.pyplot as plt
 
@@ -10,12 +15,14 @@ import argparse
 import time
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
-from hydragnn.preprocess.load_data import dataset_loading_and_splitting
-from hydragnn.preprocess.raw_dataset_loader import RawDataLoader
+from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.model import print_model
+from hydragnn.utils.rawdataset import LSMSDataset
+from hydragnn.utils.distdataset import DistDataset
+from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 
 import numpy as np
 
@@ -133,6 +140,24 @@ if __name__ == "__main__":
         default=1000,
         help="configurational_histogram_cutoff",
     )
+    parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
+    parser.add_argument("--distds", action="store_true", help="distds dataset")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--adios",
+        help="Adios dataset",
+        action="store_const",
+        dest="format",
+        const="adios",
+    )
+    group.add_argument(
+        "--pickle",
+        help="Pickle dataset",
+        action="store_const",
+        dest="format",
+        const="pickle",
+    )
+    parser.set_defaults(format="adios")
     args = parser.parse_args()
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
@@ -172,12 +197,11 @@ if __name__ == "__main__":
         """
         Parallel ising data generation step:
         1. Generate ising data (*.txt) in parallel (create_dataset_mpi)
-        2. Each process reads its own raw dataset (*.txt) (RawDataLoader)
-        3. Save own data into a pkl file (total_to_train_val_test_pkls)
-        4. Read back and split into a train, valid, and test set (load_train_val_test_sets)
-        5. Save as Adios file in parallel
+        2. Read raw dataset in parallel (*.txt) (RawDataset)
+        3. Split into a train, valid, and test set (split_dataset)
+        4. Save as Adios file in parallel
         """
-        dir = os.path.join(os.path.dirname(__file__), "../../dataset/%s" % modelname)
+        dir = os.path.join(os.path.dirname(__file__), "./dataset/%s" % modelname)
         if rank == 0:
             if os.path.exists(dir):
                 shutil.rmtree(dir)
@@ -201,45 +225,93 @@ if __name__ == "__main__":
         )
         comm.Barrier()
 
-        ## (2022/04) jyc: for parallel processing, make each pkl file local for each MPI process
-        ## Read raw and save total in pkl
-        ## Related: hydragnn.preprocess.transform_raw_data_to_serialized
-        config["Dataset"]["path"] = {"total": "./dataset/%s" % modelname}
-        config["Dataset"]["name"] = "%s_%d" % (modelname, rank)
-        loader = RawDataLoader(config["Dataset"], dist=True)
-        loader.load_raw_data()
+        config["Dataset"]["path"]["total"] = dir
+        total = LSMSDataset(config, dist=True, sampling=args.sampling)
 
-        ## Read total pkl and split (no graph object conversion)
-        hydragnn.preprocess.total_to_train_val_test_pkls(config, isdist=True)
+        trainset, valset, testset = split_dataset(
+            dataset=total,
+            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
+            stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
+        )
+        print(len(total), len(trainset), len(valset), len(testset))
 
-        ## Read each pkl and graph object conversion with max-edge normalization
-        (
-            trainset,
-            valset,
-            testset,
-        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, isdist=True)
-
-        adwriter = AdiosWriter("examples/ising_model/dataset/%s.bp" % modelname, comm)
-        adwriter.add("trainset", trainset)
-        adwriter.add("valset", valset)
-        adwriter.add("testset", testset)
-        adwriter.add_global("minmax_node_feature", loader.minmax_node_feature)
-        adwriter.add_global("minmax_graph_feature", loader.minmax_graph_feature)
-        adwriter.save()
+        if args.format == "adios":
+            fname = os.path.join(
+                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+            )
+            adwriter = AdiosWriter(fname, comm)
+            adwriter.add("trainset", trainset)
+            adwriter.add("valset", valset)
+            adwriter.add("testset", testset)
+            adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
+            adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
+            adwriter.save()
+        elif args.format == "pickle":
+            basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+            SimplePickleWriter(
+                trainset,
+                basedir,
+                "trainset",
+                minmax_node_feature=total.minmax_node_feature,
+                minmax_graph_feature=total.minmax_graph_feature,
+            )
+            SimplePickleWriter(
+                valset,
+                basedir,
+                "valset",
+                minmax_node_feature=total.minmax_node_feature,
+                minmax_graph_feature=total.minmax_graph_feature,
+            )
+            SimplePickleWriter(
+                testset,
+                basedir,
+                "testset",
+                minmax_node_feature=total.minmax_node_feature,
+                minmax_graph_feature=total.minmax_graph_feature,
+            )
         sys.exit(0)
 
     timer = Timer("load_data")
     timer.start()
 
-    info("Adios load")
-    fname = "examples/ising_model/dataset/%s.bp" % (modelname)
-    trainset = AdiosDataset(fname, "trainset", comm)
-    valset = AdiosDataset(fname, "valset", comm)
-    testset = AdiosDataset(fname, "testset", comm)
+    if args.format == "adios":
+        info("Adios load")
+        opt = {
+            "preload": False,
+            "shmem": False,
+            "distds": args.distds,
+        }
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm, **opt)
+        testset = AdiosDataset(fname, "testset", comm, **opt)
+    elif args.format == "pickle":
+        info("Pickle load")
+        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        trainset = SimplePickleDataset(basedir, "trainset")
+        valset = SimplePickleDataset(basedir, "valset")
+        testset = SimplePickleDataset(basedir, "testset")
+        minmax_node_feature = trainset.minmax_node_feature
+        minmax_graph_feature = trainset.minmax_graph_feature
+        if args.distds:
+            for dataset in (trainset, valset, testset):
+                rx = list(nsplit(range(len(dataset)), comm_size))[rank]
+                dataset.setsubset(rx)
+            opt = {}
+            trainset = DistDataset(trainset, "trainset", **opt)
+            valset = DistDataset(valset, "valset", **opt)
+            testset = DistDataset(testset, "testset", **opt)
+            trainset.minmax_node_feature = minmax_node_feature
+            trainset.minmax_graph_feature = minmax_graph_feature
+
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
+
+    if args.distds:
+        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
+        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
