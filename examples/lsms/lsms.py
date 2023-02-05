@@ -76,10 +76,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    # os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/dataset"
     datasetname = config["Dataset"]["name"]
-    # fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
-    # config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
     if not args.loadexistingsplit:
         dir = os.path.join(dirpwd, "./dataset/output_files")
         config["Dataset"]["path"]["total"] = dir
@@ -91,27 +88,6 @@ if __name__ == "__main__":
             stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
         )
         print(len(total), len(trainset), len(valset), len(testset))
-
-        # for dataset_type, raw_data_path in config["Dataset"]["path"].items():
-        #     if not os.path.isabs(raw_data_path):
-        #         raw_data_path = os.path.join(dirpwd, raw_data_path)
-        #     if not os.path.exists(raw_data_path):
-        #         raise ValueError("Folder not found: ", raw_data_path)
-        #     config["Dataset"]["path"][dataset_type] = raw_data_path
-
-        # ## each process saves its own data file
-        # loader = LSMS_RawDataLoader(config["Dataset"], dist=True)
-        # loader.load_raw_data()
-
-        # ## Read total pkl and split (no graph object conversion)
-        # hydragnn.preprocess.total_to_train_val_test_pkls(config, isdist=True)
-
-        # ## Read each pkl and graph object conversion with max-edge normalization
-        # (
-        #     trainset,
-        #     valset,
-        #     testset,
-        # ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, isdist=True)
 
         if args.format == "adios":
             fname = os.path.join(
