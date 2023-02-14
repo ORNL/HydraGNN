@@ -20,6 +20,7 @@ from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
+from hydragnn.utils import nsplit
 
 import numpy as np
 
@@ -73,11 +74,6 @@ ogb_node_types = {
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def nsplit(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
 def ogb_datasets_load(datafile, sampling=None, seed=None):

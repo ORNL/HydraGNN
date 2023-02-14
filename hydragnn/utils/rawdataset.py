@@ -13,6 +13,7 @@ from torch_geometric.transforms import (
     PointPairFeatures,
 )
 
+from hydragnn.utils import nsplit
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.basedataset import BaseDataset
@@ -33,11 +34,6 @@ from abc import ABC, abstractmethod
 
 def tensor_divide(x1, x2):
     return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
-
-
-def nsplit(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
 ## All-reduce with numpy array
