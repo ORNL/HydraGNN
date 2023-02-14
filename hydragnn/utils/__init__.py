@@ -8,6 +8,7 @@ from .distributed import (
     is_model_distributed,
     get_distributed_model,
     setup_ddp,
+    nsplit,
 )
 from .model import (
     save_model,

@@ -16,9 +16,10 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.model import print_model
-from hydragnn.utils.rawdataset import LSMSDataset
+from hydragnn.utils.lsmsdataset import LSMSDataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.utils import nsplit
 
 import numpy as np
 
@@ -109,11 +110,6 @@ def create_dataset_mpi(
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def nsplit(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
 if __name__ == "__main__":
@@ -248,6 +244,7 @@ if __name__ == "__main__":
                 "trainset",
                 minmax_node_feature=total.minmax_node_feature,
                 minmax_graph_feature=total.minmax_graph_feature,
+                comm=comm,
             )
             SimplePickleWriter(
                 valset,
@@ -255,6 +252,7 @@ if __name__ == "__main__":
                 "valset",
                 minmax_node_feature=total.minmax_node_feature,
                 minmax_graph_feature=total.minmax_graph_feature,
+                comm=comm,
             )
             SimplePickleWriter(
                 testset,
@@ -262,6 +260,7 @@ if __name__ == "__main__":
                 "testset",
                 minmax_node_feature=total.minmax_node_feature,
                 minmax_graph_feature=total.minmax_graph_feature,
+                comm=comm,
             )
         sys.exit(0)
 

@@ -8,7 +8,7 @@ import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.rawdataset import LSMSDataset
+from hydragnn.utils.lsmsdataset import LSMSDataset
 from hydragnn.utils.pickledataset import SerializedWriter, SerializedDataset
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -145,7 +145,6 @@ if __name__ == "__main__":
         trainset = SerializedDataset(basedir, datasetname, "trainset")
         valset = SerializedDataset(basedir, datasetname, "valset")
         testset = SerializedDataset(basedir, datasetname, "testset")
-        config["NeuralNetwork"]["Variables_of_interest"]
     else:
         raise ValueError("Unknown data format: %d" % args.format)
     ## Set minmax

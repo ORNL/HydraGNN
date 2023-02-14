@@ -24,9 +24,6 @@ from hydragnn.preprocess.utils import (
 )
 from hydragnn.preprocess.serialized_dataset_loader import update_predicted_values
 
-from ase.io.cfg import read_cfg
-from ase.io import read
-
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from hydragnn.preprocess.dataset_descriptors import AtomFeatures
@@ -111,16 +108,10 @@ class RawDataset(BaseDataset, ABC):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        self.__load_raw_data(sampling=self.sampling)
+        self.__load_raw_data()
 
         ## SerializedDataLoader
         self.verbosity = config["Verbosity"]["level"]
-        self.node_feature_name = config["Dataset"]["node_features"]["name"]
-        self.node_feature_dim = config["Dataset"]["node_features"]["dim"]
-        self.node_feature_col = config["Dataset"]["node_features"]["column_index"]
-        self.graph_feature_name = config["Dataset"]["graph_features"]["name"]
-        self.graph_feature_dim = config["Dataset"]["graph_features"]["dim"]
-        self.graph_feature_col = config["Dataset"]["graph_features"]["column_index"]
         self.rotational_invariance = config["Dataset"]["rotational_invariance"]
         self.periodic_boundary_conditions = config["NeuralNetwork"]["Architecture"][
             "periodic_boundary_conditions"
@@ -151,17 +142,9 @@ class RawDataset(BaseDataset, ABC):
 
         self.subsample_percentage = None
 
-        # In situations where someone already provides the .pkl filed with data
-        # the asserts from raw_dataset_loader are not performed
-        # Therefore, we need to re-check consistency
-        assert len(self.node_feature_name) == len(self.node_feature_dim)
-        assert len(self.node_feature_name) == len(self.node_feature_col)
-        assert len(self.graph_feature_name) == len(self.graph_feature_dim)
-        assert len(self.graph_feature_name) == len(self.graph_feature_col)
+        self.__build_edge()
 
-        self.__load_serialized_data()
-
-    def __load_raw_data(self, sampling=None):
+    def __load_raw_data(self):
         """Loads the raw files from specified path, performs the transformation to Data objects and normalization of values.
         After that the serialized data is stored to the serialized_dataset directory.
         """
@@ -185,8 +168,10 @@ class RawDataset(BaseDataset, ABC):
                 ## Random shuffle filelist to avoid the same test/validation set
                 random.seed(43)
                 random.shuffle(filelist)
-                if sampling is not None:
-                    filelist = np.random.choice(filelist, int(len(filelist) * sampling))
+                if self.sampling is not None:
+                    filelist = np.random.choice(
+                        filelist, int(len(filelist) * self.sampling)
+                    )
 
                 x = torch.tensor(len(filelist), requires_grad=False).to(get_device())
                 y = x.clone().detach().requires_grad_(False)
@@ -373,7 +358,7 @@ class RawDataset(BaseDataset, ABC):
         feature_indices = [i for i in atom_features]
         data.x = data.x[:, feature_indices]
 
-    def __load_serialized_data(self):
+    def __build_edge(self):
         """Loads the serialized structures data from specified path, computes new edges for the structures based on the maximum number of neighbours and radius. Additionally,
         atom and structure features are updated.
 
@@ -509,187 +494,3 @@ def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=
         subsample.append(dataset[index])
 
     return subsample
-
-
-class LSMSDataset(RawDataset):
-    def __init__(self, config, dist=False, sampling=None):
-        super().__init__(config, dist, sampling)
-
-    def transform_input_to_data_object_base(self, filepath):
-        data_object = self.__transform_LSMS_input_to_data_object_base(filepath=filepath)
-
-        return data_object
-
-    def __transform_LSMS_input_to_data_object_base(self, filepath):
-        """Transforms lines of strings read from the raw data LSMS file to Data object and returns it.
-
-        Parameters
-        ----------
-        lines:
-          content of data file with all the graph information
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-
-        data_object = Data()
-
-        f = open(filepath, "r", encoding="utf-8")
-
-        lines = f.readlines()
-        graph_feat = lines[0].split(None, 2)
-        g_feature = []
-        # collect graph features
-        for item in range(len(self.graph_feature_dim)):
-            for icomp in range(self.graph_feature_dim[item]):
-                it_comp = self.graph_feature_col[item] + icomp
-                g_feature.append(float(graph_feat[it_comp].strip()))
-        data_object.y = tensor(g_feature)
-
-        node_feature_matrix = []
-        node_position_matrix = []
-        for line in lines[1:]:
-            node_feat = line.split(None, 11)
-
-            x_pos = float(node_feat[2].strip())
-            y_pos = float(node_feat[3].strip())
-            z_pos = float(node_feat[4].strip())
-            node_position_matrix.append([x_pos, y_pos, z_pos])
-
-            node_feature = []
-            for item in range(len(self.node_feature_dim)):
-                for icomp in range(self.node_feature_dim[item]):
-                    it_comp = self.node_feature_col[item] + icomp
-                    node_feature.append(float(node_feat[it_comp].strip()))
-            node_feature_matrix.append(node_feature)
-
-        f.close()
-
-        data_object.pos = tensor(node_position_matrix)
-        data_object.x = tensor(node_feature_matrix)
-        data_object = self.__charge_density_update_for_LSMS(data_object)
-        return data_object
-
-    def __charge_density_update_for_LSMS(self, data_object: Data):
-        """Calculate charge density for LSMS format
-        Parameters
-        ----------
-        data_object: Data
-            Data object representing structure of a graph sample.
-
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-        num_of_protons = data_object.x[:, 0]
-        charge_density = data_object.x[:, 1]
-        charge_density -= num_of_protons
-        data_object.x[:, 1] = charge_density
-        return data_object
-
-
-class CFGDataset(RawDataset):
-    def __init__(self, config, dist=False, sampling=None):
-        super().__init__(config, dist, sampling)
-
-    def transform_input_to_data_object_base(self, filepath):
-        data_object = self.__transform_CFG_input_to_data_object_base(filepath=filepath)
-        return data_object
-
-    def __transform_CFG_input_to_data_object_base(self, filepath):
-        """Transforms lines of strings read from the raw data CFG file to Data object and returns it.
-
-        Parameters
-        ----------
-        lines:
-          content of data file with all the graph information
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-
-        if filepath.endswith(".cfg"):
-
-            data_object = self.__transform_ASE_object_to_data_object(filepath)
-
-            return data_object
-
-        else:
-            return None
-
-    def __transform_ASE_object_to_data_object(self, filepath):
-
-        # FIXME:
-        #  this still assumes bulk modulus is specific to the CFG format.
-        #  To deal with multiple files across formats, one should generalize this function
-        #  by moving the reading of the .bulk file in a standalone routine.
-        #  Morevoer, this approach assumes tha there is only one global feature to look at,
-        #  and that this global feature is specicially retrieveable in a file with the string *bulk* inside.
-
-        ase_object = read_cfg(filepath)
-
-        data_object = Data()
-
-        data_object.supercell_size = tensor(ase_object.cell.array).float()
-        data_object.pos = tensor(ase_object.arrays["positions"]).float()
-        proton_numbers = np.expand_dims(ase_object.arrays["numbers"], axis=1)
-        masses = np.expand_dims(ase_object.arrays["masses"], axis=1)
-        c_peratom = np.expand_dims(ase_object.arrays["c_peratom"], axis=1)
-        fx = np.expand_dims(ase_object.arrays["fx"], axis=1)
-        fy = np.expand_dims(ase_object.arrays["fy"], axis=1)
-        fz = np.expand_dims(ase_object.arrays["fz"], axis=1)
-        node_feature_matrix = np.concatenate(
-            (proton_numbers, masses, c_peratom, fx, fy, fz), axis=1
-        )
-        data_object.x = tensor(node_feature_matrix).float()
-
-        filename_without_extension = os.path.splitext(filepath)[0]
-
-        if os.path.exists(os.path.join(filename_without_extension + ".bulk")):
-            filename_bulk = os.path.join(filename_without_extension + ".bulk")
-            f = open(filename_bulk, "r", encoding="utf-8")
-            lines = f.readlines()
-            graph_feat = lines[0].split(None, 2)
-            g_feature = []
-            # collect graph features
-            for item in range(len(self.graph_feature_dim)):
-                for icomp in range(self.graph_feature_dim[item]):
-                    it_comp = self.graph_feature_col[item] + icomp
-                    g_feature.append(float(graph_feat[it_comp].strip()))
-            data_object.y = tensor(g_feature)
-
-        return data_object
-
-
-class XYZDataset(RawDataset):
-    def __init__(self, config, dist=False, sampling=None):
-        super().__init__(config, dist, sampling)
-
-    def transform_input_to_data_object_base(self, filepath):
-        data_object = self.__transform_XYZ_input_to_data_object_base(filepath=filepath)
-        return data_object
-
-    def __transform_XYZ_input_to_data_object_base(self, filepath):
-        """Transforms lines of strings read from the raw data XYZ file to Data object and returns it.
-
-        Parameters
-        ----------
-        lines:
-          content of data file with all the graph information
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-
-        if filepath.endswith(".xyz"):
-
-            data_object = self.__transform_XYZ_ASE_object_to_data_object(filepath)
-
-            return data_object
-
-        else:
-            return None
