@@ -9,6 +9,7 @@ from .distributed import (
     get_distributed_model,
     setup_ddp,
     nsplit,
+    comm_reduce,
 )
 from .model import (
     save_model,
@@ -16,6 +17,7 @@ from .model import (
     load_existing_model,
     load_existing_model_config,
     loss_function_selection,
+    tensor_divide,
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (

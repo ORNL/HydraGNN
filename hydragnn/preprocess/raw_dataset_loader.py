@@ -19,23 +19,9 @@ from torch import tensor
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import log
-from hydragnn.utils import nsplit
+from hydragnn.utils import nsplit, tensor_divide, comm_reduce
 
 import random
-
-# WARNING: DO NOT use collective communication calls here because only rank 0 uses this routines
-
-
-def tensor_divide(x1, x2):
-    return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
-
-
-## All-reduce with numpy array
-def comm_reduce(x, op):
-    tx = torch.tensor(x, requires_grad=True).to(get_device())
-    torch.distributed.all_reduce(tx, op=op)
-    y = tx.detach().cpu().numpy()
-    return y
 
 
 class AbstractRawDataLoader:

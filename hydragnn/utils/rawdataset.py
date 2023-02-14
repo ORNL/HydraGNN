@@ -13,7 +13,7 @@ from torch_geometric.transforms import (
     PointPairFeatures,
 )
 
-from hydragnn.utils import nsplit
+from hydragnn.utils import nsplit, tensor_divide, comm_reduce
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.basedataset import BaseDataset
@@ -28,21 +28,6 @@ from hydragnn.preprocess.serialized_dataset_loader import update_predicted_value
 from sklearn.model_selection import StratifiedShuffleSplit
 
 from hydragnn.preprocess.dataset_descriptors import AtomFeatures
-
-from abc import ABC, abstractmethod
-
-
-def tensor_divide(x1, x2):
-    return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
-
-
-## All-reduce with numpy array
-def comm_reduce(x, op):
-    tx = torch.tensor(x, requires_grad=True).to(get_device())
-    torch.distributed.all_reduce(tx, op=op)
-    y = tx.detach().cpu().numpy()
-    return y
-
 
 from abc import ABC, abstractmethod
 
