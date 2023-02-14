@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch_geometric.data
 
-from hydragnn.utils.basedataset import BaseDataset
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 try:
     import pyddstore as dds
@@ -14,7 +14,7 @@ except ImportError:
 from hydragnn.utils.print_utils import log
 
 
-class DistDataset(BaseDataset):
+class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
 
     def __init__(self, data, label, comm=MPI.COMM_WORLD):

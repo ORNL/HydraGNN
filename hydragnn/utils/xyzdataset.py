@@ -3,13 +3,13 @@ import numpy as np
 
 from torch import tensor
 from torch_geometric.data import Data
-from hydragnn.utils.rawdataset import RawDataset
+from hydragnn.utils.abstractrawdataset import AbstractRawDataset
 
 from ase.io.cfg import read_cfg
 from ase.io import read
 
 
-class XYZDataset(RawDataset):
+class XYZDataset(AbstractRawDataset):
     def __init__(self, config, dist=False, sampling=None):
         super().__init__(config, dist, sampling)
 

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import torch
 
 
-class BaseDataset(torch.utils.data.Dataset, ABC):
+class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
     """
     HydraGNN's base dataset. This is abstract class.
     """

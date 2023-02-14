@@ -6,11 +6,10 @@ from mpi4py import MPI
 
 from .print_utils import print_distributed, log, iterate_tqdm
 
-from hydragnn.utils.basedataset import BaseDataset
-from hydragnn.utils.rawdataset import RawDataset
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 
-class SimplePickleDataset(BaseDataset):
+class SimplePickleDataset(AbstractBaseDataset):
     """Simple Pickle Dataset"""
 
     def __init__(self, basedir, label, subset=None, preload=False):
@@ -147,7 +146,7 @@ class SimplePickleWriter:
                 pickle.dump(data, f)
 
 
-class SerializedDataset(BaseDataset):
+class SerializedDataset(AbstractBaseDataset):
     """Serialized Dataset"""
 
     def __init__(self, basedir, datasetname, label):

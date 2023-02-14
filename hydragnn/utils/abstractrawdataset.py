@@ -16,7 +16,7 @@ from torch_geometric.transforms import (
 from hydragnn.utils import nsplit, tensor_divide, comm_reduce
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.basedataset import BaseDataset
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.preprocess.utils import (
     get_radius_graph,
     get_radius_graph_pbc,
@@ -32,7 +32,7 @@ from hydragnn.preprocess.dataset_descriptors import AtomFeatures
 from abc import ABC, abstractmethod
 
 
-class RawDataset(BaseDataset, ABC):
+class AbstractRawDataset(AbstractBaseDataset, ABC):
     """Raw dataset class"""
 
     def __init__(self, config, dist=False, sampling=None):

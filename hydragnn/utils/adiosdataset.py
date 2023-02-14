@@ -17,7 +17,7 @@ import torch
 
 from multiprocessing.shared_memory import SharedMemory
 
-from hydragnn.utils.basedataset import BaseDataset
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 
 class AdiosWriter:
@@ -179,7 +179,7 @@ class AdiosWriter:
         log("Adios saving time (sec): ", (t1 - t0))
 
 
-class AdiosDataset(BaseDataset):
+class AdiosDataset(AbstractBaseDataset):
     """Adios dataset class"""
 
     def __init__(

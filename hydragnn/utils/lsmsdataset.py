@@ -1,9 +1,9 @@
 from torch import tensor
 from torch_geometric.data import Data
-from hydragnn.utils.rawdataset import RawDataset
+from hydragnn.utils.abstractrawdataset import AbstractRawDataset
 
 
-class LSMSDataset(RawDataset):
+class LSMSDataset(AbstractRawDataset):
     def __init__(self, config, dist=False, sampling=None):
         super().__init__(config, dist, sampling)
 
