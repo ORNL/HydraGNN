@@ -183,12 +183,6 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                                 self.dataset.append(data_object)
             torch.distributed.barrier()
 
-            if self.data_format == "LSMS":
-                for idx, data_object in enumerate(self.dataset):
-                    self.dataset[idx] = self.__charge_density_update_for_LSMS(
-                        data_object
-                    )
-
         # scaled features by number of nodes
         self.__scale_features_by_num_nodes()
 
@@ -282,24 +276,6 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
     @abstractmethod
     def transform_input_to_data_object_base(self, filepath):
         pass
-
-    def __charge_density_update_for_LSMS(self, data_object: Data):
-        """Calculate charge density for LSMS format
-        Parameters
-        ----------
-        data_object: Data
-            Data object representing structure of a graph sample.
-
-        Returns
-        ----------
-        Data
-            Data object representing structure of a graph sample.
-        """
-        num_of_protons = data_object.x[:, 0]
-        charge_density = data_object.x[:, 1]
-        charge_density -= num_of_protons
-        data_object.x[:, 1] = charge_density
-        return data_object
 
     def __scale_features_by_num_nodes(self):
         """Calculate [**]_scaled_num_nodes"""
