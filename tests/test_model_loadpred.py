@@ -59,7 +59,8 @@ def unittest_model_prediction(config):
 
 
 # test loading and predictiong of a saved model from previous training
-# it is possible that "config.json" can be overwritten with MPI. It can cause an error
+
+
 def pytest_model_loadpred():
     model_type = "PNA"
     ci_input = "ci_multihead.json"
@@ -77,11 +78,11 @@ def pytest_model_loadpred():
         print("Model or configure file not found: ", modelfile, config_file)
         case_exist = False
     else:
-        print("config_file:", config_file)
-        f = open(config_file, "r")
-        print(f.read())
-        f.close()
-
+        # it is possible that "config.json" can be overwritten with MPI. It can cause an error
+        # print("config_file:", config_file)
+        # f = open(config_file, "r")
+        # print(f.read())
+        # f.close()
         with open(config_file, "r") as f:
             config = json.load(f)
         for dataset_name, raw_data_path in config["Dataset"]["path"].items():
