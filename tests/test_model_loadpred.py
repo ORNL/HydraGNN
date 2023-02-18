@@ -59,8 +59,7 @@ def unittest_model_prediction(config):
 
 
 # test loading and predictiong of a saved model from previous training
-# # it is possible that "config.json" can be overwritten. It can cause some error
-# @pytest.mark.mpi_skip()
+# it is possible that "config.json" can be overwritten with MPI. It can cause an error
 def pytest_model_loadpred():
     model_type = "PNA"
     ci_input = "ci_multihead.json"
