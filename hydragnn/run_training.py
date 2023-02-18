@@ -99,8 +99,10 @@ def _(config: dict):
 
     if dist.is_initialized():
         dist.barrier()
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
+
+    if world_rank == 0:
+        with open("./logs/" + log_name + "/config.json", "w") as f:
+            json.dump(config, f)
 
     load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
