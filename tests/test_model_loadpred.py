@@ -13,6 +13,7 @@ import torch
 import random
 import hydragnn
 from .test_graphs import unittest_train_model
+import pytest
 
 
 def unittest_model_prediction(config):
@@ -58,6 +59,8 @@ def unittest_model_prediction(config):
 
 
 # test loading and predictiong of a saved model from previous training
+# it is possible that "config.json" can be overwritten. It can cause some error
+@pytest.mark.mpi_skip()
 def pytest_model_loadpred():
     model_type = "PNA"
     ci_input = "ci_multihead.json"
