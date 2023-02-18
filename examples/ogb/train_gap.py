@@ -233,8 +233,7 @@ if __name__ == "__main__":
     log_name = "ogb_" + inputfilesubstr + "_eV_fullx"
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
+    hydragnn.utils.save_config(config, log_name)
 
     if args.preonly:
         norm_yflag = False  # True

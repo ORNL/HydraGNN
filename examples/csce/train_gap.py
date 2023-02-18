@@ -328,8 +328,7 @@ if __name__ == "__main__":
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
 
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
+    hydragnn.utils.save_config(config, log_name)
 
     timer.stop()
 

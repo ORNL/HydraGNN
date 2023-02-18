@@ -26,6 +26,7 @@ from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
     load_existing_model_config,
+    save_config,
 )
 from hydragnn.utils.print_utils import print_distributed, setup_log
 from hydragnn.utils.time_utils import print_timers
@@ -100,9 +101,7 @@ def _(config: dict):
     if dist.is_initialized():
         dist.barrier()
 
-    if world_rank == 0:
-        with open("./logs/" + log_name + "/config.json", "w") as f:
-            json.dump(config, f)
+    save_config(config, log_name)
 
     load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer

@@ -329,8 +329,7 @@ if __name__ == "__main__":
 
     if dist.is_initialized():
         dist.barrier()
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
+    hydragnn.utils.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,
