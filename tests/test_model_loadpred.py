@@ -71,6 +71,7 @@ def pytest_model_loadpred():
     # check if pretrained model and pkl dataset files exists
     case_exist = True
     config_file = os.path.join("./logs/", log_name, "config.json")
+    print("config_file:", config_file, case_exist)
     if not (os.path.isfile(modelfile) and os.path.isfile(config_file)):
         print("Model or configure file not found: ", modelfile, config_file)
         case_exist = False
@@ -82,6 +83,7 @@ def pytest_model_loadpred():
                 print(dataset_name, "dataset not found: ", raw_data_path)
                 case_exist = False
                 break
+    print("case_exist:", case_exist)
     if not case_exist:
         unittest_train_model(
             config["NeuralNetwork"]["Architecture"]["model_type"],
