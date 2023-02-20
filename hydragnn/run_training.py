@@ -26,13 +26,13 @@ from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
     load_existing_model_config,
-    save_config,
 )
 from hydragnn.utils.print_utils import print_distributed, setup_log
 from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config,
     get_log_name_config,
+    save_config,
 )
 from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config

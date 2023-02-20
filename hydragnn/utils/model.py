@@ -11,7 +11,6 @@
 
 import os
 import numpy as np
-import json
 
 import torch
 import torch.distributed as dist
@@ -123,12 +122,3 @@ def print_model(model):
 
 def tensor_divide(x1, x2):
     return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
-
-
-def save_config(config, log_name, path="./logs/"):
-    """Save config"""
-    _, world_rank = get_comm_size_and_rank()
-    if world_rank == 0:
-        fname = os.path.join(path, log_name, "config.json")
-        with open(fname, "w") as f:
-            json.dump(config, f)

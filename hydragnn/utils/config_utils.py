@@ -12,8 +12,9 @@ import pickle
 import os
 from hydragnn.preprocess.utils import check_if_graph_size_variable
 from hydragnn.utils.model import calculate_PNA_degree
-from hydragnn.utils import print_distributed
+from hydragnn.utils import get_comm_size_and_rank
 import time
+import json
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -224,3 +225,12 @@ def get_log_name_config(config):
             for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
         )
     )
+
+
+def save_config(config, log_name, path="./logs/"):
+    """Save config"""
+    _, world_rank = get_comm_size_and_rank()
+    if world_rank == 0:
+        fname = os.path.join(path, log_name, "config.json")
+        with open(fname, "w") as f:
+            json.dump(config, f)
