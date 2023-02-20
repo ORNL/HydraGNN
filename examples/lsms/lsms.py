@@ -9,7 +9,7 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
 from hydragnn.utils.lsmsdataset import LSMSDataset
-from hydragnn.utils.pickledataset import SerializedWriter, SerializedDataset
+from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
 from hydragnn.preprocess.load_data import split_dataset
 
 try:
