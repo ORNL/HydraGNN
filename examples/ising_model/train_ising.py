@@ -283,9 +283,6 @@ if __name__ == "__main__":
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")
         testset = SimplePickleDataset(basedir, "testset")
-        minmax_node_feature = trainset.minmax_node_feature
-        minmax_graph_feature = trainset.minmax_graph_feature
-
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
