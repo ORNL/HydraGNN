@@ -180,7 +180,8 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                             )
                             if not isinstance(data_object, type(None)):
                                 self.dataset.append(data_object)
-            torch.distributed.barrier()
+            if self.dist:
+                torch.distributed.barrier()
 
         # scaled features by number of nodes
         self.__scale_features_by_num_nodes()

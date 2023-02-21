@@ -11,6 +11,7 @@ from hydragnn.utils.model import print_model
 from hydragnn.utils.lsmsdataset import LSMSDataset
 from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
 from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.utils.print_utils import log
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -77,7 +78,9 @@ if __name__ == "__main__":
     datasetname = config["Dataset"]["name"]
     for dataset_type, raw_data_path in config["Dataset"]["path"].items():
         config["Dataset"]["path"][dataset_type] = os.path.join(dirpwd, raw_data_path)
-    if not args.loadexistingsplit:
+
+    if not args.loadexistingsplit and rank == 0:
+        ## Only rank=0 is enough for pre-processing
         total = LSMSDataset(config)
 
         trainset, valset, testset = split_dataset(
@@ -91,7 +94,7 @@ if __name__ == "__main__":
             fname = os.path.join(
                 os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
             )
-            adwriter = AdiosWriter(fname, comm)
+            adwriter = AdiosWriter(fname, MPI.COMM_SELF)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
@@ -122,6 +125,7 @@ if __name__ == "__main__":
                 datasetname,
                 "testset",
             )
+    comm.Barrier()
     if args.preonly:
         sys.exit(0)
 
