@@ -32,6 +32,7 @@ from hydragnn.utils.time_utils import print_timers
 from hydragnn.utils.config_utils import (
     update_config,
     get_log_name_config,
+    save_config,
 )
 from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config
@@ -99,8 +100,8 @@ def _(config: dict):
 
     if dist.is_initialized():
         dist.barrier()
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
+
+    save_config(config, log_name)
 
     load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer

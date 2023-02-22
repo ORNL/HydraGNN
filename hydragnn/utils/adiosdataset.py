@@ -16,7 +16,8 @@ import torch_geometric.data
 import torch
 
 from multiprocessing.shared_memory import SharedMemory
-from multiprocessing.managers import SharedMemoryManager
+
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 
 class AdiosWriter:
@@ -178,7 +179,7 @@ class AdiosWriter:
         log("Adios saving time (sec): ", (t1 - t0))
 
 
-class AdiosDataset(torch.utils.data.Dataset):
+class AdiosDataset(AbstractBaseDataset):
     """Adios dataset class"""
 
     def __init__(
@@ -320,13 +321,13 @@ class AdiosDataset(torch.utils.data.Dataset):
         if not self.preload and not self.shmem:
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
 
-    def __len__(self):
+    def len(self):
         """
         Return the total size of dataset
         """
         return self.ndata
 
-    def __getitem__(self, idx):
+    def get(self, idx):
         """
         Get data with a given index
         """
@@ -434,7 +435,3 @@ class AdiosDataset(torch.utils.data.Dataset):
             del self._data[k]
 
         self.preflight = False
-
-    def __iter__(self):
-        for idx in range(self.ndata):
-            yield self.__getitem__(idx)
