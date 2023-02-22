@@ -50,6 +50,7 @@ def create_model_config(
         config["Architecture"]["num_gaussians"],
         config["Architecture"]["num_filters"],
         config["Architecture"]["radius"],
+        config["Architecture"]["skip_connection"],
         verbosity,
         use_gpu,
     )
@@ -75,6 +76,7 @@ def create_model(
     num_gaussians: int = None,
     num_filters: int = None,
     radius: float = None,
+    skip_connection: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -98,6 +100,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     elif model_type == "PNA":
@@ -116,6 +119,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     elif model_type == "GAT":
@@ -136,6 +140,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     elif model_type == "MFC":
@@ -153,6 +158,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     elif model_type == "CGCNN":
@@ -168,6 +174,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     elif model_type == "SAGE":
@@ -182,6 +189,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     elif model_type == "SchNet":

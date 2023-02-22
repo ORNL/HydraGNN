@@ -55,6 +55,9 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]
     )
 
+    if "skip_connection" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["skip_connection"] = False
+
     if "freeze_conv_layers" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["freeze_conv_layers"] = False
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:

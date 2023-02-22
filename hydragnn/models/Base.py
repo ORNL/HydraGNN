@@ -36,6 +36,7 @@ class Base(Module):
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
+        skip_connection: bool = False,
     ):
         super().__init__()
         self.device = get_device()
@@ -58,6 +59,7 @@ class Base(Module):
         self.batch_norms_node_hidden = ModuleList()
         self.convs_node_output = ModuleList()
         self.batch_norms_node_output = ModuleList()
+        self.skip_connection = skip_connection
 
         self.loss_function = loss_function_selection(loss_function_type)
         self.ilossweights_nll = ilossweights_nll
@@ -243,6 +245,8 @@ class Base(Module):
 
     def forward(self, data):
         x = data.x
+
+        count_conv_layers = 0
 
         ### encoder part ####
         conv_args = self._conv_args(data)

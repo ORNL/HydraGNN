@@ -21,7 +21,10 @@ import hydragnn, tests
 
 
 # Main unit test function called by pytest wrappers.
-def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False):
+def unittest_train_model(
+    model_type, skip_connection, ci_input, use_lengths, overwrite_data=False
+):
+
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -31,6 +34,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    config["NeuralNetwork"]["Architecture"]["skip_connection"] = skip_connection
     """
     to test this locally, set ci.json as
     "Dataset": {
@@ -175,18 +179,25 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 @pytest.mark.parametrize(
     "model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "CGCNN", "SchNet"]
 )
+@pytest.mark.parametrize("skip_connection", [False, True])
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input, overwrite_data=False):
-    unittest_train_model(model_type, ci_input, False, overwrite_data)
+def pytest_train_model(model_type, skip_connection, ci_input, overwrite_data=False):
+    unittest_train_model(model_type, skip_connection, ci_input, False, overwrite_data)
 
 
 # Test only models
 @pytest.mark.parametrize("model_type", ["PNA", "CGCNN", "SchNet"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
+@pytest.mark.parametrize("skip_connection", [False, True])
+def pytest_train_model_lengths(model_type, skip_connection, overwrite_data=False):
+    unittest_train_model(model_type, skip_connection, "ci.json", True, overwrite_data)
 
 
 # Test vector output
 @pytest.mark.parametrize("model_type", ["PNA"])
-def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
+@pytest.mark.parametrize("skip_connection", [False, True])
+def pytest_train_model_vectoroutput(model_type, skip_connection, overwrite_data=False):
+    unittest_train_model(
+        model_type, skip_connection, "ci_vectoroutput.json", True, overwrite_data
+    )

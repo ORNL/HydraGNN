@@ -26,6 +26,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "model_type": "PNA",
+            "skip_connection": false,
             "radius": 2.0,
             "max_neighbours": 100,
             "num_gaussians": 50,
