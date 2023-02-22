@@ -7,8 +7,16 @@ import argparse
 import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.config_utils import get_log_name_config
-from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.utils.model import print_model
+from hydragnn.utils.lsmsdataset import LSMSDataset
+from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
+from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.utils.print_utils import log
+
+try:
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
 
 import torch
 import torch.distributed as dist
@@ -67,85 +75,89 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/dataset"
     datasetname = config["Dataset"]["name"]
-    fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
-    config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
-    if not args.loadexistingsplit:
-        for dataset_type, raw_data_path in config["Dataset"]["path"].items():
-            if not os.path.isabs(raw_data_path):
-                raw_data_path = os.path.join(dirpwd, raw_data_path)
-            if not os.path.exists(raw_data_path):
-                raise ValueError("Folder not found: ", raw_data_path)
-            config["Dataset"]["path"][dataset_type] = raw_data_path
+    for dataset_type, raw_data_path in config["Dataset"]["path"].items():
+        config["Dataset"]["path"][dataset_type] = os.path.join(dirpwd, raw_data_path)
 
-        ## each process saves its own data file
-        loader = LSMS_RawDataLoader(config["Dataset"], dist=True)
-        loader.load_raw_data()
+    if not args.loadexistingsplit and rank == 0:
+        ## Only rank=0 is enough for pre-processing
+        total = LSMSDataset(config)
 
-        ## Read total pkl and split (no graph object conversion)
-        hydragnn.preprocess.total_to_train_val_test_pkls(config, isdist=True)
-
-        ## Read each pkl and graph object conversion with max-edge normalization
-        (
-            trainset,
-            valset,
-            testset,
-        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, isdist=True)
+        trainset, valset, testset = split_dataset(
+            dataset=total,
+            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
+            stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
+        )
+        print(len(total), len(trainset), len(valset), len(testset))
 
         if args.format == "adios":
-            from hydragnn.utils.adiosdataset import AdiosWriter
-
-            adwriter = AdiosWriter(fname_adios, comm)
+            fname = os.path.join(
+                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
+            )
+            adwriter = AdiosWriter(fname, MPI.COMM_SELF)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
-            adwriter.add_global("minmax_node_feature", loader.minmax_node_feature)
-            adwriter.add_global("minmax_graph_feature", loader.minmax_graph_feature)
+            adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
+            adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
             adwriter.save()
+        elif args.format == "pickle":
+            basedir = os.path.join(
+                os.path.dirname(__file__), "dataset", "serialized_dataset"
+            )
+            SerializedWriter(
+                trainset,
+                basedir,
+                datasetname,
+                "trainset",
+                minmax_node_feature=total.minmax_node_feature,
+                minmax_graph_feature=total.minmax_graph_feature,
+            )
+            SerializedWriter(
+                valset,
+                basedir,
+                datasetname,
+                "valset",
+            )
+            SerializedWriter(
+                testset,
+                basedir,
+                datasetname,
+                "testset",
+            )
+    comm.Barrier()
     if args.preonly:
         sys.exit(0)
 
     timer = Timer("load_data")
     timer.start()
     if args.format == "adios":
-        from hydragnn.utils.adiosdataset import AdiosDataset
-
         info("Adios load")
-        trainset = AdiosDataset(fname_adios, "trainset", comm)
-        valset = AdiosDataset(fname_adios, "valset", comm)
-        testset = AdiosDataset(fname_adios, "testset", comm)
-        ## Set minmax read from bp file
-        config["NeuralNetwork"]["Variables_of_interest"][
-            "minmax_node_feature"
-        ] = trainset.minmax_node_feature
-        config["NeuralNetwork"]["Variables_of_interest"][
-            "minmax_graph_feature"
-        ] = trainset.minmax_graph_feature
+        opt = {
+            "preload": True,
+            "shmem": False,
+        }
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm, **opt)
+        testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
-        config["Dataset"]["path"] = {}
-        ##set directory to load processed pickle files, train/validate/test
-        for dataset_type in ["train", "validate", "test"]:
-            raw_data_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_type}.pkl"
-            config["Dataset"]["path"][dataset_type] = raw_data_path
         info("Pickle load")
-        (
-            trainset,
-            valset,
-            testset,
-        ) = hydragnn.preprocess.load_data.load_train_val_test_sets(config, isdist=True)
-        # FIXME: here is a navie implementation with allgather. Need to have better/faster implementation
-        trainlist = [None for _ in range(dist.get_world_size())]
-        vallist = [None for _ in range(dist.get_world_size())]
-        testlist = [None for _ in range(dist.get_world_size())]
-        dist.all_gather_object(trainlist, trainset)
-        dist.all_gather_object(vallist, valset)
-        dist.all_gather_object(testlist, testset)
-        trainset = [item for sublist in trainlist for item in sublist]
-        valset = [item for sublist in vallist for item in sublist]
-        testset = [item for sublist in testlist for item in sublist]
+        basedir = os.path.join(
+            os.path.dirname(__file__), "dataset", "serialized_dataset"
+        )
+        trainset = SerializedDataset(basedir, datasetname, "trainset")
+        valset = SerializedDataset(basedir, datasetname, "valset")
+        testset = SerializedDataset(basedir, datasetname, "testset")
     else:
         raise ValueError("Unknown data format: %d" % args.format)
+    ## Set minmax
+    config["NeuralNetwork"]["Variables_of_interest"][
+        "minmax_node_feature"
+    ] = trainset.minmax_node_feature
+    config["NeuralNetwork"]["Variables_of_interest"][
+        "minmax_graph_feature"
+    ] = trainset.minmax_graph_feature
 
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -183,8 +195,8 @@ if __name__ == "__main__":
 
     if dist.is_initialized():
         dist.barrier()
-    with open("./logs/" + log_name + "/config.json", "w") as f:
-        json.dump(config, f)
+
+    hydragnn.utils.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,

@@ -15,19 +15,26 @@ from torch_geometric.utils import remove_self_loops
 
 import ase
 import ase.neighborlist
+import os
 
 ## This function can be slow if dataset is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_dist
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
-    graph_size_variable = False
-    nodes_num_list = []
-    for loader in [train_loader, val_loader, test_loader]:
-        for data in loader.dataset:
-            nodes_num_list.append(data.num_nodes)
-        if len(list(set(nodes_num_list))) > 1:
-            graph_size_variable = True
-            return graph_size_variable
-    return graph_size_variable
+    backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
+    if backend == "torch":
+        return check_if_graph_size_variable_dist(train_loader, val_loader, test_loader)
+    elif backend == "mpi":
+        return check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader)
+    else:
+        graph_size_variable = False
+        nodes_num_list = []
+        for loader in [train_loader, val_loader, test_loader]:
+            for data in loader.dataset:
+                nodes_num_list.append(data.num_nodes)
+            if len(list(set(nodes_num_list))) > 1:
+                graph_size_variable = True
+                return graph_size_variable
+        return graph_size_variable
 
 
 def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
@@ -44,11 +51,29 @@ def check_if_graph_size_variable_dist(train_loader, val_loader, test_loader):
                 break
         if graph_size_variable:
             break
-
     b = 1 if graph_size_variable else 0
     b = torch.tensor(b).to(get_device())
     torch.distributed.all_reduce(b, op=torch.distributed.ReduceOp.SUM)
     reduced = True if b.item() > 0 else False
+    return reduced
+
+
+def check_if_graph_size_variable_mpi(train_loader, val_loader, test_loader):
+    graph_size_variable = False
+    nodes_num_list = []
+    for loader in [train_loader, val_loader, test_loader]:
+        for data in loader:
+            nodes_num_list.append(data.num_nodes)
+            if len(list(set(nodes_num_list))) > 1:
+                graph_size_variable = True
+                break
+        if graph_size_variable:
+            break
+    from mpi4py import MPI
+
+    b = 1 if graph_size_variable else 0
+    rb = MPI.COMM_WORLD.allreduce(b, op=MPI.SUM)
+    reduced = True if rb > 0 else False
     return reduced
 
 

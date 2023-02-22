@@ -241,3 +241,18 @@ def print_peak_memory(verbosity_level, prefix):
             verbosity_level,
             f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ",
         )
+
+
+def nsplit(a, n):
+    k, m = divmod(len(a), n)
+    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+
+
+def comm_reduce(x, op):
+    """
+    All-reduce with numpy array
+    """
+    tx = torch.tensor(x, requires_grad=True).to(get_device())
+    torch.distributed.all_reduce(tx, op=op)
+    y = tx.detach().cpu().numpy()
+    return y

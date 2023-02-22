@@ -8,6 +8,8 @@ from .distributed import (
     is_model_distributed,
     get_distributed_model,
     setup_ddp,
+    nsplit,
+    comm_reduce,
 )
 from .model import (
     save_model,
@@ -15,12 +17,14 @@ from .model import (
     load_existing_model,
     load_existing_model_config,
     loss_function_selection,
+    tensor_divide,
 )
 from .time_utils import Timer, print_timers
 from .config_utils import (
     update_config,
     update_config_minmax,
     get_log_name_config,
+    save_config,
 )
 
 from .optimizer import select_optimizer

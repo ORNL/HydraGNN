@@ -10,6 +10,7 @@
 ##############################################################################
 
 import os
+import numpy as np
 
 import torch
 import torch.distributed as dist
@@ -117,3 +118,7 @@ def print_model(model):
     print_master("-" * 50)
     print_master("%50s\t%20s\t%10d" % ("Total", "", num_params))
     print_master("All (total, MB): %d %g" % (num_params, num_params * 4 / 1024 / 1024))
+
+
+def tensor_divide(x1, x2):
+    return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
