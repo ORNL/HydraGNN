@@ -22,6 +22,7 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device, print_peak_memory
 from hydragnn.preprocess.load_data import HydraDataLoader
+from hydragnn.utils.model import EarlyStopping
 
 import os
 
@@ -49,6 +50,11 @@ def train_validate_test(
     create_plots=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
+    EarlyStop = (
+        config["Training"]["EarlyStopping"]
+        if "EarlyStopping" in config["Training"]
+        else False
+    )
 
     device = get_device()
     # total loss tracking for train/vali/test
@@ -93,6 +99,11 @@ def train_validate_test(
     profiler = Profiler("./logs/" + model_with_config_name)
     if "Profile" in config:
         profiler.setup(config["Profile"])
+
+    if EarlyStop:
+        earlystopper = EarlyStopping()
+        if "patience" in config["Training"]:
+            earlystopper = EarlyStopping(patience=config["Training"]["patience"])
 
     timer = Timer("train_validate_test")
     timer.start()
@@ -148,6 +159,14 @@ def train_validate_test(
                 output_names=config["Variables_of_interest"]["output_names"],
                 iepoch=epoch,
             )
+        if EarlyStop:
+            if earlystopper(reduce_values_ranks(val_loss)):
+                print_distributed(
+                    verbosity,
+                    "Early stopping executed at epoch = %d due to val_loss not decreasing"
+                    % epoch,
+                )
+                break
 
     timer.stop()
 

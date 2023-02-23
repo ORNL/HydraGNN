@@ -122,3 +122,22 @@ def print_model(model):
 
 def tensor_divide(x1, x2):
     return torch.from_numpy(np.divide(x1, x2, out=np.zeros_like(x1), where=x2 != 0))
+
+
+# early stop based on validation loss
+class EarlyStopping:
+    def __init__(self, patience=10, min_delta=0.0):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.val_loss_min = float("inf")
+        self.count = 0
+
+    def __call__(self, val_loss):
+        if val_loss > self.val_loss_min + self.min_delta:
+            self.count += 1
+            if self.count >= self.patience:
+                return True
+        else:
+            self.val_loss_min = val_loss
+            self.count = 0
+        return False

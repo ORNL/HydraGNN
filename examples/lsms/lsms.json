@@ -50,7 +50,8 @@
             "denormalize_output": true
         },
         "Training": {
-            "num_epoch": 2,
+            "num_epoch": 200,
+            "EarlyStopping": true,
             "perc_train": 0.7,
             "loss_function_type": "mse",
             "batch_size": 64,
