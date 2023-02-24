@@ -38,7 +38,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only. Adios or pickle saving and no train",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="NiNb_EAM_energy.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="NiNb_EAM_energy.json"
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -163,7 +165,11 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
     timer.stop()
