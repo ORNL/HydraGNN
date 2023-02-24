@@ -56,6 +56,8 @@
         "Training": {
             "num_epoch": 100,
             "perc_train": 0.7,
+	    "EarlyStopping": true,
+	    "patience": 10,
             "loss_function_type": "mse",
             "batch_size": 32,
             "Optimizer": {
