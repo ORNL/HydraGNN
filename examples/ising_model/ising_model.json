@@ -23,7 +23,7 @@
         "Architecture": {
             "model_type": "PNA",
             "radius": 7,
-            "max_neighbours": 100000,
+            "max_neighbours": 5,
             "hidden_dim": 20,
             "num_conv_layers": 6,
             "output_heads": {
@@ -47,7 +47,7 @@
             "output_names": ["total_energy","spin"],
             "output_index": [0, 1],
             "type": ["graph","node"],
-            "denormalize_output": true
+            "denormalize_output": false
         },
         "Training": {
             "num_epoch": 2,

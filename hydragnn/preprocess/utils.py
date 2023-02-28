@@ -11,7 +11,7 @@
 
 import torch
 from torch_geometric.transforms import RadiusGraph
-from torch_geometric.utils import remove_self_loops
+from torch_geometric.utils import remove_self_loops, degree
 
 import ase
 import ase.neighborlist
@@ -169,3 +169,21 @@ class RadiusGraphPBC(RadiusGraph):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
+
+
+def gather_deg(dataset):
+    from mpi4py import MPI
+    from hydragnn.utils.print_utils import iterate_tqdm
+
+    max_deg = 0
+    for data in iterate_tqdm(dataset, 2, desc="Degree max"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        max_deg = max(max_deg, max(d))
+    max_deg = MPI.COMM_WORLD.allreduce(max_deg, op=MPI.MAX)
+
+    deg = torch.zeros(max_deg + 1, dtype=torch.long)
+    for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
+    return deg

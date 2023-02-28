@@ -2,6 +2,8 @@
   "Verbosity": {
     "level": 2
   },
+  "Dataset": {
+  },
   "NeuralNetwork": {
     "Architecture": {
       "model_type": "PNA",
@@ -47,7 +49,7 @@
       "denormalize_output": false
     },
     "Training": {
-      "num_epoch": 10,
+      "num_epoch": 2,
       "batch_size": 128,
       "continue": 0,
       "startfrom": "existing_model",
