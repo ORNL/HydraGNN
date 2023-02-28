@@ -263,6 +263,7 @@ if __name__ == "__main__":
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--distds", action="store_true", help="distds dataset")
     parser.add_argument("--distds_ncopy", type=int, help="distds ncopy", default=1)
+    parser.add_argument("--log", help="log name")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -318,7 +319,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "dftb_eV_fullx"
+    log_name = "dftb_eV_fullx" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
