@@ -53,7 +53,7 @@
             "num_epoch": 2,
             "perc_train": 0.7,
             "loss_function_type": "mse",
-            "batch_size": 64,
+            "batch_size": 128,
             "continue": false,
             "Optimizer": {
                 "type": "AdamW",
