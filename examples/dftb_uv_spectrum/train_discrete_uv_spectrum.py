@@ -263,6 +263,7 @@ if __name__ == "__main__":
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--distds", action="store_true", help="distds dataset")
     parser.add_argument("--distds_ncopy", type=int, help="distds ncopy", default=1)
+    parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
 
     group = parser.add_mutually_exclusive_group()
@@ -390,9 +391,10 @@ if __name__ == "__main__":
     timer.start()
     if args.format == "adios":
         info("Adios load")
+        assert args.shmem and args.distds, "Cannot use both distds and shmem"
         opt = {
             "preload": False,
-            "shmem": False,
+            "shmem": args.shmem,
             "distds": args.distds,
             "distds_ncopy": args.distds_ncopy,
         }
