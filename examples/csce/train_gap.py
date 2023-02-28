@@ -287,7 +287,7 @@ if __name__ == "__main__":
         testset = dataset_lists[2]
 
         deg = gather_deg(trainset)
-        config["Dataset"]["trainset_pna_deg"] = deg
+        config["trainset_pna_deg"] = deg
 
         ## local data
         if args.format == "pickle":
@@ -383,10 +383,10 @@ if __name__ == "__main__":
     log("#2")
 
     if hasattr(trainset, "trainset_pna_deg"):
-        config["Dataset"]["trainset_pna_deg"] = trainset.trainset_pna_deg
+        config["trainset_pna_deg"] = trainset.trainset_pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
-    if "trainset_pna_deg" in config["Dataset"]:
-        del config["Dataset"]["trainset_pna_deg"]
+    if "trainset_pna_deg" in config:
+        del config["trainset_pna_deg"]
     comm.Barrier()
     log("#3")
 

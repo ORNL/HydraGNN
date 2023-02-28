@@ -257,7 +257,7 @@ if __name__ == "__main__":
         print(len(total), len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
-        config["Dataset"]["trainset_pna_deg"] = deg
+        config["trainset_pna_deg"] = deg
 
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
@@ -373,12 +373,12 @@ if __name__ == "__main__":
         "minmax_graph_feature"
     ] = trainset.minmax_graph_feature
     if hasattr(trainset, "trainset_pna_deg"):
-        config["Dataset"]["trainset_pna_deg"] = trainset.trainset_pna_deg
+        config["trainset_pna_deg"] = trainset.trainset_pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
-    if "trainset_pna_deg" in config["Dataset"]:
-        del config["Dataset"]["trainset_pna_deg"]
+    if "trainset_pna_deg" in config:
+        del config["trainset_pna_deg"]
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 

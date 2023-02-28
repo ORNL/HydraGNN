@@ -25,9 +25,7 @@ def update_config(config, train_loader, val_loader, test_loader):
         train_loader, val_loader, test_loader
     )
 
-    if ("graph_features" in config["Dataset"]) or (
-        "node_features" in config["Dataset"]
-    ):
+    if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
 
     config["NeuralNetwork"] = update_config_NN_outputs(
@@ -42,8 +40,8 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        if "trainset_pna_deg" in config["Dataset"]:
-            deg_bincount = torch.tensor(config["Dataset"]["trainset_pna_deg"])
+        if "trainset_pna_deg" in config:
+            deg_bincount = torch.tensor(config["trainset_pna_deg"])
             deg = torch.zeros(max_neigh + 1, dtype=torch.long)
             if len(deg) < len(deg_bincount):
                 deg[:] = deg_bincount[: len(deg)]

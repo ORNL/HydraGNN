@@ -20,6 +20,7 @@
         }
       },
       "task_weights": [
+        1,
         1
       ]
     },
@@ -39,9 +40,11 @@
         11
       ],
       "output_index": [
-        0
+        0,
+        1
       ],
       "type": [
+        "graph",
         "graph"
       ],
       "denormalize_output": false
