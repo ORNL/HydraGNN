@@ -1,3 +1,8 @@
+import mpi4py
+
+mpi4py.rc.thread_level = "serialized"
+mpi4py.rc.threads = False
+
 import os, json
 import matplotlib.pyplot as plt
 import random
@@ -14,7 +19,7 @@ import time
 from rdkit.Chem.rdmolfiles import MolFromPDBFile
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
 
 # from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -23,18 +28,23 @@ from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_rdkit_molecule,
 )
+from hydragnn.utils.distributed import get_device
+from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.utils.distdataset import DistDataset
+from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.preprocess.utils import gather_deg
 
 import numpy as np
 
-# import adios2 as ad2
+try:
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
 
 import torch_geometric.data
 import torch
 import torch.distributed as dist
 
-import warnings
-
-warnings.filterwarnings("error")
 
 # FIXME: this works fine for now because we train on GDB-9 molecules
 # for larger chemical spaces, the following atom representation has to be properly expanded
@@ -50,6 +60,7 @@ def nsplit(a, n):
     return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
+"""
 def dftb_datasets_load(dirpath, sampling=None, seed=None, frac=[0.9, 0.05, 0.05]):
     if seed is not None:
         random.seed(seed)
@@ -164,10 +175,82 @@ class DFTBDataset(torch.utils.data.Dataset):
             mol, ytarget, dftb_node_types, self.var_config
         )
         return data
+"""
+
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+
+
+def dftb_to_graph(moldir, dftb_node_types, var_config):
+    pdb_filename = os.path.join(moldir, "smiles.pdb")
+    mol = MolFromPDBFile(
+        pdb_filename, sanitize=False, proximityBonding=True, removeHs=True
+    )  # , sanitize=False , removeHs=False)
+    spectrum_filename = os.path.join(moldir, "EXC-smooth.DAT")
+    ytarget = np.loadtxt(spectrum_filename, usecols=1, dtype=np.float32)
+    ytarget = torch.tensor(ytarget)
+    data = generate_graphdata_from_rdkit_molecule(
+        mol, ytarget, dftb_node_types, var_config
+    )
+    return data
+
+
+class DFTBDataset(AbstractBaseDataset):
+    """DFTBDataset dataset class"""
+
+    def __init__(self, dirpath, dftb_node_types, var_config, dist=False, sampling=None):
+        super().__init__()
+
+        self.dftb_node_types = dftb_node_types
+        self.var_config = var_config
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
+        if os.path.isdir(dirpath):
+            dirlist = sorted(os.listdir(dirpath))
+        else:
+            filelist = dirpath
+            info("Reading filelist:", filelist)
+            dirpath = os.path.dirname(dirpath)
+            dirlist = list()
+            with open(filelist, "r") as f:
+                lines = f.readlines()
+                for line in lines:
+                    dirlist.append(line.rstrip())
+
+        if self.dist:
+            ## Random shuffle dirlist to avoid the same test/validation set
+            random.seed(43)
+            random.shuffle(dirlist)
+            if sampling is not None:
+                dirlist = np.random.choice(dirlist, int(len(dirlist) * sampling))
+
+            x = torch.tensor(len(dirlist), requires_grad=False).to(get_device())
+            y = x.clone().detach().requires_grad_(False)
+            torch.distributed.all_reduce(x, op=torch.distributed.ReduceOp.MAX)
+            assert x == y
+            dirlist = list(nsplit(dirlist, self.world_size))[self.rank]
+            log("local dirlist", len(dirlist))
+
+        for subdir in iterate_tqdm(dirlist, verbosity_level=2, desc="Load"):
+            data_object = dftb_to_graph(
+                os.path.join(dirpath, subdir), dftb_node_types, var_config
+            )
+            self.dataset.append(data_object)
+
+    def len(self):
+        return len(self.dataset)
+
+    def get(self, idx):
+        return self.dataset[idx]
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
     parser.add_argument(
         "--preonly",
@@ -175,6 +258,10 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
+    parser.add_argument("--distds", action="store_true", help="distds dataset")
+    parser.add_argument("--distds_ncopy", type=int, help="distds ncopy", default=1)
+    parser.add_argument("--shmem", action="store_true", help="shmem")
+    parser.add_argument("--log", help="log name")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -230,91 +317,103 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "dftb_eV_fullx"
+    log_name = "dftb_eV_fullx" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
+    modelname = "dftb_smooth_uv_spectrum"
     if args.preonly:
-
-        (
-            molecule_sets,
-            values_sets,
-            ymean_feature,
-            ystd_feature,
-        ) = dftb_datasets_load(datafile, sampling=args.sampling, seed=43)
-        var_config["ymean"] = ymean_feature.tolist()
-        var_config["ystd"] = ystd_feature.tolist()
-
-        os.makedirs("dataset/pickle/", exist_ok=True)
-
-        info([len(x) for x in values_sets])
-        dataset_lists = [[] for dataset in values_sets]
-        for idataset, (molset, valueset) in enumerate(zip(molecule_sets, values_sets)):
-
-            rx = list(nsplit(range(len(molset)), comm_size))[rank]
-            info("subset range:", idataset, len(molset), rx.start, rx.stop)
-            ## local portion
-            _molset = molset[rx.start : rx.stop]
-            _valueset = valueset[rx.start : rx.stop]
-            info("local molecule set size:", len(_molset))
-
-            setname = ["trainset", "valset", "testset"]
-            if args.format == "pickle":
-                if rank == 0:
-                    with open(
-                        "dataset/pickle/%s.meta" % (setname[idataset]),
-                        "w+",
-                    ) as f:
-                        f.write(str(len(molset)))
-
-            for i, (molset, ytarget) in iterate_tqdm(
-                enumerate(zip(_molset, _valueset)), verbosity, total=len(_molset)
-            ):
-                data = generate_graphdata_from_rdkit_molecule(
-                    molset, ytarget, dftb_node_types, var_config
-                )
-                dataset_lists[idataset].append(data)
-
-                ## (2022/07) This is for testing to compare with Adios
-                ## pickle write
-                if args.format == "pickle":
-                    fname = "dataset/pickle/dftb_uv_spectrum-%s-%d.pk" % (
-                        setname[idataset],
-                        rx.start + i,
-                    )
-                    with open(fname, "wb") as f:
-                        pickle.dump(data, f)
-
         ## local data
-        if args.format == "adios":
-            _trainset = dataset_lists[0]
-            _valset = dataset_lists[1]
-            _testset = dataset_lists[2]
+        total = DFTBDataset(
+            os.path.join(datafile, "mollist.txt"),
+            dftb_node_types,
+            var_config,
+            dist=True,
+        )
+        trainset, valset, testset = split_dataset(
+            dataset=total,
+            perc_train=0.9,
+            stratify_splitting=False,
+        )
+        print(len(total), len(trainset), len(valset), len(testset))
 
-            adwriter = AdiosWriter("dataset/dftb_uv_spectrum.bp", comm)
-            adwriter.add("trainset", _trainset)
-            adwriter.add("valset", _valset)
-            adwriter.add("testset", _testset)
-            adwriter.save()
+        deg = gather_deg(trainset)
+        config["pna_deg"] = deg
 
+        ## adios
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        adwriter = AdiosWriter(fname, comm)
+        adwriter.add("trainset", trainset)
+        adwriter.add("valset", valset)
+        adwriter.add("testset", testset)
+        # adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
+        # adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
+        adwriter.add_global("pna_deg", deg)
+        adwriter.save()
+
+        ## pickle
+        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        attrs = dict()
+        attrs["pna_deg"] = deg
+        SimplePickleWriter(
+            trainset,
+            basedir,
+            "trainset",
+            # minmax_node_feature=total.minmax_node_feature,
+            # minmax_graph_feature=total.minmax_graph_feature,
+            use_subdir=True,
+            attrs=attrs,
+        )
+        SimplePickleWriter(
+            valset,
+            basedir,
+            "valset",
+            # minmax_node_feature=total.minmax_node_feature,
+            # minmax_graph_feature=total.minmax_graph_feature,
+            use_subdir=True,
+        )
+        SimplePickleWriter(
+            testset,
+            basedir,
+            "testset",
+            # minmax_node_feature=total.minmax_node_feature,
+            # minmax_graph_feature=total.minmax_graph_feature,
+            use_subdir=True,
+        )
         sys.exit(0)
 
     timer = Timer("load_data")
     timer.start()
     if args.format == "adios":
-        trainset = AdiosDataset(
-            "dataset/dftb_uv_spectrum.bp",
-            "trainset",
-            comm,
-            preload=False,
-            shmem=True,
-        )
-        valset = AdiosDataset("dataset/dftb_uv_spectrum.bp", "valset", comm)
-        testset = AdiosDataset("dataset/dftb_uv_spectrum.bp", "testset", comm)
+        info("Adios load")
+        assert not (args.shmem and args.distds), "Cannot use both distds and shmem"
+        opt = {
+            "preload": False,
+            "shmem": args.shmem,
+            "distds": args.distds,
+            "distds_ncopy": args.distds_ncopy,
+        }
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm, **opt)
+        testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
-        trainset = SimplePickleDataset("dataset/pickle", "dftb_uv_spectrum", "trainset")
-        valset = SimplePickleDataset("dataset/pickle", "dftb_uv_spectrum", "valset")
-        testset = SimplePickleDataset("dataset/pickle", "dftb_uv_spectrum", "testset")
+        info("Pickle load")
+        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        trainset = SimplePickleDataset(basedir, "trainset")
+        valset = SimplePickleDataset(basedir, "valset")
+        testset = SimplePickleDataset(basedir, "testset")
+        # minmax_node_feature = trainset.minmax_node_feature
+        # minmax_graph_feature = trainset.minmax_graph_feature
+        pna_deg = trainset.pna_deg
+        if args.distds:
+            opt = {"distds_ncopy": args.distds_ncopy}
+            trainset = DistDataset(trainset, "trainset", comm, **opt)
+            valset = DistDataset(valset, "valset", comm, **opt)
+            testset = DistDataset(testset, "testset", comm, **opt)
+            # trainset.minmax_node_feature = minmax_node_feature
+            # trainset.minmax_graph_feature = minmax_graph_feature
+            trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -324,11 +423,21 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
+    if args.distds:
+        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
+        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
+
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
+    if hasattr(trainset, "pna_deg"):
+        config["pna_deg"] = trainset.pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    if "pna_deg" in config:
+        del config["pna_deg"]
+    ## Good to sync with everyone right after DDStore setup
+    comm.Barrier()
 
     hydragnn.utils.save_config(config, log_name)
 
