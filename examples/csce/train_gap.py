@@ -287,13 +287,13 @@ if __name__ == "__main__":
         testset = dataset_lists[2]
 
         deg = gather_deg(trainset)
-        config["trainset_pna_deg"] = deg
+        config["pna_deg"] = deg
 
         ## local data
         if args.format == "pickle":
             basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
             attrs = dict()
-            attrs["trainset_pna_deg"] = deg
+            attrs["pna_deg"] = deg
             SimplePickleWriter(
                 trainset,
                 basedir,
@@ -317,7 +317,7 @@ if __name__ == "__main__":
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
-            adwriter.add_global("trainset_pna_deg", deg)
+            adwriter.add_global("pna_deg", deg)
             adwriter.save()
 
         sys.exit(0)
@@ -359,13 +359,13 @@ if __name__ == "__main__":
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")
         testset = SimplePickleDataset(basedir, "testset")
-        trainset_pna_deg = trainset.trainset_pna_deg
+        pna_deg = trainset.pna_deg
         if args.dataset == "distds":
             opt = {"distds_ncopy": args.distds_ncopy}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
-            trainset.trainset_pna_deg = trainset_pna_deg
+            trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -382,11 +382,11 @@ if __name__ == "__main__":
     comm.Barrier()
     log("#2")
 
-    if hasattr(trainset, "trainset_pna_deg"):
-        config["trainset_pna_deg"] = trainset.trainset_pna_deg
+    if hasattr(trainset, "pna_deg"):
+        config["pna_deg"] = trainset.pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
-    if "trainset_pna_deg" in config:
-        del config["trainset_pna_deg"]
+    if "pna_deg" in config:
+        del config["pna_deg"]
     comm.Barrier()
     log("#3")
 

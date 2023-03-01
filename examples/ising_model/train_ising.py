@@ -257,7 +257,7 @@ if __name__ == "__main__":
         print(len(total), len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
-        config["trainset_pna_deg"] = deg
+        config["pna_deg"] = deg
 
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
@@ -265,7 +265,7 @@ if __name__ == "__main__":
         attrs = dict()
         attrs["minmax_node_feature"] = total.minmax_node_feature
         attrs["minmax_graph_feature"] = total.minmax_graph_feature
-        attrs["trainset_pna_deg"] = deg
+        attrs["pna_deg"] = deg
         SimplePickleWriter(
             trainset,
             basedir,
@@ -293,7 +293,7 @@ if __name__ == "__main__":
         adwriter.add("testset", testset)
         adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
         adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
-        adwriter.add_global("trainset_pna_deg", deg)
+        adwriter.add_global("pna_deg", deg)
         adwriter.save()
 
         sys.exit(0)
@@ -325,7 +325,7 @@ if __name__ == "__main__":
         testset = SimplePickleDataset(basedir, "testset")
         minmax_node_feature = trainset.minmax_node_feature
         minmax_graph_feature = trainset.minmax_graph_feature
-        trainset_pna_deg = trainset.trainset_pna_deg
+        pna_deg = trainset.pna_deg
 
         # ## WIP: temporary
         # for dataset in (trainset, valset, testset):
@@ -338,7 +338,7 @@ if __name__ == "__main__":
         # adwriter.add("testset", testset)
         # adwriter.add_global("minmax_node_feature", minmax_node_feature)
         # adwriter.add_global("minmax_graph_feature", minmax_graph_feature)
-        # adwriter.add_global("trainset_pna_deg", trainset_pna_deg)
+        # adwriter.add_global("pna_deg", pna_deg)
         # adwriter.save()
         # sys.exit(0)
 
@@ -349,7 +349,7 @@ if __name__ == "__main__":
             testset = DistDataset(testset, "testset", comm, **opt)
             trainset.minmax_node_feature = minmax_node_feature
             trainset.minmax_graph_feature = minmax_graph_feature
-            trainset.trainset_pna_deg = trainset_pna_deg
+            trainset.pna_deg = pna_deg
 
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -372,13 +372,13 @@ if __name__ == "__main__":
     config["NeuralNetwork"]["Variables_of_interest"][
         "minmax_graph_feature"
     ] = trainset.minmax_graph_feature
-    if hasattr(trainset, "trainset_pna_deg"):
-        config["trainset_pna_deg"] = trainset.trainset_pna_deg
+    if hasattr(trainset, "pna_deg"):
+        config["pna_deg"] = trainset.pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
-    if "trainset_pna_deg" in config:
-        del config["trainset_pna_deg"]
+    if "pna_deg" in config:
+        del config["pna_deg"]
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
