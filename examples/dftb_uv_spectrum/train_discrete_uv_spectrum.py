@@ -391,7 +391,7 @@ if __name__ == "__main__":
     timer.start()
     if args.format == "adios":
         info("Adios load")
-        assert not args.shmem or not args.distds, "Cannot use both distds and shmem"
+        assert not (args.shmem and args.distds), "Cannot use both distds and shmem"
         opt = {
             "preload": False,
             "shmem": args.shmem,
