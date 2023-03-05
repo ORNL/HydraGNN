@@ -45,6 +45,8 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
+from hydragnn.utils import nsplit
+import hydragnn.utils.tracer as tr
 
 # FIXME: this works fine for now because we train on GDB-9 molecules
 # for larger chemical spaces, the following atom representation has to be properly expanded
@@ -53,11 +55,6 @@ dftb_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def nsplit(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
 
 
 """
@@ -382,6 +379,8 @@ if __name__ == "__main__":
         )
         sys.exit(0)
 
+    tr.initialize()
+    tr.disable()
     timer = Timer("load_data")
     timer.start()
     if args.format == "adios":
@@ -571,7 +570,10 @@ if __name__ == "__main__":
             fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
         plt.close()
 
-    if args.format == "adios":
-        trainset.unlink()
+    if tr.has("GPTLTracer"):
+        import gptl4py as gp
 
+        gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
+        gp.finalize()
     sys.exit(0)
