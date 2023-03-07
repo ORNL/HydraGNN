@@ -44,6 +44,8 @@
       "type": [
         "graph"
       ],
+      "output_dim": [37500],
+      "output_names": ["spectrum"],
       "denormalize_output": false
     },
     "Training": {

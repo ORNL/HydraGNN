@@ -279,7 +279,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     graph_feature_names = ["spectrum"]
-    graph_feature_dim = [351]
+    graph_feature_dim = [37500]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/dftb_gdb9_electronic_excitation_spectrum")
     ##################################################################################################################
