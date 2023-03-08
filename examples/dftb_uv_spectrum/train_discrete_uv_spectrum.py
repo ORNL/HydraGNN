@@ -282,7 +282,7 @@ if __name__ == "__main__":
         dest="format",
         const="pickle",
     )
-    parser.set_defaults(format="pickle")
+    parser.set_defaults(format="adios")
     args = parser.parse_args()
 
     graph_feature_names = ["frequencies", "intensities"]
@@ -356,7 +356,9 @@ if __name__ == "__main__":
         adwriter.save()
 
         ## pickle
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        basedir = os.path.join(
+            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+        )
         attrs = dict()
         attrs["pna_deg"] = deg
         SimplePickleWriter(
@@ -405,7 +407,9 @@ if __name__ == "__main__":
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        basedir = os.path.join(
+            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+        )
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")
         testset = SimplePickleDataset(basedir, "testset")
