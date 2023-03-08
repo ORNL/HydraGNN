@@ -188,6 +188,7 @@ def dftb_to_graph(moldir, dftb_node_types, var_config):
     data = generate_graphdata_from_rdkit_molecule(
         mol, ytarget, dftb_node_types, var_config
     )
+    data.ID = torch.tensor((int(os.path.basename(moldir).replace("mol_", "")),))
     return data
 
 
