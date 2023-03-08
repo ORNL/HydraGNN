@@ -282,7 +282,7 @@ if __name__ == "__main__":
     graph_feature_names = ["spectrum"]
     graph_feature_dim = [37500]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datafile = os.path.join(dirpwd, "dataset/dftb_gdb9_electronic_excitation_spectrum")
+    datafile = os.path.join(dirpwd, "dataset/dftb_aisd_electronic_excitation_spectrum")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, "dftb_smooth_uv_spectrum.json")
     ##################################################################################################################

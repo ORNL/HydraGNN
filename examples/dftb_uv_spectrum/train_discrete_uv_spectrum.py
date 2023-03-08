@@ -288,7 +288,7 @@ if __name__ == "__main__":
     graph_feature_names = ["frequencies", "intensities"]
     graph_feature_dim = [50, 50]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datafile = os.path.join(dirpwd, "dataset/dftb_gdb9_discrete_spectrum")
+    datafile = os.path.join(dirpwd, "dataset/dftb_aisd_discrete_spectrum")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, "dftb_discrete_uv_spectrum.json")
     ##################################################################################################################
