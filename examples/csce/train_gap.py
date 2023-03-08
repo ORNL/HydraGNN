@@ -158,7 +158,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
-    parser.add_argument("--distds_ncopy", type=int, help="distds ncopy", default=1)
+    parser.add_argument("--distds_width", type=int, help="distds width", default=None)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -361,7 +361,7 @@ if __name__ == "__main__":
         testset = SimplePickleDataset(basedir, "testset")
         pna_deg = trainset.pna_deg
         if args.dataset == "distds":
-            opt = {"distds_ncopy": args.distds_ncopy}
+            opt = {"distds_width": args.distds_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)

@@ -226,7 +226,7 @@ class AdiosDataset(AbstractBaseDataset):
         shmem=False,
         enable_cache=False,
         distds=False,
-        distds_ncopy=1,
+        distds_width=None,
     ):
         """
         Parameters
@@ -284,11 +284,10 @@ class AdiosDataset(AbstractBaseDataset):
         self.cache = dict()
         self.ddstore = None
         self.distds = distds
-        self.distds_ncopy = distds_ncopy
-        self.nrank_per_group = self.comm_size // self.distds_ncopy
+        self.distds_width = distds_width if distds_width is not None else self.comm_size
         if self.distds:
             self.ddstore_comm = self.comm.Split(
-                self.rank // self.nrank_per_group, self.rank
+                self.rank // self.distds_width, self.rank
             )
             self.ddstore_comm_rank = self.ddstore_comm.Get_rank()
             self.ddstore_comm_size = self.ddstore_comm.Get_size()

@@ -18,18 +18,15 @@ from hydragnn.utils import nsplit
 class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
 
-    def __init__(self, data, label, comm=MPI.COMM_WORLD, distds_ncopy=1):
+    def __init__(self, data, label, comm=MPI.COMM_WORLD, distds_width=None):
         super().__init__()
 
         self.label = label
         self.comm = comm
         self.rank = self.comm.Get_rank()
         self.comm_size = self.comm.Get_size()
-        self.distds_ncopy = distds_ncopy
-        self.nrank_per_group = self.comm_size // self.distds_ncopy
-        self.ddstore_comm = self.comm.Split(
-            self.rank // self.nrank_per_group, self.rank
-        )
+        self.distds_width = distds_width if distds_width is not None else self.comm_size
+        self.ddstore_comm = self.comm.Split(self.rank // self.distds_width, self.rank)
         self.ddstore_comm_rank = self.ddstore_comm.Get_rank()
         self.ddstore_comm_size = self.ddstore_comm.Get_size()
         self.ddstore = dds.PyDDStore(self.ddstore_comm)

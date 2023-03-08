@@ -263,7 +263,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--distds", action="store_true", help="distds dataset")
-    parser.add_argument("--distds_ncopy", type=int, help="distds ncopy", default=1)
+    parser.add_argument("--distds_width", type=int, help="distds width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
 
@@ -399,7 +399,7 @@ if __name__ == "__main__":
             "preload": False,
             "shmem": args.shmem,
             "distds": args.distds,
-            "distds_ncopy": args.distds_ncopy,
+            "distds_width": args.distds_width,
         }
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
@@ -417,7 +417,7 @@ if __name__ == "__main__":
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
         if args.distds:
-            opt = {"distds_ncopy": args.distds_ncopy}
+            opt = {"distds_width": args.distds_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
