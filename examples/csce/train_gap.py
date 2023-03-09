@@ -159,6 +159,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--distds_width", type=int, help="distds width", default=None)
+    parser.add_argument("--log", help="log name")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -242,6 +243,8 @@ if __name__ == "__main__":
     )
 
     log_name = "csce_" + inputfilesubstr + "_eV_fullx"
+    if args.log is not None:
+        log_name = args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
@@ -289,36 +292,33 @@ if __name__ == "__main__":
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
-        ## local data
-        if args.format == "pickle":
-            basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
-            attrs = dict()
-            attrs["pna_deg"] = deg
-            SimplePickleWriter(
-                trainset,
-                basedir,
-                "trainset",
-                attrs=attrs,
-            )
-            SimplePickleWriter(
-                valset,
-                basedir,
-                "valset",
-            )
-            SimplePickleWriter(
-                testset,
-                basedir,
-                "testset",
-            )
+        ## pickle
+        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        attrs = dict()
+        attrs["pna_deg"] = deg
+        SimplePickleWriter(
+            trainset,
+            basedir,
+            "trainset",
+            attrs=attrs,
+        )
+        SimplePickleWriter(
+            valset,
+            basedir,
+            "valset",
+        )
+        SimplePickleWriter(
+            testset,
+            basedir,
+            "testset",
+        )
 
-        ## local data
-        if args.format == "adios":
-            adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
-            adwriter.add("trainset", trainset)
-            adwriter.add("valset", valset)
-            adwriter.add("testset", testset)
-            adwriter.add_global("pna_deg", deg)
-            adwriter.save()
+        adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
+        adwriter.add("trainset", trainset)
+        adwriter.add("valset", valset)
+        adwriter.add("testset", testset)
+        adwriter.add_global("pna_deg", deg)
+        adwriter.save()
 
         sys.exit(0)
 
@@ -374,13 +374,11 @@ if __name__ == "__main__":
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
-    log("#1")
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
     comm.Barrier()
-    log("#2")
 
     if hasattr(trainset, "pna_deg"):
         config["pna_deg"] = trainset.pna_deg
@@ -388,11 +386,9 @@ if __name__ == "__main__":
     if "pna_deg" in config:
         del config["pna_deg"]
     comm.Barrier()
-    log("#3")
 
     hydragnn.utils.save_config(config, log_name)
     comm.Barrier()
-    log("#4")
 
     timer.stop()
 
