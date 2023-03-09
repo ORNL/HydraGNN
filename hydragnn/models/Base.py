@@ -108,6 +108,12 @@ class Base(Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
+    def _conv_args(self, data):
+        conv_args = {"edge_index": data.edge_index}
+        if (data.edge_attr is not None) and (self.use_edge_attr):
+            conv_args.update({"edge_attr": data.edge_attr})
+        return conv_args
+
     def _freeze_conv(self):
         for module in [self.convs, self.batch_norms]:
             for layer in module:
@@ -238,19 +244,11 @@ class Base(Module):
     def forward(self, data):
         x = data.x
 
-        use_edge_attr = False
-        if (data.edge_attr is not None) and (self.use_edge_attr):
-            use_edge_attr = True
-
         ### encoder part ####
-        if use_edge_attr:
-            for conv, batch_norm in zip(self.convs, self.batch_norms):
-                c = conv(x=x, edge_index=data.edge_index, edge_attr=data.edge_attr)
-                x = F.relu(batch_norm(c))
-        else:
-            for conv, batch_norm in zip(self.convs, self.batch_norms):
-                c = conv(x=x, edge_index=data.edge_index)
-                x = F.relu(batch_norm(c))
+        conv_args = self._conv_args(data)
+        for conv, batch_norm in zip(self.convs, self.batch_norms):
+            c = conv(x=x, **conv_args)
+            x = F.relu(batch_norm(c))
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
