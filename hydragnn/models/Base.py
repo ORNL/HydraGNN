@@ -236,11 +236,8 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
-        x, edge_index, batch = (
-            data.x,
-            data.edge_index,
-            data.batch,
-        )
+        x = data.x
+
         use_edge_attr = False
         if (data.edge_attr is not None) and (self.use_edge_attr):
             use_edge_attr = True
@@ -248,19 +245,19 @@ class Base(Module):
         ### encoder part ####
         if use_edge_attr:
             for conv, batch_norm in zip(self.convs, self.batch_norms):
-                c = conv(x=x, edge_index=edge_index, edge_attr=data.edge_attr)
+                c = conv(x=x, edge_index=data.edge_index, edge_attr=data.edge_attr)
                 x = F.relu(batch_norm(c))
         else:
             for conv, batch_norm in zip(self.convs, self.batch_norms):
-                c = conv(x=x, edge_index=edge_index)
+                c = conv(x=x, edge_index=data.edge_index)
                 x = F.relu(batch_norm(c))
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
-        if batch is None:
+        if data.batch is None:
             x_graph = x.mean(dim=0, keepdim=True)
         else:
-            x_graph = global_mean_pool(x, batch.to(x.device))
+            x_graph = global_mean_pool(x, data.batch.to(x.device))
         outputs = []
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
@@ -271,9 +268,11 @@ class Base(Module):
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        x_node = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
+                        x_node = F.relu(
+                            batch_norm(conv(x=x, edge_index=data.edge_index))
+                        )
                 else:
-                    x_node = headloc(x=x, batch=batch)
+                    x_node = headloc(x=x, batch=data.batch)
                 outputs.append(x_node)
         return outputs
 
