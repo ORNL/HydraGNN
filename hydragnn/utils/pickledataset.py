@@ -8,6 +8,8 @@ from .print_utils import print_distributed, log, iterate_tqdm
 
 from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
+import hydragnn.utils.tracer as tr
+
 
 class SimplePickleDataset(AbstractBaseDataset):
     """Simple Pickle Dataset"""
@@ -51,6 +53,7 @@ class SimplePickleDataset(AbstractBaseDataset):
     def len(self):
         return len(self.subset)
 
+    @tr.profile("get")
     def get(self, i):
         k = self.subset[i]
         if self.preload:

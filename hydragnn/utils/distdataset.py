@@ -14,6 +14,8 @@ except ImportError:
 from hydragnn.utils.print_utils import log
 from hydragnn.utils import nsplit
 
+import hydragnn.utils.tracer as tr
+
 
 class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
@@ -102,6 +104,7 @@ class DistDataset(AbstractBaseDataset):
     def len(self):
         return self.total_ns
 
+    @tr.profile("get")
     def get(self, idx):
         data_object = torch_geometric.data.Data()
         for k in self.keys:
