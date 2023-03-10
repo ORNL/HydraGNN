@@ -265,6 +265,7 @@ if __name__ == "__main__":
     parser.add_argument("--distds_width", type=int, help="distds width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
+    parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -306,6 +307,8 @@ if __name__ == "__main__":
         var_config["input_node_feature_names"],
         var_config["input_node_feature_dims"],
     ) = get_node_attribute_name(dftb_node_types)
+    if args.batch_size is not None:
+        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.setup_ddp()
@@ -593,7 +596,8 @@ if __name__ == "__main__":
     if tr.has("GPTLTracer"):
         import gptl4py as gp
 
-        gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        if rank == 0:
+            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
 
