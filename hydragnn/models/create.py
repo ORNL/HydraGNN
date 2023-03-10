@@ -19,6 +19,7 @@ from hydragnn.models.GATStack import GATStack
 from hydragnn.models.MFCStack import MFCStack
 from hydragnn.models.CGCNNStack import CGCNNStack
 from hydragnn.models.SAGEStack import SAGEStack
+from hydragnn.models.SCFStack import SCFStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed
@@ -30,7 +31,6 @@ def create_model_config(
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
-
     return create_model(
         config["Architecture"]["model_type"],
         config["Architecture"]["input_dim"],
@@ -47,6 +47,9 @@ def create_model_config(
         config["Architecture"]["max_neighbours"],
         config["Architecture"]["edge_dim"],
         config["Architecture"]["pna_deg"],
+        config["Architecture"]["num_gaussians"],
+        config["Architecture"]["num_filters"],
+        config["Architecture"]["radius"],
         verbosity,
         use_gpu,
     )
@@ -69,6 +72,9 @@ def create_model(
     max_neighbours: int = None,
     edge_dim: int = None,
     pna_deg: torch.tensor = None,
+    num_gaussians: int = None,
+    num_filters: int = None,
+    radius: float = None,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -174,6 +180,28 @@ def create_model(
             loss_function_type,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+
+    elif model_type == "SchNet":
+        assert num_gaussians is not None, "SchNet requires num_guassians input."
+        assert num_filters is not None, "SchNet requires num_filters input."
+        assert radius is not None, "SchNet requires radius input."
+        model = SCFStack(
+            num_gaussians,
+            num_filters,
+            radius,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
+            max_neighbours=max_neighbours,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
