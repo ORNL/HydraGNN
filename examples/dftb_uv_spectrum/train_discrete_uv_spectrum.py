@@ -4,7 +4,6 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 import os, json
-import matplotlib.pyplot as plt
 import random
 import pickle
 
@@ -488,6 +487,8 @@ if __name__ == "__main__":
     hydragnn.utils.print_timers(verbosity)
 
     if args.mae:
+        import matplotlib.pyplot as plt
+
         ##################################################################################################################
         for isub, (loader, setname) in enumerate(zip([test_loader], ["test"])):
             error, rmse_task, true_values, predicted_values = hydragnn.train.test(

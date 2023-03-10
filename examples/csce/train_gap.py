@@ -4,7 +4,6 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 import os, json
-import matplotlib.pyplot as plt
 import random
 import pickle, csv
 
@@ -428,6 +427,8 @@ if __name__ == "__main__":
     hydragnn.utils.print_timers(verbosity)
 
     if args.mae:
+        import matplotlib.pyplot as plt
+
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
         for isub, (loader, setname) in enumerate(

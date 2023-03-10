@@ -482,6 +482,8 @@ if __name__ == "__main__":
     hydragnn.utils.print_timers(verbosity)
 
     if args.mae:
+        import matplotlib.pyplot as plt
+
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
         for isub, (loader, setname) in enumerate(
