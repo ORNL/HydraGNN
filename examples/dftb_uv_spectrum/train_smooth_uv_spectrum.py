@@ -4,7 +4,6 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 import os, json
-import matplotlib.pyplot as plt
 import random
 import pickle
 
