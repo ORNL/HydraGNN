@@ -425,8 +425,7 @@ if __name__ == "__main__":
     if tr.has("GPTLTracer"):
         import gptl4py as gp
 
-        if rank == 0:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
     sys.exit(0)
