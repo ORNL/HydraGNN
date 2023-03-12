@@ -321,6 +321,11 @@ if __name__ == "__main__":
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
+    log("Command: {0}\n".format(" ".join([x for x in sys.argv])))
+    log("All settings used:")
+    for k, v in sorted(vars(args).items()):
+        log("\t{0}: {1}".format(k, v))
+
     modelname = "dftb_smooth_uv_spectrum"
     if args.preonly:
         ## local data

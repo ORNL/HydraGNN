@@ -247,6 +247,11 @@ if __name__ == "__main__":
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
+    log("Command: {0}\n".format(" ".join([x for x in sys.argv])))
+    log("All settings used:")
+    for k, v in sorted(vars(args).items()):
+        log("\t{0}: {1}".format(k, v))
+
     if args.preonly:
         norm_yflag = False  # True
 
@@ -473,8 +478,7 @@ if __name__ == "__main__":
     if tr.has("GPTLTracer"):
         import gptl4py as gp
 
-        if rank == 0:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
     sys.exit(0)
