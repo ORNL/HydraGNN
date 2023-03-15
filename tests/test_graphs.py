@@ -19,9 +19,9 @@ import shutil
 
 import hydragnn, tests
 
+
 # Main unit test function called by pytest wrappers.
 def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False):
-
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -130,6 +130,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         "GIN": [0.25, 0.20],
         "GAT": [0.60, 0.70],
         "CGCNN": [0.50, 0.40],
+        "SchNet": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -171,14 +172,16 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
 
 
 # Test across all models with both single/multihead
-@pytest.mark.parametrize("model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "CGCNN"])
+@pytest.mark.parametrize(
+    "model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "CGCNN", "SchNet"]
+)
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
     unittest_train_model(model_type, ci_input, False, overwrite_data)
 
 
 # Test only models
-@pytest.mark.parametrize("model_type", ["PNA", "CGCNN"])
+@pytest.mark.parametrize("model_type", ["PNA", "CGCNN", "SchNet"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 

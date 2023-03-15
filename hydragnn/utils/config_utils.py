@@ -44,6 +44,13 @@ def update_config(config, train_loader, val_loader, test_loader):
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
 
+    if "radius" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["radius"] = None
+    if "num_gaussians" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["num_gaussians"] = None
+    if "num_filters" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["num_filters"] = None
+
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
     )
@@ -65,9 +72,8 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_edge_dim(config):
-
     config["edge_dim"] = None
-    edge_models = ["PNA", "CGCNN"]
+    edge_models = ["PNA", "CGCNN", "SchNet"]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
@@ -81,7 +87,6 @@ def update_config_edge_dim(config):
 
 
 def check_output_dim_consistent(data, config):
-
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
     if hasattr(data, "y_loc"):
