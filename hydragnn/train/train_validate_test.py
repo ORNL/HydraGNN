@@ -17,7 +17,7 @@ import torch
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device, print_peak_memory
@@ -181,27 +181,29 @@ def train_validate_test(
 
     timer.stop()
 
-    # reduce loss statistics across all processes
-    total_loss_train = reduce_values_ranks(total_loss_train)
-    total_loss_val = reduce_values_ranks(total_loss_val)
-    total_loss_test = reduce_values_ranks(total_loss_test)
-    task_loss_train = reduce_values_ranks(task_loss_train)
-    task_loss_val = reduce_values_ranks(task_loss_val)
-    task_loss_test = reduce_values_ranks(task_loss_test)
-
-    # At the end of training phase, do the one test run for visualizer to get latest predictions
-    test_loss, test_taskserr, true_values, predicted_values = test(
-        test_loader, model, verbosity
-    )
-
-    ##output predictions with unit/not normalized
-    if config["Variables_of_interest"]["denormalize_output"]:
-        true_values, predicted_values = output_denormalize(
-            config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
-        )
-
     _, rank = get_comm_size_and_rank()
     if create_plots and (rank == 0):
+        # reduce loss statistics across all processes
+        total_loss_train = reduce_values_ranks(total_loss_train)
+        total_loss_val = reduce_values_ranks(total_loss_val)
+        total_loss_test = reduce_values_ranks(total_loss_test)
+        task_loss_train = reduce_values_ranks(task_loss_train)
+        task_loss_val = reduce_values_ranks(task_loss_val)
+        task_loss_test = reduce_values_ranks(task_loss_test)
+
+        # At the end of training phase, do the one test run for visualizer to get latest predictions
+        test_loss, test_taskserr, true_values, predicted_values = test(
+            test_loader, model, verbosity
+        )
+
+        ##output predictions with unit/not normalized
+        if config["Variables_of_interest"]["denormalize_output"]:
+            true_values, predicted_values = output_denormalize(
+                config["Variables_of_interest"]["y_minmax"],
+                true_values,
+                predicted_values,
+            )
+
         ######result visualization######
         visualizer.create_plot_global(
             true_values,
