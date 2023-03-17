@@ -266,6 +266,7 @@ if __name__ == "__main__":
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
+    parser.add_argument("--everyone", action="store_true", help="gptimer")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -598,7 +599,8 @@ if __name__ == "__main__":
     if tr.has("GPTLTracer"):
         import gptl4py as gp
 
-        if rank == 0:
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
