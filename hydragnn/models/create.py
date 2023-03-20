@@ -31,6 +31,10 @@ def create_model_config(
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
+    if "num_gaussians" not in config["Architecture"].keys():
+        config["Architecture"]["num_gaussians"] = 0
+    if "num_filters" not in config["Architecture"].keys():
+        config["Architecture"]["num_filters"] = 0
     return create_model(
         config["Architecture"]["model_type"],
         config["Architecture"]["input_dim"],
