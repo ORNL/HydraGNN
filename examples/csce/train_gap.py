@@ -201,7 +201,7 @@ if __name__ == "__main__":
         dest="dataset",
         const="simple",
     )
-    parser.set_defaults(dataset="shmem")
+    parser.set_defaults(dataset="simple")
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     args = parser.parse_args()
 
@@ -374,11 +374,14 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
-    info("Adios load")
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
+
+    if args.dataset == "distds":
+        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
+        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
