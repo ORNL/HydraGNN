@@ -302,17 +302,20 @@ if __name__ == "__main__":
             trainset,
             basedir,
             "trainset",
+            use_subdir=True,
             attrs=attrs,
         )
         SimplePickleWriter(
             valset,
             basedir,
             "valset",
+            use_subdir=True,
         )
         SimplePickleWriter(
             testset,
             basedir,
             "testset",
+            use_subdir=True,
         )
 
         adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
