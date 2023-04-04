@@ -126,6 +126,8 @@ def train_validate_test(
             )
             tr.stop("train")
             tr.disable()
+            if epoch == 0:
+                tr.reset()
 
         val_loss, val_taskserr = validate(
             val_loader, model, verbosity, reduce_ranks=True

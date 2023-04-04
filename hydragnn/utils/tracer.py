@@ -77,6 +77,9 @@ try:
         def disable(self):
             sp.disable_recording()
 
+        def reset(self):
+            pass
+
 
 except:
     pass
@@ -117,6 +120,11 @@ def enable():
 def disable():
     for tr in __tracer_list__.values():
         tr.disable()
+
+
+def reset():
+    for tr in __tracer_list__.values():
+        tr.reset()
 
 
 def profile(x_or_func=None, *decorator_args, **decorator_kws):
