@@ -53,6 +53,9 @@ try:
         def disable(self):
             gp.disable()
 
+        def reset(self):
+            gp.reset()
+
 
 except:
     pass
