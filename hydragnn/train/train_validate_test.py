@@ -184,7 +184,7 @@ def train_validate_test(
     timer.stop()
 
     _, rank = get_comm_size_and_rank()
-    if create_plots and (rank == 0):
+    if create_plots:
         # reduce loss statistics across all processes
         total_loss_train = reduce_values_ranks(total_loss_train)
         total_loss_val = reduce_values_ranks(total_loss_val)
