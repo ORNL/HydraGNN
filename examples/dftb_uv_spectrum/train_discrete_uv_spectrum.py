@@ -44,7 +44,9 @@ import torch.distributed as dist
 
 import warnings
 
+from hydragnn.utils import nsplit
 import hydragnn.utils.tracer as tr
+from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 # FIXME: this works fine for now because we train on GDB-9 molecules
 # for larger chemical spaces, the following atom representation has to be properly expanded
@@ -53,131 +55,6 @@ dftb_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def nsplit(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
-
-
-"""
-def dftb_datasets_load(dirpath, sampling=None, seed=None, frac=[0.9, 0.05, 0.05]):
-    if seed is not None:
-        random.seed(seed)
-    molecules_all = []
-    values_all = []
-    for subdir, dirs, files in os.walk(dirpath):
-        for dir in dirs:
-            # collect information about molecular structure and chemical composition
-            try:
-                pdb_filename = dirpath + "/" + dir + "/" + "smiles.pdb"
-                mol = MolFromPDBFile(
-                    pdb_filename, sanitize=False, proximityBonding=True, removeHs=True
-                )  # , sanitize=False , removeHs=False)
-            # file not found -> exit here
-            except IOError:
-                print(f"'{pdb_filename}'" + " not found")
-                sys.exit(1)
-
-            try:
-                spectrum_filename = dirpath + "/" + dir + "/" + "EXC.DAT"
-                frequencies = list()
-                intensities = list()
-                with open(spectrum_filename, "r") as input_file:
-                    count_line = 0
-                    for line in input_file:
-                        if count_line >= 5:
-                            # only recognize lines that start with number
-                            # split line into 3 lists mode, energy, intensities
-                            # line should start with a number
-                            frequencies.append(float(line[6:12]))
-                            intensities.append(float(line[19:30]))
-                        count_line += 1
-
-            # file not found -> exit here
-            except IOError:
-                print(f"'{spectrum_filename}'" + " not found")
-                sys.exit(1)
-
-            molecules_all.append(mol)
-            targets_list = frequencies + intensities
-            values_all.append(targets_list)
-    print("Total:", len(molecules_all), len(values_all))
-
-    a = list(range(len(molecules_all)))
-    a = random.sample(a, len(a))
-    ix0, ix1, ix2 = np.split(
-        a, [int(frac[0] * len(a)), int((frac[0] + frac[1]) * len(a))]
-    )
-
-    trainsmiles = []
-    valsmiles = []
-    testsmiles = []
-    trainset = []
-    valset = []
-    testset = []
-
-    for i in ix0:
-        trainsmiles.append(molecules_all[i])
-        trainset.append(values_all[i])
-
-    for i in ix1:
-        valsmiles.append(molecules_all[i])
-        valset.append(values_all[i])
-
-    for i in ix2:
-        testsmiles.append(molecules_all[i])
-        testset.append(values_all[i])
-
-    return (
-        [trainsmiles, valsmiles, testsmiles],
-        [torch.tensor(trainset), torch.tensor(valset), torch.tensor(testset)],
-    )
-
-
-## Torch Dataset for DFTB data with subdirectories
-class DFTBDatasetFactory:
-    def __init__(
-        self, datafile, sampling=1.0, seed=43, var_config=None, norm_yflag=False
-    ):
-        self.var_config = var_config
-
-        ## Read full data
-        (
-            molecule_sets,
-            values_sets,
-        ) = dftb_datasets_load(datafile, sampling=sampling, seed=seed)
-
-        info([len(x) for x in values_sets])
-        self.dataset_lists = list()
-        for idataset, (molset, valueset) in enumerate(zip(molecule_sets, values_sets)):
-            self.dataset_lists.append((molset, valueset))
-
-    def get(self, label):
-        ## Set only assigned label data
-        labelnames = ["trainset", "valset", "testset"]
-        index = labelnames.index(label)
-
-        molset, valueset = self.dataset_lists[index]
-        return (molset, valueset)
-
-
-class DFTBDataset(torch.utils.data.Dataset):
-    def __init__(self, datasetfactory, label):
-        self.molecule_set, self.valueset = datasetfactory.get(label)
-        self.var_config = datasetfactory.var_config
-
-    def __len__(self):
-        return len(self.smileset)
-
-    def __getitem__(self, idx):
-        mol = self.molecule_set[idx]
-        ytarget = self.valueset[idx]
-        data = generate_graphdata_from_rdkit_molecule(mol, ytarget, dftb_node_types, self.var_config)
-        return data
-"""
-
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 
 def dftb_to_graph(moldir, dftb_node_types, var_config):
@@ -261,8 +138,8 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
-    parser.add_argument("--distds", action="store_true", help="distds dataset")
-    parser.add_argument("--distds_width", type=int, help="distds width", default=None)
+    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
@@ -399,12 +276,12 @@ if __name__ == "__main__":
     timer.start()
     if args.format == "adios":
         info("Adios load")
-        assert not (args.shmem and args.distds), "Cannot use both distds and shmem"
+        assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
         opt = {
             "preload": False,
             "shmem": args.shmem,
-            "distds": args.distds,
-            "distds_width": args.distds_width,
+            "ddstore": args.ddstore,
+            "ddstore_width": args.ddstore_width,
         }
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
@@ -421,8 +298,8 @@ if __name__ == "__main__":
         # minmax_node_feature = trainset.minmax_node_feature
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
-        if args.distds:
-            opt = {"distds_width": args.distds_width}
+        if args.ddstore:
+            opt = {"ddstore_width": args.ddstore_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
@@ -437,9 +314,9 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    if args.distds:
+    if args.ddstore:
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
+        os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]

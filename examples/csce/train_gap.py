@@ -157,7 +157,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
-    parser.add_argument("--distds_width", type=int, help="distds width", default=None)
+    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--log", help="log name")
 
     group = parser.add_mutually_exclusive_group()
@@ -188,11 +188,11 @@ if __name__ == "__main__":
         const="shmem",
     )
     group1.add_argument(
-        "--distds",
-        help="distds dataset",
+        "--ddstore",
+        help="ddstore dataset",
         action="store_const",
         dest="dataset",
-        const="distds",
+        const="ddstore",
     )
     group1.add_argument(
         "--simple",
@@ -333,17 +333,17 @@ if __name__ == "__main__":
     timer.start()
 
     if args.format == "adios":
-        shmem = distds = False
+        shmem = ddstore = False
         if args.dataset == "shmem":
             shmem = True
             os.environ["HYDRAGNN_AGGR_BACKEND"] = "torch"
-            os.environ["HYDRAGNN_USE_DISTDS"] = "0"
-        elif args.dataset == "distds":
-            distds = True
+            os.environ["HYDRAGNN_USE_ddstore"] = "0"
+        elif args.dataset == "ddstore":
+            ddstore = True
             os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-            os.environ["HYDRAGNN_USE_DISTDS"] = "1"
+            os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-        opt = {"preload": False, "shmem": shmem, "distds": distds}
+        opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
         trainset = AdiosDataset(
             "examples/csce/dataset/csce_gap.bp", "trainset", comm, **opt
         )
@@ -365,8 +365,8 @@ if __name__ == "__main__":
         valset = SimplePickleDataset(basedir, "valset")
         testset = SimplePickleDataset(basedir, "testset")
         pna_deg = trainset.pna_deg
-        if args.dataset == "distds":
-            opt = {"distds_width": args.distds_width}
+        if args.dataset == "ddstore":
+            opt = {"ddstore_width": args.ddstore_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
@@ -379,9 +379,9 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    if args.dataset == "distds":
+    if args.dataset == "ddstore":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
+        os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]

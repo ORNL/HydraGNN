@@ -156,8 +156,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, help="seed", default=43)
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
-    parser.add_argument("--distds", action="store_true", help="distds dataset")
-    parser.add_argument("--distds_width", type=int, help="distds width", default=None)
+    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--log", help="log name")
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     group = parser.add_mutually_exclusive_group()
@@ -311,8 +311,8 @@ if __name__ == "__main__":
         opt = {
             "preload": False,
             "shmem": False,
-            "distds": args.distds,
-            "distds_width": args.distds_width,
+            "ddstore": args.ddstore,
+            "ddstore_width": args.ddstore_width,
         }
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
@@ -345,8 +345,8 @@ if __name__ == "__main__":
         # adwriter.save()
         # sys.exit(0)
 
-        if args.distds:
-            opt = {"distds_width": args.distds_width}
+        if args.ddstore:
+            opt = {"ddstore_width": args.ddstore_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
@@ -359,9 +359,9 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    if args.distds:
+    if args.ddstore:
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_DISTDS"] = "1"
+        os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]

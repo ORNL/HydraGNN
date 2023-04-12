@@ -380,16 +380,16 @@ def train(
     num_samples_local = 0
     model.train()
 
-    use_distds = (
+    use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
-        and bool(int(os.getenv("HYDRAGNN_USE_DISTDS", "0")))
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
     tr.start("dataload")
-    if use_distds:
+    if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
-        if use_distds:
+        if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         tr.stop("dataload")
         tr.start("zero_grad")
@@ -422,9 +422,9 @@ def train(
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
         tr.start("dataload")
-        if use_distds:
+        if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
-    if use_distds:
+    if use_ddstore:
         loader.dataset.ddstore.epoch_end()
     tr.stop("dataload")
 
@@ -440,15 +440,15 @@ def validate(loader, model, verbosity, reduce_ranks=True):
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
-    use_distds = (
+    use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
-        and bool(int(os.getenv("HYDRAGNN_USE_DISTDS", "0")))
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    if use_distds:
+    if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
     for data in iterate_tqdm(loader, verbosity, desc="Validate"):
-        if use_distds:
+        if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
@@ -458,9 +458,9 @@ def validate(loader, model, verbosity, reduce_ranks=True):
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-        if use_distds:
+        if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
-    if use_distds:
+    if use_ddstore:
         loader.dataset.ddstore.epoch_end()
 
     val_error = total_error / num_samples_local
@@ -478,15 +478,15 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
-    use_distds = (
+    use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
-        and bool(int(os.getenv("HYDRAGNN_USE_DISTDS", "0")))
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    if use_distds:
+    if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
     for data in iterate_tqdm(loader, verbosity, desc="Test"):
-        if use_distds:
+        if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
@@ -496,9 +496,9 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-        if use_distds:
+        if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
-    if use_distds:
+    if use_ddstore:
         loader.dataset.ddstore.epoch_end()
 
     test_error = total_error / num_samples_local

@@ -94,7 +94,7 @@ def has(name):
     return name in __tracer_list__
 
 
-def initialize(trlist=["GPTLTracer", "SCOREPTracer"], verbose=True, **kwargs):
+def initialize(trlist=["GPTLTracer", "SCOREPTracer"], verbose=False, **kwargs):
     for trname in trlist:
         try:
             tr = globals()[trname](**kwargs)

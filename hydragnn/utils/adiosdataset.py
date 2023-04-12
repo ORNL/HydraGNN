@@ -225,8 +225,8 @@ class AdiosDataset(AbstractBaseDataset):
         preload=False,
         shmem=False,
         enable_cache=False,
-        distds=False,
-        distds_width=None,
+        ddstore=False,
+        ddstore_width=None,
     ):
         """
         Parameters
@@ -243,7 +243,7 @@ class AdiosDataset(AbstractBaseDataset):
             Option to use shmem to share data between processes in the same node
         enable_cache: bool, optional
             Option to cache data object which was already read
-        distds: bool, optional
+        ddstore: bool, optional
             Option to use Distributed Data Store
         """
         t0 = time.time()
@@ -283,11 +283,13 @@ class AdiosDataset(AbstractBaseDataset):
         self.enable_cache = enable_cache
         self.cache = dict()
         self.ddstore = None
-        self.distds = distds
-        self.distds_width = distds_width if distds_width is not None else self.comm_size
-        if self.distds:
+        self.ddstore = ddstore
+        self.ddstore_width = (
+            ddstore_width if ddstore_width is not None else self.comm_size
+        )
+        if self.ddstore:
             self.ddstore_comm = self.comm.Split(
-                self.rank // self.distds_width, self.rank
+                self.rank // self.ddstore_width, self.rank
             )
             self.ddstore_comm_rank = self.ddstore_comm.Get_rank()
             self.ddstore_comm_size = self.ddstore_comm.Get_size()
@@ -377,7 +379,7 @@ class AdiosDataset(AbstractBaseDataset):
 
                         arr = np.ndarray(ishape, dtype=dtype, buffer=self.shm[k].buf)
                         self.data[k] = arr
-                elif self.distds:
+                elif self.ddstore:
                     ## Calculate local portion
                     shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                     ishape = [int(x.strip(",")) for x in shape.strip().split()]
@@ -413,7 +415,7 @@ class AdiosDataset(AbstractBaseDataset):
                     nbytes += self.data[k].size * self.data[k].itemsize
             t2 = time.time()
             log("Adios reading time (sec): ", (t2 - t0))
-            if self.distds:
+            if self.ddstore:
                 log("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
         t1 = time.time()
@@ -459,7 +461,7 @@ class AdiosDataset(AbstractBaseDataset):
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self.data[k][tuple(slice_list)]
-                elif self.distds:
+                elif self.ddstore:
                     vname = "%s/%s" % (self.label, k)
                     vartype = self.vars["%s/%s" % (self.label, k)]["Type"]
                     if vartype == "double":
@@ -506,7 +508,7 @@ class AdiosDataset(AbstractBaseDataset):
                     self.shm[k].unlink()
 
     def __del__(self):
-        if self.distds:
+        if self.ddstore:
             self.ddstore.free()
         if not self.preload and not self.shmem:
             self.f.close()
