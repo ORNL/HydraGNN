@@ -111,7 +111,7 @@ def start(name):
 
 
 def stop(name):
-    for tr in reversed(__tracer_list__.values()):
+    for tr in __tracer_list__.values():
         tr.stop(name)
 
 
