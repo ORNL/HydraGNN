@@ -135,7 +135,7 @@ class Base(Module):
       
         self.layers = ModuleList()
         for i, (conv, batch_norm) in enumerate(zip(self.convs, self.batch_norms)):
-            if i > 0 and self.skip_connection:
+            if self.skip_connection:
                 self.layers.append(SkipConv(conv, batch_norm))
             else:
                 self.layers.append(Conv(conv, batch_norm))
