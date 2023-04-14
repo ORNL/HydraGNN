@@ -25,11 +25,7 @@ except ImportError:
 import hydragnn.utils.tracer as tr
 
 from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-
-
-def nsplit(a, n):
-    k, m = divmod(len(a), n)
-    return (a[i * k + min(i, m) : (i + 1) * k + min(i + 1, m)] for i in range(n))
+from hydragnn.utils import nsplit
 
 
 class AdiosWriter:
