@@ -141,7 +141,7 @@ class Base(Module):
             self._set_bias()
 
         self.layers = ModuleList()
-        for i, (conv, batch_norm) in enumerate(zip(self.convs, self.batch_norms)):
+        for conv, batch_norm in zip(self.convs, self.batch_norms):
             if self.skip_connection:
                 self.layers.append(SkipConv(conv, batch_norm))
             else:
@@ -292,8 +292,6 @@ class Base(Module):
 
     def forward(self, data):
         x = data.x
-
-        count_conv_layers = 0
 
         ### encoder part ####
         conv_args = self._conv_args(data)
