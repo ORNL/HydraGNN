@@ -187,10 +187,6 @@ def pytest_train_model(model_type, skip_connection, ci_input, overwrite_data=Fal
 
 # Test only models
 @pytest.mark.parametrize("model_type", ["PNA", "CGCNN", "SchNet"])
-def pytest_train_model_lengths(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci.json", True, overwrite_data)
-
-
 @pytest.mark.parametrize("skip_connection", [False, True])
 def pytest_train_model_lengths(model_type, skip_connection, overwrite_data=False):
     unittest_train_model(model_type, skip_connection, "ci.json", True, overwrite_data)
