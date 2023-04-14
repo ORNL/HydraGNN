@@ -211,6 +211,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            skip_connection=skip_connection,
         )
 
     else:
