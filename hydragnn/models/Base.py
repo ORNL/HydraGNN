@@ -291,7 +291,6 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
-        import ipdb; ipdb.set_trace()
         x, edge_index, batch, edge_attr = (
             data.x,
             data.edge_index,
