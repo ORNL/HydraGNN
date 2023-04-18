@@ -28,8 +28,8 @@ class Conv(torch.nn.Module):
         self.batch_norm = batch_norm
         self.act = act
 
-    def forward(self, x=None, edge_index=None, edge_attr=None):
-        c = self.conv(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    def forward(self, **args):
+        c = self.conv(**args)
         return self.act(self.batch_norm(c))
 
 
@@ -42,18 +42,18 @@ class SkipConv(torch.nn.Module):
         self.batch_norm = batch_norm
         self.act = act
 
-    def forward(self, x=None, edge_index=None, edge_attr=None):
-        identity = x
-        c = self.conv(x=x, edge_index=edge_index, edge_attr=edge_attr)
+    def forward(self, **args):
+        identity = args["x"]
+        c = self.conv(**args)
         return self.act(self.batch_norm(c)) + identity
 
 
 class ConvSequential(torch.nn.Sequential):
     """Extention to use graph inputs"""
 
-    def forward(self, x=None, edge_index=None, edge_attr=None):
+    def forward(self, x=None, **args):
         for module in self:
-            x = module(x=x, edge_index=edge_index, edge_attr=edge_attr)
+            x = module(x=x, **args)
         return x
 
 
@@ -291,15 +291,11 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
-        x, edge_index, batch, edge_attr = (
-            data.x,
-            data.edge_index,
-            data.batch,
-            data.edge_attr if self.use_edge_attr else None,
-        )
+        x = data.x
 
         ### encoder part ####
-        x = self.conv_shared(x=x, edge_index=edge_index, edge_attr=edge_attr)
+        conv_args = self._conv_args(data)
+        x = self.conv_shared(x=x, **conv_args)
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
