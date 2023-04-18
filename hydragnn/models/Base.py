@@ -291,13 +291,15 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
-        x = data.x
+        x, edge_index, batch, edge_attr = (
+            data.x,
+            data.edge_index,
+            data.batch,
+            data.edge_attr if self.use_edge_attr else None,
+        )
 
         ### encoder part ####
-        conv_args = self._conv_args(data)
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
-            c = conv(x=x, **conv_args)
-            x = F.relu(batch_norm(c))
+        x = self.conv_shared(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
