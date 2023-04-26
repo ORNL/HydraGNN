@@ -141,6 +141,8 @@ def unittest_train_model(
         thresholds["PNA"] = [0.10, 0.10]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
+    if skip_connection:
+        thresholds["PNA"] = [0.8, 0.7]
     verbosity = 2
 
     for ihead in range(len(true_values)):
