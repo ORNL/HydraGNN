@@ -322,11 +322,7 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    if hasattr(trainset, "pna_deg"):
-        config["pna_deg"] = trainset.pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
-    if "pna_deg" in config:
-        del config["pna_deg"]
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 

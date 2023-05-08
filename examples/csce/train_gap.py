@@ -318,7 +318,8 @@ if __name__ == "__main__":
             use_subdir=True,
         )
 
-        adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap.bp")
+        adwriter = AdiosWriter(fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
         adwriter.add("testset", testset)
@@ -344,18 +345,16 @@ if __name__ == "__main__":
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
-        trainset = AdiosDataset(
-            "examples/csce/dataset/csce_gap.bp", "trainset", comm, **opt
+        fname = fname = os.path.join(
+            os.path.dirname(__file__), "dataset", "csce_gap.bp"
         )
-        valset = AdiosDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
-        testset = AdiosDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm)
+        testset = AdiosDataset(fname, "testset", comm)
         comm.Barrier()
     elif args.format == "csv":
-        fact = CSCEDatasetFactory(
-            "examples/csce/dataset/csce_gap_synth.csv",
-            args.sampling,
-            var_config=var_config,
-        )
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap_synth.csv")
+        fact = CSCEDatasetFactory(fname, args.sampling, var_config=var_config)
         trainset = CSCEDataset(fact, "trainset")
         valset = CSCEDataset(fact, "valset")
         testset = CSCEDataset(fact, "testset")
@@ -388,11 +387,7 @@ if __name__ == "__main__":
     )
     comm.Barrier()
 
-    if hasattr(trainset, "pna_deg"):
-        config["pna_deg"] = trainset.pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
-    if "pna_deg" in config:
-        del config["pna_deg"]
     comm.Barrier()
 
     hydragnn.utils.save_config(config, log_name)

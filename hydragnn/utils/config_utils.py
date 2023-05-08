@@ -40,8 +40,8 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        if "pna_deg" in config:
-            deg_bincount = torch.tensor(config["pna_deg"])
+        if hasattr(train_loader.dataset, "pna_deg"):
+            deg_bincount = torch.tensor(train_loader.dataset.pna_deg)
             deg = torch.zeros(max_neigh + 1, dtype=torch.long)
             if len(deg) < len(deg_bincount):
                 deg[:] = deg_bincount[: len(deg)]

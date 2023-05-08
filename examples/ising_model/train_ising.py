@@ -28,7 +28,6 @@ try:
 except ImportError:
     pass
 
-import torch_geometric.data
 import torch
 import torch.distributed as dist
 
@@ -330,21 +329,6 @@ if __name__ == "__main__":
         minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
 
-        # ## WIP: temporary
-        # for dataset in (trainset, valset, testset):
-        #     rx = list(nsplit(range(len(dataset)), comm_size))[rank]
-        #     dataset.setsubset(rx)
-        # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
-        # adwriter = AdiosWriter(fname, comm)
-        # adwriter.add("trainset", trainset)
-        # adwriter.add("valset", valset)
-        # adwriter.add("testset", testset)
-        # adwriter.add_global("minmax_node_feature", minmax_node_feature)
-        # adwriter.add_global("minmax_graph_feature", minmax_graph_feature)
-        # adwriter.add_global("pna_deg", pna_deg)
-        # adwriter.save()
-        # sys.exit(0)
-
         if args.ddstore:
             opt = {"ddstore_width": args.ddstore_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
@@ -375,13 +359,9 @@ if __name__ == "__main__":
     config["NeuralNetwork"]["Variables_of_interest"][
         "minmax_graph_feature"
     ] = trainset.minmax_graph_feature
-    if hasattr(trainset, "pna_deg"):
-        config["pna_deg"] = trainset.pna_deg
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
-    if "pna_deg" in config:
-        del config["pna_deg"]
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 

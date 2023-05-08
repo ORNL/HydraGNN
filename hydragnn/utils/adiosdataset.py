@@ -96,7 +96,7 @@ class AdiosWriter:
         total_ns = 0
         for label in self.dataset:
             if len(self.dataset[label]) == 0:
-                ## If there is no data to save, simply do empty operations
+                ## If there is no data to save, simply do empty operations as follows.
                 ns = self.comm.allgather(len(self.dataset[label]))
 
                 keys_list = self.comm.allgather([])
@@ -128,7 +128,7 @@ class AdiosWriter:
                 for i in range(len(m0)):
                     if m0[i] != m1[i]:
                         vdims.append(i)
-                ## We can handle only single variable dimension.
+                ## We can handle only one varying dimension.
                 assert len(vdims) < 2
                 vdim = 0
                 if len(vdims) > 0:
