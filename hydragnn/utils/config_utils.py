@@ -15,6 +15,8 @@ from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.utils import get_comm_size_and_rank
 import time
 import json
+from torch_geometric.utils import degree
+import torch
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -36,6 +38,12 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
+
+    max_degree = -1
+    for data in train_loader:
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        max_degree = max(max_degree, int(d.max()))
+    config["NeuralNetwork"]["Architecture"]["max_neighbours"] = max_degree
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
