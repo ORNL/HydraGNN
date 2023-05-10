@@ -207,8 +207,6 @@ def get_log_name_config(config):
         config["NeuralNetwork"]["Architecture"]["model_type"]
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
-        + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
         + str(config["NeuralNetwork"]["Architecture"]["num_conv_layers"])
         + "-hd-"
