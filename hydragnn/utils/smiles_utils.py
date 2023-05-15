@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.data import Data
 import hydragnn
-import random
 
 ##################################################################################################################
 ##################################################################################################################
@@ -45,7 +44,9 @@ def generate_graphdata_from_smilestr(simlestr, ytarget, types, var_config=None):
     return data
 
 
-def generate_graphdata_from_rdkit_molecule(mol, ytarget, types, var_config=None):
+def generate_graphdata_from_rdkit_molecule(
+    mol, ytarget, types, atomic_descriptors_list=[], var_config=None
+):
     bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
 
     mol = Chem.AddHs(mol)
@@ -89,7 +90,10 @@ def generate_graphdata_from_rdkit_molecule(mol, ytarget, types, var_config=None)
 
     x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
     x2 = (
-        torch.tensor([atomic_number, aromatic, sp, sp2, sp3, num_hs], dtype=torch.float)
+        torch.tensor(
+            [atomic_number, atomic_descriptors_list, aromatic, sp, sp2, sp3, num_hs],
+            dtype=torch.float,
+        )
         .t()
         .contiguous()
     )
