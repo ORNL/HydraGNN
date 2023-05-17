@@ -17,6 +17,7 @@ import time
 import json
 from torch_geometric.utils import degree
 import torch
+import torch.distributed as dist
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -43,6 +44,10 @@ def update_config(config, train_loader, val_loader, test_loader):
     for data in train_loader:
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         max_degree = max(max_degree, int(d.max()))
+    if dist.get_world_size() > 1:
+        max_degree = torch.tensor(max_degree)
+        dist.all_reduce(max_degree, op=dist.ReduceOp.MAX)
+        max_degree = max_degree.item()
     config["NeuralNetwork"]["Architecture"]["max_neighbours"] = max_degree
 
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
