@@ -102,7 +102,7 @@ def generate_graphdata_from_rdkit_molecule(
         assert (
             atomicdescriptors_torch_tensor.shape[0] == x.shape[0]
         ), "tensor of atomic descriptors MUST have the number of rows equal to the number of atoms in the molecule"
-        x = torch.cat([x.to(torch.float), atomicdescriptors_torch_tensor], dim=-1)
+        x = torch.cat([x, atomicdescriptors_torch_tensor], dim=-1).to(torch.float)
 
     y = ytarget  # .squeeze()
 
