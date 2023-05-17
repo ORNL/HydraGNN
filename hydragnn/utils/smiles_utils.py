@@ -91,9 +91,7 @@ def generate_graphdata_from_rdkit_molecule(
     x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
 
     x2 = (
-        torch.tensor(
-            [atomic_number, aromatic, sp, sp2, sp3, num_hs], dtype=torch.float
-        )
+        torch.tensor([atomic_number, aromatic, sp, sp2, sp3, num_hs], dtype=torch.float)
         .t()
         .contiguous()
     )
@@ -101,7 +99,9 @@ def generate_graphdata_from_rdkit_molecule(
     x = torch.cat([x1.to(torch.float), x2], dim=-1)
 
     if atomicdescriptors_torch_tensor is not None:
-        assert atomicdescriptors_torch_tensor.shape[0] == x.shape[0], "tensor of atomic descriptors MUST have the number of rows equal to the number of atoms in the molecule"
+        assert (
+            atomicdescriptors_torch_tensor.shape[0] == x.shape[0]
+        ), "tensor of atomic descriptors MUST have the number of rows equal to the number of atoms in the molecule"
         x = torch.cat([x.to(torch.float), atomicdescriptors_torch_tensor], dim=-1)
 
     y = ytarget  # .squeeze()
