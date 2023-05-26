@@ -108,6 +108,12 @@ class Base(Module):
             self.convs.append(conv)
             self.batch_norms.append(BatchNorm(self.hidden_dim))
 
+    def _conv_args(self, data):
+        conv_args = {"edge_index": data.edge_index}
+        if (data.edge_attr is not None) and (self.use_edge_attr):
+            conv_args.update({"edge_attr": data.edge_attr})
+        return conv_args
+
     def _freeze_conv(self):
         for module in [self.convs, self.batch_norms]:
             for layer in module:
@@ -236,31 +242,20 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def forward(self, data):
-        x, edge_index, batch = (
-            data.x,
-            data.edge_index,
-            data.batch,
-        )
-        use_edge_attr = False
-        if (data.edge_attr is not None) and (self.use_edge_attr):
-            use_edge_attr = True
+        x = data.x
 
         ### encoder part ####
-        if use_edge_attr:
-            for conv, batch_norm in zip(self.convs, self.batch_norms):
-                c = conv(x=x, edge_index=edge_index, edge_attr=data.edge_attr)
-                x = F.relu(batch_norm(c))
-        else:
-            for conv, batch_norm in zip(self.convs, self.batch_norms):
-                c = conv(x=x, edge_index=edge_index)
-                x = F.relu(batch_norm(c))
+        conv_args = self._conv_args(data)
+        for conv, batch_norm in zip(self.convs, self.batch_norms):
+            c = conv(x=x, **conv_args)
+            x = F.relu(batch_norm(c))
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
-        if batch is None:
+        if data.batch is None:
             x_graph = x.mean(dim=0, keepdim=True)
         else:
-            x_graph = global_mean_pool(x, batch.to(x.device))
+            x_graph = global_mean_pool(x, data.batch.to(x.device))
         outputs = []
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
@@ -271,9 +266,11 @@ class Base(Module):
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        x_node = F.relu(batch_norm(conv(x=x, edge_index=edge_index)))
+                        x_node = F.relu(
+                            batch_norm(conv(x=x, edge_index=data.edge_index))
+                        )
                 else:
-                    x_node = headloc(x=x, batch=batch)
+                    x_node = headloc(x=x, batch=data.batch)
                 outputs.append(x_node)
         return outputs
 

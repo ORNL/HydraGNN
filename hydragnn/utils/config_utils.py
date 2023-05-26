@@ -15,7 +15,9 @@ from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.utils import get_comm_size_and_rank
 import time
 import json
+from torch_geometric.utils import degree
 import torch
+import torch.distributed as dist
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -38,6 +40,16 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
 
+    max_degree = -1
+    for data in train_loader:
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        max_degree = max(max_degree, int(d.max()))
+    if dist.get_world_size() > 1:
+        max_degree = torch.tensor(max_degree)
+        dist.all_reduce(max_degree, op=dist.ReduceOp.MAX)
+        max_degree = max_degree.item()
+    config["NeuralNetwork"]["Architecture"]["max_neighbours"] = max_degree
+
     max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
         if hasattr(train_loader.dataset, "pna_deg"):
@@ -52,6 +64,13 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
+
+    if "radius" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["radius"] = None
+    if "num_gaussians" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["num_gaussians"] = None
+    if "num_filters" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["num_filters"] = None
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -74,9 +93,8 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_edge_dim(config):
-
     config["edge_dim"] = None
-    edge_models = ["PNA", "CGCNN"]
+    edge_models = ["PNA", "CGCNN", "SchNet"]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
@@ -90,7 +108,6 @@ def update_config_edge_dim(config):
 
 
 def check_output_dim_consistent(data, config):
-
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
     if hasattr(data, "y_loc"):
@@ -203,8 +220,6 @@ def get_log_name_config(config):
         config["NeuralNetwork"]["Architecture"]["model_type"]
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
-        + "-mnnn-"
-        + str(config["NeuralNetwork"]["Architecture"]["max_neighbours"])
         + "-ncl-"
         + str(config["NeuralNetwork"]["Architecture"]["num_conv_layers"])
         + "-hd-"
