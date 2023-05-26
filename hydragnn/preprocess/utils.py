@@ -181,7 +181,7 @@ def gather_deg(dataset):
         max_deg = max(max_deg, max(d))
     max_deg = MPI.COMM_WORLD.allreduce(max_deg, op=MPI.MAX)
 
-    deg = torch.zeros(max_deg + 1, dtype=torch.long)
+    deg = torch.zeros(max_deg, dtype=torch.long)
     for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())

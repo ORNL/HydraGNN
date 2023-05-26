@@ -97,6 +97,7 @@ class AdiosWriter:
         for label in self.dataset:
             if len(self.dataset[label]) == 0:
                 ## If there is no data to save, simply do empty operations as follows.
+                ## This process will call multiple allgather in a sequential order
                 ns = self.comm.allgather(len(self.dataset[label]))
 
                 keys_list = self.comm.allgather([])

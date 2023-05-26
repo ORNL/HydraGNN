@@ -102,8 +102,6 @@ def train_validate_test(
     if "Profile" in config:
         profiler.setup(config["Profile"])
 
-    _, rank = get_comm_size_and_rank()
-
     if EarlyStop:
         earlystopper = EarlyStopping()
         if "patience" in config["Training"]:
