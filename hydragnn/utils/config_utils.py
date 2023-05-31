@@ -42,11 +42,12 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
         if hasattr(train_loader.dataset, "pna_deg"):
-            ## Use max neibours used in the dataset.
+            ## Use max neighbours used in the dataset.
             deg = torch.tensor(train_loader.dataset.pna_deg)
         else:
             deg = gather_deg(train_loader.dataset)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
+        config["NeuralNetwork"]["Architecture"]["max_neighbours"] = len(deg) - 1
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
 
