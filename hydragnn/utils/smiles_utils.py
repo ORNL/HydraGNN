@@ -39,7 +39,9 @@ def generate_graphdata_from_smilestr(simlestr, ytarget, types, var_config=None):
 
     mol = Chem.MolFromSmiles(simlestr, ps)  # , sanitize=False , removeHs=False)
 
-    data = generate_graphdata_from_rdkit_molecule(mol, ytarget, types, var_config)
+    data = generate_graphdata_from_rdkit_molecule(
+        mol, ytarget, types, var_config=var_config
+    )
 
     return data
 

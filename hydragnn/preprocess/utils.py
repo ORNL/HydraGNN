@@ -172,6 +172,46 @@ class RadiusGraphPBC(RadiusGraph):
 
 
 def gather_deg(dataset):
+    from hydragnn.utils.print_utils import iterate_tqdm
+
+    backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
+    if backend == "torch":
+        return gather_deg_dist(dataset)
+    elif backend == "mpi":
+        return gather_deg_mpi(dataset)
+    else:
+        max_deg = 0
+        for data in iterate_tqdm(dataset, 2, desc="Degree max"):
+            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            max_deg = max(max_deg, max(d))
+
+        deg = torch.zeros(max_deg + 1, dtype=torch.long)
+        for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
+            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            deg += torch.bincount(d, minlength=deg.numel())
+        return deg
+
+
+def gather_deg_dist(dataset):
+    import torch.distributed as dist
+    from hydragnn.utils.print_utils import iterate_tqdm
+
+    max_deg = 0
+    for data in iterate_tqdm(dataset, 2, desc="Degree max"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        max_deg = max(max_deg, int(d.max()))
+    max_deg = torch.tensor(max_deg)
+    dist.all_reduce(max_deg, op=dist.ReduceOp.MAX)
+
+    deg = torch.zeros(max_deg.item() + 1, dtype=torch.long)
+    for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())
+    dist.all_reduce(deg, op=dist.ReduceOp.SUM)
+    return deg.cpu().detach().numpy()
+
+
+def gather_deg_mpi(dataset):
     from mpi4py import MPI
     from hydragnn.utils.print_utils import iterate_tqdm
 
@@ -181,7 +221,7 @@ def gather_deg(dataset):
         max_deg = max(max_deg, max(d))
     max_deg = MPI.COMM_WORLD.allreduce(max_deg, op=MPI.MAX)
 
-    deg = torch.zeros(max_deg, dtype=torch.long)
+    deg = torch.zeros(max_deg + 1, dtype=torch.long)
     for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
