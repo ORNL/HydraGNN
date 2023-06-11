@@ -257,7 +257,7 @@ if __name__ == "__main__":
 
             setname = ["trainset", "valset", "testset"]
             if args.format == "pickle":
-                dirname = "examples/ogb/dataset/pickle"
+                dirname = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
                 if rank == 0:
                     if not os.path.exists(dirname):
                         os.makedirs(dirname)
@@ -292,7 +292,8 @@ if __name__ == "__main__":
             _valset = dataset_lists[1]
             _testset = dataset_lists[2]
 
-            adwriter = AdiosWriter("examples/ogb/dataset/ogb_gap.bp", comm)
+            fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
+            adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", _trainset)
             adwriter.add("valset", _valset)
             adwriter.add("testset", _testset)
@@ -306,22 +307,20 @@ if __name__ == "__main__":
         opt = {"preload": True, "shmem": False}
         if args.shmem:
             opt = {"preload": False, "shmem": True}
-        trainset = AdiosDataset(
-            "examples/ogb/dataset/ogb_gap.bp", "trainset", comm, opt
-        )
-        valset = AdiosDataset("examples/ogb/dataset/ogb_gap.bp", "valset", comm, opt)
-        testset = AdiosDataset("examples/ogb/dataset/ogb_gap.bp", "testset", comm, opt)
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
+        trainset = AdiosDataset(fname, "trainset", comm, opt)
+        valset = AdiosDataset(fname, "valset", comm, opt)
+        testset = AdiosDataset(fname, "testset", comm, opt)
     elif args.format == "csv":
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "pcqm4m_gap.csv")
         fact = OGBRawDatasetFactory(
-            "examples/ogb/dataset/pcqm4m_gap.csv",
-            var_config=var_config,
-            sampling=args.sampling,
+            fname, var_config=var_config, sampling=args.sampling
         )
         trainset = OGBRawDataset(fact, "trainset")
         valset = OGBRawDataset(fact, "valset")
         testset = OGBRawDataset(fact, "testset")
     elif args.format == "pickle":
-        dirname = "examples/ogb/dataset/pickle"
+        dirname = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
         trainset = SimplePickleDataset(dirname, "ogb_gap", "trainset")
         valset = SimplePickleDataset(dirname, "ogb_gap", "valset")
         testset = SimplePickleDataset(dirname, "ogb_gap", "testset")

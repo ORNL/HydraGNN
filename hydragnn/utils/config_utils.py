@@ -10,7 +10,7 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_variable
+from hydragnn.preprocess.utils import check_if_graph_size_variable, gather_deg
 from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.utils import get_comm_size_and_rank
 import time
@@ -40,20 +40,14 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
 
-    max_degree = -1
-    for data in train_loader:
-        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        max_degree = max(max_degree, int(d.max()))
-    if dist.get_world_size() > 1:
-        max_degree = torch.tensor(max_degree)
-        dist.all_reduce(max_degree, op=dist.ReduceOp.MAX)
-        max_degree = max_degree.item()
-    config["NeuralNetwork"]["Architecture"]["max_neighbours"] = max_degree
-
-    max_neigh = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA":
-        deg = calculate_PNA_degree(train_loader, max_neigh)
+        if hasattr(train_loader.dataset, "pna_deg"):
+            ## Use max neighbours used in the dataset.
+            deg = torch.tensor(train_loader.dataset.pna_deg)
+        else:
+            deg = gather_deg(train_loader.dataset)
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = deg.tolist()
+        config["NeuralNetwork"]["Architecture"]["max_neighbours"] = len(deg) - 1
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
 

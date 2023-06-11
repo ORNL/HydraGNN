@@ -1,5 +1,9 @@
+import mpi4py
+
+mpi4py.rc.thread_level = "serialized"
+mpi4py.rc.threads = False
+
 import os, json
-import matplotlib.pyplot as plt
 import random
 import pickle, csv
 
@@ -12,14 +16,17 @@ import argparse
 import time
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.pickledataset import SimplePickleDataset
+from hydragnn.utils.distdataset import DistDataset
+from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
+from hydragnn.preprocess.utils import gather_deg
 from hydragnn.utils import nsplit
+import hydragnn.utils.tracer as tr
 
 import numpy as np
 
@@ -31,10 +38,6 @@ except ImportError:
 import torch_geometric.data
 import torch
 import torch.distributed as dist
-
-import warnings
-
-warnings.filterwarnings("error")
 
 
 csce_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
@@ -60,6 +63,7 @@ def csce_datasets_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.0
     print("Total:", len(smiles_all), len(values_all))
 
     a = list(range(len(smiles_all)))
+    a = random.sample(a, len(a))
     ix0, ix1, ix2 = np.split(
         a, [int(frac[0] * len(a)), int((frac[0] + frac[1]) * len(a))]
     )
@@ -142,8 +146,10 @@ class CSCEDataset(torch.utils.data.Dataset):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("inputfilesubstr", help="input file substr")
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument("--inputfilesubstr", help="input file substr", default="gap")
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
     parser.add_argument(
         "--preonly",
@@ -151,6 +157,8 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
+    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
+    parser.add_argument("--log", help="log name")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -171,6 +179,30 @@ if __name__ == "__main__":
         "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
     )
     parser.set_defaults(format="adios")
+    group1 = parser.add_mutually_exclusive_group()
+    group1.add_argument(
+        "--shmem",
+        help="shmem dataset",
+        action="store_const",
+        dest="dataset",
+        const="shmem",
+    )
+    group1.add_argument(
+        "--ddstore",
+        help="ddstore dataset",
+        action="store_const",
+        dest="dataset",
+        const="ddstore",
+    )
+    group1.add_argument(
+        "--simple",
+        help="no special dataset",
+        action="store_const",
+        dest="dataset",
+        const="simple",
+    )
+    parser.set_defaults(dataset="simple")
+    parser.add_argument("--everyone", action="store_true", help="gptimer")
     args = parser.parse_args()
 
     graph_feature_names = ["GAP"]
@@ -211,8 +243,12 @@ if __name__ == "__main__":
     )
 
     log_name = "csce_" + inputfilesubstr + "_eV_fullx"
+    if args.log is not None:
+        log_name = args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
+
+    log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
     if args.preonly:
         norm_yflag = False  # True
@@ -242,13 +278,6 @@ if __name__ == "__main__":
             info("local smileset size:", len(_smileset))
 
             setname = ["trainset", "valset", "testset"]
-            if args.format == "pickle":
-                if rank == 0:
-                    with open(
-                        "examples/csce/dataset/pickle/%s.meta" % (setname[idataset]),
-                        "w",
-                    ) as f:
-                        f.write(str(len(smileset)))
 
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
@@ -258,77 +287,111 @@ if __name__ == "__main__":
                 )
                 dataset_lists[idataset].append(data)
 
-                ## (2022/07) This is for testing to compare with Adios
-                ## pickle write
-                if args.format == "pickle":
-                    fname = "examples/csce/dataset/pickle/csce_gap-%s-%d.pk" % (
-                        setname[idataset],
-                        rx.start + i,
-                    )
-                    with open(fname, "wb") as f:
-                        pickle.dump(data, f)
+        trainset = dataset_lists[0]
+        valset = dataset_lists[1]
+        testset = dataset_lists[2]
 
-        ## local data
-        if args.format == "adios":
-            _trainset = dataset_lists[0]
-            _valset = dataset_lists[1]
-            _testset = dataset_lists[2]
+        deg = gather_deg(trainset)
+        config["pna_deg"] = deg
 
-            adwriter = AdiosWriter("examples/csce/dataset/csce_gap.bp", comm)
-            adwriter.add("trainset", _trainset)
-            adwriter.add("valset", _valset)
-            adwriter.add("testset", _testset)
-            adwriter.save()
+        ## pickle
+        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        attrs = dict()
+        attrs["pna_deg"] = deg
+        SimplePickleWriter(
+            trainset,
+            basedir,
+            "trainset",
+            use_subdir=True,
+            attrs=attrs,
+        )
+        SimplePickleWriter(
+            valset,
+            basedir,
+            "valset",
+            use_subdir=True,
+        )
+        SimplePickleWriter(
+            testset,
+            basedir,
+            "testset",
+            use_subdir=True,
+        )
+
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap.bp")
+        adwriter = AdiosWriter(fname, comm)
+        adwriter.add("trainset", trainset)
+        adwriter.add("valset", valset)
+        adwriter.add("testset", testset)
+        adwriter.add_global("pna_deg", deg)
+        adwriter.save()
 
         sys.exit(0)
 
+    tr.initialize()
+    tr.disable()
     timer = Timer("load_data")
     timer.start()
+
     if args.format == "adios":
-        trainset = AdiosDataset(
-            "examples/csce/dataset/csce_gap.bp",
-            "trainset",
-            comm,
-            preload=False,
-            shmem=True,
+        shmem = ddstore = False
+        if args.dataset == "shmem":
+            shmem = True
+            os.environ["HYDRAGNN_AGGR_BACKEND"] = "torch"
+            os.environ["HYDRAGNN_USE_ddstore"] = "0"
+        elif args.dataset == "ddstore":
+            ddstore = True
+            os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
+            os.environ["HYDRAGNN_USE_ddstore"] = "1"
+
+        opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
+        fname = fname = os.path.join(
+            os.path.dirname(__file__), "dataset", "csce_gap.bp"
         )
-        valset = AdiosDataset("examples/csce/dataset/csce_gap.bp", "valset", comm)
-        testset = AdiosDataset("examples/csce/dataset/csce_gap.bp", "testset", comm)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm)
+        testset = AdiosDataset(fname, "testset", comm)
+        comm.Barrier()
     elif args.format == "csv":
-        fact = CSCEDatasetFactory(
-            "examples/csce/dataset/csce_gap_synth.csv",
-            args.sampling,
-            var_config=var_config,
-        )
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap_synth.csv")
+        fact = CSCEDatasetFactory(fname, args.sampling, var_config=var_config)
         trainset = CSCEDataset(fact, "trainset")
         valset = CSCEDataset(fact, "valset")
         testset = CSCEDataset(fact, "testset")
     elif args.format == "pickle":
-        trainset = SimplePickleDataset(
-            "examples/csce/dataset/pickle", "csce_gap", "trainset"
-        )
-        valset = SimplePickleDataset(
-            "examples/csce/dataset/pickle", "csce_gap", "valset"
-        )
-        testset = SimplePickleDataset(
-            "examples/csce/dataset/pickle", "csce_gap", "testset"
-        )
+        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        trainset = SimplePickleDataset(basedir, "trainset")
+        valset = SimplePickleDataset(basedir, "valset")
+        testset = SimplePickleDataset(basedir, "testset")
+        pna_deg = trainset.pna_deg
+        if args.dataset == "ddstore":
+            opt = {"ddstore_width": args.ddstore_width}
+            trainset = DistDataset(trainset, "trainset", comm, **opt)
+            valset = DistDataset(valset, "valset", comm, **opt)
+            testset = DistDataset(testset, "testset", comm, **opt)
+            trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
-    info("Adios load")
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
 
+    if args.dataset == "ddstore":
+        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
+        os.environ["HYDRAGNN_USE_ddstore"] = "1"
+
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
+    comm.Barrier()
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    comm.Barrier()
 
     hydragnn.utils.save_config(config, log_name)
+    comm.Barrier()
 
     timer.stop()
 
@@ -368,6 +431,8 @@ if __name__ == "__main__":
     hydragnn.utils.print_timers(verbosity)
 
     if args.mae:
+        import matplotlib.pyplot as plt
+
         ##################################################################################################################
         fig, axs = plt.subplots(1, 3, figsize=(18, 6))
         for isub, (loader, setname) in enumerate(
@@ -406,10 +471,15 @@ if __name__ == "__main__":
                 "MAE: {:.2f}".format(error_mae),
             )
         if rank == 0:
-            fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
+            fig.savefig(os.path.join("logs", log_name, varname + "_all.png"))
         plt.close()
 
-    if args.format == "adios":
-        trainset.unlink()
+    if tr.has("GPTLTracer"):
+        import gptl4py as gp
 
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
+            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
+        gp.finalize()
     sys.exit(0)
