@@ -89,12 +89,18 @@ def load_existing_model(model, model_name, path="./logs/", optimizer=None):
 ## This function may cause OOM if dataset is too large
 ## to fit in a single GPU (i.e., with DDP). Use with caution.
 ## Recommend to use calculate_PNA_degree_dist
-def calculate_PNA_degree(dataset: [Data], max_neighbours):
-    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
-    for data in dataset:
-        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        deg += torch.bincount(d, minlength=deg.numel())
-    return deg
+def calculate_PNA_degree(loader, max_neighbours):
+    backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
+    if backend == "torch":
+        return calculate_PNA_degree_dist(loader, max_neighbours)
+    elif backend == "mpi":
+        return calculate_PNA_degree_mpi(loader, max_neighbours)
+    else:
+        deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+        for data in iterate_tqdm(loader, 2, desc="Calculate PNA degree"):
+            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            deg += torch.bincount(d, minlength=deg.numel())[: max_neighbours + 1]
+        return deg
 
 
 def calculate_PNA_degree_dist(loader, max_neighbours):
@@ -102,11 +108,23 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
     deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
     for data in iterate_tqdm(loader, 2, desc="Calculate PNA degree"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
-        deg += torch.bincount(d, minlength=deg.numel())
+        deg += torch.bincount(d, minlength=deg.numel())[: max_neighbours + 1]
     deg = deg.to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     deg = deg.detach().cpu()
     return deg
+
+
+def calculate_PNA_degree_mpi(loader, max_neighbours):
+    assert dist.is_initialized()
+    deg = torch.zeros(max_neighbours + 1, dtype=torch.long)
+    for data in iterate_tqdm(loader, 2, desc="Calculate PNA degree"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += torch.bincount(d, minlength=deg.numel())[: max_neighbours + 1]
+    from mpi4py import MPI
+
+    deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
+    return torch.tensor(deg)
 
 
 def print_model(model):

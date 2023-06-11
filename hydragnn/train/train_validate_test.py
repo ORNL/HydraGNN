@@ -17,7 +17,7 @@ import torch
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device, print_peak_memory
@@ -32,6 +32,8 @@ from unittest.mock import MagicMock
 from hydragnn.utils.distributed import get_comm_size_and_rank
 import torch.distributed as dist
 import pickle
+
+import hydragnn.utils.tracer as tr
 
 
 def train_validate_test(
@@ -115,10 +117,19 @@ def train_validate_test(
                 dataloader.sampler.set_epoch(epoch)
 
         with profiler as prof:
+            tr.enable()
+            tr.start("train")
             train_loss, train_taskserr = train(
                 train_loader, model, optimizer, verbosity, profiler=prof
             )
-        val_loss, val_taskserr = validate(val_loader, model, verbosity)
+            tr.stop("train")
+            tr.disable()
+            if epoch == 0:
+                tr.reset()
+
+        val_loss, val_taskserr = validate(
+            val_loader, model, verbosity, reduce_ranks=True
+        )
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
             model,
@@ -170,27 +181,30 @@ def train_validate_test(
 
     timer.stop()
 
-    # reduce loss statistics across all processes
-    total_loss_train = reduce_values_ranks(total_loss_train)
-    total_loss_val = reduce_values_ranks(total_loss_val)
-    total_loss_test = reduce_values_ranks(total_loss_test)
-    task_loss_train = reduce_values_ranks(task_loss_train)
-    task_loss_val = reduce_values_ranks(task_loss_val)
-    task_loss_test = reduce_values_ranks(task_loss_test)
+    if create_plots:
+        # reduce loss statistics across all processes
+        total_loss_train = reduce_values_ranks(total_loss_train)
+        total_loss_val = reduce_values_ranks(total_loss_val)
+        total_loss_test = reduce_values_ranks(total_loss_test)
+        task_loss_train = reduce_values_ranks(task_loss_train)
+        task_loss_val = reduce_values_ranks(task_loss_val)
+        task_loss_test = reduce_values_ranks(task_loss_test)
 
-    # At the end of training phase, do the one test run for visualizer to get latest predictions
-    test_loss, test_taskserr, true_values, predicted_values = test(
-        test_loader, model, verbosity
-    )
-
-    ##output predictions with unit/not normalized
-    if config["Variables_of_interest"]["denormalize_output"]:
-        true_values, predicted_values = output_denormalize(
-            config["Variables_of_interest"]["y_minmax"], true_values, predicted_values
+        # At the end of training phase, do the one test run for visualizer to get latest predictions
+        test_loss, test_taskserr, true_values, predicted_values = test(
+            test_loader, model, verbosity
         )
 
+        ##output predictions with unit/not normalized
+        if config["Variables_of_interest"]["denormalize_output"]:
+            true_values, predicted_values = output_denormalize(
+                config["Variables_of_interest"]["y_minmax"],
+                true_values,
+                predicted_values,
+            )
+
     _, rank = get_comm_size_and_rank()
-    if create_plots and (rank == 0):
+    if create_plots and rank == 0:
         ######result visualization######
         visualizer.create_plot_global(
             true_values,
@@ -282,11 +296,31 @@ def get_head_indices_node_or_mixed(model, data):
 
 
 @torch.no_grad()
-def reduce_values_ranks(local_tensor):
+def reduce_values_ranks_dist(local_tensor):
     if dist.get_world_size() > 1:
         dist.all_reduce(local_tensor, op=dist.ReduceOp.SUM)
         local_tensor = local_tensor / dist.get_world_size()
     return local_tensor
+
+
+@torch.no_grad()
+def reduce_values_ranks_mpi(local_tensor):
+    if dist.get_world_size() > 1:
+        from mpi4py import MPI
+
+        local_tensor = MPI.COMM_WORLD.allreduce(
+            local_tensor.detach().cpu().numpy(), op=MPI.SUM
+        )
+        local_tensor = torch.tensor(local_tensor) / dist.get_world_size()
+    return local_tensor
+
+
+def reduce_values_ranks(local_tensor):
+    backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
+    if backend == "mpi":
+        return reduce_values_ranks_mpi(local_tensor)
+    else:
+        return reduce_values_ranks_dist(local_tensor)
 
 
 @torch.no_grad()
@@ -345,26 +379,53 @@ def train(
     num_samples_local = 0
     model.train()
 
+    use_ddstore = (
+        hasattr(loader.dataset, "ddstore")
+        and hasattr(loader.dataset.ddstore, "epoch_begin")
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
+    )
+    tr.start("dataload")
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_begin()
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_end()
+        tr.stop("dataload")
+        tr.start("zero_grad")
         with record_function("zero_grad"):
             opt.zero_grad()
+        tr.stop("zero_grad")
+        tr.start("get_head_indices")
         with record_function("get_head_indices"):
             head_index = get_head_indices(model, data)
+        tr.stop("get_head_indices")
+        tr.start("forward")
         with record_function("forward"):
             data = data.to(get_device())
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
+        tr.stop("forward")
+        tr.start("backward")
         with record_function("backward"):
             loss.backward()
-        print_peak_memory(verbosity, "Max memory allocated before optimizer step")
+        tr.stop("backward")
+        tr.start("opt_step")
+        # print_peak_memory(verbosity, "Max memory allocated before optimizer step")
         opt.step()
-        print_peak_memory(verbosity, "Max memory allocated after optimizer")
+        # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
+        tr.stop("opt_step")
         profiler.step()
         with torch.no_grad():
             total_error += loss * data.num_graphs
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        tr.start("dataload")
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
+    tr.stop("dataload")
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
@@ -378,7 +439,16 @@ def validate(loader, model, verbosity, reduce_ranks=True):
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
+    use_ddstore = (
+        hasattr(loader.dataset, "ddstore")
+        and hasattr(loader.dataset.ddstore, "epoch_begin")
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
+    )
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_begin()
     for data in iterate_tqdm(loader, verbosity, desc="Validate"):
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
         pred = model(data)
@@ -387,6 +457,10 @@ def validate(loader, model, verbosity, reduce_ranks=True):
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
 
     val_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
@@ -403,7 +477,16 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
     model.eval()
+    use_ddstore = (
+        hasattr(loader.dataset, "ddstore")
+        and hasattr(loader.dataset.ddstore, "epoch_begin")
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
+    )
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_begin()
     for data in iterate_tqdm(loader, verbosity, desc="Test"):
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
         pred = model(data)
@@ -412,6 +495,10 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local

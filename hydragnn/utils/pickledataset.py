@@ -8,6 +8,8 @@ from .print_utils import print_distributed, log, iterate_tqdm
 
 from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
+import hydragnn.utils.tracer as tr
+
 
 class SimplePickleDataset(AbstractBaseDataset):
     """Simple Pickle Dataset"""
@@ -34,8 +36,12 @@ class SimplePickleDataset(AbstractBaseDataset):
             self.ntotal = pickle.load(f)
             self.use_subdir = pickle.load(f)
             self.nmax_persubdir = pickle.load(f)
-
+            self.attrs = pickle.load(f)
         log("Pickle files:", self.label, self.ntotal)
+        if self.attrs is None:
+            self.attrs = dict()
+        for k in self.attrs:
+            setattr(self, k, self.attrs[k])
 
         if self.subset is None:
             self.subset = list(range(self.ntotal))
@@ -47,6 +53,7 @@ class SimplePickleDataset(AbstractBaseDataset):
     def len(self):
         return len(self.subset)
 
+    @tr.profile("get")
     def get(self, i):
         k = self.subset[i]
         if self.preload:
@@ -70,6 +77,9 @@ class SimplePickleDataset(AbstractBaseDataset):
             data_object = pickle.load(f)
         return data_object
 
+    def setsubset(self, subset):
+        self.subset = subset
+
 
 class SimplePickleWriter:
     """SimplePickleWriter class to write Torch Geometric graph data"""
@@ -84,6 +94,7 @@ class SimplePickleWriter:
         use_subdir=False,
         nmax_persubdir=10_000,
         comm=MPI.COMM_WORLD,
+        attrs=dict(),
     ):
         """
         Parameters
@@ -125,6 +136,7 @@ class SimplePickleWriter:
                 pickle.dump(ntotal, f)
                 pickle.dump(use_subdir, f)
                 pickle.dump(nmax_persubdir, f)
+                pickle.dump(attrs, f)
         comm.Barrier()
 
         if use_subdir:
@@ -136,7 +148,12 @@ class SimplePickleWriter:
                 subdir = os.path.join(basedir, k)
                 os.makedirs(subdir, exist_ok=True)
 
-        for i, data in enumerate(self.dataset):
+        for i, data in iterate_tqdm(
+            enumerate(self.dataset),
+            2,
+            total=len(self.dataset),
+            desc="Pickle write %s" % self.label,
+        ):
             fname = "%s-%d.pkl" % (label, noffset + i)
             dirfname = os.path.join(basedir, fname)
             if use_subdir:
