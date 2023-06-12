@@ -20,6 +20,7 @@ from hydragnn.models.MFCStack import MFCStack
 from hydragnn.models.CGCNNStack import CGCNNStack
 from hydragnn.models.SAGEStack import SAGEStack
 from hydragnn.models.SCFStack import SCFStack
+from hydragnn.models.DIMEStack import DIMEStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed
@@ -47,6 +48,12 @@ def create_model_config(
         config["Architecture"]["max_neighbours"],
         config["Architecture"]["edge_dim"],
         config["Architecture"]["pna_deg"],
+        config["Architecture"]["num_before_skip"],
+        config["Architecture"]["num_after_skip"],
+        config["Architecture"]["num_bilinear"],
+        config["Architecture"]["num_radial"],
+        config["Architecture"]["envelope_exponent"],
+        config["Architecture"]["num_spherical"],
         config["Architecture"]["num_gaussians"],
         config["Architecture"]["num_filters"],
         config["Architecture"]["radius"],
@@ -72,6 +79,12 @@ def create_model(
     max_neighbours: int = None,
     edge_dim: int = None,
     pna_deg: torch.tensor = None,
+    num_before_skip: int = None,
+    num_after_skip: int = None,
+    num_bilinear: int = None,
+    num_radial: int = None,
+    envelope_exponent: int = None,
+    num_spherical: int = None,
     num_gaussians: int = None,
     num_filters: int = None,
     radius: float = None,
@@ -191,6 +204,38 @@ def create_model(
         model = SCFStack(
             num_gaussians,
             num_filters,
+            radius,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            loss_function_type,
+            max_neighbours=max_neighbours,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+
+    elif model_type == "DimeNet":
+        assert (
+            envelope_exponent is not None
+        ), "DimeNet requires envelope_exponent input."
+        assert num_after_skip is not None, "DimeNet requires num_after_skip input."
+        assert num_before_skip is not None, "DimeNet requires num_before_skip input."
+        assert num_bilinear is not None, "DimeNet requires num_bilinear input."
+        assert num_radial is not None, "DimeNet requires num_radial input."
+        assert num_spherical is not None, "DimeNet requires num_spherical input."
+        assert radius is not None, "DimeNet requires radius input."
+        model = DIMEStack(
+            envelope_exponent,
+            num_after_skip,
+            num_before_skip,
+            num_bilinear,
+            num_radial,
+            num_spherical,
             radius,
             input_dim,
             hidden_dim,
