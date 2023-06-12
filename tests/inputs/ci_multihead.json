@@ -1,17 +1,25 @@
 {
-    "Verbosity": {"level": 0},
+    "Verbosity": {
+        "level": 0
+    },
     "Dataset": {
         "name": "unit_test_multihead",
         "format": "unit_test",
         "compositional_stratified_splitting": true,
         "rotational_invariance": false,
-        "path": {"total": "dataset/unit_test_multihead"},
-        "node_features": {
-            "name": ["x", "x2", "x3"],
-            "dim": [1, 1, 1],
-            "column_index": [0, 6, 7],
+        "path": {
+            "total": "dataset/unit_test_multihead"
         },
-        "graph_features": {"name": ["sum_x_x2_x3"], "dim": [1], "column_index": [0]},
+        "node_features": {
+            "name": ["x","x2","x3"],
+            "dim": [1, 1, 1],
+            "column_index": [0, 6, 7]
+        },
+        "graph_features":{
+            "name": [ "sum_x_x2_x3"],
+            "dim": [1],
+            "column_index": [0]
+        }
     },
     "NeuralNetwork": {
         "Architecture": {
@@ -30,26 +38,26 @@
             "hidden_dim": 8,
             "num_conv_layers": 2,
             "output_heads": {
-                "graph": {
+                "graph":{
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 10,
                     "num_headlayers": 2,
-                    "dim_headlayers": [10, 10],
+                    "dim_headlayers": [10, 10]
                 },
                 "node": {
                     "num_headlayers": 2,
                     "dim_headlayers": [10, 10],
-                    "type": "mlp",
-                },
+                    "type": "mlp"
+                }
             },
-            "task_weights": [20.0, 1.0, 1.0, 1.0],
+            "task_weights": [20.0, 1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["sum_x_x2_x3", "x", "x2", "x3"],
-            "output_index": [0, 0, 1, 2],
-            "type": ["graph", "node", "node", "node"],
-            "denormalize_output": false,
+            "output_names": ["sum_x_x2_x3","x","x2","x3"],
+            "output_index": [0,0,1,2],
+            "type": ["graph","node","node","node"],
+            "denormalize_output": false
         },
         "Training": {
             "num_epoch": 100,
@@ -59,13 +67,13 @@
             "Optimizer": {
                 "type": "AdamW",
                 "use_zero_redundancy": false,
-                "learning_rate": 0.01,
-            },
-        },
+                "learning_rate": 0.01
+            }
+        }
     },
     "Visualization": {
         "plot_init_solution": true,
         "plot_hist_solution": false,
-        "create_plots": true,
-    },
+        "create_plots": true
+    }
 }
