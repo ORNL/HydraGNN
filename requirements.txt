@@ -6,3 +6,4 @@ ase
 tqdm
 tensorboard
 psutil
+sympy
