@@ -195,18 +195,20 @@ def gather_deg(dataset):
 def gather_deg_dist(dataset):
     import torch.distributed as dist
     from hydragnn.utils.print_utils import iterate_tqdm
+    from hydragnn.utils.distributed import get_device
 
     max_deg = 0
     for data in iterate_tqdm(dataset, 2, desc="Degree max"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         max_deg = max(max_deg, int(d.max()))
-    max_deg = torch.tensor(max_deg)
+    max_deg = torch.tensor(max_deg).to(get_device())
     dist.all_reduce(max_deg, op=dist.ReduceOp.MAX)
 
     deg = torch.zeros(max_deg.item() + 1, dtype=torch.long)
     for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
+    deg = torch.tensor(deg).to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg.cpu().detach().numpy()
 
