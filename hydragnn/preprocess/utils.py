@@ -204,11 +204,11 @@ def gather_deg_dist(dataset):
     max_deg = torch.tensor(max_deg, requires_grad=False).to(get_device())
     dist.all_reduce(max_deg, op=dist.ReduceOp.MAX)
 
-    deg = torch.zeros(max_deg.item() + 1, dtype=torch.long)
+    deg = torch.zeros(max_deg.item() + 1, requires_grad=False, dtype=torch.long)
     for data in iterate_tqdm(dataset, 2, desc="Degree bincount"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += torch.bincount(d, minlength=deg.numel())
-    deg = torch.tensor(deg, requires_grad=False).to(get_device())
+    deg = deg.clone().detach().to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg.cpu().detach().numpy()
 
