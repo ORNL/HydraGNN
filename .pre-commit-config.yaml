@@ -10,3 +10,4 @@ repos:
     rev: 21.5b1
     hooks:
       - id: black
+        additional_dependencies: ['click==8.0.0']
