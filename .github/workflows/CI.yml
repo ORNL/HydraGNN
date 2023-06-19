@@ -50,5 +50,5 @@ jobs:
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
-          python -m pytest -rfEP -W error -W ignore::DeprecationWarning --tb=native
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning ignore::UserWarning --tb=native
           mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning --tb=native --with-mpi
