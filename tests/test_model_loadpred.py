@@ -43,7 +43,7 @@ def unittest_model_prediction(config):
     )
     # 2.check a random selected sample
     isample = random.randrange(len(test_loader.dataset))
-    graph_sample = test_loader.dataset[isample]
+    graph_sample = test_loader.dataset[isample].to(model.device)
     true_sample = graph_sample.y.squeeze()
     predicted_sample = model(graph_sample)
     yloc = graph_sample.y_loc.squeeze()

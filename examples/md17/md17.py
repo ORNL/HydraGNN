@@ -20,8 +20,7 @@ def md17_pre_transform(data):
     graph_features_dim = [1]
     node_feature_dim = [1]
     data = compute_edges(data)
-    device = hydragnn.utils.get_device()
-    return data.to(device)
+    return data
 
 
 # Randomly select ~1000 samples
