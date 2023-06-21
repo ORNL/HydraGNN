@@ -43,8 +43,8 @@ class Base(Module):
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.num_conv_layers = num_conv_layers
-        self.convs = ModuleList()
-        self.batch_norms = ModuleList()
+        self.graph_convs = ModuleList()
+        self.feature_layers = ModuleList()
         self.num_nodes = num_nodes
         ##One head represent one variable
         ##Head can have different sizes, head_dims
@@ -101,12 +101,12 @@ class Base(Module):
             self._set_bias()
 
     def _init_conv(self):
-        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim))
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.feature_layers.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
             conv = self.get_conv(self.hidden_dim, self.hidden_dim)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim))
+            self.graph_convs.append(conv)
+            self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _conv_args(self, data):
         conv_args = {"edge_index": data.edge_index}
@@ -115,7 +115,7 @@ class Base(Module):
         return conv_args
 
     def _freeze_conv(self):
-        for module in [self.convs, self.batch_norms]:
+        for module in [self.graph_convs, self.feature_layers]:
             for layer in module:
                 for param in layer.parameters():
                     param.requires_grad = False
@@ -246,9 +246,9 @@ class Base(Module):
 
         ### encoder part ####
         conv_args = self._conv_args(data)
-        for conv, batch_norm in zip(self.convs, self.batch_norms):
+        for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             c = conv(x=x, **conv_args)
-            x = F.relu(batch_norm(c))
+            x = F.relu(feat_layer(c))
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
