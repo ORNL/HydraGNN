@@ -35,15 +35,15 @@ class GATStack(Base):
     def _init_conv(self):
         """Here this function overwrites _init_conv() in Base since it has different implementation
         in terms of dimensions due to the multi-head attention"""
-        self.convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))
-        self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim, True))
+        self.feature_layers.append(BatchNorm(self.hidden_dim * self.heads))
         for _ in range(self.num_conv_layers - 2):
             conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, True)
-            self.convs.append(conv)
-            self.batch_norms.append(BatchNorm(self.hidden_dim * self.heads))
+            self.graph_convs.append(conv)
+            self.feature_layers.append(BatchNorm(self.hidden_dim * self.heads))
         conv = self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, False)
-        self.convs.append(conv)
-        self.batch_norms.append(BatchNorm(self.hidden_dim))
+        self.graph_convs.append(conv)
+        self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _init_node_conv(self):
         """Here this function overwrites _init_conv() in Base since it has different implementation
