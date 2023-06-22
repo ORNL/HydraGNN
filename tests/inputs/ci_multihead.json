@@ -33,7 +33,6 @@
             "out_emb_size": 128,
             "num_after_skip": 2,
             "num_before_skip": 1,
-            "num_bilinear": 8,
             "num_radial": 6,
             "num_spherical": 7,
             "num_filters": 126,
