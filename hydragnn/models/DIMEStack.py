@@ -14,7 +14,7 @@ from torch_geometric.typing import SparseTensor
 
 import torch
 from torch import Tensor
-from torch.nn import SiLU
+from torch.nn import Identity, SiLU
 
 from torch_geometric.nn import Linear, Sequential
 from torch_geometric.nn.models.dimenet import (
@@ -67,6 +67,14 @@ class DIMEStack(Base):
         )
 
         pass
+
+    def _init_conv(self):
+        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.feature_layers.append(Identity())
+        for _ in range(self.num_conv_layers - 1):
+            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
+            self.graph_convs.append(conv)
+            self.feature_layers.append(Identity())
 
     def get_conv(self, input_dim, output_dim):
         hidden_dim = output_dim if input_dim == 1 else input_dim
