@@ -96,11 +96,11 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 def update_config_edge_dim(config):
     config["edge_dim"] = None
-    edge_models = ["PNA", "CGCNN", "SchNet"]
+    edge_models = ["PNA", "CGCNN", "SchNet", "EGNN"]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
-        ), "Edge features can only be used with SchNet, PNA and CGCNN."
+        ), "Edge features can only be used with EGNN, SchNet, PNA and CGCNN."
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim
