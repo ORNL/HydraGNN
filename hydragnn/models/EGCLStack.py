@@ -25,22 +25,25 @@ class EGCLStack(Base):
         **kwargs,
     ):
 
-        self.edge_dim =  0 if edge_attr_dim is None else edge_attr_dim # Must be named edge_dim to trigger use by Base
+        self.edge_dim = (
+            0 if edge_attr_dim is None else edge_attr_dim
+        )  # Must be named edge_dim to trigger use by Base
         super().__init__(*args, **kwargs)
         pass
 
     def get_conv(self, input_dim, output_dim):
-        egcl =  E_GCL(input_channels=input_dim,
-                     output_channels=output_dim,
-                     hidden_channels=self.hidden_dim,
-                     edge_attr_dim=self.edge_dim)
+        egcl = E_GCL(
+            input_channels=input_dim,
+            output_channels=output_dim,
+            hidden_channels=self.hidden_dim,
+            edge_attr_dim=self.edge_dim,
+        )
         return Sequential(
             "x, edge_index, coord, edge_attr",
             [
                 (egcl, "x, edge_index, coord, edge_attr -> x"),
-            ]
+            ],
         )
-
 
     def _conv_args(self, data):
         conv_args = {
@@ -79,22 +82,23 @@ include radial basis information.
 
 """
 
-class E_GCL(nn.Module):
 
-    def __init__(self,
-            input_channels,
-            output_channels,
-            hidden_channels,
-            edge_attr_dim=0,
-            nodes_attr_dim=0,
-            act_fn=nn.ReLU(),
-            recurrent=False,
-            coords_weight=1.0,
-            attention=False,
-            clamp=False,
-            norm_diff=True,
-            tanh=True,
-            coord_mlp = False,
+class E_GCL(nn.Module):
+    def __init__(
+        self,
+        input_channels,
+        output_channels,
+        hidden_channels,
+        edge_attr_dim=0,
+        nodes_attr_dim=0,
+        act_fn=nn.ReLU(),
+        recurrent=False,
+        coords_weight=1.0,
+        attention=False,
+        clamp=False,
+        norm_diff=True,
+        tanh=True,
+        coord_mlp=False,
     ) -> None:
         super(E_GCL, self).__init__()
         input_edge = input_channels * 2
@@ -111,12 +115,16 @@ class E_GCL(nn.Module):
             nn.Linear(input_edge + edge_coords_nf + edge_attr_dim, hidden_channels),
             act_fn,
             nn.Linear(hidden_channels, hidden_channels),
-            act_fn)
+            act_fn,
+        )
 
         self.node_mlp = nn.Sequential(
-            nn.Linear(hidden_channels + input_channels + nodes_attr_dim, hidden_channels),
+            nn.Linear(
+                hidden_channels + input_channels + nodes_attr_dim, hidden_channels
+            ),
             act_fn,
-            nn.Linear(hidden_channels, output_channels))
+            nn.Linear(hidden_channels, output_channels),
+        )
 
         layer = nn.Linear(hidden_channels, 1, bias=False)
         torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
@@ -130,15 +138,12 @@ class E_GCL(nn.Module):
             coord_mlp.append(layer)
             if self.tanh:
                 coord_mlp.append(nn.Tanh())
-                self.coords_range = nn.Parameter(torch.ones(1))*3
+                self.coords_range = nn.Parameter(torch.ones(1)) * 3
             self.coord_mlp = nn.Sequential(*coord_mlp)
 
-
         if self.attention:
-            self.att_mlp = nn.Sequential(
-                nn.Linear(hidden_channels, 1),
-                nn.Sigmoid())
-        
+            self.att_mlp = nn.Sequential(nn.Linear(hidden_channels, 1), nn.Sigmoid())
+
         self.act_fn = act_fn
         pass
 
@@ -168,20 +173,21 @@ class E_GCL(nn.Module):
     def coord_model(self, coord, edge_index, coord_diff, edge_feat):
         row, col = edge_index
         trans = coord_diff * self.coord_mlp(edge_feat)
-        trans = torch.clamp(trans, min=-100, max=100) #This is never activated but just in case it case it explosed it may save the train
+        trans = torch.clamp(
+            trans, min=-100, max=100
+        )  # This is never activated but just in case it case it explosed it may save the train
         agg = unsorted_segment_mean(trans, row, num_segments=coord.size(0))
-        coord += agg*self.coords_weight
+        coord += agg * self.coords_weight
         return coord
-
 
     def coord2radial(self, edge_index, coord):
         row, col = edge_index
         coord_diff = coord[row] - coord[col]
-        radial = torch.sum((coord_diff)**2, 1).unsqueeze(1)
+        radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
 
         if self.norm_diff:
             norm = torch.sqrt(radial) + 1
-            coord_diff = coord_diff/(norm)
+            coord_diff = coord_diff / (norm)
 
         return radial, coord_diff
 
@@ -193,7 +199,7 @@ class E_GCL(nn.Module):
         if self.coord_mlp:
             coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         x, agg = self.node_model(x, edge_index, edge_feat, node_attr)
-        return x #, coord, edge_attr
+        return x  # , coord, edge_attr
 
 
 def unsorted_segment_sum(data, segment_ids, num_segments):
