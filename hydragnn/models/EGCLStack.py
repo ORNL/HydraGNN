@@ -46,11 +46,18 @@ class EGCLStack(Base):
         )
 
     def _conv_args(self, data):
-        conv_args = {
-            "edge_index": data.edge_index,
-            "coord": data.pos,
-            "edge_attr": data.edge_attr,
-        }
+        if self.edge_dim > 0:
+            conv_args = {
+                "edge_index": data.edge_index,
+                "coord": data.pos,
+                "edge_attr": data.edge_attr,
+            }
+        else:
+            conv_args = {
+                "edge_index": data.edge_index,
+                "coord": data.pos,
+                "edge_attr": None,
+            }
 
         return conv_args
 
@@ -63,10 +70,10 @@ EGNN
 =====
 
 E(n) equivariant graph neural network as
-a message passing neural network. The 
+a message passing neural network. The
 model uses positional data only to ensure
 that the message passing component is
-equivariant. 
+equivariant.
 
 In particular this message passing layer
 relies on the angle formed by the triplet
