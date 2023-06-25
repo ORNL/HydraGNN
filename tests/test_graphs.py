@@ -132,6 +132,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         "CGCNN": [0.50, 0.40],
         "SchNet": [0.20, 0.20],
         "DimeNet": [0.50, 0.50],
+        "EGNN": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
