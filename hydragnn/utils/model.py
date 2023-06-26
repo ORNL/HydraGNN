@@ -159,3 +159,38 @@ class EarlyStopping:
             self.val_loss_min = val_loss
             self.count = 0
         return False
+
+
+class Checkpoint:
+    """
+    Checkpoints the model and optimizer when:
+        + The count exceeds the checkpointing frequency
+        + [Optional] The performance metric is smaller than the stored performance metric
+    Args
+      frequency: (int) Frequency of checkpointing.
+      path: (str) Path for checkpointing
+      name: (str) Model name for the directory and the file to save.
+      diable_perf_metric: (bool) optionally disable the performance metric check.
+    """
+
+    def __init__(
+        self, frequency=10, path="./logs/", name="model.pk", disable_perf_metric=False
+    ):
+        self.count = 0
+        self.frequency = frequency
+        self.path = path
+        self.name = name
+        self.min_perf_metric = float("-inf") if disable_perf_metric else float("inf")
+        self.min_delta = 0
+
+    def __call__(self, model, optimizer, perf_metric):
+        if (perf_metric > self.min_perf_metric + self.min_delta) or (
+            self.count <= self.frequency
+        ):
+            self.count += 1
+            return False
+        else:
+            self.min_perf_metric = perf_metric
+            self.count = 0
+            save_model(model, optimizer, name=self.name, path=self.path)
+            return True

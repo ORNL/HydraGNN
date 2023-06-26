@@ -22,7 +22,7 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device, print_peak_memory
 from hydragnn.preprocess.load_data import HydraDataLoader
-from hydragnn.utils.model import EarlyStopping
+from hydragnn.utils.model import Checkpoint, EarlyStopping
 
 import os
 
@@ -55,6 +55,12 @@ def train_validate_test(
     EarlyStop = (
         config["Training"]["EarlyStopping"]
         if "EarlyStopping" in config["Training"]
+        else False
+    )
+
+    SaveCheckpoint = (
+        config["Training"]["Checkpoint"]
+        if "Checkpoint" in config["Training"]
         else False
     )
 
@@ -106,6 +112,14 @@ def train_validate_test(
         earlystopper = EarlyStopping()
         if "patience" in config["Training"]:
             earlystopper = EarlyStopping(patience=config["Training"]["patience"])
+
+    if SaveCheckpoint:
+        checkpoint = Checkpoint(name=model_with_config_name)
+        if "checkpoint_freq" in config["Training"]:
+            checkpoint = Checkpoint(
+                name=model_with_config_name,
+                frequency=config["Training"]["checkpoint_freq"],
+            )
 
     timer = Timer("train_validate_test")
     timer.start()
@@ -170,6 +184,11 @@ def train_validate_test(
                 output_names=config["Variables_of_interest"]["output_names"],
                 iepoch=epoch,
             )
+
+        if SaveCheckpoint:
+            if checkpoint(model, optimizer, reduce_values_ranks(val_loss)):
+                print_distributed(verbosity, "Checkpointing model to file.")
+
         if EarlyStop:
             if earlystopper(reduce_values_ranks(val_loss)):
                 print_distributed(
