@@ -165,22 +165,24 @@ class Checkpoint:
     """
     Checkpoints the model and optimizer when:
         + The count exceeds the checkpointing frequency
-        + [Optional] The performance metric is smaller than the stored performance metric
+        + The performance metric is smaller than the stored performance metric
     Args
       frequency: (int) Frequency of checkpointing.
       path: (str) Path for checkpointing
       name: (str) Model name for the directory and the file to save.
-      diable_perf_metric: (bool) optionally disable the performance metric check.
     """
 
     def __init__(
-        self, frequency=10, path="./logs/", name="model.pk", disable_perf_metric=False
+        self,
+        frequency: int = 10,
+        path: str = "./logs/",
+        name: str = "model.pk",
     ):
         self.count = 0
         self.frequency = frequency
         self.path = path
         self.name = name
-        self.min_perf_metric = float("-inf") if disable_perf_metric else float("inf")
+        self.min_perf_metric = float("inf")
         self.min_delta = 0
 
     def __call__(self, model, optimizer, perf_metric):
