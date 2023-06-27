@@ -69,7 +69,7 @@
             "EarlyStopping": true,
             "patience": 10,
             "Checkpoint": true,
-            "checkpoint_freq": 10,
+            "checkpoint_warmup": 10,
             "loss_function_type": "mse",
             "batch_size": 32,
             "Optimizer": {

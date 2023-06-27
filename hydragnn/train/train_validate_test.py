@@ -115,10 +115,10 @@ def train_validate_test(
 
     if SaveCheckpoint:
         checkpoint = Checkpoint(name=model_with_config_name)
-        if "checkpoint_freq" in config["Training"]:
+        if "checkpoint_warmup" in config["Training"]:
             checkpoint = Checkpoint(
                 name=model_with_config_name,
-                frequency=config["Training"]["checkpoint_freq"],
+                warmup=config["Training"]["checkpoint_warmup"],
             )
 
     timer = Timer("train_validate_test")
@@ -186,8 +186,13 @@ def train_validate_test(
             )
 
         if SaveCheckpoint:
-            if checkpoint(model, optimizer, reduce_values_ranks(val_loss)):
-                print_distributed(verbosity, "Checkpointing model to file.")
+            if checkpoint(model, optimizer, reduce_values_ranks(val_loss).item()):
+                print_distributed(
+                    verbosity, "Creating Checkpoint: %f" % checkpoint.min_perf_metric
+                )
+            print_distributed(
+                verbosity, "Best Performance Metric: %f" % checkpoint.min_perf_metric
+            )
 
         if EarlyStop:
             if earlystopper(reduce_values_ranks(val_loss)):
