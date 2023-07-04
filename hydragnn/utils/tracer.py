@@ -87,6 +87,33 @@ try:
 except:
     pass
 
+
+try:
+    import roctx4py as rx
+
+    class ROCTXTracer(Tracer):
+        def __init__(self, **kwargs):
+            pass
+
+        def start(self, name):
+            rx.start(name)
+
+        def stop(self, name):
+            rx.stop(name)
+
+        def enable(self):
+            pass
+
+        def disable(self):
+            pass
+
+        def reset(self):
+            pass
+
+
+except:
+    pass
+
 __tracer_list__ = dict()
 
 
@@ -94,7 +121,7 @@ def has(name):
     return name in __tracer_list__
 
 
-def initialize(trlist=["GPTLTracer", "SCOREPTracer"], verbose=True, **kwargs):
+def initialize(trlist=["GPTLTracer", "SCOREPTracer", "ROCTXTracer"], verbose=True, **kwargs):
     for trname in trlist:
         try:
             tr = globals()[trname](**kwargs)
