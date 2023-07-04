@@ -387,10 +387,14 @@ def train(
     )
     tr.start("dataload")
     if use_distds:
+        tr.start("epoch_begin")
         loader.dataset.ddstore.epoch_begin()
+        tr.stop("epoch_begin")
     for data in iterate_tqdm(loader, verbosity, desc="Train"):
         if use_distds:
+            tr.start("epoch_end")
             loader.dataset.ddstore.epoch_end()
+            tr.stop("epoch_end")
         tr.stop("dataload")
         tr.start("zero_grad")
         with record_function("zero_grad"):
@@ -423,9 +427,13 @@ def train(
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
         tr.start("dataload")
         if use_distds:
+            tr.start("epoch_begin")
             loader.dataset.ddstore.epoch_begin()
+            tr.stop("epoch_begin")
     if use_distds:
+        tr.start("epoch_end")
         loader.dataset.ddstore.epoch_end()
+        tr.stop("epoch_end")
     tr.stop("dataload")
 
     train_error = total_error / num_samples_local
