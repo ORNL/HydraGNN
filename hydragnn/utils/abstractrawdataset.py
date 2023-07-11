@@ -120,6 +120,12 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                     "PointPairFeatures"
                 ]
 
+        if self.spherical_coordinates:
+            self.spherical_coordinates_transform = Spherical(norm=False)
+
+        if self.point_pair_features:
+            self.point_pair_features_transform = PointPairFeatures()
+
         self.subsample_percentage = None
 
         self.__build_edge()
@@ -378,9 +384,9 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         # Descriptors about topology of the local environment
         for data in self.dataset:
             if self.spherical_coordinates:
-                data = Spherical(data)
+                data = self.spherical_coordinates_transform(data)
             if self.point_pair_features:
-                data = PointPairFeatures(data)
+                data = self.point_pair_features_transform(data)
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
