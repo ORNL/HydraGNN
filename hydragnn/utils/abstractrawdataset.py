@@ -359,27 +359,27 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         self.dataset[:] = [compute_edges(data) for data in self.dataset]
 
         # edge lengths already added manually if using PBC.
-        if not self.periodic_boundary_conditions:
+        if not self.periodic_boundary_conditions and not self.spherical_coordinates:
             compute_edge_lengths = Distance(norm=False, cat=True)
             self.dataset[:] = [compute_edge_lengths(data) for data in self.dataset]
 
-        max_edge_length = torch.Tensor([float("-inf")])
+            max_edge_length = torch.Tensor([float("-inf")])
 
-        for data in self.dataset:
-            max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
+            for data in self.dataset:
+                max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
 
-        if self.dist:
-            ## Gather max in parallel
-            device = max_edge_length.device
-            max_edge_length = max_edge_length.to(get_device())
-            torch.distributed.all_reduce(
-                max_edge_length, op=torch.distributed.ReduceOp.MAX
-            )
-            max_edge_length = max_edge_length.to(device)
+            if self.dist:
+                ## Gather max in parallel
+                device = max_edge_length.device
+                max_edge_length = max_edge_length.to(get_device())
+                torch.distributed.all_reduce(
+                    max_edge_length, op=torch.distributed.ReduceOp.MAX
+                )
+                max_edge_length = max_edge_length.to(device)
 
-        # Normalization of the edges
-        for data in self.dataset:
-            data.edge_attr = data.edge_attr / max_edge_length
+            # Normalization of the edges
+            for data in self.dataset:
+                data.edge_attr = data.edge_attr / max_edge_length
 
         # Descriptors about topology of the local environment
         for data in self.dataset:
