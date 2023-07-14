@@ -159,3 +159,39 @@ class EarlyStopping:
             self.val_loss_min = val_loss
             self.count = 0
         return False
+
+
+class Checkpoint:
+    """
+    Checkpoints the model and optimizer when:
+        + The performance metric is smaller than the stored performance metric
+    Args
+      warmup: (int) Number of epochs to warmup prior to checkpointing.
+      path: (str) Path for checkpointing
+      name: (str) Model name for the directory and the file to save.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        warmup: int = 0,
+        path: str = "./logs/",
+    ):
+        self.count = 1
+        self.warmup = warmup
+        self.path = path
+        self.name = name
+        self.min_perf_metric = float("inf")
+        self.min_delta = 0
+
+    def __call__(self, model, optimizer, perf_metric):
+
+        if (perf_metric > self.min_perf_metric + self.min_delta) or (
+            self.count < self.warmup
+        ):
+            self.count += 1
+            return False
+        else:
+            self.min_perf_metric = perf_metric
+            save_model(model, optimizer, name=self.name, path=self.path)
+            return True
