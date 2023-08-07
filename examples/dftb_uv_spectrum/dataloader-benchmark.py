@@ -12,15 +12,12 @@ import logging
 import sys
 from tqdm import tqdm
 from mpi4py import MPI
-from itertools import chain
 import argparse
-import time
 
 from rdkit.Chem.rdmolfiles import MolFromPDBFile
 
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.pickledataset import SimplePickleDataset
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
@@ -160,7 +157,7 @@ def nodesplitter(src, group=None):
             if i % size == rank:
                 yield item
                 count += 1
-        print(f"nodesplitter: rank={rank} size={size} count={count} DONE")
+        print(f"nodesplitter: rank={rank} size={size} count={count}")
     else:
         yield from src
 
@@ -175,7 +172,6 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--distds", action="store_true", help="distds dataset")
     parser.add_argument("--distds_width", type=int, help="distds width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
@@ -345,11 +341,28 @@ if __name__ == "__main__":
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
         urls = glob.glob(os.path.join(basedir, "*.tar"))
-        trainset = (
-            wds.WebDataset(urls, nodesplitter=nodesplitter)
-            .map(decoder)
-            .batched(batch_size, partial=False)
-        )
+        # import ipdb; ipdb.set_trace()
+        # trainset = wds.DataPipeline(
+        #     wds.WebDataset(urls, nodesplitter=nodesplitter)
+        #     .map(decoder)
+        #     .batched(batch_size, partial=False)
+        # ).with_epoch(32)
+
+        opt = {
+            "preload": False,
+            "shmem": args.shmem,
+            "distds": args.distds,
+            "distds_width": args.distds_width,
+        }
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        nepoch = len(trainset) // comm_size // batch_size
+        trainset = wds.DataPipeline(
+            wds.ResampledShards(urls),
+            wds.tarfile_to_samples(),
+            wds.shuffle(10000),
+            wds.batched(batch_size),
+        ).with_epoch(nepoch)
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -376,6 +389,7 @@ if __name__ == "__main__":
             num_workers=num_workers,
             pin_memory=pin_memory,
             persistent_workers=persistent_workers,
+            drop_last=True,
         )
     tr.stop("preload")
 
