@@ -151,13 +151,15 @@ def nodesplitter(src, group=None):
             group = torch.distributed.group.WORLD
         rank = torch.distributed.get_rank(group=group)
         size = torch.distributed.get_world_size(group=group)
-        print(f"nodesplitter: rank={rank} size={size}")
         count = 0
         for i, item in enumerate(src):
             if i % size == rank:
+                print(
+                    f"nodesplitter: rank={rank} size={size} count={count} item={item}"
+                )
                 yield item
                 count += 1
-        print(f"nodesplitter: rank={rank} size={size} count={count}")
+        # print(f"nodesplitter: rank={rank} size={size} count={count}")
     else:
         yield from src
 
@@ -357,12 +359,17 @@ if __name__ == "__main__":
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         nepoch = len(trainset) // comm_size // batch_size
-        trainset = wds.DataPipeline(
-            wds.ResampledShards(urls),
-            wds.tarfile_to_samples(),
-            wds.shuffle(10000),
-            wds.batched(batch_size),
-        ).with_epoch(nepoch)
+        # trainset = wds.DataPipeline(
+        #     wds.WebDataset(urls, nodesplitter=nodesplitter).map(decoder).batched(batch_size, partial=False),
+        #     # wds.tarfile_to_samples(),
+        #     # wds.batched(batch_size),
+        # ).with_epoch(nepoch)
+        trainset = (
+            wds.WebDataset(urls, nodesplitter=nodesplitter)
+            .map(decoder)
+            .repeat()
+            .batched(batch_size, partial=False)
+        )
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -371,7 +378,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_USE_DISTDS"] = "1"
 
     if args.format == "webdataset":
-        train_loader = wds.WebLoader(trainset, num_workers=0, batch_size=None)
+        train_loader = (
+            wds.WebLoader(trainset, num_workers=0, batch_size=None)
+            .with_length(nepoch)
+            .with_epoch(nepoch)
+        )
     else:
         info("trainset size: %d" % len(trainset))
 
@@ -392,6 +403,13 @@ if __name__ == "__main__":
             drop_last=True,
         )
     tr.stop("preload")
+    if tr.has("GPTLTracer"):
+        import gptl4py as gp
+
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
+            gp.pr_file(os.path.join("logs", log_name, "gp_timing_pre.p%d" % rank))
+        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing_pre.summary"))
 
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
@@ -422,7 +440,6 @@ if __name__ == "__main__":
             loader.dataset.ddstore.epoch_begin()
             tr.stop("epoch_begin")
         for i, data in enumerate(iterate_tqdm(loader, verbosity, desc="Train")):
-            print(rank, i, len(data), len(data[0]))
             if use_distds:
                 tr.start("epoch_end")
                 loader.dataset.ddstore.epoch_end()
