@@ -214,7 +214,7 @@ if __name__ == "__main__":
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/dftb_aisd_electronic_excitation_spectrum")
     ##################################################################################################################
-    modelname = "dftb_discrete_uv_spectrum"
+    modelname = args.modelname
     input_filename = os.path.join(dirpwd, "%s.json" % modelname)
     ##################################################################################################################
     # Configurable run choices (JSON file that accompanies this example script).
