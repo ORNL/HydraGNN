@@ -180,6 +180,9 @@ if __name__ == "__main__":
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
+    parser.add_argument(
+        "--modelname", help="modelname", default="dftb_discrete_uv_spectrum"
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -211,7 +214,8 @@ if __name__ == "__main__":
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/dftb_aisd_electronic_excitation_spectrum")
     ##################################################################################################################
-    input_filename = os.path.join(dirpwd, "dftb_discrete_uv_spectrum.json")
+    modelname = "dftb_discrete_uv_spectrum"
+    input_filename = os.path.join(dirpwd, "%s.json" % modelname)
     ##################################################################################################################
     # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
@@ -250,7 +254,6 @@ if __name__ == "__main__":
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "dftb_discrete_uv_spectrum"
     if args.preonly:
         ## local data
         total = DFTBDataset(
