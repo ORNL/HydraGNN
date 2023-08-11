@@ -209,6 +209,16 @@ if __name__ == "__main__":
     parser.set_defaults(format="adios")
     args = parser.parse_args()
 
+    # # fname = "examples/dftb_uv_spectrum/dataset/dftb_discrete_uv_spectrum.pickle/0/trainset-0.pkl"
+    # # fname = "summit-trainset-0.pkl"
+    # fname = "perlmutter-trainset-0.pkl"
+    # with open(fname, "rb") as f:
+    #     data_object = pickle.load(f)
+
+    # for k in data_object.keys:
+    #     print (k, data_object[k].shape)
+    # sys.exit(0)
+
     graph_feature_names = ["frequencies", "intensities"]
     graph_feature_dim = [50, 50]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
