@@ -49,6 +49,7 @@ class AdiosWriter:
         self.attributes = dict()
         self.adios = ad2.ADIOS()
         self.io = self.adios.DeclareIO(self.filename)
+        self.io.SetEngine("BP4")
 
     def add_global(self, vname, arr):
         """
