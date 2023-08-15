@@ -120,6 +120,15 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                     "PointPairFeatures"
                 ]
 
+        # Descriptors about topology of the local environment
+        if self.spherical_coordinates and self.point_pair_features:
+            # FIXME We need to a new function to include both spherical coordinates and point point features together as edge features
+            # Each of the two transformation computes the distance between nodes, and adds it to the set of edge features
+            # A naive simuktaneous utilization of both spherical coordinates and point point features together includes the distance multiple times in the edge-feature vector
+            raise ValueError(
+                "Spherical Coorindates and Point Pair Features cannot be used together in the current version of HydraGNN"
+            )
+
         if self.spherical_coordinates:
             self.edge_feature_transform = Spherical(norm=False, cat=False)
 
@@ -358,13 +367,15 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
 
         self.dataset[:] = [compute_edges(data) for data in self.dataset]
 
+        #################################
+        #### COMPUTE EDGE ATTRIBUTES ####
+        #################################
+
         # edge lengths already added manually if using PBC.
         if (
             (not self.periodic_boundary_conditions)
-            and (not self.spherical_coordinates)
-            and (not self.point_pair_features)
+            and (not hasattr(self, self.edge_feature_transform))
         ):
-            compute_edge_lengths = Distance(norm=False, cat=True)
             self.dataset[:] = [compute_edge_lengths(data) for data in self.dataset]
 
             max_edge_length = torch.Tensor([float("-inf")])
@@ -386,21 +397,10 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                 data.edge_attr = data.edge_attr / max_edge_length
 
         # Descriptors about topology of the local environment
-        if self.spherical_coordinates and not self.point_pair_features:
+        elif hasattr(self, self.edge_feature_transform):
             self.dataset[:] = [
-                self.spherical_coordinates_transform(data) for data in self.dataset
+                self.edge_feature_transform(data) for data in self.dataset
             ]
-        elif self.point_pair_features and not self.spherical_coordinates:
-            self.dataset[:] = [
-                self.point_pair_features_transform(data) for data in self.dataset
-            ]
-        else:
-            # FIXME We need to a new function to include both spherical coordinates and point point features together as edge features
-            # Each of the two transformation computes the distance between nodes, and adds it to the set of edge features
-            # A naive simuktaneous utilization of both spherical coordinates and point point features together includes the distance multiple times in the edge-feature vector
-            raise ValueError(
-                "Spherical Coorindates and Point Pair Features cannot currently be used together"
-            )
 
         for data in self.dataset:
             update_predicted_values(
