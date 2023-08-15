@@ -372,6 +372,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         #################################
 
         # edge lengths already added manually if using PBC.
+        # if spherical coordinates or pair point is set up, then skip directly to edge_transformation
         if (
             (not self.periodic_boundary_conditions)
             and (not hasattr(self, self.edge_feature_transform))
