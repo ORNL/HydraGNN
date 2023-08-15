@@ -121,10 +121,10 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                 ]
 
         if self.spherical_coordinates:
-            self.spherical_coordinates_transform = Spherical(norm=False)
+            self.edge_feature_transform = Spherical(norm=False, cat=False)
 
         if self.point_pair_features:
-            self.point_pair_features_transform = PointPairFeatures()
+            self.edge_feature_transform = PointPairFeatures(cat=False)
 
         self.subsample_percentage = None
 
