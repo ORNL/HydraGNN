@@ -120,6 +120,21 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                     "PointPairFeatures"
                 ]
 
+        # Descriptors about topology of the local environment
+        if self.spherical_coordinates and self.point_pair_features:
+            # FIXME We need to a new function to include both spherical coordinates and point point features together as edge features
+            # Each of the two transformation computes the distance between nodes, and adds it to the set of edge features
+            # A naive simuktaneous utilization of both spherical coordinates and point point features together includes the distance multiple times in the edge-feature vector
+            raise ValueError(
+                "Spherical Coorindates and Point Pair Features cannot be used together in the current version of HydraGNN"
+            )
+
+        if self.spherical_coordinates:
+            self.edge_feature_transform = Spherical(norm=False, cat=False)
+
+        if self.point_pair_features:
+            self.edge_feature_transform = PointPairFeatures(cat=False)
+
         self.subsample_percentage = None
 
         self.__build_edge()
@@ -352,38 +367,41 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
 
         self.dataset[:] = [compute_edges(data) for data in self.dataset]
 
+        #################################
+        #### COMPUTE EDGE ATTRIBUTES ####
+        #################################
+
         # edge lengths already added manually if using PBC.
-        if not self.periodic_boundary_conditions:
-            compute_edge_lengths = Distance(norm=False, cat=True)
+        # if spherical coordinates or pair point is set up, then skip directly to edge_transformation
+        if (not self.periodic_boundary_conditions) and (
+            not hasattr(self, self.edge_feature_transform)
+        ):
             self.dataset[:] = [compute_edge_lengths(data) for data in self.dataset]
 
-        max_edge_length = torch.Tensor([float("-inf")])
+            max_edge_length = torch.Tensor([float("-inf")])
 
-        for data in self.dataset:
-            max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
+            for data in self.dataset:
+                max_edge_length = torch.max(max_edge_length, torch.max(data.edge_attr))
 
-        if self.dist:
-            ## Gather max in parallel
-            device = max_edge_length.device
-            max_edge_length = max_edge_length.to(get_device())
-            torch.distributed.all_reduce(
-                max_edge_length, op=torch.distributed.ReduceOp.MAX
-            )
-            max_edge_length = max_edge_length.to(device)
+            if self.dist:
+                ## Gather max in parallel
+                device = max_edge_length.device
+                max_edge_length = max_edge_length.to(get_device())
+                torch.distributed.all_reduce(
+                    max_edge_length, op=torch.distributed.ReduceOp.MAX
+                )
+                max_edge_length = max_edge_length.to(device)
 
-        # Normalization of the edges
-        for data in self.dataset:
-            data.edge_attr = data.edge_attr / max_edge_length
+            # Normalization of the edges
+            for data in self.dataset:
+                data.edge_attr = data.edge_attr / max_edge_length
 
         # Descriptors about topology of the local environment
-        for data in self.dataset:
-            if self.spherical_coordinates:
-                data = Spherical(data)
-            if self.point_pair_features:
-                data = PointPairFeatures(data)
+        elif hasattr(self, self.edge_feature_transform):
+            self.dataset[:] = [
+                self.edge_feature_transform(data) for data in self.dataset
+            ]
 
-        # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
-        device = get_device(verbosity_level=self.verbosity)
         for data in self.dataset:
             update_predicted_values(
                 self.variables_type,
