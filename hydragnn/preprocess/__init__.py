@@ -8,6 +8,8 @@ from .utils import (
     get_radius_graph_config,
     get_radius_graph_pbc_config,
     RadiusGraphPBC,
+    update_predicted_values,
+    update_atom_features,
 )
 
 from .load_data import (
@@ -20,7 +22,6 @@ from .load_data import (
 )
 from .serialized_dataset_loader import (
     SerializedDataLoader,
-    update_predicted_values,
 )
 from .lsms_raw_dataset_loader import LSMS_RawDataLoader
 from .cfg_raw_dataset_loader import CFG_RawDataLoader

@@ -12,10 +12,13 @@
 import torch
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.utils import remove_self_loops, degree
+from torch_geometric.data import Data
 
 import ase
 import ase.neighborlist
 import os
+
+from .dataset_descriptors import AtomFeatures
 
 ## This function can be slow if dataset is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_dist
@@ -229,3 +232,61 @@ def gather_deg_mpi(dataset):
         deg += torch.bincount(d, minlength=deg.numel())
     deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
     return deg
+
+
+def update_predicted_values(
+    type: list, index: list, graph_feature_dim: list, node_feature_dim: list, data: Data
+):
+    """Updates values of the structure we want to predict. Predicted value is represented by integer value.
+    Parameters
+    ----------
+    type: "graph" level or "node" level
+    index: index/location in data.y for graph level and in data.x for node level
+    graph_feature_dim: list of integers to trak the dimension of each graph level feature
+    data: Data
+        A Data object representing a structure that has atoms.
+    """
+    output_feature = []
+    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
+    for item in range(len(type)):
+        if type[item] == "graph":
+            index_counter_global_y = sum(graph_feature_dim[: index[item]])
+            feat_ = torch.reshape(
+                data.y[
+                    index_counter_global_y : index_counter_global_y
+                    + graph_feature_dim[index[item]]
+                ],
+                (graph_feature_dim[index[item]], 1),
+            )
+            # after the global features are spanned, we need to iterate over the nodal features
+            # to do so, the counter of the nodal features need to start from the last value of counter for the graph nodel feature
+        elif type[item] == "node":
+            index_counter_nodal_y = sum(node_feature_dim[: index[item]])
+            feat_ = torch.reshape(
+                data.x[
+                    :,
+                    index_counter_nodal_y : (
+                        index_counter_nodal_y + node_feature_dim[index[item]]
+                    ),
+                ],
+                (-1, 1),
+            )
+        else:
+            raise ValueError("Unknown output type", type[item])
+        output_feature.append(feat_)
+        data.y_loc[0, item + 1] = data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
+    data.y = torch.cat(output_feature, 0)
+
+
+def update_atom_features(atom_features: [AtomFeatures], data: Data):
+    """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
+
+    Parameters
+    ----------
+    atom_features: [AtomFeatures]
+        List of features to update. Each feature is instance of Enum AtomFeatures.
+    data: Data
+        A Data object representing a structure that has atoms.
+    """
+    feature_indices = [i for i in atom_features]
+    data.x = data.x[:, feature_indices]
