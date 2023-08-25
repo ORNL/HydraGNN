@@ -29,7 +29,9 @@ from hydragnn.preprocess.load_data import split_dataset
 
 
 # Main unit test function called by pytest wrappers.
-def unittest_train_model_dataset_class_inheritance(model_type, ci_input, use_lengths, overwrite_data=False):
+def unittest_train_model_dataset_class_inheritance(
+    model_type, ci_input, use_lengths, overwrite_data=False
+):
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -51,8 +53,7 @@ def unittest_train_model_dataset_class_inheritance(model_type, ci_input, use_len
                 num_samples = num_samples_tot
             elif dataset_name == "train":
                 num_samples = int(
-                    num_samples_tot
-                    * config["NeuralNetwork"]["Training"]["perc_train"]
+                    num_samples_tot * config["NeuralNetwork"]["Training"]["perc_train"]
                 )
             elif dataset_name == "test":
                 num_samples = int(
@@ -74,7 +75,7 @@ def unittest_train_model_dataset_class_inheritance(model_type, ci_input, use_len
     hydragnn.utils.setup_log(get_log_name_config(config))
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    dirpwd = dirpwd.replace('/tests', '')
+    dirpwd = dirpwd.replace("/tests", "")
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.setup_ddp()
@@ -132,9 +133,7 @@ def unittest_train_model_dataset_class_inheritance(model_type, ci_input, use_len
     dist.barrier()
 
     print("Pickle load")
-    basedir = os.path.join(
-        os.path.dirname(__file__), "dataset", "serialized_dataset"
-    )
+    basedir = os.path.join(os.path.dirname(__file__), "dataset", "serialized_dataset")
     trainset = SerializedDataset(basedir, datasetname, "trainset")
     valset = SerializedDataset(basedir, datasetname, "valset")
     testset = SerializedDataset(basedir, datasetname, "testset")
@@ -199,8 +198,9 @@ def unittest_train_model_dataset_class_inheritance(model_type, ci_input, use_len
     )
 
 
-
 # Test vector output
 @pytest.mark.parametrize("model_type", ["PNA"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
-    unittest_train_model_dataset_class_inheritance(model_type, "ci_vectoroutput.json", True, overwrite_data)
+    unittest_train_model_dataset_class_inheritance(
+        model_type, "ci_vectoroutput.json", True, overwrite_data
+    )
