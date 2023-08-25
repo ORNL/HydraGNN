@@ -115,7 +115,6 @@ class SerializedDataLoader:
         [Data]
             List of Data objects representing atom structures.
         """
-        dataset = []
         with open(dataset_path, "rb") as f:
             _ = pickle.load(f)
             _ = pickle.load(f)
@@ -165,11 +164,11 @@ class SerializedDataLoader:
             data.edge_attr = data.edge_attr / max_edge_length
 
         # Descriptors about topology of the local environment
-        for data in dataset:
-            if self.spherical_coordinates:
-                data = Spherical(data)
-            if self.point_pair_features:
-                data = PointPairFeatures(data)
+        if self.spherical_coordinates:
+            self.dataset[:] = [Spherical(data) for data in self.dataset]
+
+        if self.point_pair_features:
+            self.dataset[:] = [PointPairFeatures(data) for data in self.dataset]
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
