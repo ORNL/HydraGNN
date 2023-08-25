@@ -22,7 +22,7 @@ from hydragnn.preprocess.utils import (
     get_radius_graph_config,
     get_radius_graph_pbc_config,
 )
-from hydragnn.preprocess.serialized_dataset_loader import update_predicted_values
+from hydragnn.preprocess import update_predicted_values
 
 from sklearn.model_selection import StratifiedShuffleSplit
 
