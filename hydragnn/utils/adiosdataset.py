@@ -298,6 +298,7 @@ class AdiosDataset(AbstractBaseDataset):
             self.ddstore = dds.PyDDStore(self.ddstore_comm)
         log("Adios reading:", self.filename)
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
+            f.__next__()
             self.vars = f.available_variables()
             self.attrs = f.available_attributes()
             self.keys = f.read_attribute_string("%s/keys" % label)
@@ -420,6 +421,7 @@ class AdiosDataset(AbstractBaseDataset):
 
         if not self.preload and not self.shmem:
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
+            self.f.__next__()
 
     def len(self):
         """
@@ -533,6 +535,7 @@ class AdiosDataset(AbstractBaseDataset):
                 count[vdim] = self.variable_count[k][i : i + dn].sum()
 
                 with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
+                    f.__next__()
                     self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
 
             filtered = filter(lambda x: x >= i and x < i + dn, self.preflight_list)

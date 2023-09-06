@@ -223,6 +223,7 @@ if __name__ == "__main__":
         3. Split into a train, valid, and test set (split_dataset)
         4. Save as Adios file in parallel
         """
+        sys.setrecursionlimit(1000000)
         dir = os.path.join(os.path.dirname(__file__), "./dataset/%s" % modelname)
         if rank == 0:
             if os.path.exists(dir):
