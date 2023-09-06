@@ -21,15 +21,12 @@ from torch_geometric.transforms import (
     PointPairFeatures,
 )
 
-from .dataset_descriptors import AtomFeatures
-from hydragnn.preprocess import get_radius_graph_config
+from hydragnn.preprocess import update_predicted_values, update_atom_features
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
 from hydragnn.preprocess.utils import (
     get_radius_graph,
     get_radius_graph_pbc,
-    get_radius_graph_config,
-    get_radius_graph_pbc_config,
 )
 
 
@@ -118,7 +115,6 @@ class SerializedDataLoader:
         [Data]
             List of Data objects representing atom structures.
         """
-        dataset = []
         with open(dataset_path, "rb") as f:
             _ = pickle.load(f)
             _ = pickle.load(f)
@@ -141,7 +137,6 @@ class SerializedDataLoader:
                 loop=False,
                 max_neighbours=self.max_neighbours,
             )
-            compute_edge_lengths = Distance(norm=False, cat=True)
 
         dataset[:] = [compute_edges(data) for data in dataset]
 
@@ -169,11 +164,11 @@ class SerializedDataLoader:
             data.edge_attr = data.edge_attr / max_edge_length
 
         # Descriptors about topology of the local environment
-        for data in dataset:
-            if self.spherical_coordinates:
-                data = Spherical(data)
-            if self.point_pair_features:
-                data = PointPairFeatures(data)
+        if self.spherical_coordinates:
+            self.dataset[:] = [Spherical(data) for data in self.dataset]
+
+        if self.point_pair_features:
+            self.dataset[:] = [PointPairFeatures(data) for data in self.dataset]
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
@@ -188,7 +183,7 @@ class SerializedDataLoader:
                 data,
             )
 
-            self.__update_atom_features(self.input_node_features, data)
+            update_atom_features(self.input_node_features, data)
 
         if "subsample_percentage" in self.variables.keys():
             self.subsample_percentage = self.variables["subsample_percentage"]
@@ -197,19 +192,6 @@ class SerializedDataLoader:
             )
 
         return dataset
-
-    def __update_atom_features(self, atom_features: [AtomFeatures], data: Data):
-        """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
-
-        Parameters
-        ----------
-        atom_features: [AtomFeatures]
-            List of features to update. Each feature is instance of Enum AtomFeatures.
-        data: Data
-            A Data object representing a structure that has atoms.
-        """
-        feature_indices = [i for i in atom_features]
-        data.x = data.x[:, feature_indices]
 
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
         """Given the dataset and the percentage of data you want to extract from it, method will
@@ -257,47 +239,3 @@ class SerializedDataLoader:
             subsample.append(dataset[index])
 
         return subsample
-
-
-def update_predicted_values(
-    type: list, index: list, graph_feature_dim: list, node_feature_dim: list, data: Data
-):
-    """Updates values of the structure we want to predict. Predicted value is represented by integer value.
-    Parameters
-    ----------
-    type: "graph" level or "node" level
-    index: index/location in data.y for graph level and in data.x for node level
-    graph_feature_dim: list of integers to trak the dimension of each graph level feature
-    data: Data
-        A Data object representing a structure that has atoms.
-    """
-    output_feature = []
-    data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
-    for item in range(len(type)):
-        if type[item] == "graph":
-            index_counter_global_y = sum(graph_feature_dim[: index[item]])
-            feat_ = torch.reshape(
-                data.y[
-                    index_counter_global_y : index_counter_global_y
-                    + graph_feature_dim[index[item]]
-                ],
-                (graph_feature_dim[index[item]], 1),
-            )
-            # after the global features are spanned, we need to iterate over the nodal features
-            # to do so, the counter of the nodal features need to start from the last value of counter for the graph nodel feature
-        elif type[item] == "node":
-            index_counter_nodal_y = sum(node_feature_dim[: index[item]])
-            feat_ = torch.reshape(
-                data.x[
-                    :,
-                    index_counter_nodal_y : (
-                        index_counter_nodal_y + node_feature_dim[index[item]]
-                    ),
-                ],
-                (-1, 1),
-            )
-        else:
-            raise ValueError("Unknown output type", type[item])
-        output_feature.append(feat_)
-        data.y_loc[0, item + 1] = data.y_loc[0, item] + feat_.shape[0] * feat_.shape[1]
-    data.y = torch.cat(output_feature, 0)
