@@ -22,7 +22,7 @@ from hydragnn.preprocess.utils import (
     get_radius_graph_config,
     get_radius_graph_pbc_config,
 )
-from hydragnn.preprocess.serialized_dataset_loader import update_predicted_values
+from hydragnn.preprocess import update_predicted_values
 
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -374,7 +374,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         # edge lengths already added manually if using PBC.
         # if spherical coordinates or pair point is set up, then skip directly to edge_transformation
         if (not self.periodic_boundary_conditions) and (
-            not hasattr(self, self.edge_feature_transform)
+            not hasattr(self, "edge_feature_transform")
         ):
             self.dataset[:] = [compute_edge_lengths(data) for data in self.dataset]
 
@@ -397,7 +397,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                 data.edge_attr = data.edge_attr / max_edge_length
 
         # Descriptors about topology of the local environment
-        elif hasattr(self, self.edge_feature_transform):
+        elif hasattr(self, "edge_feature_transform"):
             self.dataset[:] = [
                 self.edge_feature_transform(data) for data in self.dataset
             ]
