@@ -364,15 +364,11 @@ if __name__ == "__main__":
             )
 
         if args.format == "adios":
-            _trainset = dataset_lists[0]
-            _valset = dataset_lists[1]
-            _testset = dataset_lists[2]
-
             fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
             adwriter = AdiosWriter(fname, comm)
-            adwriter.add("trainset", _trainset)
-            adwriter.add("valset", _valset)
-            adwriter.add("testset", _testset)
+            adwriter.add("trainset", trainset)
+            adwriter.add("valset", valset)
+            adwriter.add("testset", testset)
             adwriter.save()
 
         sys.exit(0)
