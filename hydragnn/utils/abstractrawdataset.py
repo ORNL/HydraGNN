@@ -22,7 +22,7 @@ from hydragnn.preprocess.utils import (
     get_radius_graph_config,
     get_radius_graph_pbc_config,
 )
-from hydragnn.preprocess import update_predicted_values
+from hydragnn.preprocess import update_predicted_values, update_atom_features
 
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -317,19 +317,6 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                     / data_object.num_nodes
                 )
 
-    def __update_atom_features(self, atom_features: [AtomFeatures], data: Data):
-        """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
-
-        Parameters
-        ----------
-        atom_features: [AtomFeatures]
-            List of features to update. Each feature is instance of Enum AtomFeatures.
-        data: Data
-            A Data object representing a structure that has atoms.
-        """
-        feature_indices = [i for i in atom_features]
-        data.x = data.x[:, feature_indices]
-
     def __build_edge(self):
         """Loads the serialized structures data from specified path, computes new edges for the structures based on the maximum number of neighbours and radius. Additionally,
         atom and structure features are updated.
@@ -411,7 +398,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
                 data,
             )
 
-            self.__update_atom_features(self.input_node_features, data)
+            update_atom_features(self.input_node_features, data)
 
         if "subsample_percentage" in self.variables.keys():
             self.subsample_percentage = self.variables["subsample_percentage"]
