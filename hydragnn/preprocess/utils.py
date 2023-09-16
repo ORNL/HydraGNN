@@ -334,4 +334,3 @@ def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=
         subsample.append(dataset[index])
 
     return subsample
-
