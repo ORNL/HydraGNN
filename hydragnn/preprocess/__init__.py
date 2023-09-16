@@ -10,6 +10,7 @@ from .utils import (
     RadiusGraphPBC,
     update_predicted_values,
     update_atom_features,
+    stratified_sampling,
 )
 
 from .load_data import (
