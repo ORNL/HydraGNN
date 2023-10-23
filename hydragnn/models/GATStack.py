@@ -12,8 +12,8 @@
 import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
-from torch.nn import Sequential, ReLU, Linear
-from torch_geometric.nn import GATv2Conv, BatchNorm
+from torch.nn import ReLU, Linear
+from torch_geometric.nn import GATv2Conv, BatchNorm, Sequential
 
 from .Base import Base
 
@@ -89,7 +89,7 @@ class GATStack(Base):
             self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def get_conv(self, input_dim, output_dim, concat):
-        return GATv2Conv(
+        gat = GATv2Conv(
             in_channels=input_dim,
             out_channels=output_dim,
             heads=self.heads,
@@ -97,6 +97,21 @@ class GATStack(Base):
             dropout=self.dropout,
             add_self_loops=True,
             concat=concat,
+        )
+
+        input_args = "x, pos, edge_index"
+        conv_args = "x, edge_index"
+
+        if self.use_edge_attr:
+            input_args += ", edge_attr"
+            conv_args += ", edge_attr"
+
+        return Sequential(
+            input_args,
+            [
+                (gat, conv_args + " -> x"),
+                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+            ],
         )
 
     def __str__(self):

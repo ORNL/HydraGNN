@@ -31,31 +31,52 @@ class EGCLStack(Base):
         super().__init__(*args, **kwargs)
         pass
 
-    def get_conv(self, input_dim, output_dim):
+    def _init_conv(self):
+        last_layer = 1 == self.num_conv_layers
+        self.graph_convs.append(
+            self.get_conv(self.input_dim, self.hidden_dim, last_layer)
+        )
+        self.feature_layers.append(nn.Identity())
+        for i in range(self.num_conv_layers - 1):
+            last_layer = i == self.num_conv_layers - 2
+            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)
+            self.graph_convs.append(conv)
+            self.feature_layers.append(nn.Identity())
+
+    def get_conv(self, input_dim, output_dim, last_layer=False):
         egcl = E_GCL(
             input_channels=input_dim,
             output_channels=output_dim,
             hidden_channels=self.hidden_dim,
             edge_attr_dim=self.edge_dim,
+            equivariant=self.equivariance and not last_layer,
         )
-        return Sequential(
-            "x, edge_index, coord, edge_attr",
-            [
-                (egcl, "x, edge_index, coord, edge_attr -> x"),
-            ],
-        )
+
+        if self.equivariance and not last_layer:
+            return Sequential(
+                "x, pos, edge_index, edge_attr",
+                [
+                    (egcl, "x, pos, edge_index, edge_attr -> x, pos"),
+                ],
+            )
+        else:
+            return Sequential(
+                "x, pos, edge_index, edge_attr",
+                [
+                    (egcl, "x, pos, edge_index, edge_attr -> x"),
+                    (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                ],
+            )
 
     def _conv_args(self, data):
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
-                "coord": data.pos,
                 "edge_attr": data.edge_attr,
             }
         else:
             conv_args = {
                 "edge_index": data.edge_index,
-                "coord": data.pos,
                 "edge_attr": None,
             }
 
@@ -105,7 +126,7 @@ class E_GCL(nn.Module):
         clamp=False,
         norm_diff=True,
         tanh=True,
-        coord_mlp=False,
+        equivariant=False,
     ) -> None:
         super(E_GCL, self).__init__()
         input_edge = input_channels * 2
@@ -115,7 +136,7 @@ class E_GCL(nn.Module):
         self.norm_diff = norm_diff
         self.tanh = tanh
         edge_coords_nf = 1
-        self.coord_mlp = coord_mlp
+        self.equivariant = equivariant
         self.edge_attr_dim = edge_attr_dim
 
         self.edge_mlp = nn.Sequential(
@@ -133,12 +154,13 @@ class E_GCL(nn.Module):
             nn.Linear(hidden_channels, output_channels),
         )
 
-        layer = nn.Linear(hidden_channels, 1, bias=False)
-        torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
-
         self.clamp = clamp
 
-        if self.coord_mlp:
+        if self.equivariant:
+
+            layer = nn.Linear(hidden_channels, 1, bias=False)
+            torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
+
             coord_mlp = []
             coord_mlp.append(nn.Linear(hidden_channels, hidden_channels))
             coord_mlp.append(act_fn)
@@ -184,7 +206,7 @@ class E_GCL(nn.Module):
             trans, min=-100, max=100
         )  # This is never activated but just in case it case it explosed it may save the train
         agg = unsorted_segment_mean(trans, row, num_segments=coord.size(0))
-        coord += agg * self.coords_weight
+        coord = coord + agg * self.coords_weight
         return coord
 
     def coord2radial(self, edge_index, coord):
@@ -198,15 +220,18 @@ class E_GCL(nn.Module):
 
         return radial, coord_diff
 
-    def forward(self, x, edge_index, coord, edge_attr, node_attr=None):
+    def forward(self, x, coord, edge_index, edge_attr, node_attr=None):
         row, col = edge_index
         radial, coord_diff = self.coord2radial(edge_index, coord)
         # Message Passing
         edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
-        if self.coord_mlp:
+        if self.equivariant:
             coord = self.coord_model(coord, edge_index, coord_diff, edge_feat)
         x, agg = self.node_model(x, edge_index, edge_feat, node_attr)
-        return x  # , coord, edge_attr
+        if self.equivariant:
+            return x, coord
+        else:
+            return x
 
 
 def unsorted_segment_sum(data, segment_ids, num_segments):
