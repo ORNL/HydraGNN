@@ -27,6 +27,23 @@ from hydragnn.utils.distributed import (
 from collections import OrderedDict
 
 
+def activation_function_selection(activation_function_string: str):
+    if activation_function_string == "relu":
+        return torch.nn.ReLU()
+    elif activation_function_string == "selu":
+        return torch.nn.SELU()
+    elif activation_function_string == "prelu":
+        return torch.nn.PReLU()
+    elif activation_function_string == "elu":
+        return torch.nn.ELU()
+    elif activation_function_string == "lrelu_01":
+        return torch.nn.LeakyReLU(0.1)
+    elif activation_function_string == "lrelu_025":
+        return torch.nn.LeakyReLU(0.25)
+    elif activation_function_string == "lrelu_05":
+        return torch.nn.LeakyReLU(0.5)
+
+
 def loss_function_selection(loss_function_string: str):
     if loss_function_string == "mse":
         return torch.nn.functional.mse_loss
