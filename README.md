@@ -2,6 +2,8 @@
 
 Distributed PyTorch implementation of multi-headed graph convolutional neural networks
 
+![HydraGNN_QRcode](https://github.com/allaffa/HydraGNN/assets/2488656/99e4191e-9688-4f6b-a92b-1af44f1cb78a)
+
 ## Dependencies
 
 To install required packages with only basic capability (`torch`,
