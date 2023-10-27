@@ -19,7 +19,9 @@ import hydragnn, tests
 
 # Loss function unit test called by pytest wrappers.
 # Note the intent of this test is to make sure all interfaces work - it does not assert anything
-def unittest_loss_and_activation_functions(activation_function_type, loss_function_type, ci_input, overwrite_data=False):
+def unittest_loss_and_activation_functions(
+    activation_function_type, loss_function_type, ci_input, overwrite_data=False
+):
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -29,7 +31,9 @@ def unittest_loss_and_activation_functions(activation_function_type, loss_functi
     with open(config_file, "r") as f:
         config = json.load(f)
 
-    config["NeuralNetwork"]["Architecture"]["activation_function"] = activation_function_type
+    config["NeuralNetwork"]["Architecture"][
+        "activation_function"
+    ] = activation_function_type
 
     # use pkl files if exist by default
     for dataset_name in config["Dataset"]["path"].keys():
@@ -99,7 +103,10 @@ def unittest_loss_and_activation_functions(activation_function_type, loss_functi
 # Test all supported loss function types. Separate input file because only 2 steps are run.
 @pytest.mark.parametrize("loss_function_type", ["mse", "mae", "rmse"])
 def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
-    unittest_loss_and_activation_functions("relu", loss_function_type, ci_input, overwrite_data)
+    unittest_loss_and_activation_functions(
+        "relu", loss_function_type, ci_input, overwrite_data
+    )
+
 
 # Test all supported activation function types.
 @pytest.mark.parametrize(
@@ -109,7 +116,10 @@ def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data
 def pytest_activation_functions_multihead(
     activation_function_type, ci_input="ci_multihead.json", overwrite_data=False
 ):
-    unittest_loss_and_activation_functions(activation_function_type, "mse", ci_input, overwrite_data)
+    unittest_loss_and_activation_functions(
+        activation_function_type, "mse", ci_input, overwrite_data
+    )
+
 
 # Test all supported activation function types.
 @pytest.mark.parametrize(
@@ -119,4 +129,6 @@ def pytest_activation_functions_multihead(
 def pytest_activation_functions_vectoroutput(
     activation_function_type, ci_input="ci_vectoroutput.json", overwrite_data=False
 ):
-    unittest_loss_and_activation_functions(activation_function_type, "mse", ci_input, overwrite_data)
+    unittest_loss_and_activation_functions(
+        activation_function_type, "mse", ci_input, overwrite_data
+    )
