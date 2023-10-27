@@ -14,7 +14,7 @@ from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
-from hydragnn.utils.model import loss_function_selection
+from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
 from hydragnn.utils.distributed import get_device
 
@@ -27,6 +27,7 @@ class Base(Module):
         output_dim: list,
         output_type: list,
         config_heads: dict,
+        activation_function_type: str,
         loss_function_type: str,
         ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
         loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
@@ -58,6 +59,9 @@ class Base(Module):
         self.batch_norms_node_hidden = ModuleList()
         self.convs_node_output = ModuleList()
         self.batch_norms_node_output = ModuleList()
+        self.activation_function = activation_function_selection(
+            activation_function_type
+        )
 
         self.loss_function = loss_function_selection(loss_function_type)
         self.ilossweights_nll = ilossweights_nll
@@ -170,10 +174,10 @@ class Base(Module):
             denselayers = []
             dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
             denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
-            denselayers.append(ReLU())
+            denselayers.append(self.activation_function)
             for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
                 denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
-                denselayers.append(ReLU())
+                denselayers.append(self.activation_function)
             self.graph_shared = Sequential(*denselayers)
 
         if "node" in self.config_heads:
@@ -189,12 +193,12 @@ class Base(Module):
                 dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
                 denselayers = []
                 denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
-                denselayers.append(ReLU())
+                denselayers.append(self.activation_function)
                 for ilayer in range(num_head_hidden - 1):
                     denselayers.append(
                         Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
                     )
-                    denselayers.append(ReLU())
+                    denselayers.append(self.activation_function)
                 denselayers.append(
                     Linear(
                         dim_head_hidden[-1],
@@ -217,6 +221,7 @@ class Base(Module):
                         self.num_mlp,
                         self.hidden_dim_node,
                         self.config_heads["node"]["type"],
+                        self.activation_function,
                     )
                 elif self.node_NN_type == "conv":
                     for conv, batch_norm in zip(
@@ -248,7 +253,7 @@ class Base(Module):
         conv_args = self._conv_args(data)
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             c = conv(x=x, **conv_args)
-            x = F.relu(feat_layer(c))
+            x = self.activation_function(feat_layer(c))
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
@@ -266,7 +271,7 @@ class Base(Module):
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        x_node = F.relu(
+                        x_node = self.activation_function(
                             batch_norm(conv(x=x, edge_index=data.edge_index))
                         )
                 else:
@@ -325,23 +330,32 @@ class Base(Module):
 
 
 class MLPNode(Module):
-    def __init__(self, input_dim, output_dim, num_mlp, hidden_dim_node, node_type):
+    def __init__(
+        self,
+        input_dim,
+        output_dim,
+        num_mlp,
+        hidden_dim_node,
+        node_type,
+        activation_function,
+    ):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.node_type = node_type
         self.num_mlp = num_mlp
+        self.activation_function = activation_function
 
         self.mlp = ModuleList()
         for _ in range(self.num_mlp):
             denselayers = []
             denselayers.append(Linear(self.input_dim, hidden_dim_node[0]))
-            denselayers.append(ReLU())
+            denselayers.append(self.activation_function)
             for ilayer in range(len(hidden_dim_node) - 1):
                 denselayers.append(
                     Linear(hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1])
                 )
-                denselayers.append(ReLU())
+                denselayers.append(self.activation_function)
             denselayers.append(Linear(hidden_dim_node[-1], output_dim))
             self.mlp.append(Sequential(*denselayers))
 
