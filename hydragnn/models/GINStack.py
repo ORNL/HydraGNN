@@ -36,10 +36,6 @@ class GINStack(Base):
         input_args = "x, pos, edge_index"
         conv_args = "x, edge_index"
 
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         return Sequential(
             input_args,
             [
