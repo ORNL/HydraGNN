@@ -93,6 +93,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
 
+    if "activation_function" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["activation_function"] = "relu"
+
     if "SyncBatchNorm" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"] = False
     return config
