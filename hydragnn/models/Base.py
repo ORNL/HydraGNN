@@ -29,6 +29,7 @@ class Base(Module):
         config_heads: dict,
         activation_function_type: str,
         loss_function_type: str,
+        equivariance: bool,
         ilossweights_hyperp: int = 1,  # if =1, considering weighted losses for different tasks and treat the weights as hyper parameters
         loss_weights: list = [1.0, 1.0, 1.0],  # weights for losses of different tasks
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
@@ -59,6 +60,7 @@ class Base(Module):
         self.batch_norms_node_hidden = ModuleList()
         self.convs_node_output = ModuleList()
         self.batch_norms_node_output = ModuleList()
+        self.equivariance = equivariance
         self.activation_function = activation_function_selection(
             activation_function_type
         )
@@ -113,8 +115,11 @@ class Base(Module):
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _conv_args(self, data):
-        conv_args = {"edge_index": data.edge_index}
-        if (data.edge_attr is not None) and (self.use_edge_attr):
+        conv_args = {"edge_index": data.edge_index.to(torch.long)}
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
         return conv_args
 
@@ -248,11 +253,12 @@ class Base(Module):
 
     def forward(self, data):
         x = data.x
+        pos = data.pos
 
         ### encoder part ####
         conv_args = self._conv_args(data)
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
-            c = conv(x=x, **conv_args)
+            c, pos = conv(x=x, pos=pos, **conv_args)
             x = self.activation_function(feat_layer(c))
 
         #### multi-head decoder part####
