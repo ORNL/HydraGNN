@@ -12,7 +12,7 @@
 import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
-from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool
+from torch_geometric.nn import PNAConv, BatchNorm, global_mean_pool, Sequential
 from .Base import Base
 
 
@@ -38,7 +38,7 @@ class PNAStack(Base):
         super().__init__(*args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
-        return PNAConv(
+        pna = PNAConv(
             in_channels=input_dim,
             out_channels=output_dim,
             aggregators=self.aggregators,
@@ -48,6 +48,21 @@ class PNAStack(Base):
             pre_layers=1,
             post_layers=1,
             divide_input=False,
+        )
+
+        input_args = "x, pos, edge_index"
+        conv_args = "x, edge_index"
+
+        if self.use_edge_attr:
+            input_args += ", edge_attr"
+            conv_args += ", edge_attr"
+
+        return Sequential(
+            input_args,
+            [
+                (pna, conv_args + " -> x"),
+                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+            ],
         )
 
     def __str__(self):

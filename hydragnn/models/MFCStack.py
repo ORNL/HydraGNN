@@ -12,8 +12,8 @@
 import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
-from torch.nn import Sequential, ReLU, Linear
-from torch_geometric.nn import MFConv, BatchNorm, global_mean_pool
+from torch.nn import ReLU, Linear
+from torch_geometric.nn import MFConv, BatchNorm, global_mean_pool, Sequential
 
 from .Base import Base
 
@@ -30,10 +30,21 @@ class MFCStack(Base):
         super().__init__(*args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
-        return MFConv(
+        mfc = MFConv(
             in_channels=input_dim,
             out_channels=output_dim,
             max_degree=self.max_degree,
+        )
+
+        input_args = "x, pos, edge_index"
+        conv_args = "x, edge_index"
+
+        return Sequential(
+            input_args,
+            [
+                (mfc, conv_args + " -> x"),
+                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+            ],
         )
 
     def __str__(self):

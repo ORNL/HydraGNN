@@ -13,7 +13,7 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from torch.nn import ModuleList
-from torch_geometric.nn import SAGEConv, BatchNorm
+from torch_geometric.nn import SAGEConv, BatchNorm, Sequential
 
 from .Base import Base
 
@@ -23,9 +23,20 @@ class SAGEStack(Base):
         super().__init__(*args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
-        return SAGEConv(
+        sage = SAGEConv(
             in_channels=input_dim,
             out_channels=output_dim,
+        )
+
+        input_args = "x, pos, edge_index"
+        conv_args = "x, edge_index"
+
+        return Sequential(
+            input_args,
+            [
+                (sage, conv_args + " -> x"),
+                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+            ],
         )
 
     def __str__(self):
