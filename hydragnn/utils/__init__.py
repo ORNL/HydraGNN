@@ -14,6 +14,7 @@ from .distributed import (
 from .model import (
     save_model,
     get_summary_writer,
+    unsorted_segment_mean,
     load_existing_model,
     load_existing_model_config,
     loss_function_selection,

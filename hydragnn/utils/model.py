@@ -144,6 +144,16 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
     return torch.tensor(deg)
 
 
+def unsorted_segment_mean(data, segment_ids, num_segments):
+    result_shape = (num_segments, data.size(1))
+    segment_ids = segment_ids.unsqueeze(-1).expand(-1, data.size(1))
+    result = data.new_full(result_shape, 0)  # Init empty result tensor.
+    count = data.new_full(result_shape, 0)
+    result.scatter_add_(0, segment_ids, data)
+    count.scatter_add_(0, segment_ids, torch.ones_like(data))
+    return result / count.clamp(min=1)
+
+
 def print_model(model):
     """print model's parameter size layer by layer"""
     num_params = 0
