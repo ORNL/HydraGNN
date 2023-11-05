@@ -22,13 +22,14 @@ test_requires = ["black", "pytest", "pytest-mpi"]
 
 setup(
     name="HydraGNN",
-    version="1.0",
+    version="3.0-rc1",
     package_dir={"hydragnn": "hydragnn"},
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph convolutional neural networks",
     license="BSD-3",
+    long_description_content_type="text/markdown",
     long_description=read("README.md"),
     url="https://github.com/ORNL/HydraGNN",
     author="Massimiliano Lupo Pasini, Samuel Temple Reeve, Pei Zhang, Jong Youl Choi",
