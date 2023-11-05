@@ -62,6 +62,11 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         """
 
         # self.serial_data_name_list = []
+        self.normalize_features = (
+            config["Dataset"]["normalize_features"]
+            if config["Dataset"]["normalize_features"] is not None
+            else False
+        )
         self.node_feature_name = (
             config["Dataset"]["node_features"]["name"]
             if config["Dataset"]["node_features"]["name"] is not None
@@ -205,7 +210,8 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         # scaled features by number of nodes
         self.__scale_features_by_num_nodes()
 
-        self.__normalize_dataset()
+        if self.normalize_features:
+            self.__normalize_dataset()
 
     def __normalize_dataset(self):
 
@@ -392,17 +398,6 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
             self.dataset[:] = [
                 self.edge_feature_transform(data) for data in self.dataset
             ]
-
-        for data in self.dataset:
-            update_predicted_values(
-                self.variables_type,
-                self.output_index,
-                self.graph_feature_dim,
-                self.node_feature_dim,
-                data,
-            )
-
-            update_atom_features(self.input_node_features, data)
 
         if "subsample_percentage" in self.variables.keys():
             self.subsample_percentage = self.variables["subsample_percentage"]
