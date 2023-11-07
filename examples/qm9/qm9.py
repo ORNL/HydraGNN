@@ -23,7 +23,7 @@ def qm9_pre_transform(data):
 
 
 def qm9_pre_filter(data):
-    return data.idx < num_samples
+    return True #data.idx < num_samples
 
 
 # Set this path for output.
@@ -91,4 +91,5 @@ hydragnn.train.train_validate_test(
     config["NeuralNetwork"],
     log_name,
     verbosity,
+    create_plots=config["Visualization"]["create_plots"],
 )

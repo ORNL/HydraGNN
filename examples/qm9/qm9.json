@@ -5,16 +5,13 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "model_type": "GIN",
-            "radius": 7,
-            "max_neighbours": 5,
-            "periodic_boundary_conditions": false,
+            "model_type": "PNA",
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "output_heads": {
                 "graph":{
                     "num_sharedlayers": 2,
-                    "dim_sharedlayers": 5,
+                    "dim_sharedlayers": 50,
                     "num_headlayers": 2,
                     "dim_headlayers": [50,25]
                 }
@@ -30,7 +27,7 @@
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 2,
+            "num_epoch": 200,
             "perc_train": 0.7,
             "loss_function_type": "mse",
             "batch_size": 64,
