@@ -1,0 +1,73 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "Dataset": {
+        "name": "FePt_32atoms",
+        "path": {"total": "./dataset/FePt_enthalpy"},
+        "format": "LSMS",
+        "compositional_stratified_splitting": true,
+        "rotational_invariance": false,
+        "node_features": {
+            "name": ["num_of_protons","charge_density", "magnetic_moment"],
+            "dim": [1,1,1],
+            "column_index": [0,5,6]
+        },
+        "graph_features":{
+            "name": [ "free_energy_scaled_num_nodes"],
+            "dim": [1],
+            "column_index": [0]
+        },
+        "normalize_features": false
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "radius": 7,
+            "max_neighbours": 100,
+            "periodic_boundary_conditions": false,
+            "hidden_dim": 100,
+            "num_conv_layers": 6,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 5,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25]
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50,25],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0, 1.0, 1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["mixing_enthalpy","charge_density", "magnetic_moment"],
+            "type": ["graph","node","node"],
+            "output_index": [0, 1, 2],
+            "output_dim": [1, 1, 1],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 200,
+            "EarlyStopping": true,
+            "perc_train": 0.7,
+            "loss_function_type": "mse",
+            "batch_size": 64,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
+    }
+}
