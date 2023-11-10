@@ -4,22 +4,22 @@ import sys
 from mpi4py import MPI
 import argparse
 
+import torch
+
 import hydragnn
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.config_utils import get_log_name_config
-from hydragnn.utils.model import print_model
-from hydragnn.utils.lsmsdataset import LSMSDataset
-from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
-from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.print_utils import log
+from hydragnn.utils.lsmsdataset import LSMSDataset
+from hydragnn.utils.distdataset import DistDataset
+from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.preprocess.utils import gather_deg
+import hydragnn.utils.tracer as tr
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
-
-import torch
-import torch.distributed as dist
 
 
 def info(*args, logtype="info", sep=" "):
@@ -28,17 +28,24 @@ def info(*args, logtype="info", sep=" "):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--loadexistingsplit",
-        action="store_true",
-        help="loading from existing pickle/adios files with train/test/validate splits",
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
+    parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
     parser.add_argument(
         "--preonly",
         action="store_true",
-        help="preprocess only. Adios or pickle saving and no train",
+        help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="lsms.json")
+    parser.add_argument("--mae", action="store_true", help="do mae calculation")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
+    parser.add_argument("--shmem", action="store_true", help="shmem")
+    parser.add_argument("--log", help="log name")
+    parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
+    parser.add_argument("--everyone", action="store_true", help="gptimer")
+    parser.add_argument("--inputfile", help="input file", type=str, default="lsms_multi_tasking.json")
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -58,16 +65,35 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    graph_feature_names = ["mixing_enthalpy"]
+    graph_feature_dims = [1]
+    node_feature_names = ["atomic_number", "charge_transfer", "magnetic_moment"]
+    node_feature_dims = [1, 1, 1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
+    datadir = os.path.join(dirpwd, "dataset/FePt_enthalpy")
+    ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
+    ##################################################################################################################
+    # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
         config = json.load(f)
-    hydragnn.utils.setup_log(get_log_name_config(config))
+    verbosity = config["Verbosity"]["level"]
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config["graph_feature_names"] = graph_feature_names
+    var_config["graph_feature_dims"] = graph_feature_dims
+    var_config["node_feature_names"] = node_feature_names
+    var_config["node_feature_dims"] = node_feature_dims
+
+    if args.batch_size is not None:
+        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.setup_ddp()
     ##################################################################################################################
+
     comm = MPI.COMM_WORLD
+
     ## Set up logging
     logging.basicConfig(
         level=logging.INFO,
@@ -75,13 +101,20 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
+    modelname = "fept_lsms"
+    log_name = modelname if args.log is None else args.log
+    hydragnn.utils.setup_log(log_name)
+    writer = hydragnn.utils.get_summary_writer(log_name)
+
+    log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
+
     datasetname = config["Dataset"]["name"]
     for dataset_type, raw_data_path in config["Dataset"]["path"].items():
         config["Dataset"]["path"][dataset_type] = os.path.join(dirpwd, raw_data_path)
 
-    if not args.loadexistingsplit and rank == 0:
+    if args.preonly:
         ## Only rank=0 is enough for pre-processing
-        total = LSMSDataset(config)
+        total = LSMSDataset(config, dist=True)
 
         trainset, valset, testset = split_dataset(
             dataset=total,
@@ -89,6 +122,11 @@ if __name__ == "__main__":
             stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
         )
         print(len(total), len(trainset), len(valset), len(testset))
+
+        deg = gather_deg(trainset)
+        config["pna_deg"] = deg
+
+        setnames = ["trainset", "valset", "testset"]
 
         if args.format == "adios":
             fname = os.path.join(
@@ -103,85 +141,89 @@ if __name__ == "__main__":
             adwriter.save()
         elif args.format == "pickle":
             basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "serialized_dataset"
+                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
             )
-            SerializedWriter(
+            attrs = dict()
+            attrs["pna_deg"] = deg
+            SimplePickleWriter(
                 trainset,
                 basedir,
-                datasetname,
                 "trainset",
-                minmax_node_feature=total.minmax_node_feature,
-                minmax_graph_feature=total.minmax_graph_feature,
+                # minmax_node_feature=total.minmax_node_feature,
+                # minmax_graph_feature=total.minmax_graph_feature,
+                use_subdir=True,
+                attrs=attrs,
             )
-            SerializedWriter(
+            SimplePickleWriter(
                 valset,
                 basedir,
-                datasetname,
                 "valset",
+                # minmax_node_feature=total.minmax_node_feature,
+                # minmax_graph_feature=total.minmax_graph_feature,
+                use_subdir=True,
             )
-            SerializedWriter(
+            SimplePickleWriter(
                 testset,
                 basedir,
-                datasetname,
                 "testset",
+                # minmax_node_feature=total.minmax_node_feature,
+                # minmax_graph_feature=total.minmax_graph_feature,
+                use_subdir=True,
             )
-    comm.Barrier()
-    if args.preonly:
-        sys.exit(0)
+            sys.exit(0)
 
+    tr.initialize()
+    tr.disable()
     timer = Timer("load_data")
     timer.start()
-    if args.format == "adios":
-        info("Adios load")
-        opt = {
-            "preload": True,
-            "shmem": False,
-        }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
-        trainset = AdiosDataset(fname, "trainset", comm, **opt)
-        valset = AdiosDataset(fname, "valset", comm, **opt)
-        testset = AdiosDataset(fname, "testset", comm, **opt)
-    elif args.format == "pickle":
+
+    if args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "serialized_dataset"
+            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
-        trainset = SerializedDataset(basedir, datasetname, "trainset")
-        valset = SerializedDataset(basedir, datasetname, "valset")
-        testset = SerializedDataset(basedir, datasetname, "testset")
+        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=var_config)
+        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=var_config)
+        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=var_config)
+        # minmax_node_feature = trainset.minmax_node_feature
+        # minmax_graph_feature = trainset.minmax_graph_feature
+        pna_deg = trainset.pna_deg
+        if args.ddstore:
+            opt = {"ddstore_width": args.ddstore_width}
+            trainset = DistDataset(trainset, "trainset", comm, **opt)
+            valset = DistDataset(valset, "valset", comm, **opt)
+            testset = DistDataset(testset, "testset", comm, **opt)
+            # trainset.minmax_node_feature = minmax_node_feature
+            # trainset.minmax_graph_feature = minmax_graph_feature
+            trainset.pna_deg = pna_deg
     else:
-        raise ValueError("Unknown data format: %d" % args.format)
-    ## Set minmax
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_node_feature"
-    ] = trainset.minmax_node_feature
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_graph_feature"
-    ] = trainset.minmax_graph_feature
+        raise NotImplementedError("No supported format: %s" % (args.format))
 
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
 
+    if args.ddstore:
+        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
+        os.environ["HYDRAGNN_USE_ddstore"] = "1"
+
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
-    timer.stop()
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_node_feature", None)
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_graph_feature", None)
+    ## Good to sync with everyone right after DDStore setup
+    comm.Barrier()
 
-    verbosity = config["Verbosity"]["level"]
+    hydragnn.utils.save_config(config, log_name)
+
+    timer.stop()
+
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    if rank == 0:
-        print_model(model)
-    comm.Barrier()
-
     model = hydragnn.utils.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
@@ -190,13 +232,11 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    log_name = get_log_name_config(config)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.load_existing_model_config(
+        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+    )
 
-    if dist.is_initialized():
-        dist.barrier()
-
-    hydragnn.utils.save_config(config, log_name)
+    ##################################################################################################################
 
     hydragnn.train.train_validate_test(
         model,
@@ -209,10 +249,18 @@ if __name__ == "__main__":
         config["NeuralNetwork"],
         log_name,
         verbosity,
-        create_plots=True,
+        create_plots=False,
     )
 
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
+    if tr.has("GPTLTracer"):
+        import gptl4py as gp
+
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
+            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
+        gp.finalize()
     sys.exit(0)
