@@ -50,15 +50,15 @@ There are two main options for running the code; both require a JSON input file
 for configurable options.
 1. Training a model, including continuing from a previously trained model using
 configuration options:
-    ```
-    import hydragnn
-    hydragnn.run_training("examples/configuration.json")
-    ```
+```
+import hydragnn
+hydragnn.run_training("examples/configuration.json")
+```
 2. Making predictions from a previously trained model:
-    ```
-    import hydragnn
-    hydragnn.run_prediction("examples/configuration.json", model)
-    ```
+```
+import hydragnn
+hydragnn.run_prediction("examples/configuration.json", model)
+```
 
 ### Datasets
 
