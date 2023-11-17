@@ -1,12 +1,11 @@
 {
     "Verbosity": {
-        "level": 2
+        "level": 1
     },
     "NeuralNetwork": {
-        "Profile": {"enable": 1},
         "Architecture": {
             "model_type": "PNA",
-            "hidden_dim": 5,
+            "hidden_dim": 30,
             "num_conv_layers": 6,
             "output_heads": {
                 "graph":{
@@ -14,25 +13,25 @@
                     "dim_sharedlayers": 50,
                     "num_headlayers": 2,
                     "dim_headlayers": [50,25]
+                },
+                "node": {
+                    "num_headlayers": 3,
+                    "dim_headlayers": [50,50,25],
+                    "type": "mlp"
                 }
             },
-            "task_weights": [1.0]
+            "task_weights": [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["free_energy"],
-            "output_index": [0],
-            "output_dim": [1],
-            "type": ["graph"],
-            "denormalize_output": false
+            "input_node_features": [0,1,2,3,4,5,6,7,8,9,10],
+            "output_index": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,11],
+            "type": ["graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","graph","node"]
         },
         "Training": {
-            "num_epoch": 200,
+            "num_epoch": 50,
             "perc_train": 0.7,
             "loss_function_type": "mse",
             "batch_size": 64,
-            "continue": 0,
-            "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 1e-3
