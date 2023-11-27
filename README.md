@@ -2,7 +2,7 @@
 
 Distributed PyTorch implementation of multi-headed graph convolutional neural networks
 
-<img src="https://github.com/ORNL/HydraGNN/assets/2488656/679e7352-16f8-4de1-900c-91302d3cc66f" alt="HydraGNN_QRcode" width="300" />
+<img src="https://github.com/ORNL/HydraGNN/assets/2488656/a6d5369b-2a70-4eee-aa39-b2cf8dedf262" alt="HydraGNN_QRcode" width="300" />
 
 
 ## Dependencies
