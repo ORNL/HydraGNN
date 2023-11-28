@@ -40,7 +40,7 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["mixing_enthyalpy"],
+            "output_names": ["mixing_enthalpy"],
             "type": ["graph"],
             "output_index": [0],
             "output_dim": [1],
