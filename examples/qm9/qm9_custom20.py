@@ -315,21 +315,24 @@ if checksplitting:
     plot_node_graph_features(var_config, train, val, test, "./logs/" + log_name)
 ##################################################################################################################
 ##################################################################################################################
-hydragnn.train.train_validate_test(
-    model,
-    optimizer,
-    train_loader,
-    val_loader,
-    test_loader,
-    writer,
-    scheduler,
-    config["NeuralNetwork"],
-    log_name,
-    verbosity,
-    create_plots=config["Visualization"]["create_plots"],
-)
-hydragnn.utils.save_model(model, optimizer, log_name)
-hydragnn.utils.print_timers(verbosity)
+try:
+    hydragnn.utils.model.load_existing_model(model, log_name)
+except:
+    hydragnn.train.train_validate_test(
+        model,
+        optimizer,
+        train_loader,
+        val_loader,
+        test_loader,
+        writer,
+        scheduler,
+        config["NeuralNetwork"],
+        log_name,
+        verbosity,
+        create_plots=config["Visualization"]["create_plots"],
+    )
+    hydragnn.utils.save_model(model, optimizer, log_name)
+    hydragnn.utils.print_timers(verbosity)
 
 output_dir = "./logs/" + log_name + "/postpred"
 if not os.path.exists(output_dir):
