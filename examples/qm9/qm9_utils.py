@@ -89,17 +89,21 @@ def plot_predictions_all20(
 ):
     ##################################################################################################################
     def scale_back_node(data_arr, minval, maxval, num_nodes):
-        data_unit = data_arr * (maxval.item() - minval.item()) + minval.item()
-        data_unit *= num_nodes
+        minval = minval.to(data_arr.device)
+        maxval = maxval.to(data_arr.device)
+        data_unit = data_arr * (maxval - minval) + minval
+        data_unit *= num_nodes.to(data_arr.device)[:,None]
         return data_unit
 
     def scale_back(data_arr, minval, maxval):
-        data_unit = data_arr * (maxval.item() - minval.item()) + minval.item()
+        minval = minval.to(data_arr.device)
+        maxval = maxval.to(data_arr.device)
+        data_unit = data_arr * (maxval - minval) + minval
         return data_unit
 
     _, _, true_values, predicted_values = hydragnn.train.test(data_loader, model, 1)
 
-    num_nodes = np.zeros(len(data_loader.dataset))
+    num_nodes = torch.zeros(len(data_loader.dataset))
     for idata in range(len(data_loader.dataset)):
         num_nodes[idata] = data_loader.dataset[idata].x.size(0)
 
@@ -111,8 +115,8 @@ def plot_predictions_all20(
     name_list = []
     unit_list = []
     for ihead in range(model.num_heads):
-        head_true = np.asarray(true_values[ihead]).squeeze()
-        head_pred = np.asarray(predicted_values[ihead]).squeeze()
+        head_true = true_values[ihead]
+        head_pred = predicted_values[ihead]
         ax = axs[ihead]
         unit = var_config["output_units"][ihead]
         varname = var_config["output_names"][ihead]
@@ -140,14 +144,16 @@ def plot_predictions_all20(
                 min_output_feature[ihead],
                 max_output_feature[ihead],
             )
-        error_mae = np.mean(np.abs(head_pred - head_true))
-        error_rmse = np.sqrt(np.mean(np.abs(head_pred - head_true) ** 2))
+        error_mae = torch.abs(head_pred - head_true).mean()
+        error_rmse = ((head_pred - head_true)**2).mean()**0.5
         print(varname, ": ", unit, ", mae=", error_mae, ", rmse= ", error_rmse)
         print(head_pred.shape, head_true.shape)
         mae_list.append(error_mae)
         rmse_list.append(error_rmse)
         unit_list.append(unit)
         name_list.append(varname)
+        head_true = head_true.cpu().numpy()
+        head_pred = head_pred.cpu().numpy()
         ax.scatter(
             head_true, head_pred, s=7, linewidth=0.5, edgecolor="b", facecolor="none"
         )
