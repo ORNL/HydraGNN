@@ -18,6 +18,8 @@ from hydragnn.utils.model import activation_function_selection, loss_function_se
 import sys
 from hydragnn.utils.distributed import get_device
 
+import inspect
+
 
 class Base(Module):
     def __init__(
@@ -152,23 +154,48 @@ class Base(Module):
         if len(node_feature_ind) == 0:
             return
         # In this part, each head has same number of convolutional layers, but can have different output dimension
-        self.convs_node_hidden.append(
-            self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
-        )
-        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
-        for ilayer in range(self.num_conv_layers_node - 1):
+        if "last_layer" in inspect.signature(self.get_conv).parameters:
             self.convs_node_hidden.append(
                 self.get_conv(
-                    self.hidden_dim_node[ilayer], self.hidden_dim_node[ilayer + 1]
+                    self.hidden_dim, self.hidden_dim_node[0], last_layer=False
                 )
             )
+        else:
+            self.convs_node_hidden.append(
+                self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
+            )
+        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
+        for ilayer in range(self.num_conv_layers_node - 1):
+            # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+            if "last_layer" in inspect.signature(self.get_conv).parameters:
+                self.convs_node_hidden.append(
+                    self.get_conv(
+                        self.hidden_dim_node[ilayer],
+                        self.hidden_dim_node[ilayer + 1],
+                        last_layer=False,
+                    )
+                )
+            else:
+                self.convs_node_hidden.append(
+                    self.get_conv(
+                        self.hidden_dim_node[ilayer], self.hidden_dim_node[ilayer + 1]
+                    )
+                )
             self.batch_norms_node_hidden.append(
                 BatchNorm(self.hidden_dim_node[ilayer + 1])
             )
         for ihead in node_feature_ind:
-            self.convs_node_output.append(
-                self.get_conv(self.hidden_dim_node[-1], self.head_dims[ihead])
-            )
+            # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+            if "last_layer" in inspect.signature(self.get_conv).parameters:
+                self.convs_node_output.append(
+                    self.get_conv(
+                        self.hidden_dim_node[-1], self.head_dims[ihead], last_layer=True
+                    )
+                )
+            else:
+                self.convs_node_output.append(
+                    self.get_conv(self.hidden_dim_node[-1], self.head_dims[ihead])
+                )
             self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def _multihead(self):
@@ -277,9 +304,10 @@ class Base(Module):
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        x_node = self.activation_function(
-                            batch_norm(conv(x=x, edge_index=data.edge_index))
-                        )
+                        c, pos = conv(x=x, pos=pos, **conv_args)
+                        c = batch_norm(c)
+                        x = self.activation_function(c)
+                    x_node = x
                 else:
                     x_node = headloc(x=x, batch=data.batch)
                 outputs.append(x_node)

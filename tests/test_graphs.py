@@ -139,6 +139,10 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
         thresholds["PNA"] = [0.10, 0.10]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
+    if ci_input == "ci_conv_head.json":
+        thresholds["PNA"] = [0.3, 0.3]
+        thresholds["EGNN"] = [0.4, 0.4]
+        thresholds["SchNet"] = [0.4, 0.4]
     verbosity = 2
 
     for ihead in range(len(true_values)):
@@ -199,3 +203,11 @@ def pytest_train_equivariant_model(model_type, overwrite_data=False):
 @pytest.mark.parametrize("model_type", ["PNA"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    ["PNA", "EGNN", "SchNet"],
+)
+def pytest_train_model_conv_head(model_type, overwrite_data=False):
+    unittest_train_model(model_type, "ci_conv_head.json", True, overwrite_data)
