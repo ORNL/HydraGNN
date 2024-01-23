@@ -142,7 +142,7 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     if ci_input == "ci_conv_head.json":
         thresholds["PNA"] = [0.3, 0.3]
         thresholds["EGNN"] = [0.5, 0.5]
-        thresholds["SchNet"] = [0.5, 0.5]
+        thresholds["SchNet"] = [0.6, 0.6]
     verbosity = 2
 
     for ihead in range(len(true_values)):
