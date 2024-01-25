@@ -12,6 +12,7 @@ try:
 except ImportError:
     pass
 
+import torch_geometric
 import torch_geometric.data
 import torch
 
@@ -117,8 +118,16 @@ class AdiosWriter:
 
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
-                self.io.DefineAttribute("%s/keys" % label, data.keys)
-                keys = sorted(data.keys)
+                geom_version = list(map(lambda x: int(x), torch_geometric.__version__.split('.')))
+                if geom_version[0] == 2 and geom_version[1] < 4:
+                    self.io.DefineAttribute("%s/keys" % label, data.keys)
+                    keys = sorted(data.keys)
+                elif geom_version[0] == 2 and geom_version[1] >= 4:
+                    self.io.DefineAttribute("%s/keys" % label, data.keys())
+                    keys = sorted(data.keys())
+                else:
+                    raise RuntimeError("pytorch geometric version is not supported: %s"%torch_geometric.__version__)
+
                 self.comm.allgather(keys)
 
             for k in keys:
