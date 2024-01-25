@@ -181,6 +181,13 @@ if __name__ == "__main__":
     parser.set_defaults(format="adios")
     group1 = parser.add_mutually_exclusive_group()
     group1.add_argument(
+        "--preload",
+        help="preload dataset",
+        action="store_const",
+        dest="dataset",
+        const="preload",
+    )
+    group1.add_argument(
         "--shmem",
         help="shmem dataset",
         action="store_const",
@@ -334,8 +341,12 @@ if __name__ == "__main__":
     timer.start()
 
     if args.format == "adios":
-        shmem = ddstore = False
-        if args.dataset == "shmem":
+        preload = shmem = ddstore = False
+        if args.dataset == "preload":
+            preload = True
+            os.environ["HYDRAGNN_AGGR_BACKEND"] = "torch"
+            os.environ["HYDRAGNN_USE_ddstore"] = "0"
+        elif args.dataset == "shmem":
             shmem = True
             os.environ["HYDRAGNN_AGGR_BACKEND"] = "torch"
             os.environ["HYDRAGNN_USE_ddstore"] = "0"
@@ -344,7 +355,8 @@ if __name__ == "__main__":
             os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-        opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
+        opt = {"preload": preload, "shmem": shmem, "ddstore": ddstore}
+        print ("opt:", opt)
         fname = fname = os.path.join(
             os.path.dirname(__file__), "dataset", "csce_gap.bp"
         )
