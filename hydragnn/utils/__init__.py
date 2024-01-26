@@ -8,6 +8,8 @@ from .distributed import (
     is_model_distributed,
     get_distributed_model,
     setup_ddp,
+    setup_ddp_groups,
+    cleanup,
     nsplit,
     comm_reduce,
 )

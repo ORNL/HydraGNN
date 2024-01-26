@@ -161,6 +161,26 @@ def setup_ddp():
 
     return world_size, world_rank
 
+def setup_ddp_groups(num_groups):
+
+    world_size, world_rank = get_comm_size_and_rank()
+    assert world_size >= num_groups, f'Number of groups {num_groups} requested exceeds number of total processes {world_size} available'
+
+    num_ranks_per_group = world_size//num_groups
+
+    ddp_groups_list = []
+    for group_id in range(num_groups):
+        ranks_list = [num_ranks_per_group*group_id + rank_id for rank_id in range(num_ranks_per_group)]
+        ddp_groups_list.append(dist.new_group(ranks=ranks_list))
+
+    for group_id in range(num_groups):
+        if dist.get_rank(ddp_groups_list[group_id]) >= 0:
+           print(f"Rank {world_rank} is in group {group_id}")
+
+    return ddp_groups_list
+
+def cleanup(group):
+    dist.destroy_process_group(group)
 
 def get_device_list():
 
@@ -217,18 +237,18 @@ def is_model_distributed(model):
     return isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel)
 
 
-def get_distributed_model(model, verbosity=0, sync_batch_norm=False):
+def get_distributed_model(model, verbosity=0, sync_batch_norm=False, group=None):
     device_name = get_device_name(verbosity_level=verbosity)
 
     if dist.is_initialized():
         if device_name == "cpu":
-            model = torch.nn.parallel.DistributedDataParallel(model)
+            model = torch.nn.parallel.DistributedDataParallel(model, process_group=group)
         else:
             if sync_batch_norm:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             device = get_device_from_name(device_name)
             model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[device]
+                model, device_ids=[device], process_group=group
             )
     return model
 
