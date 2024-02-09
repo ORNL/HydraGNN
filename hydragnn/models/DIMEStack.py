@@ -102,6 +102,7 @@ class DIMEStack(Base):
             out_channels=output_dim,
             num_layers=1,
             act=SiLU(),
+            output_initializer="glorot_orthogonal",
         )
         return Sequential(
             "x, pos, rbf, sbf, i, j, idx_kj, idx_ji",
