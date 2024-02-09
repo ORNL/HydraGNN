@@ -39,12 +39,12 @@
             "num_spherical": 7,
             "num_filters": 126,
             "periodic_boundary_conditions": false,
-            "hidden_dim": 50,
-            "num_conv_layers": 4,
+            "hidden_dim": 20,
+            "num_conv_layers": 2,
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [50,50],
+                    "dim_headlayers": [20,10],
                      "type": "conv"
                 }
             },
@@ -60,10 +60,10 @@
         "Training": {
             "num_epoch": 100,
             "perc_train": 0.7,
-	    "EarlyStopping": true,
-	    "patience": 10,
+	        "EarlyStopping": false,
+	        "patience": 10,
             "loss_function_type": "mse",
-            "batch_size": 1,
+            "batch_size": 32,
             "Optimizer": {
                 "type": "AdamW",
                 "use_zero_redundancy": false,
