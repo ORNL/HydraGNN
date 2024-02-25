@@ -1,6 +1,6 @@
 click==8.0.0
 matplotlib
-torch==1.13
+torch==2.0.1
 ase
 tqdm
 tensorboard
