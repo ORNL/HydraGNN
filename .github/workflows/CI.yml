@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python: [3.8]
+        python: [3.8, 3.9]
 
     steps:
       - name: Setup Python
@@ -50,5 +50,5 @@ jobs:
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
-          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -x
-          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -x
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
+          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi
