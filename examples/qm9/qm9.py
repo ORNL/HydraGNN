@@ -10,6 +10,7 @@ except:
     from torch_geometric.data import DataLoader
 
 import hydragnn
+import hydragnn.utils.tracer as tr
 
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
@@ -26,6 +27,8 @@ try:
 except:
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
+tr.initialize()
+tr.disable()
 
 # Configurable run choices (JSON file that accompanies this example script).
 filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
@@ -86,3 +89,11 @@ hydragnn.train.train_validate_test(
     verbosity,
     create_plots=config["Visualization"]["create_plots"],
 )
+
+if tr.has("GPTLTracer"):
+    import gptl4py as gp
+
+    if world_rank == 0:
+        gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % world_rank))
+    gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
+    gp.finalize()

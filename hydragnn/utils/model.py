@@ -161,7 +161,7 @@ def print_model(model):
         print_master("%50s\t%20s\t%10d" % (k, list(v.shape), v.numel()))
         num_params += v.numel()
     print_master("-" * 50)
-    print_master("%50s\t%20s\t%10d" % ("Total", "", num_params))
+    print_master("%50s\t%20s\t%10d" % ("Total number of model params:", "", num_params))
     print_master("All (total, MB): %d %g" % (num_params, num_params * 4 / 1024 / 1024))
 
 
