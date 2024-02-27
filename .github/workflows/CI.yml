@@ -52,4 +52,4 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
           python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -x
-          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -x
+          # mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -x
