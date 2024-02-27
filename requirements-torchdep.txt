@@ -1,4 +1,4 @@
---index-url https://data.pyg.org/whl/torch-2.0.1+cpu.html
+--find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
 torch_geometric==2.5.0
 torch_scatter==2.1.2
 torch_sparse==0.6.18
