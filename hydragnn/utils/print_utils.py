@@ -79,8 +79,8 @@ def setup_log(prefix):
     fname = "./logs/%s/run.log" % (prefix)
     fileHandler = logging.FileHandler(fname)
 
-    if (logger.hasHandlers()):
-        logger.handlers.clear() 
+    if logger.hasHandlers():
+        logger.handlers.clear()
 
     fileHandler.setFormatter(logFormatter)
     logger.addHandler(fileHandler)
