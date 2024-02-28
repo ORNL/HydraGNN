@@ -110,6 +110,10 @@ def get_comm_size_and_rank():
 def setup_ddp():
     """ "Initialize DDP"""
 
+    if dist.is_initialized():
+        world_size, world_rank = init_comm_size_and_rank()
+        return world_size, world_rank
+
     if os.getenv("HYDRAGNN_BACKEND") is not None:
         backend = os.environ["HYDRAGNN_BACKEND"]
     elif dist.is_nccl_available() and torch.cuda.is_available():
