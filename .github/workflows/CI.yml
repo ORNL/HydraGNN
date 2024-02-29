@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-20.04
     strategy:
       matrix:
-        python: ["3.8", "3.9", "3.10"]
+        python: ["3.8", "3.9"]
 
     steps:
       - name: Setup Python
@@ -39,7 +39,6 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           python -m pip install --upgrade pip
-          # python -m pip install torch==2.0.1 torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --upgrade -r requirements.txt -r requirements-dev.txt
           python -m pip install --upgrade -r requirements-torch.txt
           python -m pip install --upgrade -r requirements-pyg.txt
@@ -52,5 +51,5 @@ jobs:
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
-          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -x -s
-          # python -m pytest -rfEP -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -x -s
+          python -m pytest -rfEP -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
+          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi
