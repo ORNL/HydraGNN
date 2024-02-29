@@ -12,7 +12,8 @@ To install required packages with only basic capability (`torch`,
 and to serialize+store the processed data for later sessions (`pickle5`):
 ```
 pip install -r requirements.txt
-pip install -r requirements-torchdep.txt
+pip install -r requirements-torch.txt
+pip install -r requirements-pyg.txt
 ```
 
 If you plan to modify the code, include packages for formatting (`black`) and
