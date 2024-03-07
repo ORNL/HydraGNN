@@ -430,8 +430,8 @@ def train(
         with record_function("forward"):
             # Perform forward pass and backward pass under autocast
             with autocast(enabled=use_tensor_cores, dtype=torch.bfloat16):
-            #with autocast(enabled=use_tensor_cores, dtype=torch.float16):
-            #with autocast(enabled=use_tensor_cores, dtype=torch.float32):
+                # with autocast(enabled=use_tensor_cores, dtype=torch.float16):
+                # with autocast(enabled=use_tensor_cores, dtype=torch.float32):
                 data = data.to(get_device())
                 pred = model(data)
                 loss, tasks_loss = model.module.loss(pred, data.y, head_index)
@@ -469,7 +469,6 @@ def train(
 
 @torch.no_grad()
 def validate(loader, model, verbosity, reduce_ranks=True):
-
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
@@ -507,7 +506,6 @@ def validate(loader, model, verbosity, reduce_ranks=True):
 
 @torch.no_grad()
 def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
-
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
