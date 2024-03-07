@@ -429,7 +429,9 @@ def train(
         tr.start("forward")
         with record_function("forward"):
             # Perform forward pass and backward pass under autocast
-            with autocast(enabled=use_tensor_cores):
+            with autocast(enabled=use_tensor_cores, dtype=torch.bfloat16):
+            #with autocast(enabled=use_tensor_cores, dtype=torch.float16):
+            #with autocast(enabled=use_tensor_cores, dtype=torch.float32):
                 data = data.to(get_device())
                 pred = model(data)
                 loss, tasks_loss = model.module.loss(pred, data.y, head_index)
