@@ -95,7 +95,7 @@ def uncompress_data(compressed_dir):
 
 
 def preprocess_data(uncompressed_dir, output_path):
-    import preprocess_adios2 as preprocess_ad
+    import preprocess as preprocess_ad
     args.data_path = uncompressed_dir
     args.out_path = output_path
     preprocess_ad.main(args)
@@ -137,8 +137,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-path",
         type=str,
-        default="./data",
-        help="Specify path to save dataset. Defaults to './data'",
+        default="./dataset",
+        help="Specify path to save dataset. Defaults to './dataset'",
     )
 
     args, _ = parser.parse_known_args()
