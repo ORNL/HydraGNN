@@ -20,8 +20,6 @@ from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
 #transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 
-from data_utils import collate
-
 class AtomsToGraphs:
     """A class to help convert periodic atomic structures to graphs.
 
@@ -84,7 +82,7 @@ class AtomsToGraphs:
         """
 
         # set the atomic numbers, positions, and cell
-        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers())
+        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
         positions = torch.Tensor(atoms.get_positions())
         cell = torch.Tensor(np.array(atoms.get_cell())).view(1, 3, 3)
         natoms = torch.IntTensor([positions.shape[0]])
@@ -108,7 +106,7 @@ class AtomsToGraphs:
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
         data.force = forces
 
-        data.x = torch.cat(atomic_numbers, positions, forces, dim=1)
+        data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
         data = self.radius_graph(data)
         data = transform_coordinates(data)
