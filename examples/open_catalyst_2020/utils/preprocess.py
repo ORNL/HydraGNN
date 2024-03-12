@@ -25,6 +25,10 @@ def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=Fal
         traj_path = os.path.join(data_path, f"{xyz_idx}.extxyz")
         traj_frames = ase.io.read(traj_path, ":")
 
+        if len(traj_logs) != len(traj_frames):
+                ## let's skip
+                continue
+
         for i, frame in enumerate(traj_frames):
             frame_log = traj_logs[i].split(",")
             sid = int(frame_log[0].split("random")[1])
