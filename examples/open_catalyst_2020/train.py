@@ -73,10 +73,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         # Chunk the trajectories into args.num_workers splits
         chunked_txt_files = np.array_split(xyz_logs, self.world_size)
 
-        try: 
-            self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files[self.rank], self.data_path))
-        except:
-            print(f"Rank {self.rank} - Error reading {self.data_path}")
+        self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files[self.rank], self.data_path))
 
     def len(self):
         return len(self.dataset)
