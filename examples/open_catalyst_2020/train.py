@@ -22,6 +22,7 @@ from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.preprocess.utils import gather_deg
+from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.tracer as tr
 
@@ -72,7 +73,10 @@ class OpenCatalystDataset(AbstractBaseDataset):
         # Chunk the trajectories into args.num_workers splits
         chunked_txt_files = np.array_split(xyz_logs, self.world_size)
 
-        self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files[self.rank], self.data_path))
+        try: 
+            self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files[self.rank], self.data_path))
+        except:
+            print(f"Rank {self.rank} - Error reading {self.data_path}")
 
     def len(self):
         return len(self.dataset)
@@ -98,10 +102,7 @@ if __name__ == "__main__":
         "--train_path", help="path to training data", type=str, default="s2ef_train_200K_uncompressed"
     )
     parser.add_argument(
-        "--val_path", help="path to validation data", type=str, default="s2ef_val_id_uncompressed"
-    )
-    parser.add_argument(
-        "--test_path", help="path to testing data", type=str, default="s2ef_test_uncompressed"
+        "--test_path", help="path to testing data", type=str, default="s2ef_val_id_uncompressed"
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -179,12 +180,13 @@ if __name__ == "__main__":
             data_type=args.train_path,
             dist=True
         )
-        valset = OpenCatalystDataset(
-            os.path.join(datadir),
-            var_config,
-            data_type=args.val_path,
-            dist=True
+        ## This is a local split
+        trainset, valset1, valset2 = split_dataset(
+            dataset=trainset,
+            perc_train=0.9,
+            stratify_splitting=False,
         )
+        valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
             os.path.join(datadir),
             var_config,

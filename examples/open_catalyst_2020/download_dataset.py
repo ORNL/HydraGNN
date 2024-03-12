@@ -75,6 +75,8 @@ def get_data(datadir, task, split, del_intmd_files):
 
         # verify_count(output_path, task, split)
     if task == "s2ef" and split == "test":
+        if not(os.path.exists(f"{datadir}/s2ef/all")):
+            os.makedirs(f"{datadir}/s2ef/all")
         os.system(f"mv {dirname}/test_data/s2ef/all/test_* {datadir}/s2ef/all")
     elif task == "is2re":
         os.system(f"mv {dirname}/data/is2re {datadir}")
