@@ -81,7 +81,7 @@ class AdiosWriter:
             self.dataset[label].extend(data)
         elif isinstance(data, torch_geometric.data.Data):
             self.dataset[label].append(data)
-        elif isinstance(data, BaseDataset):
+        elif isinstance(data, AbstractBaseDataset):
             self.dataset[label] = data
         else:
             raise Exception("Unsuppored data type yet.")
@@ -117,12 +117,23 @@ class AdiosWriter:
 
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
-                self.io.DefineAttribute("%s/keys" % label, data.keys)
-                keys = sorted(data.keys)
+                keys = data.keys() if callable(data.keys) else data.keys
+                self.io.DefineAttribute("%s/keys" % label, keys)
+                keys = sorted(keys)
                 self.comm.allgather(keys)
 
             for k in keys:
-                arr_list = [data[k].cpu().numpy() for data in self.dataset[label]]
+                arr_list = list()
+                for data in self.dataset[label]:
+                    if isinstance(data[k], torch.Tensor):
+                        arr_list.append(data[k].cpu().numpy())
+                    elif isinstance(data[k], np.ndarray):
+                        arr_list.append(data[k])
+                    elif isinstance(data[k], (np.floating, np.integer)):
+                        arr_list.append(np.array((data[k],)))
+                    else:
+                        print("Error: type(data[k]):", label, k, type(data[k]))
+                        raise NotImplementedError("Not supported: not tensor nor numpy array")
                 m0 = np.min([x.shape for x in arr_list], axis=0)
                 m1 = np.max([x.shape for x in arr_list], axis=0)
                 vdims = list()

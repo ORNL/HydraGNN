@@ -59,9 +59,17 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        xyz_logs = glob.glob(os.path.join(self.data_path, "*.txt"))
-        if not xyz_logs:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
+        ## Only rank 0 reads the list of files and distribute
+        chunked_txt_files = None
+        if self.rank == 0:
+            xyz_logs = glob.glob(os.path.join(self.data_path, "*.txt"))
+            if not xyz_logs:
+                raise RuntimeError("No *.txt files found. Did you uncompress?")
+
+            # Chunk the trajectories into args.num_workers splits
+            chunked_txt_files = np.array_split(xyz_logs, self.world_size)
+        chunked_txt_files = MPI.COMM_WORLD.scatter(chunked_txt_files, root=0)
+        assert len(chunked_txt_files) > 0, f"No files to process: {self.rank}"
 
         # Initialize feature extractor.
         a2g = AtomsToGraphs(
@@ -73,7 +81,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         # Chunk the trajectories into args.num_workers splits
         chunked_txt_files = np.array_split(xyz_logs, self.world_size)
 
-        self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files[self.rank], self.data_path))
+        self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files, self.data_path))
 
     def len(self):
         return len(self.dataset)
@@ -190,7 +198,9 @@ if __name__ == "__main__":
             data_type=args.test_path,
             dist=True
         )
-        print("Local splitting: ", len(trainset), len(valset), len(testset))
+        ## Need as a list
+        testset = testset[:]
+        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
