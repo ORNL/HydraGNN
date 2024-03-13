@@ -100,8 +100,9 @@ class AtomsToGraphs:
         )
 
         energy = atoms.get_potential_energy(apply_constraint=False)
-        data.energy = energy
-        data.y = energy
+        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        data.energy = energy_tensor
+        data.y = energy_tensor
 
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
         data.force = forces
