@@ -36,6 +36,8 @@ try:
 except ImportError:
     pass
 
+import subprocess
+from hydragnn.utils import nsplit
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -61,14 +63,28 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         ## Only rank 0 reads the list of files and distribute
         chunked_txt_files = None
-        if self.rank == 0:
-            xyz_logs = glob.glob(os.path.join(self.data_path, "*.txt"))
-            if not xyz_logs:
-                raise RuntimeError("No *.txt files found. Did you uncompress?")
 
-            chunked_txt_files = np.array_split(xyz_logs, self.world_size)
-        chunked_txt_files = MPI.COMM_WORLD.scatter(chunked_txt_files, root=0)
-        assert len(chunked_txt_files) > 0, f"No files to process: {self.rank}"
+        mx = 0
+        if self.rank == 0:
+            ## Let rank 0 check the number of files and share
+            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            # print (cmd)
+            out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            mx = int(out.stdout)
+        mx = MPI.COMM_WORLD.bcast(mx, root=0)
+        if mx == 0:
+            raise RuntimeError("No *.txt files found. Did you uncompress?")
+
+        ## We assume file names are "%d.txt"
+        rx = list(nsplit(range(mx), self.world_size))[self.rank]
+        chunked_txt_files = list()
+        for n in rx:
+            fname = os.path.join(self.data_path, "%d.txt"%n)
+            if os.path.exists(fname):
+                chunked_txt_files.append(fname)
+
+        if len(chunked_txt_files) == 0:
+            print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
         a2g = AtomsToGraphs(
@@ -111,6 +127,7 @@ if __name__ == "__main__":
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
+    parser.add_argument("--modelname", help="model name")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -172,7 +189,7 @@ if __name__ == "__main__":
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OC2020"
+    modelname = "OC2020" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
         trainset = OpenCatalystDataset(
