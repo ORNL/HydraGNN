@@ -59,15 +59,14 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        ## Only rank 0 reads the list of files and distribute
-        chunked_txt_files = None
-        if self.rank == 0:
-            xyz_logs = glob.glob(os.path.join(self.data_path, "*.txt"))
-            if not xyz_logs:
-                raise RuntimeError("No *.txt files found. Did you uncompress?")
+        chunked_txt_files = []
+        for i, txt_file in enumerate(glob.iglob(os.path.join(self.data_path, "*.txt"))):
+            if not txt_file:
+               raise RuntimeError("No *.txt files found. Did you uncompress?")
+            else:
+                if i % self.world_size == self.rank:
+                   chunked_txt_files.append(txt_file)
 
-            chunked_txt_files = np.array_split(xyz_logs, self.world_size)
-        chunked_txt_files = MPI.COMM_WORLD.scatter(chunked_txt_files, root=0)
         assert len(chunked_txt_files) > 0, f"No files to process: {self.rank}"
 
         # Initialize feature extractor.
