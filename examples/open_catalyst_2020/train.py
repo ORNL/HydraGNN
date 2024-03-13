@@ -66,7 +66,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
             if not xyz_logs:
                 raise RuntimeError("No *.txt files found. Did you uncompress?")
 
-            # Chunk the trajectories into args.num_workers splits
             chunked_txt_files = np.array_split(xyz_logs, self.world_size)
         chunked_txt_files = MPI.COMM_WORLD.scatter(chunked_txt_files, root=0)
         assert len(chunked_txt_files) > 0, f"No files to process: {self.rank}"
@@ -77,9 +76,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
             radius=6,
             r_pbc=False
         )
-
-        # Chunk the trajectories into args.num_workers splits
-        chunked_txt_files = np.array_split(xyz_logs, self.world_size)
 
         self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files, self.data_path))
 
