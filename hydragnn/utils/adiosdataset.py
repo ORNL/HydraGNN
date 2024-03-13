@@ -26,7 +26,7 @@ import hydragnn.utils.tracer as tr
 
 from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils import nsplit
-
+from hydragnn.preprocess import update_predicted_values, update_atom_features
 
 class AdiosWriter:
     """Adios class to write Torch Geometric graph data"""
@@ -235,6 +235,7 @@ class AdiosDataset(AbstractBaseDataset):
         enable_cache=False,
         ddstore=False,
         ddstore_width=None,
+        var_config=None,
     ):
         """
         Parameters
@@ -434,6 +435,27 @@ class AdiosDataset(AbstractBaseDataset):
             self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
             self.f.__next__()
 
+        ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
+        self.var_config = var_config
+        self.input_node_features = var_config["input_node_features"]
+
+        if self.var_config is not None:
+            self.variables_type = self.var_config["type"]
+            self.output_index = self.var_config["output_index"]
+            self.graph_feature_dim = self.var_config["graph_feature_dims"]
+            self.node_feature_dim = self.var_config["node_feature_dims"]
+
+    def update_data_object(self, data_object):
+        if self.var_config is not None:
+            update_predicted_values(
+                self.variables_type,
+                self.output_index,
+                self.graph_feature_dim,
+                self.node_feature_dim,
+                data_object,
+            )
+            update_atom_features(self.input_node_features, data_object)
+
     def len(self):
         """
         Return the total size of dataset
@@ -505,6 +527,8 @@ class AdiosDataset(AbstractBaseDataset):
                 exec("data_object.%s = v" % (k))
             if self.enable_cache:
                 self.cache[idx] = data_object
+
+        self.update_data_object(data_object)
         return data_object
 
     def unlink(self):
