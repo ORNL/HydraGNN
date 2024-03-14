@@ -22,18 +22,22 @@ def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=Fal
     
     rank = torch.distributed.get_rank()
     for sample in tqdm(samples, desc=os.path.basename(data_path), disable=False if rank == 0 else True):
-        traj_logs = open(sample, "r").read().splitlines()
-        xyz_idx = os.path.splitext(os.path.basename(sample))[0]
-        traj_path = os.path.join(data_path, f"{xyz_idx}.extxyz")
-        traj_frames = ase.io.read(traj_path, ":", parallel=False)
-        ## Check length consistency (got error with 199.txt)
-        if len(traj_logs) != len(traj_frames):
-            print(rank, "skip:", sample)
-            continue
-
-        if len(traj_logs) != len(traj_frames):
-                ## let's skip
+        try:
+            traj_logs = open(sample, "r").read().splitlines()
+            xyz_idx = os.path.splitext(os.path.basename(sample))[0]
+            traj_path = os.path.join(data_path, f"{xyz_idx}.extxyz")
+            traj_frames = ase.io.read(traj_path, ":", parallel=False)
+            ## Check length consistency (got error with 199.txt)
+            if len(traj_logs) != len(traj_frames):
+                print(rank, "skip:", sample)
                 continue
+
+            if len(traj_logs) != len(traj_frames):
+                    ## let's skip
+                    continue
+        except Exception as e:
+            print(f"WARN:", type(error).__name__)
+            continue
 
         for i, frame in enumerate(traj_frames):
             frame_log = traj_logs[i].split(",")

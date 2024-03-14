@@ -61,16 +61,14 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        ## Only rank 0 reads the list of files and distribute
-        chunked_txt_files = None
-
-        mx = 0
+        mx = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
             cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
-            # print (cmd)
+            print("Check the number of files:", cmd)
             out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             mx = int(out.stdout)
+            print("Total the number of files:", mx)
         mx = MPI.COMM_WORLD.bcast(mx, root=0)
         if mx == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
@@ -80,8 +78,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         chunked_txt_files = list()
         for n in rx:
             fname = os.path.join(self.data_path, "%d.txt"%n)
-            if os.path.exists(fname):
-                chunked_txt_files.append(fname)
+            chunked_txt_files.append(fname)
 
         if len(chunked_txt_files) == 0:
             print(self.rank, "WARN: No files to process. Continue ...")
