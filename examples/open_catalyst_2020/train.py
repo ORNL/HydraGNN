@@ -39,6 +39,7 @@ except ImportError:
 import subprocess
 from hydragnn.utils import nsplit
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -48,7 +49,6 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
-
     def __init__(self, dirpath, var_config, data_type, dist=False):
         super().__init__()
 
@@ -77,20 +77,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
         rx = list(nsplit(range(mx), self.world_size))[self.rank]
         chunked_txt_files = list()
         for n in rx:
-            fname = os.path.join(self.data_path, "%d.txt"%n)
+            fname = os.path.join(self.data_path, "%d.txt" % n)
             chunked_txt_files.append(fname)
 
         if len(chunked_txt_files) == 0:
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(
-            max_neigh=50,
-            radius=6,
-            r_pbc=False
-        )
+        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
 
-        self.dataset.extend(write_images_to_adios(a2g, chunked_txt_files, self.data_path))
+        self.dataset.extend(
+            write_images_to_adios(a2g, chunked_txt_files, self.data_path)
+        )
 
     def len(self):
         return len(self.dataset)
@@ -113,10 +111,16 @@ if __name__ == "__main__":
         "--inputfile", help="input file", type=str, default="open_catalyst_energy.json"
     )
     parser.add_argument(
-        "--train_path", help="path to training data", type=str, default="s2ef_train_200K_uncompressed"
+        "--train_path",
+        help="path to training data",
+        type=str,
+        default="s2ef_train_200K_uncompressed",
     )
     parser.add_argument(
-        "--test_path", help="path to testing data", type=str, default="s2ef_val_id_uncompressed"
+        "--test_path",
+        help="path to testing data",
+        type=str,
+        default="s2ef_val_id_uncompressed",
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -190,10 +194,7 @@ if __name__ == "__main__":
     if args.preonly:
         ## local data
         trainset = OpenCatalystDataset(
-            os.path.join(datadir),
-            var_config,
-            data_type=args.train_path,
-            dist=True
+            os.path.join(datadir), var_config, data_type=args.train_path, dist=True
         )
         ## This is a local split
         trainset, valset1, valset2 = split_dataset(
@@ -203,10 +204,7 @@ if __name__ == "__main__":
         )
         valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
-            os.path.join(datadir),
-            var_config,
-            data_type=args.test_path,
-            dist=True
+            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
         )
         ## Need as a list
         testset = testset[:]
@@ -218,8 +216,10 @@ if __name__ == "__main__":
         setnames = ["trainset", "valset", "testset"]
 
         ## adios
-        if args.format=="adios":
-            fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        if args.format == "adios":
+            fname = os.path.join(
+                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+            )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
@@ -230,7 +230,7 @@ if __name__ == "__main__":
             adwriter.save()
 
         ## pickle
-        elif args.format=="pickle":
+        elif args.format == "pickle":
             basedir = os.path.join(
                 os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
             )
@@ -286,9 +286,15 @@ if __name__ == "__main__":
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
-        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=var_config)
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=var_config)
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=var_config)
+        trainset = SimplePickleDataset(
+            basedir=basedir, label="trainset", var_config=var_config
+        )
+        valset = SimplePickleDataset(
+            basedir=basedir, label="valset", var_config=var_config
+        )
+        testset = SimplePickleDataset(
+            basedir=basedir, label="testset", var_config=var_config
+        )
         # minmax_node_feature = trainset.minmax_node_feature
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg

@@ -75,7 +75,7 @@ def get_data(datadir, task, split, del_intmd_files):
 
         # verify_count(output_path, task, split)
     if task == "s2ef" and split == "test":
-        if not(os.path.exists(f"{datadir}/s2ef/all")):
+        if not (os.path.exists(f"{datadir}/s2ef/all")):
             os.makedirs(f"{datadir}/s2ef/all")
         os.system(f"mv {dirname}/test_data/s2ef/all/test_* {datadir}/s2ef/all")
     elif task == "is2re":
@@ -98,6 +98,7 @@ def uncompress_data(compressed_dir):
 
 def preprocess_data(uncompressed_dir, output_path):
     import preprocess as preprocess_ad
+
     args.data_path = uncompressed_dir
     args.out_path = output_path
     preprocess_ad.main(args)

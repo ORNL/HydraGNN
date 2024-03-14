@@ -48,9 +48,7 @@ def main(args: argparse.Namespace) -> None:
     ip_op_pairs: List[Tuple[str, str]] = []
     for filename in filelist:
         fname_base = os.path.basename(filename)
-        ip_op_pairs.append(
-            (filename, os.path.join(args.opdir, fname_base[:-3]))
-        )
+        ip_op_pairs.append((filename, os.path.join(args.opdir, fname_base[:-3])))
 
     pool = mp.Pool(args.num_workers)
     list(

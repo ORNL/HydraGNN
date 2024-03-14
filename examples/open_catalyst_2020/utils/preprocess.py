@@ -19,9 +19,11 @@ def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=Fal
 
     dataset = []
     idx = 0
-    
+
     rank = torch.distributed.get_rank()
-    for sample in tqdm(samples, desc=os.path.basename(data_path), disable=False if rank == 0 else True):
+    for sample in tqdm(
+        samples, desc=os.path.basename(data_path), disable=False if rank == 0 else True
+    ):
         try:
             traj_logs = open(sample, "r").read().splitlines()
             xyz_idx = os.path.splitext(os.path.basename(sample))[0]
@@ -33,8 +35,8 @@ def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=Fal
                 continue
 
             if len(traj_logs) != len(traj_frames):
-                    ## let's skip
-                    continue
+                ## let's skip
+                continue
         except Exception as e:
             print(f"WARN:", type(error).__name__)
             continue

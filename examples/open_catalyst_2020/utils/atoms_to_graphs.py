@@ -17,8 +17,9 @@ from torch_geometric.transforms import Spherical, LocalCartesian
 
 from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
 
-#transform_coordinates = Spherical(norm=False, cat=False)
+# transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
+
 
 class AtomsToGraphs:
     """A class to help convert periodic atomic structures to graphs.
@@ -55,15 +56,11 @@ class AtomsToGraphs:
 
         if self.r_pbc:
             self.radius_graph = RadiusGraphPBC(
-                self.radius,
-                loop=False,
-                max_num_neighbors=self.max_neigh
+                self.radius, loop=False, max_num_neighbors=self.max_neigh
             )
         else:
             self.radius_graph = RadiusGraph(
-                self.radius,
-                loop=False,
-                max_num_neighbors=self.max_neigh
+                self.radius, loop=False, max_num_neighbors=self.max_neigh
             )
 
     def convert(
