@@ -133,7 +133,9 @@ class AdiosWriter:
                         arr_list.append(np.array((data[k],)))
                     else:
                         print("Error: type(data[k]):", label, k, type(data[k]))
-                        raise NotImplementedError("Not supported: not tensor nor numpy array")
+                        raise NotImplementedError(
+                            "Not supported: not tensor nor numpy array"
+                        )
                 m0 = np.min([x.shape for x in arr_list], axis=0)
                 m1 = np.max([x.shape for x in arr_list], axis=0)
                 vdims = list()
