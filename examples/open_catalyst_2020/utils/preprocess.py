@@ -34,9 +34,6 @@ def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=Fal
                 print(rank, "skip:", sample)
                 continue
 
-            if len(traj_logs) != len(traj_frames):
-                ## let's skip
-                continue
         except Exception as e:
             print(f"WARN:", type(error).__name__)
             continue

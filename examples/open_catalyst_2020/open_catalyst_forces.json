@@ -2,14 +2,6 @@
     "Verbosity": {
         "level": 2
     },
-   "Dataset": {
-        "name": "OC2020",
-        "node_features": {
-            "name": ["atom_number", "cartesian_coordinates", "forces"],
-            "dim": [1, 3, 3],
-            "column_index": [0, 1, 4]
-        }
-    },
    "NeuralNetwork": {
         "Architecture": {
             "model_type": "EGNN",
