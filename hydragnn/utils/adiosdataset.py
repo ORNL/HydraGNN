@@ -119,22 +119,9 @@ class AdiosWriter:
 
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
-<<<<<<< HEAD
                 keys = data.keys() if callable(data.keys) else data.keys
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
-=======
-                geom_version = list(map(lambda x: int(x), torch_geometric.__version__.split('.')))
-                if geom_version[0] == 2 and geom_version[1] < 4:
-                    self.io.DefineAttribute("%s/keys" % label, data.keys)
-                    keys = sorted(data.keys)
-                elif geom_version[0] == 2 and geom_version[1] >= 4:
-                    self.io.DefineAttribute("%s/keys" % label, data.keys())
-                    keys = sorted(data.keys())
-                else:
-                    raise RuntimeError("pytorch geometric version is not supported: %s"%torch_geometric.__version__)
-
->>>>>>> 1f3c364 (adding suppor for different version of pytorch geometric)
                 self.comm.allgather(keys)
 
             for k in keys:
