@@ -65,14 +65,21 @@ class MPTrjDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        d=loadjson(os.path.join(dirpath, 'MPtrj_2022.9_full.json'))
+        d = None
+        if (not self.dist) or (self.dist and self.rank == 0):
+            d=loadjson(os.path.join(dirpath, 'MPtrj_2022.9_full.json'))
+
+        if self.dist:
+            d = MPI.COMM_WORLD.bcast(d, root=0)
 
         mpids=list(d.keys())
 
-        mem=[]
         dataset=[]
 
-        mpids_loc = list(nsplit(range(mpids), self.world_size))[self.rank]
+        if (not self.dist):
+            mpids_loc = mpids
+        else:
+            mpids_loc = list(nsplit(range(mpids), self.world_size))[self.rank]
 
         for i in mpids_loc:
 
