@@ -440,9 +440,9 @@ class AdiosDataset(AbstractBaseDataset):
 
         ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
         self.var_config = var_config
-        self.input_node_features = var_config["input_node_features"]
 
         if self.var_config is not None:
+            self.input_node_features = self.var_config["input_node_features"]
             self.variables_type = self.var_config["type"]
             self.output_index = self.var_config["output_index"]
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
