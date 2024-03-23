@@ -199,3 +199,10 @@ def pytest_train_equivariant_model(model_type, overwrite_data=False):
 @pytest.mark.parametrize("model_type", ["PNA"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
+
+
+@pytest.mark.parametrize(
+    "model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "SchNet", "DimeNet", "EGNN"]
+)
+def pytest_train_model_conv_head(model_type, overwrite_data=False):
+    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
