@@ -22,6 +22,7 @@ from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.preprocess.utils import gather_deg
+from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.tracer as tr
@@ -53,11 +54,15 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 
 class MPTrjDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, data_type, dist=False):
+    def __init__(self, dirpath, var_config, data_type, dist=False, tmpfs=None):
         super().__init__()
 
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
+
+        self.radius_graph = RadiusGraph(
+                5.0, loop=False, max_num_neighbors=50
+            )
 
         self.dist = dist
         if self.dist:
@@ -66,11 +71,10 @@ class MPTrjDataset(AbstractBaseDataset):
             self.rank = torch.distributed.get_rank()
 
         d = None
-        if (not self.dist) or (self.dist and self.rank == 0):
+        if tmpfs is None:
             d=loadjson(os.path.join(dirpath, 'MPtrj_2022.9_full.json'))
-
-        if self.dist:
-            d = MPI.COMM_WORLD.bcast(d, root=0)
+        else:
+            d=loadjson(os.path.join(tmpfs, 'MPtrj_2022.9_full.json'))
 
         mpids=list(d.keys())
 
@@ -79,7 +83,7 @@ class MPTrjDataset(AbstractBaseDataset):
         if (not self.dist):
             mpids_loc = mpids
         else:
-            mpids_loc = list(nsplit(range(mpids), self.world_size))[self.rank]
+            mpids_loc = list(nsplit(mpids, self.world_size))[self.rank]
 
         for i in mpids_loc:
 
@@ -120,7 +124,7 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 # Converting positions and atomic numbers to torch tensors
                 atomic_numbers = torch.tensor([inverted_dict[element] for element in atoms_dict['elements']], dtype=torch.float32).view(-1, 1)
-                energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(1)
+                energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(0)
                 forces = torch.tensor(forces, dtype=torch.float32)
                 x = torch.cat([atomic_numbers, positions, forces], dim=1)
 
@@ -136,6 +140,9 @@ class MPTrjDataset(AbstractBaseDataset):
                     x=x,
                     y=energy
                 )
+
+                data = self.radius_graph(data)
+                data = transform_coordinates(data)
 
                 self.dataset.append(data)
 
@@ -178,6 +185,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument("--tmpfs", default=None, help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -233,21 +241,21 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OC2020" if args.log is None else args.log
+    log_name = "MPTrj" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OC2020" if args.modelname is None else args.modelname
+    modelname = "MPTrj" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
         total = MPTrjDataset(
-            os.path.join(datadir), var_config, data_type=args.train_path, dist=True
+            os.path.join(datadir), var_config, data_type=args.train_path, dist=True, tmpfs=args.tmpfs
         )
         ## This is a local split
         trainset, valset, testset = split_dataset(
-            dataset=trainset,
+            dataset=total,
             perc_train=0.9,
             stratify_splitting=False,
         )
