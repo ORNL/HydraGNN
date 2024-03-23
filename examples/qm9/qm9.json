@@ -3,7 +3,7 @@
         "level": 2
     },
     "NeuralNetwork": {
-        "Profile": {"enable": 1},
+        "Profile": {"enable": 0},
         "Architecture": {
             "model_type": "GIN",
             "radius": 7,

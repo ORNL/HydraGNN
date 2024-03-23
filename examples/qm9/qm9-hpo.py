@@ -1,6 +1,7 @@
 import os, json
 
 import torch
+import torch.distributed as dist
 import torch_geometric
 
 # deprecated in torch_geometric 2.0
@@ -10,6 +11,7 @@ except:
     from torch_geometric.data import DataLoader
 
 import hydragnn
+import argparse
 
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
@@ -41,13 +43,10 @@ with open(filename, "r") as f:
 verbosity = config["Verbosity"]["level"]
 var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
-def demo_model_parallel(group, group_id):
+def demo_model_parallel(group_id, group):
     global config
-    world_size, world_rank = hydragnn.utils.get_comm_size_and_rank()
-    print (world_rank, "group_id:", group_id)
 
-    config["NeuralNetwork"]["Architecture"]["hidden_dim"] = group_id*2 + 10
-    print (world_rank, "hidden_dim:", config["NeuralNetwork"]["Architecture"]["hidden_dim"])
+    config["NeuralNetwork"]["Architecture"]["hidden_dim"] = group_id * 2 + 10
 
     log_name = "qm9_test_group%d"%group_id
     print (world_rank, "log_name:", log_name)
@@ -100,23 +99,19 @@ def demo_model_parallel(group, group_id):
     )
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ngroups", type=int, help="number of groups", default=2)
+    args = parser.parse_args()
+
     world_size, world_rank = hydragnn.utils.setup_ddp()
     print(f"WORLD size {world_size} and WORLD rank {world_rank}")
-    num_gpus = torch.cuda.device_count()
-    print(f"Number of devices available: {num_gpus}", flush=True)
-    num_groups = 2
-    num_ranks_per_group = world_size//num_groups
+
+    num_groups = args.ngroups
     processes_groups = hydragnn.utils.setup_ddp_groups(num_groups)
     for group_id, group in enumerate(processes_groups):
-        if torch.distributed.get_rank(group) >= 0:
-           demo_model_parallel(group, group_id)
-           ## How to pick next task?
-           ## Option 1: no codinator option
-           ##    - all writes results to a shared file or with MPI
-           ##    - each group will try to find next parameter
-           ##    - can be a bottleneck
-           ## Option 2: coodinator 
-           ##    - may help in a large scale
-    torch.distributed.barrier()
-    # hydragnn.utils.cleanup(processes_groups)
+        if dist.get_rank(group) >= 0:
+            demo_model_parallel(group_id, group)
+
+    dist.barrier()
+    dist.destroy_process_group()
     print("END")
