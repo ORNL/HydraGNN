@@ -13,6 +13,8 @@ import torch
 from torch import tensor
 from torch_geometric.data import Data
 
+from torch_geometric.transforms import Spherical, LocalCartesian
+
 import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.model import print_model
@@ -26,8 +28,12 @@ import hydragnn.utils.tracer as tr
 
 from hydragnn.utils.print_utils import iterate_tqdm, log
 
-from utils.atoms_to_graphs import AtomsToGraphs
-from utils.preprocess import write_images_to_adios
+from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
+
+from ase.io import read
+
+# transform_coordinates = Spherical(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -42,12 +48,26 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+# transform_coordinates = Spherical(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+
+
 class OpenCatalystDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, data_type, dist=False):
+    def __init__(self, dirpath, var_config, data_type, dist=False, r_pbc=False):
         super().__init__()
 
         self.var_config = var_config
-        self.data_path = os.path.join(dirpath, data_type)
+        self.data_path = dirpath
+
+        self.r_pbc = r_pbc
+        if self.r_pbc:
+            self.radius_graph = RadiusGraphPBC(
+                6.0, loop=False, max_num_neighbors=50
+            )
+        else:
+            self.radius_graph = RadiusGraph(
+                6.0, loop=False, max_num_neighbors=50
+            )
 
         self.dist = dist
         if self.dist:
@@ -55,34 +75,65 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        mx = None
+        trajectories_files_list = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
-            print("Check the number of files:", cmd)
-            out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            mx = int(out.stdout)
-            print("Total the number of files:", mx)
-        mx = MPI.COMM_WORLD.bcast(mx, root=0)
-        if mx == 0:
+            file_path = os.path.join(dirpath, 'oc22_trajectories/trajectories/oc22/', data_type)+'_t.txt'
+            # Open the file and read its contents line by line
+            with open(file_path, 'r') as file:
+                 trajectories_files_list = [line.strip() for line in file.readlines()]
+        trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
+        if len(trajectories_files_list) == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
 
-        ## We assume file names are "%d.txt"
-        rx = list(nsplit(range(mx), self.world_size))[self.rank]
-        chunked_txt_files = list()
-        for n in rx:
-            fname = os.path.join(self.data_path, "%d.txt" % n)
-            chunked_txt_files.append(fname)
+        ## We assume file names are "%d.trj"
+        local_files_list = list(nsplit(trajectories_files_list, self.world_size))[self.rank]
+        log("local files list", len(local_files_list))
 
-        if len(chunked_txt_files) == 0:
-            print(self.rank, "WARN: No files to process. Continue ...")
+        for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
+            self.dataset.extend(self.traj_to_torch_geom(traj_file))
 
-        # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
+    def ase_to_torch_geom(self, atoms):
+        # set the atomic numbers, positions, and cell
+        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
+        positions = torch.Tensor(atoms.get_positions())
+        cell = torch.Tensor(np.array(atoms.get_cell())).view(1, 3, 3)
+        natoms = torch.IntTensor([positions.shape[0]])
+        # initialized to torch.zeros(natoms) if tags missing.
+        # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
+        tags = torch.Tensor(atoms.get_tags())
 
-        self.dataset.extend(
-            write_images_to_adios(a2g, chunked_txt_files, self.data_path)
+        # put the minimum data in torch geometric data object
+        data = Data(
+            cell=cell,
+            pos=positions,
+            atomic_numbers=atomic_numbers,
+            natoms=natoms,
+            tags=tags,
         )
+
+        energy = atoms.get_potential_energy(apply_constraint=False)
+        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        data.energy = energy_tensor
+        data.y = energy_tensor
+
+        forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
+        data.force = forces
+
+        data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
+
+        data = self.radius_graph(data)
+        data = transform_coordinates(data)
+
+        return data
+
+    def traj_to_torch_geom(self, traj_file):
+        traj_file_path=os.path.join(self.data_path,'oc22_trajectories/trajectories/oc22/raw_trajs/', traj_file)
+        traj = read(traj_file_path, ":")
+        data_list = []
+        for step in traj:
+            data_list.append(self.ase_to_torch_geom(step))
+        return data_list
 
     def len(self):
         return len(self.dataset)
@@ -108,13 +159,13 @@ if __name__ == "__main__":
         "--train_path",
         help="path to training data",
         type=str,
-        default="s2ef_train_200K_uncompressed",
+        default="train_s2ef",
     )
     parser.add_argument(
         "--test_path",
         help="path to testing data",
         type=str,
-        default="s2ef_val_id_uncompressed",
+        default="val_id_s2ef",
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -178,13 +229,13 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OC2020" if args.log is None else args.log
+    log_name = "OC2022" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OC2020" if args.modelname is None else args.modelname
+    modelname = "OC2022" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
         trainset = OpenCatalystDataset(
