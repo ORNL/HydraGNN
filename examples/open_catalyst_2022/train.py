@@ -129,7 +129,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
     def traj_to_torch_geom(self, traj_file):
         traj_file_path=os.path.join(self.data_path,'oc22_trajectories/trajectories/oc22/raw_trajs/', traj_file)
-        traj = read(traj_file_path, ":")
+        traj = read(traj_file_path, ":", parallel=False)
         data_list = []
         for step in traj:
             data_list.append(self.ase_to_torch_geom(step))
@@ -253,7 +253,7 @@ if __name__ == "__main__":
         )
         ## Need as a list
         testset = testset[:]
-        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
+        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset), flush=True)
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
