@@ -61,13 +61,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         self.r_pbc = r_pbc
         if self.r_pbc:
-            self.radius_graph = RadiusGraphPBC(
-                6.0, loop=False, max_num_neighbors=50
-            )
+            self.radius_graph = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
         else:
-            self.radius_graph = RadiusGraph(
-                6.0, loop=False, max_num_neighbors=50
-            )
+            self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
 
         self.dist = dist
         if self.dist:
@@ -78,16 +74,21 @@ class OpenCatalystDataset(AbstractBaseDataset):
         trajectories_files_list = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            file_path = os.path.join(dirpath, 'oc22_trajectories/trajectories/oc22/', data_type)+'_t.txt'
+            file_path = (
+                os.path.join(dirpath, "oc22_trajectories/trajectories/oc22/", data_type)
+                + "_t.txt"
+            )
             # Open the file and read its contents line by line
-            with open(file_path, 'r') as file:
-                 trajectories_files_list = [line.strip() for line in file.readlines()]
+            with open(file_path, "r") as file:
+                trajectories_files_list = [line.strip() for line in file.readlines()]
         trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
         if len(trajectories_files_list) == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
 
         ## We assume file names are "%d.trj"
-        local_files_list = list(nsplit(trajectories_files_list, self.world_size))[self.rank]
+        local_files_list = list(nsplit(trajectories_files_list, self.world_size))[
+            self.rank
+        ]
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
@@ -128,7 +129,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
         return data
 
     def traj_to_torch_geom(self, traj_file):
-        traj_file_path=os.path.join(self.data_path,'oc22_trajectories/trajectories/oc22/raw_trajs/', traj_file)
+        traj_file_path = os.path.join(
+            self.data_path, "oc22_trajectories/trajectories/oc22/raw_trajs/", traj_file
+        )
         traj = read(traj_file_path, ":", parallel=False)
         data_list = []
         for step in traj:
@@ -253,7 +256,14 @@ if __name__ == "__main__":
         )
         ## Need as a list
         testset = testset[:]
-        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset), flush=True)
+        print(
+            rank,
+            "Local splitting: ",
+            len(trainset),
+            len(valset),
+            len(testset),
+            flush=True,
+        )
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
