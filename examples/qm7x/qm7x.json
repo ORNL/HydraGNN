@@ -4,7 +4,7 @@
   },
   "NeuralNetwork": {
     "Architecture": {
-      "model_type": "SchNet",
+      "model_type": "EGNN",
       "edge_features": ["bond_length"],
       "equivariance": true,
       "max_neighbours": 20,

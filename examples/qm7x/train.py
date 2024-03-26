@@ -170,7 +170,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="qm7x.json"
     )
-    parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
@@ -260,6 +259,19 @@ if __name__ == "__main__":
 
         setnames = ["trainset", "valset", "testset"]
 
+        ## adios
+        fname = os.path.join(
+            os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+        )
+        adwriter = AdiosWriter(fname, comm)
+        adwriter.add("trainset", trainset)
+        adwriter.add("valset", valset)
+        adwriter.add("testset", testset)
+        # adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
+        # adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
+        adwriter.add_global("pna_deg", deg)
+        adwriter.save()
+
         ## pickle
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
@@ -298,7 +310,21 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
 
-    if args.format == "pickle":
+    if args.format == "adios":
+        info("Adios load")
+        assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
+        opt = {
+            "preload": False,
+            "shmem": args.shmem,
+            "ddstore": args.ddstore,
+            "ddstore_width": args.ddstore_width,
+        }
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
+        valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
+        testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
+
+    elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
@@ -309,16 +335,16 @@ if __name__ == "__main__":
         # minmax_node_feature = trainset.minmax_node_feature
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
-        if args.ddstore:
-            opt = {"ddstore_width": args.ddstore_width}
-            trainset = DistDataset(trainset, "trainset", comm, **opt)
-            valset = DistDataset(valset, "valset", comm, **opt)
-            testset = DistDataset(testset, "testset", comm, **opt)
-            # trainset.minmax_node_feature = minmax_node_feature
-            # trainset.minmax_graph_feature = minmax_graph_feature
-            trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
+    if args.ddstore:
+        opt = {"ddstore_width": args.ddstore_width}
+        trainset = DistDataset(trainset, "trainset", comm, **opt)
+        valset = DistDataset(valset, "valset", comm, **opt)
+        testset = DistDataset(testset, "testset", comm, **opt)
+        # trainset.minmax_node_feature = minmax_node_feature
+        # trainset.minmax_graph_feature = minmax_graph_feature
+        trainset.pna_deg = pna_deg
 
     info(
         "trainset,valset,testset size: %d %d %d"
