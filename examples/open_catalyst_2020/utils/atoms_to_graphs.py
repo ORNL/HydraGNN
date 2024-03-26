@@ -13,12 +13,13 @@ import numpy as np
 
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import Spherical, LocalCartesian
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = LocalCartesian(norm=False, cat=False)
+transform_coordinates = Distance(norm=False, cat=False)
 
 
 class AtomsToGraphs:
