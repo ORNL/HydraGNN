@@ -39,6 +39,7 @@ except ImportError:
     pass
 
 import matplotlib.pyplot as plt
+
 plt.rcParams.update({"font.size": 16})
 
 
@@ -71,12 +72,11 @@ def get_log_name_config(config):
         )
     )
 
+
 def getcolordensity(xdata, ydata):
     ###############################
     nbin = 20
-    hist2d, xbins_edge, ybins_edge = np.histogram2d(
-        x=xdata, y=ydata, bins=[nbin, nbin]
-    )
+    hist2d, xbins_edge, ybins_edge = np.histogram2d(x=xdata, y=ydata, bins=[nbin, nbin])
     xbin_cen = 0.5 * (xbins_edge[0:-1] + xbins_edge[1:])
     ybin_cen = 0.5 * (ybins_edge[0:-1] + ybins_edge[1:])
     BCTY, BCTX = np.meshgrid(ybin_cen, xbin_cen)
@@ -97,8 +97,10 @@ def getcolordensity(xdata, ydata):
     )  # np.nan)
     return hist2d_norm
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
 
 if __name__ == "__main__":
 
@@ -149,9 +151,21 @@ if __name__ == "__main__":
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
-        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=config["NeuralNetwork"]["Variables_of_interest"])
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=config["NeuralNetwork"]["Variables_of_interest"])
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=config["NeuralNetwork"]["Variables_of_interest"])
+        trainset = SimplePickleDataset(
+            basedir=basedir,
+            label="trainset",
+            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+        )
+        valset = SimplePickleDataset(
+            basedir=basedir,
+            label="valset",
+            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+        )
+        testset = SimplePickleDataset(
+            basedir=basedir,
+            label="testset",
+            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+        )
         pna_deg = trainset.pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
@@ -161,15 +175,17 @@ if __name__ == "__main__":
         verbosity=config["Verbosity"]["level"],
     )
 
-    model = torch.nn.parallel.DistributedDataParallel(
-        model
-    )
+    model = torch.nn.parallel.DistributedDataParallel(model)
 
     load_existing_model(model, modelname, path="./logs/")
     model.eval()
 
     variable_index = 0
-    for output_name, output_type, output_dim in zip(config["NeuralNetwork"]["Variables_of_interest"]["output_names"], config["NeuralNetwork"]["Variables_of_interest"]["type"], config["NeuralNetwork"]["Variables_of_interest"]["output_dim"]):
+    for output_name, output_type, output_dim in zip(
+        config["NeuralNetwork"]["Variables_of_interest"]["output_names"],
+        config["NeuralNetwork"]["Variables_of_interest"]["type"],
+        config["NeuralNetwork"]["Variables_of_interest"]["output_dim"],
+    ):
 
         test_MAE = 0.0
 
@@ -183,16 +199,14 @@ if __name__ == "__main__":
             start = data.y_loc[0][variable_index].item()
             end = data.y_loc[0][variable_index + 1].item()
             true = data.y[start:end, 0]
-            test_MAE += torch.norm(predicted - true, p=1).item()/len(testset)
+            test_MAE += torch.norm(predicted - true, p=1).item() / len(testset)
             predicted_values.extend(predicted.tolist())
             true_values.extend(true.tolist())
 
         hist2d_norm = getcolordensity(true_values, predicted_values)
 
         fig, ax = plt.subplots()
-        plt.scatter(
-            true_values, predicted_values, s=8, c=hist2d_norm, vmin=0, vmax=1
-        )
+        plt.scatter(true_values, predicted_values, s=8, c=hist2d_norm, vmin=0, vmax=1)
         plt.clim(0, 1)
         ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
         plt.colorbar()

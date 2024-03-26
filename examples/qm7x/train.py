@@ -39,8 +39,14 @@ qm7x_node_types = {"H": 0, "C": 1, "N": 2, "O": 3, "S": 4, "Cl": 5}
 
 torch.set_default_dtype(torch.float32)
 
-EPBE0_atom = {6: -1027.592489146, 17: -12516.444619523, 1: -13.641404161, \
-              7: -1484.274819088, 8: -2039.734879322, 16: -10828.707468187}
+EPBE0_atom = {
+    6: -1027.592489146,
+    17: -12516.444619523,
+    1: -13.641404161,
+    7: -1484.274819088,
+    8: -2039.734879322,
+    16: -10828.707468187,
+}
 
 
 def info(*args, logtype="info", sep=" "):
@@ -50,7 +56,7 @@ def info(*args, logtype="info", sep=" "):
 from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
-create_graph_fromXYZ = RadiusGraph(r=5.0) # radius cutoff in angstrom
+create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
 compute_edge_lengths = Distance(norm=False, cat=True)
 
 
@@ -63,21 +69,31 @@ def hdf5_to_graph(fMOL, molid):
 
     rx = list(nsplit(range(len(conf_ids)), comm_size))[rank]
 
-    for confid in conf_ids[rx.start:rx.stop]:
+    for confid in conf_ids[rx.start : rx.stop]:
         ## get atomic positions and numbers
-        xyz = torch.from_numpy(np.array(fMOL[molid][confid]['atXYZ'])).to(torch.float32)
-        Z = torch.Tensor(fMOL[molid][confid]['atNUM']).unsqueeze(1).to(torch.float32)
+        xyz = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(torch.float32)
+        Z = torch.Tensor(fMOL[molid][confid]["atNUM"]).unsqueeze(1).to(torch.float32)
 
         ## get quantum mechanical properties and add them to properties buffer
-        forces = torch.from_numpy(np.array(fMOL[molid][confid]['pbe0FOR'])).to(torch.float32)
+        forces = torch.from_numpy(np.array(fMOL[molid][confid]["pbe0FOR"])).to(
+            torch.float32
+        )
         Eatoms = sum([EPBE0_atom[zi.item()] for zi in Z])
-        EPBE0 = float(list(fMOL[molid][confid]['ePBE0'])[0]) # energy
-        EMBD = float(list(fMOL[molid][confid]['eMBD'])[0])
-        hCHG = torch.from_numpy(np.array(fMOL[molid][confid]['hCHG'])).to(torch.float32) # charge
-        POL = float(list(fMOL[molid][confid]['mPOL'])[0])
-        hVDIP = torch.from_numpy(np.array(fMOL[molid][confid]['hVDIP'])).to(torch.float32) # dipole moment
-        HLGAP = torch.tensor(fMOL[molid][confid]['HLgap']).unsqueeze(1).to(torch.float32) # HL gap
-        hRAT = torch.from_numpy(np.array(fMOL[molid][confid]['hRAT'])).to(torch.float32) # hirshfeld ratios
+        EPBE0 = float(list(fMOL[molid][confid]["ePBE0"])[0])  # energy
+        EMBD = float(list(fMOL[molid][confid]["eMBD"])[0])
+        hCHG = torch.from_numpy(np.array(fMOL[molid][confid]["hCHG"])).to(
+            torch.float32
+        )  # charge
+        POL = float(list(fMOL[molid][confid]["mPOL"])[0])
+        hVDIP = torch.from_numpy(np.array(fMOL[molid][confid]["hVDIP"])).to(
+            torch.float32
+        )  # dipole moment
+        HLGAP = (
+            torch.tensor(fMOL[molid][confid]["HLgap"]).unsqueeze(1).to(torch.float32)
+        )  # HL gap
+        hRAT = torch.from_numpy(np.array(fMOL[molid][confid]["hRAT"])).to(
+            torch.float32
+        )  # hirshfeld ratios
 
         data = Data(pos=xyz, x=Z)
         data.x = torch.cat((data.x, forces, hCHG, hVDIP, hRAT), dim=1)
@@ -122,16 +138,15 @@ class QM7XDataset(AbstractBaseDataset):
                 for line in lines:
                     dirlist.append(line.rstrip())
 
-        setids_files = [x for x in dirfiles if x.endswith('hdf5')]
+        setids_files = [x for x in dirfiles if x.endswith("hdf5")]
 
         self.read_setids(dirpath, setids_files)
-
 
     def read_setids(self, dirpath, setids_files):
 
         for setid in setids_files:
             ## load HDF5 file
-            fMOL = h5py.File(dirpath+'/'+setid, 'r')
+            fMOL = h5py.File(dirpath + "/" + setid, "r")
 
             ## get IDs of HDF5 files and loop through
             mol_ids = list(fMOL.keys())
@@ -167,9 +182,7 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument(
-        "--inputfile", help="input file", type=str, default="qm7x.json"
-    )
+    parser.add_argument("--inputfile", help="input file", type=str, default="qm7x.json")
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
@@ -260,9 +273,7 @@ if __name__ == "__main__":
         setnames = ["trainset", "valset", "testset"]
 
         ## adios
-        fname = os.path.join(
-            os.path.dirname(__file__), "./dataset/%s.bp" % modelname
-        )
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         adwriter = AdiosWriter(fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
@@ -329,9 +340,15 @@ if __name__ == "__main__":
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
-        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=var_config)
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=var_config)
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=var_config)
+        trainset = SimplePickleDataset(
+            basedir=basedir, label="trainset", var_config=var_config
+        )
+        valset = SimplePickleDataset(
+            basedir=basedir, label="valset", var_config=var_config
+        )
+        testset = SimplePickleDataset(
+            basedir=basedir, label="testset", var_config=var_config
+        )
         # minmax_node_feature = trainset.minmax_node_feature
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
