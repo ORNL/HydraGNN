@@ -1,7 +1,7 @@
 def generate_dictionary_elements():
 
-  # Original dictionary 
-  periodic_table_atomic_numbers = {
+    # Original dictionary
+    periodic_table_atomic_numbers = {
         1: "H",
         2: "He",
         3: "Li",
@@ -119,10 +119,10 @@ def generate_dictionary_elements():
         115: "Mc",
         116: "Lv",
         117: "Ts",
-        118: "Og"
+        118: "Og",
     }
 
-  # Inverted dictionary using dictionary comprehension
-  inverted_dict = {v: k for k, v in periodic_table_atomic_numbers.items()}
-    
-  return inverted_dict
+    # Inverted dictionary using dictionary comprehension
+    inverted_dict = {v: k for k, v in periodic_table_atomic_numbers.items()}
+
+    return inverted_dict
