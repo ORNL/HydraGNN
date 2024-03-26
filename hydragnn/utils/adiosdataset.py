@@ -149,7 +149,9 @@ class AdiosWriter:
                 if len(vdims) > 0:
                     vdim = vdims[0]
                 val = np.concatenate(arr_list, axis=vdim)
-                assert val.data.contiguous
+                if not val.flags['C_CONTIGUOUS']:
+                    val = np.ascontiguousarray(val)
+                assert val.data.c_contiguous
 
                 shape_list = self.comm.allgather(list(val.shape))
                 offset = [
