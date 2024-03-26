@@ -13,7 +13,7 @@ import torch
 from torch import tensor
 from torch_geometric.data import Data
 
-from torch_geometric.transforms import Spherical, LocalCartesian
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
 from hydragnn.utils.time_utils import Timer
@@ -29,7 +29,7 @@ import hydragnn.utils.tracer as tr
 
 from hydragnn.utils.print_utils import iterate_tqdm, log
 
-from jarvis.db.jsonutils import loadjson,dumpjson
+from jarvis.db.jsonutils import loadjson, dumpjson
 from pymatgen.core.structure import Structure
 from jarvis.core.atoms import pmg_to_atoms
 from utils.generate_dictionary import generate_dictionary_elements
@@ -50,7 +50,8 @@ def info(*args, logtype="info", sep=" "):
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = LocalCartesian(norm=False, cat=False)
+transform_coordinates = Distance(norm=False, cat=False)
 
 
 class MPTrjDataset(AbstractBaseDataset):
@@ -60,9 +61,7 @@ class MPTrjDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
 
-        self.radius_graph = RadiusGraph(
-                5.0, loop=False, max_num_neighbors=50
-            )
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
         self.dist = dist
         if self.dist:
@@ -72,42 +71,46 @@ class MPTrjDataset(AbstractBaseDataset):
 
         d = None
         if tmpfs is None:
-            d=loadjson(os.path.join(dirpath, 'MPtrj_2022.9_full.json'))
+            d = loadjson(os.path.join(dirpath, "MPtrj_2022.9_full.json"))
         else:
-            d=loadjson(os.path.join(tmpfs, 'MPtrj_2022.9_full.json'))
+            d = loadjson(os.path.join(tmpfs, "MPtrj_2022.9_full.json"))
 
-        mpids=list(d.keys())
+        mpids = list(d.keys())
 
-        dataset=[]
+        dataset = []
 
-        if (not self.dist):
+        if not self.dist:
             mpids_loc = mpids
         else:
             mpids_loc = list(nsplit(mpids, self.world_size))[self.rank]
 
         for i in mpids_loc:
 
-            tmp=d[i]
+            tmp = d[i]
 
-            for j,k in tmp.items():
+            for j, k in tmp.items():
 
-                info={}
+                info = {}
 
-                info['jid']=j
+                info["jid"] = j
 
-                info['total_energy']=k['energy_per_atom']
+                info["total_energy"] = k["energy_per_atom"]
 
-                info['forces']=k['force']
+                info["forces"] = k["force"]
 
-                info['stresses']=k['stress']
+                info["stresses"] = k["stress"]
 
-                info['atoms']=pmg_to_atoms(Structure.from_dict(k['structure'])).to_dict()
+                info["atoms"] = pmg_to_atoms(
+                    Structure.from_dict(k["structure"])
+                ).to_dict()
 
-                info['magmom']=k['magmom']
+                info["magmom"] = k["magmom"]
 
                 # Convert lists to PyTorch tensors
-                lattice_mat = torch.tensor(info['atoms']['lattice_mat'], dtype=torch.float32)
-                coords = torch.tensor(info['atoms']['coords'], dtype=torch.float32)
+                lattice_mat = torch.tensor(
+                    info["atoms"]["lattice_mat"], dtype=torch.float32
+                )
+                coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
                 # Multiply 'lattice_mat' by the transpose of 'coords'
                 result = torch.matmul(lattice_mat, coords.T)
@@ -116,14 +119,17 @@ class MPTrjDataset(AbstractBaseDataset):
                 positions = result.T.clone().detach()
 
                 # Extracting data from info dictionary
-                total_energy = info['total_energy']
-                forces = info['forces']
-                stresses = info['stresses']
-                magmom = info['magmom']
-                atoms_dict = info['atoms']
+                total_energy = info["total_energy"]
+                forces = info["forces"]
+                stresses = info["stresses"]
+                magmom = info["magmom"]
+                atoms_dict = info["atoms"]
 
                 # Converting positions and atomic numbers to torch tensors
-                atomic_numbers = torch.tensor([inverted_dict[element] for element in atoms_dict['elements']], dtype=torch.float32).view(-1, 1)
+                atomic_numbers = torch.tensor(
+                    [inverted_dict[element] for element in atoms_dict["elements"]],
+                    dtype=torch.float32,
+                ).view(-1, 1)
                 energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(0)
                 forces = torch.tensor(forces, dtype=torch.float32)
                 x = torch.cat([atomic_numbers, positions, forces], dim=1)
@@ -133,12 +139,12 @@ class MPTrjDataset(AbstractBaseDataset):
                     supercell_size=lattice_mat,
                     energy=energy,
                     force=forces,
-                    #stress=torch.tensor(stresses, dtype=torch.float32),
-                    #magmom=torch.tensor(magmom, dtype=torch.float32),
+                    # stress=torch.tensor(stresses, dtype=torch.float32),
+                    # magmom=torch.tensor(magmom, dtype=torch.float32),
                     pos=positions,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     x=x,
-                    y=energy
+                    y=energy,
                 )
 
                 data = self.radius_graph(data)
@@ -185,7 +191,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
-    parser.add_argument("--tmpfs", default=None, help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.")
+    parser.add_argument(
+        "--tmpfs",
+        default=None,
+        help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.",
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -251,7 +261,11 @@ if __name__ == "__main__":
     if args.preonly:
         ## local data
         total = MPTrjDataset(
-            os.path.join(datadir), var_config, data_type=args.train_path, dist=True, tmpfs=args.tmpfs
+            os.path.join(datadir),
+            var_config,
+            data_type=args.train_path,
+            dist=True,
+            tmpfs=args.tmpfs,
         )
         ## This is a local split
         trainset, valset, testset = split_dataset(

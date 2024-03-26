@@ -18,7 +18,7 @@
             "num_radial": 6,
             "num_spherical": 7,
             "num_filters": 126,
-            "edge_features": ["coord_x", "coord_y", "coord_z"],
+            "edge_features": ["length"],
             "hidden_dim": 50,
             "num_conv_layers": 3,
             "output_heads": {
