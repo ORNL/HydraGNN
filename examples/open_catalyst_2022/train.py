@@ -13,7 +13,7 @@ import torch
 from torch import tensor
 from torch_geometric.data import Data
 
-from torch_geometric.transforms import Spherical, LocalCartesian
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
 from hydragnn.utils.time_utils import Timer
@@ -32,9 +32,6 @@ from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
 
 from ase.io import read
 
-# transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
-
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
@@ -49,7 +46,8 @@ def info(*args, logtype="info", sep=" "):
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = LocalCartesian(norm=False, cat=False)
+transform_coordinates = Distance(norm=False, cat=False)
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
