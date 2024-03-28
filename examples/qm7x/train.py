@@ -96,7 +96,7 @@ def hdf5_to_graph(fMOL, molid):
         )  # hirshfeld ratios
 
         data = Data(pos=xyz, x=Z)
-        data.x = torch.cat((data.x, forces, hCHG, hVDIP, hRAT), dim=1)
+        data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
         data.y = HLGAP
 
         data = create_graph_fromXYZ(data)
@@ -210,8 +210,8 @@ if __name__ == "__main__":
 
     graph_feature_names = ["HLGAP"]
     graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "forces", "hCHG", "hVDIP", "hRAT"]
-    node_feature_dims = [1, 3, 1, 1, 1]
+    node_feature_names = ["atomic_number", "coordinates", "forces", "hCHG", "hVDIP", "hRAT"]
+    node_feature_dims = [1, 3, 3, 1, 1, 1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset/QM7-X")
     ##################################################################################################################

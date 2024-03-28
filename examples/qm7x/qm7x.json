@@ -42,7 +42,7 @@
       ]
     },
     "Variables_of_interest": {
-      "input_node_features": [0],
+      "input_node_features": [0, 1, 2, 3],
       "output_index": [
         0, 1, 2, 3, 4
       ],
