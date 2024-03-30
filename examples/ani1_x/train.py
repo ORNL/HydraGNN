@@ -29,13 +29,6 @@ import hydragnn.utils.tracer as tr
 
 from hydragnn.utils.print_utils import iterate_tqdm, log
 
-from jarvis.db.jsonutils import loadjson, dumpjson
-from pymatgen.core.structure import Structure
-from jarvis.core.atoms import pmg_to_atoms
-from utils.generate_dictionary import generate_dictionary_elements
-
-inverted_dict = generate_dictionary_elements()
-
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
@@ -44,6 +37,7 @@ except ImportError:
 import subprocess
 from hydragnn.utils import nsplit
 
+import h5py
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -54,11 +48,14 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = Distance(norm=False, cat=False)
 
 
-class MPTrjDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, dist=False, tmpfs=None):
+class ANI1xDataset(AbstractBaseDataset):
+
+    def __init__(self, dirpath, var_config, dist=False):
         super().__init__()
 
         self.var_config = var_config
+        self.data_path = os.path.join(dirpath, 'ani1x-release.h5')
+        self.data_keys = ['wb97x_dz.energy','wb97x_dz.forces']
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
@@ -68,88 +65,74 @@ class MPTrjDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        d = None
-        if tmpfs is None:
-            d = loadjson(os.path.join(dirpath, "MPtrj_2022.9_full.json"))
-        else:
-            d = loadjson(os.path.join(tmpfs, "MPtrj_2022.9_full.json"))
+        self.convert_trajectories_to_graphs()
 
-        mpids = list(d.keys())
 
-        dataset = []
+    def convert_trajectories_to_graphs(self):
 
-        if not self.dist:
-            mpids_loc = mpids
-        else:
-            mpids_loc = list(nsplit(mpids, self.world_size))[self.rank]
+        # Example for extracting DFT/DZ energies and forces
+        for data_trj in self.iter_data_buckets(self.data_path,keys=self.data_keys):
 
-        for i in mpids_loc:
+            X = data_trj['coordinates']
+            Z = data_trj['atomic_numbers']
+            E = data_trj['wb97x_dz.energy']
+            F = data_trj['wb97x_dz.forces']
 
-            tmp = d[i]
+            # atomic numbers
+            atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
 
-            for j, k in tmp.items():
+            global_trajectories_id = range(X.shape[0])
+            if self.dist:
+                local_trajectories_id = list(nsplit(global_trajectories_id, self.world_size))[self.rank]
+            else:
+                local_trajectories_id = global_trajectories_id
 
-                info = {}
+            # extract positions, energies, and forces for each step 
+            for frame_id in local_trajectories_id:
 
-                info["jid"] = j
-
-                info["total_energy"] = k["energy_per_atom"]
-
-                info["forces"] = k["force"]
-
-                info["stresses"] = k["stress"]
-
-                info["atoms"] = pmg_to_atoms(
-                    Structure.from_dict(k["structure"])
-                ).to_dict()
-
-                info["magmom"] = k["magmom"]
-
-                # Convert lists to PyTorch tensors
-                lattice_mat = torch.tensor(
-                    info["atoms"]["lattice_mat"], dtype=torch.float32
-                )
-                coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
-
-                # Multiply 'lattice_mat' by the transpose of 'coords'
-                result = torch.matmul(lattice_mat, coords.T)
-
-                # Transpose the result
-                positions = result.T.clone().detach()
-
-                # Extracting data from info dictionary
-                total_energy = info["total_energy"]
-                forces = info["forces"]
-                stresses = info["stresses"]
-                magmom = info["magmom"]
-                atoms_dict = info["atoms"]
-
-                # Converting positions and atomic numbers to torch tensors
-                atomic_numbers = torch.tensor(
-                    [inverted_dict[element] for element in atoms_dict["elements"]],
-                    dtype=torch.float32,
-                ).view(-1, 1)
-                energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(0)
-                forces = torch.tensor(forces, dtype=torch.float32)
+                positions = torch.from_numpy(X[frame_id]).to(torch.float32)
+                energy = torch.tensor(E[frame_id]).unsqueeze(0).unsqueeze(1).to(torch.float32)
+                forces = torch.from_numpy(F[frame_id]).to(torch.float32)
                 x = torch.cat([atomic_numbers, positions, forces], dim=1)
 
-                # Creating the Data object
                 data = Data(
-                    supercell_size=lattice_mat,
-                    energy=energy,
-                    force=forces,
-                    # stress=torch.tensor(stresses, dtype=torch.float32),
-                    # magmom=torch.tensor(magmom, dtype=torch.float32),
-                    pos=positions,
-                    atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
-                    x=x,
-                    y=energy,
-                )
+                            energy=energy,
+                            force=forces,
+                            # stress=torch.tensor(stresses, dtype=torch.float32),
+                            # magmom=torch.tensor(magmom, dtype=torch.float32),
+                            pos=positions,
+                            atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
+                            x=x,
+                            y=energy,
+                        )
 
                 data = self.radius_graph(data)
                 data = transform_coordinates(data)
 
                 self.dataset.append(data)
+
+    def iter_data_buckets(self, h5filename, keys=['wb97x_dz.energy']):
+        """ Iterate over buckets of data in ANI HDF5 file. 
+        Yields dicts with atomic numbers (shape [Na,]) coordinated (shape [Nc, Na, 3])
+        and other available properties specified by `keys` list, w/o NaN values.
+        """
+        keys = set(keys)
+        keys.discard('atomic_numbers')
+        keys.discard('coordinates')
+        with h5py.File(h5filename, 'r') as f:
+            for grp in f.values():
+                Nc = grp['coordinates'].shape[0]
+                mask = np.ones(Nc, dtype=np.bool_)
+                data = dict((k, grp[k][()]) for k in keys)
+                for k in keys:
+                    v = data[k].reshape(Nc, -1)
+                    mask = mask & ~np.isnan(v).any(axis=1)
+                if not np.sum(mask):
+                    continue
+                d = dict((k, data[k][mask]) for k in keys)
+                d['atomic_numbers'] = grp['atomic_numbers'][()]
+                d['coordinates'] = grp['coordinates'][()][mask]
+                yield d 
 
     def len(self):
         return len(self.dataset)
@@ -169,7 +152,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="mptrj_energy.json"
+        "--inputfile", help="input file", type=str, default="ani1x_energy.json"
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -178,12 +161,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
-    parser.add_argument(
-        "--tmpfs",
-        default=None,
-        help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.",
-    )
-
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -238,20 +215,19 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "MPTrj" if args.log is None else args.log
+    log_name = "ANI1x" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "MPTrj" if args.modelname is None else args.modelname
+    modelname = "ANI1x" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
-        total = MPTrjDataset(
+        total = ANI1xDataset(
             os.path.join(datadir),
             var_config,
             dist=True,
-            tmpfs=args.tmpfs,
         )
         ## This is a local split
         trainset, valset, testset = split_dataset(
