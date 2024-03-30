@@ -39,6 +39,7 @@ from hydragnn.utils import nsplit
 
 import h5py
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -49,13 +50,12 @@ transform_coordinates = Distance(norm=False, cat=False)
 
 
 class ANI1xDataset(AbstractBaseDataset):
-
     def __init__(self, dirpath, var_config, dist=False):
         super().__init__()
 
         self.var_config = var_config
-        self.data_path = os.path.join(dirpath, 'ani1x-release.h5')
-        self.data_keys = ['wb97x_dz.energy','wb97x_dz.forces']
+        self.data_path = os.path.join(dirpath, "ani1x-release.h5")
+        self.data_keys = ["wb97x_dz.energy", "wb97x_dz.forces"]
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
@@ -67,61 +67,67 @@ class ANI1xDataset(AbstractBaseDataset):
 
         self.convert_trajectories_to_graphs()
 
-
     def convert_trajectories_to_graphs(self):
 
         # Example for extracting DFT/DZ energies and forces
-        for data_trj in self.iter_data_buckets(self.data_path,keys=self.data_keys):
+        for data_trj in self.iter_data_buckets(self.data_path, keys=self.data_keys):
 
-            X = data_trj['coordinates']
-            Z = data_trj['atomic_numbers']
-            E = data_trj['wb97x_dz.energy']
-            F = data_trj['wb97x_dz.forces']
+            X = data_trj["coordinates"]
+            Z = data_trj["atomic_numbers"]
+            E = data_trj["wb97x_dz.energy"]
+            F = data_trj["wb97x_dz.forces"]
 
             # atomic numbers
             atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
 
             global_trajectories_id = range(X.shape[0])
             if self.dist:
-                local_trajectories_id = list(nsplit(global_trajectories_id, self.world_size))[self.rank]
+                local_trajectories_id = list(
+                    nsplit(global_trajectories_id, self.world_size)
+                )[self.rank]
             else:
                 local_trajectories_id = global_trajectories_id
 
-            # extract positions, energies, and forces for each step 
+            # extract positions, energies, and forces for each step
             for frame_id in local_trajectories_id:
 
                 positions = torch.from_numpy(X[frame_id]).to(torch.float32)
-                energy = torch.tensor(E[frame_id]).unsqueeze(0).unsqueeze(1).to(torch.float32)
+                energy = (
+                    torch.tensor(E[frame_id])
+                    .unsqueeze(0)
+                    .unsqueeze(1)
+                    .to(torch.float32)
+                )
                 forces = torch.from_numpy(F[frame_id]).to(torch.float32)
                 x = torch.cat([atomic_numbers, positions, forces], dim=1)
 
                 data = Data(
-                            energy=energy,
-                            force=forces,
-                            # stress=torch.tensor(stresses, dtype=torch.float32),
-                            # magmom=torch.tensor(magmom, dtype=torch.float32),
-                            pos=positions,
-                            atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
-                            x=x,
-                            y=energy,
-                        )
+                    energy=energy,
+                    force=forces,
+                    # stress=torch.tensor(stresses, dtype=torch.float32),
+                    # magmom=torch.tensor(magmom, dtype=torch.float32),
+                    pos=positions,
+                    atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
+                    x=x,
+                    y=energy,
+                )
 
                 data = self.radius_graph(data)
                 data = transform_coordinates(data)
 
                 self.dataset.append(data)
 
-    def iter_data_buckets(self, h5filename, keys=['wb97x_dz.energy']):
-        """ Iterate over buckets of data in ANI HDF5 file. 
+    def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
+        """Iterate over buckets of data in ANI HDF5 file.
         Yields dicts with atomic numbers (shape [Na,]) coordinated (shape [Nc, Na, 3])
         and other available properties specified by `keys` list, w/o NaN values.
         """
         keys = set(keys)
-        keys.discard('atomic_numbers')
-        keys.discard('coordinates')
-        with h5py.File(h5filename, 'r') as f:
+        keys.discard("atomic_numbers")
+        keys.discard("coordinates")
+        with h5py.File(h5filename, "r") as f:
             for grp in f.values():
-                Nc = grp['coordinates'].shape[0]
+                Nc = grp["coordinates"].shape[0]
                 mask = np.ones(Nc, dtype=np.bool_)
                 data = dict((k, grp[k][()]) for k in keys)
                 for k in keys:
@@ -130,9 +136,9 @@ class ANI1xDataset(AbstractBaseDataset):
                 if not np.sum(mask):
                     continue
                 d = dict((k, data[k][mask]) for k in keys)
-                d['atomic_numbers'] = grp['atomic_numbers'][()]
-                d['coordinates'] = grp['coordinates'][()][mask]
-                yield d 
+                d["atomic_numbers"] = grp["atomic_numbers"][()]
+                d["coordinates"] = grp["coordinates"][()][mask]
+                yield d
 
     def len(self):
         return len(self.dataset)
