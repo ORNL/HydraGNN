@@ -183,7 +183,6 @@ if __name__ == "__main__":
         type=bool,
         default=True,
     )
-
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
@@ -196,7 +195,6 @@ if __name__ == "__main__":
         default=None,
         help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.",
     )
-
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
