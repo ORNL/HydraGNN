@@ -150,17 +150,17 @@ class QM7XDataset(AbstractBaseDataset):
                 torch.tensor(sum([EPBE0_atom[zi.item()] for zi in Z]))
                 .unsqueeze(0)
                 .to(torch.float32)
-            ) # eatoms
+            )  # eatoms
             EPBE0 = (
                 torch.tensor(float(list(fMOL[molid][confid]["ePBE0"])[0]))
                 .unsqueeze(0)
                 .to(torch.float32)
-            ) # energy
+            )  # energy
             EMBD = (
                 torch.tensor(float(list(fMOL[molid][confid]["eMBD"])[0]))
                 .unsqueeze(0)
                 .to(torch.float32)
-            ) # embd
+            )  # embd
             hCHG = torch.from_numpy(np.array(fMOL[molid][confid]["hCHG"])).to(
                 torch.float32
             )  # charge
