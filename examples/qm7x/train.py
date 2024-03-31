@@ -60,66 +60,16 @@ create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
 compute_edge_lengths = Distance(norm=False, cat=True)
 
 
-def hdf5_to_graph(fMOL, molid):
-
-    subset = []
-
-    ## get IDs of individual configurations/conformations of molecule
-    conf_ids = list(fMOL[molid].keys())
-
-    rx = list(nsplit(range(len(conf_ids)), comm_size))[rank]
-
-    for confid in conf_ids[rx.start : rx.stop]:
-        ## get atomic positions and numbers
-        xyz = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(torch.float32)
-        Z = torch.Tensor(fMOL[molid][confid]["atNUM"]).unsqueeze(1).to(torch.float32)
-
-        ## get quantum mechanical properties and add them to properties buffer
-        forces = torch.from_numpy(np.array(fMOL[molid][confid]["pbe0FOR"])).to(
-            torch.float32
-        )
-        Eatoms = sum([EPBE0_atom[zi.item()] for zi in Z])
-        EPBE0 = float(list(fMOL[molid][confid]["ePBE0"])[0])  # energy
-        EMBD = float(list(fMOL[molid][confid]["eMBD"])[0])
-        hCHG = torch.from_numpy(np.array(fMOL[molid][confid]["hCHG"])).to(
-            torch.float32
-        )  # charge
-        POL = float(list(fMOL[molid][confid]["mPOL"])[0])
-        hVDIP = torch.from_numpy(np.array(fMOL[molid][confid]["hVDIP"])).to(
-            torch.float32
-        )  # dipole moment
-        HLGAP = (
-            torch.tensor(fMOL[molid][confid]["HLgap"]).unsqueeze(1).to(torch.float32)
-        )  # HL gap
-        hRAT = torch.from_numpy(np.array(fMOL[molid][confid]["hRAT"])).to(
-            torch.float32
-        )  # hirshfeld ratios
-
-        data = Data(pos=xyz, x=Z)
-        data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
-        data.y = HLGAP
-
-        data = create_graph_fromXYZ(data)
-
-        # Add edge length as edge feature
-        data = compute_edge_lengths(data)
-        data.edge_attr = data.edge_attr.to(torch.float32)
-
-        # FIXME: Question from Max to David: "David, do you want also edge attributes? Spherical coordinates?"
-
-        subset.append(data)
-
-    return subset
-
-
 class QM7XDataset(AbstractBaseDataset):
     """QM7-XDataset dataset class"""
 
-    def __init__(self, dirpath, var_config, dist=False):
+    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
         super().__init__()
 
         self.qm7x_node_types = qm7x_node_types
         self.var_config = var_config
+        self.energy_per_atom = energy_per_atom
+
         self.dist = dist
         if self.dist:
             assert torch.distributed.is_initialized()
@@ -163,7 +113,72 @@ class QM7XDataset(AbstractBaseDataset):
                 log("molecule dirlist", len(mol_ids))
 
             for mol_id in iterate_tqdm(mol_ids, verbosity_level=2, desc="Load"):
-                self.dataset.extend(hdf5_to_graph(fMOL, mol_id))
+                self.dataset.extend(self.hdf5_to_graph(fMOL, mol_id))
+
+    def hdf5_to_graph(self, fMOL, molid):
+
+        subset = []
+
+        ## get IDs of individual configurations/conformations of molecule
+        conf_ids = list(fMOL[molid].keys())
+
+        rx = list(nsplit(range(len(conf_ids)), comm_size))[rank]
+
+        for confid in conf_ids[rx.start : rx.stop]:
+            ## get atomic positions and numbers
+            xyz = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(
+                torch.float32
+            )
+            Z = (
+                torch.Tensor(fMOL[molid][confid]["atNUM"])
+                .unsqueeze(1)
+                .to(torch.float32)
+            )
+
+            natoms = xyz.shape[0]
+
+            ## get quantum mechanical properties and add them to properties buffer
+            forces = torch.from_numpy(np.array(fMOL[molid][confid]["pbe0FOR"])).to(
+                torch.float32
+            )
+            Eatoms = sum([EPBE0_atom[zi.item()] for zi in Z])
+            EPBE0 = float(list(fMOL[molid][confid]["ePBE0"])[0])  # energy
+            EMBD = float(list(fMOL[molid][confid]["eMBD"])[0])
+            hCHG = torch.from_numpy(np.array(fMOL[molid][confid]["hCHG"])).to(
+                torch.float32
+            )  # charge
+            POL = float(list(fMOL[molid][confid]["mPOL"])[0])
+            hVDIP = torch.from_numpy(np.array(fMOL[molid][confid]["hVDIP"])).to(
+                torch.float32
+            )  # dipole moment
+            HLGAP = (
+                torch.tensor(fMOL[molid][confid]["HLgap"])
+                .unsqueeze(1)
+                .to(torch.float32)
+            )  # HL gap
+            hRAT = torch.from_numpy(np.array(fMOL[molid][confid]["hRAT"])).to(
+                torch.float32
+            )  # hirshfeld ratios
+
+            data = Data(pos=xyz, x=Z)
+            data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
+
+            if self.energy_per_atom:
+                data.y = EPBE0 / natoms
+            else:
+                data.y = EPBE0
+
+            data = create_graph_fromXYZ(data)
+
+            # Add edge length as edge feature
+            data = compute_edge_lengths(data)
+            data.edge_attr = data.edge_attr.to(torch.float32)
+
+            # FIXME: Question from Max to David: "David, do you want also edge attributes? Spherical coordinates?"
+
+            subset.append(data)
+
+        return subset
 
     def len(self):
         return len(self.dataset)
