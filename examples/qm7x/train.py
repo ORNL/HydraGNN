@@ -30,6 +30,11 @@ from torch_geometric.transforms import RadiusGraph, Distance
 import torch
 import torch.distributed as dist
 
+try:
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
+
 from hydragnn.utils import nsplit
 import hydragnn.utils.tracer as tr
 
@@ -301,47 +306,51 @@ if __name__ == "__main__":
         setnames = ["trainset", "valset", "testset"]
 
         ## adios
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
-        adwriter = AdiosWriter(fname, comm)
-        adwriter.add("trainset", trainset)
-        adwriter.add("valset", valset)
-        adwriter.add("testset", testset)
-        # adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
-        # adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
-        adwriter.add_global("pna_deg", deg)
-        adwriter.save()
+        if args.format == "adios":
+            fname = os.path.join(
+                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+            )
+            adwriter = AdiosWriter(fname, comm)
+            adwriter.add("trainset", trainset)
+            adwriter.add("valset", valset)
+            adwriter.add("testset", testset)
+            # adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
+            # adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
+            adwriter.add_global("pna_deg", deg)
+            adwriter.save()
 
         ## pickle
-        basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-        )
-        attrs = dict()
-        attrs["pna_deg"] = deg
-        SimplePickleWriter(
-            trainset,
-            basedir,
-            "trainset",
-            # minmax_node_feature=total.minmax_node_feature,
-            # minmax_graph_feature=total.minmax_graph_feature,
-            use_subdir=True,
-            attrs=attrs,
-        )
-        SimplePickleWriter(
-            valset,
-            basedir,
-            "valset",
-            # minmax_node_feature=total.minmax_node_feature,
-            # minmax_graph_feature=total.minmax_graph_feature,
-            use_subdir=True,
-        )
-        SimplePickleWriter(
-            testset,
-            basedir,
-            "testset",
-            # minmax_node_feature=total.minmax_node_feature,
-            # minmax_graph_feature=total.minmax_graph_feature,
-            use_subdir=True,
-        )
+        elif args.format == "pickle":
+            basedir = os.path.join(
+                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            )
+            attrs = dict()
+            attrs["pna_deg"] = deg
+            SimplePickleWriter(
+                trainset,
+                basedir,
+                "trainset",
+                # minmax_node_feature=total.minmax_node_feature,
+                # minmax_graph_feature=total.minmax_graph_feature,
+                use_subdir=True,
+                attrs=attrs,
+            )
+            SimplePickleWriter(
+                valset,
+                basedir,
+                "valset",
+                # minmax_node_feature=total.minmax_node_feature,
+                # minmax_graph_feature=total.minmax_graph_feature,
+                use_subdir=True,
+            )
+            SimplePickleWriter(
+                testset,
+                basedir,
+                "testset",
+                # minmax_node_feature=total.minmax_node_feature,
+                # minmax_graph_feature=total.minmax_graph_feature,
+                use_subdir=True,
+            )
         sys.exit(0)
 
     tr.initialize()
