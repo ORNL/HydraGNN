@@ -43,11 +43,14 @@ def info(*args, logtype="info", sep=" "):
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, data_type, dist=False):
+    def __init__(
+        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
+    ):
         super().__init__()
 
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
+        self.energy_per_atom = energy_per_atom
 
         self.dist = dist
         if self.dist:
@@ -81,7 +84,12 @@ class OpenCatalystDataset(AbstractBaseDataset):
         a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
 
         self.dataset.extend(
-            write_images_to_adios(a2g, chunked_txt_files, self.data_path)
+            write_images_to_adios(
+                a2g,
+                chunked_txt_files,
+                self.data_path,
+                energy_per_atom=self.energy_per_atom,
+            )
         )
 
     def len(self):
@@ -115,6 +123,12 @@ if __name__ == "__main__":
         help="path to testing data",
         type=str,
         default="s2ef_val_id_uncompressed",
+    )
+    parser.add_argument(
+        "--energy_per_atom",
+        help="option to normalize energy by number of atoms",
+        type=bool,
+        default=True,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -188,7 +202,11 @@ if __name__ == "__main__":
     if args.preonly:
         ## local data
         trainset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.train_path, dist=True
+            os.path.join(datadir),
+            var_config,
+            data_type=args.train_path,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
         )
         ## This is a local split
         trainset, valset1, valset2 = split_dataset(

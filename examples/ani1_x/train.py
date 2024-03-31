@@ -50,12 +50,13 @@ transform_coordinates = Distance(norm=False, cat=False)
 
 
 class ANI1xDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, dist=False):
+    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
         super().__init__()
 
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, "ani1x-release.h5")
         self.data_keys = ["wb97x_dz.energy", "wb97x_dz.forces"]
+        self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
@@ -80,6 +81,8 @@ class ANI1xDataset(AbstractBaseDataset):
             # atomic numbers
             atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
 
+            natoms = X.shape[1]
+
             global_trajectories_id = range(X.shape[0])
             if self.dist:
                 local_trajectories_id = list(
@@ -98,12 +101,15 @@ class ANI1xDataset(AbstractBaseDataset):
                     .unsqueeze(1)
                     .to(torch.float32)
                 )
+                if self.energy_per_atom:
+                    energy /= natoms
                 forces = torch.from_numpy(F[frame_id]).to(torch.float32)
                 x = torch.cat([atomic_numbers, positions, forces], dim=1)
 
                 data = Data(
                     energy=energy,
                     force=forces,
+                    natoms=natoms,
                     # stress=torch.tensor(stresses, dtype=torch.float32),
                     # magmom=torch.tensor(magmom, dtype=torch.float32),
                     pos=positions,
@@ -159,6 +165,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="ani1x_energy.json"
+    )
+    parser.add_argument(
+        "--energy_per_atom",
+        help="option to normalize energy by number of atoms",
+        type=bool,
+        default=True,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -233,6 +245,7 @@ if __name__ == "__main__":
         total = ANI1xDataset(
             os.path.join(datadir),
             var_config,
+            energy_per_atom=args.energy_per_atom,
             dist=True,
         )
         ## This is a local split

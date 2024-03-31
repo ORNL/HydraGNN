@@ -67,6 +67,7 @@ class AtomsToGraphs:
     def convert(
         self,
         atoms,
+        energy_per_atom,
     ):
         """Convert a single atomic stucture to a graph.
 
@@ -99,6 +100,8 @@ class AtomsToGraphs:
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        if energy_per_atom:
+            energy_tensor /= natoms
         data.energy = energy_tensor
         data.y = energy_tensor
 

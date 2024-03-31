@@ -55,10 +55,13 @@ transform_coordinates = Distance(norm=False, cat=False)
 
 
 class MPTrjDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, dist=False, tmpfs=None):
+    def __init__(
+        self, dirpath, var_config, energy_per_atom=True, dist=False, tmpfs=None
+    ):
         super().__init__()
 
         self.var_config = var_config
+        self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
@@ -93,7 +96,10 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 info["jid"] = j
 
-                info["total_energy"] = k["energy_per_atom"]
+                if self.energy_per_atom:
+                    info["total_energy"] = k["energy_per_atom"]
+                else:
+                    info["total_energy"] = k["corrected_total_energy"]
 
                 info["forces"] = k["force"]
 
