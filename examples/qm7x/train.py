@@ -174,8 +174,6 @@ class QM7XDataset(AbstractBaseDataset):
             data = compute_edge_lengths(data)
             data.edge_attr = data.edge_attr.to(torch.float32)
 
-            # FIXME: Question from Max to David: "David, do you want also edge attributes? Spherical coordinates?"
-
             subset.append(data)
 
         return subset
@@ -223,7 +221,7 @@ if __name__ == "__main__":
     parser.set_defaults(format="adios")
     args = parser.parse_args()
 
-    graph_feature_names = ["HLGAP"]
+    graph_feature_names = ["energy"]
     graph_feature_dims = [1]
     node_feature_names = [
         "atomic_number",
