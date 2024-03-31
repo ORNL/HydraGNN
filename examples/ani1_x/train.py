@@ -81,7 +81,7 @@ class ANI1xDataset(AbstractBaseDataset):
             # atomic numbers
             atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
 
-            natoms = X.shape[1]
+            natoms = torch.IntTensor([X.shape[1]])
 
             global_trajectories_id = range(X.shape[0])
             if self.dist:
