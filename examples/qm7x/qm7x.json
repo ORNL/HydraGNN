@@ -1,0 +1,67 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "model_type": "EGNN",
+      "edge_features": ["bond_length"],
+      "equivariance": true,
+      "max_neighbours": 20,
+      "num_gaussians": 50,
+      "num_filters": 50,
+      "envelope_exponent": 5,
+      "int_emb_size": 64,
+      "basis_emb_size": 8,
+      "out_emb_size": 128,
+      "num_after_skip": 2,
+      "num_before_skip": 1,
+      "num_radial": 6,
+      "num_spherical": 7,
+      "radius": 5,
+      "hidden_dim": 200,
+      "num_conv_layers": 6,
+      "output_heads": {
+        "graph": {
+          "num_sharedlayers": 2,
+          "dim_sharedlayers": 200,
+          "num_headlayers": 2,
+          "dim_headlayers": [
+            1000,
+            1000
+          ]
+        },
+        "node": {
+          "num_headlayers": 2,
+          "dim_headlayers": [1000,1000],
+          "type": "mlp"
+        }
+      },
+      "task_weights": [
+        1, 1, 1, 1, 1
+      ]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [0, 1, 2, 3],
+      "output_index": [
+        0, 1, 2, 3, 4
+      ],
+      "type": [
+        "graph", "node", "node", "node", "node"
+      ],
+      "output_dim": [1, 3, 1, 1, 1],
+      "output_names": ["HLGAP", "forces", "hCHG", "hVDIP", "hRAT"],
+      "denormalize_output": false
+    },
+    "Training": {
+      "Checkpoint" : true,
+      "num_epoch": 20,
+      "batch_size": 32,
+      "continue": 1,
+      "startfrom": "/gpfs/alpine/lrn026/world-shared/HydraGNN_Max_QM7X/HydraGNN/logs/qm7x_fullx/qm7x_fullx",
+      "Optimizer": {
+        "learning_rate": 0.001
+      }
+    }
+  }
+}
