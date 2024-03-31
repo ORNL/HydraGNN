@@ -277,4 +277,4 @@ def save_config(config, log_name, path="./logs/"):
     if world_rank == 0:
         fname = os.path.join(path, log_name, "config.json")
         with open(fname, "w") as f:
-            json.dump(config, f)
+            json.dump(config, f, indent=4)

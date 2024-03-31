@@ -129,7 +129,9 @@ def setup_ddp():
     master_addr = "127.0.0.1"
     master_port = "8889"
 
-    if os.getenv("LSB_HOSTS") is not None:
+    if os.getenv("HYDRAGNN_MASTER_ADDR") is not None:
+        master_addr = os.environ["HYDRAGNN_MASTER_ADDR"]
+    elif os.getenv("LSB_HOSTS") is not None:
         ## source: https://www.olcf.ornl.gov/wp-content/uploads/2019/12/Scaling-DL-on-Summit.pdf
         ## The following is Summit specific
         master_addr = os.environ["LSB_HOSTS"].split()[1]
