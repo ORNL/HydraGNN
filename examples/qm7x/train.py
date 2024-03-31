@@ -196,6 +196,13 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--inputfile", help="input file", type=str, default="qm7x.json")
+    parser.add_argument(
+        "--energy_per_atom",
+        help="option to normalize energy by number of atoms",
+        type=bool,
+        default=True,
+    )
+
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
@@ -277,6 +284,7 @@ if __name__ == "__main__":
         total = QM7XDataset(
             os.path.join(datadir),
             var_config,
+            energy_per_atom=args.energy_per_atom,
             dist=True,
         )
         ## This is a local split
