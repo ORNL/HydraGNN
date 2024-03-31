@@ -86,7 +86,7 @@ class MPTrjDataset(AbstractBaseDataset):
         else:
             mpids_loc = list(nsplit(mpids, self.world_size))[self.rank]
 
-        for i in mpids_loc:
+        for i in iterate_tqdm(mpids_loc, verbosity_level=2, desc="Load"):
 
             tmp = d[i]
 
