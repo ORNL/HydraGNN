@@ -20,7 +20,9 @@ import hydragnn.utils.tracer as tr
 class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
 
-    def __init__(self, data, label, comm=MPI.COMM_WORLD, ddstore_width=None, local=False):
+    def __init__(
+        self, data, label, comm=MPI.COMM_WORLD, ddstore_width=None, local=False
+    ):
         super().__init__()
 
         self.label = label
