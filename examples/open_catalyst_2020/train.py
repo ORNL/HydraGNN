@@ -37,6 +37,8 @@ except ImportError:
 import subprocess
 from hydragnn.utils import nsplit
 
+## FIMME
+torch.backends.cudnn.enabled = False
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -123,6 +125,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument("--multi_model_list", help="multidataset list")
+    parser.add_argument("--multi_process_list", help="multidataset process list")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -138,6 +142,13 @@ if __name__ == "__main__":
         action="store_const",
         dest="format",
         const="pickle",
+    )
+    group.add_argument(
+        "--multi",
+        help="Multi dataset",
+        action="store_const",
+        dest="format",
+        const="multi",
     )
     parser.set_defaults(format="adios")
     args = parser.parse_args()
@@ -300,6 +311,44 @@ if __name__ == "__main__":
             # trainset.minmax_node_feature = minmax_node_feature
             # trainset.minmax_graph_feature = minmax_graph_feature
             trainset.pna_deg = pna_deg
+    elif args.format == "multi":
+        info("Multi load")
+        ## Reading multiple datasets, which requires the following arguments:
+        ## --multi_model_list: the list datasets/model names
+        ## --multi_process_list: the list of the number of processes
+        modellist = args.multi_model_list.split(",")
+        processlist = list(map(lambda x: int(x), args.multi_process_list.split(",")))
+        assert comm_size == sum(processlist)
+        colorlist = list()
+        color = 0
+        for n in processlist:
+            for _ in range(n):
+                colorlist.append(color)
+            color += 1
+        mycolor = colorlist[rank]
+        mymodel = modellist[mycolor]
+
+        local_comm = comm.Split(mycolor, rank)
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
+        trainset = AdiosDataset(fname, "trainset", local_comm, var_config=var_config)
+        valset = AdiosDataset(fname, "valset", local_comm, var_config=var_config)
+        testset = AdiosDataset(fname, "testset", local_comm, var_config=var_config)
+        print(rank, "color,moddelname,len:", mycolor, mymodel, len(trainset))
+
+        assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
+        if args.ddstore:
+            opt = {"ddstore_width": args.ddstore_width}
+            trainset = DistDataset(trainset, "trainset", comm, **opt)
+            valset = DistDataset(valset, "valset", comm, **opt)
+            testset = DistDataset(testset, "testset", comm, **opt)
+
+        opt = {
+            "preload": False,
+            "shmem": args.shmem,
+            "ddstore": args.ddstore,
+            "ddstore_width": args.ddstore_width,
+        }
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
