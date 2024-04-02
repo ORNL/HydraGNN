@@ -1,41 +1,26 @@
-import os, re, json
+import os, json
 import logging
 import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
-import random
-import numpy as np
-
 import torch
-from torch import tensor
-from torch_geometric.data import Data
 
 import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
-from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.utils.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.tracer as tr
 
-from hydragnn.utils.print_utils import iterate_tqdm, log
-
-from utils.atoms_to_graphs import AtomsToGraphs
-from utils.preprocess import write_images_to_adios
+from hydragnn.utils.print_utils import log
+from hydragnn.utils import nsplit
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.adiosdataset import AdiosDataset
 except ImportError:
     pass
-
-import subprocess
-from hydragnn.utils import nsplit
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -45,79 +30,12 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-class OpenCatalystDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, data_type, dist=False):
-        super().__init__()
-
-        self.var_config = var_config
-        self.data_path = os.path.join(dirpath, data_type)
-
-        self.dist = dist
-        if self.dist:
-            assert torch.distributed.is_initialized()
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
-
-        mx = None
-        if self.rank == 0:
-            ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
-            print("Check the number of files:", cmd)
-            out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            mx = int(out.stdout)
-            print("Total the number of files:", mx)
-        mx = MPI.COMM_WORLD.bcast(mx, root=0)
-        if mx == 0:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
-
-        ## We assume file names are "%d.txt"
-        rx = list(nsplit(range(mx), self.world_size))[self.rank]
-        chunked_txt_files = list()
-        for n in rx:
-            fname = os.path.join(self.data_path, "%d.txt" % n)
-            chunked_txt_files.append(fname)
-
-        if len(chunked_txt_files) == 0:
-            print(self.rank, "WARN: No files to process. Continue ...")
-
-        # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
-
-        self.dataset.extend(
-            write_images_to_adios(a2g, chunked_txt_files, self.data_path)
-        )
-
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
-        return self.dataset[idx]
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
-    parser.add_argument(
-        "--preonly",
-        action="store_true",
-        help="preprocess only (no training)",
-    )
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="open_catalyst_energy.json"
-    )
-    parser.add_argument(
-        "--train_path",
-        help="path to training data",
-        type=str,
-        default="s2ef_train_200K_uncompressed",
-    )
-    parser.add_argument(
-        "--test_path",
-        help="path to testing data",
-        type=str,
-        default="s2ef_val_id_uncompressed",
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -126,6 +44,12 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--multi_model_list", help="multidataset list", default="OC2020"
+    )
+    parser.add_argument(
+        "--multi_process_list", help="multidataset process list", default="1"
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -141,6 +65,13 @@ if __name__ == "__main__":
         action="store_const",
         dest="format",
         const="pickle",
+    )
+    group.add_argument(
+        "--multi",
+        help="Multi dataset",
+        action="store_const",
+        dest="format",
+        const="multi",
     )
     parser.set_defaults(format="adios")
     args = parser.parse_args()
@@ -181,84 +112,13 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OC2020" if args.log is None else args.log
+    log_name = "GFM" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OC2020" if args.modelname is None else args.modelname
-    if args.preonly:
-        ## local data
-        trainset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.train_path, dist=True
-        )
-        ## This is a local split
-        trainset, valset1, valset2 = split_dataset(
-            dataset=trainset,
-            perc_train=0.9,
-            stratify_splitting=False,
-        )
-        valset = [*valset1, *valset2]
-        testset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
-        )
-        ## Need as a list
-        testset = testset[:]
-        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
-
-        deg = gather_deg(trainset)
-        config["pna_deg"] = deg
-
-        setnames = ["trainset", "valset", "testset"]
-
-        ## adios
-        if args.format == "adios":
-            fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
-            )
-            adwriter = AdiosWriter(fname, comm)
-            adwriter.add("trainset", trainset)
-            adwriter.add("valset", valset)
-            adwriter.add("testset", testset)
-            # adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
-            # adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
-            adwriter.add_global("pna_deg", deg)
-            adwriter.save()
-
-        ## pickle
-        elif args.format == "pickle":
-            basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-            )
-            attrs = dict()
-            attrs["pna_deg"] = deg
-            SimplePickleWriter(
-                trainset,
-                basedir,
-                "trainset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
-                use_subdir=True,
-                attrs=attrs,
-            )
-            SimplePickleWriter(
-                valset,
-                basedir,
-                "valset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
-                use_subdir=True,
-            )
-            SimplePickleWriter(
-                testset,
-                basedir,
-                "testset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
-                use_subdir=True,
-            )
-        sys.exit(0)
+    modelname = "GFM" if args.modelname is None else args.modelname
 
     tr.initialize()
     tr.disable()
@@ -303,6 +163,52 @@ if __name__ == "__main__":
             # trainset.minmax_node_feature = minmax_node_feature
             # trainset.minmax_graph_feature = minmax_graph_feature
             trainset.pna_deg = pna_deg
+    elif args.format == "multi":
+        info("Multi load")
+        ## Reading multiple datasets, which requires the following arguments:
+        ## --multi_model_list: the list datasets/model names
+        ## --multi_process_list: the list of the number of processes
+        modellist = args.multi_model_list.split(",")
+        processlist = list(map(lambda x: int(x), args.multi_process_list.split(",")))
+        assert comm_size == sum(processlist)
+        colorlist = list()
+        color = 0
+        for n in processlist:
+            for _ in range(n):
+                colorlist.append(color)
+            color += 1
+        mycolor = colorlist[rank]
+        mymodel = modellist[mycolor]
+
+        local_comm = comm.Split(mycolor, rank)
+        local_comm_rank = local_comm.Get_rank()
+        local_comm_size = local_comm.Get_size()
+
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
+        trainset = AdiosDataset(fname, "trainset", local_comm, var_config=var_config)
+        valset = AdiosDataset(fname, "valset", local_comm, var_config=var_config)
+        testset = AdiosDataset(fname, "testset", local_comm, var_config=var_config)
+
+        ## Set local set
+        for dataset in [trainset, valset, testset]:
+            rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            dataset.setsubset(rx)
+        print(
+            rank,
+            "color,moddelname,len:",
+            mycolor,
+            mymodel,
+            len(trainset),
+            len(valset),
+            len(testset),
+        )
+
+        assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
+        if args.ddstore:
+            opt = {"ddstore_width": args.ddstore_width, "local": True}
+            trainset = DistDataset(trainset, "trainset", comm, **opt)
+            valset = DistDataset(valset, "valset", comm, **opt)
+            testset = DistDataset(testset, "testset", comm, **opt)
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 

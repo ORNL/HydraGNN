@@ -89,9 +89,6 @@ class SimplePickleDataset(AbstractBaseDataset):
             self.update_data_object(data_object)
         return data_object
 
-    def setsubset(self, subset):
-        self.subset = subset
-
     def update_data_object(self, data_object):
         if self.var_config is not None:
             update_predicted_values(
