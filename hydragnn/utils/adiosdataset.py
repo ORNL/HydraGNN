@@ -241,6 +241,7 @@ class AdiosDataset(AbstractBaseDataset):
         ddstore=False,
         ddstore_width=None,
         var_config=None,
+        subset=None,
     ):
         """
         Parameters
@@ -450,6 +451,10 @@ class AdiosDataset(AbstractBaseDataset):
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
             self.node_feature_dim = self.var_config["node_feature_dims"]
 
+        self.subset = subset
+        if self.subset is None:
+            self.subset = list(range(self.ndata))
+
     def update_data_object(self, data_object):
         if self.var_config is not None:
             update_predicted_values(
@@ -461,17 +466,18 @@ class AdiosDataset(AbstractBaseDataset):
             )
             update_atom_features(self.input_node_features, data_object)
 
+    def setsubset(self, subset):
+        self.subset = subset
+
     def len(self):
-        """
-        Return the total size of dataset
-        """
-        return self.ndata
+        return len(self.subset)
 
     @tr.profile("get")
-    def get(self, idx):
+    def get(self, i):
         """
         Get data with a given index
         """
+        idx = self.subset[i]
         if self.preflight:
             ## Preflight option: This is experimental.
             ## Collect only the indeces of data to load. "populate" will load the data later.
