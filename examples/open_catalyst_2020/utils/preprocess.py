@@ -15,7 +15,9 @@ import torch
 from tqdm import tqdm
 
 
-def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=False):
+def write_images_to_adios(
+    a2g, samples, data_path, energy_per_atom, subtract_reference_energy=False
+):
 
     dataset = []
     idx = 0
@@ -42,7 +44,7 @@ def write_images_to_adios(a2g, samples, data_path, subtract_reference_energy=Fal
             frame_log = traj_logs[i].split(",")
             sid = int(frame_log[0].split("random")[1])
             fid = int(frame_log[1].split("frame")[1])
-            data_object = a2g.convert(frame)
+            data_object = a2g.convert(frame, energy_per_atom)
             # add atom tags
             data_object.tags = torch.LongTensor(frame.get_tags())
             data_object.sid = torch.IntTensor([sid])

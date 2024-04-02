@@ -55,11 +55,13 @@ transform_coordinates = Distance(norm=False, cat=False)
 
 
 class MPTrjDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, data_type, dist=False, tmpfs=None):
+    def __init__(
+        self, dirpath, var_config, energy_per_atom=True, dist=False, tmpfs=None
+    ):
         super().__init__()
 
         self.var_config = var_config
-        self.data_path = os.path.join(dirpath, data_type)
+        self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
@@ -84,7 +86,7 @@ class MPTrjDataset(AbstractBaseDataset):
         else:
             mpids_loc = list(nsplit(mpids, self.world_size))[self.rank]
 
-        for i in mpids_loc:
+        for i in iterate_tqdm(mpids_loc, verbosity_level=2, desc="Load"):
 
             tmp = d[i]
 
@@ -94,7 +96,10 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 info["jid"] = j
 
-                info["total_energy"] = k["energy_per_atom"]
+                if self.energy_per_atom:
+                    info["total_energy"] = k["energy_per_atom"]
+                else:
+                    info["total_energy"] = k["corrected_total_energy"]
 
                 info["forces"] = k["force"]
 
@@ -173,16 +178,10 @@ if __name__ == "__main__":
         "--inputfile", help="input file", type=str, default="mptrj_energy.json"
     )
     parser.add_argument(
-        "--train_path",
-        help="path to training data",
-        type=str,
-        default="s2ef_train_200K_uncompressed",
-    )
-    parser.add_argument(
-        "--test_path",
-        help="path to testing data",
-        type=str,
-        default="s2ef_val_id_uncompressed",
+        "--energy_per_atom",
+        help="option to normalize energy by number of atoms",
+        type=bool,
+        default=True,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -196,7 +195,6 @@ if __name__ == "__main__":
         default=None,
         help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.",
     )
-
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -263,7 +261,7 @@ if __name__ == "__main__":
         total = MPTrjDataset(
             os.path.join(datadir),
             var_config,
-            data_type=args.train_path,
+            energy_per_atom=args.energy_per_atom,
             dist=True,
             tmpfs=args.tmpfs,
         )

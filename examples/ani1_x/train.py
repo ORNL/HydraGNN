@@ -13,6 +13,8 @@ import torch
 from torch import tensor
 from torch_geometric.data import Data
 
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+
 import hydragnn
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.model import print_model
@@ -20,14 +22,12 @@ from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.preprocess.utils import gather_deg
+from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.tracer as tr
 
 from hydragnn.utils.print_utils import iterate_tqdm, log
-
-from utils.atoms_to_graphs import AtomsToGraphs
-from utils.preprocess import write_images_to_adios
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -37,23 +37,28 @@ except ImportError:
 import subprocess
 from hydragnn.utils import nsplit
 
-## FIMME
-torch.backends.cudnn.enabled = False
+import h5py
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-class OpenCatalystDataset(AbstractBaseDataset):
-    def __init__(
-        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
-    ):
+# transform_coordinates = Spherical(norm=False, cat=False)
+# transform_coordinates = LocalCartesian(norm=False, cat=False)
+transform_coordinates = Distance(norm=False, cat=False)
+
+
+class ANI1xDataset(AbstractBaseDataset):
+    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
         super().__init__()
 
         self.var_config = var_config
-        self.data_path = os.path.join(dirpath, data_type)
+        self.data_path = os.path.join(dirpath, "ani1x-release.h5")
+        self.data_keys = ["wb97x_dz.energy", "wb97x_dz.forces"]
         self.energy_per_atom = energy_per_atom
+
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
         self.dist = dist
         if self.dist:
@@ -61,39 +66,85 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        mx = None
-        if self.rank == 0:
-            ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
-            print("Check the number of files:", cmd)
-            out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            mx = int(out.stdout)
-            print("Total the number of files:", mx)
-        mx = MPI.COMM_WORLD.bcast(mx, root=0)
-        if mx == 0:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
+        self.convert_trajectories_to_graphs()
 
-        ## We assume file names are "%d.txt"
-        rx = list(nsplit(range(mx), self.world_size))[self.rank]
-        chunked_txt_files = list()
-        for n in rx:
-            fname = os.path.join(self.data_path, "%d.txt" % n)
-            chunked_txt_files.append(fname)
+    def convert_trajectories_to_graphs(self):
 
-        if len(chunked_txt_files) == 0:
-            print(self.rank, "WARN: No files to process. Continue ...")
+        # Example for extracting DFT/DZ energies and forces
+        for data_trj in self.iter_data_buckets(self.data_path, keys=self.data_keys):
 
-        # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
+            X = data_trj["coordinates"]
+            Z = data_trj["atomic_numbers"]
+            E = data_trj["wb97x_dz.energy"]
+            F = data_trj["wb97x_dz.forces"]
 
-        self.dataset.extend(
-            write_images_to_adios(
-                a2g,
-                chunked_txt_files,
-                self.data_path,
-                energy_per_atom=self.energy_per_atom,
-            )
-        )
+            # atomic numbers
+            atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
+
+            natoms = torch.IntTensor([X.shape[1]])
+
+            global_trajectories_id = range(X.shape[0])
+            if self.dist:
+                local_trajectories_id = list(
+                    nsplit(global_trajectories_id, self.world_size)
+                )[self.rank]
+            else:
+                local_trajectories_id = global_trajectories_id
+
+            # extract positions, energies, and forces for each step
+            for frame_id in local_trajectories_id:
+
+                positions = torch.from_numpy(X[frame_id]).to(torch.float32)
+                energy = (
+                    torch.tensor(E[frame_id])
+                    .unsqueeze(0)
+                    .unsqueeze(1)
+                    .to(torch.float32)
+                )
+                if self.energy_per_atom:
+                    energy /= natoms
+                forces = torch.from_numpy(F[frame_id]).to(torch.float32)
+                x = torch.cat([atomic_numbers, positions, forces], dim=1)
+
+                data = Data(
+                    energy=energy,
+                    force=forces,
+                    natoms=natoms,
+                    # stress=torch.tensor(stresses, dtype=torch.float32),
+                    # magmom=torch.tensor(magmom, dtype=torch.float32),
+                    pos=positions,
+                    atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
+                    x=x,
+                    y=energy,
+                )
+
+                data = self.radius_graph(data)
+                data = transform_coordinates(data)
+
+                self.dataset.append(data)
+
+    def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
+        """Iterate over buckets of data in ANI HDF5 file.
+        Yields dicts with atomic numbers (shape [Na,]) coordinated (shape [Nc, Na, 3])
+        and other available properties specified by `keys` list, w/o NaN values.
+        """
+        keys = set(keys)
+        keys.discard("atomic_numbers")
+        keys.discard("coordinates")
+        with h5py.File(h5filename, "r") as f:
+            for grp in f.values():
+                Nc = grp["coordinates"].shape[0]
+                mask = np.ones(Nc, dtype=np.bool_)
+                data = dict((k, grp[k][()]) for k in keys)
+                for k in keys:
+                    v = data[k].reshape(Nc, -1)
+                    mask = mask & ~np.isnan(v).any(axis=1)
+                if not np.sum(mask):
+                    continue
+                d = dict((k, data[k][mask]) for k in keys)
+                d["atomic_numbers"] = grp["atomic_numbers"][()]
+                d["coordinates"] = grp["coordinates"][()][mask]
+                yield d
 
     def len(self):
         return len(self.dataset)
@@ -113,19 +164,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="open_catalyst_energy.json"
-    )
-    parser.add_argument(
-        "--train_path",
-        help="path to training data",
-        type=str,
-        default="s2ef_train_200K_uncompressed",
-    )
-    parser.add_argument(
-        "--test_path",
-        help="path to testing data",
-        type=str,
-        default="s2ef_val_id_uncompressed",
+        "--inputfile", help="input file", type=str, default="ani1x_energy.json"
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -140,7 +179,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
-
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -195,34 +233,27 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OC2020" if args.log is None else args.log
+    log_name = "ANI1x" if args.log is None else args.log
     hydragnn.utils.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OC2020" if args.modelname is None else args.modelname
+    modelname = "ANI1x" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
-        trainset = OpenCatalystDataset(
+        total = ANI1xDataset(
             os.path.join(datadir),
             var_config,
-            data_type=args.train_path,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
         ## This is a local split
-        trainset, valset1, valset2 = split_dataset(
-            dataset=trainset,
+        trainset, valset, testset = split_dataset(
+            dataset=total,
             perc_train=0.9,
             stratify_splitting=False,
         )
-        valset = [*valset1, *valset2]
-        testset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
-        )
-        ## Need as a list
-        testset = testset[:]
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)

@@ -51,11 +51,20 @@ transform_coordinates = Distance(norm=False, cat=False)
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, data_type, dist=False, r_pbc=False):
+    def __init__(
+        self,
+        dirpath,
+        var_config,
+        data_type,
+        energy_per_atom=True,
+        dist=False,
+        r_pbc=False,
+    ):
         super().__init__()
 
         self.var_config = var_config
         self.data_path = dirpath
+        self.energy_per_atom = energy_per_atom
 
         self.r_pbc = r_pbc
         if self.r_pbc:
@@ -113,6 +122,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        if self.energy_per_atom:
+            energy_tensor /= natoms
         data.energy = energy_tensor
         data.y = energy_tensor
 
@@ -167,6 +178,12 @@ if __name__ == "__main__":
         help="path to testing data",
         type=str,
         default="val_id_s2ef",
+    )
+    parser.add_argument(
+        "--energy_per_atom",
+        help="option to normalize energy by number of atoms",
+        type=bool,
+        default=True,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -240,7 +257,11 @@ if __name__ == "__main__":
     if args.preonly:
         ## local data
         trainset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.train_path, dist=True
+            os.path.join(datadir),
+            var_config,
+            data_type=args.train_path,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
         )
         ## This is a local split
         trainset, valset1, valset2 = split_dataset(
