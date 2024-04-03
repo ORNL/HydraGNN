@@ -14,9 +14,6 @@ except:
 
 import hydragnn
 
-import deephyper
-
-import pandas as pd
 
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
@@ -155,7 +152,7 @@ if __name__ == "__main__":
 
     # Define the search space for hyperparameters
     problem.add_hyperparameter((1, 2), "num_conv_layers")  # discrete parameter
-    # problem.add_hyperparameter((1, 1), "num_headlayers")  # discrete parameter
+    problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((50, 52), "hidden_dim")  # discrete parameter
     problem.add_hyperparameter(
         ["EGNN", "PNA", "SchNet"], "model_type"

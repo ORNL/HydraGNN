@@ -112,3 +112,6 @@ hydragnn.train.train_validate_test(
     log_name,
     verbosity,
 )
+
+hydragnn.utils.save_model(model, optimizer, log_name)
+hydragnn.utils.print_timers(verbosity)

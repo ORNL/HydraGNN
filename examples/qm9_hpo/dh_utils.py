@@ -27,20 +27,6 @@ def read_node_list():
     return nodes, nodes_string
 
 
-"""
-def create_ds_config(job_id, mbs, gbs):
-    config_file_name = f"ds_config_{job_id}.json"
-    with open(config_file_name, "w") as writer:
-        writer.write("{\n")
-        writer.write("    \"fp16\": {\n        \"enabled\": true\n    },\n")
-        writer.write(f"    \"train_micro_batch_size_per_gpu\" : {mbs},\n")
-        writer.write(f"    \"train_batch_size\" : {gbs}\n") 
-        writer.write("}")
-
-    return config_file_name
-"""
-
-
 def create_ds_config(job_id, mbs, gbs):
     config_file_name = f"ds_config_{job_id}.json"
     with open(config_file_name, "w") as writer:
@@ -171,6 +157,3 @@ def create_launch_command(
     command = f"{prefix} {SLURM_ARGS} {python_exe} {python_script} {params}"
     # print("Command =", command)
     return command
-
-
-# create_ds_config(756, 123, 1234)

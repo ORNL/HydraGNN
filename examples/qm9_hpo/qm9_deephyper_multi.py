@@ -1,5 +1,4 @@
-import os, sys, json
-import logging
+import os, sys
 
 import torch
 import torch_geometric
@@ -13,8 +12,6 @@ except:
     from torch_geometric.data import DataLoader
 
 import hydragnn
-
-import deephyper
 
 import pandas as pd
 import subprocess
