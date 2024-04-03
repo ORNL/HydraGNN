@@ -35,7 +35,7 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="open_catalyst_energy.json"
+        "--inputfile", help="input file", type=str, default="gfm_multitasking.json"
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
