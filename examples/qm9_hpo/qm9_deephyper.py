@@ -69,7 +69,17 @@ def run(trial):
     config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = trial.parameters[
         "num_conv_layers"
     ]
-    # config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"]["num_headlayers"] = trial.parameters["num_headlayers"]
+    config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
+        "num_headlayers"
+    ] = trial.parameters["num_headlayers"]
+
+    dim_headlayers = [
+        trial.parameters["dim_headlayers"]
+        for i in range(trial.parameters["num_headlayers"])
+    ]
+    config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
+        "dim_headlayers"
+    ] = dim_headlayers
 
     if trial.parameters["model_type"] not in ["EGNN", "SchNet", "DimeNet"]:
         config["NeuralNetwork"]["Architecture"]["equivariance"] = False
@@ -152,10 +162,11 @@ if __name__ == "__main__":
 
     # Define the search space for hyperparameters
     problem.add_hyperparameter((1, 2), "num_conv_layers")  # discrete parameter
-    problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((50, 52), "hidden_dim")  # discrete parameter
+    problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
+    problem.add_hyperparameter((1, 3), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
-        ["EGNN", "PNA", "SchNet"], "model_type"
+        ["EGNN", "PNA", "SchNet", "DimeNet"], "model_type"
     )  # categorical parameter
 
     # Define the search space for hyperparameters

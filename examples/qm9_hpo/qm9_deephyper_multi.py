@@ -141,10 +141,11 @@ if __name__ == "__main__":
 
     # Define the search space for hyperparameters
     problem.add_hyperparameter((1, 2), "num_conv_layers")  # discrete parameter
-    # problem.add_hyperparameter((1, 1), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((50, 52), "hidden_dim")  # discrete parameter
+    problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
+    problem.add_hyperparameter((1, 3), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
-        ["EGNN", "PNA", "SchNet"], "model_type"
+        ["EGNN", "PNA", "SchNet", "DimeNet"], "model_type"
     )  # categorical parameter
 
     # Create the node queue

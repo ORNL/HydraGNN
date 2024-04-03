@@ -56,7 +56,17 @@ config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters["hidden_
 config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = args.parameters[
     "num_conv_layers"
 ]
-# config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"]["num_headlayers"] = args.parameters["num_headlayers"]
+config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
+    "num_headlayers"
+] = args.parameters["num_headlayers"]
+
+dim_headlayers = [
+    args.parameters["dim_headlayers"]
+    for i in range(args.parameters["num_headlayers"])
+]
+config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
+    "dim_headlayers"
+] = dim_headlayers
 
 if args.parameters["model_type"] not in ["EGNN", "SchNet", "DimeNet"]:
     config["NeuralNetwork"]["Architecture"]["equivariance"] = False
