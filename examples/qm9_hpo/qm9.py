@@ -28,18 +28,14 @@ def qm9_pre_filter(data):
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_type", help="model_type", default="GIN")
+parser.add_argument("--model_type", help="model_type", default="EGNN")
 parser.add_argument("--hidden_dim", type=int, help="hidden_dim", default=5)
 parser.add_argument("--num_conv_layers", type=int, help="num_conv_layers", default=6)
+parser.add_argument("--num_headlayers", type=int, help="num_headlayers", default=2)
+parser.add_argument("--dim_headlayers", type=int, help="dim_headlayers", default=10)
 parser.add_argument("--log", help="log name", default="qm9_test")
 args = parser.parse_args()
 args.parameters = vars(args)
-
-# Set this path for output.
-try:
-    os.environ["SERIALIZED_DATA_PATH"]
-except:
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
 num_samples = 1000
 
@@ -56,16 +52,18 @@ config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters["hidden_
 config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = args.parameters[
     "num_conv_layers"
 ]
-config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
-    "num_headlayers"
-] = args.parameters["num_headlayers"]
 
 dim_headlayers = [
     args.parameters["dim_headlayers"] for i in range(args.parameters["num_headlayers"])
 ]
-config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
-    "dim_headlayers"
-] = dim_headlayers
+
+for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
+    config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+        "num_headlayers"
+    ] = args.parameters["num_headlayers"]
+    config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+        "dim_headlayers"
+    ] = dim_headlayers
 
 if args.parameters["model_type"] not in ["EGNN", "SchNet", "DimeNet"]:
     config["NeuralNetwork"]["Architecture"]["equivariance"] = False

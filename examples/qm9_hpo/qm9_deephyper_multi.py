@@ -32,13 +32,6 @@ OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
 DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
 DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
 
-# Set this path for output.
-try:
-    os.environ["SERIALIZED_DATA_PATH"]
-except:
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
-
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
     # Set descriptor as element type.
@@ -90,7 +83,8 @@ def run(trial, dequed=None):
             f"--model_type={trial.parameters['model_type']}",
             f"--hidden_dim={trial.parameters['hidden_dim']}",
             f"--num_conv_layers={trial.parameters['num_conv_layers']}",
-            f"--num_conv_layers={trial.parameters['num_conv_layers']}",
+            f"--num_headlayers={trial.parameters['num_headlayers']}",
+            f"--dim_headlayers={trial.parameters['dim_headlayers']}",
             f"--log={log_name}",
         ]
     )
@@ -116,19 +110,6 @@ def run(trial, dequed=None):
 if __name__ == "__main__":
 
     log_name = "qm9"
-
-    # Use built-in torch_geometric dataset.
-    # Filter function above used to run quick example.
-    # NOTE: data is moved to the device in the pre-transform.
-    # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
-    dataset = torch_geometric.datasets.QM9(
-        root="dataset/qm9", pre_transform=qm9_pre_transform
-    )
-
-    trainset, valset, testset = hydragnn.preprocess.split_dataset(dataset, 0.8, False)
-    (train_loader, val_loader, test_loader) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, 64
-    )
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
     from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued

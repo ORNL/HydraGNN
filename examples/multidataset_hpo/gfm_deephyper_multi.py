@@ -42,7 +42,7 @@ def _parse_results(stdout):
 def run(trial, dequed=None):
     f = open(f"output-{trial.id}.txt", "w")
     python_exe = sys.executable
-    python_script = os.path.join(os.path.dirname(__file__), "train.py")
+    python_script = os.path.join(os.path.dirname(__file__), "gfm.py")
 
     # TODO: Launch a subprocess with `srun` to train neural networks
     params = trial.parameters
