@@ -1,7 +1,6 @@
 import os, sys
 
 import torch
-import torch_geometric
 
 torch.backends.cudnn.enabled = False
 
@@ -10,8 +9,6 @@ try:
     from torch_geometric.loader import DataLoader
 except:
     from torch_geometric.data import DataLoader
-
-import hydragnn
 
 import pandas as pd
 import subprocess
@@ -32,23 +29,6 @@ OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
 DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
 DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
 
-# Set this path for output.
-try:
-    os.environ["SERIALIZED_DATA_PATH"]
-except:
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
-
-# Update each sample prior to loading.
-def qm9_pre_transform(data):
-    # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
-    # Only predict free energy (index 10 of 19 properties) for this run.
-    data.y = data.y[:, 10] / len(data.x)
-    graph_features_dim = [1]
-    node_feature_dim = [1]
-    return data
-
 
 def _parse_results(stdout):
     pattern = r"Train Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
@@ -62,11 +42,11 @@ def _parse_results(stdout):
 def run(trial, dequed=None):
     f = open(f"output-{trial.id}.txt", "w")
     python_exe = sys.executable
-    python_script = os.path.join(os.path.dirname(__file__), "qm9.py")
+    python_script = os.path.join(os.path.dirname(__file__), "train.py")
 
     # TODO: Launch a subprocess with `srun` to train neural networks
     params = trial.parameters
-    log_name = "qm9" + "_" + str(trial.id)
+    log_name = "gfm" + "_" + str(trial.id)
     master_addr = f"HYDRAGNN_MASTER_ADDR={dequed[0]}"
 
     # time srun -u -n32 -c2 --ntasks-per-node=8 --gpus-per-node=8 --gpu-bind=closest
@@ -87,10 +67,13 @@ def run(trial, dequed=None):
             python_exe,
             "-u",
             python_script,
+            f"--ddstore",
+            f"--ddstore_width=128",
             f"--model_type={trial.parameters['model_type']}",
             f"--hidden_dim={trial.parameters['hidden_dim']}",
             f"--num_conv_layers={trial.parameters['num_conv_layers']}",
-            f"--num_conv_layers={trial.parameters['num_conv_layers']}",
+            f"--num_headlayers={trial.parameters['num_headlayers']}",
+            f"--dim_headlayers={trial.parameters['dim_headlayers']}",
             f"--log={log_name}",
         ]
     )
@@ -115,20 +98,7 @@ def run(trial, dequed=None):
 
 if __name__ == "__main__":
 
-    log_name = "qm9"
-
-    # Use built-in torch_geometric dataset.
-    # Filter function above used to run quick example.
-    # NOTE: data is moved to the device in the pre-transform.
-    # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
-    dataset = torch_geometric.datasets.QM9(
-        root="dataset/qm9", pre_transform=qm9_pre_transform
-    )
-
-    trainset, valset, testset = hydragnn.preprocess.split_dataset(dataset, 0.8, False)
-    (train_loader, val_loader, test_loader) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, 64
-    )
+    log_name = "gfm"
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
     from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
@@ -140,10 +110,10 @@ if __name__ == "__main__":
     problem = HpProblem()
 
     # Define the search space for hyperparameters
-    problem.add_hyperparameter((1, 2), "num_conv_layers")  # discrete parameter
-    problem.add_hyperparameter((50, 52), "hidden_dim")  # discrete parameter
+    problem.add_hyperparameter((2, 6), "num_conv_layers")  # discrete parameter
+    problem.add_hyperparameter((100, 5000), "hidden_dim")  # discrete parameter
     problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
-    problem.add_hyperparameter((1, 3), "dim_headlayers")  # discrete parameter
+    problem.add_hyperparameter((100, 5000), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
         ["EGNN", "PNA", "SchNet", "DimeNet"], "model_type"
     )  # categorical parameter
