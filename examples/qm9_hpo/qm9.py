@@ -61,8 +61,7 @@ config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
 ] = args.parameters["num_headlayers"]
 
 dim_headlayers = [
-    args.parameters["dim_headlayers"]
-    for i in range(args.parameters["num_headlayers"])
+    args.parameters["dim_headlayers"] for i in range(args.parameters["num_headlayers"])
 ]
 config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
     "dim_headlayers"
