@@ -27,13 +27,6 @@ def qm9_pre_transform(data):
     return data
 
 
-# Set this path for output.
-try:
-    os.environ["SERIALIZED_DATA_PATH"]
-except:
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
-
 def objective(trial):
 
     global config, best_trial_id, best_validation_loss
