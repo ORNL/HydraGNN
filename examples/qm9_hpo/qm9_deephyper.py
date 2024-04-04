@@ -26,13 +26,6 @@ def qm9_pre_transform(data):
     return data
 
 
-# Set this path for output.
-try:
-    os.environ["SERIALIZED_DATA_PATH"]
-except:
-    os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
-
 def run(trial):
 
     global config, log_name, train_loader, val_loader, test_loader
@@ -69,17 +62,19 @@ def run(trial):
     config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = trial.parameters[
         "num_conv_layers"
     ]
-    config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
-        "num_headlayers"
-    ] = trial.parameters["num_headlayers"]
 
     dim_headlayers = [
         trial.parameters["dim_headlayers"]
         for i in range(trial.parameters["num_headlayers"])
     ]
-    config["NeuralNetwork"]["Architecture"]["output_heads"]["graph"][
-        "dim_headlayers"
-    ] = dim_headlayers
+
+    for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+            "num_headlayers"
+        ] = trial.parameters["num_headlayers"]
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+            "dim_headlayers"
+        ] = dim_headlayers
 
     if trial.parameters["model_type"] not in ["EGNN", "SchNet", "DimeNet"]:
         config["NeuralNetwork"]["Architecture"]["equivariance"] = False
