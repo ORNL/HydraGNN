@@ -11,11 +11,11 @@ try:
 except ImportError:
     pass
 
-from hydragnn.utils.print_utils import log, iterate_tqdm
+from hydragnn.utils.print_utils import log
 from hydragnn.utils import nsplit
 
 import hydragnn.utils.tracer as tr
-
+from tqdm import tqdm
 
 class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
@@ -40,7 +40,9 @@ class DistDataset(AbstractBaseDataset):
         ## set total before set subset
         if local:
             local_ns = len(data)
-            for i in iterate_tqdm(range(local_ns), verbosity_level=2, desc="Loading"):
+            local_ns_list = comm.allgather(local_ns)
+            maxrank = np.argmax(local_ns_list).item()
+            for i in tqdm(range(local_ns), desc="Loading", disable=(self.rank != maxrank)):
                 self.dataset.append(data[i])
             self.total_ns = comm.allreduce(local_ns, op=MPI.SUM)
         else:
