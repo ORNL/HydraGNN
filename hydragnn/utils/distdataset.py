@@ -51,7 +51,11 @@ class DistDataset(AbstractBaseDataset):
             for i in rx:
                 self.dataset.append(data[i])
 
-        self.keys = self.dataset[0].keys() if callable(self.dataset[0].keys) else self.dataset[0].keys
+        self.keys = (
+            self.dataset[0].keys()
+            if callable(self.dataset[0].keys)
+            else self.dataset[0].keys
+        )
         self.keys = sorted(self.keys)
         self.variable_shape = dict()
         self.variable_dim = dict()

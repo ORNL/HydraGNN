@@ -364,7 +364,9 @@ class AdiosDataset(AbstractBaseDataset):
                         count = ishape
                         vdim = self.variable_dim[k]
                         start[vdim] = self.variable_offset[k][subset_istart]
-                        count[vdim] = sum(self.variable_count[k][subset_istart:subset_iend])
+                        count[vdim] = sum(
+                            self.variable_count[k][subset_istart:subset_iend]
+                        )
                         vname = "%s/%s" % (label, k)
                         self.data[k] = f.read(vname, start, count)
                         self.subset_start[k] = start
@@ -487,12 +489,15 @@ class AdiosDataset(AbstractBaseDataset):
             )
             update_atom_features(self.input_node_features, data_object)
 
+    def setkeys(self, keys):
+        self.keys = keys
+
     def setsubset(self, subset_istart, subset_iend, preload=False):
         self.subset_istart = subset_istart
         self.subset_iend = subset_iend
         if self.subset_istart is not None and self.subset_iend is not None:
             self.subset = list(range(subset_istart, subset_iend))
-        
+
         if preload and self.subset is not None:
             t0 = time.time()
             self.preload = preload
@@ -514,7 +519,6 @@ class AdiosDataset(AbstractBaseDataset):
             self.f.close()
             t2 = time.time()
             log("Adios reading time (sec): ", (t2 - t0))
-            
 
     def len(self):
         if self.subset is not None:
