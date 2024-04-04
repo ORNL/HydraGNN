@@ -192,10 +192,11 @@ if __name__ == "__main__":
         ## Set local set
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            dataset.setsubset(rx)
+            dataset.setsubset(rx[0], rx[-1], preload=True)
+
         print(
             rank,
-            "color,moddelname,len:",
+            "color, moddelname, local size(trainset,valset,testset):",
             mycolor,
             mymodel,
             len(trainset),

@@ -241,7 +241,8 @@ class AdiosDataset(AbstractBaseDataset):
         ddstore=False,
         ddstore_width=None,
         var_config=None,
-        subset=None,
+        subset_istart=None,
+        subset_iend=None,
     ):
         """
         Parameters
@@ -314,6 +315,13 @@ class AdiosDataset(AbstractBaseDataset):
                 self.ddstore_comm_size,
             )
             self.ddstore = dds.PyDDStore(self.ddstore_comm)
+
+        self.subset = None
+        self.subset_istart = subset_istart
+        self.subset_iend = subset_iend
+        if self.subset_istart is not None and self.subset_iend is not None:
+            self.subset = list(range(subset_istart, subset_iend))
+
         log("Adios reading:", self.filename)
         with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
             f.__next__()
@@ -335,6 +343,8 @@ class AdiosDataset(AbstractBaseDataset):
             self.variable_count = dict()
             self.variable_offset = dict()
             self.variable_dim = dict()
+            self.subset_start = dict()
+            self.subset_count = dict()
 
             nbytes = 0
             for k in self.keys:
@@ -344,8 +354,23 @@ class AdiosDataset(AbstractBaseDataset):
                     "%s/%s/variable_dim" % (label, k)
                 ).item()
                 if self.preload:
-                    ## load full data first
-                    self.data[k] = f.read("%s/%s" % (label, k))
+                    ##  preload data
+                    if self.subset is not None:
+                        shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                        ishape = [int(x.strip(",")) for x in shape.strip().split()]
+                        start = [
+                            0,
+                        ] * len(ishape)
+                        count = ishape
+                        vdim = self.variable_dim[k]
+                        start[vdim] = self.variable_offset[k][subset_istart]
+                        count[vdim] = sum(self.variable_count[k][subset_istart:subset_iend])
+                        vname = "%s/%s" % (label, k)
+                        self.data[k] = f.read(vname, start, count)
+                        self.subset_start[k] = start
+                        self.subset_count[k] = count
+                    else:
+                        self.data[k] = f.read("%s/%s" % (label, k))
                 elif self.shmem:
                     if self.local_rank == 0:
                         adios = ad2.ADIOS()
@@ -451,10 +476,6 @@ class AdiosDataset(AbstractBaseDataset):
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
             self.node_feature_dim = self.var_config["node_feature_dims"]
 
-        self.subset = subset
-        if self.subset is None:
-            self.subset = list(range(self.ndata))
-
     def update_data_object(self, data_object):
         if self.var_config is not None:
             update_predicted_values(
@@ -466,18 +487,50 @@ class AdiosDataset(AbstractBaseDataset):
             )
             update_atom_features(self.input_node_features, data_object)
 
-    def setsubset(self, subset):
-        self.subset = subset
+    def setsubset(self, subset_istart, subset_iend, preload=False):
+        self.subset_istart = subset_istart
+        self.subset_iend = subset_iend
+        if self.subset_istart is not None and self.subset_iend is not None:
+            self.subset = list(range(subset_istart, subset_iend))
+        
+        if preload and self.subset is not None:
+            t0 = time.time()
+            self.preload = preload
+            log("Adios preloading:", self.filename)
+            for k in self.keys:
+                shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                ishape = [int(x.strip(",")) for x in shape.strip().split()]
+                start = [
+                    0,
+                ] * len(ishape)
+                count = ishape
+                vdim = self.variable_dim[k]
+                start[vdim] = self.variable_offset[k][subset_istart]
+                count[vdim] = sum(self.variable_count[k][subset_istart:subset_iend])
+                vname = "%s/%s" % (self.label, k)
+                self.data[k] = self.f.read(vname, start, count)
+                self.subset_start[k] = start
+                self.subset_count[k] = count
+            self.f.close()
+            t2 = time.time()
+            log("Adios reading time (sec): ", (t2 - t0))
+            
 
     def len(self):
-        return len(self.subset)
+        if self.subset is not None:
+            return len(self.subset)
+        else:
+            return self.ndata
 
     @tr.profile("get")
     def get(self, i):
         """
         Get data with a given index
         """
-        idx = self.subset[i]
+        idx = i
+        if self.subset is not None:
+            idx = self.subset[i]
+
         if self.preflight:
             ## Preflight option: This is experimental.
             ## Collect only the indeces of data to load. "populate" will load the data later.
@@ -500,6 +553,9 @@ class AdiosDataset(AbstractBaseDataset):
                 count[vdim] = self.variable_count[k][idx]
                 if self.preload or self.shmem:
                     ## Read from memory when preloaded or used with shmem
+                    if self.subset is not None:
+                        start[vdim] = start[vdim] - self.subset_start[k][vdim]
+                        assert count[vdim] <= self.subset_count[k][vdim]
                     slice_list = list()
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
