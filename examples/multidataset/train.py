@@ -199,11 +199,11 @@ if __name__ == "__main__":
 
             ## FIXME: Hard-coded for now. Need to find common variable names
             common_variable_names = [
-                "x", 
+                "x",
                 "edge_index",
-                "edge_attr", 
-                "pos", 
-                "y", 
+                "edge_attr",
+                "pos",
+                "y",
             ]
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
