@@ -196,11 +196,8 @@ if args.ddstore:
     os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
     os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-train, val, test = hydragnn.preprocess.split_dataset(
-    dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
-)
 (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
-    train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+    trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
 config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
