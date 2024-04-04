@@ -141,6 +141,9 @@ def train_validate_test(
             if epoch == 0:
                 tr.reset()
 
+        if int(os.getenv("HYDRAGNN_VALTEST", "1")) == 0:
+            continue
+
         val_loss, val_taskserr = validate(
             val_loader, model, verbosity, reduce_ranks=True
         )
@@ -408,10 +411,16 @@ def train(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
+    extra = 0 if loader.drop_last else 1
+    nbatch = len(loader.sampler) // loader.batch_size + extra
+
+    if os.getenv("HYDRAGNN_MAX_NUM_BATCH") is not None:
+        nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
+
     tr.start("dataload")
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
-    for data in iterate_tqdm(loader, verbosity, desc="Train"):
+    for ibatch, data in iterate_tqdm(enumerate(loader), verbosity, desc="Train", total=nbatch):
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         tr.stop("dataload")
@@ -444,12 +453,10 @@ def train(
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-        tr.start("dataload")
-        if use_ddstore:
-            loader.dataset.ddstore.epoch_begin()
-    if use_ddstore:
-        loader.dataset.ddstore.epoch_end()
-    tr.stop("dataload")
+        if ibatch < (nbatch - 1):
+            tr.start("dataload")
+            if use_ddstore:
+                loader.dataset.ddstore.epoch_begin()
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
