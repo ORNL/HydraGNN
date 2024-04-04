@@ -17,6 +17,7 @@ from hydragnn.utils import nsplit
 import hydragnn.utils.tracer as tr
 from tqdm import tqdm
 
+
 class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
 
@@ -42,7 +43,9 @@ class DistDataset(AbstractBaseDataset):
             local_ns = len(data)
             local_ns_list = comm.allgather(local_ns)
             maxrank = np.argmax(local_ns_list).item()
-            for i in tqdm(range(local_ns), desc="Loading", disable=(self.rank != maxrank)):
+            for i in tqdm(
+                range(local_ns), desc="Loading", disable=(self.rank != maxrank)
+            ):
                 self.dataset.append(data[i])
             self.total_ns = comm.allreduce(local_ns, op=MPI.SUM)
         else:
