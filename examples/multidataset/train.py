@@ -205,7 +205,7 @@ if __name__ == "__main__":
                 "y",
             ]
             dataset.setkeys(common_variable_names)
-            dataset.setsubset(rx[0], rx[-1]+1, preload=True)
+            dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
 
         print(
             rank,
