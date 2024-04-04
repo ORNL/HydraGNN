@@ -193,21 +193,18 @@ if __name__ == "__main__":
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
 
-            ## FIXME: need to find common variable names
+            ## FIXME: Hard-coded for now. Need to find common variable names
             common_variable_names = [
-                "energy",
+                "atomic_numbers",
                 "edge_attr",
+                "edge_index",
+                "energy",
                 "force",
-                "natoms",
-                "cell",
                 "pos",
                 "x",
                 "y",
-                "edge_index",
-                "atomic_numbers",
             ]
-            # dataset.setkeys(common_variable_names)
-
+            dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1], preload=True)
 
         print(
