@@ -41,6 +41,7 @@ if __name__ == "__main__":
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
+    parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
@@ -97,6 +98,9 @@ if __name__ == "__main__":
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
@@ -192,10 +196,21 @@ if __name__ == "__main__":
         ## Set local set
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            dataset.setsubset(rx)
+
+            ## FIXME: Hard-coded for now. Need to find common variable names
+            common_variable_names = [
+                "x",
+                "edge_index",
+                "edge_attr",
+                "pos",
+                "y",
+            ]
+            dataset.setkeys(common_variable_names)
+            dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+
         print(
             rank,
-            "color,moddelname,len:",
+            "color, moddelname, local size(trainset,valset,testset):",
             mycolor,
             mymodel,
             len(trainset),

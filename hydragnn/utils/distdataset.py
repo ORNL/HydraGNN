@@ -15,6 +15,7 @@ from hydragnn.utils.print_utils import log
 from hydragnn.utils import nsplit
 
 import hydragnn.utils.tracer as tr
+from tqdm import tqdm
 
 
 class DistDataset(AbstractBaseDataset):
@@ -40,7 +41,11 @@ class DistDataset(AbstractBaseDataset):
         ## set total before set subset
         if local:
             local_ns = len(data)
-            for i in range(local_ns):
+            local_ns_list = comm.allgather(local_ns)
+            maxrank = np.argmax(local_ns_list).item()
+            for i in tqdm(
+                range(local_ns), desc="Loading", disable=(self.rank != maxrank)
+            ):
                 self.dataset.append(data[i])
             self.total_ns = comm.allreduce(local_ns, op=MPI.SUM)
         else:
@@ -51,7 +56,12 @@ class DistDataset(AbstractBaseDataset):
             for i in rx:
                 self.dataset.append(data[i])
 
-        self.keys = sorted(self.dataset[0].keys)
+        self.keys = (
+            self.dataset[0].keys()
+            if callable(self.dataset[0].keys)
+            else self.dataset[0].keys
+        )
+        self.keys = sorted(self.keys)
         self.variable_shape = dict()
         self.variable_dim = dict()
         self.variable_dtype = dict()
