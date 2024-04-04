@@ -138,6 +138,7 @@ if __name__ == "__main__":
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
+    parser.add_argument("--num_epoch", type=int, help="num_epoch", default=4)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
 
@@ -180,6 +181,8 @@ if __name__ == "__main__":
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
@@ -290,7 +293,7 @@ if __name__ == "__main__":
             "preload": False,
             "shmem": args.shmem,
             "ddstore": args.ddstore,
-            "ddstore_width": args.ddstore_width,
+            "ddstore_width": None if args.ddstore_width == 0 else args.ddstore_width,
         }
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
@@ -314,7 +317,7 @@ if __name__ == "__main__":
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
         if args.ddstore:
-            opt = {"ddstore_width": args.ddstore_width}
+            opt = {"ddstore_width": None if args.ddstore_width == 0 else args.ddstore_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
