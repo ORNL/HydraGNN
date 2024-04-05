@@ -29,6 +29,7 @@ torch.backends.cudnn.enabled = False
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+
 def main():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -38,7 +39,9 @@ def main():
     )
     parser.add_argument("--model_type", help="model_type", default="EGNN")
     parser.add_argument("--hidden_dim", type=int, help="hidden_dim", default=5)
-    parser.add_argument("--num_conv_layers", type=int, help="num_conv_layers", default=6)
+    parser.add_argument(
+        "--num_conv_layers", type=int, help="num_conv_layers", default=6
+    )
     parser.add_argument("--num_headlayers", type=int, help="num_headlayers", default=2)
     parser.add_argument("--dim_headlayers", type=int, help="dim_headlayers", default=10)
 
@@ -103,19 +106,28 @@ def main():
     var_config["node_feature_dims"] = node_feature_dims
 
     # Update the config dictionary with the suggested hyperparameters
-    config["NeuralNetwork"]["Architecture"]["model_type"] = args.parameters["model_type"]
-    config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters["hidden_dim"]
+    config["NeuralNetwork"]["Architecture"]["model_type"] = args.parameters[
+        "model_type"
+    ]
+    config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters[
+        "hidden_dim"
+    ]
     config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = args.parameters[
         "num_conv_layers"
     ]
 
     dim_headlayers = [
-        args.parameters["dim_headlayers"] for i in range(args.parameters["num_headlayers"])
+        args.parameters["dim_headlayers"]
+        for i in range(args.parameters["num_headlayers"])
     ]
 
     for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
-        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]["num_headlayers"] = args.parameters["num_headlayers"]
-        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]["dim_headlayers"] = dim_headlayers
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+            "num_headlayers"
+        ] = args.parameters["num_headlayers"]
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+            "dim_headlayers"
+        ] = dim_headlayers
 
     if args.parameters["model_type"] not in ["EGNN", "SchNet", "DimeNet"]:
         config["NeuralNetwork"]["Architecture"]["equivariance"] = False
@@ -260,7 +272,11 @@ def main():
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
@@ -318,6 +334,7 @@ def main():
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
 
 if __name__ == "__main__":
     try:
