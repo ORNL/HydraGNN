@@ -141,9 +141,6 @@ def train_validate_test(
             if epoch == 0:
                 tr.reset()
 
-        if int(os.getenv("HYDRAGNN_VALTEST", "1")) == 0:
-            continue
-
         val_loss, val_taskserr = validate(
             val_loader, model, verbosity, reduce_ranks=True
         )

@@ -59,7 +59,7 @@ def run(trial, dequed=None):
             f"--ntasks-per-node=8 --gpus-per-node=8",
             f"--cpus-per-task {OMP_NUM_THREADS} --threads-per-core 1 --cpu-bind threads",
             f"--gpus-per-task=1 --gpu-bind=closest",
-            f"--export=ALL,{master_addr},HYDRAGNN_VALTEST=1,HYDRAGNN_MAX_NUM_BATCH=100,HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1,HYDRAGNN_AGGR_BACKEND=mpi",
+            f"--export=ALL,{master_addr},HYDRAGNN_MAX_NUM_BATCH=100,HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1,HYDRAGNN_AGGR_BACKEND=mpi",
             f"--nodelist={nodelist}",
             f"--output {DEEPHYPER_LOG_DIR}/output_{SLURM_JOB_ID}_{trial.id}.txt",
             f"--error {DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt",
@@ -91,7 +91,6 @@ def run(trial, dequed=None):
     print("Command = ", command, flush=True, file=f)
 
     result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-    print(result, flush=True, file=f)
     output = "F"
     try:
         output = _parse_results(result)
