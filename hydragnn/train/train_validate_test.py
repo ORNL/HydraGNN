@@ -417,7 +417,9 @@ def train(
     tr.start("dataload")
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
-    for ibatch, data in iterate_tqdm(enumerate(loader), verbosity, desc="Train", total=nbatch):
+    for ibatch, data in iterate_tqdm(
+        enumerate(loader), verbosity, desc="Train", total=nbatch
+    ):
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         tr.stop("dataload")
