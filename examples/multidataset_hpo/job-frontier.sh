@@ -16,12 +16,12 @@ export MIOPEN_DISABLE_CACHE=1
 #export HSA_DISABLE_CACHE=1
 
 #export ROCM_HOME=/opt/rocm-5.4.2
-export TRANSFORMERS_OFFLINE=1
-export HF_DATASETS_OFFLINE=1
-export NCCL_DEBUG=INFO
+# export TRANSFORMERS_OFFLINE=1
+# export HF_DATASETS_OFFLINE=1
+# export NCCL_DEBUG=INFO
 # export settings
 #export TORCH_EXTENSIONS_DIR=$PWD/deepspeed
-export HF_HOME=$PWD/hfdata
+# export HF_HOME=$PWD/hfdata
 
 # setup hostfile
 HOSTS=.hosts-job$SLURM_JOB_ID
