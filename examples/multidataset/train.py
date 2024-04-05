@@ -5,6 +5,7 @@ from mpi4py import MPI
 import argparse
 
 import torch
+import numpy as np
 
 import hydragnn
 from hydragnn.utils.time_utils import Timer
@@ -47,9 +48,6 @@ if __name__ == "__main__":
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
         "--multi_model_list", help="multidataset list", default="OC2020"
-    )
-    parser.add_argument(
-        "--multi_process_list", help="multidataset process list", default="1"
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -171,13 +169,31 @@ if __name__ == "__main__":
         info("Multi load")
         ## Reading multiple datasets, which requires the following arguments:
         ## --multi_model_list: the list datasets/model names
-        ## --multi_process_list: the list of the number of processes
         modellist = args.multi_model_list.split(",")
-        processlist = list(map(lambda x: int(x), args.multi_process_list.split(",")))
-        assert comm_size == sum(processlist)
+        if rank == 0:
+            ndata_list = list()
+            for model in modellist:
+                fname = os.path.join(
+                    os.path.dirname(__file__), "./dataset/%s.bp" % model
+                )
+                f = AdiosDataset(fname, "trainset", comm)
+                ndata_list.append(f.ndata)
+                del f
+            ndata_list = np.array(ndata_list, dtype=np.float32)
+            process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
+                np.int32
+            )
+            imax = np.argmax(process_list)
+            process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
+            process_list = process_list.tolist()
+            comm.bcast(process_list)
+        else:
+            process_list = comm.bcast(None)
+        assert comm_size == sum(process_list)
+
         colorlist = list()
         color = 0
-        for n in processlist:
+        for n in process_list:
             for _ in range(n):
                 colorlist.append(color)
             color += 1
