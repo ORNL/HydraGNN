@@ -31,7 +31,7 @@ DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
 
 
 def _parse_results(stdout):
-    pattern = r"Train Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
+    pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
     matches = re.findall(pattern, stdout.decode())
     if matches:
         return matches[-1][0]
@@ -58,7 +58,7 @@ def run(trial, dequed=None):
             f"--ntasks-per-node=8 --gpus-per-node=8",
             f"--cpus-per-task {OMP_NUM_THREADS} --threads-per-core 1 --cpu-bind threads",
             f"--gpus-per-task=1 --gpu-bind=closest",
-            f"--export=ALL,{master_addr},HYDRAGNN_VALTEST=0,HYDRAGNN_MAX_NUM_BATCH=100",
+            f"--export=ALL,{master_addr},HYDRAGNN_VALTEST=1,HYDRAGNN_MAX_NUM_BATCH=100",
             f"--nodelist={nodelist}",
         ]
     )
@@ -73,6 +73,7 @@ def run(trial, dequed=None):
             f"--hidden_dim={trial.parameters['hidden_dim']}",
             f"--num_conv_layers={trial.parameters['num_conv_layers']}",
             f"--num_headlayers={trial.parameters['num_headlayers']}",
+            f"--dim_headlayers={trial.parameters['dim_headlayers']}",
             f"--multi",
             f"--ddstore",
             # f'--multi_model_list="ANI1x,MPTrj,OC2020,OC2022,qm7x"',
