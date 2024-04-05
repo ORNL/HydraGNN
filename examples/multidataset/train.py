@@ -186,7 +186,7 @@ if __name__ == "__main__":
             imax = np.argmax(process_list)
             process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
             process_list = process_list.tolist()
-        process_list = comm.bcast(process_list)
+        process_list = comm.bcast(process_list, root=0)
         assert comm_size == sum(process_list)
 
         colorlist = list()
