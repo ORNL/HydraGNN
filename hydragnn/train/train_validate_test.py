@@ -457,6 +457,8 @@ def train(
             tr.start("dataload")
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
+        else:
+            break
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local

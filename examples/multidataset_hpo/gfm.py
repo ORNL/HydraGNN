@@ -323,7 +323,7 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print("Unexpected error:")
-        print(sys.exc_info())
-        print(e)
+        log("Unexpected error:")
+        log(sys.exc_info())
+        log(e)
     sys.exit(0)
