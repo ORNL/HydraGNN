@@ -84,7 +84,7 @@ def run(trial, dequed=None):
             ## debugging
             f'--multi_model_list="ANI1x"',
             f'--multi_process_list="16"',
-            f'--num_epoch=5',
+            f"--num_epoch=5",
             f"--log={log_name}",
         ]
     )
