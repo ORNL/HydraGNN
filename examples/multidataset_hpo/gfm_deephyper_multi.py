@@ -93,12 +93,22 @@ def run(trial, dequed=None):
     result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
     output = "F"
     try:
-        output = _parse_results(result)
+        pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
+        fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
+        while True:
+            line = fout.readline()
+            matches = re.findall(pattern, line)
+            if matches:
+                output = float(matches[-1][0])
+            if not line:
+                break
+        fout.close()
+
     except Exception as excp:
         print(excp, flush=True, file=f)
         output = "F"
 
-    print("Got the output", output, flush=True, file=f)
+    print("Output:", output, flush=True, file=f)
     objective = output
     print(objective, flush=True, file=f)
     metadata = {"some_info": "some_value"}
