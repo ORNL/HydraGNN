@@ -36,6 +36,19 @@ import pickle
 import hydragnn.utils.tracer as tr
 
 
+def get_nbatch(loader):
+    ## calculate numbrer of batches for a given loader
+    m = len(loader.sampler)
+    nbatch = (m - 1) // loader.batch_size + 1
+    extra = -1 if m - nbatch * loader.batch_size > 0 and loader.drop_last else 0
+    nbatch = nbatch + extra
+
+    if os.getenv("HYDRAGNN_MAX_NUM_BATCH") is not None:
+        nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
+
+    return nbatch
+
+
 def train_validate_test(
     model,
     optimizer,
@@ -408,18 +421,16 @@ def train(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    extra = 0 if loader.drop_last else 1
-    nbatch = len(loader.sampler) // loader.batch_size + extra
 
-    if os.getenv("HYDRAGNN_MAX_NUM_BATCH") is not None:
-        nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
-
+    nbatch = get_nbatch(loader)
     tr.start("dataload")
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
     for ibatch, data in iterate_tqdm(
         enumerate(loader), verbosity, desc="Train", total=nbatch
     ):
+        if ibatch >= nbatch:
+            break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         tr.stop("dataload")
@@ -456,8 +467,6 @@ def train(
             tr.start("dataload")
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
-        else:
-            break
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
@@ -476,15 +485,15 @@ def validate(loader, model, verbosity, reduce_ranks=True):
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    extra = 0 if loader.drop_last else 1
-    nbatch = len(loader.sampler) // loader.batch_size + extra
-
-    if os.getenv("HYDRAGNN_MAX_NUM_BATCH") is not None:
-        nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
+    nbatch = get_nbatch(loader)
 
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
-    for ibatch, data in iterate_tqdm(enumerate(loader), verbosity, desc="Validate"):
+    for ibatch, data in iterate_tqdm(
+        enumerate(loader), verbosity, desc="Validate", total=nbatch
+    ):
+        if ibatch >= nbatch:
+            break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
@@ -498,8 +507,6 @@ def validate(loader, model, verbosity, reduce_ranks=True):
         if ibatch < (nbatch - 1):
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
-        else:
-            break
 
     val_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
@@ -521,15 +528,15 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    extra = 0 if loader.drop_last else 1
-    nbatch = len(loader.sampler) // loader.batch_size + extra
-
-    if os.getenv("HYDRAGNN_MAX_NUM_BATCH") is not None:
-        nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
+    nbatch = get_nbatch(loader)
 
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
-    for ibatch, data in iterate_tqdm(enumerate(loader), verbosity, desc="Test"):
+    for ibatch, data in iterate_tqdm(
+        enumerate(loader), verbosity, desc="Test", total=nbatch
+    ):
+        if ibatch >= nbatch:
+            break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
@@ -543,8 +550,6 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         if ibatch < (nbatch - 1):
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
-        else:
-            break
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
