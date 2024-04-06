@@ -35,10 +35,11 @@ import pickle
 
 import hydragnn.utils.tracer as tr
 
+
 def get_nbatch(loader):
     ## calculate numbrer of batches for a given loader
     m = len(loader.sampler)
-    nbatch = (m -1) // loader.batch_size + 1
+    nbatch = (m - 1) // loader.batch_size + 1
     extra = -1 if m - nbatch * loader.batch_size > 0 and loader.drop_last else 0
     nbatch = nbatch + extra
 
@@ -46,6 +47,7 @@ def get_nbatch(loader):
         nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
 
     return nbatch
+
 
 def train_validate_test(
     model,
@@ -487,7 +489,9 @@ def validate(loader, model, verbosity, reduce_ranks=True):
 
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
-    for ibatch, data in iterate_tqdm(enumerate(loader), verbosity, desc="Validate", total=nbatch):
+    for ibatch, data in iterate_tqdm(
+        enumerate(loader), verbosity, desc="Validate", total=nbatch
+    ):
         if ibatch >= nbatch:
             break
         if use_ddstore:
@@ -528,7 +532,9 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
 
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
-    for ibatch, data in iterate_tqdm(enumerate(loader), verbosity, desc="Test", total=nbatch):
+    for ibatch, data in iterate_tqdm(
+        enumerate(loader), verbosity, desc="Test", total=nbatch
+    ):
         if ibatch >= nbatch:
             break
         if use_ddstore:
