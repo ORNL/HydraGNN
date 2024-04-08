@@ -80,10 +80,8 @@ def run(trial, dequed=None):
             f"--multi",
             f"--ddstore",
             # f'--multi_model_list="ANI1x,MPTrj,OC2020,OC2022,qm7x"',
-            # f'--multi_process_list="8,8,2016,8,8"',
             ## debugging
             f'--multi_model_list="ANI1x"',
-            f'--multi_process_list="16"',
             f"--num_epoch=5",
             f"--log={log_name}",
         ]
@@ -136,7 +134,7 @@ if __name__ == "__main__":
     problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((100, 5000), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
-        ["EGNN", "SchNet"], "model_type"
+        ["EGNN", "SchNet", "PNA"], "model_type"
     )  # categorical parameter
 
     # Create the node queue
