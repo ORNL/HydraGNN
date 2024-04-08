@@ -134,7 +134,7 @@ if __name__ == "__main__":
     problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((100, 5000), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
-        ["EGNN", "SchNet"], "model_type"
+        ["EGNN", "SchNet", "PNA"], "model_type"
     )  # categorical parameter
 
     # Create the node queue
