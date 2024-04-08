@@ -5,6 +5,7 @@ from mpi4py import MPI
 import argparse
 
 import torch
+import numpy as np
 
 import hydragnn
 from hydragnn.utils.time_utils import Timer
@@ -22,6 +23,8 @@ try:
 except ImportError:
     pass
 
+from scipy.interpolate import BSpline, make_interp_spline
+
 ## FIMME
 torch.backends.cudnn.enabled = False
 
@@ -30,7 +33,7 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-def main():
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -55,9 +58,6 @@ def main():
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
         "--multi_model_list", help="multidataset list", default="OC2020"
-    )
-    parser.add_argument(
-        "--multi_process_list", help="multidataset process list", default="1"
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -207,13 +207,54 @@ def main():
         info("Multi load")
         ## Reading multiple datasets, which requires the following arguments:
         ## --multi_model_list: the list datasets/model names
-        ## --multi_process_list: the list of the number of processes
         modellist = args.multi_model_list.split(",")
-        processlist = list(map(lambda x: int(x), args.multi_process_list.split(",")))
-        assert comm_size == sum(processlist)
+        if rank == 0:
+            ndata_list = list()
+            pna_deg_list = list()
+            for model in modellist:
+                fname = os.path.join(
+                    os.path.dirname(__file__), "./dataset/%s.bp" % model
+                )
+                f = AdiosDataset(fname, "trainset", comm)
+                ndata_list.append(f.ndata)
+                pna_deg_list.append(f.pna_deg)
+                del f
+            ndata_list = np.array(ndata_list, dtype=np.float32)
+            process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
+                np.int32
+            )
+            imax = np.argmax(process_list)
+            process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
+            process_list = process_list.tolist()
+
+            ## Merge pna_deg using interpolation
+            intp_list = list()
+            mlen = min([len(pna_deg) for pna_deg in pna_deg_list])
+            for pna_deg in pna_deg_list:
+                x = np.linspace(0, 1, num=len(pna_deg))
+                intp = make_interp_spline(x, pna_deg)
+                intp_list.append(intp)
+
+            new_pna_deg_list = list()
+            for intp in intp_list:
+                x = np.linspace(0, 1, num=mlen)
+                y = intp(x)
+                new_pna_deg_list.append(y)
+
+            pna_deg = np.zeros_like(new_pna_deg_list[0])
+            for new_pna_deg in new_pna_deg_list:
+                pna_deg += new_pna_deg
+            pna_deg = pna_deg.astype(np.int64).tolist()
+        else:
+            process_list = None
+            pna_deg = None
+        process_list = comm.bcast(process_list, root=0)
+        pna_deg = comm.bcast(pna_deg, root=0)
+        assert comm_size == sum(process_list)
+
         colorlist = list()
         color = 0
-        for n in processlist:
+        for n in process_list:
             for _ in range(n):
                 colorlist.append(color)
             color += 1
@@ -260,6 +301,9 @@ def main():
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
+            trainset.pna_deg = pna_deg
+            valset.pna_deg = pna_deg
+            testset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -330,13 +374,4 @@ def main():
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        log("Unexpected error:")
-        log(sys.exc_info())
-        log(e)
     sys.exit(0)
