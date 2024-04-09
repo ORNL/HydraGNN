@@ -130,9 +130,9 @@ if __name__ == "__main__":
 
     # Define the search space for hyperparameters
     problem.add_hyperparameter((2, 6), "num_conv_layers")  # discrete parameter
-    problem.add_hyperparameter((100, 5000), "hidden_dim")  # discrete parameter
+    problem.add_hyperparameter((100, 2000), "hidden_dim")  # discrete parameter
     problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
-    problem.add_hyperparameter((100, 5000), "dim_headlayers")  # discrete parameter
+    problem.add_hyperparameter((100, 1000), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
         ["EGNN", "SchNet", "PNA"], "model_type"
     )  # categorical parameter

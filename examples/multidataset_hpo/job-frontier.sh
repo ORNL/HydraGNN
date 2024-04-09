@@ -6,7 +6,7 @@
 #SBATCH -e job-%j.out
 #SBATCH -t 0:30:00
 #SBATCH -p batch
-#SBATCH -N 4
+#SBATCH -N 2048
 
 # Frontier User Guide: https://docs.olcf.ornl.gov/systems/frontier_user_guide.html
 
@@ -39,8 +39,8 @@ sed 's/$/ slots=8/' $HOSTS > $HOSTFILE
 
 # Configuration 
 export NNODES=$SLURM_JOB_NUM_NODES # e.g., 100 total nodes
-export NNODES_PER_TRIAL=2
-export NUM_CONCURRENT_TRIALS=2
+export NNODES_PER_TRIAL=256
+export NUM_CONCURRENT_TRIALS=8
 export NTOTGPUS=$(( $NNODES * 8 )) # e.g., 800 total GPUs
 export NGPUS_PER_TRIAL=$(( 8 * $NNODES_PER_TRIAL )) # e.g., 32 GPUs per training
 export NTOT_DEEPHYPER_RANKS=$(( $NTOTGPUS / $NGPUS_PER_TRIAL )) # e.g., 25 total DH ranks
