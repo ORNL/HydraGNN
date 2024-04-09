@@ -39,7 +39,7 @@ sed 's/$/ slots=8/' $HOSTS > $HOSTFILE
 
 # Configuration 
 export NNODES=$SLURM_JOB_NUM_NODES # e.g., 100 total nodes
-export NNODES_PER_TRIAL=32
+export NNODES_PER_TRIAL=256
 export NUM_CONCURRENT_TRIALS=$(( $NNODES / $NNODES_PER_TRIAL ))
 export NTOTGPUS=$(( $NNODES * 8 )) # e.g., 800 total GPUs
 export NGPUS_PER_TRIAL=$(( 8 * $NNODES_PER_TRIAL )) # e.g., 32 GPUs per training
