@@ -11,7 +11,7 @@ try:
 except ImportError:
     pass
 
-from hydragnn.utils.print_utils import log
+from hydragnn.utils.print_utils import log, log0
 from hydragnn.utils import nsplit
 
 import hydragnn.utils.tracer as tr
@@ -107,7 +107,7 @@ class DistDataset(AbstractBaseDataset):
 
             vname = "%s/%s" % (label, k)
             self.ddstore.add(vname, val)
-            log(
+            log0(
                 "DDStore add:",
                 (
                     vname,
@@ -119,7 +119,7 @@ class DistDataset(AbstractBaseDataset):
                 ),
             )
             nbytes += val.size * val.itemsize
-        log("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
+        log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
     def len(self):
         return self.total_ns
