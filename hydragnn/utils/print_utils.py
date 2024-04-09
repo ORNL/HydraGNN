@@ -106,5 +106,6 @@ def log(*args, sep=" ", rank=None):
         if rank == world_rank:
             logger.info(sep.join(map(str, args)))
 
+
 def log0(*args, sep=" "):
     log(*args, sep=sep, rank=0)

@@ -332,18 +332,18 @@ class AdiosDataset(AbstractBaseDataset):
             self.keys = self.read_attribute_string0(f, "%s/keys" % label)
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
             if "minmax_graph_feature" in self.attrs:
-                self.minmax_graph_feature = self.read_attribute0(f, 
-                    "minmax_graph_feature"
+                self.minmax_graph_feature = self.read_attribute0(
+                    f, "minmax_graph_feature"
                 ).reshape((2, -1))
             if "minmax_node_feature" in self.attrs:
-                self.minmax_node_feature = self.read_attribute0(f, 
-                    "minmax_node_feature"
+                self.minmax_node_feature = self.read_attribute0(
+                    f, "minmax_node_feature"
                 ).reshape((2, -1))
             if "pna_deg" in self.attrs:
                 self.pna_deg = self.read_attribute0(f, "pna_deg")
             t1 = time.time()
             log0("Read attr time (sec): ", (t1 - t0))
-        
+
             self.variable_count = dict()
             self.variable_offset = dict()
             self.variable_dim = dict()
@@ -353,14 +353,30 @@ class AdiosDataset(AbstractBaseDataset):
             nbytes = 0
             t0 = time.time()
             for k in self.keys:
-                self.variable_count[k] = self.read0(f, "%s/%s/variable_count" % (label, k))
-                log0("read and bcast:", "%s/%s/variable_count" % (label, k), time.time()-t0)
-                self.variable_offset[k] = self.read0(f, "%s/%s/variable_offset" % (label, k))
-                log0("read and bcast:", "%s/%s/variable_offset" % (label, k), time.time()-t0)
-                self.variable_dim[k] = self.read_attribute0(f, 
-                    "%s/%s/variable_dim" % (label, k)
+                self.variable_count[k] = self.read0(
+                    f, "%s/%s/variable_count" % (label, k)
+                )
+                log0(
+                    "read and bcast:",
+                    "%s/%s/variable_count" % (label, k),
+                    time.time() - t0,
+                )
+                self.variable_offset[k] = self.read0(
+                    f, "%s/%s/variable_offset" % (label, k)
+                )
+                log0(
+                    "read and bcast:",
+                    "%s/%s/variable_offset" % (label, k),
+                    time.time() - t0,
+                )
+                self.variable_dim[k] = self.read_attribute0(
+                    f, "%s/%s/variable_dim" % (label, k)
                 ).item()
-                log0("read and bcast:", "%s/%s/variable_dim" % (label, k), time.time()-t0)
+                log0(
+                    "read and bcast:",
+                    "%s/%s/variable_dim" % (label, k),
+                    time.time() - t0,
+                )
                 if self.preload:
                     ##  preload data
                     if self.subset is not None:
@@ -450,7 +466,7 @@ class AdiosDataset(AbstractBaseDataset):
                     if vdim > 0:
                         self.data[k] = np.moveaxis(self.data[k], vdim, 0)
                         self.data[k] = np.ascontiguousarray(self.data[k])
-                    
+
                     t1 = time.time()
                     self.ddstore.add(vname, self.data[k])
                     t2 = time.time()
@@ -516,8 +532,6 @@ class AdiosDataset(AbstractBaseDataset):
             val = None
         val = self.comm.bcast(val, root=0)
         return val
-
-
 
     def update_data_object(self, data_object):
         if self.var_config is not None:
