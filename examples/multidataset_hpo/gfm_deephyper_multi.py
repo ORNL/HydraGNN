@@ -79,9 +79,9 @@ def run(trial, dequed=None):
             f"--dim_headlayers={trial.parameters['dim_headlayers']}",
             f"--multi",
             f"--ddstore",
-            # f'--multi_model_list="ANI1x,MPTrj,OC2020,OC2022,qm7x"',
+            f'--multi_model_list="ANI1x,MPTrj,OC2020-20M,OC2022,qm7x"',
             ## debugging
-            f'--multi_model_list="ANI1x"',
+            ##f'--multi_model_list="ANI1x"',
             f"--num_epoch=5",
             f"--log={log_name}",
         ]

@@ -270,35 +270,54 @@ def main():
         local_comm_rank = local_comm.Get_rank()
         local_comm_size = local_comm.Get_size()
 
+        ## FIXME: Hard-coded for now. Need to find common variable names
+        common_variable_names = [
+            "x",
+            "edge_index",
+            "edge_attr",
+            "pos",
+            "y",
+        ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
-        trainset = AdiosDataset(fname, "trainset", local_comm, var_config=var_config)
-        valset = AdiosDataset(fname, "valset", local_comm, var_config=var_config)
-        testset = AdiosDataset(fname, "testset", local_comm, var_config=var_config)
+        trainset = AdiosDataset(
+            fname,
+            "trainset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
+        valset = AdiosDataset(
+            fname,
+            "valset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
+        testset = AdiosDataset(
+            fname,
+            "testset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
 
         ## Set local set
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-
-            ## FIXME: Hard-coded for now. Need to find common variable names
-            common_variable_names = [
-                "x",
-                "edge_index",
-                "edge_attr",
-                "pos",
-                "y",
-            ]
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
 
-        print(
-            rank,
-            "color, moddelname, local size(trainset,valset,testset):",
-            mycolor,
-            mymodel,
-            len(trainset),
-            len(valset),
-            len(testset),
-        )
+        if local_comm_rank == 0:
+            print(
+                rank,
+                "color, moddelname, comm size, local size(trainset,valset,testset):",
+                mycolor,
+                mymodel,
+                local_comm_size,
+                len(trainset),
+                len(valset),
+                len(testset),
+            )
 
         assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
         if args.ddstore:
