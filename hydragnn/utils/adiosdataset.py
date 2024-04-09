@@ -3,7 +3,7 @@ import time
 import os
 import glob
 
-from .print_utils import print_distributed, log, iterate_tqdm
+from .print_utils import print_distributed, log, log0, iterate_tqdm
 
 import numpy as np
 
@@ -92,7 +92,7 @@ class AdiosWriter:
         Save data into an Adios file
         """
         t0 = time.time()
-        log("Adios saving:", self.filename)
+        log0("Adios saving:", self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         total_ns = 0
         for label in self.dataset:
@@ -224,7 +224,7 @@ class AdiosWriter:
 
         self.writer.Close()
         t1 = time.time()
-        log("Adios saving time (sec): ", (t1 - t0))
+        log0("Adios saving time (sec): ", (t1 - t0))
 
 
 class AdiosDataset(AbstractBaseDataset):
@@ -262,7 +262,6 @@ class AdiosDataset(AbstractBaseDataset):
         ddstore: bool, optional
             Option to use Distributed Data Store
         """
-        t0 = time.time()
         self.filename = filename
         self.label = label
         self.comm = comm
@@ -309,7 +308,7 @@ class AdiosDataset(AbstractBaseDataset):
             )
             self.ddstore_comm_rank = self.ddstore_comm.Get_rank()
             self.ddstore_comm_size = self.ddstore_comm.Get_size()
-            log(
+            log0(
                 "ddstore_comm_rank,ddstore_comm_size",
                 self.ddstore_comm_rank,
                 self.ddstore_comm_size,
@@ -322,24 +321,29 @@ class AdiosDataset(AbstractBaseDataset):
         if self.subset_istart is not None and self.subset_iend is not None:
             self.subset = list(range(subset_istart, subset_iend))
 
-        log("Adios reading:", self.filename)
-        with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
+        log0("Adios reading:", self.filename)
+        adios_read_time = 0.0
+        ddstore_time = 0.0
+        with ad2.open(self.filename, "r", self.comm) as f:
             f.__next__()
+            t0 = time.time()
             self.vars = f.available_variables()
             self.attrs = f.available_attributes()
-            self.keys = f.read_attribute_string("%s/keys" % label)
-            self.ndata = f.read_attribute("%s/ndata" % label).item()
+            self.keys = self.read_attribute_string0(f, "%s/keys" % label)
+            self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
             if "minmax_graph_feature" in self.attrs:
-                self.minmax_graph_feature = f.read_attribute(
+                self.minmax_graph_feature = self.read_attribute0(f, 
                     "minmax_graph_feature"
                 ).reshape((2, -1))
             if "minmax_node_feature" in self.attrs:
-                self.minmax_node_feature = f.read_attribute(
+                self.minmax_node_feature = self.read_attribute0(f, 
                     "minmax_node_feature"
                 ).reshape((2, -1))
             if "pna_deg" in self.attrs:
-                self.pna_deg = f.read_attribute("pna_deg")
-
+                self.pna_deg = self.read_attribute0(f, "pna_deg")
+            t1 = time.time()
+            log0("Read attr time (sec): ", (t1 - t0))
+        
             self.variable_count = dict()
             self.variable_offset = dict()
             self.variable_dim = dict()
@@ -347,12 +351,16 @@ class AdiosDataset(AbstractBaseDataset):
             self.subset_count = dict()
 
             nbytes = 0
+            t0 = time.time()
             for k in self.keys:
-                self.variable_count[k] = f.read("%s/%s/variable_count" % (label, k))
-                self.variable_offset[k] = f.read("%s/%s/variable_offset" % (label, k))
-                self.variable_dim[k] = f.read_attribute(
+                self.variable_count[k] = self.read0(f, "%s/%s/variable_count" % (label, k))
+                log0("read and bcast:", "%s/%s/variable_count" % (label, k), time.time()-t0)
+                self.variable_offset[k] = self.read0(f, "%s/%s/variable_offset" % (label, k))
+                log0("read and bcast:", "%s/%s/variable_offset" % (label, k), time.time()-t0)
+                self.variable_dim[k] = self.read_attribute0(f, 
                     "%s/%s/variable_dim" % (label, k)
                 ).item()
+                log0("read and bcast:", "%s/%s/variable_dim" % (label, k), time.time()-t0)
                 if self.preload:
                     ##  preload data
                     if self.subset is not None:
@@ -372,12 +380,12 @@ class AdiosDataset(AbstractBaseDataset):
                         self.subset_start[k] = start
                         self.subset_count[k] = count
                     else:
-                        self.data[k] = f.read("%s/%s" % (label, k))
+                        self.data[k] = self.read0(f, "%s/%s" % (label, k))
                 elif self.shmem:
                     if self.local_rank == 0:
                         adios = ad2.ADIOS()
                         io = adios.DeclareIO("ogb_read")
-                        reader = io.Open(self.filename, ad2.Mode.Read, MPI.COMM_SELF)
+                        reader = io.Open(self.filename, ad2.Mode.Read, self.comm)
                         var = io.InquireVariable("%s/%s" % (label, k))
 
                         if var.Type() == "double":
@@ -442,8 +450,13 @@ class AdiosDataset(AbstractBaseDataset):
                     if vdim > 0:
                         self.data[k] = np.moveaxis(self.data[k], vdim, 0)
                         self.data[k] = np.ascontiguousarray(self.data[k])
+                    
+                    t1 = time.time()
                     self.ddstore.add(vname, self.data[k])
-                    log(
+                    t2 = time.time()
+                    ddstore_time += t2 - t1
+
+                    log0(
                         "DDStore add:",
                         (
                             vname,
@@ -456,16 +469,17 @@ class AdiosDataset(AbstractBaseDataset):
                         ),
                     )
                     nbytes += self.data[k].size * self.data[k].itemsize
-            t2 = time.time()
-            log("Adios reading time (sec): ", (t2 - t0))
+            t3 = time.time()
+            log0("Overall time (sec): ", t3 - t0)
+            log0("DDStore adding time (sec): ", ddstore_time)
             if self.ddstore:
-                log("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
+                log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
         t1 = time.time()
-        log("Data loading time (sec): ", (t1 - t0))
+        log0("Data loading time (sec): ", (t1 - t0))
 
         if not self.preload and not self.shmem:
-            self.f = ad2.open(self.filename, "r", MPI.COMM_SELF)
+            self.f = ad2.open(self.filename, "r", self.comm)
             self.f.__next__()
 
         ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
@@ -477,6 +491,33 @@ class AdiosDataset(AbstractBaseDataset):
             self.output_index = self.var_config["output_index"]
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
             self.node_feature_dim = self.var_config["node_feature_dims"]
+
+    ## rank=0 read and bcast
+    def read0(self, f, vname):
+        if self.rank == 0:
+            val = f.read(vname)
+        else:
+            val = None
+        val = self.comm.bcast(val, root=0)
+        return val
+
+    def read_attribute0(self, f, vname):
+        if self.rank == 0:
+            val = f.read_attribute(vname)
+        else:
+            val = None
+        val = self.comm.bcast(val, root=0)
+        return val
+
+    def read_attribute_string0(self, f, vname):
+        if self.rank == 0:
+            val = f.read_attribute_string(vname)
+        else:
+            val = None
+        val = self.comm.bcast(val, root=0)
+        return val
+
+
 
     def update_data_object(self, data_object):
         if self.var_config is not None:
@@ -501,7 +542,7 @@ class AdiosDataset(AbstractBaseDataset):
         if preload and self.subset is not None:
             t0 = time.time()
             self.preload = preload
-            log("Adios preloading:", self.filename)
+            log0("Adios preloading:", self.filename)
             for k in self.keys:
                 shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                 ishape = [int(x.strip(",")) for x in shape.strip().split()]
@@ -518,7 +559,7 @@ class AdiosDataset(AbstractBaseDataset):
                 self.subset_count[k] = count
             self.f.close()
             t2 = time.time()
-            log("Adios reading time (sec): ", (t2 - t0))
+            log0("Adios reading time (sec): ", (t2 - t0))
 
     def len(self):
         if self.subset is not None:
@@ -591,7 +632,7 @@ class AdiosDataset(AbstractBaseDataset):
                         val = np.ascontiguousarray(val)
                 else:
                     ## Reading data directly from disk
-                    # log("getitem out-of-memory:", self.label, k, idx)
+                    # log0("getitem out-of-memory:", self.label, k, idx)
                     val = self.f.read("%s/%s" % (self.label, k), start, count)
 
                 v = torch.tensor(val)
@@ -640,7 +681,7 @@ class AdiosDataset(AbstractBaseDataset):
                 start[vdim] = self.variable_offset[k][i]
                 count[vdim] = self.variable_count[k][i : i + dn].sum()
 
-                with ad2.open(self.filename, "r", MPI.COMM_SELF) as f:
+                with ad2.open(self.filename, "r", self.comm) as f:
                     f.__next__()
                     self._data[k] = f.read("%s/%s" % (self.label, k), start, count)
 
