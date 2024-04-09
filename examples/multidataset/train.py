@@ -52,7 +52,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--multi_model_list", help="multidataset list", default="OC2020"
     )
-    parser.add_argument("--num_samples", type=int, help="set num samples per process for weak-scaling test", default=None)
+    parser.add_argument(
+        "--num_samples",
+        type=int,
+        help="set num samples per process for weak-scaling test",
+        default=None,
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -244,17 +249,37 @@ if __name__ == "__main__":
             "y",
         ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
-        trainset = AdiosDataset(fname, "trainset", local_comm, var_config=var_config, keys=common_variable_names)
-        valset = AdiosDataset(fname, "valset", local_comm, var_config=var_config, keys=common_variable_names)
-        testset = AdiosDataset(fname, "testset", local_comm, var_config=var_config, keys=common_variable_names)
+        trainset = AdiosDataset(
+            fname,
+            "trainset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
+        valset = AdiosDataset(
+            fname,
+            "valset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
+        testset = AdiosDataset(
+            fname,
+            "testset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
 
         ## Set local set
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
             if args.num_samples is not None:
                 if args.num_samples > len(rx):
-                    log(f"WARN: requested samples are larger than what is available. Use only {len(rx)}.")
-                rx = rx[:args.num_samples]
+                    log(
+                        f"WARN: requested samples are larger than what is available. Use only {len(rx)}."
+                    )
+                rx = rx[: args.num_samples]
 
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
