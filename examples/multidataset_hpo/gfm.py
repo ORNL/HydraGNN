@@ -24,6 +24,7 @@ except ImportError:
     pass
 
 from scipy.interpolate import BSpline, make_interp_spline
+import adios2 as ad2
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -204,7 +205,6 @@ def main():
             # trainset.minmax_graph_feature = minmax_graph_feature
             trainset.pna_deg = pna_deg
     elif args.format == "multi":
-        info("Multi load")
         ## Reading multiple datasets, which requires the following arguments:
         ## --multi_model_list: the list datasets/model names
         modellist = args.multi_model_list.split(",")
@@ -215,10 +215,15 @@ def main():
                 fname = os.path.join(
                     os.path.dirname(__file__), "./dataset/%s.bp" % model
                 )
-                f = AdiosDataset(fname, "trainset", comm)
-                ndata_list.append(f.ndata)
-                pna_deg_list.append(f.pna_deg)
-                del f
+                with ad2.open(fname, "r", MPI.COMM_SELF) as f:
+                    f.__next__()
+                    ndata = f.read_attribute("trainset/ndata").item()
+                    attrs = f.available_attributes()
+                    pna_deg = None
+                    if "pna_deg" in attrs:
+                        pna_deg = f.read_attribute("pna_deg")
+                    ndata_list.append(ndata)
+                    pna_deg_list.append(pna_deg)
             ndata_list = np.array(ndata_list, dtype=np.float32)
             process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
                 np.int32
@@ -265,35 +270,54 @@ def main():
         local_comm_rank = local_comm.Get_rank()
         local_comm_size = local_comm.Get_size()
 
+        ## FIXME: Hard-coded for now. Need to find common variable names
+        common_variable_names = [
+            "x",
+            "edge_index",
+            "edge_attr",
+            "pos",
+            "y",
+        ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
-        trainset = AdiosDataset(fname, "trainset", local_comm, var_config=var_config)
-        valset = AdiosDataset(fname, "valset", local_comm, var_config=var_config)
-        testset = AdiosDataset(fname, "testset", local_comm, var_config=var_config)
+        trainset = AdiosDataset(
+            fname,
+            "trainset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
+        valset = AdiosDataset(
+            fname,
+            "valset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
+        testset = AdiosDataset(
+            fname,
+            "testset",
+            local_comm,
+            var_config=var_config,
+            keys=common_variable_names,
+        )
 
         ## Set local set
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-
-            ## FIXME: Hard-coded for now. Need to find common variable names
-            common_variable_names = [
-                "x",
-                "edge_index",
-                "edge_attr",
-                "pos",
-                "y",
-            ]
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
 
-        print(
-            rank,
-            "color, moddelname, local size(trainset,valset,testset):",
-            mycolor,
-            mymodel,
-            len(trainset),
-            len(valset),
-            len(testset),
-        )
+        if local_comm_rank == 0:
+            print(
+                rank,
+                "color, moddelname, comm size, local size(trainset,valset,testset):",
+                mycolor,
+                mymodel,
+                local_comm_size,
+                len(trainset),
+                len(valset),
+                len(testset),
+            )
 
         assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
         if args.ddstore:
