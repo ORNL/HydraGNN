@@ -243,6 +243,7 @@ class AdiosDataset(AbstractBaseDataset):
         var_config=None,
         subset_istart=None,
         subset_iend=None,
+        keys = None,
     ):
         """
         Parameters
@@ -330,6 +331,8 @@ class AdiosDataset(AbstractBaseDataset):
             self.vars = f.available_variables()
             self.attrs = f.available_attributes()
             self.keys = self.read_attribute_string0(f, "%s/keys" % label)
+            if keys is not None:
+                self.setkeys(keys)
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
             if "minmax_graph_feature" in self.attrs:
                 self.minmax_graph_feature = self.read_attribute0(
@@ -545,6 +548,8 @@ class AdiosDataset(AbstractBaseDataset):
             update_atom_features(self.input_node_features, data_object)
 
     def setkeys(self, keys):
+        for k in keys:
+            assert k in self.keys
         self.keys = keys
 
     def setsubset(self, subset_istart, subset_iend, preload=False):
