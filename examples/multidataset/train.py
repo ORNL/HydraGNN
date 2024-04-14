@@ -277,7 +277,7 @@ if __name__ == "__main__":
             if args.num_samples is not None:
                 if args.num_samples > len(rx):
                     log(
-                        f"WARN: requested samples are larger than what is available. Use only {len(rx)}."
+                        f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
                     )
                 rx = rx[: args.num_samples]
 

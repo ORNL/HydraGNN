@@ -82,7 +82,7 @@ def run(trial, dequed=None):
             f'--multi_model_list="ANI1x,MPTrj,OC2020-20M,OC2022,qm7x"',
             ## debugging
             ##f'--multi_model_list="ANI1x"',
-            f"--num_epoch=5",
+            f"--num_epoch=10",
             f"--log={log_name}",
         ]
     )
@@ -97,7 +97,8 @@ def run(trial, dequed=None):
             line = fout.readline()
             matches = re.findall(pattern, line)
             if matches:
-                output = float(matches[-1][0])
+                ## DeepHyper maximizing by default
+                output = - float(matches[-1][0])
             if not line:
                 break
         fout.close()
@@ -131,8 +132,8 @@ if __name__ == "__main__":
     # Define the search space for hyperparameters
     problem.add_hyperparameter((2, 6), "num_conv_layers")  # discrete parameter
     problem.add_hyperparameter((100, 2000), "hidden_dim")  # discrete parameter
-    problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
-    problem.add_hyperparameter((100, 1000), "dim_headlayers")  # discrete parameter
+    problem.add_hyperparameter((2, 3), "num_headlayers")  # discrete parameter
+    problem.add_hyperparameter((300, 1000), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
         ["EGNN", "SchNet", "PNA"], "model_type"
     )  # categorical parameter
@@ -170,7 +171,7 @@ if __name__ == "__main__":
     )
 
     timeout = None
-    results = search.search(max_evals=10, timeout=timeout)
+    results = search.search(max_evals=200, timeout=timeout)
     print(results)
 
     sys.exit(0)
