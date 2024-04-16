@@ -25,7 +25,7 @@ def read_node_list():
                     nodes.append(f"frontier{leading_zeros}{i}")
             else:
                 nodes.append(f"frontier{subset}")
-        nodes_string = ",".join(nodes)        
+        nodes_string = ",".join(nodes)
     elif system == "perlmutter":
         node_subsets = node_list[4:-1].split(",")
         for subset in node_subsets:
