@@ -126,8 +126,9 @@ def run(trial):
     validation_loss = validation_loss.cpu().detach().numpy()
 
     # Return the metric to minimize (e.g., validation loss)
+    # By default, DeepHyper maximized the objective function, so we need to flip the sign of the validation loss function
     print("validation_loss.item()", validation_loss.item())
-    return validation_loss.item()
+    return -validation_loss.item()
 
 
 if __name__ == "__main__":

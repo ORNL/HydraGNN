@@ -46,8 +46,9 @@ def qm9_pre_transform(data):
 def _parse_results(stdout):
     pattern = r"Train Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
     matches = re.findall(pattern, stdout.decode())
+    # By default, DeepHyper maximized the objective function, so we need to flip the sign of the validation loss function
     if matches:
-        return matches[-1][0]
+        return -matches[-1][0]
     else:
         return "F"
 
