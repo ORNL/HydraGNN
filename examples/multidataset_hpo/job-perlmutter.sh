@@ -70,4 +70,4 @@ echo "Doing something"
 #$NTOT_DEEPHYPER_RANKS 
 #srun -n1 python qm9_deephyper_multi.py
 export HYDRAGNN_SYSTEM=perlmutter
-python gfm_deephyper_multi.py
+python gfm_deephyper_multi_perlmutter.py
