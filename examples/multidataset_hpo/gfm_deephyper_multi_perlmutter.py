@@ -98,7 +98,7 @@ def run(trial, dequed=None):
             line = fout.readline()
             matches = re.findall(pattern, line)
             if matches:
-                output = float(matches[-1][0])
+                output = -float(matches[-1][0])
             if not line:
                 break
         fout.close()
