@@ -97,8 +97,7 @@ def run(trial, dequed=None):
             line = fout.readline()
             matches = re.findall(pattern, line)
             if matches:
-                ## DeepHyper maximizing by default
-                output = - float(matches[-1][0])
+                output = -float(matches[-1][0])
             if not line:
                 break
         fout.close()
