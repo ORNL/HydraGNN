@@ -13,17 +13,31 @@ def master_from_host(host):
 def read_node_list():
     node_list = os.environ["SLURM_NODELIST"]
     nodes = []
-    node_subsets = node_list[9:-1].split(",")
-    for subset in node_subsets:
-        if "-" in subset:
-            start, end = subset.split("-")
-            start, end = int(start), int(end)
-            for i in range(start, end + 1):
-                leading_zeros = "".join(["0"] * (5 - len(str(i))))
-                nodes.append(f"frontier{leading_zeros}{i}")
-        else:
-            nodes.append(f"frontier{subset}")
-    nodes_string = ",".join(nodes)
+    system = os.getenv("HYDRAGNN_SYSTEM", "frontier")
+    if system == "frontier":
+        node_subsets = node_list[9:-1].split(",")
+        for subset in node_subsets:
+            if "-" in subset:
+                start, end = subset.split("-")
+                start, end = int(start), int(end)
+                for i in range(start, end + 1):
+                    leading_zeros = "".join(["0"] * (5 - len(str(i))))
+                    nodes.append(f"frontier{leading_zeros}{i}")
+            else:
+                nodes.append(f"frontier{subset}")
+        nodes_string = ",".join(nodes)
+    elif system == "perlmutter":
+        node_subsets = node_list[4:-1].split(",")
+        for subset in node_subsets:
+            if "-" in subset:
+                start, end = subset.split("-")
+                start, end = int(start), int(end)
+                for i in range(start, end + 1):
+                    leading_zeros = "".join(["0"] * (6 - len(str(i))))
+                    nodes.append(f"nid{leading_zeros}{i}")
+            else:
+                nodes.append(f"nid{subset}")
+        nodes_string = ",".join(nodes)
     return nodes, nodes_string
 
 
