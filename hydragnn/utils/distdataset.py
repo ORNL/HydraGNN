@@ -82,6 +82,8 @@ class DistDataset(AbstractBaseDataset):
             vdim = 0
             if len(vdims) > 0:
                 vdim = vdims[0]
+            ## vdim should be globally equal
+            vdim = self.comm.allreduce(vdim, op=MPI.MAX)
             val = np.concatenate(arr_list, axis=vdim)
             assert val.data.contiguous
 

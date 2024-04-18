@@ -19,6 +19,7 @@ from .print_utils import print_distributed
 
 import psutil
 import socket
+from datetime import timedelta
 
 
 def find_ifname(myaddr):
@@ -153,14 +154,16 @@ def setup_ddp():
             if ifname is not None:
                 os.environ["GLOO_SOCKET_IFNAME"] = ifname
 
-        print_distributed(
-            1,
-            "Distributed data parallel: %s master at %s:%s"
-            % (backend, master_addr, master_port),
-        )
+        if world_rank == 0:
+            print(
+                "Distributed data parallel: %s master at %s:%s"
+                % (backend, master_addr, master_port),
+            )
 
         if not dist.is_initialized():
-            dist.init_process_group(backend=backend, init_method="env://")
+            dist.init_process_group(
+                backend=backend, init_method="env://", timeout=timedelta(seconds=1800)
+            )
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
