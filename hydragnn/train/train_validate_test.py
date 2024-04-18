@@ -555,8 +555,11 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
             for i in range(len(data)):
                 n = len(data[i].pos)
                 y0 = data[i].y[1:].flatten()
-                y1 = pred[1][offset:offset+n].flatten()
-                y2 = torch.norm(data[i].y[1:].reshape(-1, 3) - pred[1][offset:offset+n,:], dim=1).mean()
+                y1 = pred[1][offset : offset + n].flatten()
+                y2 = torch.norm(
+                    data[i].y[1:].reshape(-1, 3) - pred[1][offset : offset + n, :],
+                    dim=1,
+                ).mean()
                 data_to_save = dict()
                 data_to_save["energy_true"] = data[i].y[0].detach().cpu().item()
                 data_to_save["forces_true"] = y0.detach().cpu()
@@ -565,7 +568,15 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
                 data_to_save["forces_average_error_per_atom"] = y2.detach().cpu()
                 pickle.dump(data_to_save, f)
                 if rank == 0:
-                    print(rank, ibatch, i, data[i].x.shape, data[i].y[0].item(), pred[0][i].item(), y2.item())
+                    print(
+                        rank,
+                        ibatch,
+                        i,
+                        data[i].x.shape,
+                        data[i].y[0].item(),
+                        pred[0][i].item(),
+                        y2.item(),
+                    )
                 offset += n
 
         total_error += error * data.num_graphs

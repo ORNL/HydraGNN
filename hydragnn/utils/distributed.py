@@ -161,7 +161,9 @@ def setup_ddp():
             )
 
         if not dist.is_initialized():
-            dist.init_process_group(backend=backend, init_method="env://", timeout=timedelta(seconds=1800))
+            dist.init_process_group(
+                backend=backend, init_method="env://", timeout=timedelta(seconds=1800)
+            )
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
