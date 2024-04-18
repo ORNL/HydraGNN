@@ -149,7 +149,7 @@ class AdiosWriter:
                 if len(vdims) > 0:
                     vdim = vdims[0]
                 ## vdim should be globally equal
-                vdim = comm.allreduce(vdim, op=MPI.MAX)
+                vdim = self.comm.allreduce(vdim, op=MPI.MAX)
                 val = np.concatenate(arr_list, axis=vdim)
                 if not val.flags["C_CONTIGUOUS"]:
                     val = np.ascontiguousarray(val)
