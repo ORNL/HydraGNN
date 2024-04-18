@@ -58,6 +58,12 @@ if __name__ == "__main__":
         help="set num samples per process for weak-scaling test",
         default=None,
     )
+    parser.add_argument(
+        "--num_test_samples",
+        type=int,
+        help="set num test samples per process for weak-scaling test",
+        default=None,
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -272,7 +278,7 @@ if __name__ == "__main__":
         )
 
         ## Set local set
-        for dataset in [trainset, valset, testset]:
+        for dataset in [trainset, valset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
             if args.num_samples is not None:
                 if args.num_samples > len(rx):
@@ -280,6 +286,18 @@ if __name__ == "__main__":
                         f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
                     )
                 rx = rx[: args.num_samples]
+
+            dataset.setkeys(common_variable_names)
+            dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+
+        for dataset in [testset]:
+            rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            num_samples = len(rx)
+            if args.num_test_samples is not None:
+                num_samples = args.num_test_samples
+            elif args.num_samples is not None:
+                num_samples = args.num_samples
+            rx = rx[:num_samples]
 
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
@@ -316,7 +334,8 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
+        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"],
+        test_sampler_shuffle = False,
     )
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
