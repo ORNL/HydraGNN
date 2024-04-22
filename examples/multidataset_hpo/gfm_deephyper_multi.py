@@ -45,6 +45,8 @@ def run(trial, dequed=None):
     python_exe = sys.executable
     python_script = os.path.join(os.path.dirname(__file__), "gfm.py")
 
+    counters_file = os.path.join(os.path.dirname(__file__), "counters_fp32.txt")
+
     # TODO: Launch a subprocess with `srun` to train neural networks
     params = trial.parameters
     log_name = "gfm" + "_" + str(trial.id)
@@ -63,6 +65,7 @@ def run(trial, dequed=None):
             f"--nodelist={nodelist}",
             f"--output {DEEPHYPER_LOG_DIR}/output_{SLURM_JOB_ID}_{trial.id}.txt",
             f"--error {DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt",
+            f"rocprof -i {counters_file} -o {DEEPHYPER_LOG_DIR}/counters_fp32_{SLURM_JOB_ID}_{trial.id}.csv",
         ]
     )
 
