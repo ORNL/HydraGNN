@@ -468,8 +468,10 @@ def train(
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
         if ibatch < (nbatch - 1):
             tr.start("dataload")
-            if use_ddstore:
-                loader.dataset.ddstore.epoch_begin()
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
@@ -507,9 +509,10 @@ def validate(loader, model, verbosity, reduce_ranks=True):
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-        if ibatch < (nbatch - 1):
-            if use_ddstore:
-                loader.dataset.ddstore.epoch_begin()
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
 
     val_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
@@ -583,9 +586,10 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
-        if ibatch < (nbatch - 1):
-            if use_ddstore:
-                loader.dataset.ddstore.epoch_begin()
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
 
     if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
         f.close()
