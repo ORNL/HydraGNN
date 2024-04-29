@@ -39,7 +39,7 @@ for index in indices:
 
     for json_file in json_files:
         subprocess.run(
-            [f"wget {url_root+'/'+index+'/'+json_file} -P {new_dir}"],
+            [f"wget -nv {url_root+'/'+index+'/'+json_file} -P {new_dir}"],
             shell=True,
             check=True,
             executable="/bin/bash",
