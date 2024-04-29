@@ -1,8 +1,5 @@
 import bz2
 
-from tqdm import tqdm
-
-
 import os, json
 import logging
 import sys
@@ -13,7 +10,6 @@ import random
 import numpy as np
 
 import torch
-from torch import tensor
 from torch_geometric.data import Data
 
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
