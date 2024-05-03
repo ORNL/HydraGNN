@@ -112,22 +112,24 @@ class Alexandria(AbstractBaseDataset):
 
         pos = None
         try:
-            pos=torch.tensor([item["xyz"] for item in computed_entry_dict["structure"]["sites"]]).float()
+            pos = torch.tensor(
+                [item["xyz"] for item in computed_entry_dict["structure"]["sites"]]
+            ).float()
         except:
             print(f"Structure {entry_id} does not have positional sites")
             return data_object
-        natoms=torch.LongTensor(len(structure["sites"]))
+        natoms = torch.LongTensor(len(structure["sites"]))
 
         cell = None
         try:
-            cell=torch.tensor(structure["lattice"]["matrix"]).float()
+            cell = torch.tensor(structure["lattice"]["matrix"]).float()
         except:
             print(f"Structure {entry_id} does not have cell")
             return data_object
 
         atomic_numbers = None
         try:
-            atomic_numbers=torch.LongTensor(
+            atomic_numbers = torch.LongTensor(
                 [
                     reversed_dict_periodic_table[item["species"][0]["element"]]
                     for item in computed_entry_dict["structure"]["sites"]
@@ -145,55 +147,55 @@ class Alexandria(AbstractBaseDataset):
             return data_object
         forces = torch.tensor(forces_numpy).float()
 
-        #magmoms_numpy = None
-        #try:
+        # magmoms_numpy = None
+        # try:
         #    magmoms_numpy = get_magmoms_array_from_structure(structure)
-        #except:
+        # except:
         #    print(f"Structure {entry_id} does not have magnetic moments")
         #    return data_object
 
         total_energy = None
         try:
-            total_energy=computed_entry_dict["data"]["energy_total"]
+            total_energy = computed_entry_dict["data"]["energy_total"]
         except:
             print(f"Structure {entry_id} does not have total energy")
             return data_object
         total_energy = torch.tensor([[total_energy]]).float()
-        total_energy_per_atom = total_energy/natoms
-        
-        #total_mag = None
-        #try:
+        total_energy_per_atom = total_energy / natoms
+
+        # total_mag = None
+        # try:
         #    total_mag=computed_entry_dict["data"]["total_mag"]
-        #except:
+        # except:
         #    print(f"Structure {entry_id} does not have total magnetization")
         #    return data_object
 
-        #dos_ef = None
-        #try:
+        # dos_ef = None
+        # try:
         #    dos_ef=computed_entry_dict["data"]["dos_ef"]
-        #except:
+        # except:
         #    print(f"Structure {entry_id} does not have dos_ef")
         #    return data_object
 
-        #band_gap_ind = None
-        #try:
+        # band_gap_ind = None
+        # try:
         #    band_gap_ind=computed_entry_dict["data"]["band_gap_ind"]
-        #except:
+        # except:
         #    print(f"Structure {entry_id} does not have band_gap_ind")
         #    return data_object
 
-        #formation_energy = None
-        #try:
+        # formation_energy = None
+        # try:
         #    formation_energy=computed_entry_dict["data"]["e_form"]
-        #except:
+        # except:
         #    print(f"Structure {entry_id} does not have formation energy")
         #    return data_object
-        #formation_energy_per_atom=computed_entry_dict["data"]["e_form"]/len(structure["sites"])
+        # formation_energy_per_atom=computed_entry_dict["data"]["e_form"]/len(structure["sites"])
 
-        #energy_above_hull = None
-        #try:
+        # energy_above_hull = None
+        # try:
         #    energy_above_hull=computed_entry_dict["data"]["e_above_hull"]
-        #except:
+        # except:
         #    print(f"Structure {entry_id} does not have e_above_hull")
         #    return data_object
 
@@ -202,17 +204,17 @@ class Alexandria(AbstractBaseDataset):
             cell=cell,
             atomic_numbers=atomic_numbers,
             forces=forces,
-            #entry_id=entry_id,
+            # entry_id=entry_id,
             natoms=natoms,
             total_energy=total_energy,
             total_energy_per_atom=total_energy_per_atom,
-            #formation_energy=torch.tensor(formation_energy).float(),
-            #formation_energy_per_atom=torch.tensor(formation_energy_per_atom).float(),
-            #energy_above_hull=energy_above_hull,
-            #magmoms=torch.tensor(magmoms_numpy).float(),
-            #total_mag=total_mag,
-            #dos_ef=dos_ef,
-            #band_gap_ind=band_gap_ind,
+            # formation_energy=torch.tensor(formation_energy).float(),
+            # formation_energy_per_atom=torch.tensor(formation_energy_per_atom).float(),
+            # energy_above_hull=energy_above_hull,
+            # magmoms=torch.tensor(magmoms_numpy).float(),
+            # total_mag=total_mag,
+            # dos_ef=dos_ef,
+            # band_gap_ind=band_gap_ind,
         )
 
         if self.energy_per_atom:
@@ -260,8 +262,10 @@ class Alexandria(AbstractBaseDataset):
                     )
                 ]
 
-                #remove None elements
-                filtered_computed_entry_dict = [x for x in computed_entry_dict if x is not None]
+                # remove None elements
+                filtered_computed_entry_dict = [
+                    x for x in computed_entry_dict if x is not None
+                ]
 
                 random.shuffle(filtered_computed_entry_dict)
                 self.dataset.extend(filtered_computed_entry_dict)
