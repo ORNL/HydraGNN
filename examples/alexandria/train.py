@@ -67,6 +67,8 @@ class Alexandria(AbstractBaseDataset):
 
         self.energy_per_atom = energy_per_atom
 
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+
         indices = ["pascal", "pbe", "pbe_1d", "pbe_2d", "pbesol", "scan"]
 
         for index in indices:
@@ -95,6 +97,8 @@ class Alexandria(AbstractBaseDataset):
         and other target properties.
         """
 
+        data_object = None
+
         def get_forces_array_from_structure(structure):
             forces = [site["properties"]["forces"] for site in structure["sites"]]
             return np.array(forces)
@@ -103,33 +107,112 @@ class Alexandria(AbstractBaseDataset):
             magmoms = [site["properties"]["magmom"] for site in structure["sites"]]
             return np.array(magmoms)
 
+        entry_id = computed_entry_dict["data"]["mat_id"]
         structure = computed_entry_dict["structure"]
 
-        data_object = Data(
-            pos=torch.tensor(
-                [item["xyz"] for item in computed_entry_dict["structure"]["sites"]]
-            ).float(),
-            cell=torch.tensor(structure["lattice"]["matrix"]).float(),
+        pos = None
+        try:
+            pos=torch.tensor([item["xyz"] for item in computed_entry_dict["structure"]["sites"]]).float()
+        except:
+            print(f"Structure {entry_id} does not have positional sites")
+            return data_object
+        natoms=torch.LongTensor(len(structure["sites"]))
+
+        cell = None
+        try:
+            cell=torch.tensor(structure["lattice"]["matrix"]).float()
+        except:
+            print(f"Structure {entry_id} does not have cell")
+            return data_object
+
+        atomic_numbers = None
+        try:
             atomic_numbers=torch.LongTensor(
                 [
                     reversed_dict_periodic_table[item["species"][0]["element"]]
                     for item in computed_entry_dict["structure"]["sites"]
                 ]
-            ).unsqueeze(1),
-            forces=torch.tensor(get_forces_array_from_structure(structure)).float(),
-            entry_id=computed_entry_dict["data"]["mat_id"],
-            natoms=len(structure["sites"]),
-            magmoms=get_magmoms_array_from_structure(structure),
-            total_energy=computed_entry_dict["data"]["energy_total"],
-            total_energy_per_atom=computed_entry_dict["data"]["energy_total"]
-            / len(structure["sites"]),
-            total_mag=computed_entry_dict["data"]["total_mag"],
-            dos_ef=computed_entry_dict["data"]["dos_ef"],
-            band_gap_ind=computed_entry_dict["data"]["band_gap_ind"],
-            formation_energy=computed_entry_dict["data"]["e_form"],
-            formation_energy_per_atom=computed_entry_dict["data"]["e_form"]
-            / len(structure["sites"]),
-            energy_above_hull=computed_entry_dict["data"]["e_above_hull"],
+            ).unsqueeze(1)
+        except:
+            print(f"Structure {entry_id} does not have positional atomic numbers")
+            return data_object
+
+        forces_numpy = None
+        try:
+            forces_numpy = get_forces_array_from_structure(structure)
+        except:
+            print(f"Structure {entry_id} does not have forces")
+            return data_object
+        forces = torch.tensor(forces_numpy).float()
+
+        #magmoms_numpy = None
+        #try:
+        #    magmoms_numpy = get_magmoms_array_from_structure(structure)
+        #except:
+        #    print(f"Structure {entry_id} does not have magnetic moments")
+        #    return data_object
+
+        total_energy = None
+        try:
+            total_energy=computed_entry_dict["data"]["energy_total"]
+        except:
+            print(f"Structure {entry_id} does not have total energy")
+            return data_object
+        total_energy = torch.tensor([[total_energy]]).float()
+        total_energy_per_atom = total_energy/natoms
+        
+        #total_mag = None
+        #try:
+        #    total_mag=computed_entry_dict["data"]["total_mag"]
+        #except:
+        #    print(f"Structure {entry_id} does not have total magnetization")
+        #    return data_object
+
+        #dos_ef = None
+        #try:
+        #    dos_ef=computed_entry_dict["data"]["dos_ef"]
+        #except:
+        #    print(f"Structure {entry_id} does not have dos_ef")
+        #    return data_object
+
+        #band_gap_ind = None
+        #try:
+        #    band_gap_ind=computed_entry_dict["data"]["band_gap_ind"]
+        #except:
+        #    print(f"Structure {entry_id} does not have band_gap_ind")
+        #    return data_object
+
+        #formation_energy = None
+        #try:
+        #    formation_energy=computed_entry_dict["data"]["e_form"]
+        #except:
+        #    print(f"Structure {entry_id} does not have formation energy")
+        #    return data_object
+        #formation_energy_per_atom=computed_entry_dict["data"]["e_form"]/len(structure["sites"])
+
+        #energy_above_hull = None
+        #try:
+        #    energy_above_hull=computed_entry_dict["data"]["e_above_hull"]
+        #except:
+        #    print(f"Structure {entry_id} does not have e_above_hull")
+        #    return data_object
+
+        data_object = Data(
+            pos=pos,
+            cell=cell,
+            atomic_numbers=atomic_numbers,
+            forces=forces,
+            #entry_id=entry_id,
+            natoms=natoms,
+            total_energy=total_energy,
+            total_energy_per_atom=total_energy_per_atom,
+            #formation_energy=torch.tensor(formation_energy).float(),
+            #formation_energy_per_atom=torch.tensor(formation_energy_per_atom).float(),
+            #energy_above_hull=energy_above_hull,
+            #magmoms=torch.tensor(magmoms_numpy).float(),
+            #total_mag=total_mag,
+            #dos_ef=dos_ef,
+            #band_gap_ind=band_gap_ind,
         )
 
         if self.energy_per_atom:
@@ -140,6 +223,9 @@ class Alexandria(AbstractBaseDataset):
         data_object.x = torch.cat(
             [data_object.atomic_numbers, data_object.pos, data_object.forces], dim=1
         )
+
+        data_object = self.radius_graph(data_object)
+        data_object = transform_coordinates(data_object)
 
         return data_object
 
@@ -174,8 +260,11 @@ class Alexandria(AbstractBaseDataset):
                     )
                 ]
 
-                random.shuffle(computed_entry_dict)
-                self.dataset.extend(computed_entry_dict)
+                #remove None elements
+                filtered_computed_entry_dict = [x for x in computed_entry_dict if x is not None]
+
+                random.shuffle(filtered_computed_entry_dict)
+                self.dataset.extend(filtered_computed_entry_dict)
 
             except OSError as e:
                 print("Failed to decompress data:", e)
