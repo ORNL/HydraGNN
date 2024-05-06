@@ -114,27 +114,36 @@ class Alexandria(AbstractBaseDataset):
         try:
             pos = torch.tensor(
                 [item["xyz"] for item in computed_entry_dict["structure"]["sites"]]
-            ).float()
+            ).to(torch.float32)
+            assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
+            assert pos.shape[0] > 0, "pos tensor does not have any atoms"
         except:
             print(f"Structure {entry_id} does not have positional sites")
             return data_object
-        natoms = torch.LongTensor(len(structure["sites"]))
+        natoms = torch.IntTensor([pos.shape[1]])
 
         cell = None
         try:
-            cell = torch.tensor(structure["lattice"]["matrix"]).float()
+            cell = torch.tensor(structure["lattice"]["matrix"]).to(torch.float32)
         except:
             print(f"Structure {entry_id} does not have cell")
             return data_object
 
         atomic_numbers = None
         try:
-            atomic_numbers = torch.LongTensor(
-                [
-                    reversed_dict_periodic_table[item["species"][0]["element"]]
-                    for item in computed_entry_dict["structure"]["sites"]
-                ]
-            ).unsqueeze(1)
+            atomic_numbers = (
+                torch.tensor(
+                    [
+                        reversed_dict_periodic_table[item["species"][0]["element"]]
+                        for item in computed_entry_dict["structure"]["sites"]
+                    ]
+                )
+                .unsqueeze(1)
+                .to(torch.float32)
+            )
+            assert (
+                pos.shape[0] == atomic_numbers.shape[0]
+            ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
         except:
             print(f"Structure {entry_id} does not have positional atomic numbers")
             return data_object
@@ -145,7 +154,7 @@ class Alexandria(AbstractBaseDataset):
         except:
             print(f"Structure {entry_id} does not have forces")
             return data_object
-        forces = torch.tensor(forces_numpy).float()
+        forces = torch.tensor(forces_numpy).to(torch.float32)
 
         # magmoms_numpy = None
         # try:
@@ -160,8 +169,10 @@ class Alexandria(AbstractBaseDataset):
         except:
             print(f"Structure {entry_id} does not have total energy")
             return data_object
-        total_energy = torch.tensor([[total_energy]]).float()
-        total_energy_per_atom = total_energy / natoms
+        total_energy_tensor = (
+            torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
+        )
+        total_energy_per_atom_tensor = total_energy_tensor.detach().clone() / natoms
 
         # total_mag = None
         # try:
@@ -206,8 +217,8 @@ class Alexandria(AbstractBaseDataset):
             forces=forces,
             # entry_id=entry_id,
             natoms=natoms,
-            total_energy=total_energy,
-            total_energy_per_atom=total_energy_per_atom,
+            total_energy=total_energy_tensor,
+            total_energy_per_atom=total_energy_per_atom_tensor,
             # formation_energy=torch.tensor(formation_energy).float(),
             # formation_energy_per_atom=torch.tensor(formation_energy_per_atom).float(),
             # energy_above_hull=energy_above_hull,
