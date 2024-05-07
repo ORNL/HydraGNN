@@ -268,6 +268,7 @@ def comm_reduce(x, op):
     y = tx.detach().cpu().numpy()
     return y
 
+
 ## For early stop
 def timedelta_parse(text):
     """
@@ -275,7 +276,12 @@ def timedelta_parse(text):
     format: [[[d-]h:]m:]s
     """
     tokens = text.replace("-", ":").split(":")
-    return timedelta(**{ key: float(val) for val, key in zip(tokens[::-1], ("seconds", "minutes", "hours", "days")) })
+    return timedelta(
+        **{
+            key: float(val)
+            for val, key in zip(tokens[::-1], ("seconds", "minutes", "hours", "days"))
+        }
+    )
 
 
 def check_remaining(t0):
@@ -288,11 +294,11 @@ def check_remaining(t0):
         if world_rank == 0:
             cmd = f"squeue -h -j {jobid} -o %L"
             proc = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
-            timestr = proc.stdout.decode('utf-8').strip()
+            timestr = proc.stdout.decode("utf-8").strip()
             left = timedelta_parse(timestr).total_seconds()
             esitmated = time.time() - t0
             should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(device)
-            print ("should_stop:", left, esitmated, should_stop.item())
+            print("should_stop:", left, esitmated, should_stop.item())
         else:
             should_stop = torch.tensor(False, dtype=torch.bool).to(device)
 

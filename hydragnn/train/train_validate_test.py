@@ -36,6 +36,7 @@ import pickle
 import hydragnn.utils.tracer as tr
 import time
 
+
 def get_nbatch(loader):
     ## calculate numbrer of batches for a given loader
     m = len(loader.sampler)
@@ -223,7 +224,9 @@ def train_validate_test(
 
         should_stop = check_remaining(t0)
         if should_stop:
-            print("No time left. Early stop.", )
+            print(
+                "No time left. Early stop.",
+            )
             break
 
     timer.stop()

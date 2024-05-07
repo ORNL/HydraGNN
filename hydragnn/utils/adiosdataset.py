@@ -467,7 +467,7 @@ class AdiosDataset(AbstractBaseDataset):
                     count[vdim] = sum(rx[self.ddstore_comm_rank])
 
                     # Read only local portion
-                    vname = "%s/%s" % (label, k)                        
+                    vname = "%s/%s" % (label, k)
                     self.data[k] = f.read(vname, start, count)
                     if vdim > 0:
                         self.data[k] = np.moveaxis(self.data[k], vdim, 0)
