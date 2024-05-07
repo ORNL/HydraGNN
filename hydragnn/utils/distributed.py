@@ -20,6 +20,8 @@ from .print_utils import print_distributed
 import psutil
 import socket
 from datetime import timedelta
+import time
+import subprocess
 
 
 def find_ifname(myaddr):
@@ -265,3 +267,35 @@ def comm_reduce(x, op):
     torch.distributed.all_reduce(tx, op=op)
     y = tx.detach().cpu().numpy()
     return y
+
+## For early stop
+def timedelta_parse(text):
+    """
+    Convert input string to timedelta.
+    format: [[[d-]h:]m:]s
+    """
+    tokens = text.replace("-", ":").split(":")
+    return timedelta(**{ key: float(val) for val, key in zip(tokens[::-1], ("seconds", "minutes", "hours", "days")) })
+
+
+def check_remaining(t0):
+    ## Early stop
+    world_size, world_rank = get_comm_size_and_rank()
+    jobid = os.getenv("SLURM_JOB_ID", None)
+    should_stop = False
+    device = get_device()
+    if jobid is not None:
+        if world_rank == 0:
+            cmd = f"squeue -h -j {jobid} -o %L"
+            proc = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+            timestr = proc.stdout.decode('utf-8').strip()
+            left = timedelta_parse(timestr).total_seconds()
+            esitmated = time.time() - t0
+            should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(device)
+            print ("should_stop:", left, esitmated, should_stop.item())
+        else:
+            should_stop = torch.tensor(False, dtype=torch.bool).to(device)
+
+        dist.broadcast(should_stop, src=0)
+        should_stop = should_stop.item()
+    return should_stop

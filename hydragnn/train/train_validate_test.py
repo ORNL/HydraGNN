@@ -20,7 +20,7 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
-from hydragnn.utils.distributed import get_device, print_peak_memory
+from hydragnn.utils.distributed import get_device, print_peak_memory, check_remaining
 from hydragnn.preprocess.load_data import HydraDataLoader
 from hydragnn.utils.model import Checkpoint, EarlyStopping
 
@@ -34,7 +34,7 @@ import torch.distributed as dist
 import pickle
 
 import hydragnn.utils.tracer as tr
-
+import time
 
 def get_nbatch(loader):
     ## calculate numbrer of batches for a given loader
@@ -138,6 +138,8 @@ def train_validate_test(
     timer.start()
 
     for epoch in range(0, num_epoch):
+        ## timer per epoch
+        t0 = time.time()
         profiler.set_current_epoch(epoch)
         for dataloader in [train_loader, val_loader, test_loader]:
             if getattr(dataloader.sampler, "set_epoch", None) is not None:
@@ -218,6 +220,11 @@ def train_validate_test(
                     % epoch,
                 )
                 break
+
+        should_stop = check_remaining(t0)
+        if should_stop:
+            print("No time left. Early stop.", )
+            break
 
     timer.stop()
 
