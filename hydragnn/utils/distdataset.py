@@ -11,16 +11,19 @@ try:
 except ImportError:
     pass
 
-from hydragnn.utils.print_utils import log
+from hydragnn.utils.print_utils import log, log0
 from hydragnn.utils import nsplit
 
 import hydragnn.utils.tracer as tr
+from tqdm import tqdm
 
 
 class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
 
-    def __init__(self, data, label, comm=MPI.COMM_WORLD, ddstore_width=None):
+    def __init__(
+        self, data, label, comm=MPI.COMM_WORLD, ddstore_width=None, local=False
+    ):
         super().__init__()
 
         self.label = label
@@ -36,14 +39,29 @@ class DistDataset(AbstractBaseDataset):
         self.ddstore = dds.PyDDStore(self.ddstore_comm)
 
         ## set total before set subset
-        self.total_ns = len(data)
-        rx = list(nsplit(range(len(data)), self.ddstore_comm_size))[
-            self.ddstore_comm_rank
-        ]
-        for i in rx:
-            self.dataset.append(data[i])
+        if local:
+            local_ns = len(data)
+            local_ns_list = comm.allgather(local_ns)
+            maxrank = np.argmax(local_ns_list).item()
+            for i in tqdm(
+                range(local_ns), desc="Loading", disable=(self.rank != maxrank)
+            ):
+                self.dataset.append(data[i])
+            self.total_ns = comm.allreduce(local_ns, op=MPI.SUM)
+        else:
+            self.total_ns = len(data)
+            rx = list(nsplit(range(len(data)), self.ddstore_comm_size))[
+                self.ddstore_comm_rank
+            ]
+            for i in rx:
+                self.dataset.append(data[i])
 
-        self.keys = sorted(self.dataset[0].keys)
+        self.keys = (
+            self.dataset[0].keys()
+            if callable(self.dataset[0].keys)
+            else self.dataset[0].keys
+        )
+        self.keys = sorted(self.keys)
         self.variable_shape = dict()
         self.variable_dim = dict()
         self.variable_dtype = dict()
@@ -64,6 +82,8 @@ class DistDataset(AbstractBaseDataset):
             vdim = 0
             if len(vdims) > 0:
                 vdim = vdims[0]
+            ## vdim should be globally equal
+            vdim = self.comm.allreduce(vdim, op=MPI.MAX)
             val = np.concatenate(arr_list, axis=vdim)
             assert val.data.contiguous
 
@@ -89,7 +109,7 @@ class DistDataset(AbstractBaseDataset):
 
             vname = "%s/%s" % (label, k)
             self.ddstore.add(vname, val)
-            log(
+            log0(
                 "DDStore add:",
                 (
                     vname,
@@ -101,7 +121,7 @@ class DistDataset(AbstractBaseDataset):
                 ),
             )
             nbytes += val.size * val.itemsize
-        log("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
+        log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
     def len(self):
         return self.total_ns

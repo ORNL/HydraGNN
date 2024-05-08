@@ -79,6 +79,9 @@ def setup_log(prefix):
     fname = "./logs/%s/run.log" % (prefix)
     fileHandler = logging.FileHandler(fname)
 
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
     fileHandler.setFormatter(logFormatter)
     logger.addHandler(fileHandler)
 
@@ -102,3 +105,7 @@ def log(*args, sep=" ", rank=None):
         world_size, world_rank = init_comm_size_and_rank()
         if rank == world_rank:
             logger.info(sep.join(map(str, args)))
+
+
+def log0(*args, sep=" "):
+    log(*args, sep=sep, rank=0)

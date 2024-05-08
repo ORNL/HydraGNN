@@ -1,4 +1,0 @@
-torch-geometric>=1.7.2 #required for GATv2
-torch-scatter
-torch-sparse
-torch-cluster

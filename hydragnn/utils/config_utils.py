@@ -23,9 +23,13 @@ import torch.distributed as dist
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
 
-    graph_size_variable = check_if_graph_size_variable(
-        train_loader, val_loader, test_loader
-    )
+    graph_size_variable = os.getenv("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE")
+    if graph_size_variable is None:
+        graph_size_variable = check_if_graph_size_variable(
+            train_loader, val_loader, test_loader
+        )
+    else:
+        graph_size_variable = bool(int(graph_size_variable))
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
@@ -277,4 +281,4 @@ def save_config(config, log_name, path="./logs/"):
     if world_rank == 0:
         fname = os.path.join(path, log_name, "config.json")
         with open(fname, "w") as f:
-            json.dump(config, f)
+            json.dump(config, f, indent=4)

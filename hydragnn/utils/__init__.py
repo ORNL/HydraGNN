@@ -28,6 +28,13 @@ from .config_utils import (
     get_log_name_config,
     save_config,
 )
+from .deephyper import (
+    master_from_host,
+    read_node_list,
+    create_ds_config,
+    read_job_node_list,
+    create_launch_command,
+)
 
 from .optimizer import select_optimizer
 from .atomicdescriptors import atomicdescriptors

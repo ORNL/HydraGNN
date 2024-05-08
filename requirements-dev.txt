@@ -3,3 +3,4 @@ pre-commit
 pytest
 pytest-mpi
 mendeleev
+mpi4py

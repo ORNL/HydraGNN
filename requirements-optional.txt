@@ -1,1 +1,7 @@
 deepspeed
+pymatgen
+jarvis-tools # needed for MPTrj dataset
+optuna # hyperparameter optimization
+deephyper # hyperparameter optimization
+h5py # utils to read hdf5 files
+

@@ -223,12 +223,26 @@ def dataset_loading_and_splitting(config: {}):
     )
 
 
-def create_dataloaders(trainset, valset, testset, batch_size):
+def create_dataloaders(
+    trainset,
+    valset,
+    testset,
+    batch_size,
+    train_sampler_shuffle=True,
+    val_sampler_shuffle=True,
+    test_sampler_shuffle=True,
+):
     if dist.is_initialized():
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler(trainset)
-        val_sampler = torch.utils.data.distributed.DistributedSampler(valset)
-        test_sampler = torch.utils.data.distributed.DistributedSampler(testset)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
+            trainset, shuffle=train_sampler_shuffle
+        )
+        val_sampler = torch.utils.data.distributed.DistributedSampler(
+            valset, shuffle=val_sampler_shuffle
+        )
+        test_sampler = torch.utils.data.distributed.DistributedSampler(
+            testset, shuffle=test_sampler_shuffle
+        )
 
         pin_memory = True
         persistent_workers = False

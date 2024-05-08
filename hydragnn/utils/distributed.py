@@ -19,6 +19,7 @@ from .print_utils import print_distributed
 
 import psutil
 import socket
+from datetime import timedelta
 
 
 def find_ifname(myaddr):
@@ -110,6 +111,10 @@ def get_comm_size_and_rank():
 def setup_ddp():
     """ "Initialize DDP"""
 
+    if dist.is_initialized():
+        world_size, world_rank = init_comm_size_and_rank()
+        return world_size, world_rank
+
     if os.getenv("HYDRAGNN_BACKEND") is not None:
         backend = os.environ["HYDRAGNN_BACKEND"]
     elif dist.is_nccl_available() and torch.cuda.is_available():
@@ -125,7 +130,9 @@ def setup_ddp():
     master_addr = "127.0.0.1"
     master_port = "8889"
 
-    if os.getenv("LSB_HOSTS") is not None:
+    if os.getenv("HYDRAGNN_MASTER_ADDR") is not None:
+        master_addr = os.environ["HYDRAGNN_MASTER_ADDR"]
+    elif os.getenv("LSB_HOSTS") is not None:
         ## source: https://www.olcf.ornl.gov/wp-content/uploads/2019/12/Scaling-DL-on-Summit.pdf
         ## The following is Summit specific
         master_addr = os.environ["LSB_HOSTS"].split()[1]
@@ -147,14 +154,16 @@ def setup_ddp():
             if ifname is not None:
                 os.environ["GLOO_SOCKET_IFNAME"] = ifname
 
-        print_distributed(
-            1,
-            "Distributed data parallel: %s master at %s:%s"
-            % (backend, master_addr, master_port),
-        )
+        if world_rank == 0:
+            print(
+                "Distributed data parallel: %s master at %s:%s"
+                % (backend, master_addr, master_port),
+            )
 
         if not dist.is_initialized():
-            dist.init_process_group(backend=backend, init_method="env://")
+            dist.init_process_group(
+                backend=backend, init_method="env://", timeout=timedelta(seconds=1800)
+            )
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")

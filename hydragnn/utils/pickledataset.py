@@ -30,9 +30,9 @@ class SimplePickleDataset(AbstractBaseDataset):
         self.subset = subset
         self.preload = preload
         self.var_config = var_config
-        self.input_node_features = var_config["input_node_features"]
 
         if self.var_config is not None:
+            self.input_node_features = self.var_config["input_node_features"]
             self.variables_type = self.var_config["type"]
             self.output_index = self.var_config["output_index"]
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
@@ -88,9 +88,6 @@ class SimplePickleDataset(AbstractBaseDataset):
             data_object = pickle.load(f)
             self.update_data_object(data_object)
         return data_object
-
-    def setsubset(self, subset):
-        self.subset = subset
 
     def update_data_object(self, data_object):
         if self.var_config is not None:
