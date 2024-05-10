@@ -224,7 +224,8 @@ def train_validate_test(
 
         should_stop = check_remaining(t0)
         if should_stop:
-            print(
+            print_distributed(
+                verbosity,
                 "No time left. Early stop.",
             )
             break

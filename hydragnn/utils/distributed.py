@@ -292,13 +292,16 @@ def check_remaining(t0):
     device = get_device()
     if jobid is not None:
         if world_rank == 0:
-            cmd = f"squeue -h -j {jobid} -o %L"
-            proc = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
-            timestr = proc.stdout.decode("utf-8").strip()
-            left = timedelta_parse(timestr).total_seconds()
-            esitmated = time.time() - t0
-            should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(device)
-            print("should_stop:", left, esitmated, should_stop.item())
+            try:
+                cmd = f"squeue -h -j {jobid} -o %L"
+                proc = subprocess.run(cmd.split(), stdout=subprocess.PIPE)
+                timestr = proc.stdout.decode("utf-8").strip()
+                left = timedelta_parse(timestr).total_seconds()
+                esitmated = time.time() - t0
+                should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(device)
+                print("should_stop:", left, esitmated, should_stop.item())
+            except:
+                should_stop = torch.tensor(False, dtype=torch.bool).to(device)
         else:
             should_stop = torch.tensor(False, dtype=torch.bool).to(device)
 
