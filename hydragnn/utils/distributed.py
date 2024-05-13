@@ -298,7 +298,9 @@ def check_remaining(t0):
                 timestr = proc.stdout.decode("utf-8").strip()
                 left = timedelta_parse(timestr).total_seconds()
                 esitmated = time.time() - t0
-                should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(device)
+                should_stop = torch.tensor(left < esitmated, dtype=torch.bool).to(
+                    device
+                )
                 print("should_stop:", left, esitmated, should_stop.item())
             except:
                 should_stop = torch.tensor(False, dtype=torch.bool).to(device)
