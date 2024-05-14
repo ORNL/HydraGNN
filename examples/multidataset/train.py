@@ -15,7 +15,7 @@ from hydragnn.utils.pickledataset import SimplePickleDataset
 
 import hydragnn.utils.tracer as tr
 
-from hydragnn.utils.print_utils import log
+from hydragnn.utils.print_utils import log, log0
 from hydragnn.utils import nsplit
 
 try:
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
-    info(
+    log0(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
