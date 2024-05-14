@@ -13,6 +13,7 @@ except ImportError:
 
 from hydragnn.utils.print_utils import log, log0
 from hydragnn.utils import nsplit
+from hydragnn.preprocess import update_predicted_values, update_atom_features
 
 import hydragnn.utils.tracer as tr
 from tqdm import tqdm
@@ -22,7 +23,13 @@ class DistDataset(AbstractBaseDataset):
     """Distributed dataset class"""
 
     def __init__(
-        self, data, label, comm=MPI.COMM_WORLD, ddstore_width=None, local=False
+        self,
+        data,
+        label,
+        comm=MPI.COMM_WORLD,
+        ddstore_width=None,
+        local=False,
+        var_config=None,
     ):
         super().__init__()
 
@@ -85,7 +92,9 @@ class DistDataset(AbstractBaseDataset):
             ## vdim should be globally equal
             vdim = self.comm.allreduce(vdim, op=MPI.MAX)
             val = np.concatenate(arr_list, axis=vdim)
-            assert val.data.contiguous
+            if not val.flags["C_CONTIGUOUS"]:
+                val = np.ascontiguousarray(val)
+            assert val.data.c_contiguous
 
             self.variable_shape[k] = val.shape
             self.variable_dim[k] = vdim
@@ -123,8 +132,29 @@ class DistDataset(AbstractBaseDataset):
             nbytes += val.size * val.itemsize
         log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
+        ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
+        self.var_config = var_config
+
+        if self.var_config is not None:
+            self.input_node_features = self.var_config["input_node_features"]
+            self.variables_type = self.var_config["type"]
+            self.output_index = self.var_config["output_index"]
+            self.graph_feature_dim = self.var_config["graph_feature_dims"]
+            self.node_feature_dim = self.var_config["node_feature_dims"]
+
     def len(self):
         return self.total_ns
+
+    def update_data_object(self, data_object):
+        if self.var_config is not None:
+            update_predicted_values(
+                self.variables_type,
+                self.output_index,
+                self.graph_feature_dim,
+                self.node_feature_dim,
+                data_object,
+            )
+            update_atom_features(self.input_node_features, data_object)
 
     @tr.profile("get")
     def get(self, idx):
@@ -148,4 +178,6 @@ class DistDataset(AbstractBaseDataset):
                 val = np.ascontiguousarray(val)
             v = torch.tensor(val)
             exec("data_object.%s = v" % (k))
+
+        self.update_data_object(data_object)
         return data_object

@@ -327,9 +327,10 @@ class AdiosDataset(AbstractBaseDataset):
         log0("Adios reading:", self.filename)
         adios_read_time = 0.0
         ddstore_time = 0.0
+        t0 = time.time()
         with ad2.open(self.filename, "r", self.comm) as f:
             f.__next__()
-            t0 = time.time()
+            t1 = time.time()
             self.vars = f.available_variables()
             self.attrs = f.available_attributes()
             self.keys = self.read_attribute_string0(f, "%s/keys" % label)
@@ -346,8 +347,8 @@ class AdiosDataset(AbstractBaseDataset):
                 ).reshape((2, -1))
             if "pna_deg" in self.attrs:
                 self.pna_deg = self.read_attribute0(f, "pna_deg")
-            t1 = time.time()
-            log0("Read attr time (sec): ", (t1 - t0))
+            t2 = time.time()
+            log0("Read attr time (sec): ", (t2 - t1))
 
             self.variable_count = dict()
             self.variable_offset = dict()
@@ -356,7 +357,7 @@ class AdiosDataset(AbstractBaseDataset):
             self.subset_count = dict()
 
             nbytes = 0
-            t0 = time.time()
+            t3 = time.time()
             for k in self.keys:
                 self.variable_count[k] = self.read0(
                     f, "%s/%s/variable_count" % (label, k)
@@ -364,7 +365,7 @@ class AdiosDataset(AbstractBaseDataset):
                 log0(
                     "read and bcast:",
                     "%s/%s/variable_count" % (label, k),
-                    time.time() - t0,
+                    time.time() - t3,
                 )
                 self.variable_offset[k] = self.read0(
                     f, "%s/%s/variable_offset" % (label, k)
@@ -372,7 +373,7 @@ class AdiosDataset(AbstractBaseDataset):
                 log0(
                     "read and bcast:",
                     "%s/%s/variable_offset" % (label, k),
-                    time.time() - t0,
+                    time.time() - t3,
                 )
                 self.variable_dim[k] = self.read_attribute0(
                     f, "%s/%s/variable_dim" % (label, k)
@@ -380,7 +381,7 @@ class AdiosDataset(AbstractBaseDataset):
                 log0(
                     "read and bcast:",
                     "%s/%s/variable_dim" % (label, k),
-                    time.time() - t0,
+                    time.time() - t3,
                 )
                 if self.preload:
                     ##  preload data
@@ -472,10 +473,10 @@ class AdiosDataset(AbstractBaseDataset):
                         self.data[k] = np.moveaxis(self.data[k], vdim, 0)
                         self.data[k] = np.ascontiguousarray(self.data[k])
 
-                    t1 = time.time()
+                    t4 = time.time()
                     self.ddstore.add(vname, self.data[k])
-                    t2 = time.time()
-                    ddstore_time += t2 - t1
+                    t5 = time.time()
+                    ddstore_time += t5 - t4
 
                     log0(
                         "DDStore add:",
@@ -490,14 +491,14 @@ class AdiosDataset(AbstractBaseDataset):
                         ),
                     )
                     nbytes += self.data[k].size * self.data[k].itemsize
-            t3 = time.time()
-            log0("Overall time (sec): ", t3 - t0)
+            t6 = time.time()
+            log0("Overall time (sec): ", t6 - t1)
             log0("DDStore adding time (sec): ", ddstore_time)
             if self.ddstore:
                 log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
-        t1 = time.time()
-        log0("Data loading time (sec): ", (t1 - t0))
+        t7 = time.time()
+        log0("Data loading time (sec): ", (t7 - t0))
 
         if not self.preload and not self.shmem:
             self.f = ad2.open(self.filename, "r", self.comm)
