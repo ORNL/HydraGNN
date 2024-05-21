@@ -35,6 +35,7 @@ import pickle
 
 import hydragnn.utils.tracer as tr
 import time
+from mpi4py import MPI
 
 
 def get_nbatch(loader):
@@ -437,17 +438,25 @@ def train(
     )
 
     nbatch = get_nbatch(loader)
-    tr.start("dataload")
+    syncopt = {"cudasync": True}
+    tr.start("dataload", **syncopt)
     if use_ddstore:
+        tr.start("epoch_begin")
         loader.dataset.ddstore.epoch_begin()
+        tr.stop("epoch_begin")
     for ibatch, data in iterate_tqdm(
         enumerate(loader), verbosity, desc="Train", total=nbatch
     ):
         if ibatch >= nbatch:
             break
         if use_ddstore:
+            tr.start("epoch_end")
             loader.dataset.ddstore.epoch_end()
-        tr.stop("dataload")
+            tr.stop("epoch_end")
+        tr.start("dataload_sync", **syncopt)
+        MPI.COMM_WORLD.Barrier()
+        tr.stop("dataload_sync")
+        tr.stop("dataload", **syncopt)
         tr.start("zero_grad")
         with record_function("zero_grad"):
             opt.zero_grad()
@@ -456,21 +465,29 @@ def train(
         with record_function("get_head_indices"):
             head_index = get_head_indices(model, data)
         tr.stop("get_head_indices")
-        tr.start("forward")
+        tr.start("forward", **syncopt)
         with record_function("forward"):
+            tr.start("h2d", **syncopt)
             data = data.to(get_device())
+            tr.stop("h2d", **syncopt)
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
-        tr.stop("forward")
-        tr.start("backward")
+            tr.start("forward_sync", **syncopt)
+            MPI.COMM_WORLD.Barrier()
+            tr.stop("forward_sync")
+        tr.stop("forward", **syncopt)
+        tr.start("backward", **syncopt)
         with record_function("backward"):
             loss.backward()
-        tr.stop("backward")
-        tr.start("opt_step")
+            tr.start("backward_sync", **syncopt)
+            MPI.COMM_WORLD.Barrier()
+            tr.stop("backward_sync")
+        tr.stop("backward", **syncopt)
+        tr.start("opt_step", **syncopt)
         # print_peak_memory(verbosity, "Max memory allocated before optimizer step")
         opt.step()
         # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
-        tr.stop("opt_step")
+        tr.stop("opt_step", **syncopt)
         profiler.step()
         with torch.no_grad():
             total_error += loss * data.num_graphs
@@ -478,9 +495,13 @@ def train(
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
         if ibatch < (nbatch - 1):
-            tr.start("dataload")
+            tr.start("dataload", **syncopt)
         if use_ddstore:
+            if ibatch < (nbatch - 1):
+                tr.start("epoch_begin")
             loader.dataset.ddstore.epoch_begin()
+            if ibatch < (nbatch - 1):
+                tr.stop("epoch_begin")
     if use_ddstore:
         loader.dataset.ddstore.epoch_end()
 
@@ -610,7 +631,15 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
     true_values = [[] for _ in range(model.module.num_heads)]
     predicted_values = [[] for _ in range(model.module.num_heads)]
     if return_samples:
-        for data in loader:
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+        for ibatch, data in iterate_tqdm(
+            enumerate(loader), verbosity, desc="Sample", total=nbatch
+        ):
+            if ibatch >= nbatch:
+                break
+            if use_ddstore:
+                loader.dataset.ddstore.epoch_end()
             head_index = get_head_indices(model, data)
             data = data.to(get_device())
             ytrue = data.y
@@ -620,6 +649,10 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
                 head_val = ytrue[head_index[ihead]]
                 true_values[ihead].append(head_val)
                 predicted_values[ihead].append(head_pre)
+            if use_ddstore:
+                loader.dataset.ddstore.epoch_begin()
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_end()
         for ihead in range(model.module.num_heads):
             predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
             true_values[ihead] = torch.cat(true_values[ihead], dim=0)

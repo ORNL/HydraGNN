@@ -11,7 +11,8 @@ import sys
 from collections import OrderedDict
 
 from abc import ABC, abstractmethod
-
+import torch
+from mpi4py import MPI
 
 class Tracer(ABC):
     def __init__(self, **kwargs):
@@ -105,12 +106,26 @@ def initialize(trlist=["GPTLTracer", "SCOREPTracer"], verbose=False, **kwargs):
             pass
 
 
-def start(name):
+def start(name, cudasync=False, sync=False):
+    if cudasync and torch.cuda.is_available():
+        try:
+            torch.cuda.synchronize()
+        except:
+            pass
+    if sync:
+        MPI.COMM_WORLD.Barrier()
     for tr in __tracer_list__.values():
         tr.start(name)
 
 
-def stop(name):
+def stop(name, cudasync=False, sync=False):
+    if cudasync and torch.cuda.is_available():
+        try:
+            torch.cuda.synchronize()
+        except:
+            pass
+    if sync:
+        MPI.COMM_WORLD.Barrier()
     for tr in __tracer_list__.values():
         tr.stop(name)
 
