@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 import torch
 from mpi4py import MPI
 
+
 class Tracer(ABC):
     def __init__(self, **kwargs):
         pass
