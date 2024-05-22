@@ -438,7 +438,11 @@ def train(
     )
 
     nbatch = get_nbatch(loader)
-    syncopt = {"cudasync": True}
+    syncopt = {"cudasync": False}
+    ## 0: default (no detailed tracing), 1: sync tracing
+    trace_level = int(os.getenv("HYDRAGNN_TRACE_LEVEL", "0"))
+    if trace_level > 0:
+        syncopt = {"cudasync": True}
     tr.start("dataload", **syncopt)
     if use_ddstore:
         tr.start("epoch_begin")
@@ -453,9 +457,10 @@ def train(
             tr.start("epoch_end")
             loader.dataset.ddstore.epoch_end()
             tr.stop("epoch_end")
-        tr.start("dataload_sync", **syncopt)
-        MPI.COMM_WORLD.Barrier()
-        tr.stop("dataload_sync")
+        if trace_level > 0:
+            tr.start("dataload_sync", **syncopt)
+            MPI.COMM_WORLD.Barrier()
+            tr.stop("dataload_sync")
         tr.stop("dataload", **syncopt)
         tr.start("zero_grad")
         with record_function("zero_grad"):
@@ -467,21 +472,24 @@ def train(
         tr.stop("get_head_indices")
         tr.start("forward", **syncopt)
         with record_function("forward"):
-            tr.start("h2d", **syncopt)
-            data = data.to(get_device())
-            tr.stop("h2d", **syncopt)
+            if trace_level > 0:
+                tr.start("h2d", **syncopt)
+                data = data.to(get_device())
+                tr.stop("h2d", **syncopt)
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
-            tr.start("forward_sync", **syncopt)
-            MPI.COMM_WORLD.Barrier()
-            tr.stop("forward_sync")
+            if trace_level > 0:
+                tr.start("forward_sync", **syncopt)
+                MPI.COMM_WORLD.Barrier()
+                tr.stop("forward_sync")
         tr.stop("forward", **syncopt)
         tr.start("backward", **syncopt)
         with record_function("backward"):
             loss.backward()
-            tr.start("backward_sync", **syncopt)
-            MPI.COMM_WORLD.Barrier()
-            tr.stop("backward_sync")
+            if trace_level > 0:
+                tr.start("backward_sync", **syncopt)
+                MPI.COMM_WORLD.Barrier()
+                tr.stop("backward_sync")
         tr.stop("backward", **syncopt)
         tr.start("opt_step", **syncopt)
         # print_peak_memory(verbosity, "Max memory allocated before optimizer step")
