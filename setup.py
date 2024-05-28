@@ -9,7 +9,6 @@ def read(fname):
 
 
 install_requires = [
-    "pickle5",
     "matplotlib",
     "tqdm",
     "tensorboard",
