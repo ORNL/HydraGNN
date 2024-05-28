@@ -192,9 +192,11 @@ class QM7XDataset(AbstractBaseDataset):
                 # check forces values
                 assert self.check_forces_values(
                     forces
-                    ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
-                data = Data(pos=xyz, x=Z, dataset_name="qm7x", molid=molid, confid=confid)
+                data = Data(
+                    pos=xyz, x=Z, dataset_name="qm7x", molid=molid, confid=confid
+                )
                 data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
 
                 if self.energy_per_atom:
