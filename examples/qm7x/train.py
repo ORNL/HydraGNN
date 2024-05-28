@@ -189,8 +189,10 @@ class QM7XDataset(AbstractBaseDataset):
             )  # hirshfeld ratios
 
             try:
-                #check forces values
-                assert self.check_forces_values(forces), f"L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                # check forces values
+                assert self.check_forces_values(
+                    forces
+                ), f"L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
                 data = Data(pos=xyz, x=Z, molid=molid, confid=confid)
                 data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
