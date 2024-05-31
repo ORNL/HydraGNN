@@ -73,9 +73,11 @@ def save_model(model, optimizer, name, path="./logs/"):
 
 def get_summary_writer(name, path="./logs/"):
     _, world_rank = get_comm_size_and_rank()
+    writer = None
     if world_rank == 0:
         path_name = os.path.join(path, name)
         writer = SummaryWriter(path_name)
+    return writer
 
 
 def load_existing_model_config(model, config, path="./logs/", optimizer=None):
