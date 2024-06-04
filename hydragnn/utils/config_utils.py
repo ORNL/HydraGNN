@@ -102,6 +102,9 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "SyncBatchNorm" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"] = False
+
+    if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
     return config
 
 
