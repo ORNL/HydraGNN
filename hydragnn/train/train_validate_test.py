@@ -474,7 +474,8 @@ def train(
         with record_function("forward"):
             if trace_level > 0:
                 tr.start("h2d", **syncopt)
-                data = data.to(get_device())
+            data = data.to(get_device())
+            if trace_level > 0:
                 tr.stop("h2d", **syncopt)
             pred = model(data)
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
