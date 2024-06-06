@@ -18,6 +18,7 @@ from torch.utils.checkpoint import checkpoint
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
 from hydragnn.utils.distributed import get_device
+from hydragnn.utils.print_utils import print_master
 
 import inspect
 
@@ -282,7 +283,7 @@ class Base(Module):
             self.heads_NN.append(head_NN)
 
     def enable_conv_checkpointing(self):
-        print("Enabling checkpointing")
+        print_master("Enabling checkpointing")
         self.conv_checkpointing = True
 
     def forward(self, data):
