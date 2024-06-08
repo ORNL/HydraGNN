@@ -194,9 +194,9 @@ class QM7XDataset(AbstractBaseDataset):
                     forces
                 ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
-                #data = Data(
+                # data = Data(
                 #    pos=xyz, x=Z, molid=molid, confid=confid
-                #)
+                # )
                 data = Data(pos=xyz, x=Z)
                 data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
 
