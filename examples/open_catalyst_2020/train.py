@@ -54,7 +54,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
-        
+
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
 
@@ -90,18 +90,21 @@ class OpenCatalystDataset(AbstractBaseDataset):
         a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
 
         list_atomistic_structures = write_images_to_adios(
-                a2g,
-                chunked_txt_files,
-                self.data_path,
-                energy_per_atom=self.energy_per_atom,
-            )
+            a2g,
+            chunked_txt_files,
+            self.data_path,
+            energy_per_atom=self.energy_per_atom,
+        )
 
-        for item in list_atomistic_structures:       
+        for item in list_atomistic_structures:
             if self.check_forces_values(item.force):
                 self.dataset.append(item)
             else:
-                print(f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}", flush=True)
- 
+                print(
+                    f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
+                    flush=True,
+                )
+
     def check_forces_values(self, forces):
 
         # Calculate the L2 norm for each row
