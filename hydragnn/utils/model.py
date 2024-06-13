@@ -45,6 +45,7 @@ def activation_function_selection(activation_function_string: str):
     elif activation_function_string == "sigmoid":
         return torch.nn.Sigmoid()
 
+
 def loss_function_selection(loss_function_string: str):
     if loss_function_string == "mse":
         return torch.nn.functional.mse_loss
