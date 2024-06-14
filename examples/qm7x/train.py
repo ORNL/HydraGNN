@@ -75,6 +75,9 @@ class QM7XDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.energy_per_atom = energy_per_atom
 
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
+
         self.dist = dist
         if self.dist:
             assert torch.distributed.is_initialized()
@@ -96,6 +99,14 @@ class QM7XDataset(AbstractBaseDataset):
         setids_files = [x for x in dirfiles if x.endswith("hdf5")]
 
         self.read_setids(dirpath, setids_files)
+
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def read_setids(self, dirpath, setids_files):
 
@@ -177,21 +188,31 @@ class QM7XDataset(AbstractBaseDataset):
                 torch.float32
             )  # hirshfeld ratios
 
-            data = Data(pos=xyz, x=Z)
-            data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
+            try:
+                # check forces values
+                assert self.check_forces_values(
+                    forces
+                ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
-            if self.energy_per_atom:
-                data.y = EPBE0 / natoms
-            else:
-                data.y = EPBE0
+                # data = Data(
+                #    pos=xyz, x=Z, molid=molid, confid=confid
+                # )
+                data = Data(pos=xyz, x=Z)
+                data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
 
-            data = create_graph_fromXYZ(data)
+                if self.energy_per_atom:
+                    data.y = EPBE0 / natoms
+                else:
+                    data.y = EPBE0
 
-            # Add edge length as edge feature
-            data = compute_edge_lengths(data)
-            data.edge_attr = data.edge_attr.to(torch.float32)
+                data = create_graph_fromXYZ(data)
 
-            subset.append(data)
+                # Add edge length as edge feature
+                data = compute_edge_lengths(data)
+                data.edge_attr = data.edge_attr.to(torch.float32)
+                subset.append(data)
+            except AssertionError as e:
+                print(f"Assertion error occurred: {e}")
 
         return subset
 
