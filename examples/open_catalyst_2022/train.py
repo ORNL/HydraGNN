@@ -72,6 +72,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
         else:
             self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
 
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
+
         self.dist = dist
         if self.dist:
             assert torch.distributed.is_initialized()
@@ -99,7 +102,15 @@ class OpenCatalystDataset(AbstractBaseDataset):
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            self.dataset.extend(self.traj_to_torch_geom(traj_file))
+            list_atomistic_structures = self.traj_to_torch_geom(traj_file)
+            for item in list_atomistic_structures:
+                if self.check_forces_values(item.force):
+                    self.dataset.append(item)
+                else:
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
+                        flush=True,
+                    )
 
     def ase_to_torch_geom(self, atoms):
         # set the atomic numbers, positions, and cell
@@ -146,6 +157,14 @@ class OpenCatalystDataset(AbstractBaseDataset):
         for step in traj:
             data_list.append(self.ase_to_torch_geom(step))
         return data_list
+
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
