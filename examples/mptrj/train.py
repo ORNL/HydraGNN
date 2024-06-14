@@ -158,12 +158,12 @@ class MPTrjDataset(AbstractBaseDataset):
                 data = self.radius_graph(data)
                 data = transform_coordinates(data)
                 if self.check_forces_values(data.force):
-                     self.dataset.append(data)
+                    self.dataset.append(data)
                 else:
-                     print(
-                         f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
-                         flush=True,
-                     )
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
+                        flush=True,
+                    )
 
     def check_forces_values(self, forces):
 
