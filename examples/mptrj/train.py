@@ -71,6 +71,9 @@ class MPTrjDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
+
         d = None
         if tmpfs is None:
             d = loadjson(os.path.join(dirpath, "MPtrj_2022.9_full.json"))
@@ -154,8 +157,21 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 data = self.radius_graph(data)
                 data = transform_coordinates(data)
+                if self.check_forces_values(data.force):
+                    self.dataset.append(data)
+                else:
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
+                        flush=True,
+                    )
 
-                self.dataset.append(data)
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
