@@ -66,6 +66,9 @@ class ANI1xDataset(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
+
         self.convert_trajectories_to_graphs()
 
     def convert_trajectories_to_graphs(self):
@@ -121,7 +124,13 @@ class ANI1xDataset(AbstractBaseDataset):
                 data = self.radius_graph(data)
                 data = transform_coordinates(data)
 
-                self.dataset.append(data)
+                if self.check_forces_values(data.force):
+                    self.dataset.append(data)
+                else:
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
+                        flush=True,
+                    )
 
     def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
         """Iterate over buckets of data in ANI HDF5 file.
@@ -145,6 +154,14 @@ class ANI1xDataset(AbstractBaseDataset):
                 d["atomic_numbers"] = grp["atomic_numbers"][()]
                 d["coordinates"] = grp["coordinates"][()][mask]
                 yield d
+
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
