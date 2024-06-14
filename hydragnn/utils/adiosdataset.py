@@ -107,6 +107,7 @@ class AdiosWriter:
                         break
 
                 for k in keys:
+                    vdim = self.comm.allreduce(0, op=MPI.MAX)
                     shape_list = self.comm.allgather([])
 
                 continue
