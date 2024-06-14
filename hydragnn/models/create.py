@@ -62,6 +62,7 @@ def create_model_config(
         config["Architecture"]["num_filters"],
         config["Architecture"]["radius"],
         config["Architecture"]["equivariance"],
+        config["Training"]["conv_checkpointing"],
         verbosity,
         use_gpu,
     )
@@ -97,6 +98,7 @@ def create_model(
     num_filters: int = None,
     radius: float = None,
     equivariance: bool = False,
+    conv_checkopinting: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -301,6 +303,9 @@ def create_model(
 
     else:
         raise ValueError("Unknown model_type: {0}".format(model_type))
+
+    if conv_checkopinting:
+        model.enable_conv_checkpointing()
 
     timer.stop()
 

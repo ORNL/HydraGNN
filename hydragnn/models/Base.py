@@ -14,9 +14,11 @@ from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch.nn import GaussianNLLLoss
+from torch.utils.checkpoint import checkpoint
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
 from hydragnn.utils.distributed import get_device
+from hydragnn.utils.print_utils import print_master
 
 import inspect
 
@@ -107,6 +109,8 @@ class Base(Module):
         self._multihead()
         if self.initial_bias is not None:
             self._set_bias()
+
+        self.conv_checkpointing = False
 
     def _init_conv(self):
         self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
@@ -278,6 +282,10 @@ class Base(Module):
                 )
             self.heads_NN.append(head_NN)
 
+    def enable_conv_checkpointing(self):
+        print_master("Enabling checkpointing")
+        self.conv_checkpointing = True
+
     def forward(self, data):
         x = data.x
         pos = data.pos
@@ -285,7 +293,12 @@ class Base(Module):
         ### encoder part ####
         conv_args = self._conv_args(data)
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
-            c, pos = conv(x=x, pos=pos, **conv_args)
+            if not self.conv_checkpointing:
+                c, pos = conv(x=x, pos=pos, **conv_args)
+            else:
+                c, pos = checkpoint(
+                    conv, use_reentrant=False, x=x, pos=pos, **conv_args
+                )
             x = self.activation_function(feat_layer(c))
 
         #### multi-head decoder part####
