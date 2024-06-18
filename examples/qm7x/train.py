@@ -202,7 +202,7 @@ class QM7XDataset(AbstractBaseDataset):
                 # data = Data(
                 #    pos=xyz, x=Z, molid=molid, confid=confid
                 # )
-                data = Data(pos=xyz, x=Z, force=forces, y=energy)
+                data = Data(pos=xyz, x=Z, force=forces, energy=energy, y=energy)
                 data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
 
                 data = create_graph_fromXYZ(data)
