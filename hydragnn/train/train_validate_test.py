@@ -186,7 +186,15 @@ def train_validate_test(
             f"Test Loss: {test_loss:.8f}",
         )
         print_distributed(
-            verbosity, "Tasks Loss:", [taskerr.item() for taskerr in train_taskserr]
+            verbosity,
+            "Tasks Train Loss:",
+            [taskerr.item() for taskerr in train_taskserr],
+        )
+        print_distributed(
+            verbosity, "Tasks Val Loss:", [taskerr.item() for taskerr in val_taskserr]
+        )
+        print_distributed(
+            verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
         )
 
         total_loss_train[epoch] = train_loss
