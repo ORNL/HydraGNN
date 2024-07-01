@@ -12,6 +12,8 @@ def master_from_host(host):
 
 def read_node_list():
     node_list = os.environ["SLURM_NODELIST"]
+    if not "[" in node_list:
+        return [node_list,], node_list
     nodes = []
     system = os.getenv("HYDRAGNN_SYSTEM", "frontier")
     if system == "frontier":
