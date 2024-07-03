@@ -1,4 +1,5 @@
 from mpi4py import MPI
+import pickle
 import time
 import os
 import glob
@@ -27,6 +28,50 @@ import hydragnn.utils.tracer as tr
 from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils import nsplit
 from hydragnn.preprocess import update_predicted_values, update_atom_features
+
+
+# A solution for bcast val > 2GB for mpi4py < 3.1.0
+# For mpi4py >= 3.1.0, please use: https://mpi4py.readthedocs.io/en/stable/mpi4py.util.pkl5.html
+def bulk_bcast(comm, val, root=0):
+    rank = comm.Get_rank()
+
+    # Define the maximum chunk size (2GB)
+    MAX_CHUNK_SIZE = 2 * 1000 * 1000 * 1000  # ~2GB
+
+    if rank == root:
+        # Serialize the value
+        serialized_val = pickle.dumps(val)
+        val_size = len(serialized_val)
+        num_chunks = (val_size + MAX_CHUNK_SIZE - 1) // MAX_CHUNK_SIZE
+    else:
+        serialized_val = None
+        val_size = None
+        num_chunks = None
+
+    # Broadcast the size and number of chunks
+    val_size = comm.bcast(val_size, root=root)
+    num_chunks = comm.bcast(num_chunks, root=root)
+
+    received_data = bytearray(val_size)
+
+    for i in range(num_chunks):
+        if rank == root:
+            chunk_start = i * MAX_CHUNK_SIZE
+            chunk_end = min((i + 1) * MAX_CHUNK_SIZE, val_size)
+            chunk = serialized_val[chunk_start:chunk_end]
+        else:
+            chunk = None
+
+        chunk = comm.bcast(chunk, root=root)
+
+        chunk_start = i * MAX_CHUNK_SIZE
+        received_data[chunk_start : chunk_start + len(chunk)] = chunk
+
+    # Deserialize the received data
+    if rank != root:
+        val = pickle.loads(received_data)
+
+    return val
 
 
 class AdiosWriter:
@@ -521,7 +566,7 @@ class AdiosDataset(AbstractBaseDataset):
             val = f.read(vname)
         else:
             val = None
-        val = self.comm.bcast(val, root=0)
+        val = bulk_bcast(self.comm, val, root=0)
         return val
 
     def read_attribute0(self, f, vname):
@@ -529,7 +574,7 @@ class AdiosDataset(AbstractBaseDataset):
             val = f.read_attribute(vname)
         else:
             val = None
-        val = self.comm.bcast(val, root=0)
+        val = bulk_bcast(self.comm, val, root=0)
         return val
 
     def read_attribute_string0(self, f, vname):
@@ -537,7 +582,7 @@ class AdiosDataset(AbstractBaseDataset):
             val = f.read_attribute_string(vname)
         else:
             val = None
-        val = self.comm.bcast(val, root=0)
+        val = bulk_bcast(self.comm, val, root=0)
         return val
 
     def update_data_object(self, data_object):
