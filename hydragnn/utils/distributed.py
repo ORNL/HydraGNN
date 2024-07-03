@@ -130,7 +130,7 @@ def setup_ddp():
 
     ## Default setting
     master_addr = "127.0.0.1"
-    master_port = "8889"
+    master_port = os.getenv("HYDRAGNN_MASTER_PORT", "8889")
 
     if os.getenv("HYDRAGNN_MASTER_ADDR") is not None:
         master_addr = os.environ["HYDRAGNN_MASTER_ADDR"]
