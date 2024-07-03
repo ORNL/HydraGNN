@@ -11,6 +11,7 @@ from mpi4py import MPI
 from itertools import chain
 import argparse
 import time
+import math
 
 import hydragnn
 from hydragnn.preprocess.load_data import split_dataset
@@ -91,9 +92,12 @@ def smiles_to_graph(datadir, files_list):
         df = pandas.read_csv(os.path.join(datadir, filename))
         rx = list(nsplit(range(len(df)), comm_size))[rank]
 
-        for smile_id in range(len(df))[rx.start : rx.stop]:
+        for smile_id in tqdm(range(len(df))[rx.start : rx.stop]):
             ## get atomic positions and numbers
             dfrow = df.iloc[smile_id]
+
+            if math.isnan(float(dfrow[-1])):
+                continue
 
             smilestr = dfrow[0]
             ytarget = (
@@ -103,14 +107,18 @@ def smiles_to_graph(datadir, files_list):
                 .to(torch.float32)
             )  # HL gap
 
-            data = generate_graphdata_from_smilestr(
-                smilestr,
-                ytarget,
-                ogb_node_types,
-                var_config,
-            )
+            try:
+                data = generate_graphdata_from_smilestr(
+                    smilestr,
+                    ytarget,
+                    ogb_node_types,
+                    var_config,
+                )
 
-            subset.append(data)
+                subset.append(data)
+            except KeyError:
+                print("KeyError: ", smilestr)
+                continue
 
     return subset
 
@@ -369,6 +377,7 @@ if __name__ == "__main__":
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
+            adwriter.add_global("pna_deg", deg)
             adwriter.save()
 
         sys.exit(0)
@@ -380,9 +389,9 @@ if __name__ == "__main__":
         if args.shmem:
             opt = {"preload": False, "shmem": True}
         fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
-        trainset = AdiosDataset(fname, "trainset", comm, opt)
-        valset = AdiosDataset(fname, "valset", comm, opt)
-        testset = AdiosDataset(fname, "testset", comm, opt)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm, **opt)
+        testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "csv":
         fname = os.path.join(os.path.dirname(__file__), "dataset", "pcqm4m_gap.csv")
         fact = OGBRawDatasetFactory(
