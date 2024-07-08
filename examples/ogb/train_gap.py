@@ -271,7 +271,10 @@ if __name__ == "__main__":
         "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
     )
     parser.add_argument(
-        "--use_deepspeed", help="Use Deepspeed", action="store_true", dest="use_deepspeed"
+        "--use_deepspeed",
+        help="Use Deepspeed",
+        action="store_true",
+        dest="use_deepspeed",
     )
     parser.set_defaults(format="adios")
     args = parser.parse_args()
@@ -448,7 +451,9 @@ if __name__ == "__main__":
     if not args.use_deepspeed:
         model = hydragnn.utils.get_distributed_model(model, verbosity)
 
-        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
+        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ]
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
@@ -460,7 +465,9 @@ if __name__ == "__main__":
 
     if args.use_deepspeed:
         # first, create optimizer and scheduler for deepspeed initialization
-        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
+        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ]
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
@@ -472,12 +479,11 @@ if __name__ == "__main__":
         # create deepspeed model
         model, optimizer, _, _ = deepspeed.initialize(
             model=model, config=ds_config, dist_init_required=False, optimizer=optimizer
-        ) # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
+        )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
 
         hydragnn.utils.load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], use_deepspeed=True
         )
-
 
     ##################################################################################################################
 

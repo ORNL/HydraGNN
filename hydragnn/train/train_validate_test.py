@@ -156,7 +156,12 @@ def train_validate_test(
             tr.enable()
             tr.start("train")
             train_loss, train_taskserr = train(
-                train_loader, model, optimizer, verbosity, profiler=prof, use_deepspeed=use_deepspeed
+                train_loader,
+                model,
+                optimizer,
+                verbosity,
+                profiler=prof,
+                use_deepspeed=use_deepspeed,
             )
             tr.stop("train")
             tr.disable()
@@ -429,14 +434,7 @@ def gather_tensor_ranks(head_values):
     return head_values
 
 
-def train(
-    loader,
-    model,
-    opt,
-    verbosity,
-    profiler=None,
-    use_deepspeed=False
-):
+def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
     if profiler is None:
         profiler = Profiler()
 

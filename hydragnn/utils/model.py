@@ -85,7 +85,9 @@ def get_summary_writer(name, path="./logs/"):
     return writer
 
 
-def load_existing_model_config(model, config, path="./logs/", optimizer=None, use_deepspeed=False):
+def load_existing_model_config(
+    model, config, path="./logs/", optimizer=None, use_deepspeed=False
+):
     if "continue" in config and config["continue"]:
         model_name = config["startfrom"]
         if not use_deepspeed:
@@ -233,9 +235,10 @@ class Checkpoint:
         else:
             self.min_perf_metric = perf_metric
             save_model(
-                model, 
-                optimizer, 
-                name=self.name, 
-                path=self.path, 
-                use_deepspeed=self.use_deepspeed)
+                model,
+                optimizer,
+                name=self.name,
+                path=self.path,
+                use_deepspeed=self.use_deepspeed,
+            )
             return True

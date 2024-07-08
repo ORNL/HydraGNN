@@ -26,6 +26,7 @@ from mpi4py import MPI
 
 import deepspeed
 
+
 def find_ifname(myaddr):
     """
     Find socket ifname for a given ip adress. This is for "GLOO" ddp setup.
@@ -168,11 +169,15 @@ def setup_ddp(use_deepspeed=False):
         if not dist.is_initialized():
             if use_deepspeed:
                 deepspeed.init_distributed(
-                    dist_backend=backend, init_method="env://", timeout=timedelta(seconds=1800)
+                    dist_backend=backend,
+                    init_method="env://",
+                    timeout=timedelta(seconds=1800),
                 )
             else:
                 dist.init_process_group(
-                    backend=backend, init_method="env://", timeout=timedelta(seconds=1800)
+                    backend=backend,
+                    init_method="env://",
+                    timeout=timedelta(seconds=1800),
                 )
 
     except KeyError:
