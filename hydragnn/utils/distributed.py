@@ -24,7 +24,11 @@ import time
 import subprocess
 from mpi4py import MPI
 
-import deepspeed
+deepspeed_available = True
+try:
+    import deepspeed
+except ImportError:
+    deepspeed_available = False
 
 
 def find_ifname(myaddr):
@@ -168,6 +172,7 @@ def setup_ddp(use_deepspeed=False):
 
         if not dist.is_initialized():
             if use_deepspeed:
+                assert deepspeed_available, "deepspeed package not installed"
                 deepspeed.init_distributed(
                     dist_backend=backend,
                     init_method="env://",

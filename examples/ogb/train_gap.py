@@ -38,7 +38,11 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
-import deepspeed
+deepspeed_available = True
+try:
+    import deepspeed
+except ImportError:
+    deepspeed_available = False
 
 # import warnings
 
@@ -464,6 +468,7 @@ if __name__ == "__main__":
         )
 
     if args.use_deepspeed:
+        assert deepspeed_available, "deepspeed package not installed"
         # first, create optimizer and scheduler for deepspeed initialization
         learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
             "learning_rate"
