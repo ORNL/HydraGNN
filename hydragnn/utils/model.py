@@ -57,20 +57,23 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
 
 
-def save_model(model, optimizer, name, path="./logs/"):
+def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
     """Save both model and optimizer state in a single checkpoint file"""
-    _, world_rank = get_comm_size_and_rank()
-    if hasattr(optimizer, "consolidate_state_dict"):
-        optimizer.consolidate_state_dict()
-    if world_rank == 0:
-        path_name = os.path.join(path, name, name + ".pk")
-        torch.save(
-            {
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-            },
-            path_name,
-        )
+    if not use_deepspeed:
+        _, world_rank = get_comm_size_and_rank()
+        if hasattr(optimizer, "consolidate_state_dict"):
+            optimizer.consolidate_state_dict()
+        if world_rank == 0:
+            path_name = os.path.join(path, name, name + ".pk")
+            torch.save(
+                {
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                },
+                path_name,
+            )
+    else:
+        model.save_checkpoint(os.path.join(path, name), name)
 
 
 def get_summary_writer(name, path="./logs/"):
@@ -82,10 +85,13 @@ def get_summary_writer(name, path="./logs/"):
     return writer
 
 
-def load_existing_model_config(model, config, path="./logs/", optimizer=None):
+def load_existing_model_config(model, config, path="./logs/", optimizer=None, use_deepspeed=False):
     if "continue" in config and config["continue"]:
         model_name = config["startfrom"]
-        load_existing_model(model, model_name, path, optimizer)
+        if not use_deepspeed:
+            load_existing_model(model, model_name, path, optimizer)
+        else:
+            model.load_checkpoint(os.path.join(path, model_name), model_name)
 
 
 def load_existing_model(model, model_name, path="./logs/", optimizer=None):
@@ -207,6 +213,7 @@ class Checkpoint:
         name: str,
         warmup: int = 0,
         path: str = "./logs/",
+        use_deepspeed: bool = False,
     ):
         self.count = 1
         self.warmup = warmup
@@ -214,6 +221,7 @@ class Checkpoint:
         self.name = name
         self.min_perf_metric = float("inf")
         self.min_delta = 0
+        self.use_deepspeed = use_deepspeed
 
     def __call__(self, model, optimizer, perf_metric):
 
@@ -224,5 +232,10 @@ class Checkpoint:
             return False
         else:
             self.min_perf_metric = perf_metric
-            save_model(model, optimizer, name=self.name, path=self.path)
+            save_model(
+                model, 
+                optimizer, 
+                name=self.name, 
+                path=self.path, 
+                use_deepspeed=self.use_deepspeed)
             return True

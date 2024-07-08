@@ -285,3 +285,20 @@ def save_config(config, log_name, path="./logs/"):
         fname = os.path.join(path, log_name, "config.json")
         with open(fname, "w") as f:
             json.dump(config, f, indent=4)
+
+
+def parse_deepspeed_config(config):
+    # first, check if we have a ds_config section in the config
+    if "ds_config" in config["NeuralNetwork"]:
+        ds_config = config["NeuralNetwork"]["ds_config"]
+    else:
+        ds_config = {}
+    
+    if "train_micro_batch_size_per_gpu" not in ds_config:
+        ds_config["train_micro_batch_size_per_gpu"] = config["NeuralNetwork"]["Training"]["batch_size"]
+        ds_config["gradient_accumulation_steps"] = 1
+    
+    if "steps_per_print" not in ds_config:
+        ds_config["steps_per_print"] = 1e9 # disable printing
+
+    return ds_config
