@@ -467,7 +467,7 @@ if __name__ == "__main__":
             model, config["NeuralNetwork"]["Training"], optimizer=optimizer
         )
 
-    if args.use_deepspeed:
+    else:
         assert deepspeed_available, "deepspeed package not installed"
         # first, create optimizer and scheduler for deepspeed initialization
         learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
