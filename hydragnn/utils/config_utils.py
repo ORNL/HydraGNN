@@ -14,6 +14,7 @@ from hydragnn.preprocess.utils import check_if_graph_size_variable, gather_deg
 from hydragnn.utils.model import calculate_PNA_degree
 from hydragnn.utils import get_comm_size_and_rank
 import time
+from copy import deepcopy
 import json
 from torch_geometric.utils import degree
 import torch
@@ -304,3 +305,14 @@ def parse_deepspeed_config(config):
         ds_config["steps_per_print"] = 1e9  # disable printing
 
     return ds_config
+
+
+def merge_config(a: dict, b: dict) -> dict:
+    result = deepcopy(a)
+    for bk, bv in b.items():
+        av = result.get(bk)
+        if isinstance(av, dict) and isinstance(bv, dict):
+            result[bk] = merge_config(av, bv)
+        else:
+            result[bk] = deepcopy(bv)
+    return result

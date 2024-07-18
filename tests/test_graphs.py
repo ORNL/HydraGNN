@@ -18,11 +18,17 @@ torch.manual_seed(97)
 import shutil
 
 import hydragnn, tests
+from hydragnn.utils.config_utils import merge_config
 
 
 # Main unit test function called by pytest wrappers.
 def unittest_train_model(
-    model_type, ci_input, use_lengths, overwrite_data=False, use_deepspeed=False
+    model_type,
+    ci_input,
+    use_lengths,
+    overwrite_data=False,
+    use_deepspeed=False,
+    overwrite_config=None,
 ):
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
@@ -33,6 +39,11 @@ def unittest_train_model(
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+
+    # Overwrite config settings if provided
+    if overwrite_config:
+        config = merge_config(config, overwrite_config)
+
     """
     to test this locally, set ci.json as
     "Dataset": {
