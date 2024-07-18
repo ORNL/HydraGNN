@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - enable_deepspeed_ci
   pull_request:
     branches:
       - main
