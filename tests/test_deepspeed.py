@@ -17,17 +17,17 @@ def pytest_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False
 
 
 # Test deepspeed zero
-# "3" is not supported by the gloo backend on the CI machine
-@pytest.mark.parametrize("model_type", ["PNA"])
-@pytest.mark.parametrize("zero_stage", ["1", "2"])
-@pytest.mark.mpi
-def pytest_train_model_vectoroutput_w_deepspeed_zero(
-    model_type, zero_stage, overwrite_data=False
-):
-    unittest_train_model(
-        model_type,
-        f"ci_vectoroutput_deepspeed_zero_{zero_stage}.json",
-        True,
-        overwrite_data,
-        use_deepspeed=True,
-    )
+# cannot use deepspeed zero-optimizer with gloo backend on the server
+# @pytest.mark.parametrize("model_type", ["PNA"])
+# @pytest.mark.parametrize("zero_stage", ["1", "2", "3"])
+# @pytest.mark.mpi
+# def pytest_train_model_vectoroutput_w_deepspeed_zero(
+#     model_type, zero_stage, overwrite_data=False
+# ):
+#     unittest_train_model(
+#         model_type,
+#         f"ci_vectoroutput_deepspeed_zero_{zero_stage}.json",
+#         True,
+#         overwrite_data,
+#         use_deepspeed=True,
+#     )
