@@ -21,7 +21,9 @@ import hydragnn, tests
 
 
 # Main unit test function called by pytest wrappers.
-def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False):
+def unittest_train_model(
+    model_type, ci_input, use_lengths, overwrite_data=False, use_deepspeed=False
+):
     world_size, rank = hydragnn.utils.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
@@ -111,16 +113,16 @@ def unittest_train_model(model_type, ci_input, use_lengths, overwrite_data=False
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.
     if model_type == "PNA" and not use_lengths:
-        hydragnn.run_training(config_file)
+        hydragnn.run_training(config_file, use_deepspeed)
     else:
-        hydragnn.run_training(config)
+        hydragnn.run_training(config, use_deepspeed)
 
     (
         error,
         error_mse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.run_prediction(config)
+    ) = hydragnn.run_prediction(config, use_deepspeed)
 
     # Set RMSE and sample MAE error thresholds
     thresholds = {

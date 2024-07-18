@@ -42,6 +42,7 @@ jobs:
           python -m pip install --upgrade -r requirements.txt -r requirements-dev.txt
           python -m pip install --upgrade -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --upgrade -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
+          python -m pip install --upgrade -r requirements-deepspeed.txt
       - name: Format black
         run: |
           black .
