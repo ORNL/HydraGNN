@@ -75,6 +75,12 @@ def _(config: dict, use_deepspeed=False):
 
         # create temporary deepspeed configuration
         ds_config = parse_deepspeed_config(config)
+
+        try:
+            ds_config["zero_optimization"]["stage"] = 0
+        except KeyError:
+            pass
+
         model, _, _, _ = deepspeed.initialize(
             model=model, config=ds_config, dist_init_required=False
         )

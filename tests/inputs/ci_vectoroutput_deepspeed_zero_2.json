@@ -64,7 +64,7 @@
             }
         },
         "ds_config": {
-            "zero": {
+            "zero_optimization": {
                 "stage": 2
             }
         }

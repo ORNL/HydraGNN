@@ -132,9 +132,12 @@ def _(config: dict, use_deepspeed=False):
 
         # create temporary deepspeed configuration
         ds_config = parse_deepspeed_config(config)
+        print(ds_config)
 
         try:
-            zero_stage = config["NeuralNetwork"]["ds_config"]["zero"]["stage"]
+            zero_stage = config["NeuralNetwork"]["ds_config"]["zero_optimization"][
+                "stage"
+            ]
         except KeyError:
             zero_stage = 0
 
