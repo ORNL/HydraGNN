@@ -86,7 +86,6 @@ class AdiosWriter:
         comm: MPI_comm
             MPI communicator to use for Adios parallel writing
         """
-
         # Test import of adios2. Let it fail with an ImportError if ADIOS2 is not installed
         import adios2
 
@@ -315,7 +314,6 @@ class AdiosDataset(AbstractBaseDataset):
         ddstore: bool, optional
             Option to use Distributed Data Store
         """
-        
         # Test import of adios2. Let it fail with an ImportError if ADIOS2 is not installed
         import adios2
 
