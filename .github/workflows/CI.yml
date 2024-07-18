@@ -54,4 +54,5 @@ jobs:
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
           python -m pytest tests/test_deepspeed.py -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
+          echo "pytest single thread done"
           mpirun -n 2 --oversubscribe python tests/test_deepspeed.py -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi
