@@ -77,6 +77,7 @@ def _(config: dict, use_deepspeed=False):
         ds_config = parse_deepspeed_config(config)
 
         try:
+            # cannot use zero_optimization iwithout an optimizer, so we must disable it
             ds_config["zero_optimization"]["stage"] = 0
         except KeyError:
             pass
@@ -84,7 +85,6 @@ def _(config: dict, use_deepspeed=False):
         model, _, _, _ = deepspeed.initialize(
             model=model, config=ds_config, dist_init_required=False
         )
-        print(model.__class__.__name__)
 
     log_name = get_log_name_config(config)
     load_existing_model(model, log_name, use_deepspeed=use_deepspeed)

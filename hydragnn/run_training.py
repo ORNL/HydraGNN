@@ -132,7 +132,6 @@ def _(config: dict, use_deepspeed=False):
 
         # create temporary deepspeed configuration
         ds_config = parse_deepspeed_config(config)
-        print(ds_config)
 
         try:
             zero_stage = config["NeuralNetwork"]["ds_config"]["zero_optimization"][
@@ -149,6 +148,8 @@ def _(config: dict, use_deepspeed=False):
         assert (
             zero_stage == model.zero_optimization_stage()
         ), f"Zero stage mismatch: {zero_stage} vs {model.zero_optimization_stage()}"
+
+        save_config(config, log_name)
 
         load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], use_deepspeed=True
