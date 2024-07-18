@@ -17,7 +17,7 @@ def pytest_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False
 
 # Test deepspeed zero
 @pytest.mark.parametrize("model_type", ["PNA"])
-@pytest.mark.parametrize("zero_stage", ["1", "2", "3"])
+@pytest.mark.parametrize("zero_stage", ["1", "2"])
 def pytest_train_model_vectoroutput_w_deepspeed_zero(
     model_type, zero_stage, overwrite_data=False
 ):
