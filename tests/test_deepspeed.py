@@ -4,7 +4,7 @@ import pytest
 import torch
 import random
 import hydragnn
-from .test_graphs import unittest_train_model
+from tests.test_graphs import unittest_train_model
 
 
 # Test vector output
