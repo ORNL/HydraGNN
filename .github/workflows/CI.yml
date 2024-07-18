@@ -42,6 +42,7 @@ jobs:
           python -m pip install --upgrade -r requirements.txt -r requirements-dev.txt
           python -m pip install --upgrade -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --upgrade -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
+          python -m pip install --upgrade -r requirements-deepspeed.txt
       - name: Format black
         run: |
           black .
@@ -51,5 +52,5 @@ jobs:
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
-          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
-          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi
+          python -m pytest tests/test_deepspeed.py -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
+          mpirun -n 2 --oversubscribe python tests/test_deepspeed.py -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi

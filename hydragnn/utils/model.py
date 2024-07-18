@@ -90,29 +90,33 @@ def load_existing_model_config(
 ):
     if "continue" in config and config["continue"]:
         model_name = config["startfrom"]
-        if not use_deepspeed:
-            load_existing_model(model, model_name, path, optimizer)
-        else:
-            model.load_checkpoint(os.path.join(path, model_name), model_name)
+        load_existing_model(
+            model, model_name, path, optimizer, use_deepspeed=use_deepspeed
+        )
 
 
-def load_existing_model(model, model_name, path="./logs/", optimizer=None):
+def load_existing_model(
+    model, model_name, path="./logs/", optimizer=None, use_deepspeed=False
+):
     """Load both model and optimizer state from a single checkpoint file"""
-    path_name = os.path.join(path, model_name, model_name + ".pk")
-    map_location = {"cuda:%d" % 0: get_device_name()}
-    print_master("Load existing model:", path_name)
-    checkpoint = torch.load(path_name, map_location=map_location)
-    state_dict = checkpoint["model_state_dict"]
-    ## To be compatible with old checkpoint which was not written as a ddp model
-    if not next(iter(state_dict)).startswith("module"):
-        ddp_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            k = "module." + k
-            ddp_state_dict[k] = v
-        state_dict = ddp_state_dict
-    model.load_state_dict(state_dict)
-    if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if not use_deepspeed:
+        path_name = os.path.join(path, model_name, model_name + ".pk")
+        map_location = {"cuda:%d" % 0: get_device_name()}
+        print_master("Load existing model:", path_name)
+        checkpoint = torch.load(path_name, map_location=map_location)
+        state_dict = checkpoint["model_state_dict"]
+        ## To be compatible with old checkpoint which was not written as a ddp model
+        if not next(iter(state_dict)).startswith("module"):
+            ddp_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                k = "module." + k
+                ddp_state_dict[k] = v
+            state_dict = ddp_state_dict
+        model.load_state_dict(state_dict)
+        if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    else:
+        model.load_checkpoint(os.path.join(path, model_name), model_name)
 
 
 ## This function may cause OOM if dataset is too large
