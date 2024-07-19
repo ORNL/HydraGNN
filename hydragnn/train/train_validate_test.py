@@ -65,6 +65,7 @@ def train_validate_test(
     plot_init_solution=True,
     plot_hist_solution=False,
     create_plots=False,
+    use_deepspeed=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
@@ -129,11 +130,15 @@ def train_validate_test(
             earlystopper = EarlyStopping(patience=config["Training"]["patience"])
 
     if SaveCheckpoint:
-        checkpoint = Checkpoint(name=model_with_config_name)
+        checkpoint = Checkpoint(
+            name=model_with_config_name,
+            use_deepspeed=use_deepspeed,
+        )
         if "checkpoint_warmup" in config["Training"]:
             checkpoint = Checkpoint(
                 name=model_with_config_name,
                 warmup=config["Training"]["checkpoint_warmup"],
+                use_deepspeed=use_deepspeed,
             )
 
     timer = Timer("train_validate_test")
@@ -151,7 +156,12 @@ def train_validate_test(
             tr.enable()
             tr.start("train")
             train_loss, train_taskserr = train(
-                train_loader, model, optimizer, verbosity, profiler=prof
+                train_loader,
+                model,
+                optimizer,
+                verbosity,
+                profiler=prof,
+                use_deepspeed=use_deepspeed,
             )
             tr.stop("train")
             tr.disable()
@@ -424,13 +434,7 @@ def gather_tensor_ranks(head_values):
     return head_values
 
 
-def train(
-    loader,
-    model,
-    opt,
-    verbosity,
-    profiler=None,
-):
+def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
     if profiler is None:
         profiler = Profiler()
 
@@ -472,7 +476,10 @@ def train(
         tr.stop("dataload", **syncopt)
         tr.start("zero_grad")
         with record_function("zero_grad"):
-            opt.zero_grad()
+            if use_deepspeed:
+                pass
+            else:
+                opt.zero_grad()
         tr.stop("zero_grad")
         tr.start("get_head_indices")
         with record_function("get_head_indices"):
@@ -494,7 +501,10 @@ def train(
         tr.stop("forward", **syncopt)
         tr.start("backward", **syncopt)
         with record_function("backward"):
-            loss.backward()
+            if use_deepspeed:
+                model.backward(loss)
+            else:
+                loss.backward()
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -502,7 +512,10 @@ def train(
         tr.stop("backward", **syncopt)
         tr.start("opt_step", **syncopt)
         # print_peak_memory(verbosity, "Max memory allocated before optimizer step")
-        opt.step()
+        if use_deepspeed:
+            model.step()
+        else:
+            opt.step()
         # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()

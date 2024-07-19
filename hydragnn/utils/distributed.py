@@ -22,6 +22,13 @@ import socket
 from datetime import timedelta
 import time
 import subprocess
+from mpi4py import MPI
+
+deepspeed_available = True
+try:
+    import deepspeed
+except ImportError:
+    deepspeed_available = False
 
 
 def find_ifname(myaddr):
@@ -110,7 +117,7 @@ def get_comm_size_and_rank():
     return int(world_size), int(world_rank)
 
 
-def setup_ddp():
+def setup_ddp(use_deepspeed=False):
     """ "Initialize DDP"""
 
     if dist.is_initialized():
@@ -150,6 +157,7 @@ def setup_ddp():
             os.environ["MASTER_PORT"] = master_port
             os.environ["WORLD_SIZE"] = str(world_size)
             os.environ["RANK"] = str(world_rank)
+            os.environ["LOCAL_RANK"] = str(get_local_rank())
 
         if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
             ifname = find_ifname(master_addr)
@@ -163,9 +171,19 @@ def setup_ddp():
             )
 
         if not dist.is_initialized():
-            dist.init_process_group(
-                backend=backend, init_method="env://", timeout=timedelta(seconds=1800)
-            )
+            if use_deepspeed:
+                assert deepspeed_available, "deepspeed package not installed"
+                deepspeed.init_distributed(
+                    dist_backend=backend,
+                    init_method="env://",
+                    timeout=timedelta(seconds=1800),
+                )
+            else:
+                dist.init_process_group(
+                    backend=backend,
+                    init_method="env://",
+                    timeout=timedelta(seconds=1800),
+                )
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
@@ -211,6 +229,18 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
     device_name = "cuda:" + str(localrank)
 
     return device_name
+
+
+def get_local_rank():
+    localrank = 0
+    if os.getenv("OMPI_COMM_WORLD_LOCAL_RANK"):
+        ## Summit
+        localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
+    elif os.getenv("SLURM_LOCALID"):
+        ## CADES
+        localrank = int(os.environ["SLURM_LOCALID"])
+
+    return localrank
 
 
 def get_device_from_name(name: str):
