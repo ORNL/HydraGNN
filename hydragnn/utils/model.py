@@ -57,20 +57,23 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
 
 
-def save_model(model, optimizer, name, path="./logs/"):
+def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
     """Save both model and optimizer state in a single checkpoint file"""
-    _, world_rank = get_comm_size_and_rank()
-    if hasattr(optimizer, "consolidate_state_dict"):
-        optimizer.consolidate_state_dict()
-    if world_rank == 0:
-        path_name = os.path.join(path, name, name + ".pk")
-        torch.save(
-            {
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-            },
-            path_name,
-        )
+    if not use_deepspeed:
+        _, world_rank = get_comm_size_and_rank()
+        if hasattr(optimizer, "consolidate_state_dict"):
+            optimizer.consolidate_state_dict()
+        if world_rank == 0:
+            path_name = os.path.join(path, name, name + ".pk")
+            torch.save(
+                {
+                    "model_state_dict": model.state_dict(),
+                    "optimizer_state_dict": optimizer.state_dict(),
+                },
+                path_name,
+            )
+    else:
+        model.save_checkpoint(os.path.join(path, name), name)
 
 
 def get_summary_writer(name, path="./logs/"):
@@ -82,29 +85,38 @@ def get_summary_writer(name, path="./logs/"):
     return writer
 
 
-def load_existing_model_config(model, config, path="./logs/", optimizer=None):
+def load_existing_model_config(
+    model, config, path="./logs/", optimizer=None, use_deepspeed=False
+):
     if "continue" in config and config["continue"]:
         model_name = config["startfrom"]
-        load_existing_model(model, model_name, path, optimizer)
+        load_existing_model(
+            model, model_name, path, optimizer, use_deepspeed=use_deepspeed
+        )
 
 
-def load_existing_model(model, model_name, path="./logs/", optimizer=None):
+def load_existing_model(
+    model, model_name, path="./logs/", optimizer=None, use_deepspeed=False
+):
     """Load both model and optimizer state from a single checkpoint file"""
-    path_name = os.path.join(path, model_name, model_name + ".pk")
-    map_location = {"cuda:%d" % 0: get_device_name()}
-    print_master("Load existing model:", path_name)
-    checkpoint = torch.load(path_name, map_location=map_location)
-    state_dict = checkpoint["model_state_dict"]
-    ## To be compatible with old checkpoint which was not written as a ddp model
-    if not next(iter(state_dict)).startswith("module"):
-        ddp_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            k = "module." + k
-            ddp_state_dict[k] = v
-        state_dict = ddp_state_dict
-    model.load_state_dict(state_dict)
-    if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
-        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    if not use_deepspeed:
+        path_name = os.path.join(path, model_name, model_name + ".pk")
+        map_location = {"cuda:%d" % 0: get_device_name()}
+        print_master("Load existing model:", path_name)
+        checkpoint = torch.load(path_name, map_location=map_location)
+        state_dict = checkpoint["model_state_dict"]
+        ## To be compatible with old checkpoint which was not written as a ddp model
+        if not next(iter(state_dict)).startswith("module"):
+            ddp_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                k = "module." + k
+                ddp_state_dict[k] = v
+            state_dict = ddp_state_dict
+        model.load_state_dict(state_dict)
+        if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    else:
+        model.load_checkpoint(os.path.join(path, model_name), model_name)
 
 
 ## This function may cause OOM if dataset is too large
@@ -207,6 +219,7 @@ class Checkpoint:
         name: str,
         warmup: int = 0,
         path: str = "./logs/",
+        use_deepspeed: bool = False,
     ):
         self.count = 1
         self.warmup = warmup
@@ -214,6 +227,7 @@ class Checkpoint:
         self.name = name
         self.min_perf_metric = float("inf")
         self.min_delta = 0
+        self.use_deepspeed = use_deepspeed
 
     def __call__(self, model, optimizer, perf_metric):
 
@@ -224,5 +238,11 @@ class Checkpoint:
             return False
         else:
             self.min_perf_metric = perf_metric
-            save_model(model, optimizer, name=self.name, path=self.path)
+            save_model(
+                model,
+                optimizer,
+                name=self.name,
+                path=self.path,
+                use_deepspeed=self.use_deepspeed,
+            )
             return True
