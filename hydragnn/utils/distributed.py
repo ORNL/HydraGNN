@@ -233,13 +233,15 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
 
     return device_name
 
+
 def get_deepspeed_init_args():
     class Obj(object):
         pass
-    
+
     obj = Obj()
     obj.device_rank = int(get_device_name(no_prefix=True))
     return obj
+
 
 def get_local_rank():
     localrank = 0

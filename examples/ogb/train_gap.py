@@ -485,7 +485,10 @@ if __name__ == "__main__":
         # create deepspeed model
         model, optimizer, _, _ = deepspeed.initialize(
             args=get_deepspeed_init_args(),
-            model=model, config=ds_config, dist_init_required=False, optimizer=optimizer
+            model=model,
+            config=ds_config,
+            dist_init_required=False,
+            optimizer=optimizer,
         )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
 
         hydragnn.utils.load_existing_model_config(
