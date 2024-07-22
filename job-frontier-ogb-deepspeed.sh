@@ -39,6 +39,8 @@ export PYTHONPATH=/lustre/orion/cph161/world-shared/mlupopa/ADIOS_frontier/insta
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 
-#srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest \
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest \
-    python -u ./examples/ogb/train_gap.py gap --adios --use_deepspeed
+# both commands should work
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gres=gpu:8 \
+   python -u ./examples/ogb/train_gap.py gap --adios --use_deepspeed
+# srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest \
+#     python -u ./examples/ogb/train_gap.py gap --adios --use_deepspeed
