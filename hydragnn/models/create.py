@@ -15,6 +15,7 @@ from torch_geometric.data import Data
 
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
+from hydragnn.models.PNAPlusStack import PNAPlusStack
 from hydragnn.models.GATStack import GATStack
 from hydragnn.models.MFCStack import MFCStack
 from hydragnn.models.CGCNNStack import CGCNNStack
@@ -104,7 +105,7 @@ def create_model(
 ):
     timer = Timer("create_model")
     timer.start()
-    torch.manual_seed(0)
+    torch.manual_seed(3)
 
     device = get_device(use_gpu, verbosity_level=verbosity)
 
@@ -131,6 +132,34 @@ def create_model(
         model = PNAStack(
             pna_deg,
             edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+
+    elif model_type == "PNAPlus":
+        assert pna_deg is not None, "PNAPlus requires degree input."
+        assert (
+            envelope_exponent is not None
+        ), "PNAPlus requires envelope_exponent input."
+        assert num_radial is not None, "PNAPlus requires num_radial input."
+        assert radius is not None, "PNAPlus requires radius input."
+        model = PNAPlusStack(
+            pna_deg,
+            edge_dim,
+            envelope_exponent,
+            num_radial,
+            radius,
             input_dim,
             hidden_dim,
             output_dim,
