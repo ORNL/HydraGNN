@@ -105,7 +105,7 @@ def create_model(
 ):
     timer = Timer("create_model")
     timer.start()
-    torch.manual_seed(3)
+    torch.manual_seed(0)
 
     device = get_device(use_gpu, verbosity_level=verbosity)
 
