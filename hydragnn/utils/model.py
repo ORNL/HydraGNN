@@ -55,6 +55,10 @@ def loss_function_selection(loss_function_string: str):
         return torch.nn.SmoothL1Loss
     elif loss_function_string == "rmse":
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
+    elif loss_function_string == "GaussianNLLLoss":
+        return torch.nn.GaussianNLLLoss()
+    else:
+        ImportError
 
 
 def save_model(model, optimizer, name, path="./logs/"):

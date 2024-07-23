@@ -69,6 +69,12 @@ class Base(Module):
             activation_function_type
         )
 
+        # output variance for Gaussian negative log likelihood loss
+        self.var_output = 0
+        if loss_function_type == "GaussianNLLLoss":
+            self.var_output = 1
+        self.loss_function_type = loss_function_type
+
         self.loss_function = loss_function_selection(loss_function_type)
         self.ilossweights_nll = ilossweights_nll
         self.ilossweights_hyperp = ilossweights_hyperp
@@ -193,14 +199,21 @@ class Base(Module):
             if "last_layer" in inspect.signature(self.get_conv).parameters:
                 self.convs_node_output.append(
                     self.get_conv(
-                        self.hidden_dim_node[-1], self.head_dims[ihead], last_layer=True
+                        self.hidden_dim_node[-1],
+                        self.head_dims[ihead] * (1 + self.var_output),
+                        last_layer=True,
                     )
                 )
             else:
                 self.convs_node_output.append(
-                    self.get_conv(self.hidden_dim_node[-1], self.head_dims[ihead])
+                    self.get_conv(
+                        self.hidden_dim_node[-1],
+                        self.head_dims[ihead] * (1 + self.var_output),
+                    )
                 )
-            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
+            self.batch_norms_node_output.append(
+                BatchNorm(self.head_dims[ihead] * (1 + self.var_output))
+            )
 
     def _multihead(self):
         ############multiple heads/taks################
@@ -238,7 +251,7 @@ class Base(Module):
                 denselayers.append(
                     Linear(
                         dim_head_hidden[-1],
-                        self.head_dims[ihead] + self.ilossweights_nll * 1,
+                        self.head_dims[ihead] * (1 + self.var_output),
                     )
                 )
                 head_NN = Sequential(*denselayers)
@@ -253,7 +266,7 @@ class Base(Module):
                     # """if different graphs in the dataset have different size, one MLP is shared across all nodes """
                     head_NN = MLPNode(
                         self.hidden_dim,
-                        self.head_dims[ihead],
+                        self.head_dims[ihead] * (1 + self.var_output),
                         self.num_mlp,
                         self.hidden_dim_node,
                         self.config_heads["node"]["type"],
@@ -308,12 +321,15 @@ class Base(Module):
         else:
             x_graph = global_mean_pool(x, data.batch.to(x.device))
         outputs = []
+        outputs_var = []
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
                 x_graph_head = self.graph_shared(x_graph)
-                outputs.append(headloc(x_graph_head))
+                output_head = headloc(x_graph_head)
+                outputs.append(output_head[:, :head_dim])
+                outputs_var.append(output_head[:, head_dim:] ** 2)
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
@@ -323,16 +339,23 @@ class Base(Module):
                     x_node = x
                 else:
                     x_node = headloc(x=x, batch=data.batch)
-                outputs.append(x_node)
+                outputs.append(x_node[:, :head_dim])
+                outputs_var.append(x_node[:, head_dim:] ** 2)
+        if self.var_output:
+            return outputs, outputs_var
         return outputs
 
     def loss(self, pred, value, head_index):
+        var = None
+        if self.var_output:
+            var = pred[1]
+            pred = pred[0]
         if self.ilossweights_nll == 1:
-            return self.loss_nll(pred, value, head_index)
+            return self.loss_nll(pred, value, head_index, var=var)
         elif self.ilossweights_hyperp == 1:
-            return self.loss_hpweighted(pred, value, head_index)
+            return self.loss_hpweighted(pred, value, head_index, var=var)
 
-    def loss_nll(self, pred, value, head_index):
+    def loss_nll(self, pred, value, head_index, var=None):
         # negative log likelihood loss
         # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
         # fixme: Pei said that right now this is never used
@@ -353,7 +376,7 @@ class Base(Module):
 
         return nll_loss, tasks_mseloss, []
 
-    def loss_hpweighted(self, pred, value, head_index):
+    def loss_hpweighted(self, pred, value, head_index, var=None):
         # weights for different tasks as hyper-parameters
         tot_loss = 0
         tasks_loss = []
@@ -364,11 +387,21 @@ class Base(Module):
             value_shape = head_val.shape
             if pred_shape != value_shape:
                 head_val = torch.reshape(head_val, pred_shape)
-
-            tot_loss += (
-                self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
-            )
-            tasks_loss.append(self.loss_function(head_pre, head_val))
+            if var is None:
+                assert (
+                    self.loss_function_type != "GaussianNLLLoss"
+                ), "Expecting var for GaussianNLLLoss, but got None"
+                tot_loss += (
+                    self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
+                )
+                tasks_loss.append(self.loss_function(head_pre, head_val))
+            else:
+                head_var = var[ihead]
+                tot_loss += (
+                    self.loss_function(head_pre, head_val, head_var)
+                    * self.loss_weights[ihead]
+                )
+                tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
 
         return tot_loss, tasks_loss
 

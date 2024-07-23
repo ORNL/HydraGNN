@@ -603,6 +603,8 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
+            if model.module.var_output:
+                pred = pred[0]
             offset = 0
             for i in range(len(data)):
                 n = len(data[i].pos)
@@ -661,6 +663,8 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
             data = data.to(get_device())
             ytrue = data.y
             pred = model(data)
+            if model.module.var_output:
+                pred = pred[0]
             for ihead in range(model.module.num_heads):
                 head_pre = pred[ihead].reshape(-1, 1)
                 head_val = ytrue[head_index[ihead]]
