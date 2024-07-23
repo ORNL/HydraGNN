@@ -75,31 +75,9 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="gfm_multitasking.json"
-    )
-    parser.add_argument(
-        "--modelname", help="modelname", type=str, default="ANI1x"
+        "modelname", help="modelname", type=str, default="ANI1x"
     )
     args = parser.parse_args()
-
-    graph_feature_names = ["energy"]
-    graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "cartesian_coordinates", "force"]
-    node_feature_dims = [1, 3, 3]
-    dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
-    ##################################################################################################################
-    input_filename = os.path.join(dirpwd, args.inputfile)
-    ##################################################################################################################
-    # Configurable run choices (JSON file that accompanies this example script).
-    with open(input_filename, "r") as f:
-        config = json.load(f)
-    verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
 
     comm = MPI.COMM_WORLD
     comm_rank = comm.Get_rank()
@@ -111,19 +89,16 @@ if __name__ == "__main__":
         fname,
         "trainset",
         comm,
-        var_config=var_config,
     )
     valset = AdiosDataset(
         fname,
         "valset",
         comm,
-        var_config=var_config,
     )
     testset = AdiosDataset(
         fname,
         "testset",
         comm,
-        var_config=var_config,
     )
     pna_deg = trainset.pna_deg
 
@@ -133,7 +108,8 @@ if __name__ == "__main__":
     for dataset in [trainset, valset, testset]:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
         print(comm_rank, "Loading:", rx[0], rx[-1] + 1)
-        dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+        # dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+        dataset.setsubset(rx[0], 200 + 1, preload=True)
 
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Collecting node feature"):
             energy_list.append(data.energy.item()/data.num_nodes)
