@@ -108,8 +108,7 @@ if __name__ == "__main__":
     for dataset in [trainset, valset, testset]:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
         print(comm_rank, "Loading:", rx[0], rx[-1] + 1)
-        # dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
-        dataset.setsubset(rx[0], 200 + 1, preload=True)
+        dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
 
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Collecting node feature"):
             ## Assume: data.energy is already energy per atom
