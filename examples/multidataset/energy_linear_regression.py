@@ -143,7 +143,6 @@ if __name__ == "__main__":
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118+2))
             hist = hist/data.num_nodes
             feature_list.append(hist)
-            import pdb; pdb.set_trace()
     
     ## energy
     if comm_rank == 0:
