@@ -198,7 +198,7 @@ def get_device_list():
     return available_gpus
 
 
-def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
+def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix=False):
 
     available_gpus = get_device_list()
     if not use_gpu or not available_gpus:
@@ -226,9 +226,21 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0):
                 % (localrank, torch.cuda.device_count())
             )
 
-    device_name = "cuda:" + str(localrank)
+    if no_prefix:
+        device_name = str(localrank)
+    else:
+        device_name = "cuda:" + str(localrank)
 
     return device_name
+
+
+def get_deepspeed_init_args():
+    class Obj(object):
+        pass
+
+    obj = Obj()
+    obj.device_rank = int(get_device_name(no_prefix=True))
+    return obj
 
 
 def get_local_rank():
