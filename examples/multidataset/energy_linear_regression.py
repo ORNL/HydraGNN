@@ -112,7 +112,8 @@ if __name__ == "__main__":
         dataset.setsubset(rx[0], 200 + 1, preload=True)
 
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Collecting node feature"):
-            energy_list.append(data.energy.item()/data.num_nodes)
+            ## Assume: data.energy is already energy per atom
+            energy_list.append(data.energy.item())
             atomic_number_list = data.x[:,0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
@@ -125,11 +126,11 @@ if __name__ == "__main__":
         print("Collecting energy")
     _e = np.array(energy_list)
     _X = np.array(feature_list)
-    _n = len(_e)
-    n = comm.allreduce(_n, op=MPI.SUM)
+    _N = len(_e)
+    N = comm.allreduce(_N, op=MPI.SUM)
     _esum = _e.sum()
-    emean = comm.allreduce(_esum, op=MPI.SUM)/n
-    ## e = e - e_mean
+    emean = comm.allreduce(_esum, op=MPI.SUM)/N
+    ## e = e - mean(e)
     _e = _e - emean
 
     ## A
