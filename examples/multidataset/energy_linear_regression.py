@@ -188,6 +188,8 @@ if __name__ == "__main__":
     adwriter.add("valset", valset)
     adwriter.add("testset", testset)
     adwriter.add_global("pna_deg", pna_deg)
+    adwriter.add_global("energy_mean", np.array(emean))
+    adwriter.add_global("energy_linear_regression_coeff", x)
     adwriter.save()
 
     print("Done.")
