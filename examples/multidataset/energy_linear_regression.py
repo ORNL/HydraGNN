@@ -156,7 +156,7 @@ if __name__ == "__main__":
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118+2))
             hist = hist/data.num_nodes
-            data.energy = data.energy/data.num_nodes - np.dot(hist, x)
+            data.energy = data.energy - np.dot(hist, x)
             if "y_loc" in data:
                 del data.y_loc
 
