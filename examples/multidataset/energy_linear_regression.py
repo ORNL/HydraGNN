@@ -12,52 +12,56 @@ from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
 from mpi_list import Context, DFM
 
+
 def subset(i):
-    #sz = len(dataset)
-    #chunk = sz // C.procs
-    #left  = sz % C.procs
-    #a = i*chunk     + min(i, left)
-    #b = (i+1)*chunk + min(i+1, left)
-    #print(f"Rank {i}/{C.procs} converting subset [{a},{b})")
-    #return np.array([np.array(x) for x in dataset[a:b]["image"]])
-    return np.random.random( (100,4) )
+    # sz = len(dataset)
+    # chunk = sz // C.procs
+    # left  = sz % C.procs
+    # a = i*chunk     + min(i, left)
+    # b = (i+1)*chunk + min(i+1, left)
+    # print(f"Rank {i}/{C.procs} converting subset [{a},{b})")
+    # return np.array([np.array(x) for x in dataset[a:b]["image"]])
+    return np.random.random((100, 4))
+
 
 # form the correlation matrix
 def covar(x):
-    return np.tensordot(x, x, axes=[(),()])
+    return np.tensordot(x, x, axes=[(), ()])
+
 
 def summarize(x):
     N = len(x)
-    m = x.sum(0)/N
-    y = x-m[None,...]
-    V = np.tensordot(y, y, [0,0])/N
-    return {'N':N, 'm':m, 'V':V}
+    m = x.sum(0) / N
+    y = x - m[None, ...]
+    V = np.tensordot(y, y, [0, 0]) / N
+    return {"N": N, "m": m, "V": V}
+
 
 def merge_est(a, b):
     if not isinstance(b, dict):
         b = summarize(b)
 
-    x = a['N']/(a['N']+b['N'])
-    y = b['N']/(a['N']+b['N'])
+    x = a["N"] / (a["N"] + b["N"])
+    y = b["N"] / (a["N"] + b["N"])
 
-    m = x*a['m'] + y*b['m']
-    a['N'] += b['N']
-    a['V'] = x*(a['V'] + covar(m - a['m'])) \
-           + y*(b['V'] + covar(m - b['m']))
-    a['m'] = m
+    m = x * a["m"] + y * b["m"]
+    a["N"] += b["N"]
+    a["V"] = x * (a["V"] + covar(m - a["m"])) + y * (b["V"] + covar(m - b["m"]))
+    a["m"] = m
     return a
 
+
 def test():
-    C = Context() # calls MPI_Init via mpi4py
+    C = Context()  # calls MPI_Init via mpi4py
 
-    dfm = C . iterates(C.procs) \
-            . map( subset )
+    dfm = C.iterates(C.procs).map(subset)
 
-    ans = {'N': 0, 'm': 0, 'V': 0}
+    ans = {"N": 0, "m": 0, "V": 0}
     ans = dfm.reduce(merge_est, ans, False)
     if C.rank == 0:
         print(ans)
         print(f"theoretical: m = 0.5, v = {0.25/3}")
+
 
 def solve_least_squares_svd(A, b):
     # Compute the SVD of A
@@ -70,18 +74,21 @@ def solve_least_squares_svd(A, b):
     x = np.dot(A_pinv, b)
     return x
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
+    parser.add_argument("modelname", help="modelname", type=str, default="ANI1x")
     parser.add_argument(
-        "modelname", help="modelname", type=str, default="ANI1x"
+        "--nsample_only",
+        help="nsample only",
+        type=int,
     )
     parser.add_argument(
-        "--nsample_only", help="nsample only", type=int, 
-    )
-    parser.add_argument(
-        "--verbose", help="verbose", action="store_true",
+        "--verbose",
+        help="verbose",
+        action="store_true",
     )
     args = parser.parse_args()
 
@@ -117,16 +124,18 @@ if __name__ == "__main__":
         print(comm_rank, "Loading:", rx[0], upper)
         dataset.setsubset(rx[0], upper, preload=True)
 
-        for data in tqdm(dataset, disable=comm_rank != 0, desc="Collecting node feature"):
+        for data in tqdm(
+            dataset, disable=comm_rank != 0, desc="Collecting node feature"
+        ):
             ## Assume: data.energy is already energy per atom
             energy_list.append(data.energy.item())
-            atomic_number_list = data.x[:,0].tolist()
+            atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
-            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118+2))
-            hist = hist/data.num_nodes
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+            hist = hist / data.num_nodes
             feature_list.append(hist)
-    
+
     ## energy
     if comm_rank == 0:
         print("Collecting energy")
@@ -135,7 +144,7 @@ if __name__ == "__main__":
     _N = len(_e)
     N = comm.allreduce(_N, op=MPI.SUM)
     _esum = _e.sum()
-    emean = comm.allreduce(_esum, op=MPI.SUM)/N
+    emean = comm.allreduce(_esum, op=MPI.SUM) / N
     ## e = e - mean(e)
     _e = _e - emean
 
@@ -159,15 +168,21 @@ if __name__ == "__main__":
     energy_list = list()
     for dataset in [trainset, valset, testset]:
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Update energy"):
-            atomic_number_list = data.x[:,0].tolist()
+            atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
-            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118+2))
-            hist = hist/data.num_nodes
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+            hist = hist / data.num_nodes
             if args.verbose:
-                print(comm_rank, "current,new,diff:", data.energy.item(), data.energy.item() - np.dot(hist, x) - emean, - np.dot(hist, x) - emean)
+                print(
+                    comm_rank,
+                    "current,new,diff:",
+                    data.energy.item(),
+                    data.energy.item() - np.dot(hist, x) - emean,
+                    -np.dot(hist, x) - emean,
+                )
             data.energy = data.energy - np.dot(hist, x) - emean
-            energy_list.append((data.energy.item(), - np.dot(hist, x) - emean))
+            energy_list.append((data.energy.item(), -np.dot(hist, x) - emean))
             if "y_loc" in data:
                 del data.y_loc
 
@@ -178,9 +193,10 @@ if __name__ == "__main__":
     else:
         comm.gather(energy_list, root=0)
 
-
     ## Writing
-    fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname)
+    fname = os.path.join(
+        os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname
+    )
     if comm_rank == 0:
         print("Saving:", fname)
     adwriter = AdiosWriter(fname, comm)
