@@ -90,6 +90,11 @@ if __name__ == "__main__":
         help="verbose",
         action="store_true",
     )
+    parser.add_argument(
+        "--savenpz",
+        help="save npz",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     comm = MPI.COMM_WORLD
@@ -102,16 +107,19 @@ if __name__ == "__main__":
         fname,
         "trainset",
         comm,
+        enable_cache=True,
     )
     valset = AdiosDataset(
         fname,
         "valset",
         comm,
+        enable_cache=True,
     )
     testset = AdiosDataset(
         fname,
         "testset",
         comm,
+        enable_cache=True,
     )
     pna_deg = trainset.pna_deg
 
@@ -181,17 +189,18 @@ if __name__ == "__main__":
                     data.energy.item() - np.dot(hist, x) - emean,
                     -np.dot(hist, x) - emean,
                 )
-            data.energy = data.energy - np.dot(hist, x) - emean
+            data.energy -= np.dot(hist, x) + emean
             energy_list.append((data.energy.item(), -np.dot(hist, x) - emean))
             if "y_loc" in data:
                 del data.y_loc
 
-    if comm_rank == 0:
-        energy_list_all = comm.gather(energy_list, root=0)
-        energy_arr = np.concatenate(energy_list_all, axis=0)
-        np.savez(f"{args.modelname}_energy.npz", energy=energy_arr, emean=emean)
-    else:
-        comm.gather(energy_list, root=0)
+    if args.savenpz:
+        if comm_rank == 0:
+            energy_list_all = comm.gather(energy_list, root=0)
+            energy_arr = np.concatenate(energy_list_all, axis=0)
+            np.savez(f"{args.modelname}_energy.npz", energy=energy_arr, emean=emean)
+        else:
+            comm.gather(energy_list, root=0)
 
     ## Writing
     fname = os.path.join(
