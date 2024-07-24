@@ -77,6 +77,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "modelname", help="modelname", type=str, default="ANI1x"
     )
+    parser.add_argument(
+        "--nsample_only", help="nsample only", type=int, 
+    )
+    parser.add_argument(
+        "--verbose", help="verbose", action="store_true",
+    )
     args = parser.parse_args()
 
     comm = MPI.COMM_WORLD
@@ -107,8 +113,9 @@ if __name__ == "__main__":
     feature_list = list()
     for dataset in [trainset, valset, testset]:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
-        print(comm_rank, "Loading:", rx[0], rx[-1] + 1)
-        dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+        upper = rx[-1] + 1 if args.nsample_only is None else rx[0] + args.nsample_only
+        print(comm_rank, "Loading:", rx[0], upper)
+        dataset.setsubset(rx[0], upper, preload=True)
 
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Collecting node feature"):
             ## Assume: data.energy is already energy per atom
@@ -149,6 +156,7 @@ if __name__ == "__main__":
     x = solve_least_squares_svd(A, b)
 
     ## Re-calculate energy
+    energy_list = list()
     for dataset in [trainset, valset, testset]:
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Update energy"):
             atomic_number_list = data.x[:,0].tolist()
@@ -156,9 +164,13 @@ if __name__ == "__main__":
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118+2))
             hist = hist/data.num_nodes
-            data.energy = data.energy - np.dot(hist, x)
+            if args.verbose:
+                print(comm_rank, "current,new,diff:", data.energy.item(), data.energy.item() - np.dot(hist, x) - emean, - np.dot(hist, x) - emean)
+            data.energy = data.energy - np.dot(hist, x) - emean
+            energy_list.append((data.energy.item(), - np.dot(hist, x) - emean))
             if "y_loc" in data:
                 del data.y_loc
+    np.savez(f"{args.modelname}_energy_rank_{comm_rank}.npz", energy=np.array(energy_list), emean=emean)
 
     ## Writing
     fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname)
