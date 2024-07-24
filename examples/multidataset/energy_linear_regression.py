@@ -170,7 +170,14 @@ if __name__ == "__main__":
             energy_list.append((data.energy.item(), - np.dot(hist, x) - emean))
             if "y_loc" in data:
                 del data.y_loc
-    np.savez(f"{args.modelname}_energy_rank_{comm_rank}.npz", energy=np.array(energy_list), emean=emean)
+
+    if comm_rank == 0:
+        energy_list_all = comm.gather(energy_list, root=0)
+        energy_arr = np.concatenate(energy_list_all, axis=0)
+        np.savez(f"{args.modelname}_energy.npz", energy=energy_arr, emean=emean)
+    else:
+        comm.gather(energy_list, root=0)
+
 
     ## Writing
     fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname)
