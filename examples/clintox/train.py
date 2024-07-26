@@ -39,14 +39,14 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
-# csce_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
+node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5, "Hg": 6, "Cl": 7}
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
 def clintox_dataset_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0.04]):
-    # TODO: What should the frac be?
     if seed is not None:
         random.seed(seed)
     smiles_all = []
@@ -57,7 +57,7 @@ def clintox_dataset_load(datafile, sampling=None, seed=None, frac=[0.94, 0.02, 0
         for row in csvreader:
             if (sampling is not None) and (random.random() > sampling):
                 continue
-            smiles_all.append(row[1])
+            smiles_all.append(row[0])
             values_all.append([int(row[-1])])
     print("Total:", len(smiles_all), len(values_all))
 
@@ -139,7 +139,7 @@ class ClintoxDataset(torch.utils.data.Dataset):
         smilestr = self.smileset[idx]
         ytarget = self.valueset[idx]
         data = generate_graphdata_from_smilestr(
-            smilestr, ytarget, csce_node_types, self.var_config   # TODO What should the node_types be?
+            smilestr, ytarget, node_types, self.var_config
         )
         return data
 
@@ -148,7 +148,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfilesubstr", help="input file substr", default="gap")
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
     parser.add_argument(
         "--preonly",
@@ -204,13 +203,12 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     args = parser.parse_args()
 
-    graph_feature_names = ["CT_TOX"]   # TODO Is this change correct? I changed from GAP to CT_TOX
+    graph_feature_names = ["CT_TOX"]
     graph_feature_dim = [1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/clintox.csv")
     ##################################################################################################################
-    inputfilesubstr = args.inputfilesubstr
-    input_filename = os.path.join(dirpwd, "clintox_" + inputfilesubstr + ".json")  # TODO Verify the clintox.json file
+    input_filename = os.path.join(dirpwd, "clintox.json")
     ##################################################################################################################
     # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
@@ -226,7 +224,7 @@ if __name__ == "__main__":
     (
         var_config["input_node_feature_names"],
         var_config["input_node_feature_dims"],
-    ) = get_node_attribute_name(csce_node_types)
+    ) = get_node_attribute_name(node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.setup_ddp()
@@ -241,7 +239,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "clintox_" + inputfilesubstr + "_eV_fullx"
+    log_name = "clintox_eV_fullx"
     if args.log is not None:
         log_name = args.log
     hydragnn.utils.setup_log(log_name)
@@ -281,10 +279,18 @@ if __name__ == "__main__":
             for i, (smilestr, ytarget) in iterate_tqdm(
                 enumerate(zip(_smileset, _valueset)), verbosity, total=len(_smileset)
             ):
-                data = generate_graphdata_from_smilestr(
-                    smilestr, ytarget, csce_node_types, var_config
-                )
-                dataset_lists[idataset].append(data)
+                try:
+                    data = generate_graphdata_from_smilestr(
+                        smilestr, ytarget, node_types, var_config
+                    )
+
+                    assert type(data) is torch_geometric.data.Data
+                    dataset_lists[idataset].append(data)
+                except Exception as e:
+                    print(
+                        f"Exception in call to generate_graphdata_from_smilestr."
+                        f" {e} for {smilestr}. Ignoring molecule and proceeding .."
+                    )
 
         trainset = dataset_lists[0]
         valset = dataset_lists[1]
@@ -344,7 +350,7 @@ if __name__ == "__main__":
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
-        fname = fname = os.path.join(
+        fname = os.path.join(
             os.path.dirname(__file__), "dataset", "clintox.bp"
         )
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
