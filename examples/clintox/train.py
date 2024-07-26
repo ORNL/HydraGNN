@@ -350,9 +350,7 @@ if __name__ == "__main__":
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
-        fname = os.path.join(
-            os.path.dirname(__file__), "dataset", "clintox.bp"
-        )
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "clintox.bp")
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm)
         testset = AdiosDataset(fname, "testset", comm)
@@ -387,7 +385,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
     comm.Barrier()
