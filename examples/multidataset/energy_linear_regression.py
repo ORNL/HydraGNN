@@ -152,9 +152,6 @@ if __name__ == "__main__":
     _N = len(_e)
     N = comm.allreduce(_N, op=MPI.SUM)
     _esum = _e.sum()
-    emean = comm.allreduce(_esum, op=MPI.SUM) / N
-    ## e = e - mean(e)
-    _e = _e - emean
 
     ## A
     if comm_rank == 0:
@@ -186,21 +183,25 @@ if __name__ == "__main__":
                     comm_rank,
                     "current,new,diff:",
                     data.energy.item(),
-                    data.energy.item() - np.dot(hist, x) - emean,
-                    -np.dot(hist, x) - emean,
+                    data.energy.item() - np.dot(hist, x),
+                    np.dot(hist, x),
                 )
-            data.energy -= np.dot(hist, x) + emean
-            energy_list.append((data.energy.item(), -np.dot(hist, x) - emean))
+            data.energy -= np.dot(hist, x)
+            energy_list.append((data.energy.item(), -np.dot(hist, x)))
             if "y_loc" in data:
                 del data.y_loc
 
     if args.savenpz:
-        if comm_rank == 0:
-            energy_list_all = comm.gather(energy_list, root=0)
-            energy_arr = np.concatenate(energy_list_all, axis=0)
-            np.savez(f"{args.modelname}_energy.npz", energy=energy_arr, emean=emean)
+        if comm_size < 400:
+            if comm_rank == 0:
+                energy_list_all = comm.gather(energy_list, root=0)
+                energy_arr = np.concatenate(energy_list_all, axis=0)
+                np.savez(f"{args.modelname}_energy.npz", energy=energy_arr)
+            else:
+                comm.gather(energy_list, root=0)
         else:
-            comm.gather(energy_list, root=0)
+            energy_arr = np.concatenate(energy_list, axis=0)
+            np.savez(f"{args.modelname}_energy_rank_{comm_rank}.npz", energy=energy_arr)
 
     ## Writing
     fname = os.path.join(
@@ -213,7 +214,6 @@ if __name__ == "__main__":
     adwriter.add("valset", valset)
     adwriter.add("testset", testset)
     adwriter.add_global("pna_deg", pna_deg)
-    adwriter.add_global("energy_mean", np.array(emean))
     adwriter.add_global("energy_linear_regression_coeff", x)
     adwriter.save()
 
