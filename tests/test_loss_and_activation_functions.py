@@ -101,8 +101,12 @@ def unittest_loss_and_activation_functions(
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.
-@pytest.mark.parametrize("loss_function_type", ["mse", "mae", "rmse"])
+@pytest.mark.parametrize(
+    "loss_function_type", ["mse", "mae", "rmse", "GaussianNLLLoss"]
+)
 def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
+    if loss_function_type == "GaussianNLLLoss":
+        ci_input = "ci_multihead.json"
     unittest_loss_and_activation_functions(
         "relu", loss_function_type, ci_input, overwrite_data
     )
