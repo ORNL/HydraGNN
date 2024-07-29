@@ -4,6 +4,7 @@
   },
   "NeuralNetwork": {
     "Architecture": {
+      "edge_features": ["aromatic", "single", "double", "triple"],
       "model_type": "PNA",
       "max_neighbours": 20,
       "hidden_dim": 200,
@@ -36,7 +37,9 @@
         8,
         9,
         10,
-        11
+        11,
+        12,
+        13
       ],
       "output_index": [
         0
