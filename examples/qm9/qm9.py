@@ -11,6 +11,7 @@ except:
 
 import hydragnn
 
+
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
     # Set descriptor as element type.
@@ -32,7 +33,7 @@ try:
 except:
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
-num_samples = 1000
+num_samples = 10000
 
 # Configurable run choices (JSON file that accompanies this example script).
 filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
@@ -58,7 +59,11 @@ dataset = torch_geometric.datasets.QM9(
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
-(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+(
+    train_loader,
+    val_loader,
+    test_loader,
+) = hydragnn.preprocess.create_dataloaders(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 

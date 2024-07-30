@@ -18,7 +18,9 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from torch.nn import ModuleList, Sequential, Identity
 from torch_geometric.nn import PNAConv
-from torch_geometric.nn import Sequential as PyGSequential  # This naming is because there is torch.nn.Sequential and torch_geometric.nn.Sequential
+from torch_geometric.nn import (
+    Sequential as PyGSequential,
+)  # This naming is because there is torch.nn.Sequential and torch_geometric.nn.Sequential
 
 # Torch Geo
 from torch_geometric.nn.aggr import DegreeScalerAggregation
@@ -33,7 +35,6 @@ from torch_geometric.typing import Adj
 
 # HydraGNN
 from .Base import Base
-
 
 
 class PNAPlusStack(Base):
@@ -63,8 +64,10 @@ class PNAPlusStack(Base):
 
         super().__init__(*args, **kwargs)
 
-        self.rbf = BesselBasisLayer(self.num_radial, self.radius, self.envelope_exponent)
-        
+        self.rbf = BesselBasisLayer(
+            self.num_radial, self.radius, self.envelope_exponent
+        )
+
     def get_conv(self, input_dim, output_dim):
         pna = PNAConv(
             in_channels=input_dim,
@@ -93,7 +96,7 @@ class PNAPlusStack(Base):
                 (lambda x, pos: [x, pos], "x, pos -> x, pos"),
             ],
         )
-    
+
     def _conv_args(self, data):
         assert (
             data.pos is not None
@@ -170,14 +173,18 @@ class PNAConv(MessagePassing):
             self.post_nns.append(Sequential(*modules))
 
         self.lin = Linear(out_channels, out_channels)
-        self.rbf_lin = Linear(num_radial, self.F_in, bias=False)  # projection of rbf for Hadamard with m_ij
+        self.rbf_lin = Linear(
+            num_radial, self.F_in, bias=False
+        )  # projection of rbf for Hadamard with m_ij
         self.rbf_emb = Sequential(
             Linear(num_radial, self.F_in),
-            activation_resolver(act, **(act_kwargs or {}))  # embedded rbf to concat with edge_attr
+            activation_resolver(
+                act, **(act_kwargs or {})
+            ),  # embedded rbf to concat with edge_attr
         )
 
         if self.edge_dim is not None:
-            self.edge_encoder = Linear(self.F_in+edge_dim, self.F_in)
+            self.edge_encoder = Linear(self.F_in + edge_dim, self.F_in)
 
         self.reset_parameters()
 
@@ -192,11 +199,18 @@ class PNAConv(MessagePassing):
         self.lin.reset_parameters()
 
     def propagate(self, edge_index: Adj, size: Tuple[int, int] = None, **kwargs):
-        kwargs['rbf'] = kwargs.get('rbf', None)  # Necessary to include rbf in message-passsing now
+        kwargs["rbf"] = kwargs.get(
+            "rbf", None
+        )  # Necessary to include rbf in message-passsing now
         return super().propagate(edge_index, size=size, **kwargs)
-    
-    def forward(self, x: Tensor, edge_index: Adj, rbf: Tensor = None,
-            edge_attr: OptTensor = None) -> Tensor:
+
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Adj,
+        rbf: Tensor = None,
+        edge_attr: OptTensor = None,
+    ) -> Tensor:
 
         if self.divide_input:
             x = x.view(-1, self.towers, self.F_in)
@@ -211,10 +225,11 @@ class PNAConv(MessagePassing):
         out = torch.cat(outs, dim=1)
 
         return self.lin(out)
-    
-    def message(self, x_i: Tensor, x_j: Tensor,
-        rbf: Tensor = None, edge_attr: OptTensor = None) -> Tensor:
-    
+
+    def message(
+        self, x_i: Tensor, x_j: Tensor, rbf: Tensor = None, edge_attr: OptTensor = None
+    ) -> Tensor:
+
         h: Tensor = x_i  # Dummy.
         if edge_attr is not None:
             edge_attr = torch.cat([edge_attr, self.rbf_emb(rbf)], dim=-1)
@@ -243,9 +258,11 @@ class PNAConv(MessagePassing):
         return hs
 
     def __repr__(self):
-        return (f'{self.__class__.__name__}({self.in_channels}, '
-                f'{self.out_channels}, towers={self.towers}, '
-                f'edge_dim={self.edge_dim})')
+        return (
+            f"{self.__class__.__name__}({self.in_channels}, "
+            f"{self.out_channels}, towers={self.towers}, "
+            f"edge_dim={self.edge_dim})"
+        )
 
     @staticmethod
     def get_degree_histogram(loader: DataLoader) -> Tensor:
@@ -253,12 +270,11 @@ class PNAConv(MessagePassing):
         argument in :class:`PNAConv`."""
         deg_histogram = torch.zeros(1, dtype=torch.long)
         for data in loader:
-            deg = degree(data.edge_index[1], num_nodes=data.num_nodes,
-                         dtype=torch.long)
+            deg = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg_bincount = torch.bincount(deg, minlength=deg_histogram.numel())
             deg_histogram = deg_histogram.to(deg_bincount.device)
             if deg_bincount.numel() > deg_histogram.numel():
-                deg_bincount[:deg_histogram.size(0)] += deg_histogram
+                deg_bincount[: deg_histogram.size(0)] += deg_histogram
                 deg_histogram = deg_bincount
             else:
                 assert deg_bincount.numel() == deg_histogram.numel()
