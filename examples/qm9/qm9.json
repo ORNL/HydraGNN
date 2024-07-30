@@ -5,12 +5,9 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "model_type": "PNA",
-            "radius": 5,
+            "model_type": "GIN",
+            "radius": 7,
             "max_neighbours": 5,
-            "envelope_exponent": 5,
-            "num_radial": 5,
-            "num_spherical": 5,
             "periodic_boundary_conditions": false,
             "hidden_dim": 5,
             "num_conv_layers": 6,
@@ -33,12 +30,12 @@
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 500,
+            "num_epoch": 2,
             "perc_train": 0.7,
             "loss_function_type": "mse",
             "batch_size": 64,
-            "early_stopping": true,
-            "patience": 10,
+            "continue": 0,
+            "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 1e-3
@@ -47,7 +44,7 @@
     },
     "Visualization": {
         "plot_init_solution": true,
-        "plot_hist_solution": true,
+        "plot_hist_solution": false,
         "create_plots": true
     }
 }
