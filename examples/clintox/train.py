@@ -300,36 +300,41 @@ if __name__ == "__main__":
         config["pna_deg"] = deg
 
         ## pickle
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
-        attrs = dict()
-        attrs["pna_deg"] = deg
-        SimplePickleWriter(
-            trainset,
-            basedir,
-            "trainset",
-            use_subdir=True,
-            attrs=attrs,
-        )
-        SimplePickleWriter(
-            valset,
-            basedir,
-            "valset",
-            use_subdir=True,
-        )
-        SimplePickleWriter(
-            testset,
-            basedir,
-            "testset",
-            use_subdir=True,
-        )
+        if args.format == 'pickle':
+            basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+            attrs = dict()
+            attrs["pna_deg"] = deg
+            SimplePickleWriter(
+                trainset,
+                basedir,
+                "trainset",
+                use_subdir=True,
+                attrs=attrs,
+            )
+            SimplePickleWriter(
+                valset,
+                basedir,
+                "valset",
+                use_subdir=True,
+            )
+            SimplePickleWriter(
+                testset,
+                basedir,
+                "testset",
+                use_subdir=True,
+            )
 
-        fname = os.path.join(os.path.dirname(__file__), "dataset", "clintox.bp")
-        adwriter = AdiosWriter(fname, comm)
-        adwriter.add("trainset", trainset)
-        adwriter.add("valset", valset)
-        adwriter.add("testset", testset)
-        adwriter.add_global("pna_deg", deg)
-        adwriter.save()
+        elif args.format == 'adios':
+            fname = os.path.join(os.path.dirname(__file__), "dataset", "clintox.bp")
+            adwriter = AdiosWriter(fname, comm)
+            adwriter.add("trainset", trainset)
+            adwriter.add("valset", valset)
+            adwriter.add("testset", testset)
+            adwriter.add_global("pna_deg", deg)
+            adwriter.save()
+
+        else:
+            raise "Invalid output format. Must be one of pickle/adios"
 
         sys.exit(0)
 
