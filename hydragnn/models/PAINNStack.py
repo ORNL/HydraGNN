@@ -30,7 +30,7 @@ class PAINNStack(Base):
 
     def __init__(
         self,
-        # edge_dim: int,
+        # edge_dim: int,   # To-Do: Add edge_features
         num_radial: int,
         radius: float,
         *args,

@@ -26,6 +26,7 @@
             "model_type": "PNA",
             "radius": 2.0,
             "max_neighbours": 100,
+            "num_radial": 5,
             "periodic_boundary_conditions": false,
             "hidden_dim": 8,
             "num_conv_layers": 2,

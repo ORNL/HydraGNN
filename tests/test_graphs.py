@@ -146,6 +146,7 @@ def unittest_train_model(
         "SchNet": [0.20, 0.20],
         "DimeNet": [0.50, 0.50],
         "EGNN": [0.20, 0.20],
+        "PAINN": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -192,7 +193,7 @@ def unittest_train_model(
 # Test across all models with both single/multihead
 @pytest.mark.parametrize(
     "model_type",
-    ["SAGE", "GIN", "GAT", "MFC", "PNA", "CGCNN", "SchNet", "DimeNet", "EGNN"],
+    ["SAGE", "GIN", "GAT", "MFC", "PNA", "CGCNN", "SchNet", "DimeNet", "EGNN", "PAINN"],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model(model_type, ci_input, overwrite_data=False):
@@ -200,13 +201,13 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
 
 # Test only models
-@pytest.mark.parametrize("model_type", ["PNA", "CGCNN", "SchNet", "EGNN"])
+@pytest.mark.parametrize("model_type", ["PNA", "CGCNN", "SchNet", "EGNN", "PAINN"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 
 
 # Test across equivariant models
-@pytest.mark.parametrize("model_type", ["EGNN", "SchNet"])
+@pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "PAINN"])
 def pytest_train_equivariant_model(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
 
@@ -218,7 +219,7 @@ def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
 
 
 @pytest.mark.parametrize(
-    "model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "SchNet", "DimeNet", "EGNN"]
+    "model_type", ["SAGE", "GIN", "GAT", "MFC", "PNA", "SchNet", "DimeNet", "EGNN", "PAINN"]
 )
 def pytest_train_model_conv_head(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)

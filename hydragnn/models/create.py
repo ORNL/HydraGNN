@@ -303,7 +303,7 @@ def create_model(
         )
     elif model_type == "PAINN":
         model = PAINNStack(
-            # edge_dim,
+            # edge_dim,   # To-do add edge_features
             num_radial,
             radius,
             input_dim,
