@@ -22,6 +22,7 @@ from hydragnn.models.SAGEStack import SAGEStack
 from hydragnn.models.SCFStack import SCFStack
 from hydragnn.models.DIMEStack import DIMEStack
 from hydragnn.models.EGCLStack import EGCLStack
+from hydragnn.models.PAINNStack import PAINNStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print_utils import print_distributed
@@ -297,6 +298,24 @@ def create_model(
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
             initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+    elif model_type == "PAINN":
+        model = PAINNStack(
+            # edge_dim,
+            num_radial,
+            radius,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
