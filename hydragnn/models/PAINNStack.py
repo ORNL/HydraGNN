@@ -9,10 +9,10 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+# Adapted From the Following:
 # Github: https://github.com/nityasagarjena/PaiNN-model/blob/main/PaiNN/model.py
 # Paper: https://arxiv.org/pdf/2102.03150
 
-# Questions: Do we want to allow models to be run without using parameters and without throwing an error?
 
 import torch
 from torch import nn
