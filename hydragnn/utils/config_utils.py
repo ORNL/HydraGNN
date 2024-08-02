@@ -110,7 +110,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet"]
+    equivariant_models = ["EGNN", "SchNet", "PAINN"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
@@ -260,9 +260,11 @@ def get_log_name_config(config):
         + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-data-"
         + config["Dataset"]["name"][
-            : config["Dataset"]["name"].rfind("_")
-            if config["Dataset"]["name"].rfind("_") > 0
-            else None
+            : (
+                config["Dataset"]["name"].rfind("_")
+                if config["Dataset"]["name"].rfind("_") > 0
+                else None
+            )
         ]
         + "-node_ft-"
         + "".join(

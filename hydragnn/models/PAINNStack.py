@@ -137,7 +137,7 @@ class PAINNStack(Base):
             else:
                 if self.node_NN_type == "conv":
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        c, pos = conv(x=x, pos=pos, **conv_args)
+                        c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)
                         c = batch_norm(c)
                         x = self.activation_function(c)
                     x_node = x
