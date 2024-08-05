@@ -68,15 +68,10 @@ def random_splits(N, x, y):
     return np.split( a, [int(x * N), int((x+y) * N)] )
 
 def load_columns(datafile, descr):
-    print(descr)
-    smiles_all = []
-    values_all = []
-    with open(datafile, "r") as file:
-        csvreader = csv.reader(file)
-        print(next(csvreader))
-        for row in csvreader:
-            smiles_all.append(row[0])
-            values_all.append([int(row[-1])])
+    df = pd.read_csv(datafile)
+    smiles_all = df[ descr["smiles"] ].to_list()
+    names = [ val["name"] for val in descr["graph_tasks"] ]
+    values_all = df[ names ].values #.tolist()
 
     N = len(smiles_all)
     assert len(values_all) == N
@@ -110,9 +105,9 @@ def main():
     )
     args = parser.parse_args()
     if args.output.endswith(".pkl"):
-        out_format = "pickle"
+        output_format = "pickle"
     elif args.output.endswith(".bp"):
-        out_format = "adios"
+        output_format = "adios"
     else:
         raise "Invalid output format. --output must end with .pkl (pickle) or .bp (adios) suffix."
     basedir = args.output
@@ -130,7 +125,8 @@ def main():
         datefmt="%H:%M:%S",
     )
 
-    descr = yaml.safe_load(args.descr)
+    with open(args.descr, "r", encoding="utf-8") as f:
+        descr = yaml.safe_load(f)
     smiles_sets, values_sets = load_columns(args.input, descr)
     info(
         "trainset,valset,testset size: %d %d %d",
