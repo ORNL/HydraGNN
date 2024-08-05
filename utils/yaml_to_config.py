@@ -3,6 +3,12 @@
 import json
 import yaml
 
+from hydragnn.utils.smiles_utils import (
+    get_node_attribute_name,
+)
+
+node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5, "Hg": 6, "Cl": 7}
+
 config = {
   "Verbosity": {
     "level": 2
@@ -26,13 +32,10 @@ config = {
         }
       },
       "task_weights": [
-        1
+        1.0
       ]
     },
     "Variables_of_interest": {
-      "input_node_feature_names": ["Z", "x"],
-      "input_node_feature_dims": [1, 3],
-      "input_node_features": [0, 1],
       "denormalize_output": False
     },
     "Training": {
@@ -47,26 +50,89 @@ config = {
   }
 }
 
+def group_features(tasks):
+    """ Given a task dictionary, list out
+        all runs of a given type.  For example,
+        two numeric tasks followed by three binary
+        tasks would return
+        names = ["name1 name2", "name3 name4 name5"]
+        sizes = [2, 3]
+        types = ["numeric", "binary"]
+    """
+    names = []
+    sizes = []
+    types = []
+
+    name = ""
+    sz = 0
+    cur_type = None
+    def finalize(v):
+        # flush name,sz,cur_type to the list
+        # and start a new tab
+        nonlocal names, sizes, types, name, sz, cur_type
+        if sz > 0:
+            names.append(name)
+            sizes.append(sz)
+            types.append(cur_type)
+        if v is None:
+            return
+
+        name = v["name"]
+        sz = 1
+        cur_type = v["type"]
+
+    start = True
+    for v in tasks:
+        if start:
+            finalize(v)
+            start = False
+        elif v["type"] != cur_type:
+            finalize(v)
+        else:
+            name += " " + v["name"]
+            sz += 1
+
+    finalize(None)
+    return names, sizes, types
+
 def main(argv):
     assert len(argv) == 3, f"Usage: {argv[0]} <in.yaml> <out.json>"
     inp = argv[1]
     out = argv[2]
 
-    graph_feature_names = ["CT_TOX"]
-    graph_feature_dim = [1]
-
     with open(inp, "r", encoding="utf-8") as f:
         descr = yaml.safe_load(f)
+    # smiles: IsomericSMILES
+    # split: split
+    # graph_tasks:
+    # - { name: alcoholic, type: binary, description: 'scent label' }
+    # - { name: aldehydic, type: binary, description: 'scent label' }
+
+    group_names, group_sizes, group_type = group_features(descr["graph_tasks"])
+    for i in (group_names, group_sizes, group_type):
+        print(i)
 
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["output_index"] = [ 0 ]
-    var_config["type"] = [ "graph" ]
+
+    (
+        var_config["input_node_feature_names"],
+        var_config["input_node_feature_dims"],
+    ) = get_node_attribute_name(node_types)
+    var_config["node_feature_dims"] = var_config["input_node_feature_dims"]
+    ninp = len(var_config["node_feature_dims"])
+    var_config["input_node_features"] = list(range(ninp))
+
+    ngrp = len(group_names)
+    var_config["output_index"] = list(range(ngrp))
+    var_config["type"] = [ "graph" ]*ngrp
+    # list of regression / prediction targets
     var_config["output_names"] = [
-        graph_feature_names[item]
+        group_names[item]
         for ihead, item in enumerate(var_config["output_index"])
     ]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dim
+    # all graph features present in data
+    var_config["graph_feature_names"] = group_names
+    var_config["graph_feature_dims"]  = group_sizes
 
     with open(out, "w", encoding="utf-8") as f:
         f.write(json.dumps(config, indent=2))

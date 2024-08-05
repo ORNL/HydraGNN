@@ -14,7 +14,7 @@ Next, import your dataset into ADIOS2 format, using
 Then create a `config.json` file describing
 the topology of your ML model.
 
-    yaml_to_config.py descr.yaml config.json
+    yaml_to_config.py ../../../datasets/clintox.yaml clintox.json
 
 With both of these ingredients in-hand, you can run:
 
