@@ -191,7 +191,7 @@ class PainnMessage(nn.Module):
 
         self.filter_layer = nn.Linear(edge_size, node_size * 3)
 
-    def forward(self, node_scalar, node_vector, edge, edge_diff, edge_dist):
+    def forward(self, node_scalar, node_vector, edge, edge_diff, edge_dist):        
         # remember to use v_j, s_j but not v_i, s_i
         filter_weight = self.filter_layer(
             sinc_expansion(edge_dist, self.edge_size, self.cutoff)
@@ -199,6 +199,9 @@ class PainnMessage(nn.Module):
         filter_weight = filter_weight * cosine_cutoff(edge_dist, self.cutoff).unsqueeze(
             -1
         )
+        
+        """Do pre-nns here"""
+        """Make this depend on node itself AND neighbor embeddings"""
         scalar_out = self.scalar_message_mlp(node_scalar)
         filter_out = filter_weight * scalar_out[edge[:, 1]]
 
@@ -214,6 +217,9 @@ class PainnMessage(nn.Module):
             edge_diff / edge_dist.unsqueeze(-1)
         ).unsqueeze(-1)
         message_vector = message_vector + edge_vector
+
+
+        """Do PNA aggregation of messages here. Scale down to node_scalar size"""
 
         # sum message
         residual_scalar = torch.zeros_like(node_scalar)

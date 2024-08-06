@@ -32,7 +32,7 @@ try:
 except:
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
-num_samples = 1000
+num_samples = 10000
 
 # Configurable run choices (JSON file that accompanies this example script).
 filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
@@ -91,4 +91,5 @@ hydragnn.train.train_validate_test(
     config["NeuralNetwork"],
     log_name,
     verbosity,
+    create_plots=config["Visualization"]["create_plots"],
 )
