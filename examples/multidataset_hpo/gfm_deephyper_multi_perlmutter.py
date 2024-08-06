@@ -89,9 +89,9 @@ def run(trial, dequed=None):
     )
     print("Command = ", command, flush=True, file=f)
 
-    result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
     output = "F"
     try:
+        result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
         while True:

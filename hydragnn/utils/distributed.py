@@ -147,6 +147,9 @@ def setup_ddp(use_deepspeed=False):
         master_addr = os.environ["LSB_HOSTS"].split()[1]
     elif os.getenv("LSB_MCPU_HOSTS") is not None:
         master_addr = os.environ["LSB_MCPU_HOSTS"].split()[2]
+    elif os.getenv("SLURM_STEP_NODELIST") is not None:
+        ## The following is CADES/Frontier/Perlmutter specific with job steps
+        master_addr = parse_slurm_nodelist(os.environ["SLURM_STEP_NODELIST"])[0]
     elif os.getenv("SLURM_NODELIST") is not None:
         ## The following is CADES specific
         master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
