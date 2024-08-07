@@ -15,8 +15,10 @@ import hydragnn
 ##################################################################################################################
 
 
-def get_node_attribute_name(types):
-    atom_attr_name = ["atom" + k for k in types]
+def get_node_attribute_name(types={}):
+    atom_attr_name = ["" for k in range(len(types))]
+    for k, idx in types.items():
+        atom_attr_name[idx] = "atom"+k
     extra_attr_name = [
         "atomicnumber",
         "IsAromatic",
@@ -31,8 +33,11 @@ def get_node_attribute_name(types):
     ] * len(name_list)
     return name_list, dims_list
 
+def get_edge_attribute_name():
+    names = ["SINGLE", "DOUBLE", "TRIPLE", "AROMATIC"]
+    return names, [1]*len(names)
 
-def generate_graphdata_from_smilestr(simlestr, ytarget, types, var_config=None):
+def generate_graphdata_from_smilestr(simlestr, ytarget, types={}, var_config=None):
 
     ps = Chem.SmilesParserParams()
     ps.removeHs = False
@@ -47,7 +52,7 @@ def generate_graphdata_from_smilestr(simlestr, ytarget, types, var_config=None):
 
 
 def generate_graphdata_from_rdkit_molecule(
-    mol, ytarget, types, atomicdescriptors_torch_tensor=None, var_config=None
+    mol, ytarget, types={}, atomicdescriptors_torch_tensor=None, var_config=None
 ):
     bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
 
@@ -61,7 +66,7 @@ def generate_graphdata_from_rdkit_molecule(
     sp2 = []
     sp3 = []
     for atom in mol.GetAtoms():
-        type_idx.append(types[atom.GetSymbol()])
+        type_idx.append(types.get(atom.GetSymbol(), 0))
         atomic_number.append(atom.GetAtomicNum())
         aromatic.append(1 if atom.GetIsAromatic() else 0)
         hybridization = atom.GetHybridization()
@@ -90,15 +95,15 @@ def generate_graphdata_from_rdkit_molecule(
     hs = (z == 1).to(torch.float)
     num_hs = scatter(hs[row], col, dim_size=N).tolist()
 
-    x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
-
-    x2 = (
+    x = (
         torch.tensor([atomic_number, aromatic, sp, sp2, sp3, num_hs], dtype=torch.float)
         .t()
         .contiguous()
     )
 
-    x = torch.cat([x1.to(torch.float), x2], dim=-1)
+    if len(types) > 0:
+        x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
+        x = torch.cat([x1.to(torch.float), x], dim=-1)
 
     if atomicdescriptors_torch_tensor is not None:
         assert (
