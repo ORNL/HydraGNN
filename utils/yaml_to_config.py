@@ -3,12 +3,11 @@
 import json
 import yaml
 
-from hydragnn.utils.smiles_utils import (
-    get_node_attribute_name,
-)
-
-node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5, "Hg": 6, "Cl": 7}
-
+# TODO: create a pydantic.BaseModel to validate the config object
+# TODO: add a version number to the config (and/or redo all configs...)
+#
+# TODO: refactor edge_features, task_weights, and Variables_of_interest
+# TODO: change "output_heads" to be a list.
 config = {
   "Verbosity": {
     "level": 2
@@ -114,10 +113,6 @@ def main(argv):
 
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
-    (
-        var_config["input_node_feature_names"],
-        var_config["input_node_feature_dims"],
-    ) = get_node_attribute_name(node_types)
     var_config["node_feature_dims"] = var_config["input_node_feature_dims"]
     ninp = len(var_config["node_feature_dims"])
     var_config["input_node_features"] = list(range(ninp))

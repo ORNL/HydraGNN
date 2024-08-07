@@ -16,25 +16,26 @@ SplitValue = Annotated[str, AfterValidator(valid_split)]
 
 cat_re = re.compile(r"categorical\([1-9][0-9]*\)")
 def valid_task_type(s):
-    if s.startswith("num"): return True
-    if s == "binary": return True
-    if cat_re.fullmatch(s): return True
-    return False
+    if s.startswith("num"): return s
+    if s == "binary": return s
+    if cat_re.fullmatch(s): return s
+    return None
+# TODO: fix this validator to check all types match a pattern
 TypeValue = Annotated[str, AfterValidator(valid_task_type)]
 
 class Task(BaseModel):
-    name: str
-    type: TypeValue
+    name: str           # column name for task
+    type: TypeValue     # type of task
     description: str = ""
 
 class DataDescriptor(BaseModel, extra="ignore"): # or "allow" to keep extra
     name:    str
     smiles:  str
     source:  str
-    split:   Optional[str] = None
-    authors: str = ""
+    split:   Optional[str] = None # column name for split
+    authors: str = ""             # list of authors
     ref:     str = ""
-    graph_tasks: List[Task] = []
+    graph_tasks: List[Task] = []  # list of prediction tasks for a graph
     edge_tasks:  List[Task] = []
     node_tasks:  List[Task] = []
 
