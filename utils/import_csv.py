@@ -8,6 +8,7 @@ import os, json
 import pickle, csv
 from pathlib import Path
 import random
+from typing import List
 
 import logging
 import sys
@@ -22,17 +23,20 @@ from mpi4py import MPI
 from tqdm import tqdm
 import pandas as pd
 import yaml
+import numpy as np
 
 import hydragnn
 from hydragnn.utils.pickledataset import SimplePickleWriter #, SimplePickleDataset
 from hydragnn.utils.smiles_utils import (
     get_node_attribute_name,
+    get_edge_attribute_name,
     generate_graphdata_from_smilestr,
 )
 from hydragnn.preprocess.utils import gather_deg
 from hydragnn.utils import nsplit
 
-import numpy as np
+from models import DataDescriptor
+
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -41,8 +45,6 @@ except ImportError:
 
 import torch_geometric.data
 import torch
-
-node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5, "Hg": 6, "Cl": 7}
 
 info = logging.info
 
@@ -67,21 +69,37 @@ def random_splits(N, x, y):
     a = random.sample(a, N)
     return np.split( a, [int(x * N), int((x+y) * N)] )
 
-def load_columns(datafile, descr):
+def load_columns(datafile : str, descr : DataDescriptor):
     df = pd.read_csv(datafile)
-    smiles_all = df[ descr["smiles"] ].to_list()
-    names = [ val["name"] for val in descr["graph_tasks"] ]
+    smiles_all = df[ descr.smiles ].to_list()
+    names = [ val.name for val in descr.graph_tasks ]
     values_all = df[ names ].values #.tolist()
 
     N = len(smiles_all)
     assert len(values_all) == N
     print("Total:", N)
 
-    idxs = random_splits(N, 0.8, 0.1)
-    assert len(idxs) == 3
+    if descr.split is None: # no labels - generate an 80/10/10 split.
+        idxs = random_splits(N, 0.8, 0.1)
+    else:
+        split = df[descr.split].str # use string functions on the "split" col.
+        idxs = [ np.flatnonzero(split.startswith(name)) \
+                 for name in ["train", "val", "test"] \
+               ]
     smiles = [ [smiles_all[i] for i in ix] for ix in idxs ]
     values = [ torch.tensor([values_all[i] for i in ix]) for ix in idxs ]
-    return smiles, values
+    return smiles, values, names
+
+def calc_offsets(counts : List[int]) -> List[int]:
+    """ Calculate the starting offsets for each
+        range -- where counts is a list of lengths of each range.
+    """
+    k = 0
+    off = []
+    for d in counts:
+        off.append(k)
+        k += d
+    return off
 
 def main():
     parser = argparse.ArgumentParser(
@@ -126,8 +144,8 @@ def main():
     )
 
     with open(args.descr, "r", encoding="utf-8") as f:
-        descr = yaml.safe_load(f)
-    smiles_sets, values_sets = load_columns(args.input, descr)
+        descr = DataDescriptor.model_validate(yaml.safe_load(f))
+    smiles_sets, values_sets, task_names = load_columns(args.input, descr)
     info(
         "trainset,valset,testset size: %d %d %d",
         *map(len, smiles_sets)
@@ -152,8 +170,10 @@ def main():
         ):
             try:
                 data = generate_graphdata_from_smilestr(
-                    smilestr, ytarget, node_types
+                    smilestr, ytarget
                 )
+                # TODO: ensure data.pos is populated (e.g. call rdkit)
+                # TODO: should we energy minimize these coordinates
 
                 assert isinstance(data, torch_geometric.data.Data)
                 dataset[name].append(data)
@@ -169,9 +189,26 @@ def main():
     # and as a global in adios format
     #config["pna_deg"] = pna_deg
 
-    if output_format == 'pickle':
+    node_names, node_dims = get_node_attribute_name()
+    node_names = [x.replace("atomicnumber", "atomic_number") for x in node_names]
+    edge_names, edge_dims = get_edge_attribute_name()
+    task_dims = [1]*len(task_names)
+
+    attrs = {
+        "x_name": node_names,
+        "x_name/feature_count": np.array(node_dims),
+        "x_name/feature_offset": np.array(calc_offsets(node_dims)),
+        "y_name": task_names,
+        "y_name/feature_count": np.array(task_dims),
+        "y_name/feature_offset": np.array(calc_offsets(task_dims)),
+        "edge_attr_name": edge_names,
+        "edge_attr_name/feature_count": np.array(edge_dims),
+        "edge_attr_name/feature_offset": np.array(calc_offsets(edge_dims))
+    }
+    #attrs = dict( (k, np.array(v)) for k,v in attrs.items() )
+
+    if output_format == "pickle":
         for name, data in dataset.items():
-            attrs = dict()
             if name == "trainset":
                 attrs["pna_deg"] = pna_deg
             SimplePickleWriter(
@@ -181,10 +218,14 @@ def main():
                 use_subdir=True,
                 attrs=attrs,
             )
-    elif output_format == 'adios':
+            if name == "trainset":
+                del attrs["pna_deg"]
+    elif output_format == "adios":
         adwriter = AdiosWriter(basedir, comm)
         for name, data in dataset.items():
             adwriter.add(name, data)
+        for k, v in attrs.items():
+            adwriter.add_global(k, v)
         adwriter.add_global("pna_deg", pna_deg)
         adwriter.save()
     else:
