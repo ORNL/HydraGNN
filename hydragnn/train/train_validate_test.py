@@ -181,6 +181,7 @@ def train_validate_test(
             reduce_ranks=True,
             return_samples=plot_hist_solution,
         )
+        print("DEBUGGING True/Pred first generated: ", true_values, predicted_values)
         scheduler.step(val_loss)
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
