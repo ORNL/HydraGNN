@@ -276,6 +276,7 @@ def train_validate_test(
     _, rank = get_comm_size_and_rank()
     if create_plots and rank == 0:
         ######result visualization######
+        print(f"DEBUGGING Create Plots true/pred: ", true_values, predicted_values)
         visualizer.create_plot_global(
             true_values,
             predicted_values,
