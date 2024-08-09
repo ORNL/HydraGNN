@@ -92,33 +92,33 @@ def train_validate_test(
 
     # preparing for results visualization
     ## collecting node feature
-    # if create_plots:
-    #     node_feature = []
-    #     nodes_num_list = []
-    #     ## (2022/05) : FIXME: using test_loader.datast caused a bottleneck for large data
-    #     for data in iterate_tqdm(
-    #         test_loader.dataset, verbosity, desc="Collecting node feature"
-    #     ):
-    #         node_feature.extend(data.x.tolist())
-    #         nodes_num_list.append(data.num_nodes)
+    if create_plots:
+        node_feature = []
+        nodes_num_list = []
+        ## (2022/05) : FIXME: using test_loader.datast caused a bottleneck for large data
+        for data in iterate_tqdm(
+            test_loader.dataset, verbosity, desc="Collecting node feature"
+        ):
+            node_feature.extend(data.x.tolist())
+            nodes_num_list.append(data.num_nodes)
 
-    #     visualizer = Visualizer(
-    #         model_with_config_name,
-    #         node_feature=node_feature,
-    #         num_heads=model.module.num_heads,
-    #         head_dims=model.module.head_dims,
-    #         num_nodes_list=nodes_num_list,
-    #     )
-    #     visualizer.num_nodes_plot()
+        visualizer = Visualizer(
+            model_with_config_name,
+            node_feature=node_feature,
+            num_heads=model.module.num_heads,
+            head_dims=model.module.head_dims,
+            num_nodes_list=nodes_num_list,
+        )
+        visualizer.num_nodes_plot()
 
-    # if create_plots and plot_init_solution:  # visualizing of initial conditions
-    #     _, _, true_values, predicted_values = test(test_loader, model, verbosity)
-    #     visualizer.create_scatter_plots(
-    #         true_values,
-    #         predicted_values,
-    #         output_names=config["Variables_of_interest"]["output_names"],
-    #         iepoch=-1,
-    #     )
+    if create_plots and plot_init_solution:  # visualizing of initial conditions
+        _, _, true_values, predicted_values = test(test_loader, model, verbosity)
+        visualizer.create_scatter_plots(
+            true_values,
+            predicted_values,
+            output_names=config["Variables_of_interest"]["output_names"],
+            iepoch=-1,
+        )
 
     profiler = Profiler("./logs/" + model_with_config_name)
     if "Profile" in config:
@@ -251,52 +251,52 @@ def train_validate_test(
 
     timer.stop()
 
-    # if create_plots:
-    #     # reduce loss statistics across all processes
-    #     total_loss_train = reduce_values_ranks(total_loss_train)
-    #     total_loss_val = reduce_values_ranks(total_loss_val)
-    #     total_loss_test = reduce_values_ranks(total_loss_test)
-    #     task_loss_train = reduce_values_ranks(task_loss_train)
-    #     task_loss_val = reduce_values_ranks(task_loss_val)
-    #     task_loss_test = reduce_values_ranks(task_loss_test)
+    if create_plots:
+        # reduce loss statistics across all processes
+        total_loss_train = reduce_values_ranks(total_loss_train)
+        total_loss_val = reduce_values_ranks(total_loss_val)
+        total_loss_test = reduce_values_ranks(total_loss_test)
+        task_loss_train = reduce_values_ranks(task_loss_train)
+        task_loss_val = reduce_values_ranks(task_loss_val)
+        task_loss_test = reduce_values_ranks(task_loss_test)
 
-    #     # At the end of training phase, do the one test run for visualizer to get latest predictions
-    #     test_loss, test_taskserr, true_values, predicted_values = test(
-    #         test_loader, model, verbosity
-    #     )
+        # At the end of training phase, do the one test run for visualizer to get latest predictions
+        test_loss, test_taskserr, true_values, predicted_values = test(
+            test_loader, model, verbosity
+        )
 
-    #     ##output predictions with unit/not normalized
-    #     if config["Variables_of_interest"]["denormalize_output"]:
-    #         true_values, predicted_values = output_denormalize(
-    #             config["Variables_of_interest"]["y_minmax"],
-    #             true_values,
-    #             predicted_values,
-    #         )
+        ##output predictions with unit/not normalized
+        if config["Variables_of_interest"]["denormalize_output"]:
+            true_values, predicted_values = output_denormalize(
+                config["Variables_of_interest"]["y_minmax"],
+                true_values,
+                predicted_values,
+            )
 
     _, rank = get_comm_size_and_rank()
-    # if create_plots and rank == 0:
-    #     ######result visualization######
-    #     visualizer.create_plot_global(
-    #         true_values,
-    #         predicted_values,
-    #         output_names=config["Variables_of_interest"]["output_names"],
-    #     )
-    #     visualizer.create_scatter_plots(
-    #         true_values,
-    #         predicted_values,
-    #         output_names=config["Variables_of_interest"]["output_names"],
-    #     )
-    #     ######plot loss history#####
-    #     visualizer.plot_history(
-    #         total_loss_train,
-    #         total_loss_val,
-    #         total_loss_test,
-    #         task_loss_train,
-    #         task_loss_val,
-    #         task_loss_test,
-    #         model.module.loss_weights,
-    #         config["Variables_of_interest"]["output_names"],
-    #     )
+    if create_plots and rank == 0:
+        ######result visualization######
+        visualizer.create_plot_global(
+            true_values,
+            predicted_values,
+            output_names=config["Variables_of_interest"]["output_names"],
+        )
+        visualizer.create_scatter_plots(
+            true_values,
+            predicted_values,
+            output_names=config["Variables_of_interest"]["output_names"],
+        )
+        ######plot loss history#####
+        visualizer.plot_history(
+            total_loss_train,
+            total_loss_val,
+            total_loss_test,
+            task_loss_train,
+            task_loss_val,
+            task_loss_test,
+            model.module.loss_weights,
+            config["Variables_of_interest"]["output_names"],
+        )
 
 
 def get_head_indices(model, data):
