@@ -76,7 +76,9 @@ train, val, test = hydragnn.preprocess.split_dataset(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
-config = hydragnn.utils.input_config_parsing.update_config(config, train_loader, val_loader, test_loader)
+config = hydragnn.utils.input_config_parsing.update_config(
+    config, train_loader, val_loader, test_loader
+)
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"],
