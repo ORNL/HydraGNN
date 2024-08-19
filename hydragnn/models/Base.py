@@ -19,7 +19,7 @@ import torch_scatter
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.print_utils import print_master
+from hydragnn.utils.print.print_utils import print_master
 
 import inspect
 

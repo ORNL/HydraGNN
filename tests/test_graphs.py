@@ -30,7 +30,7 @@ def unittest_train_model(
     use_deepspeed=False,
     overwrite_config=None,
 ):
-    world_size, rank = hydragnn.utils.get_comm_size_and_rank()
+    world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
@@ -167,7 +167,7 @@ def unittest_train_model(
             + " < "
             + str(thresholds[model_type][0])
         )
-        hydragnn.utils.print_distributed(verbosity, "head: " + error_str)
+        hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
         assert (
             error_head_mse < thresholds[model_type][0]
         ), "Head RMSE checking failed for " + str(ihead)
@@ -188,7 +188,7 @@ def unittest_train_model(
 
     # Check RMSE error
     error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
-    hydragnn.utils.print_distributed(verbosity, "total: " + error_str)
+    hydragnn.utils.print.print_distributed(verbosity, "total: " + error_str)
     assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
 
 

@@ -52,7 +52,7 @@ world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
 log_name = "md17_test"
 # Enable print to log file.
-hydragnn.utils.setup_log(log_name)
+hydragnn.utils.print.print_utils.setup_log(log_name)
 
 # Use built-in torch_geometric datasets.
 # Filter function above used to run quick example.
@@ -76,13 +76,13 @@ train, val, test = hydragnn.preprocess.split_dataset(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
-config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+config = hydragnn.utils.input_config_parsing.update_config(config, train_loader, val_loader, test_loader)
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"],
     verbosity=verbosity,
 )
-model = hydragnn.utils.get_distributed_model(model, verbosity)
+model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
 learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -91,8 +91,8 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 )
 
 # Run training with the given model and qm9 datasets.
-writer = hydragnn.utils.get_summary_writer(log_name)
-hydragnn.utils.save_config(config, log_name)
+writer = hydragnn.utils.model.model.get_summary_writer(log_name)
+hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
 hydragnn.train.train_validate_test(
     model,

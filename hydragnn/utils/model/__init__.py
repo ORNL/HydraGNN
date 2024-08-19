@@ -1,4 +1,5 @@
 from .model import (
+    activation_function_selection,
     save_model,
     get_summary_writer,
     unsorted_segment_mean,
