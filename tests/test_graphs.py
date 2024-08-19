@@ -222,9 +222,22 @@ def unittest_train_model(
 #     "model_type",
 #     ["SAGE", "GIN", "GAT", "MFC", "PNA", "SchNet", "DimeNet", "EGNN", "PAINN"],
 # )
-@pytest.mark.parametrize(
-    "model_type",
-    ["PAINN"],
-)
-def pytest_train_model_conv_head(model_type, overwrite_data=False):
+
+
+# @pytest.mark.parametrize(
+#     "model_type",
+#     ["PAINN"],
+# )
+# def pytest_train_model_conv_head(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+
+
+def main():
+    model_type = "PAINN"
+    overwrite_data = False
+    
     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+
+if __name__ == "__main__":
+    main()
+    print("Finished running tests!")
