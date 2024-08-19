@@ -18,7 +18,9 @@ import subprocess
 @pytest.mark.mpi_skip()
 def pytest_atomicdescriptors():
     file_path = os.path.join(
-        os.path.dirname(__file__), "..", "hydragnn/utils/atomicdescriptors.py"
+        os.path.dirname(__file__),
+        "..",
+        "hydragnn/utils/descriptors_and_embeddings/atomicdescriptors.py",
     )
     return_code = subprocess.call(["python", file_path])
 

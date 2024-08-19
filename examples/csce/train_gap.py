@@ -9,7 +9,9 @@ import pickle, csv
 
 import logging
 import sys
+
 from mpi4py import MPI
+
 import argparse
 
 import hydragnn
@@ -231,7 +233,7 @@ if __name__ == "__main__":
     ) = get_node_attribute_name(csce_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -246,8 +248,8 @@ if __name__ == "__main__":
     log_name = "csce_" + inputfilesubstr + "_eV_fullx"
     if args.log is not None:
         log_name = args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.print_utils.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -346,9 +348,7 @@ if __name__ == "__main__":
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
-        fname = fname = os.path.join(
-            os.path.dirname(__file__), "datasets", "csce_gap.bp"
-        )
+        fname = os.path.join(os.path.dirname(__file__), "datasets", "csce_gap.bp")
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm)
         testset = AdiosDataset(fname, "testset", comm)
@@ -390,10 +390,12 @@ if __name__ == "__main__":
     )
     comm.Barrier()
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
     comm.Barrier()
 
     timer.stop()
@@ -402,7 +404,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -410,7 +412,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -430,8 +432,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.time_utils.print_timers(verbosity)
 
     if args.mae:
         import matplotlib.pyplot as plt
