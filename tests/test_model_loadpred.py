@@ -29,7 +29,9 @@ def unittest_model_prediction(config):
         verbosity=config["Verbosity"]["level"],
     )
 
-    model = hydragnn.utils.distributed.get_distributed_model(model, config["Verbosity"]["level"])
+    model = hydragnn.utils.distributed.get_distributed_model(
+        model, config["Verbosity"]["level"]
+    )
 
     log_name = hydragnn.utils.input_config_parsing.get_log_name_config(config)
     hydragnn.utils.model.load_existing_model(model, log_name)
