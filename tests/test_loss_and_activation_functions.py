@@ -22,7 +22,7 @@ import hydragnn, tests
 def unittest_loss_and_activation_functions(
     activation_function_type, loss_function_type, ci_input, overwrite_data=False
 ):
-    world_size, rank = hydragnn.utils.get_comm_size_and_rank()
+    world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
 
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
