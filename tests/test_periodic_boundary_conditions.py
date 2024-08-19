@@ -9,12 +9,11 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import sys, os, json, numpy as np
-import pytest
+import json, numpy as np
 
 import torch
 from torch_geometric.data import Data
-from hydragnn.preprocess.utils import (
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
     get_radius_graph_config,
     get_radius_graph_pbc_config,
 )

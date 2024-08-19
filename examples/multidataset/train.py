@@ -13,15 +13,15 @@ torch.manual_seed(random_state)
 import numpy as np
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print_utils import log, log0
-from hydragnn.utils import nsplit
+from hydragnn.utils.print.print_utils import log, log0
+from hydragnn.utils.distributed import nsplit
 
 try:
     from hydragnn.utils.adiosdataset import AdiosDataset
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="gfm_multitasking.json"
     )
-    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
@@ -73,21 +73,21 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
     )
     group.add_argument(
         "--multi",
-        help="Multi dataset",
+        help="Multi datasets",
         action="store_const",
         dest="format",
         const="multi",
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
+    datadir = os.path.join(dirpwd, "datasets")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -156,14 +156,14 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
         )
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=var_config
@@ -194,7 +194,7 @@ if __name__ == "__main__":
             pna_deg_list = list()
             for model in modellist:
                 fname = os.path.join(
-                    os.path.dirname(__file__), "./dataset/%s.bp" % model
+                    os.path.dirname(__file__), "./datasets/%s.bp" % model
                 )
                 with ad2.open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
@@ -259,7 +259,7 @@ if __name__ == "__main__":
             "pos",
             "y",
         ]
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % mymodel)
         trainset = AdiosDataset(
             fname,
             "trainset",

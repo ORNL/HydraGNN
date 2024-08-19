@@ -15,17 +15,23 @@ from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
-from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
-import hydragnn.utils.tracer as tr
-from hydragnn.utils.print_utils import iterate_tqdm, log
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 from generate_dictionaries_pure_elements import (
     generate_dictionary_bulk_energies,
@@ -38,7 +44,7 @@ except ImportError:
     pass
 
 import subprocess
-from hydragnn.utils import nsplit
+from hydragnn.utils.distributed import nsplit
 
 
 def info(*args, logtype="info", sep=" "):
@@ -244,7 +250,7 @@ class Alexandria(AbstractBaseDataset):
 
     def process_file_content(self, filepath):
         """
-        Download a file from a dataset of the Alexandria database with the respective index
+        Download a file from a datasets of the Alexandria database with the respective index
         and write it to the LMDB file with the respective index.
 
         Parameters
@@ -311,7 +317,7 @@ if __name__ == "__main__":
         type=bool,
         default=True,
     )
-    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
@@ -321,14 +327,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
@@ -341,7 +347,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
+    datadir = os.path.join(dirpwd, "datasets")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -403,7 +409,7 @@ if __name__ == "__main__":
         ## adios
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+                os.path.dirname(__file__), "./datasets/%s.bp" % modelname
             )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
@@ -417,7 +423,7 @@ if __name__ == "__main__":
         ## pickle
         elif args.format == "pickle":
             basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+                os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
             )
             attrs = dict()
             attrs["pna_deg"] = deg
@@ -462,14 +468,14 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
         )
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=var_config

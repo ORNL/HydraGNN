@@ -14,12 +14,11 @@ import numpy as np
 import pickle
 
 import torch
-from torch_geometric.data import Data
-from torch import tensor
 
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.print_utils import log
-from hydragnn.utils import nsplit, tensor_divide, comm_reduce
+from hydragnn.utils.print.print_utils import log
+from hydragnn.utils.distributed import nsplit, comm_reduce
+from hydragnn.utils.model.model import tensor_divide
 
 import random
 
@@ -38,7 +37,7 @@ class AbstractRawDataLoader:
     def __init__(self, config, dist=False):
         """
         config:
-          shows the dataset path the target variables information, e.g, location and dimension, in data file
+          shows the datasets path the target variables information, e.g, location and dimension, in data file
         ###########
         dataset_list:
           list of datasets read from self.path_dictionary
@@ -193,7 +192,7 @@ class AbstractRawDataLoader:
 
     def normalize_dataset(self):
 
-        """Performs the normalization on Data objects and returns the normalized dataset."""
+        """Performs the normalization on Data objects and returns the normalized datasets."""
         num_node_features = len(self.node_feature_dim)
         num_graph_features = len(self.graph_feature_dim)
 

@@ -5,13 +5,15 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.config_utils import get_log_name_config
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.cfgdataset import CFGDataset
-from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
+from hydragnn.utils.datasets.cfgdataset import CFGDataset
+from hydragnn.utils.datasets.serializeddataset import (
+    SerializedWriter,
+    SerializedDataset,
+)
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.print_utils import log
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -44,14 +46,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
@@ -77,9 +79,9 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/dataset"
+    os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/datasets"
     datasetname = config["Dataset"]["name"]
-    fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
+    fname_adios = dirpwd + "/datasets/%s.bp" % (datasetname)
     config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
     if not args.loadexistingsplit:
         total = CFGDataset(config)
@@ -93,7 +95,7 @@ if __name__ == "__main__":
 
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
+                os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
             )
             adwriter = AdiosWriter(fname, MPI.COMM_SELF)
             adwriter.add("trainset", trainset)
@@ -104,7 +106,7 @@ if __name__ == "__main__":
             adwriter.save()
         elif args.format == "pickle":
             basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "serialized_dataset"
+                os.path.dirname(__file__), "datasets", "serialized_dataset"
             )
             SerializedWriter(
                 trainset,
@@ -138,14 +140,16 @@ if __name__ == "__main__":
             "preload": True,
             "shmem": False,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
+        fname = os.path.join(
+            os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
+        )
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "serialized_dataset"
+            os.path.dirname(__file__), "datasets", "serialized_dataset"
         )
         trainset = SerializedDataset(basedir, datasetname, "trainset")
         valset = SerializedDataset(basedir, datasetname, "valset")

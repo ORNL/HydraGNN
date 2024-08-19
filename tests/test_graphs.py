@@ -18,7 +18,7 @@ torch.manual_seed(97)
 import shutil
 
 import hydragnn, tests
-from hydragnn.utils.config_utils import merge_config
+from hydragnn.utils.input_config_parsing.config_utils import merge_config
 
 
 # Main unit test function called by pytest wrappers.

@@ -64,7 +64,7 @@ def setup_log(prefix):
     """
     Setup logging to print messages for both screen and file.
     """
-    from .distributed import init_comm_size_and_rank
+    from hydragnn.utils.distributed import init_comm_size_and_rank
 
     world_size, world_rank = init_comm_size_and_rank()
 
@@ -100,7 +100,7 @@ def log(*args, sep=" ", rank=None):
     if rank is None:
         logger.info(sep.join(map(str, args)))
     else:
-        from .distributed import init_comm_size_and_rank
+        from hydragnn.utils.distributed import init_comm_size_and_rank
 
         world_size, world_rank = init_comm_size_and_rank()
         if rank == world_rank:

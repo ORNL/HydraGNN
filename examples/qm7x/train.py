@@ -14,14 +14,17 @@ import sys
 import argparse
 
 import hydragnn
-from hydragnn.utils.print_utils import iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import numpy as np
 
@@ -42,8 +45,8 @@ try:
 except ImportError:
     pass
 
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
+from hydragnn.utils.distributed import nsplit
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 # FIXME: this works fine for now because we train on QM7-X molecules
 # for larger chemical spaces, the following atom representation has to be properly expanded
@@ -73,7 +76,7 @@ compute_edge_lengths = Distance(norm=False, cat=True)
 
 
 class QM7XDataset(AbstractBaseDataset):
-    """QM7-XDataset dataset class"""
+    """QM7-XDataset datasets class"""
 
     def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
         super().__init__()
@@ -197,7 +200,7 @@ class QM7XDataset(AbstractBaseDataset):
                 # check forces values
                 assert self.check_forces_values(
                     forces
-                ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                ), f"qm7x datasets - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
                 if self.energy_per_atom:
                     energy = EPBE0 / natoms
@@ -246,7 +249,7 @@ if __name__ == "__main__":
         default=True,
     )
 
-    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
@@ -256,14 +259,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
@@ -346,7 +349,7 @@ if __name__ == "__main__":
         ## adios
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+                os.path.dirname(__file__), "./datasets/%s.bp" % modelname
             )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
@@ -405,7 +408,7 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)

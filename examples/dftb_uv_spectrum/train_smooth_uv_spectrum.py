@@ -31,7 +31,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import numpy as np
 
@@ -75,7 +75,7 @@ def dftb_to_graph(moldir, dftb_node_types, var_config):
 
 
 class DFTBDataset(AbstractBaseDataset):
-    """DFTBDataset dataset class"""
+    """DFTBDataset datasets class"""
 
     def __init__(self, dirpath, dftb_node_types, var_config, dist=False, sampling=None):
         super().__init__()
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
-    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
@@ -148,14 +148,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     graph_feature_names = ["spectrum"]
     graph_feature_dim = [37500]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datafile = os.path.join(dirpwd, "dataset/dftb_aisd_electronic_excitation_spectrum")
+    datafile = os.path.join(dirpwd, "datasets/dftb_aisd_electronic_excitation_spectrum")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, "dftb_smooth_uv_spectrum.json")
     ##################################################################################################################
@@ -227,7 +227,7 @@ if __name__ == "__main__":
         config["pna_deg"] = deg
 
         ## adios
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         adwriter = AdiosWriter(fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
         ## pickle
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
         )
         attrs = dict()
         attrs["pna_deg"] = deg
@@ -283,14 +283,14 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
         )
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")

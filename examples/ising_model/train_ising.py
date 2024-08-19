@@ -11,15 +11,18 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.config_utils import get_log_name_config
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.model import print_model
-from hydragnn.utils.lsmsdataset import LSMSDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.lsmsdataset import LSMSDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import numpy as np
 
@@ -45,8 +48,8 @@ import math
 
 from create_configurations import E_dimensionless
 
-import hydragnn.utils.tracer as tr
-from hydragnn.utils import nsplit
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.distributed import nsplit
 
 
 def write_to_file(total_energy, atomic_features, count_config, dir, prefix):
@@ -90,7 +93,7 @@ def create_dataset_mpi(
         os.makedirs(subdir, exist_ok=True)
 
     for num_downs in iterate_tqdm(
-        range(rx.start, rx.stop), verbosity_level=2, desc="Creating dataset"
+        range(rx.start, rx.stop), verbosity_level=2, desc="Creating datasets"
     ):
         prefix = "output_%d_" % num_downs
         subdir = os.path.join(dir, str(num_downs))
@@ -159,21 +162,21 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, help="seed", default=43)
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
-    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--log", help="log name")
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
@@ -223,12 +226,12 @@ if __name__ == "__main__":
         """
         Parallel ising data generation step:
         1. Generate ising data (*.txt) in parallel (create_dataset_mpi)
-        2. Read raw dataset in parallel (*.txt) (RawDataset)
+        2. Read raw datasets in parallel (*.txt) (RawDataset)
         3. Split into a train, valid, and test set (split_dataset)
         4. Save as Adios file in parallel
         """
         sys.setrecursionlimit(1000000)
-        dir = os.path.join(os.path.dirname(__file__), "./dataset/%s" % modelname)
+        dir = os.path.join(os.path.dirname(__file__), "./datasets/%s" % modelname)
         if rank == 0:
             if os.path.exists(dir):
                 shutil.rmtree(dir)
@@ -267,7 +270,7 @@ if __name__ == "__main__":
         config["pna_deg"] = deg
 
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
         )
         attrs = dict()
         attrs["minmax_node_feature"] = total.minmax_node_feature
@@ -293,7 +296,7 @@ if __name__ == "__main__":
             use_subdir=True,
         )
 
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         adwriter = AdiosWriter(fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
@@ -318,14 +321,14 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
+            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
         )
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")

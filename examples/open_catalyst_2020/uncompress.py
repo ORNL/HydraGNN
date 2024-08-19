@@ -28,7 +28,7 @@ def decompress_list_of_files(ip_op_pair: Tuple[str, str]) -> None:
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--ipdir", type=str, help="Path to compressed dataset directory"
+        "--ipdir", type=str, help="Path to compressed datasets directory"
     )
     parser.add_argument(
         "--opdir", type=str, help="Directory path to uncompress files to"

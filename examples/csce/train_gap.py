@@ -13,17 +13,20 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.utils.smiles_utils import (
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
-from hydragnn.preprocess.utils import gather_deg
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.utils.distributed import nsplit
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import numpy as np
 
@@ -161,42 +164,42 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
     )
     group.add_argument(
-        "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
+        "--csv", help="CSV datasets", action="store_const", dest="format", const="csv"
     )
     parser.set_defaults(format="adios")
     group1 = parser.add_mutually_exclusive_group()
     group1.add_argument(
         "--shmem",
-        help="shmem dataset",
+        help="shmem datasets",
         action="store_const",
-        dest="dataset",
+        dest="datasets",
         const="shmem",
     )
     group1.add_argument(
         "--ddstore",
-        help="ddstore dataset",
+        help="ddstore datasets",
         action="store_const",
-        dest="dataset",
+        dest="datasets",
         const="ddstore",
     )
     group1.add_argument(
         "--simple",
-        help="no special dataset",
+        help="no special datasets",
         action="store_const",
-        dest="dataset",
+        dest="datasets",
         const="simple",
     )
     parser.set_defaults(dataset="simple")
@@ -206,7 +209,7 @@ if __name__ == "__main__":
     graph_feature_names = ["GAP"]
     graph_feature_dim = [1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datafile = os.path.join(dirpwd, "dataset/csce_gap_synth.csv")
+    datafile = os.path.join(dirpwd, "datasets/csce_gap_synth.csv")
     ##################################################################################################################
     inputfilesubstr = args.inputfilesubstr
     input_filename = os.path.join(dirpwd, "csce_" + inputfilesubstr + ".json")
@@ -293,7 +296,7 @@ if __name__ == "__main__":
         config["pna_deg"] = deg
 
         ## pickle
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        basedir = os.path.join(os.path.dirname(__file__), "datasets", "pickle")
         attrs = dict()
         attrs["pna_deg"] = deg
         SimplePickleWriter(
@@ -316,7 +319,7 @@ if __name__ == "__main__":
             use_subdir=True,
         )
 
-        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap.bp")
+        fname = os.path.join(os.path.dirname(__file__), "datasets", "csce_gap.bp")
         adwriter = AdiosWriter(fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
@@ -344,20 +347,22 @@ if __name__ == "__main__":
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
         fname = fname = os.path.join(
-            os.path.dirname(__file__), "dataset", "csce_gap.bp"
+            os.path.dirname(__file__), "datasets", "csce_gap.bp"
         )
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm)
         testset = AdiosDataset(fname, "testset", comm)
         comm.Barrier()
     elif args.format == "csv":
-        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap_synth.csv")
+        fname = os.path.join(
+            os.path.dirname(__file__), "datasets", "csce_gap_synth.csv"
+        )
         fact = CSCEDatasetFactory(fname, args.sampling, var_config=var_config)
         trainset = CSCEDataset(fact, "trainset")
         valset = CSCEDataset(fact, "valset")
         testset = CSCEDataset(fact, "testset")
     elif args.format == "pickle":
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
+        basedir = os.path.join(os.path.dirname(__file__), "datasets", "pickle")
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")
         testset = SimplePickleDataset(basedir, "testset")

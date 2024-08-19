@@ -14,13 +14,13 @@ from mpi_list import Context, DFM
 
 
 def subset(i):
-    # sz = len(dataset)
+    # sz = len(datasets)
     # chunk = sz // C.procs
     # left  = sz % C.procs
     # a = i*chunk     + min(i, left)
     # b = (i+1)*chunk + min(i+1, left)
     # print(f"Rank {i}/{C.procs} converting subset [{a},{b})")
-    # return np.array([np.array(x) for x in dataset[a:b]["image"]])
+    # return np.array([np.array(x) for x in datasets[a:b]["image"]])
     return np.random.random((100, 4))
 
 
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     comm_rank = comm.Get_rank()
     comm_size = comm.Get_size()
 
-    fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % args.modelname)
+    fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % args.modelname)
     print("fname:", fname)
     trainset = AdiosDataset(
         fname,
@@ -123,7 +123,7 @@ if __name__ == "__main__":
     )
     pna_deg = trainset.pna_deg
 
-    ## Iterate over local dataset
+    ## Iterate over local datasets
     energy_list = list()
     feature_list = list()
     for dataset in [trainset, valset, testset]:
@@ -205,7 +205,7 @@ if __name__ == "__main__":
 
     ## Writing
     fname = os.path.join(
-        os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname
+        os.path.dirname(__file__), "./datasets/%s-v2.bp" % args.modelname
     )
     if comm_rank == 0:
         print("Saving:", fname)

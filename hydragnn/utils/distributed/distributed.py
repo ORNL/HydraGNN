@@ -15,14 +15,13 @@ import re
 import torch
 import torch.distributed as dist
 
-from .print_utils import print_distributed
+from hydragnn.utils.print.print_utils import print_distributed
 
 import psutil
 import socket
 from datetime import timedelta
 import time
 import subprocess
-from mpi4py import MPI
 
 deepspeed_available = True
 try:

@@ -68,7 +68,7 @@ def pytest_model_loadpred():
     # get the directory of trained model
     log_name = hydragnn.utils.config_utils.get_log_name_config(config)
     modelfile = os.path.join("./logs/", log_name, log_name + ".pk")
-    # check if pretrained model and pkl dataset files exists
+    # check if pretrained model and pkl datasets files exists
     case_exist = True
     config_file = os.path.join("./logs/", log_name, "config.json")
     if not (os.path.isfile(modelfile) and os.path.isfile(config_file)):
@@ -79,7 +79,7 @@ def pytest_model_loadpred():
             config = json.load(f)
         for dataset_name, raw_data_path in config["Dataset"]["path"].items():
             if not os.path.isfile(raw_data_path):
-                print(dataset_name, "dataset not found: ", raw_data_path)
+                print(dataset_name, "datasets not found: ", raw_data_path)
                 case_exist = False
                 break
     if not case_exist:

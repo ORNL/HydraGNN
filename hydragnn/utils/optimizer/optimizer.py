@@ -1,5 +1,5 @@
 import torch
-from .distributed import get_device_name
+from hydragnn.utils.distributed import get_device_name
 from torch.distributed.optim import ZeroRedundancyOptimizer
 
 deepspeed_available = True

@@ -2,9 +2,8 @@ from mpi4py import MPI
 import pickle
 import time
 import os
-import glob
 
-from .print_utils import print_distributed, log, log0, iterate_tqdm
+from hydragnn.utils.print.print_utils import log, log0, iterate_tqdm
 
 import numpy as np
 
@@ -23,10 +22,10 @@ try:
 except ImportError:
     pass
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils import nsplit
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.distributed import nsplit
 from hydragnn.preprocess import update_predicted_values, update_atom_features
 
 
@@ -279,7 +278,7 @@ class AdiosWriter:
 
 
 class AdiosDataset(AbstractBaseDataset):
-    """Adios dataset class"""
+    """Adios datasets class"""
 
     def __init__(
         self,
@@ -306,7 +305,7 @@ class AdiosDataset(AbstractBaseDataset):
         comm: MPI_comm
             MPI communicator
         preload: bool, optional
-            Option to preload all the dataset into a memory
+            Option to preload all the datasets into a memory
         shmem: bool, optional
             Option to use shmem to share data between processes in the same node
         enable_cache: bool, optional

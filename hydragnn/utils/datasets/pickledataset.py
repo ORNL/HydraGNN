@@ -1,15 +1,14 @@
 import os
 import pickle
 
-import torch
 from mpi4py import MPI
 
-from .print_utils import print_distributed, log, iterate_tqdm
+from hydragnn.utils.print.print_utils import log, iterate_tqdm
 
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.preprocess import update_predicted_values, update_atom_features
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 
 class SimplePickleDataset(AbstractBaseDataset):
@@ -119,7 +118,7 @@ class SimplePickleWriter:
         """
         Parameters
         ----------
-        dataset: locally owned dataset (should be iterable)
+        dataset: locally owned datasets (should be iterable)
         basedir: basedir
         label: label
         nmax: nmax in case of subdir

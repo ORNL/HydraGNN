@@ -3,9 +3,8 @@ import numpy as np
 
 from torch import tensor
 from torch_geometric.data import Data
-from hydragnn.utils.abstractrawdataset import AbstractRawDataset
+from hydragnn.utils.datasets.abstractrawdataset import AbstractRawDataset
 
-from ase.io.cfg import read_cfg
 from ase.io import read
 
 

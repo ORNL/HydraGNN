@@ -4,23 +4,23 @@ import numpy as np
 import torch
 import torch_geometric.data
 
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
 try:
     import pyddstore as dds
 except ImportError:
     pass
 
-from hydragnn.utils.print_utils import log, log0
-from hydragnn.utils import nsplit
+from hydragnn.utils.print.print_utils import log0
+from hydragnn.utils.distributed import nsplit
 from hydragnn.preprocess import update_predicted_values, update_atom_features
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 from tqdm import tqdm
 
 
 class DistDataset(AbstractBaseDataset):
-    """Distributed dataset class"""
+    """Distributed datasets class"""
 
     def __init__(
         self,

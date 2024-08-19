@@ -23,8 +23,8 @@ from torch_geometric.transforms import (
 
 from hydragnn.preprocess import update_predicted_values, update_atom_features
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
-from hydragnn.preprocess.utils import (
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
     get_radius_graph,
     get_radius_graph_pbc,
 )
@@ -194,9 +194,9 @@ class SerializedDataLoader:
         return dataset
 
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
-        """Given the dataset and the percentage of data you want to extract from it, method will
-        apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
-        In the case of the structures dataset where each structure contains 2 types of atoms, the category will
+        """Given the datasets and the percentage of data you want to extract from it, method will
+        apply stratified sampling where X is the datasets and Y is are the category values for each datapoint.
+        In the case of the structures datasets where each structure contains 2 types of atoms, the category will
         be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
 
         Parameters
@@ -204,16 +204,16 @@ class SerializedDataLoader:
         dataset: [Data]
             A list of Data objects representing a structure that has atoms.
         subsample_percentage: float
-            Percentage of the dataset.
+            Percentage of the datasets.
 
         Returns
         ----------
         [Data]
-            Subsample of the original dataset constructed using stratified sampling.
+            Subsample of the original datasets constructed using stratified sampling.
         """
         dataset_categories = []
         print_distributed(
-            self.verbosity, "Computing the categories for the whole dataset."
+            self.verbosity, "Computing the categories for the whole datasets."
         )
         for data in iterate_tqdm(dataset, self.verbosity):
             frequencies = torch.bincount(data.x[:, 0].int())

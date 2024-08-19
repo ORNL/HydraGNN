@@ -171,12 +171,12 @@ if __name__ == "__main__":
     # Enable print to log file.
     hydragnn.utils.setup_log(log_name)
 
-    # Use built-in torch_geometric dataset.
+    # Use built-in torch_geometric datasets.
     # Filter function above used to run quick example.
     # NOTE: data is moved to the device in the pre-transform.
     # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
     dataset = torch_geometric.datasets.QM9(
-        root="dataset/qm9", pre_transform=qm9_pre_transform
+        root="datasets/qm9", pre_transform=qm9_pre_transform
     )
     trainset, valset, testset = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False

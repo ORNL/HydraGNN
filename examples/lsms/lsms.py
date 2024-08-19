@@ -5,11 +5,14 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.config_utils import get_log_name_config
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.lsmsdataset import LSMSDataset
-from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
+from hydragnn.utils.datasets.lsmsdataset import LSMSDataset
+from hydragnn.utils.datasets.serializeddataset import (
+    SerializedWriter,
+    SerializedDataset,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
 try:
@@ -45,14 +48,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios dataset",
+        help="Adios datasets",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle dataset",
+        help="Pickle datasets",
         action="store_const",
         dest="format",
         const="pickle",
@@ -95,7 +98,7 @@ if __name__ == "__main__":
 
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
+                os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
             )
             adwriter = AdiosWriter(fname, MPI.COMM_SELF)
             adwriter.add("trainset", trainset)
@@ -140,7 +143,9 @@ if __name__ == "__main__":
             "preload": True,
             "shmem": False,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
+        fname = os.path.join(
+            os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
+        )
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
