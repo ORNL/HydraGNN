@@ -68,7 +68,9 @@ def pytest_model_loadpred():
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
     # get the directory of trained model
-    log_name = hydragnn.utils.config_utils.get_log_name_config(config)
+    log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
+        config
+    )
     modelfile = os.path.join("./logs/", log_name, log_name + ".pk")
     # check if pretrained model and pkl datasets files exists
     case_exist = True
