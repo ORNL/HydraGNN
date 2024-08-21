@@ -90,14 +90,15 @@ def run(argv):
         % (len(trainset), len(valset), len(testset))
     )
 
-    return 0
+    # first hurdle - we need to get metadata (what features are present) from adios datasets.
     (
         train_loader,
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
+        trainset, valset, testset, config["Training"]["Optimizer"]["batch_size"]
     )
+    return 0
     comm.Barrier()
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
@@ -108,18 +109,22 @@ def run(argv):
 
     timer.stop()
 
+    # most important step - create the NN model based on the config file's
+    # NeuralNetwork parameters.
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
+    # tell pytorch to parallelize training over torch.distributed
     model = hydragnn.utils.get_distributed_model(model, verbosity)
 
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
+    learning_rate = config["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    # ? what is this doing to the model?
     hydragnn.utils.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
