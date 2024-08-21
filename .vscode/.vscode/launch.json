@@ -1,0 +1,22 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "python": "/opt/anaconda3/envs/HYDRA5/bin/python",
+            "args": ["-Xfrozen_modules=off"],  // To not miss breakpoints
+            "pythonArgs": ["-Xfrozen_modules=off"],  // To not miss breakpoints
+            "env": {
+                "PYTHONPATH": "/Users/r9w/Coding/My_Fork/HydraGNN/",
+                "PYDEVD_DISABLE_FILE_VALIDATION": "1"
+            }
+        }
+    ]
+}

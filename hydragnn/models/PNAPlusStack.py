@@ -266,7 +266,7 @@ class PNAConv(MessagePassing):
 
         # Pass the concatenated embeddings through the pre_nns
         scalar_out = [nn(scalar_out[:, i]) for i, nn in enumerate(self.pre_nns)]
-        scalar_out = torch.stack(hs, dim=1)
+        scalar_out = torch.stack(scalar_out, dim=1)
         
         # Put rbf through a linear layer
         rbf = self.rbf_lin(rbf)

@@ -5,7 +5,7 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "model_type": "PNA",
+            "model_type": "PNAPlus",
             "radius": 5,
             "max_neighbours": 5,
             "envelope_exponent": 5,
