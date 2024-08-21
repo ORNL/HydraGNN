@@ -5,10 +5,14 @@
 """
 import os, json
 import pickle, csv
+from pathlib import Path
 
 import logging
 import sys
 from tqdm import tqdm
+
+info = logging.info
+
 
 import mpi4py
 mpi4py.rc.thread_level = "serialized"
@@ -44,105 +48,49 @@ import torch
 import torch.distributed as dist
 
 
-def run():
-    parser = argparse.ArgumentParser(
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
+def run(argv):
+    assert len(argv) == 3, f"Usage: {argv[0]} <config.json> <dataset.bp>"
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "--adios",
-        help="Adios dataset",
-        action="store_const",
-        dest="format",
-        const="adios",
-    )
-    group.add_argument(
-        "--pickle",
-        help="Pickle dataset",
-        action="store_const",
-        dest="format",
-        const="pickle",
-    )
-    group.add_argument(
-        "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
-    )
-    parser.set_defaults(format="adios")
-    """
-    group1 = parser.add_mutually_exclusive_group()
-    group1.add_argument(
-        "--shmem",
-        help="shmem dataset",
-        action="store_const",
-        dest="dataset",
-        const="shmem",
-    )
-    group1.add_argument(
-        "--ddstore",
-        help="ddstore dataset",
-        action="store_const",
-        dest="dataset",
-        const="ddstore",
-    )
-    group1.add_argument(
-        "--simple",
-        help="no special dataset",
-        action="store_const",
-        dest="dataset",
-        const="simple",
-    )
-    parser.set_defaults(dataset="simple")
-    """
-    parser.add_argument("--everyone", action="store_true", help="gptimer")
-    args = parser.parse_args()
-
+    cfgfile = argv[1]
+    dataset = argv[2]
 
     tr.initialize()
     tr.disable()
     timer = Timer("load_data")
     timer.start()
 
-    if args.format == "adios":
+    config = json.loads( Path(cfgfile).read_text() )
+    print(config)
+
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    comm_size = comm.Get_size()
+
+    use_torch_backend = False # Fix to MPI backend
+    if True: # fix to adios format
         shmem = ddstore = False
-        if args.dataset == "shmem":
+        if use_torch_backend:
             shmem = True
             os.environ["HYDRAGNN_AGGR_BACKEND"] = "torch"
             os.environ["HYDRAGNN_USE_ddstore"] = "0"
-        elif args.dataset == "ddstore":
+        else:
             ddstore = True
             os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
-        fname = os.path.join(os.path.dirname(__file__), "dataset", "clintox.bp")
-        trainset = AdiosDataset(fname, "trainset", comm, **opt)
-        valset = AdiosDataset(fname, "valset", comm)
-        testset = AdiosDataset(fname, "testset", comm)
+        trainset = AdiosDataset(dataset, "trainset", comm, **opt)
+        valset = AdiosDataset(dataset, "valset", comm)
+        testset = AdiosDataset(dataset, "testset", comm)
         comm.Barrier()
-    elif args.format == "pickle":
-        basedir = os.path.join(os.path.dirname(__file__), "dataset", "pickle")
-        trainset = SimplePickleDataset(basedir, "trainset")
-        valset = SimplePickleDataset(basedir, "valset")
-        testset = SimplePickleDataset(basedir, "testset")
-        pna_deg = trainset.pna_deg
-        if args.dataset == "ddstore":
-            opt = {"ddstore_width": args.ddstore_width}
-            trainset = DistDataset(trainset, "trainset", comm, **opt)
-            valset = DistDataset(valset, "valset", comm, **opt)
-            testset = DistDataset(testset, "testset", comm, **opt)
-            trainset.pna_deg = pna_deg
-    else:
-        raise NotImplementedError("No supported format: %s" % (args.format))
 
+    print("Loaded dataset.")
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
 
-    if args.dataset == "ddstore":
-        os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_ddstore"] = "1"
-
+    return 0
     (
         train_loader,
         val_loader,
@@ -247,3 +195,7 @@ def run():
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
+if __name__=="__main__":
+    import sys
+    run(sys.argv)
