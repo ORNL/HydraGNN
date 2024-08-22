@@ -117,9 +117,6 @@ class PNAPlusStack(Base):
 
     def __str__(self):
         return "PNAStack"
-    
-
-
 
 
 class PNAConv(MessagePassing):
@@ -127,10 +124,8 @@ class PNAConv(MessagePassing):
         self,
         in_channels: int,
         out_channels: int,
-        x_aggregators: List[str],
-        v_aggregators: List[str],
-        x_scalers: List[str],
-        v_scalers: List[str],
+        aggregators: List[str],
+        scalers: List[str],
         deg: Tensor,
         num_radial: int,
         edge_dim: int,
@@ -143,11 +138,9 @@ class PNAConv(MessagePassing):
         train_norm: bool = False,
         **kwargs,
     ):
-        
-        self.aggr_module_scalar = DegreeScalerAggregation(x_aggregators, x_scalers, deg)
-        self.aggr_module_vector = DegreeScalerAggregation(v_aggregators, v_scalers, deg)
-        
-        super().__init__(aggr=None, node_dim=0, **kwargs)
+
+        aggr = DegreeScalerAggregation(aggregators, scalers, deg, train_norm)
+        super().__init__(aggr=aggr, node_dim=0, **kwargs)
 
         if divide_input:
             assert in_channels % towers == 0
@@ -171,17 +164,14 @@ class PNAConv(MessagePassing):
                 modules += [Linear(self.F_in, self.F_in)]
             self.pre_nns.append(Sequential(*modules))
 
-            in_channels = (len(x_aggregators) * len(x_scalers) + 1) * self.F_in
+            in_channels = (len(aggregators) * len(scalers) + 1) * self.F_in
             modules = [Linear(in_channels, self.F_out)]
             for _ in range(post_layers - 1):
                 modules += [activation_resolver(act, **(act_kwargs or {}))]
                 modules += [Linear(self.F_out, self.F_out)]
             self.post_nns.append(Sequential(*modules))
+
         self.lin = Linear(out_channels, out_channels)
-        
-        self.v_lin = Linear(in_channels, out_channels, bias=False)
-        self.v_down = Linear(len(), out_channels, bias=False)
-        
         self.rbf_lin = Linear(
             num_radial, self.F_in, bias=False
         )  # projection of rbf for Hadamard with m_ij
@@ -216,11 +206,10 @@ class PNAConv(MessagePassing):
     def forward(
         self,
         x: Tensor,
-        v: Tensor,
         edge_index: Adj,
-        rbf: Tensor = None,
+        rbf: Tensor,
         edge_attr: OptTensor = None,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> Tensor:
 
         if self.divide_input:
             x = x.view(-1, self.towers, self.F_in)
@@ -228,67 +217,44 @@ class PNAConv(MessagePassing):
             x = x.view(-1, 1, self.F_in).repeat(1, self.towers, 1)
 
         # propagate_type: (x: Tensor, edge_attr: OptTensor)
-        message_scalar, message_vector = self.propagate(edge_index, x=x, v=v, edge_attr=edge_attr, size=None, rbf=rbf)
-        message_scalar = torch.cat([x, message_scalar], dim=-1)
-        message_scalar = [nn(message_scalar[:, i]) for i, nn in enumerate(self.post_nns)]
-        message_vector = torch.cat([v, message_vector], dim=-1)
-        message_vector = self.v_down(message_vector)
-        
-        
-        x = x + message_scalar
-        v = v + message_vector
+        out = self.propagate(edge_index, x=x, edge_attr=edge_attr, size=None, rbf=rbf)
 
-        return x, v
+        out = torch.cat([x, out], dim=-1)
+        outs = [nn(out[:, i]) for i, nn in enumerate(self.post_nns)]
+        out = torch.cat(outs, dim=1)
+
+        return self.lin(out)
 
     def message(
-        self, x_i: Tensor, x_j: Tensor, v_i, v_j, rbf, edge_vec, edge_attr: OptTensor = None
-    ) -> Tuple[Tensor, Tensor]:
-        
-        # filter_weight = self.filter_layer(
-        #     sinc_expansion(edge_dist, self.edge_size, self.cutoff)
-        # )
-        # filter_weight = filter_weight * cosine_cutoff(edge_dist, self.cutoff).unsqueeze(
-        #     -1
-        # )
+        self, x_i: Tensor, x_j: Tensor, rbf: Tensor = None, edge_attr: OptTensor = None
+    ) -> Tensor:
 
-        # h: Tensor = x_i  # Dummy.
+        h: Tensor = x_i  # Dummy.
         if edge_attr is not None:
             edge_attr = torch.cat([edge_attr, self.rbf_emb(rbf)], dim=-1)
             edge_attr = self.edge_encoder(edge_attr)
             edge_attr = edge_attr.view(-1, 1, self.F_in)
             edge_attr = edge_attr.repeat(1, self.towers, 1)
-            scalar_out = torch.cat([x_i, x_j, edge_attr], dim=-1)
+            h = torch.cat([x_i, x_j, edge_attr], dim=-1)
         else:
             rbf_attr = self.rbf_emb(rbf)
             rbf_attr = rbf_attr.view(-1, 1, self.F_in)
             rbf_attr = rbf_attr.repeat(1, self.towers, 1)
-            scalar_out = torch.cat([x_i, x_j, rbf_attr], dim=-1)
+            h = torch.cat([x_i, x_j, rbf_attr], dim=-1)
 
         # Pass the concatenated embeddings through the pre_nns
-        scalar_out = [nn(scalar_out[:, i]) for i, nn in enumerate(self.pre_nns)]
-        scalar_out = torch.stack(scalar_out, dim=1)
-        
+        hs = [nn(h[:, i]) for i, nn in enumerate(self.pre_nns)]
+        hs = torch.stack(hs, dim=1)
+
         # Put rbf through a linear layer
         rbf = self.rbf_lin(rbf)
         # Repeat distance embedding for each tower
         rbf = rbf.view(-1, 1, self.F_in)
         rbf = rbf.repeat(1, self.towers, 1)
         # Perform Hadamard product
-        filter_out = scalar_out * self.rbf_lin(rbf)
-        
-        gate_state_vector, gate_edge_vector, message_scalar = torch.split(
-            filter_out,
-            self.in_channels,
-            dim=1,
-        )
-        
-        message_vector = v_j * gate_state_vector.unsqueeze(1)
-        edge_vector = gate_edge_vector.unsqueeze(1) * (
-            edge_vec / rbf.unsqueeze(-1)
-        ).unsqueeze(-1)
-        message_vector = message_vector + edge_vector
-        
-        return message_scalar, message_vector
+        hs = hs * rbf
+
+        return hs
 
     def __repr__(self):
         return (

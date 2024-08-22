@@ -14,7 +14,7 @@
 # Paper: https://arxiv.org/pdf/2102.03150
 
 # To-Do: 
-## PNA aggregation for vec?
+## Maybe do PNA aggregation for vectorial? To maintain equivariance, aggregation could only the Identity, but all scalers are valid.
 
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -28,9 +28,12 @@ from torch_scatter import scatter
 
 # Torch Geo
 from torch_geometric import nn as geom_nn
+from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.resolver import activation_resolver
 from torch_geometric.nn.dense.linear import Linear as geom_Linear
+from torch_geometric.nn.aggr.scaler import DegreeScalerAggregation
 from torch_geometric.typing import Adj, OptTensor
+# from torch_geometric.utils import degree
 
 from .Base import Base
 
@@ -107,7 +110,7 @@ class PNAEqStack(Base):
             nn.Linear(input_dim, output_dim),
             self.activation_function
         )
-        vec_embed_out = nn.Linear(input_dim, output_dim) if not last_layer else None
+        vec_embed_out = geom_nn.Linear(input_dim, output_dim) if not last_layer else None
         
         
         input_args = "x, v, pos, edge_index, edge_rbf, edge_vec"
@@ -131,7 +134,7 @@ class PNAEqStack(Base):
             )
         else:
             return geom_nn.Sequential(
-                "x, v, pos, edge_index, diff, dist",
+                input_args,
                 [
                     # (embed_in, "x, v -> x, v"),
                     (message, conv_args + " -> x, v"),
@@ -157,13 +160,12 @@ class PNAEqStack(Base):
 
         ### encoder part ####
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
-            self.conv_checkpointing = False
             if not self.conv_checkpointing:
                 c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)  # Added v here
-            # else:
-            #     c, v, pos = checkpoint(  # Added v here
-            #         conv, use_reentrant=False, x=x, v=v, pos=pos, **conv_args
-            #     )
+            else:
+                c, v, pos = checkpoint(  # Added v here
+                    conv, use_reentrant=False, x=x, v=v, pos=pos, **conv_args
+                )
             x = self.activation_function(feat_layer(c))
 
         #### multi-head decoder part####
@@ -221,7 +223,7 @@ class PNAEqStack(Base):
 
         return data, conv_args
 
-class PainnMessage(nn.Module):
+class PainnMessage(MessagePassing):
     """Message function"""
 
     def __init__(
@@ -316,7 +318,6 @@ class PainnMessage(nn.Module):
             x = x.view(-1, 1, self.F_in).repeat(1, self.towers, 1)
         
         # Create message_scalar using an MLP on concatenated node scalar, neighbor scalar, edge_rbf, and edge_attr(optional)
-        # h: Tensor = x[src]  # Dummy.
         if edge_attr is not None:
             rbf_attr = self.rbf_emb(edge_rbf)
             rbf_attr = rbf_attr.view(-1, 1, self.F_in)
@@ -334,11 +335,18 @@ class PainnMessage(nn.Module):
         
         # Pass the concatenated features through pre_nns
         message_scalar = [nn(message_scalar[:, i]) for i, nn in enumerate(self.pre_nns)]
+        # message_scalar = torch.stack(message_scalar, dim=1).squeeze(1)
         message_scalar = torch.stack(message_scalar, dim=1)
         scalar_out = self.scalar_message_mlp(message_scalar)  # Expand for PAINN
         
         # Apply distance filtering with pointwise product
-        filter_out = scalar_out * self.rbf_lin(edge_rbf).unsqueeze(1)
+        # Put rbf through a linear layer
+        rbf = self.rbf_lin(edge_rbf)
+        # Repeat distance embedding for each tower
+        rbf = rbf.view(-1, 1, 3*self.F_in)
+        rbf = rbf.repeat(1, self.towers, 1)
+        # Perform Hadamard (element-wise) product
+        filter_out = scalar_out * rbf
         
         # Split for x,v tasks
         gate_state_vector, gate_edge_vector, message_scalar = torch.split(
@@ -353,7 +361,13 @@ class PainnMessage(nn.Module):
         message_vector = message_vector + edge_vector
         
         # Aggregate and scale message_scalar
-        message_scalar = aggregate_and_scale(self.x_aggregators, self.x_scalers, message_scalar, src, self.deg)
+        # message_scalar = aggregate_and_scale(self.x_aggregators, self.x_scalers, message_scalar, src, self.deg)
+        degree_scaler_aggregation = DegreeScalerAggregation(
+            aggr=self.x_aggregators,
+            scaler=self.x_scalers,
+            deg=self.deg
+        )
+        message_scalar = degree_scaler_aggregation(message_scalar.squeeze(1), index=src, dim_size=x.shape[0]).unsqueeze(1)  # degree scalar aggregation expects shape(num_nodes, feature_dim)
         message_scalar = torch.cat([x, message_scalar], dim=-1)
         delta_x = [nn(message_scalar[:, i]) for i, nn in enumerate(self.post_nns)]
         delta_x = torch.stack(delta_x, dim=1)
@@ -363,7 +377,7 @@ class PainnMessage(nn.Module):
         delta_v.index_add_(0, src, message_vector)
         
         # Update with skip connection
-        x = x + delta_x
+        x = x.squeeze(1) + delta_x.squeeze(1)
         v = v + delta_v
 
         return x, v
@@ -375,7 +389,7 @@ class PainnMessage(nn.Module):
             f"edge_dim={self.edge_dim})"
         )
 
-class PainnUpdate(nn.Module):
+class PainnUpdate(MessagePassing):
     """Update function"""
 
     def __init__(self, node_size: int, last_layer=False):
@@ -402,7 +416,7 @@ class PainnUpdate(nn.Module):
         Xv = self.update_X(v)
         Vv = self.update_V(v)
 
-        Vv_norm = torch.linalg.norm(Vv, dim=1).unsqueeze(1)
+        Vv_norm = torch.linalg.norm(Vv, dim=1)
         mlp_input = torch.cat((Vv_norm, x), dim=-1)
         mlp_output = self.update_mlp(mlp_input)
 
@@ -413,8 +427,8 @@ class PainnUpdate(nn.Module):
                 dim=-1,
             )
 
-            delta_v = a_vv * Xv
-            inner_prod = torch.sum(Xv * Vv, dim=1).unsqueeze(1)
+            delta_v = a_vv.unsqueeze(1) * Xv
+            inner_prod = torch.sum(Xv * Vv, dim=1)
             delta_x = a_xv * inner_prod + a_xx
 
             return x + delta_x, v + delta_v
@@ -425,7 +439,7 @@ class PainnUpdate(nn.Module):
                 dim=-1,
             )
 
-            inner_prod = torch.sum(Xv * Vv, dim=1).unsqueeze(1)
+            inner_prod = torch.sum(Xv * Vv, dim=1)
             delta_x = a_xv * inner_prod + a_xx
 
             return x + delta_x
@@ -470,65 +484,3 @@ class rbf_BasisLayer(nn.Module):
         filter_weight = sinc_out * cosine_out
         
         return filter_weight
-
-
-def aggregate_and_scale(aggregators, scalers, messages, src, degree_histogram):
-    """
-    Perform the aggregating and scaling operations of PNA on the messages for type 2 tensors,
-    using degree histogram information and torch_scatter.
-    """
-    # Initialize the aggregated tensor
-    # aggregated = torch.empty(0, messages.size(1), device=messages.device)
-    aggregated = torch.Tensor().to(messages.device)
-
-    for aggregator in aggregators:
-        if aggregator == 'mean':
-            agg = scatter(messages, src, dim=0, reduce='mean')
-        elif aggregator == 'min':
-            agg = scatter(messages, src, dim=0, reduce='min')
-        elif aggregator == 'max':
-            agg = scatter(messages, src, dim=0, reduce='max')
-        elif aggregator == 'std':
-            mean = scatter(messages, src, dim=0, reduce='mean')
-            mean_expanded = mean[src]
-            variance = scatter((messages - mean_expanded) ** 2, src, dim=0, reduce='mean')
-            agg = torch.sqrt(variance)
-        
-        # Concatenate the aggregation results
-        aggregated = torch.cat((aggregated, agg), dim=-1) if aggregated.numel() != 0 else agg
-
-    # Degree scaling: count degrees of source nodes in src
-    node_degrees = torch.bincount(src).float().unsqueeze(-1).unsqueeze(-1)  # Compute node degrees for each source node
-
-    # Map each node's degree to the corresponding value from the degree histogram
-    degree_bins = torch.bucketize(node_degrees, torch.arange(len(degree_histogram)))
-    degree_values = degree_histogram[degree_bins]
-
-    # Initialize agg_scaled as a tensor
-    # agg_scaled = torch.empty(0, aggregated.size(1), device=aggregated.device)
-    agg_scaled = torch.Tensor().to(messages.device)
-
-    for scaler in scalers:
-        if scaler == 'identity':
-            scaled = aggregated
-        elif scaler == 'amplification':
-            avg_deg_log = (degree_values * torch.log(degree_values + 1)).sum() / degree_values.sum()
-            scaling_factor = (torch.log(node_degrees + 1) / avg_deg_log)
-            scaled = aggregated * scaling_factor
-        elif scaler == 'attenuation':
-            avg_deg_log = (degree_values * torch.log(degree_values + 1)).sum() / degree_values.sum()
-            scaling_factor = (avg_deg_log / torch.log(node_degrees.clamp(min=1) + 1))
-            scaled = aggregated * scaling_factor
-        elif scaler == 'linear':
-            avg_deg_lin = (degree_values * degree_values).sum() / degree_values.sum()
-            scaling_factor = (node_degrees / avg_deg_lin)
-            scaled = aggregated * scaling_factor
-        elif scaler == 'inverse_linear':
-            avg_deg_lin = (degree_values * degree_values).sum() / degree_values.sum()
-            scaling_factor = (avg_deg_lin / node_degrees.clamp(min=1))
-            scaled = aggregated * scaling_factor
-
-        # Concatenate the scaled results
-        agg_scaled = torch.cat((agg_scaled, scaled), dim=-1)
-
-    return agg_scaled

@@ -5,7 +5,7 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "model_type": "PNAPlus",
+            "model_type": "PNAEq",
             "radius": 5,
             "max_neighbours": 5,
             "envelope_exponent": 5,
@@ -46,8 +46,8 @@
         }
     },
     "Visualization": {
-        "plot_init_solution": true,
-        "plot_hist_solution": true,
-        "create_plots": true
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
     }
 }
