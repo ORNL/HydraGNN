@@ -29,7 +29,7 @@ OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
 DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
 DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
 SLURM_JOB_ID = os.environ["SLURM_JOB_ID"]
-
+OMNISTAT_WRAPPER = os.environ["OMNISTAT_WRAPPER"]
 
 def _parse_results(stdout):
     pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
@@ -69,6 +69,8 @@ def run(trial, dequed=None):
     command = " ".join(
         [
             prefix,
+            f"bash -c \"",
+            f"{OMNISTAT_WRAPPER} rms;",
             python_exe,
             "-u",
             python_script,
@@ -84,6 +86,9 @@ def run(trial, dequed=None):
             ##f'--multi_model_list="ANI1x"',
             f"--num_epoch=10",
             f"--log={log_name}",
+            f"; {OMNISTAT_WRAPPER} rms --nostep;",
+            f"touch {DEEPHYPER_LOG_DIR}/trial_map_{trial.id}_\\$SLURM_STEP_ID;",
+            f"\"",
         ]
     )
     print("Command = ", command, flush=True, file=f)
