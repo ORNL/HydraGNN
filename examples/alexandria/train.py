@@ -250,7 +250,7 @@ class Alexandria(AbstractBaseDataset):
 
     def process_file_content(self, filepath):
         """
-        Download a file from a datasets of the Alexandria database with the respective index
+        Download a file from a dataset of the Alexandria database with the respective index
         and write it to the LMDB file with the respective index.
 
         Parameters
