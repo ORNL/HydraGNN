@@ -214,7 +214,7 @@ if __name__ == "__main__":
     )
     group.add_argument(
         "--pickle",
-        help="Pickle ",
+        help="Pickle dataset",
         action="store_const",
         dest="format",
         const="pickle",
