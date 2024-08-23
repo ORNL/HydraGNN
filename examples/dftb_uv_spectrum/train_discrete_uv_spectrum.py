@@ -23,7 +23,10 @@ from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
 from hydragnn.utils.distributed import get_device
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import numpy as np
