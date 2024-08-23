@@ -399,7 +399,7 @@ if __name__ == "__main__":
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hhydragnn.utils.input_config_parsing.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
