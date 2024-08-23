@@ -140,7 +140,7 @@ if __name__ == "__main__":
     # NOTE: data is moved to the device in the pre-transform.
     # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
     dataset = torch_geometric.datasets.QM9(
-        root="datasets/qm9", pre_transform=qm9_pre_transform
+        root="dataset/qm9", pre_transform=qm9_pre_transform
     )
 
     trainset, valset, testset = hydragnn.preprocess.split_dataset(dataset, 0.8, False)

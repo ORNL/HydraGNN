@@ -155,7 +155,7 @@ if __name__ == "__main__":
         type=bool,
         default=True,
     )
-    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
@@ -167,14 +167,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios datasets",
+        help="Adios dataset",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle datasets",
+        help="Pickle dataset",
         action="store_const",
         dest="format",
         const="pickle",
@@ -259,7 +259,7 @@ if __name__ == "__main__":
         ## adios
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./datasets/%s.bp" % modelname
+                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
             )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
@@ -318,7 +318,7 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)

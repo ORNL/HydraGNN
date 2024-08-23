@@ -48,14 +48,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios datasets",
+        help="Adios dataset",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle datasets",
+        help="Pickle dataset",
         action="store_const",
         dest="format",
         const="pickle",
@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
+                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
             )
             adwriter = AdiosWriter(fname, MPI.COMM_SELF)
             adwriter.add("trainset", trainset)
@@ -143,9 +143,7 @@ if __name__ == "__main__":
             "preload": True,
             "shmem": False,
         }
-        fname = os.path.join(
-            os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
-        )
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)

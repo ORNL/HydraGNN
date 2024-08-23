@@ -64,7 +64,7 @@ compute_edges = hydragnn.preprocess.get_radius_graph_config(arch_config)
 torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
 
 dataset = torch_geometric.datasets.MD17(
-    root="datasets/md17",
+    root="dataset/md17",
     name="uracil",
     pre_transform=md17_pre_transform,
     pre_filter=md17_pre_filter,
@@ -92,7 +92,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-# Run training with the given model and qm9 datasets.
+# Run training with the given model and md17 dataset.
 writer = hydragnn.utils.model.model.get_summary_writer(log_name)
 hydragnn.utils.input_config_parsing.save_config(config, log_name)
 

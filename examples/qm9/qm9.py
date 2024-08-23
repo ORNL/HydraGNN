@@ -58,7 +58,7 @@ hydragnn.utils.print.print_utils.setup_log(log_name)
 # NOTE: data is moved to the device in the pre-transform.
 # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
 dataset = torch_geometric.datasets.QM9(
-    root="datasets/qm9", pre_transform=qm9_pre_transform, pre_filter=qm9_pre_filter
+    root="dataset/qm9", pre_transform=qm9_pre_transform, pre_filter=qm9_pre_filter
 )
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False

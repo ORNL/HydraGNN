@@ -93,7 +93,7 @@ def create_dataset_mpi(
         os.makedirs(subdir, exist_ok=True)
 
     for num_downs in iterate_tqdm(
-        range(rx.start, rx.stop), verbosity_level=2, desc="Creating datasets"
+        range(rx.start, rx.stop), verbosity_level=2, desc="Creating dataset"
     ):
         prefix = "output_%d_" % num_downs
         subdir = os.path.join(dir, str(num_downs))
@@ -162,21 +162,21 @@ if __name__ == "__main__":
     )
     parser.add_argument("--seed", type=int, help="seed", default=43)
     parser.add_argument("--sampling", type=float, help="sampling ratio", default=None)
-    parser.add_argument("--ddstore", action="store_true", help="ddstore datasets")
+    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--log", help="log name")
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios datasets",
+        help="Adios dataset",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle datasets",
+        help="Pickle dataset",
         action="store_const",
         dest="format",
         const="pickle",
@@ -231,7 +231,7 @@ if __name__ == "__main__":
         4. Save as Adios file in parallel
         """
         sys.setrecursionlimit(1000000)
-        dir = os.path.join(os.path.dirname(__file__), "./datasets/%s" % modelname)
+        dir = os.path.join(os.path.dirname(__file__), "./dataset/%s" % modelname)
         if rank == 0:
             if os.path.exists(dir):
                 shutil.rmtree(dir)
@@ -270,7 +270,7 @@ if __name__ == "__main__":
         config["pna_deg"] = deg
 
         basedir = os.path.join(
-            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
+            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
         attrs = dict()
         attrs["minmax_node_feature"] = total.minmax_node_feature
@@ -296,7 +296,7 @@ if __name__ == "__main__":
             use_subdir=True,
         )
 
-        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         adwriter = AdiosWriter(fname, comm)
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
@@ -321,14 +321,14 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
+            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
         trainset = SimplePickleDataset(basedir, "trainset")
         valset = SimplePickleDataset(basedir, "valset")

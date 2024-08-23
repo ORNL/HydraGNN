@@ -265,20 +265,20 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios datasets",
+        help="Adios dataset",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle datasets",
+        help="Pickle dataset",
         action="store_const",
         dest="format",
         const="pickle",
     )
     group.add_argument(
-        "--csv", help="CSV datasets", action="store_const", dest="format", const="csv"
+        "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
     )
     parser.add_argument(
         "--use_deepspeed",
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     graph_feature_names = ["GAP"]
     graph_feature_dim = [1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "datasets/")
+    datadir = os.path.join(dirpwd, "dataset/")
     ##################################################################################################################
     inputfilesubstr = args.inputfilesubstr
     input_filename = os.path.join(dirpwd, "ogb_" + inputfilesubstr + ".json")
@@ -362,7 +362,7 @@ if __name__ == "__main__":
 
             ## pickle
             basedir = os.path.join(
-                os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
+                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
             )
             attrs = dict()
             attrs["pna_deg"] = deg
@@ -393,7 +393,7 @@ if __name__ == "__main__":
             )
 
         if args.format == "adios":
-            fname = os.path.join(os.path.dirname(__file__), "datasets", "ogb_gap.bp")
+            fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
@@ -409,12 +409,12 @@ if __name__ == "__main__":
         opt = {"preload": True, "shmem": False}
         if args.shmem:
             opt = {"preload": False, "shmem": True}
-        fname = os.path.join(os.path.dirname(__file__), "datasets", "ogb_gap.bp")
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "csv":
-        fname = os.path.join(os.path.dirname(__file__), "datasets", "pcqm4m_gap.csv")
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "pcqm4m_gap.csv")
         fact = OGBRawDatasetFactory(
             fname, var_config=var_config, sampling=args.sampling
         )
@@ -424,7 +424,7 @@ if __name__ == "__main__":
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "datasets", "%s.pickle" % modelname
+            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=var_config

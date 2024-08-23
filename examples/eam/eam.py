@@ -46,14 +46,14 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
-        help="Adios datasets",
+        help="Adios dataset",
         action="store_const",
         dest="format",
         const="adios",
     )
     group.add_argument(
         "--pickle",
-        help="Pickle datasets",
+        help="Pickle dataset",
         action="store_const",
         dest="format",
         const="pickle",
@@ -79,9 +79,9 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/datasets"
+    os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/dataset"
     datasetname = config["Dataset"]["name"]
-    fname_adios = dirpwd + "/datasets/%s.bp" % (datasetname)
+    fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
     config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
     if not args.loadexistingsplit:
         total = CFGDataset(config)
@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
+                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
             )
             adwriter = AdiosWriter(fname, MPI.COMM_SELF)
             adwriter.add("trainset", trainset)
@@ -106,7 +106,7 @@ if __name__ == "__main__":
             adwriter.save()
         elif args.format == "pickle":
             basedir = os.path.join(
-                os.path.dirname(__file__), "datasets", "serialized_dataset"
+                os.path.dirname(__file__), "dataset", "serialized_dataset"
             )
             SerializedWriter(
                 trainset,
@@ -140,16 +140,14 @@ if __name__ == "__main__":
             "preload": True,
             "shmem": False,
         }
-        fname = os.path.join(
-            os.path.dirname(__file__), "./datasets/%s.bp" % datasetname
-        )
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % datasetname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
-            os.path.dirname(__file__), "datasets", "serialized_dataset"
+            os.path.dirname(__file__), "dataset", "serialized_dataset"
         )
         trainset = SerializedDataset(basedir, datasetname, "trainset")
         valset = SerializedDataset(basedir, datasetname, "valset")
