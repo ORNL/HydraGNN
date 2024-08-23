@@ -24,7 +24,7 @@ indices = ["pascal", "pbe", "pbe_1d", "pbe_2d", "pbesol", "scan"]
 
 url_root = "https://alexandria.icams.rub.de/data"  # Replace with the actual URL
 
-dirpath = "datasets/compressed_data"
+dirpath = "dataset/compressed_data"
 
 if os.path.exists(dirpath) and os.path.isdir(dirpath):
     shutil.rmtree(dirpath)
