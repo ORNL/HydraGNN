@@ -226,7 +226,7 @@ if __name__ == "__main__":
         """
         Parallel ising data generation step:
         1. Generate ising data (*.txt) in parallel (create_dataset_mpi)
-        2. Read raw datasets in parallel (*.txt) (RawDataset)
+        2. Read raw dataset in parallel (*.txt) (RawDataset)
         3. Split into a train, valid, and test set (split_dataset)
         4. Save as Adios file in parallel
         """
