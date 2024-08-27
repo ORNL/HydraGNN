@@ -8,12 +8,38 @@
 #SBATCH -N 1
 #SBATCH -q debug
 
-# target SLURM job ID and DeepHyper log dir
-# CHANGEME: set SLURM job ID for which you want to do post-processing of its omnistat data
-export TARGET_SLURM_JOB_ID=206276
+usage() { echo "Usage: sbatch job-frontier-hpo-postprocess-omnistat.sh -j <target job ID> [-p <path to deephyper log dir>]" 1>&2; exit 1; }
 
-# CHANGEME: set DeepHyper log dir corresponding to the above SLURM job
-export DEEPHYPER_LOG_DIR="logs/deephyper-experiment"-$TARGET_SLURM_JOB_ID 
+while getopts ":j:p:" o; do
+    case "${o}" in
+        j)
+            TARGET_SLURM_JOB_ID=${OPTARG}
+            ;;
+        p)
+            DEEPHYPER_LOG_DIR=${OPTARG}
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ -z "${TARGET_SLURM_JOB_ID}" ]; then
+  usage
+fi
+
+if [ -z "${DEEPHYPER_LOG_DIR}" ]; then
+  DEEPHYPER_LOG_DIR="logs/deephyper-experiment"-$TARGET_SLURM_JOB_ID
+fi
+
+if [ ! -d "${DEEPHYPER_LOG_DIR}" ]; then
+  echo "DeepHyper log dir path is invalid."
+  usage
+fi
+
+echo "TARGET_SLURM_JOB_ID = ${TARGET_SLURM_JOB_ID}"
+echo "DEEPHYPER_LOG_DIR = ${DEEPHYPER_LOG_DIR}"
 
 # omnistat variables
 export OMNISTAT_WRAPPER=/autofs/nccs-svm1_sw/crusher/amdsw/omnistat/1.0.0-RC1/misc/omnistat-ornl
