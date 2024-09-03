@@ -39,7 +39,7 @@ def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=
         n_splits=1, train_size=subsample_percentage, random_state=0
     )
 
-    for subsample_index, rest_of_data_index in sss.split(dataset, dataset_categories):
+    for subsample_index, _ in sss.split(dataset, dataset_categories):
         subsample_indices = subsample_index.tolist()
 
     for index in subsample_indices:

@@ -7,10 +7,15 @@ import torch
 import numpy as np
 
 import hydragnn
-from hydragnn.utils import nsplit
-from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+from hydragnn.utils.distributed import nsplit
+from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
-from mpi_list import Context, DFM
+
+# This import requires having installed the package mpi_list
+try:
+    from mpi_list import Context, DFM
+except ImportError:
+    print("mpi_list requires having installed: https://github.com/frobnitzem/mpi_list")
 
 
 def subset(i):
