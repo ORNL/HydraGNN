@@ -306,6 +306,7 @@ def split_dataset(
 ):
     if not stratify_splitting:
         perc_val = (1 - perc_train) / 2
+        dataset = list(dataset)
         data_size = len(dataset)
         random.shuffle(dataset)
         trainset = dataset[: int(data_size * perc_train)]
