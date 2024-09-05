@@ -6,6 +6,8 @@ import argparse
 
 import numpy as np
 
+import random
+
 import torch
 
 # FIX random seed
@@ -112,6 +114,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
                         f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
                         flush=True,
                     )
+
+        random.shuffle(self.dataset)
 
     def ase_to_torch_geom(self, atoms):
         # set the atomic numbers, positions, and cell

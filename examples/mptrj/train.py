@@ -4,6 +4,8 @@ import sys
 from mpi4py import MPI
 import argparse
 
+import random
+
 import torch
 
 # FIX random seed
@@ -163,6 +165,8 @@ class MPTrjDataset(AbstractBaseDataset):
                         f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
                         flush=True,
                     )
+
+        random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
 

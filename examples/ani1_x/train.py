@@ -6,6 +6,8 @@ import argparse
 
 import numpy as np
 
+import random
+
 import torch
 
 # FIX random seed
@@ -131,6 +133,8 @@ class ANI1xDataset(AbstractBaseDataset):
                         f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
                         flush=True,
                     )
+
+        random.shuffle(self.dataset)
 
     def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
         """Iterate over buckets of data in ANI HDF5 file.

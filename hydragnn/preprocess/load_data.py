@@ -12,6 +12,8 @@
 import os
 import socket
 
+import random
+
 import torch
 import torch.distributed as dist
 import torch_geometric
@@ -305,6 +307,7 @@ def split_dataset(
     if not stratify_splitting:
         perc_val = (1 - perc_train) / 2
         data_size = len(dataset)
+        random.shuffle(dataset)
         trainset = dataset[: int(data_size * perc_train)]
         valset = dataset[
             int(data_size * perc_train) : int(data_size * (perc_train + perc_val))
