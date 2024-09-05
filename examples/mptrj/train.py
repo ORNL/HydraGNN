@@ -4,13 +4,12 @@ import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
-import random
-import numpy as np
-
 import torch
-from torch import tensor
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 from torch_geometric.data import Data
 
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian

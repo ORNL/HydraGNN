@@ -29,6 +29,10 @@ import adios2 as ad2
 ## FIMME
 torch.backends.cudnn.enabled = False
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
