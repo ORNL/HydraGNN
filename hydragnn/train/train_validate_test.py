@@ -66,6 +66,7 @@ def train_validate_test(
     plot_hist_solution=False,
     create_plots=False,
     use_deepspeed=False,
+    compute_grad_energy=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
@@ -492,8 +493,13 @@ def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
             data = data.to(get_device())
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
-            pred = model(data)
-            loss, tasks_loss = model.module.loss(pred, data.y, head_index)
+            if compute_grad_energy:
+                data.pos.requires_grad = True
+                pred = model(data)
+                loss, tasks_loss = model.module.energy_force_loss(pred, data)
+            else:
+                pred = model(data)
+                loss, tasks_loss = model.module.loss(pred, data.y, head_index)
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()

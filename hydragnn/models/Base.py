@@ -354,6 +354,35 @@ class Base(Module):
             return self.loss_nll(pred, value, head_index, var=var)
         elif self.ilossweights_hyperp == 1:
             return self.loss_hpweighted(pred, value, head_index, var=var)
+        
+    def energy_force_loss(self, pred, data):
+        # Initialize loss
+        tot_loss = 0
+        tasks_loss = []
+        # Energies
+        node_energy_pred = pred[0]
+        energy_pred = torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0).float()
+        energy_true = data.energy
+        tot_loss += (
+            self.loss_function(energy_pred, energy_true) * self.loss_weights[0]  # There should only be one loss-weight for energy
+        )
+        tasks_loss.append(self.loss_function(energy_pred, energy_true))
+        # Forces
+        forces_true = data.forces
+        forces_pred = (torch.autograd.grad(
+                energy_pred, 
+                data.pos, 
+                grad_outputs=torch.ones_like(energy_pred), 
+                retain_graph=True, create_graph=True
+                )[0]).float()
+        forces_pred = -forces_pred
+        tot_loss += (
+            self.loss_function(forces_pred, forces_true) * (1-self.loss_weights[0])  # Have force-weight be the complement to energy-weight
+        )
+        tasks_loss.append(self.loss_function(forces_pred, forces_true))
+        ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+        ##        so, we need to do this manually without calling the other functions.
+        
 
     def loss_nll(self, pred, value, head_index, var=None):
         # negative log likelihood loss
