@@ -14,7 +14,7 @@ from torch_geometric.typing import SparseTensor
 
 import torch
 from torch import Tensor
-from torch.nn import Identity, SiLU
+from torch.nn import Identity, SiLU, Sigmoid
 
 from torch_geometric.nn import Linear, Sequential
 from torch_geometric.nn.models.dimenet import (
@@ -101,7 +101,7 @@ class DIMEStack(Base):
             out_emb_channels=self.out_emb_size,
             out_channels=output_dim,
             num_layers=1,
-            act=SiLU(),
+            act=Sigmoid(),  # Sigmoid instead of SiLU here promotes stability when we have a linear decoder at the start of convolution (especially for random data examples in test_graphs.py)
             output_initializer="glorot_orthogonal",
         )
         return Sequential(
