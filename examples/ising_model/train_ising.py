@@ -31,6 +31,10 @@ except ImportError:
 import torch
 import torch.distributed as dist
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 import warnings
 
 ## For create_configurations

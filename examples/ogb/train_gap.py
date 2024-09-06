@@ -39,6 +39,10 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 deepspeed_available = True
 try:
     import deepspeed
