@@ -170,6 +170,7 @@ def _(config: dict, use_deepspeed=False):
         scheduler,
         config["NeuralNetwork"],
         log_name,
+        compute_grad_energy=config["NeuralNetwork"]["Training"]["compute_grad_energy"],
         config["Verbosity"]["level"],
         plot_init_solution,
         plot_hist_solution,

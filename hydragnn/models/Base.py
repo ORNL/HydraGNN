@@ -361,18 +361,18 @@ class Base(Module):
         tasks_loss = []
         # Energies
         node_energy_pred = pred[0]
-        energy_pred = torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0).float()
-        energy_true = data.energy
+        graph_energy_pred = torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0).float()
+        graph_energy_true = data.energy
         tot_loss += (
-            self.loss_function(energy_pred, energy_true) * self.loss_weights[0]  # There should only be one loss-weight for energy
+            self.loss_function(graph_energy_pred, graph_energy_true) * self.loss_weights[0]  # There should only be one loss-weight for energy
         )
-        tasks_loss.append(self.loss_function(energy_pred, energy_true))
+        tasks_loss.append(self.loss_function(graph_energy_pred, graph_energy_true))
         # Forces
         forces_true = data.forces
         forces_pred = (torch.autograd.grad(
                 energy_pred, 
                 data.pos, 
-                grad_outputs=torch.ones_like(energy_pred), 
+                grad_outputs=torch.ones_like(graph_energy_pred), 
                 retain_graph=True, create_graph=True
                 )[0]).float()
         forces_pred = -forces_pred
