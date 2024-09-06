@@ -170,12 +170,12 @@ def _(config: dict, use_deepspeed=False):
         scheduler,
         config["NeuralNetwork"],
         log_name,
-        compute_grad_energy=config["NeuralNetwork"]["Training"]["compute_grad_energy"],
         config["Verbosity"]["level"],
         plot_init_solution,
         plot_hist_solution,
         create_plots,
         use_deepspeed=use_deepspeed,
+        compute_grad_energy=config["NeuralNetwork"]["Training"]["compute_grad_energy"],
     )
 
     save_model(model, optimizer, log_name, use_deepspeed=use_deepspeed)
