@@ -376,10 +376,11 @@ class Base(Module):
             node_energy_pred, data.batch, dim=0
         ).float()
         graph_energy_true = data.energy
+        energy_loss_weight = self.loss_weights[0]  # There should only be one loss-weight for energy
         tot_loss += (
             self.loss_function(graph_energy_pred, graph_energy_true)
-            * self.loss_weights[0]
-        )  # There should only be one loss-weight for energy
+            * energy_loss_weight
+        )
         tasks_loss.append(self.loss_function(graph_energy_pred, graph_energy_true))
         # Forces
         forces_true = data.forces.float()
@@ -394,8 +395,10 @@ class Base(Module):
             forces_pred is not None
         ), "No gradients were found for data.pos. Does your model use positions for prediction?"
         forces_pred = -forces_pred
-        tot_loss += self.loss_function(forces_pred, forces_true) * (
-            1 - self.loss_weights[0]
+        force_loss_weight = energy_loss_weight * torch.mean(torch.abs(graph_energy_true)) / (torch.mean(torch.abs(forces_true)) + 1e-8)  # Weight force loss and graph energy equally
+        tot_loss += (
+            self.loss_function(forces_pred, forces_true) 
+            * force_loss_weight
         )  # Have force-weight be the complement to energy-weight
         ## FixMe: current loss functions require the number of heads to be the number of things being predicted
         ##        so, we need to do loss calculation manually without calling the other functions.
