@@ -5,6 +5,11 @@ from mpi4py import MPI
 import argparse
 
 import torch
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 import numpy as np
 
 import hydragnn

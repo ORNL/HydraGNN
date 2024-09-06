@@ -1,6 +1,11 @@
 import os, json
 
 import torch
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 import torch_geometric
 
 # deprecated in torch_geometric 2.0

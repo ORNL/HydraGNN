@@ -4,6 +4,10 @@ import torch
 
 torch.backends.cudnn.enabled = False
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 # deprecated in torch_geometric 2.0
 try:
     from torch_geometric.loader import DataLoader
