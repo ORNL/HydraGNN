@@ -437,6 +437,9 @@ def gather_tensor_ranks(head_values):
                 head_values[size_all[:i].sum() : size_all[:i].sum() + size.item()] = (
                     tensor_list[start_idx:end_idx]
                 )
+                head_values[
+                    size_all[:i].sum() : size_all[:i].sum() + size.item()
+                ] = tensor_list[start_idx:end_idx]
 
     return head_values
 
