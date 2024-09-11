@@ -124,7 +124,7 @@ def load_existing_model(
 
 ## This function may cause OOM if datasets is too large
 ## to fit in a single GPU (i.e., with DDP). Use with caution.
-## Recommend to use calculate_PNA_degree_dist
+## Recommend to use calculate_PNA_degree_dist or calculate_avg_deg_dist
 def calculate_PNA_degree(loader, max_neighbours):
     backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
     if backend == "torch":
@@ -137,6 +137,21 @@ def calculate_PNA_degree(loader, max_neighbours):
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())[: max_neighbours + 1]
         return deg
+    
+def calculate_avg_deg(loader):
+    backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
+    if backend == "torch":
+        return calculate_avg_deg_dist(loader)
+    elif backend == "mpi":
+        return calculate_avg_deg_mpi(loader)
+    else:
+        deg = 0
+        counter = 0
+        for data in iterate_tqdm(loader, 2, desc="Calculate avg degree"):
+            d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+            deg += d.sum()
+            counter += d.size(0)
+        return deg / counter
 
 
 def calculate_PNA_degree_dist(loader, max_neighbours):
@@ -150,6 +165,22 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
     deg = deg.detach().cpu()
     return deg
 
+def calculate_avg_deg_dist(loader):
+    assert dist.is_initialized()
+    deg = 0
+    counter = 0
+    for data in iterate_tqdm(loader, 2, desc="Calculate avg degree"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += d.sum()
+        counter += d.size(0)
+    deg = torch.tensor(deg)
+    counter = torch.tensor(counter)
+    dist.all_reduce(deg, op=dist.ReduceOp.SUM)
+    dist.all_reduce(counter, op=dist.ReduceOp.SUM)
+    deg = deg.detach().cpu()
+    counter = counter.detach().cpu()
+    return deg / counter
+
 
 def calculate_PNA_degree_mpi(loader, max_neighbours):
     assert dist.is_initialized()
@@ -161,6 +192,20 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
 
     deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
     return torch.tensor(deg)
+
+def calculate_avg_deg_mpi(loader):
+    assert dist.is_initialized()
+    deg = 0
+    counter = 0
+    for data in iterate_tqdm(loader, 2, desc="Calculate avg degree"):
+        d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
+        deg += d.sum()
+        counter += d.size(0)
+    from mpi4py import MPI
+
+    deg = MPI.COMM_WORLD.allreduce(deg, op=MPI.SUM)
+    counter = MPI.COMM_WORLD.allreduce(counter, op=MPI.SUM)
+    return deg / counter
 
 
 def unsorted_segment_mean(data, segment_ids, num_segments):

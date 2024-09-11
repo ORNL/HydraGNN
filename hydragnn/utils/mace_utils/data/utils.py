@@ -13,7 +13,7 @@ import ase.io
 import h5py
 import numpy as np
 
-from mace.tools import AtomicNumberTable
+from hydragnn.utils.mace_utils.tools import AtomicNumberTable
 
 Vector = np.ndarray  # [3,]
 Positions = np.ndarray  # [..., 3]

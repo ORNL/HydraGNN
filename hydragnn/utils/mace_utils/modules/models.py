@@ -11,9 +11,9 @@ import torch
 from e3nn import o3
 from e3nn.util.jit import compile_mode
 
-from mace.data import AtomicData
-from mace.modules.radial import ZBLBasis
-from mace.tools.scatter import scatter_sum
+from hydragnn.utils.mace_utils.data import AtomicData
+from hydragnn.utils.mace_utils.modules.radial import ZBLBasis
+from hydragnn.utils.mace_utils.tools.scatter import scatter_sum
 
 from .blocks import (
     AtomicEnergiesBlock,

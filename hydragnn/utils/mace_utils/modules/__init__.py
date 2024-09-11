@@ -3,8 +3,8 @@ from typing import Callable, Dict, Optional, Type
 import torch
 
 from .blocks import (
-    AgnosticNonlinearInteractionBlock,
-    AgnosticResidualNonlinearInteractionBlock,
+    # AgnosticNonlinearInteractionBlock,
+    # AgnosticResidualNonlinearInteractionBlock,
     AtomicEnergiesBlock,
     EquivariantProductBasisBlock,
     InteractionBlock,
@@ -15,9 +15,9 @@ from .blocks import (
     NonLinearReadoutBlock,
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
-    RealAgnosticInteractionBlock,
-    RealAgnosticResidualInteractionBlock,
-    ResidualElementDependentInteractionBlock,
+    # RealAgnosticInteractionBlock,
+    # RealAgnosticResidualInteractionBlock,
+    # ResidualElementDependentInteractionBlock,
     ScaleShiftBlock,
 )
 from .loss import (
@@ -50,12 +50,12 @@ from .utils import (
 )
 
 interaction_classes: Dict[str, Type[InteractionBlock]] = {
-    "AgnosticNonlinearInteractionBlock": AgnosticNonlinearInteractionBlock,
-    "ResidualElementDependentInteractionBlock": ResidualElementDependentInteractionBlock,
-    "AgnosticResidualNonlinearInteractionBlock": AgnosticResidualNonlinearInteractionBlock,
-    "RealAgnosticResidualInteractionBlock": RealAgnosticResidualInteractionBlock,
+    # "AgnosticNonlinearInteractionBlock": AgnosticNonlinearInteractionBlock,
+    # "ResidualElementDependentInteractionBlock": ResidualElementDependentInteractionBlock,
+    # "AgnosticResidualNonlinearInteractionBlock": AgnosticResidualNonlinearInteractionBlock,
+    # "RealAgnosticResidualInteractionBlock": RealAgnosticResidualInteractionBlock,
     "RealAgnosticAttResidualInteractionBlock": RealAgnosticAttResidualInteractionBlock,
-    "RealAgnosticInteractionBlock": RealAgnosticInteractionBlock,
+    # "RealAgnosticInteractionBlock": RealAgnosticInteractionBlock,
 }
 
 scaling_classes: Dict[str, Callable] = {

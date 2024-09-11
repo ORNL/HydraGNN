@@ -13,9 +13,9 @@ import torch.nn
 import torch.utils.data
 from scipy.constants import c, e
 
-from mace.tools import to_numpy
-from mace.tools.scatter import scatter_sum
-from mace.tools.torch_geometric.batch import Batch
+from hydragnn.utils.mace_utils.tools import to_numpy
+from hydragnn.utils.mace_utils.tools.scatter import scatter_sum
+from hydragnn.utils.mace_utils.tools.torch_geometric.batch import Batch
 
 from .blocks import AtomicEnergiesBlock
 

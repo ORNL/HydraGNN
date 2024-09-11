@@ -14,6 +14,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     check_if_graph_size_variable,
     gather_deg,
 )
+from hydragnn.utils.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from copy import deepcopy
 import json
@@ -54,6 +55,16 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_neighbours"] = len(deg) - 1
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
+        
+    if config["NeuralNetwork"]["Architecture"]["model_type"] == "MACE":
+        if hasattr(train_loader.dataset, "avg_num_neighbors"):
+            ## Use avg neighbours used in the dataset.
+            avg_num_neighbors = torch.tensor(train_loader.dataset.avg_num_neighbors)
+        else:
+            avg_num_neighbors = float(calculate_avg_deg(train_loader.dataset))
+        config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"] = avg_num_neighbors
+    else:
+        config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"] = None
 
     if "radius" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["radius"] = None
@@ -77,6 +88,14 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["num_radial"] = None
     if "num_spherical" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["num_spherical"] = None
+    if "radial_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["radial_type"] = None
+    if "correlation" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["correlation"] = None
+    if "max_ell" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["max_ell"] = None
+    if "node_max_ell" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -112,11 +131,11 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet"]
+    equivariant_models = ["EGNN", "SchNet", "MACE"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for EGNN and SchNet."
+        ), "E(3) equivariance can only be ensured for EGNN, SchNet, and MACE."
     elif "equivariance" not in config:
         config["equivariance"] = False
     return config
@@ -124,11 +143,11 @@ def update_config_equivariance(config):
 
 def update_config_edge_dim(config):
     config["edge_dim"] = None
-    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN"]
+    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN", "MACE"]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
-        ), "Edge features can only be used with EGNN, SchNet, PNA, PNAPlus, and CGCNN."
+        ), "Edge features can only be used with MACE, EGNN, SchNet, PNA, PNAPlus, and CGCNN."
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim

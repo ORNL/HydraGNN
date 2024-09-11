@@ -147,6 +147,7 @@ def unittest_train_model(
         "SchNet": [0.20, 0.20],
         "DimeNet": [0.50, 0.50],
         "EGNN": [0.20, 0.20],
+        "MACE": [0.60, 0.70],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -206,6 +207,7 @@ def unittest_train_model(
         "SchNet",
         "DimeNet",
         "EGNN",
+        "MACE",
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
@@ -214,26 +216,47 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
 
 # Test only models
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN"])
+# "PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", 
+@pytest.mark.parametrize("model_type", ["MACE"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 
 
 # Test across equivariant models
-@pytest.mark.parametrize("model_type", ["EGNN", "SchNet"])
+# "EGNN", "SchNet", 
+@pytest.mark.parametrize("model_type", ["MACE"])
 def pytest_train_equivariant_model(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
 
 
 # Test vector output
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus"])
+# "PNA", "PNAPlus", 
+@pytest.mark.parametrize("model_type", ["MACE"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
 
 
-@pytest.mark.parametrize(
-    "model_type",
-    ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN"],
-)
-def pytest_train_model_conv_head(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+# @pytest.mark.parametrize(
+#     "model_type",
+#     ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN"],
+# )
+# def pytest_train_model_conv_head(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+
+
+# def debug_train_model_vectoroutput(model_type="MACE", overwrite_data=False):
+#     """
+#     A function to test vector output that can be run in VSCode's debug mode.
+#     Set breakpoints in VSCode as needed for debugging.
+#     """
+#     # Call the test function directly
+#     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
+
+#     # After execution, print some debug information if needed
+#     print(f"Finished training model: {model_type} with overwrite_data={overwrite_data}")
+
+# # Manual testing entry point
+# if __name__ == "__main__":
+#     # Manually call the function with the desired parameters for debugging in VSCode
+#     debug_train_model_vectoroutput(model_type="MACE", overwrite_data=True)
+

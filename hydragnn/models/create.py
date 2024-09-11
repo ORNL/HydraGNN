@@ -12,6 +12,7 @@
 import os
 import torch
 from torch_geometric.data import Data
+from typing import List, Union
 
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
@@ -23,6 +24,7 @@ from hydragnn.models.SAGEStack import SAGEStack
 from hydragnn.models.SCFStack import SCFStack
 from hydragnn.models.DIMEStack import DIMEStack
 from hydragnn.models.EGCLStack import EGCLStack
+from hydragnn.models.MACEStack import MACEStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -53,6 +55,7 @@ def create_model_config(
         config["Architecture"]["num_before_skip"],
         config["Architecture"]["num_after_skip"],
         config["Architecture"]["num_radial"],
+        config["Architecture"]["radial_type"],
         config["Architecture"]["basis_emb_size"],
         config["Architecture"]["int_emb_size"],
         config["Architecture"]["out_emb_size"],
@@ -62,6 +65,10 @@ def create_model_config(
         config["Architecture"]["num_filters"],
         config["Architecture"]["radius"],
         config["Architecture"]["equivariance"],
+        config["Architecture"]["correlation"],
+        config["Architecture"]["max_ell"],
+        config["Architecture"]["node_max_ell"],
+        config["Architecture"]["avg_num_neighbors"],
         config["Training"]["conv_checkpointing"],
         verbosity,
         use_gpu,
@@ -89,6 +96,7 @@ def create_model(
     num_before_skip: int = None,
     num_after_skip: int = None,
     num_radial: int = None,
+    radial_type: str = None,
     basis_emb_size: int = None,
     int_emb_size: int = None,
     out_emb_size: int = None,
@@ -98,6 +106,10 @@ def create_model(
     num_filters: int = None,
     radius: float = None,
     equivariance: bool = False,
+    correlation: Union[int, List[int]] = None,
+    max_ell: int = None,
+    node_max_ell: int = None,
+    avg_num_neighbors: int = None,
     conv_checkopinting: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
@@ -322,6 +334,36 @@ def create_model(
             loss_function_type,
             equivariance,
             max_neighbours=max_neighbours,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+    elif model_type == "MACE":
+        assert radius is not None, "MACE requires radius input."
+        assert num_radial is not None, "MACE requires num_radial input."
+        assert max_ell is not None, "MACE requires max_ell input."
+        assert node_max_ell is not None, "MACE requires node_max_ell input."
+        assert max_ell >= 1, "MACE requires max_ell >= 1."
+        assert node_max_ell >= 1, "MACE requires node_max_ell >= 1."
+        model = MACEStack(
+            radius,
+            num_radial,
+            max_ell,
+            node_max_ell,
+            avg_num_neighbors,
+            envelope_exponent,
+            correlation,
+            radial_type,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
             initial_bias=initial_bias,
