@@ -134,7 +134,6 @@ class Visualizer:
     def create_plot_global_analysis(
         self, varname, true_values, predicted_values, save_plot=True
     ):
-        print(f"DEBUGGING Create Plot Global Analysis true/pred: ", true_values.flatten()[:10], predicted_values.flatten()[:10])
         """Creates scatter/condmean/error pdf plots for the true and predicted values of variable varname."""
         nshape = np.asarray(predicted_values).shape
         if nshape[1] == 1:
@@ -723,10 +722,8 @@ class Visualizer:
     def create_plot_global(self, true_values, predicted_values, output_names=None):
         """Creates global analysis for all head predictons, e.g., scatter/condmean/error pdf plot."""
         for ihead in range(self.num_heads):
-            print(f"DEBUGGING Create Plot Global true/pred: ", np.array(true_values).flatten()[:10], np.array(predicted_values).flatten()[:10])
             head_true = true_values[ihead].cpu()
             head_pred = predicted_values[ihead].cpu()
-            print(f"DEBUGGING Create Plot Global head_true/head_pred: ", np.array(head_true.flatten()[:10]), np.array(head_pred.flatten()[:10]))
             self.create_plot_global_analysis(
                 output_names[ihead],
                 head_true,

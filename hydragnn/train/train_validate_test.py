@@ -181,7 +181,6 @@ def train_validate_test(
             reduce_ranks=True,
             return_samples=plot_hist_solution,
         )
-        print("DEBUGGING True/Pred first generated: ", np.array(true_values).flatten()[:10], np.array(predicted_values).flatten()[:10])
         scheduler.step(val_loss)
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
@@ -277,7 +276,6 @@ def train_validate_test(
     _, rank = get_comm_size_and_rank()
     if create_plots and rank == 0:
         ######result visualization######
-        print(f"DEBUGGING Create Plots true/pred: ", np.array(true_values).flatten()[:10], np.array(predicted_values).flatten()[:10])
         visualizer.create_plot_global(
             true_values,
             predicted_values,

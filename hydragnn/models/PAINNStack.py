@@ -67,7 +67,7 @@ class PAINNStack(Base):
         necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly 
         because node_scalar and node-vector are updated through a sum.
         """
-        node_embed_out = nn.Linear(input_dim, output_dim)
+        node_embed_out = nn.Sequential(nn.Linear(input_dim, output_dim), nn.Tanh(), nn.Linear(output_dim, output_dim))  # Tanh activation is necessary to prevent exploding gradients when learning from random signals in test_graphs.py
         vec_embed_out = nn.Linear(input_dim, output_dim) if not last_layer else None
 
         if not last_layer:
