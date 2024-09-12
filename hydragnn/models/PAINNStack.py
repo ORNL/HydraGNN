@@ -57,7 +57,6 @@ class PAINNStack(Base):
         assert (
             hidden_dim > 1
         ), "PainnNet requires more than one hidden dimension between input_dim and output_dim."
-        # embed_in = ShapeEmbed(input_dim, hidden_dim)
         self_inter = PainnMessage(
             node_size=input_dim, edge_size=self.num_radial, cutoff=self.radius
         )
@@ -67,14 +66,17 @@ class PAINNStack(Base):
         necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly 
         because node_scalar and node-vector are updated through a sum.
         """
-        node_embed_out = nn.Sequential(nn.Linear(input_dim, output_dim), nn.Tanh(), nn.Linear(output_dim, output_dim))  # Tanh activation is necessary to prevent exploding gradients when learning from random signals in test_graphs.py
+        node_embed_out = nn.Sequential(
+            nn.Linear(input_dim, output_dim),
+            nn.Tanh(),
+            nn.Linear(output_dim, output_dim),
+        )  # Tanh activation is necessary to prevent exploding gradients when learning from random signals in test_graphs.py
         vec_embed_out = nn.Linear(input_dim, output_dim) if not last_layer else None
 
         if not last_layer:
             return geom_nn.Sequential(
                 "x, v, pos, edge_index, diff, dist",
                 [
-                    # (embed_in, "x, v -> x, v"),
                     (self_inter, "x, v, edge_index, diff, dist -> x, v"),
                     (cross_inter, "x, v -> x, v"),
                     (node_embed_out, "x -> x"),
@@ -86,7 +88,6 @@ class PAINNStack(Base):
             return geom_nn.Sequential(
                 "x, v, pos, edge_index, diff, dist",
                 [
-                    # (embed_in, "x, v -> x, v"),
                     (self_inter, "x, v, edge_index, diff, dist -> x, v"),
                     (
                         cross_inter,
