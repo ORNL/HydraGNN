@@ -16,8 +16,7 @@ import torch
 from torch import Tensor
 from torch.utils.data import DataLoader
 import torch.nn.functional as F
-from torch.nn import ModuleList, Sequential, Identity
-from torch_geometric.nn import PNAConv
+from torch.nn import ModuleList, Sequential
 from torch_geometric.nn import (
     Sequential as PyGSequential,
 )  # This naming is because there is torch.nn.Sequential and torch_geometric.nn.Sequential
