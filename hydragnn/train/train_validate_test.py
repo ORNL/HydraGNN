@@ -67,6 +67,7 @@ def train_validate_test(
     create_plots=False,
     use_deepspeed=False,
 ):
+    create_plots = True
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
         config["Training"]["EarlyStopping"]
@@ -500,6 +501,11 @@ def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
             pred = model(data)
+            ## Debug ##
+            # Check if pred has nans
+            if torch.isnan(pred[0]).any():
+                raise ValueError("NANs in prediction")
+            ## Debug End ##
             loss, tasks_loss = model.module.loss(pred, data.y, head_index)
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
@@ -573,6 +579,11 @@ def validate(loader, model, verbosity, reduce_ranks=True):
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
         pred = model(data)
+        ## Debug ##
+        # Check if pred has nans
+        if torch.isnan(pred[0]).any():
+            raise ValueError("NANs in prediction")
+        ## Debug End ##
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
@@ -620,6 +631,11 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
         pred = model(data)
+        ## Debug ##
+        # Check if pred has nans
+        if torch.isnan(pred[0]).any():
+            raise ValueError("NANs in prediction")
+        ## Debug End ##
         error, tasks_loss = model.module.loss(pred, data.y, head_index)
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
