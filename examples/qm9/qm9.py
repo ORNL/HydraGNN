@@ -64,13 +64,9 @@ dataset = torch_geometric.datasets.QM9(
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
-(
-    train_loader,
-    val_loader,
-    test_loader,
-) = hydragnn.preprocess.create_dataloaders(
-    train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
-)
+(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+ )
 
 config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
 
