@@ -23,8 +23,6 @@ import torch
 from torch import nn, Tensor
 from torch.nn import ModuleList
 from torch.utils.checkpoint import checkpoint
-import torch_scatter
-from torch_scatter import scatter
 
 # Torch Geo
 from torch_geometric import nn as geom_nn
@@ -33,8 +31,6 @@ from torch_geometric.nn.resolver import activation_resolver
 from torch_geometric.nn.dense.linear import Linear as geom_Linear
 from torch_geometric.nn.aggr.scaler import DegreeScalerAggregation
 from torch_geometric.typing import Adj, OptTensor
-
-# from torch_geometric.utils import degree
 
 from .Base import Base
 
@@ -117,7 +113,6 @@ class PNAEqStack(Base):
             return geom_nn.Sequential(
                 input_args,
                 [
-                    # (embed_in, "x, v -> x, v"),
                     (message, conv_args + " -> x, v"),
                     (update, "x, v -> x, v"),
                     (node_embed_out, "x -> x"),
@@ -129,7 +124,6 @@ class PNAEqStack(Base):
             return geom_nn.Sequential(
                 input_args,
                 [
-                    # (embed_in, "x, v -> x, v"),
                     (message, conv_args + " -> x, v"),
                     (
                         update,
