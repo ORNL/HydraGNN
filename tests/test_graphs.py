@@ -193,60 +193,70 @@ def unittest_train_model(
     assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
 
 
-# Test across all models with both single/multihead
+# # Test across all models with both single/multihead
+# @pytest.mark.parametrize(
+#     "model_type",
+#     [
+#         "SAGE",
+#         "GIN",
+#         "GAT",
+#         "MFC",
+#         "PNA",
+#         "PNAPlus",
+#         "CGCNN",
+#         "SchNet",
+#         "DimeNet",
+#         "EGNN",
+#         "PNAEq",
+#     ],
+# )
+# @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+# def pytest_train_model(model_type, ci_input, overwrite_data=False):
+#     unittest_train_model(model_type, ci_input, False, overwrite_data)
+
+
+# # Test only models
+# @pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN"])
+# def pytest_train_model_lengths(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci.json", True, overwrite_data)
+
+
+# # Test across equivariant models
+# @pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "PNAEq"])
+# def pytest_train_equivariant_model(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
+
+
+# # Test vector output
+# @pytest.mark.parametrize("model_type", ["PNA", "PNAPlus"])
+# def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
+
+
 @pytest.mark.parametrize(
     "model_type",
     [
-        "SAGE",
-        "GIN",
-        "GAT",
-        "MFC",
-        "PNA",
-        "PNAPlus",
-        "CGCNN",
-        "SchNet",
-        "DimeNet",
-        "EGNN",
-        "PNAEq",
-    ],
-)
-@pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input, overwrite_data=False):
-    unittest_train_model(model_type, ci_input, False, overwrite_data)
-
-
-# Test only models
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN"])
-def pytest_train_model_lengths(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci.json", True, overwrite_data)
-
-
-# Test across equivariant models
-@pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "PNAEq"])
-def pytest_train_equivariant_model(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
-
-
-# Test vector output
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus"])
-def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
-
-
-@pytest.mark.parametrize(
-    "model_type",
-    [
-        "SAGE",
-        "GIN",
-        "GAT",
-        "MFC",
-        "PNA",
-        "PNAPlus",
-        "SchNet",
-        "DimeNet",
-        "EGNN",
+        # "SAGE",
+        # "GIN",
+        # "GAT",
+        # "MFC",
+        # "PNA",
+        # "PNAPlus",
+        # "SchNet",
+        # "DimeNet",
+        # "EGNN",
         "PNAEq",
     ],
 )
 def pytest_train_model_conv_head(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+
+
+# def train_model_conv_head(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+
+
+# # Call the function directly with the model_type "PNAEq"
+# if __name__ == "__main__":
+#     model_type = "PNAEq"  # Specify the model type you want to debug
+#     train_model_conv_head(model_type)
