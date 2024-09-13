@@ -96,7 +96,9 @@ class PNAEqStack(Base):
         """
         # Embed down to output size
         node_embed_out = nn.Sequential(
-            nn.Linear(input_dim, output_dim), self.activation_function
+            nn.Linear(input_dim, output_dim),
+            nn.Tanh(),
+            nn.Linear(output_dim, output_dim),
         )
         vec_embed_out = (
             geom_nn.Linear(input_dim, output_dim) if not last_layer else None
