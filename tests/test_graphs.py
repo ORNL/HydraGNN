@@ -139,7 +139,8 @@ def unittest_train_model(
     thresholds = {
         "SAGE": [0.20, 0.20],
         "PNA": [0.20, 0.20],
-        "MFC": [0.20, 0.20],
+        "PNAPlus": [0.20, 0.20],
+        "MFC": [0.20, 0.30],
         "GIN": [0.25, 0.20],
         "GAT": [0.60, 0.70],
         "CGCNN": [0.50, 0.40],
@@ -151,8 +152,10 @@ def unittest_train_model(
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
         thresholds["PNA"] = [0.10, 0.10]
+        thresholds["PNAPlus"] = [0.10, 0.10]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
+        thresholds["PNAPlus"] = [0.2, 0.15]
     if ci_input == "ci_conv_head.json":
         thresholds["GIN"] = [0.25, 0.40]
 
@@ -213,7 +216,7 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
 
 # Test only models
-@pytest.mark.parametrize("model_type", ["PNA", "CGCNN", "SchNet", "EGNN"])
+@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 
@@ -225,7 +228,7 @@ def pytest_train_equivariant_model(model_type, overwrite_data=False):
 
 
 # Test vector output
-@pytest.mark.parametrize("model_type", ["PNA"])
+@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
 

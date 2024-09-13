@@ -74,6 +74,12 @@ def train_validate_test(
         else False
     )
 
+    CheckRemainingTime = (
+        config["Training"]["CheckRemainingTime"]
+        if "CheckRemainingTime" in config["Training"]
+        else False
+    )
+
     SaveCheckpoint = (
         config["Training"]["Checkpoint"]
         if "Checkpoint" in config["Training"]
@@ -241,13 +247,14 @@ def train_validate_test(
                 )
                 break
 
-        should_stop = check_remaining(t0)
-        if should_stop:
-            print_distributed(
-                verbosity,
-                "No time left. Early stop.",
-            )
-            break
+        if CheckRemainingTime:
+            should_stop = check_remaining(t0)
+            if should_stop:
+                print_distributed(
+                    verbosity,
+                    "No time left. Early stop.",
+                )
+                break
 
     timer.stop()
 

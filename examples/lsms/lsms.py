@@ -11,7 +11,6 @@ from hydragnn.utils.model import print_model
 from hydragnn.utils.lsmsdataset import LSMSDataset
 from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.print_utils import log
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -20,6 +19,10 @@ except ImportError:
 
 import torch
 import torch.distributed as dist
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
 
 
 def info(*args, logtype="info", sep=" "):

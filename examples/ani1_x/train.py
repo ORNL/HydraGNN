@@ -4,15 +4,17 @@ import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
-import random
 import numpy as np
 
-import torch
-from torch import tensor
-from torch_geometric.data import Data
+import random
 
+import torch
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
+from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
@@ -131,6 +133,8 @@ class ANI1xDataset(AbstractBaseDataset):
                         f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
                         flush=True,
                     )
+
+        random.shuffle(self.dataset)
 
     def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
         """Iterate over buckets of data in ANI HDF5 file.

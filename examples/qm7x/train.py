@@ -25,10 +25,17 @@ from hydragnn.preprocess.utils import gather_deg
 
 import numpy as np
 
+import torch
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
+import torch.distributed as dist
+
 from torch_geometric.data import Data
 from torch_geometric.transforms import RadiusGraph, Distance
-import torch
-import torch.distributed as dist
+
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -118,8 +125,6 @@ class QM7XDataset(AbstractBaseDataset):
             mol_ids = list(fMOL.keys())
 
             if self.dist:
-                ## Random shuffle dirlist to avoid the same test/validation set
-                random.seed(43)
                 random.shuffle(mol_ids)
 
                 x = torch.tensor(len(mol_ids), requires_grad=False).to(get_device())
