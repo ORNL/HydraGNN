@@ -301,7 +301,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
-        
+
     elif model_type == "PNAEq":
         assert pna_deg is not None, "PNAEq requires degree input."
         model = PNAEqStack(

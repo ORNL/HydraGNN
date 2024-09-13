@@ -13,7 +13,7 @@
 # Github: https://github.com/nityasagarjena/PaiNN-model/blob/main/PaiNN/model.py
 # Paper: https://arxiv.org/pdf/2102.03150
 
-# To-Do: 
+# To-Do:
 ## Maybe do PNA aggregation for vectorial? To maintain equivariance, aggregation could only the Identity, but all scalers are valid.
 
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -33,6 +33,7 @@ from torch_geometric.nn.resolver import activation_resolver
 from torch_geometric.nn.dense.linear import Linear as geom_Linear
 from torch_geometric.nn.aggr.scaler import DegreeScalerAggregation
 from torch_geometric.typing import Adj, OptTensor
+
 # from torch_geometric.utils import degree
 
 from .Base import Base
@@ -45,13 +46,7 @@ class PNAEqStack(Base):
     """
 
     def __init__(
-        self,
-        deg: list,
-        edge_dim: int,
-        num_radial: int,
-        radius: float,
-        *args,
-        **kwargs
+        self, deg: list, edge_dim: int, num_radial: int, radius: float, *args, **kwargs
     ):
 
         self.x_aggregators = ["mean", "min", "max", "std"]
@@ -66,13 +61,11 @@ class PNAEqStack(Base):
         self.edge_dim = edge_dim
         self.num_radial = num_radial
         self.radius = radius
-        
+
         super().__init__(*args, **kwargs)
-        
-        self.rbf = rbf_BasisLayer(
-            self.num_radial, self.radius
-        )
-        
+
+        self.rbf = rbf_BasisLayer(self.num_radial, self.radius)
+
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
         self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
@@ -89,12 +82,12 @@ class PNAEqStack(Base):
             hidden_dim > 1
         ), "PNAEq requires more than one hidden dimension between input_dim and output_dim."
         message = PainnMessage(
-            node_size=input_dim, 
+            node_size=input_dim,
             x_aggregators=self.x_aggregators,
             x_scalers=self.x_scalers,
             deg=self.deg,
             edge_dim=self.edge_dim,
-            num_radial=self.num_radial, 
+            num_radial=self.num_radial,
             pre_layers=1,
             post_layers=1,
             divide_input=False,
@@ -107,15 +100,15 @@ class PNAEqStack(Base):
         """
         # Embed down to output size
         node_embed_out = nn.Sequential(
-            nn.Linear(input_dim, output_dim),
-            self.activation_function
+            nn.Linear(input_dim, output_dim), self.activation_function
         )
-        vec_embed_out = geom_nn.Linear(input_dim, output_dim) if not last_layer else None
-        
-        
+        vec_embed_out = (
+            geom_nn.Linear(input_dim, output_dim) if not last_layer else None
+        )
+
         input_args = "x, v, pos, edge_index, edge_rbf, edge_vec"
         conv_args = "x, v, edge_index, edge_rbf, edge_vec"
-        
+
         if self.use_edge_attr:
             input_args += ", edge_attr"
             conv_args += ", edge_attr"
@@ -223,11 +216,12 @@ class PNAEqStack(Base):
 
         return data, conv_args
 
+
 class PainnMessage(MessagePassing):
     """Message function"""
 
     def __init__(
-        self, 
+        self,
         node_size: int,
         x_aggregators: List[str],
         x_scalers: List[str],
@@ -243,9 +237,9 @@ class PainnMessage(MessagePassing):
         # train_norm: bool = False,
         **kwargs,
     ):
-    
+
         super().__init__()
-        
+
         assert node_size % towers == 0
 
         self.node_size = node_size  # We keep input and output dim the same here because of the skip connection
@@ -254,29 +248,37 @@ class PainnMessage(MessagePassing):
         self.deg = deg
         self.num_radial = num_radial
         self.edge_dim = edge_dim
-        
+
         self.towers = towers
         self.divide_input = divide_input
 
         self.F_in = node_size // towers if divide_input else node_size
         self.F_out = self.node_size // towers
-        
+
         # Pre and post MLPs
         self.pre_nns = ModuleList()
         self.post_nns = ModuleList()
         for _ in range(towers):
-            modules = [geom_Linear(4 * self.F_in, self.F_in)] if self.edge_dim else [geom_Linear(3 * self.F_in, self.F_in)]
+            modules = (
+                [geom_Linear(4 * self.F_in, self.F_in)]
+                if self.edge_dim
+                else [geom_Linear(3 * self.F_in, self.F_in)]
+            )
             for _ in range(pre_layers - 1):
                 modules += [activation_resolver(act, **(act_kwargs or {}))]
                 modules += [geom_Linear(self.F_in, self.F_in)]
             self.pre_nns.append(nn.Sequential(*modules))
 
-            modules = [geom_Linear((len(x_aggregators) * len(x_scalers) + 1) * self.F_in, self.F_out)]
+            modules = [
+                geom_Linear(
+                    (len(x_aggregators) * len(x_scalers) + 1) * self.F_in, self.F_out
+                )
+            ]
             for _ in range(post_layers - 1):
                 modules += [activation_resolver(act, **(act_kwargs or {}))]
                 modules += [geom_Linear(self.F_out, self.F_out)]
             self.post_nns.append(nn.Sequential(*modules))
-            
+
         # Embedding rbf for making m_ij
         self.rbf_emb = nn.Sequential(
             nn.Linear(num_radial, self.F_in),
@@ -287,36 +289,34 @@ class PainnMessage(MessagePassing):
         # Embedding edge_attr for making m_ij
         if self.edge_dim is not None:
             self.edge_encoder = geom_Linear(edge_dim, self.F_in)
-            
+
         # Projection of rbf for pointwise-product with m_ij
-        self.rbf_lin = nn.Linear(
-            num_radial, self.F_in*3, bias=False
-        )
-        
+        self.rbf_lin = nn.Linear(num_radial, self.F_in * 3, bias=False)
+
         # MLP for scalar messages to split among x,v operations
         self.scalar_message_mlp = nn.Sequential(
-                nn.Linear(self.F_in, self.F_in),
-                nn.SiLU(),
-                nn.Linear(self.F_in, self.F_in * 3),
-            )
-    
+            nn.Linear(self.F_in, self.F_in),
+            nn.SiLU(),
+            nn.Linear(self.F_in, self.F_in * 3),
+        )
+
     def forward(
-        self, 
-        x: Tensor, 
-        v: Tensor, 
-        edge_index: Adj, 
+        self,
+        x: Tensor,
+        v: Tensor,
+        edge_index: Adj,
         edge_rbf: Tensor,
-        edge_vec: Tensor, 
+        edge_vec: Tensor,
         edge_attr: OptTensor = None,
-    ) -> Tensor :
-        
+    ) -> Tensor:
+
         src, dst = edge_index.t()
-        
+
         if self.divide_input:
             x = x.view(-1, self.towers, self.F_in)
         else:
             x = x.view(-1, 1, self.F_in).repeat(1, self.towers, 1)
-        
+
         # Create message_scalar using an MLP on concatenated node scalar, neighbor scalar, edge_rbf, and edge_attr(optional)
         if edge_attr is not None:
             rbf_attr = self.rbf_emb(edge_rbf)
@@ -331,63 +331,65 @@ class PainnMessage(MessagePassing):
             rbf_attr = rbf_attr.view(-1, 1, self.F_in)
             rbf_attr = rbf_attr.repeat(1, self.towers, 1)
             message_scalar = torch.cat([x[src], x[dst], rbf_attr], dim=-1)
-        
-        
+
         # Pass the concatenated features through pre_nns
         message_scalar = [nn(message_scalar[:, i]) for i, nn in enumerate(self.pre_nns)]
         # message_scalar = torch.stack(message_scalar, dim=1).squeeze(1)
         message_scalar = torch.stack(message_scalar, dim=1)
         scalar_out = self.scalar_message_mlp(message_scalar)  # Expand for PAINN
-        
+
         # Apply distance filtering with pointwise product
         # Put rbf through a linear layer
         rbf = self.rbf_lin(edge_rbf)
         # Repeat distance embedding for each tower
-        rbf = rbf.view(-1, 1, 3*self.F_in)
+        rbf = rbf.view(-1, 1, 3 * self.F_in)
         rbf = rbf.repeat(1, self.towers, 1)
         # Perform Hadamard (element-wise) product
         filter_out = scalar_out * rbf
-        
+
         # Split for x,v tasks
         gate_state_vector, gate_edge_vector, message_scalar = torch.split(
             filter_out,
             self.node_size,
             dim=-1,
         )
-        
+
         # Create message_vector
         message_vector = v[dst] * gate_state_vector
         edge_vector = gate_edge_vector * edge_vec.unsqueeze(-1)
         message_vector = message_vector + edge_vector
-        
+
         # Aggregate and scale message_scalar
         # message_scalar = aggregate_and_scale(self.x_aggregators, self.x_scalers, message_scalar, src, self.deg)
         degree_scaler_aggregation = DegreeScalerAggregation(
-            aggr=self.x_aggregators,
-            scaler=self.x_scalers,
-            deg=self.deg
+            aggr=self.x_aggregators, scaler=self.x_scalers, deg=self.deg
         )
-        message_scalar = degree_scaler_aggregation(message_scalar.squeeze(1), index=src, dim_size=x.shape[0]).unsqueeze(1)  # degree scalar aggregation expects shape(num_nodes, feature_dim)
+        message_scalar = degree_scaler_aggregation(
+            message_scalar.squeeze(1), index=src, dim_size=x.shape[0]
+        ).unsqueeze(
+            1
+        )  # degree scalar aggregation expects shape(num_nodes, feature_dim)
         message_scalar = torch.cat([x, message_scalar], dim=-1)
         delta_x = [nn(message_scalar[:, i]) for i, nn in enumerate(self.post_nns)]
         delta_x = torch.stack(delta_x, dim=1)
-        
+
         # Aggregate message_vector
         delta_v = torch.zeros_like(v)
         delta_v.index_add_(0, src, message_vector)
-        
+
         # Update with skip connection
         x = x.squeeze(1) + delta_x.squeeze(1)
         v = v + delta_v
 
         return x, v
-    
+
     def __repr__(self):
         return (
             f"{self.__class__.__name__}({self.in_channels}, "
             f"{self.in_channels}, towers={self.towers}, "
             f"edge_dim={self.edge_dim})"
         )
+
 
 class PainnUpdate(MessagePassing):
     """Update function"""
@@ -458,7 +460,9 @@ class rbf_BasisLayer(nn.Module):
         sin(n * pi * d / d_cut) / d
         """
         n = torch.arange(self.num_radial, device=edge_dist.device) + 1
-        return torch.sin(edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff) / edge_dist.unsqueeze(-1)
+        return torch.sin(
+            edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff
+        ) / edge_dist.unsqueeze(-1)
 
     def cosine_cutoff(self, edge_dist: torch.Tensor) -> torch.Tensor:
         """
@@ -476,11 +480,11 @@ class rbf_BasisLayer(nn.Module):
     def forward(self, edge_dist: torch.Tensor) -> torch.Tensor:
         # Calculate sinc expansion
         sinc_out = self.sinc_expansion(edge_dist)
-        
+
         # Calculate cosine cutoff
         cosine_out = self.cosine_cutoff(edge_dist).unsqueeze(-1)
-        
+
         # Apply filter weights
         filter_weight = sinc_out * cosine_out
-        
+
         return filter_weight
