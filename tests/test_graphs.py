@@ -207,7 +207,7 @@ def unittest_train_model(
         "SchNet",
         "DimeNet",
         "EGNN",
-        "PNAEq"
+        "PNAEq",
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
@@ -235,7 +235,18 @@ def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
 
 @pytest.mark.parametrize(
     "model_type",
-    ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN", "PNAEq"],
+    [
+        "SAGE",
+        "GIN",
+        "GAT",
+        "MFC",
+        "PNA",
+        "PNAPlus",
+        "SchNet",
+        "DimeNet",
+        "EGNN",
+        "PNAEq",
+    ],
 )
 def pytest_train_model_conv_head(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
