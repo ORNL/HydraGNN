@@ -9,11 +9,8 @@ import pickle, csv
 
 import logging
 import sys
-from tqdm import tqdm
 from mpi4py import MPI
-from itertools import chain
 import argparse
-import time
 
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
@@ -35,10 +32,11 @@ try:
 except ImportError:
     pass
 
-import torch_geometric.data
 import torch
-import torch.distributed as dist
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
 
 csce_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
 

@@ -4,6 +4,10 @@ import torch
 
 torch.backends.cudnn.enabled = False
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 # deprecated in torch_geometric 2.0
 try:
     from torch_geometric.loader import DataLoader
@@ -88,9 +92,9 @@ def run(trial, dequed=None):
     )
     print("Command = ", command, flush=True, file=f)
 
-    result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
     output = "F"
     try:
+        result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
         while True:

@@ -4,14 +4,13 @@ import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
 import random
-import numpy as np
 
 import torch
-from torch import tensor
-from torch_geometric.data import Data
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
 
 import hydragnn
 from hydragnn.utils.time_utils import Timer
@@ -104,6 +103,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
                     f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
                     flush=True,
                 )
+
+        random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
 
