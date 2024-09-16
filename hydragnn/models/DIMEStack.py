@@ -101,7 +101,7 @@ class DIMEStack(Base):
             out_emb_channels=self.out_emb_size,
             out_channels=output_dim,
             num_layers=1,
-            act=Sigmoid(),  # Sigmoid instead of SiLU here promotes stability when we have a linear decoder at the start of convolution (especially for random data examples in test_graphs.py)
+            act=SiLU(),
             output_initializer="glorot_orthogonal",
         )
         return Sequential(
