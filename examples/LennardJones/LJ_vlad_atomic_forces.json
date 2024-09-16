@@ -1,0 +1,61 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "Dataset": {
+    "name": "LJdataset",
+    "path": {"total": "./dataset/data"},
+    "format": "XYZ",
+    "rotational_invariance": true,
+    "node_features": {
+      "name": ["atom_type", "forces"],
+      "dim": [1, 3],
+      "column_index": [0, 1]
+    }
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "periodic_boundary_conditions": true,
+      "model_type": "EGNN",
+      "equivariance": true,
+      "edge_features": ["bond_length", "polar_angle", "azimutal_angle"],
+      "max_neighbours": 20,
+      "hidden_dim": 10,
+      "num_conv_layers": 3,
+      "output_heads": {
+            "node": {
+                "num_headlayers": 2,
+                "dim_headlayers": [50,25],
+                "type": "mlp"
+            }
+      },
+      "task_weights": [
+        1
+      ]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [0],
+      "output_index": [
+        1
+      ],
+      "type": [
+        "node"
+      ],
+      "output_dim": [3],
+      "output_names": ["forces"]
+    },
+    "Training": {
+      "num_epoch": 20,
+      "batch_size": 3,
+      "continue": 0,
+      "EarlyStopping": true,
+      "patience": 100,
+      "Checkpoint": true,
+      "checkpoint_warmup": 100,
+      "startfrom": "existing_model",
+      "Optimizer": {
+        "learning_rate": 0.001
+      }
+    }
+  }
+}

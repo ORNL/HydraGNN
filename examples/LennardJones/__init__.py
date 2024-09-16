@@ -1,0 +1,1 @@
+from .LennardJones import LJpotential

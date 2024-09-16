@@ -1,0 +1,71 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "Dataset": {
+    "name": "LJdataset",
+    "path": {"total": "./dataset/data"},
+    "format": "XYZ",
+    "rotational_invariance": true,
+    "node_features": {
+      "name": ["atom_type"],
+      "dim": [1],
+      "column_index": [0]
+    },
+    "graph_features":{
+      "name": ["total_energy"],
+      "dim": [1],
+      "column_index": [0]
+    }
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "periodic_boundary_conditions": true,
+      "model_type": "EGNN",
+      "equivariance": true,
+      "edge_features": ["bond_length", "polar_angle", "azimutal_angle"],
+      "max_neighbours": 20,
+      "hidden_dim": 10,
+      "num_conv_layers": 3,
+      "output_heads": {
+         "graph": {
+          "num_sharedlayers": 2,
+          "dim_sharedlayers": 20,
+          "num_headlayers": 2,
+          "dim_headlayers": [
+            50,
+            50
+          ]
+        }
+      },
+      "task_weights": [
+        1
+      ]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [0, 1, 2, 3],
+      "output_index": [
+        0
+      ],
+      "type": [
+        "graph"
+      ],
+      "output_dim": [1],
+      "output_names": ["energy"]
+    },
+    "Training": {
+      "num_epoch": 50,
+      "batch_size": 3,
+      "perc_train": 0.8,
+      "continue": 0,
+      "EarlyStopping": true,
+      "patience": 10,
+      "Checkpoint": true,
+      "checkpoint_warmup": 100,
+      "startfrom": "existing_model",
+      "Optimizer": {
+        "learning_rate": 0.001
+      }
+    }
+  }
+}
