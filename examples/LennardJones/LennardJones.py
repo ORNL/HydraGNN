@@ -7,8 +7,6 @@ mpi4py.rc.threads = False
 import os, json
 import random
 
-import h5py
-
 import logging
 import sys
 import argparse
