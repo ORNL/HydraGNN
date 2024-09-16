@@ -40,6 +40,7 @@ except ImportError:
     pass
 
 import matplotlib.pyplot as plt
+
 plt.rcParams.update({"font.size": 16})
 
 
@@ -72,12 +73,11 @@ def get_log_name_config(config):
         )
     )
 
+
 def getcolordensity(xdata, ydata):
     ###############################
     nbin = 20
-    hist2d, xbins_edge, ybins_edge = np.histogram2d(
-        x=xdata, y=ydata, bins=[nbin, nbin]
-    )
+    hist2d, xbins_edge, ybins_edge = np.histogram2d(x=xdata, y=ydata, bins=[nbin, nbin])
     xbin_cen = 0.5 * (xbins_edge[0:-1] + xbins_edge[1:])
     ybin_cen = 0.5 * (ybins_edge[0:-1] + ybins_edge[1:])
     BCTY, BCTX = np.meshgrid(ybin_cen, xbin_cen)
@@ -98,8 +98,10 @@ def getcolordensity(xdata, ydata):
     )  # np.nan)
     return hist2d_norm
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
 
 if __name__ == "__main__":
 
@@ -150,9 +152,21 @@ if __name__ == "__main__":
         basedir = os.path.join(
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
-        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=config["NeuralNetwork"]["Variables_of_interest"])
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=config["NeuralNetwork"]["Variables_of_interest"])
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=config["NeuralNetwork"]["Variables_of_interest"])
+        trainset = SimplePickleDataset(
+            basedir=basedir,
+            label="trainset",
+            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+        )
+        valset = SimplePickleDataset(
+            basedir=basedir,
+            label="valset",
+            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+        )
+        testset = SimplePickleDataset(
+            basedir=basedir,
+            label="testset",
+            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+        )
         pna_deg = trainset.pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
@@ -162,15 +176,13 @@ if __name__ == "__main__":
         verbosity=config["Verbosity"]["level"],
     )
 
-    model = torch.nn.parallel.DistributedDataParallel(
-        model
-    )
+    model = torch.nn.parallel.DistributedDataParallel(model)
 
     load_existing_model(model, modelname, path="./logs/")
     model.eval()
 
     variable_index = 0
-    #for output_name, output_type, output_dim in zip(config["NeuralNetwork"]["Variables_of_interest"]["output_names"], config["NeuralNetwork"]["Variables_of_interest"]["type"], config["NeuralNetwork"]["Variables_of_interest"]["output_dim"]):
+    # for output_name, output_type, output_dim in zip(config["NeuralNetwork"]["Variables_of_interest"]["output_names"], config["NeuralNetwork"]["Variables_of_interest"]["type"], config["NeuralNetwork"]["Variables_of_interest"]["output_dim"]):
 
     test_MAE = 0.0
 
@@ -182,14 +194,20 @@ if __name__ == "__main__":
 
     for data_id, data in enumerate(tqdm(testset)):
         data.pos.requires_grad = True
-        node_energy_pred = model(data.to(get_device()))[0]  # Note that this is sensitive to energy and forces prediction being single-task (current requirement)
+        node_energy_pred = model(data.to(get_device()))[
+            0
+        ]  # Note that this is sensitive to energy and forces prediction being single-task (current requirement)
         energy_pred = torch.sum(node_energy_pred, dim=0).float()
         test_MAE += torch.norm(energy_pred - data.energy, p=1).item() / len(testset)
-        #predicted.backward(retain_graph=True)
-        #gradients = data.pos.grad
-        grads_energy = torch.autograd.grad(outputs=energy_pred, inputs=data.pos,
-                                           grad_outputs=torch.ones_like(energy_pred),
-                                           retain_graph=False, create_graph=True)[0]
+        # predicted.backward(retain_graph=True)
+        # gradients = data.pos.grad
+        grads_energy = torch.autograd.grad(
+            outputs=energy_pred,
+            inputs=data.pos,
+            grad_outputs=torch.ones_like(energy_pred),
+            retain_graph=False,
+            create_graph=True,
+        )[0]
         energy_pred_list.extend(energy_pred.tolist())
         energy_true_list.extend(data.energy.tolist())
         forces_pred_list.extend((-grads_energy).flatten().tolist())
@@ -198,9 +216,7 @@ if __name__ == "__main__":
     hist2d_norm = getcolordensity(energy_true_list, energy_pred_list)
 
     fig, ax = plt.subplots()
-    plt.scatter(
-        energy_true_list, energy_pred_list, s=8, c=hist2d_norm, vmin=0, vmax=1
-    )
+    plt.scatter(energy_true_list, energy_pred_list, s=8, c=hist2d_norm, vmin=0, vmax=1)
     plt.clim(0, 1)
     ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
     plt.colorbar()
@@ -215,9 +231,7 @@ if __name__ == "__main__":
 
     hist2d_norm = getcolordensity(forces_pred_list, forces_true_list)
     fig, ax = plt.subplots()
-    plt.scatter(
-        forces_pred_list, forces_true_list, s=8, c=hist2d_norm, vmin=0, vmax=1
-    )
+    plt.scatter(forces_pred_list, forces_true_list, s=8, c=hist2d_norm, vmin=0, vmax=1)
     plt.clim(0, 1)
     ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
     plt.colorbar()

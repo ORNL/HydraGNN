@@ -42,6 +42,8 @@ import hydragnn.utils.tracer as tr
 from configurational_data import deterministic_graph_data
 from LJpotential import LJpotential
 from AtomicStructure import AtomicStructureHandler
+
+
 def create_dataset(config):
     # Angstrom unit
     primitive_bravais_lattice_constant_x = 3.8
@@ -49,11 +51,31 @@ def create_dataset(config):
     primitive_bravais_lattice_constant_z = 3.8
     path = "./dataset/data"
     radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
-    number_configurations = config["NeuralNetwork"]["Training"]["num_configurations"] if "num_configurations" in config["NeuralNetwork"]["Training"] else 1000
+    number_configurations = (
+        config["NeuralNetwork"]["Training"]["num_configurations"]
+        if "num_configurations" in config["NeuralNetwork"]["Training"]
+        else 1000
+    )
     atom_types = [1]
     formula = LJpotential(1.0, 3.4)
-    atomic_structure_handler = AtomicStructureHandler(atom_types, [primitive_bravais_lattice_constant_x, primitive_bravais_lattice_constant_y, primitive_bravais_lattice_constant_z], radius_cutoff, formula)
-    deterministic_graph_data(path, atom_types, atomic_structure_handler=atomic_structure_handler, radius_cutoff=radius_cutoff, relative_maximum_atomic_displacement=1e-1, number_configurations=number_configurations)
+    atomic_structure_handler = AtomicStructureHandler(
+        atom_types,
+        [
+            primitive_bravais_lattice_constant_x,
+            primitive_bravais_lattice_constant_y,
+            primitive_bravais_lattice_constant_z,
+        ],
+        radius_cutoff,
+        formula,
+    )
+    deterministic_graph_data(
+        path,
+        atom_types,
+        atomic_structure_handler=atomic_structure_handler,
+        radius_cutoff=radius_cutoff,
+        relative_maximum_atomic_displacement=1e-1,
+        number_configurations=number_configurations,
+    )
 
 
 # FIXME: this works fine for now because we train on disordered atomic structures with potentials and forces computed with Lennard-Jones
@@ -138,8 +160,12 @@ class LJDataset(AbstractBaseDataset):
 
         energy_pre_translation_factor = 0.0
         energy_pre_scaling_factor = 1.0 / num_nodes
-        energy_per_atom_pretransformed = (energy_per_atom - energy_pre_translation_factor) * energy_pre_scaling_factor
-        grad_energy_post_scaling_factor = 1.0/energy_pre_scaling_factor * torch.ones(num_nodes, 1)
+        energy_per_atom_pretransformed = (
+            energy_per_atom - energy_pre_translation_factor
+        ) * energy_pre_scaling_factor
+        grad_energy_post_scaling_factor = (
+            1.0 / energy_pre_scaling_factor * torch.ones(num_nodes, 1)
+        )
         forces = torch_data[:, [5, 6, 7]]
         forces_pre_scaling_factor = 1.0
         forces_pre_scaled = forces * forces_pre_scaling_factor
@@ -148,19 +174,23 @@ class LJDataset(AbstractBaseDataset):
             supercell_size=torch_supercell.to(torch.float32),
             num_nodes=num_nodes,
             grad_energy_post_scaling_factor=grad_energy_post_scaling_factor,
-            forces_pre_scaling_factor=torch.tensor(forces_pre_scaling_factor).to(torch.float32),
+            forces_pre_scaling_factor=torch.tensor(forces_pre_scaling_factor).to(
+                torch.float32
+            ),
             forces=forces,
             forces_pre_scaled=forces_pre_scaled,
             pos=torch_data[:, [1, 2, 3]].to(torch.float32),
             x=torch.cat([torch_data[:, [0, 4]]], axis=1).to(torch.float32),
             y=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-            energy_per_atom=torch.tensor(energy_per_atom_pretransformed).unsqueeze(0).to(torch.float32),
+            energy_per_atom=torch.tensor(energy_per_atom_pretransformed)
+            .unsqueeze(0)
+            .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
         )
         data = create_graph_fromXYZ(data)
         data = compute_edge_lengths(data)
         data.edge_attr = data.edge_attr.to(torch.float32)
-        #data = spherical_coordinates(data)
+        # data = spherical_coordinates(data)
         data = cartesian_coordinates(data)
 
         return data
@@ -391,7 +421,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
@@ -433,7 +467,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=True,
-        compute_grad_energy=True
+        compute_grad_energy=True,
     )
 
     hydragnn.utils.save_model(model, optimizer, log_name)

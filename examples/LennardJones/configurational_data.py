@@ -12,6 +12,7 @@
 import os
 import torch
 import numpy
+
 numpy.set_printoptions(threshold=numpy.inf)
 numpy.set_printoptions(linewidth=numpy.inf)
 
@@ -38,8 +39,8 @@ def deterministic_graph_data(
     path: str,
     atom_types: list,
     atomic_structure_handler,
-    radius_cutoff = float('inf'),
-    max_num_neighbors = float('inf'),
+    radius_cutoff=float("inf"),
+    max_num_neighbors=float("inf"),
     number_configurations: int = 500,
     configuration_start: int = 0,
     unit_cell_x_range: list = [3, 4],
@@ -77,7 +78,7 @@ def deterministic_graph_data(
     configurations_list = range(number_configurations)
     rx = list(nsplit(configurations_list, comm_size))[comm_rank]
 
-    for configuration in configurations_list[rx.start:rx.stop]:
+    for configuration in configurations_list[rx.start : rx.stop]:
         uc_x = unit_cell_x[configuration]
         uc_y = unit_cell_y[configuration]
         uc_z = unit_cell_z[configuration]
@@ -92,7 +93,7 @@ def deterministic_graph_data(
             atom_types,
             radius_cutoff,
             max_num_neighbors,
-            relative_maximum_atomic_displacement
+            relative_maximum_atomic_displacement,
         )
 
 
@@ -107,7 +108,7 @@ def create_configuration(
     types,
     radius_cutoff,
     max_num_neighbors,
-    relative_maximum_atomic_displacement
+    relative_maximum_atomic_displacement,
 ):
     ###############################################################################################
     ###################################   STRUCTURE OF THE DATA  ##################################
@@ -143,12 +144,21 @@ def create_configuration(
     for x in range(uc_x):
         for y in range(uc_y):
             for z in range(uc_z):
-                positions[count_pos][0] = (x + relative_maximum_atomic_displacement * (
-                            (torch.rand(1, 1).item()) - 0.5)) * primitive_bravais_lattice_constant_x
-                positions[count_pos][1] = (y + relative_maximum_atomic_displacement * (
-                            (torch.rand(1, 1).item()) - 0.5)) * primitive_bravais_lattice_constant_y
-                positions[count_pos][2] = (z + relative_maximum_atomic_displacement * (
-                            (torch.rand(1, 1).item()) - 0.5)) * primitive_bravais_lattice_constant_z
+                positions[count_pos][0] = (
+                    x
+                    + relative_maximum_atomic_displacement
+                    * ((torch.rand(1, 1).item()) - 0.5)
+                ) * primitive_bravais_lattice_constant_x
+                positions[count_pos][1] = (
+                    y
+                    + relative_maximum_atomic_displacement
+                    * ((torch.rand(1, 1).item()) - 0.5)
+                ) * primitive_bravais_lattice_constant_y
+                positions[count_pos][2] = (
+                    z
+                    + relative_maximum_atomic_displacement
+                    * ((torch.rand(1, 1).item()) - 0.5)
+                ) * primitive_bravais_lattice_constant_z
 
                 count_pos = count_pos + 1
 
@@ -160,9 +170,13 @@ def create_configuration(
     supercell_size_x = primitive_bravais_lattice_constant_x * uc_x
     supercell_size_y = primitive_bravais_lattice_constant_y * uc_y
     supercell_size_z = primitive_bravais_lattice_constant_z * uc_z
-    data.supercell_size = torch.diag(torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z]))
+    data.supercell_size = torch.diag(
+        torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
+    )
 
-    create_graph_connectivity_pbc = get_radius_graph_pbc(radius_cutoff, max_num_neighbors)
+    create_graph_connectivity_pbc = get_radius_graph_pbc(
+        radius_cutoff, max_num_neighbors
+    )
     data = create_graph_connectivity_pbc(data)
 
     atomic_descriptors = torch.cat(
@@ -176,26 +190,22 @@ def create_configuration(
     data.x = atomic_descriptors
 
     data = atomic_structure_handler.compute(data)
-    
-    total_energy = torch.sum(data.x[:,4])
-    energy_per_atom = total_energy/number_nodes
-    
+
+    total_energy = torch.sum(data.x[:, 4])
+    energy_per_atom = total_energy / number_nodes
+
     total_energy_str = numpy.array2string(total_energy.detach().numpy())
     energy_per_atom_str = numpy.array2string(energy_per_atom.detach().numpy())
     filetxt = total_energy_str + "\n" + energy_per_atom_str
 
     for index in range(0, 3):
         numpy_row = data.supercell_size[index, :].detach().numpy()
-        numpy_string_row = numpy.array2string(
-            numpy_row, precision=64, separator="\t"
-        )
+        numpy_string_row = numpy.array2string(numpy_row, precision=64, separator="\t")
         filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
     for index in range(0, number_nodes):
         numpy_row = data.x[index, :].detach().numpy()
-        numpy_string_row = numpy.array2string(
-            numpy_row, precision=64, separator="\t"
-        )
+        numpy_string_row = numpy.array2string(numpy_row, precision=64, separator="\t")
         filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
     filename = os.path.join(
@@ -205,10 +215,26 @@ def create_configuration(
         f.write(filetxt)
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     path = "./data"
     radius_cutoff = 5.0
     atom_types = [1]
     formula = LJpotential(1.0, 3.4)
-    AtomicStructureHandler = AtomicStructureHandler(atom_types, [primitive_bravais_lattice_constant_x, primitive_bravais_lattice_constant_y, primitive_bravais_lattice_constant_z], radius_cutoff, formula)
-    deterministic_graph_data(path, atom_types, atomic_structure_handler=AtomicStructureHandler, radius_cutoff=radius_cutoff, relative_maximum_atomic_displacement=1e-1, number_configurations=1000)
+    AtomicStructureHandler = AtomicStructureHandler(
+        atom_types,
+        [
+            primitive_bravais_lattice_constant_x,
+            primitive_bravais_lattice_constant_y,
+            primitive_bravais_lattice_constant_z,
+        ],
+        radius_cutoff,
+        formula,
+    )
+    deterministic_graph_data(
+        path,
+        atom_types,
+        atomic_structure_handler=AtomicStructureHandler,
+        radius_cutoff=radius_cutoff,
+        relative_maximum_atomic_displacement=1e-1,
+        number_configurations=1000,
+    )

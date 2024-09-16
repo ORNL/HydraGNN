@@ -1,8 +1,11 @@
 import torch
 
-class AtomicStructureHandler():
 
-    def __init__(self, list_atom_types, bravais_lattice_constants, radius_cutoff, formula):
+class AtomicStructureHandler:
+
+    def __init__(
+        self, list_atom_types, bravais_lattice_constants, radius_cutoff, formula
+    ):
 
         self.bravais_lattice_constants = bravais_lattice_constants
         self.radius_cutoff = radius_cutoff
@@ -10,21 +13,23 @@ class AtomicStructureHandler():
 
     def compute(self, data):
 
-        assert (data.pos.shape[0] == data.x.shape[0])
+        assert data.pos.shape[0] == data.x.shape[0]
 
         interatomic_potential = torch.zeros([data.pos.shape[0], 1])
         interatomic_forces = torch.zeros([data.pos.shape[0], 3])
 
         for node_id in range(data.pos.shape[0]):
 
-            neighbor_list_indices = torch.where(data.edge_index[0, :] == node_id)[0].tolist()
+            neighbor_list_indices = torch.where(data.edge_index[0, :] == node_id)[
+                0
+            ].tolist()
             neighbor_list = data.edge_index[1, neighbor_list_indices]
 
             for neighbor_id, edge_id in zip(neighbor_list, neighbor_list_indices):
 
                 neighbor_pos = data.pos[neighbor_id, :]
                 distance_vector = data.pos[neighbor_id, :] - data.pos[node_id, :]
-                
+
                 # Adjust the neighbor position based on periodic boundary conditions (PBC)
                 ## If the distance between the atoms is larger than the cutoff radius, the edge is because of PBC conditions
                 if torch.norm(distance_vector) > self.radius_cutoff:
@@ -54,27 +59,25 @@ class AtomicStructureHandler():
                 # The distance vecor may need to be updated after applying PBCs
                 distance_vector = data.pos[node_id, :] - neighbor_pos
 
-                #pair_distance = data.edge_attr[edge_id].item()
-                interatomic_potential[node_id] += self.formula.potential_energy(distance_vector)
+                # pair_distance = data.edge_attr[edge_id].item()
+                interatomic_potential[node_id] += self.formula.potential_energy(
+                    distance_vector
+                )
 
                 derivative_x = self.formula.derivative_x(distance_vector)
                 derivative_y = self.formula.derivative_y(distance_vector)
                 derivative_z = self.formula.derivative_z(distance_vector)
 
-                interatomic_forces_contribution_x = - derivative_x
-                interatomic_forces_contribution_y = - derivative_y
-                interatomic_forces_contribution_z = - derivative_z
+                interatomic_forces_contribution_x = -derivative_x
+                interatomic_forces_contribution_y = -derivative_y
+                interatomic_forces_contribution_z = -derivative_z
 
                 interatomic_forces[node_id, 0] += interatomic_forces_contribution_x
                 interatomic_forces[node_id, 1] += interatomic_forces_contribution_y
                 interatomic_forces[node_id, 2] += interatomic_forces_contribution_z
 
         data.x = torch.cat(
-            (
-                data.x,
-                interatomic_potential,
-                interatomic_forces
-            ),
+            (data.x, interatomic_potential, interatomic_forces),
             1,
         )
 

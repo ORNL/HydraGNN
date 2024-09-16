@@ -116,22 +116,22 @@ class LJDataset_VladTest(AbstractBaseDataset):
         pos = torch_data[:, [1, 2, 3]].to(torch.float32)
         atomic_number = torch_data[:, [0]].to(torch.float32)
         forces_torch = torch.zeros_like(pos)
-        forces_torch[0,:] = forces.unsqueeze(0)
+        forces_torch[0, :] = forces.unsqueeze(0)
 
         data = Data(
             pos=pos,
             x=torch.cat((atomic_number, forces_torch.to(torch.float32)), 1),
-            y = []
+            y=[],
         )
         data = create_graph_fromXYZ(data)
         data = compute_edge_lengths(data)
         data.edge_attr = data.edge_attr.to(torch.float32)
-        #data = spherical_coordinates(data)
+        # data = spherical_coordinates(data)
         data = cartesian_coordinates(data)
 
-        #maintain directionality
-        data.edge_index = data.edge_index[:,0:6]
-        data.edge_attr= data.edge_attr[0:6,:]
+        # maintain directionality
+        data.edge_index = data.edge_index[:, 0:6]
+        data.edge_attr = data.edge_attr[0:6, :]
 
         return data
 
@@ -152,7 +152,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="LJ_vlad_atomic_forces.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="LJ_vlad_atomic_forces.json"
+    )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -354,7 +356,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

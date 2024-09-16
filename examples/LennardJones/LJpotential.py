@@ -1,6 +1,7 @@
 import torch
 
-class LJpotential():
+
+class LJpotential:
 
     def __init__(self, epsilon, sigma):
         self.epsilon = epsilon
@@ -8,12 +9,22 @@ class LJpotential():
 
     def potential_energy(self, distance_vector):
         pair_distance = torch.norm(distance_vector)
-        return 4 * self.epsilon * ((self.sigma / pair_distance) ** 12 - (self.sigma / pair_distance) ** 6)
+        return (
+            4
+            * self.epsilon
+            * ((self.sigma / pair_distance) ** 12 - (self.sigma / pair_distance) ** 6)
+        )
 
     def radial_derivative(self, distance_vector):
         pair_distance = torch.norm(distance_vector)
-        return 4 * self.epsilon * (-12 * (self.sigma / pair_distance) ** 12 * 1 / pair_distance + 6 * (
-                self.sigma / pair_distance) ** 6 * 1 / pair_distance)
+        return (
+            4
+            * self.epsilon
+            * (
+                -12 * (self.sigma / pair_distance) ** 12 * 1 / pair_distance
+                + 6 * (self.sigma / pair_distance) ** 6 * 1 / pair_distance
+            )
+        )
 
     def derivative_x(self, distance_vector):
         pair_distance = torch.norm(distance_vector)

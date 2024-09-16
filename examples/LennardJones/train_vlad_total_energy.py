@@ -122,12 +122,12 @@ class LJDataset_VladTest(AbstractBaseDataset):
         data = create_graph_fromXYZ(data)
         data = compute_edge_lengths(data)
         data.edge_attr = data.edge_attr.to(torch.float32)
-        #data = spherical_coordinates(data)
+        # data = spherical_coordinates(data)
         data = cartesian_coordinates(data)
 
-        #maintain directionality
-        data.edge_index = data.edge_index[:,0:6]
-        data.edge_attr= data.edge_attr[0:6,:]
+        # maintain directionality
+        data.edge_index = data.edge_index[:, 0:6]
+        data.edge_attr = data.edge_attr[0:6, :]
 
         return data
 
@@ -148,7 +148,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="LJ_vlad_total_energy.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="LJ_vlad_total_energy.json"
+    )
     parser.add_argument("--mae", action="store_true", help="do mae calculation")
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -350,7 +352,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

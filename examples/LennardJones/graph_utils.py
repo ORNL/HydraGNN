@@ -4,6 +4,7 @@ import ase
 import ase.neighborlist
 from torch_geometric.utils import remove_self_loops, degree
 
+
 class RadiusGraphPBC(RadiusGraph):
     r"""Creates edges based on node positions :obj:`pos` to all points within a
     given distance, including periodic images.
