@@ -2,7 +2,6 @@ import torch
 
 
 class AtomicStructureHandler:
-
     def __init__(
         self, list_atom_types, bravais_lattice_constants, radius_cutoff, formula
     ):

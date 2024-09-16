@@ -2,7 +2,6 @@ import torch
 
 
 class LJpotential:
-
     def __init__(self, epsilon, sigma):
         self.epsilon = epsilon
         self.sigma = sigma
