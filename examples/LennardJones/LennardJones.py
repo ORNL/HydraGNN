@@ -422,7 +422,7 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
         
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
-         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
+        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
