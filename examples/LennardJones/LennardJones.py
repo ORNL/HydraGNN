@@ -460,7 +460,7 @@ if __name__ == "__main__":
         config["NeuralNetwork"],
         log_name,
         verbosity,
-        create_plots=True,
+        create_plots=False,
         compute_grad_energy=True,
     )
 
