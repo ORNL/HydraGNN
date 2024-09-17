@@ -13,18 +13,21 @@
 import os
 import logging
 import numpy
+
 numpy.set_printoptions(threshold=numpy.inf)
 numpy.set_printoptions(linewidth=numpy.inf)
 
 # Torch
 import torch
 from torch_geometric.data import Data
+
 # torch.set_default_tensor_type(torch.DoubleTensor)
 # torch.set_default_dtype(torch.float64)
 
 # Distributed
 import mpi4py
 from mpi4py import MPI
+
 mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
@@ -44,9 +47,14 @@ primitive_bravais_lattice_constant_z = 3.8
 
 """High-Level Function"""
 
+
 def create_dataset(path, config):
     radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
-    number_configurations = config["Dataset"]["number_configurations"] if "number_configurations" in config["Dataset"] else 3000
+    number_configurations = (
+        config["Dataset"]["number_configurations"]
+        if "number_configurations" in config["Dataset"]
+        else 3000
+    )
     atom_types = [1]
     formula = LJpotential(1.0, 3.4)
     atomic_structure_handler = AtomicStructureHandler(
@@ -71,6 +79,7 @@ def create_dataset(path, config):
 
 """Reading/Transforming Data"""
 
+
 class LJDataset(AbstractBaseDataset):
     """LJDataset dataset class"""
 
@@ -84,7 +93,7 @@ class LJDataset(AbstractBaseDataset):
             assert torch.distributed.is_initialized()
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
-            
+
         self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
         self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
 
@@ -166,7 +175,7 @@ class LJDataset(AbstractBaseDataset):
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
         )
-        
+
         # Create pbc edges and lengths
         edge_creation = get_radius_graph_pbc(self.radius, self.max_neighbours)
         data = edge_creation(data)
@@ -181,6 +190,7 @@ class LJDataset(AbstractBaseDataset):
 
 
 """Create Data"""
+
 
 def deterministic_graph_data(
     path: str,
@@ -360,10 +370,10 @@ def create_configuration(
     )
     with open(filename, "w") as f:
         f.write(filetxt)
-      
 
 
 """Function Calculation"""
+
 
 class AtomicStructureHandler:
     def __init__(
@@ -486,9 +496,9 @@ class LJpotential:
         radial_derivative = self.radial_derivative(pair_distance)
         return radial_derivative * (distance_vector[2].item()) / pair_distance
 
-        
-        
+
 """Etc"""
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))

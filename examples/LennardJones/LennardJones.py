@@ -17,12 +17,14 @@ import argparse
 
 # Torch
 import torch
+
 # torch.set_default_tensor_type(torch.DoubleTensor)
 # torch.set_default_dtype(torch.float64)
 
 # Distributed
 import mpi4py
 from mpi4py import MPI
+
 mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
@@ -35,6 +37,7 @@ from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.preprocess.utils import gather_deg
+
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
@@ -139,7 +142,9 @@ if __name__ == "__main__":
         dataset_exists = os.path.exists(os.path.join(dirpwd, "dataset/LJ.pickle"))
     if args.format == "adios":
         fname = os.path.join(dirpwd, "./dataset/%s.bp" % modelname)
-        dataset_exists = os.path.exists(os.path.join(dirpwd, "dataset", "%s.bp" % modelname))
+        dataset_exists = os.path.exists(
+            os.path.join(dirpwd, "dataset", "%s.bp" % modelname)
+        )
 
     # Create dataset if preonly specified or dataset does not exist
     if not dataset_exists:
