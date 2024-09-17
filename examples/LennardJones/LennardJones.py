@@ -1,197 +1,50 @@
-import mpi4py
-from mpi4py import MPI
+##############################################################################
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
 
-mpi4py.rc.thread_level = "serialized"
-mpi4py.rc.threads = False
-
+# General
 import os, json
-import random
-
 import logging
 import sys
 import argparse
 
-import hydragnn
-from hydragnn.utils.print_utils import iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
+# Torch
+import torch
+# torch.set_default_tensor_type(torch.DoubleTensor)
+# torch.set_default_dtype(torch.float64)
 
+# Distributed
+import mpi4py
+from mpi4py import MPI
+mpi4py.rc.thread_level = "serialized"
+mpi4py.rc.threads = False
+
+# HydraGNN
+import hydragnn
+from hydragnn.utils.print_utils import log
+from hydragnn.utils.time_utils import Timer
+import hydragnn.utils.tracer as tr
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.abstractrawdataset import AbstractBaseDataset
 from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.preprocess.utils import gather_deg
-
-import numpy as np
-
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance, LocalCartesian
-import torch
-import torch.distributed as dist
-
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
-
-# Using LJ dataset creation
-from configurational_data import deterministic_graph_data
-from LJpotential import LJpotential
-from AtomicStructure import AtomicStructureHandler
+# Lennard Jones
+from LJ_data import create_dataset, LJDataset, info
 
 
-def create_dataset(path, config):
-    # Angstrom unit
-    primitive_bravais_lattice_constant_x = 3.8
-    primitive_bravais_lattice_constant_y = 3.8
-    primitive_bravais_lattice_constant_z = 3.8
-    radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
-    number_configurations = config["Dataset"]["number_configurations"] if "number_configurations" in config["Dataset"] else 1000
-    atom_types = [1]
-    formula = LJpotential(1.0, 3.4)
-    atomic_structure_handler = AtomicStructureHandler(
-        atom_types,
-        [
-            primitive_bravais_lattice_constant_x,
-            primitive_bravais_lattice_constant_y,
-            primitive_bravais_lattice_constant_z,
-        ],
-        radius_cutoff,
-        formula,
-    )
-    deterministic_graph_data(
-        path,
-        atom_types,
-        atomic_structure_handler=atomic_structure_handler,
-        radius_cutoff=radius_cutoff,
-        relative_maximum_atomic_displacement=1e-1,
-        number_configurations=number_configurations,
-    )
-
-
-# FIXME: this works fine for now because we train on disordered atomic structures with potentials and forces computed with Lennard-Jones
-
-
-torch.set_default_dtype(torch.float32)
-
-
-def info(*args, logtype="info", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-
-class LJDataset(AbstractBaseDataset):
-    """LJDataset dataset class"""
-
-    def __init__(self, dirpath, config, dist=False, sampling=None):
-        super().__init__()
-
-        self.dist = dist
-        self.world_size = 1
-        self.rank = 1
-        if self.dist:
-            assert torch.distributed.is_initialized()
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
-            
-        self.create_graph_fromXYZ = RadiusGraph(r=config["NeuralNetwork"]["Architecture"]["radius"])  # radius cutoff in angstrom
-        self.compute_edge_lengths = Distance(norm=False, cat=True)
-        # self.spherical_coordinates = Spherical(norm=False, cat=False)
-        self.cartesian_coordinates = LocalCartesian(norm=False, cat=False)
-
-        dirfiles = sorted(os.listdir(dirpath))
-
-        rx = list(nsplit((dirfiles), self.world_size))[self.rank]
-
-        for file in rx:
-            filepath = os.path.join(dirpath, file)
-            self.dataset.append(self.transform_input_to_data_object_base(filepath))
-
-    def transform_input_to_data_object_base(self, filepath):
-
-        # Using readline()
-        file = open(filepath, "r")
-
-        torch_data = torch.empty((0, 8), dtype=torch.float32)
-        torch_supercell = torch.zeros((0, 3), dtype=torch.float32)
-
-        count = 0
-
-        while True:
-            count += 1
-
-            # Get next line from file
-            line = file.readline()
-
-            # if line is empty
-            # end of file is reached
-            if not line:
-                break
-
-            if count == 1:
-                total_energy = float(line)
-            elif count == 2:
-                energy_per_atom = float(line)
-            elif 2 < count < 6:
-                array_line = np.fromstring(line, dtype=float, sep="\t")
-                torch_supercell = torch.cat(
-                    [torch_supercell, torch.from_numpy(array_line).unsqueeze(0)], axis=0
-                )
-            elif count > 5:
-                array_line = np.fromstring(line, dtype=float, sep="\t")
-                torch_data = torch.cat(
-                    [torch_data, torch.from_numpy(array_line).unsqueeze(0)], axis=0
-                )
-            # print("Line{}: {}".format(count, line.strip()))
-
-        file.close()
-
-        num_nodes = torch_data.shape[0]
-
-        energy_pre_translation_factor = 0.0
-        energy_pre_scaling_factor = 1.0 / num_nodes
-        energy_per_atom_pretransformed = (
-            energy_per_atom - energy_pre_translation_factor
-        ) * energy_pre_scaling_factor
-        grad_energy_post_scaling_factor = (
-            1.0 / energy_pre_scaling_factor * torch.ones(num_nodes, 1)
-        )
-        forces = torch_data[:, [5, 6, 7]]
-        forces_pre_scaling_factor = 1.0
-        forces_pre_scaled = forces * forces_pre_scaling_factor
-
-        data = Data(
-            supercell_size=torch_supercell.to(torch.float32),
-            num_nodes=num_nodes,
-            grad_energy_post_scaling_factor=grad_energy_post_scaling_factor,
-            forces_pre_scaling_factor=torch.tensor(forces_pre_scaling_factor).to(
-                torch.float32
-            ),
-            forces=forces,
-            forces_pre_scaled=forces_pre_scaled,
-            pos=torch_data[:, [1, 2, 3]].to(torch.float32),
-            x=torch.cat([torch_data[:, [0, 4]]], axis=1).to(torch.float32),
-            y=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-            energy_per_atom=torch.tensor(energy_per_atom_pretransformed)
-            .unsqueeze(0)
-            .to(torch.float32),
-            energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-        )
-        data = self.create_graph_fromXYZ(data)
-        data = self.compute_edge_lengths(data)
-        data.edge_attr = data.edge_attr.to(torch.float32)
-        # data = self.spherical_coordinates(data)
-        data = self.cartesian_coordinates(data)
-
-        return data
-
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
-        return self.dataset[idx]
+##################################################################################################################
 
 
 if __name__ == "__main__":
@@ -294,7 +147,7 @@ if __name__ == "__main__":
         ## local data
         create_dataset(os.path.join(dirpwd, "dataset/data"), config)
         total = LJDataset(
-            os.path.join(dirpwd, "dataset"),
+            os.path.join(dirpwd, "dataset/data"),
             config,
             dist=True,
         )
