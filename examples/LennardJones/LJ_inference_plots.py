@@ -39,6 +39,8 @@ try:
 except ImportError:
     pass
 
+from LJ_data import info
+
 import matplotlib.pyplot as plt
 
 plt.rcParams.update({"font.size": 16})
@@ -97,10 +99,6 @@ def getcolordensity(xdata, ydata):
         fill_value=0,
     )  # np.nan)
     return hist2d_norm
-
-
-def info(*args, logtype="info", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
 
 
 if __name__ == "__main__":
