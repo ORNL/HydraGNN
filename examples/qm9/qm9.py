@@ -62,11 +62,6 @@ dataset = torch_geometric.datasets.QM9(
 )
 # Check for dataset filepath
 datadir = os.path.join(os.getcwd(), "dataset/qm9")
-if os.path.exists(datadir):
-    print("----------------------------DATASET FOUND----------------------------")
-else:
-    print("----------------------------DATASET NOT FOUND----------------------------")
-    raise FileNotFoundError
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
