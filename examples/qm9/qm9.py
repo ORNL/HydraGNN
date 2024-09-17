@@ -62,7 +62,7 @@ dataset = torch_geometric.datasets.QM9(
 )
 # Check for dataset filepath
 datadir = os.path.join(os.getcwd(), "dataset/qm9")
-if os.exists(datadir):
+if os.path.exists(datadir):
     print("----------------------------DATASET FOUND----------------------------")
 else:
     print("----------------------------DATASET NOT FOUND----------------------------")

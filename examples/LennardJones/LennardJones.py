@@ -42,18 +42,13 @@ from LJpotential import LJpotential
 from AtomicStructure import AtomicStructureHandler
 
 
-def create_dataset(config):
+def create_dataset(path, config):
     # Angstrom unit
     primitive_bravais_lattice_constant_x = 3.8
     primitive_bravais_lattice_constant_y = 3.8
     primitive_bravais_lattice_constant_z = 3.8
-    path = "./dataset/data"
     radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
-    number_configurations = (
-        config["NeuralNetwork"]["Training"]["num_configurations"]
-        if "num_configurations" in config["NeuralNetwork"]["Training"]
-        else 1000
-    )
+    number_configurations = 1000
     atom_types = [1]
     formula = LJpotential(1.0, 3.4)
     atomic_structure_handler = AtomicStructureHandler(
@@ -298,7 +293,7 @@ if __name__ == "__main__":
     if not dataset_exists:
 
         ## local data
-        create_dataset(config)
+        create_dataset(os.path.join(lookdir, 'data'), config)
         total = LJDataset(
             os.path.join(datadir),
             dist=True,
