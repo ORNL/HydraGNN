@@ -29,7 +29,7 @@ except ImportError:
     pass
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import RadiusGraph, Distance, LocalCartesian
 import torch
 import torch.distributed as dist
 
@@ -48,7 +48,7 @@ def create_dataset(path, config):
     primitive_bravais_lattice_constant_y = 3.8
     primitive_bravais_lattice_constant_z = 3.8
     radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
-    number_configurations = 1000
+    number_configurations = config["Dataset"]["number_configurations"] if "number_configurations" in config["Dataset"] else 1000
     atom_types = [1]
     formula = LJpotential(1.0, 3.4)
     atomic_structure_handler = AtomicStructureHandler(
@@ -81,17 +81,11 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-# FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
-create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
-compute_edge_lengths = Distance(norm=False, cat=True)
-spherical_coordinates = Spherical(norm=False, cat=False)
-cartesian_coordinates = LocalCartesian(norm=False, cat=False)
-
 
 class LJDataset(AbstractBaseDataset):
     """LJDataset dataset class"""
 
-    def __init__(self, dirpath, dist=False, sampling=None):
+    def __init__(self, dirpath, config, dist=False, sampling=None):
         super().__init__()
 
         self.dist = dist
@@ -101,6 +95,11 @@ class LJDataset(AbstractBaseDataset):
             assert torch.distributed.is_initialized()
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
+            
+        self.create_graph_fromXYZ = RadiusGraph(r=config["NeuralNetwork"]["Architecture"]["radius"])  # radius cutoff in angstrom
+        self.compute_edge_lengths = Distance(norm=False, cat=True)
+        # self.spherical_coordinates = Spherical(norm=False, cat=False)
+        self.cartesian_coordinates = LocalCartesian(norm=False, cat=False)
 
         dirfiles = sorted(os.listdir(dirpath))
 
@@ -180,11 +179,11 @@ class LJDataset(AbstractBaseDataset):
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
         )
-        data = create_graph_fromXYZ(data)
-        data = compute_edge_lengths(data)
+        data = self.create_graph_fromXYZ(data)
+        data = self.compute_edge_lengths(data)
         data.edge_attr = data.edge_attr.to(torch.float32)
-        # data = spherical_coordinates(data)
-        data = cartesian_coordinates(data)
+        # data = self.spherical_coordinates(data)
+        data = self.cartesian_coordinates(data)
 
         return data
 
@@ -237,7 +236,6 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "potential", "forces"]
     node_feature_dims = [1, 1, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset/data")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -283,19 +281,21 @@ if __name__ == "__main__":
 
     modelname = "LJ"
     # Check for dataset for each format
-    lookdir = os.path.join(dirpwd, "dataset")
     if args.format == "pickle":
-        dataset_exists = os.path.exists(os.path.join(lookdir, "LJ.pickle"))
+        basedir = os.path.join(dirpwd, "dataset", "%s.pickle" % modelname)
+        dataset_exists = os.path.exists(os.path.join(dirpwd, "dataset/LJ.pickle"))
     if args.format == "adios":
-        dataset_exists = os.path.exists(os.path.join(lookdir, "%s.bp" % modelname))
+        fname = os.path.join(dirpwd, "./dataset/%s.bp" % modelname)
+        dataset_exists = os.path.exists(os.path.join(dirpwd, "dataset", "%s.bp" % modelname))
 
     # Create dataset if preonly specified or dataset does not exist
     if not dataset_exists:
 
         ## local data
-        create_dataset(os.path.join(lookdir, "data"), config)
+        create_dataset(os.path.join(dirpwd, "dataset/data"), config)
         total = LJDataset(
-            os.path.join(datadir),
+            os.path.join(dirpwd, "dataset"),
+            config,
             dist=True,
         )
         ## This is a local split
@@ -314,9 +314,6 @@ if __name__ == "__main__":
         if args.format == "pickle":
 
             ## pickle
-            basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-            )
             attrs = dict()
             attrs["pna_deg"] = deg
             SimplePickleWriter(
@@ -347,9 +344,6 @@ if __name__ == "__main__":
 
         if args.format == "adios":
             ## adios
-            fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
-            )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
@@ -372,15 +366,11 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
-        basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-        )
         var_config = config["NeuralNetwork"]["Variables_of_interest"]
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", preload=True, var_config=var_config

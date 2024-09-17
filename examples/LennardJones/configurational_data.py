@@ -213,28 +213,3 @@ def create_configuration(
     )
     with open(filename, "w") as f:
         f.write(filetxt)
-
-
-if __name__ == "__main__":
-    path = "./data"
-    radius_cutoff = 5.0
-    atom_types = [1]
-    formula = LJpotential(1.0, 3.4)
-    AtomicStructureHandler = AtomicStructureHandler(
-        atom_types,
-        [
-            primitive_bravais_lattice_constant_x,
-            primitive_bravais_lattice_constant_y,
-            primitive_bravais_lattice_constant_z,
-        ],
-        radius_cutoff,
-        formula,
-    )
-    deterministic_graph_data(
-        path,
-        atom_types,
-        atomic_structure_handler=AtomicStructureHandler,
-        radius_cutoff=radius_cutoff,
-        relative_maximum_atomic_displacement=1e-1,
-        number_configurations=1000,
-    )
