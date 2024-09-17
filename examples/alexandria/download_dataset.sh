@@ -17,6 +17,7 @@ wget --recursive \
      --convert-links \
      --cut-dirs=1 \
      --no-check-certificate \
+     --reject-regex="(/older/|/geo_opt_paths/)" \
      --directory-prefix="$OUTPUT_DIR" \
      "$URL"
 
