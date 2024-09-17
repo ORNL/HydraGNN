@@ -56,7 +56,7 @@
       "output_names": ["graph_energy"]
     },
     "Training": {
-      "num_epoch": 20,
+      "num_epoch": 15,
       "batch_size": 64,
       "patience": 20,
       "early_stopping": true,

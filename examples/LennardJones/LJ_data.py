@@ -53,7 +53,7 @@ def create_dataset(path, config):
     number_configurations = (
         config["Dataset"]["number_configurations"]
         if "number_configurations" in config["Dataset"]
-        else 3000
+        else 300
     )
     atom_types = [1]
     formula = LJpotential(1.0, 3.4)
