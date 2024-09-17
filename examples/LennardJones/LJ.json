@@ -4,9 +4,7 @@
   },
   "Dataset": {
     "name": "LJdataset",
-    "path": {"total": "./dataset/data"},
     "format": "XYZ",
-    "rotational_invariance": true,
     "node_features": {
       "name": ["atom_type"],
       "dim": [1],
@@ -22,7 +20,6 @@
     "Architecture": {
       "periodic_boundary_conditions": true,
       "model_type": "DimeNet",
-      "equivariance": false,
       "radius": 5.0,
       "max_neighbours": 5,
       "int_emb_size": 32,
