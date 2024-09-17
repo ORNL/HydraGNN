@@ -16,6 +16,7 @@ except:
 
 import hydragnn
 
+
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
     # Set descriptor as element type.
@@ -60,10 +61,21 @@ hydragnn.utils.setup_log(log_name)
 dataset = torch_geometric.datasets.QM9(
     root="dataset/qm9", pre_transform=qm9_pre_transform, pre_filter=qm9_pre_filter
 )
+# Check for dataset filepath
+datadir = os.path.join(os.getcwd(), "dataset/qm9")
+if os.exists(datadir):
+    print("----------------------------DATASET FOUND----------------------------")
+else:
+    print("----------------------------DATASET NOT FOUND----------------------------")
+    raise FileNotFoundError
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
-(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+(
+    train_loader,
+    val_loader,
+    test_loader,
+) = hydragnn.preprocess.create_dataloaders(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
