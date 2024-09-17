@@ -14,7 +14,7 @@ from torch_geometric.typing import SparseTensor
 
 import torch
 from torch import Tensor
-from torch.nn import Identity, SiLU, Sigmoid
+from torch.nn import Identity, SiLU
 
 from torch_geometric.nn import Linear, Sequential
 from torch_geometric.nn.models.dimenet import (
