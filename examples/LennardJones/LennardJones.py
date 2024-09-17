@@ -293,7 +293,7 @@ if __name__ == "__main__":
     if not dataset_exists:
 
         ## local data
-        create_dataset(os.path.join(lookdir, 'data'), config)
+        create_dataset(os.path.join(lookdir, "data"), config)
         total = LJDataset(
             os.path.join(datadir),
             dist=True,
