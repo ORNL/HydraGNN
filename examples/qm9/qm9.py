@@ -60,8 +60,6 @@ hydragnn.utils.setup_log(log_name)
 dataset = torch_geometric.datasets.QM9(
     root="dataset/qm9", pre_transform=qm9_pre_transform, pre_filter=qm9_pre_filter
 )
-# Check for dataset filepath
-datadir = os.path.join(os.getcwd(), "dataset/qm9")
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
