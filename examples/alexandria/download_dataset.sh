@@ -18,6 +18,7 @@ wget --recursive \
      --cut-dirs=1 \
      --no-check-certificate \
      --reject-regex="(/older/|/geo_opt_paths/)" \
+     --reject "*index.html*" \
      --directory-prefix="$OUTPUT_DIR" \
      "$URL"
 
