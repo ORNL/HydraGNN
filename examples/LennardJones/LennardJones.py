@@ -35,7 +35,10 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.datasets.distdataset import DistDataset
-from hydragnn.utils.datasets.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 try:
