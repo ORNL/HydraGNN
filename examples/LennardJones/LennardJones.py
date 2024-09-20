@@ -99,7 +99,11 @@ if __name__ == "__main__":
     # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
         config = json.load(f)
-    config["NeuralNetwork"]["Architecture"]["model_type"] = args.model_type if args.model_type else config["NeuralNetwork"]["Architecture"]["model_type"]
+    config["NeuralNetwork"]["Architecture"]["model_type"] = (
+        args.model_type
+        if args.model_type
+        else config["NeuralNetwork"]["Architecture"]["model_type"]
+    )
     verbosity = config["Verbosity"]["level"]
     config["NeuralNetwork"]["Variables_of_interest"][
         "graph_feature_names"
