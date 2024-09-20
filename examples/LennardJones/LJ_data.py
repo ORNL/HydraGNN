@@ -32,8 +32,8 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 # HydraGNN
-from hydragnn.utils.abstractrawdataset import AbstractBaseDataset
-from hydragnn.utils import nsplit
+from hydragnn.utils.datasets.abstractrawdataset import AbstractBaseDataset
+from hydragnn.utils.distributed import nsplit
 from hydragnn.preprocess.utils import get_radius_graph_pbc
 
 # Angstrom unit
