@@ -30,16 +30,16 @@ mpi4py.rc.threads = False
 
 # HydraGNN
 import hydragnn
-from hydragnn.utils.print_utils import log
-from hydragnn.utils.time_utils import Timer
-import hydragnn.utils.tracer as tr
+from hydragnn.utils.print.print_utils import log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import SimplePickleWriter, SimplePickleDataset
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
