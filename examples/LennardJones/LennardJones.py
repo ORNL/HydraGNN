@@ -133,7 +133,7 @@ if __name__ == "__main__":
     )
 
     log_name = "LJ" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
+    hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
