@@ -85,11 +85,15 @@ class Alexandria(AbstractBaseDataset):
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
-        list_dirs = list_directories(os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de"))
+        list_dirs = list_directories(
+            os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
+        )
 
         for index in list_dirs:
 
-            subdirpath = os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de", index)
+            subdirpath = os.path.join(
+                dirpath, "compressed_data", "alexandria.icams.rub.de", index
+            )
 
             total_file_list = os.listdir(subdirpath)
 
@@ -161,7 +165,10 @@ class Alexandria(AbstractBaseDataset):
                 pos.shape[0] == atomic_numbers.shape[0]
             ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
         except:
-            print(f"Structure {entry_id} does not have positional atomic numbers", flush=True)
+            print(
+                f"Structure {entry_id} does not have positional atomic numbers",
+                flush=True,
+            )
             return data_object
 
         forces_numpy = None
