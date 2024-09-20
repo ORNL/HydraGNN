@@ -15,7 +15,7 @@ import pytest
 import subprocess
 
 
-@pytest.mark.parametrize("example", ["qm9", "md17"])
+@pytest.mark.parametrize("example", ["qm9", "md17", "LennardJones"])
 @pytest.mark.mpi_skip()
 def pytest_examples(example):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)

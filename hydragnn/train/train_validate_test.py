@@ -66,6 +66,7 @@ def train_validate_test(
     plot_hist_solution=False,
     create_plots=False,
     use_deepspeed=False,
+    compute_grad_energy=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
@@ -168,6 +169,7 @@ def train_validate_test(
                 verbosity,
                 profiler=prof,
                 use_deepspeed=use_deepspeed,
+                compute_grad_energy=compute_grad_energy,
             )
             tr.stop("train")
             tr.disable()
@@ -178,7 +180,11 @@ def train_validate_test(
             continue
 
         val_loss, val_taskserr = validate(
-            val_loader, model, verbosity, reduce_ranks=True
+            val_loader,
+            model,
+            verbosity,
+            reduce_ranks=True,
+            compute_grad_energy=compute_grad_energy,
         )
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
@@ -186,6 +192,7 @@ def train_validate_test(
             verbosity,
             reduce_ranks=True,
             return_samples=plot_hist_solution,
+            compute_grad_energy=compute_grad_energy,
         )
         scheduler.step(val_loss)
         if writer is not None:
@@ -441,7 +448,15 @@ def gather_tensor_ranks(head_values):
     return head_values
 
 
-def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
+def train(
+    loader,
+    model,
+    opt,
+    verbosity,
+    profiler=None,
+    use_deepspeed=False,
+    compute_grad_energy=False,
+):
     if profiler is None:
         profiler = Profiler()
 
@@ -499,8 +514,13 @@ def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
             data = data.to(get_device())
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
-            pred = model(data)
-            loss, tasks_loss = model.module.loss(pred, data.y, head_index)
+            if compute_grad_energy:  # for force and energy prediction
+                data.pos.requires_grad = True
+                pred = model(data)
+                loss, tasks_loss = model.module.energy_force_loss(pred, data)
+            else:
+                pred = model(data)
+                loss, tasks_loss = model.module.loss(pred, data.y, head_index)
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -548,7 +568,7 @@ def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
 
 
 @torch.no_grad()
-def validate(loader, model, verbosity, reduce_ranks=True):
+def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=False):
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -572,8 +592,14 @@ def validate(loader, model, verbosity, reduce_ranks=True):
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
-        pred = model(data)
-        error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        if compute_grad_energy:  # for force and energy prediction
+            with torch.enable_grad():
+                data.pos.requires_grad = True
+                pred = model(data)
+                error, tasks_loss = model.module.energy_force_loss(pred, data)
+        else:
+            pred = model(data)
+            error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -592,7 +618,14 @@ def validate(loader, model, verbosity, reduce_ranks=True):
 
 
 @torch.no_grad()
-def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
+def test(
+    loader,
+    model,
+    verbosity,
+    reduce_ranks=True,
+    return_samples=True,
+    compute_grad_energy=False,
+):
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -619,8 +652,14 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
-        pred = model(data)
-        error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        if compute_grad_energy:  # for force and energy prediction
+            with torch.enable_grad():
+                data.pos.requires_grad = True
+                pred = model(data)
+                error, tasks_loss = model.module.energy_force_loss(pred, data)
+        else:
+            pred = model(data)
+            error, tasks_loss = model.module.loss(pred, data.y, head_index)
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
             if model.module.var_output:
