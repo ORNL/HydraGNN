@@ -25,6 +25,8 @@
       "int_emb_size": 32,
       "out_emb_size": 16,
       "basis_emb_size": 8,
+      "num_gaussians": 10,
+      "num_filters": 8,
       "num_before_skip": 1,
       "num_after_skip": 1,
       "envelope_exponent": 5,
@@ -55,6 +57,7 @@
     "Training": {
       "num_epoch": 15,
       "batch_size": 64,
+      "perc_train": 0.7,
       "patience": 20,
       "early_stopping": true,
       "Optimizer": {

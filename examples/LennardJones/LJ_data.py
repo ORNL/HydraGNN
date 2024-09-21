@@ -103,9 +103,9 @@ class LJDataset(AbstractBaseDataset):
 
         for file in rx:
             filepath = os.path.join(dirpath, file)
-            self.dataset.append(self.transform_inumpyut_to_data_object_base(filepath))
+            self.dataset.append(self.transform_input_to_data_object_base(filepath))
 
-    def transform_inumpyut_to_data_object_base(self, filepath):
+    def transform_input_to_data_object_base(self, filepath):
 
         # Using readline()
         file = open(filepath, "r")
