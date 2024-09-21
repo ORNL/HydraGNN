@@ -140,7 +140,7 @@ class Alexandria(AbstractBaseDataset):
         except:
             print(f"Structure {entry_id} does not have positional sites", flush=True)
             return data_object
-        natoms = torch.IntTensor([pos.shape[1]])
+        natoms = torch.IntTensor([pos.shape[0]])
 
         cell = None
         try:
