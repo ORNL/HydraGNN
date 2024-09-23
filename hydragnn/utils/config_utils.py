@@ -92,11 +92,11 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["initial_bias"] = None
 
-    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
+    if "Optimizer" not in config["Training"]:
+        config["Training"]["Optimizer"]["type"] = "AdamW"
 
-    if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
+    if "loss_function_type" not in config["Training"]:
+        config["Training"]["loss_function_type"] = "mse"
 
     if "activation_function" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["activation_function"] = "relu"
@@ -104,11 +104,11 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "SyncBatchNorm" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"] = False
 
-    if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
+    if "conv_checkpointing" not in config["Training"]:
+        config["Training"]["conv_checkpointing"] = False
 
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
+    if "compute_grad_energy" not in config["Training"]:
+        config["Training"]["compute_grad_energy"] = False
     return config
 
 
@@ -256,11 +256,11 @@ def get_log_name_config(config):
         + "-hd-"
         + str(config["NeuralNetwork"]["Architecture"]["hidden_dim"])
         + "-ne-"
-        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
+        + str(config["Training"]["num_epoch"])
         + "-lr-"
-        + str(config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"])
+        + str(config["Training"]["Optimizer"]["learning_rate"])
         + "-bs-"
-        + str(config["NeuralNetwork"]["Training"]["batch_size"])
+        + str(config["Training"]["batch_size"])
         + "-data-"
         + config["Dataset"]["name"][
             : (
@@ -301,7 +301,7 @@ def parse_deepspeed_config(config):
         ds_config = {}
 
     if "train_micro_batch_size_per_gpu" not in ds_config:
-        ds_config["train_micro_batch_size_per_gpu"] = config["NeuralNetwork"][
+        ds_config["train_micro_batch_size_per_gpu"] = config[
             "Training"
         ]["batch_size"]
         ds_config["gradient_accumulation_steps"] = 1

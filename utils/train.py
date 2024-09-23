@@ -26,12 +26,13 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.utils.smiles_utils import (
-    get_node_attribute_name,
-    generate_graphdata_from_smilestr,
+#from hydragnn.utils.distdataset import DistDataset
+from hydragnn.utils.distributed import (
+    setup_ddp,
+    get_distributed_model,
+    print_peak_memory,
 )
+
 from hydragnn.preprocess.utils import gather_deg
 from hydragnn.utils import nsplit
 import hydragnn.utils.tracer as tr
@@ -47,12 +48,16 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
+from debug_dict import DebugDict
 
 def run(argv):
     assert len(argv) == 3, f"Usage: {argv[0]} <config.json> <dataset.bp>"
 
     cfgfile = argv[1]
     dataset = argv[2]
+    log_name = 'experiment'
+    (Path('logs')/log_name).mkdir(exist_ok=True, parents=True)
+    verbosity = 1
 
     tr.initialize()
     tr.disable()
@@ -60,11 +65,12 @@ def run(argv):
     timer.start()
 
     config = json.loads( Path(cfgfile).read_text() )
-    print(config)
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    comm_size = comm.Get_size()
+    #print(config)
+    config = DebugDict(config)
+    #world_size, world_rank = setup_ddp()
+    comm_size, rank = setup_ddp()
+    #rank = comm.Get_rank()
+    #comm_size = comm.Get_size()
 
     use_torch_backend = False # Fix to MPI backend
     if True: # fix to adios format
@@ -79,10 +85,11 @@ def run(argv):
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
+        comm = MPI.COMM_WORLD
         trainset = AdiosDataset(dataset, "trainset", comm, **opt)
         valset = AdiosDataset(dataset, "valset", comm)
         testset = AdiosDataset(dataset, "testset", comm)
-        comm.Barrier()
+        #comm.Barrier()
 
     print("Loaded dataset.")
     info(
@@ -98,13 +105,15 @@ def run(argv):
     ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["Training"]["Optimizer"]["batch_size"]
     )
-    return 0
-    comm.Barrier()
+    print("Created Dataloaders")
+    #comm.Barrier()
 
     config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
-    comm.Barrier()
+    #comm.Barrier()
+    print("Updated Config")
 
-    hydragnn.utils.save_config(config, log_name)
+    if rank == 0:
+        hydragnn.utils.save_config(config, log_name)
     comm.Barrier()
 
     timer.stop()
@@ -116,7 +125,7 @@ def run(argv):
         verbosity=verbosity,
     )
     # tell pytorch to parallelize training over torch.distributed
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = get_distributed_model(model, verbosity)
 
     learning_rate = config["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
