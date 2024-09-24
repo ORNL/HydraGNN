@@ -107,6 +107,9 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
+
+    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
     return config
 
 
