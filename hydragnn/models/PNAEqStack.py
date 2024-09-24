@@ -97,7 +97,7 @@ class PNAEqStack(Base):
         # Embed down to output size
         node_embed_out = nn.Sequential(
             nn.Linear(input_dim, output_dim),
-            nn.Tanh(),
+            nn.Tanh(),  # Promotes stability to avoid exploding gradients
             nn.Linear(output_dim, output_dim),
         )
         vec_embed_out = (
@@ -228,7 +228,7 @@ class PainnMessage(MessagePassing):
         pre_layers: int = 1,
         post_layers: int = 1,
         divide_input: bool = False,
-        act: Union[str, Callable, None] = "relu",
+        act: Union[str, Callable, None] = "tanh",
         act_kwargs: Optional[Dict[str, Any]] = None,
         # train_norm: bool = False,
         **kwargs,
@@ -291,6 +291,8 @@ class PainnMessage(MessagePassing):
 
         # MLP for scalar messages to split among x,v operations
         self.scalar_message_mlp = nn.Sequential(
+            nn.Linear(self.F_in, self.F_in),
+            nn.Tanh(),  # Promotes stability to avoid exploding gradients
             nn.Linear(self.F_in, self.F_in),
             nn.SiLU(),
             nn.Linear(self.F_in, self.F_in * 3),
