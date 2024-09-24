@@ -68,7 +68,6 @@ def train_validate_test(
     use_deepspeed=False,
     compute_grad_energy=False,
 ):
-    create_plots = True
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
         config["Training"]["EarlyStopping"]
@@ -153,7 +152,6 @@ def train_validate_test(
     timer.start()
 
     for epoch in range(0, num_epoch):
-        print("EPOCH: ", epoch)
         ## timer per epoch
         t0 = time.time()
         profiler.set_current_epoch(epoch)
@@ -523,11 +521,6 @@ def train(
             else:
                 pred = model(data)
                 loss, tasks_loss = model.module.loss(pred, data.y, head_index)
-            ## Debug ##
-            # Check if pred has nans
-            if torch.isnan(pred[0]).any():
-                raise ValueError("NANs in prediction")
-            ## Debug End ##
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -607,11 +600,6 @@ def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=Fa
         else:
             pred = model(data)
             error, tasks_loss = model.module.loss(pred, data.y, head_index)
-        ## Debug ##
-        # Check if pred has nans
-        if torch.isnan(pred[0]).any():
-            raise ValueError("NANs in prediction")
-        ## Debug End ##
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -672,11 +660,6 @@ def test(
         else:
             pred = model(data)
             error, tasks_loss = model.module.loss(pred, data.y, head_index)
-        ## Debug ##
-        # Check if pred has nans
-        if torch.isnan(pred[0]).any():
-            raise ValueError("NANs in prediction")
-        ## Debug End ##
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
             if model.module.var_output:
@@ -739,11 +722,6 @@ def test(
             data = data.to(get_device())
             ytrue = data.y
             pred = model(data)
-            ## Debug ##
-            # Check if pred has nans
-            if torch.isnan(pred[0]).any():
-                raise ValueError("NANs in prediction")
-            ## Debug End ##
             if model.module.var_output:
                 pred = pred[0]
             for ihead in range(model.module.num_heads):
