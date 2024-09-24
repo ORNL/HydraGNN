@@ -152,6 +152,7 @@ def train_validate_test(
     timer.start()
 
     for epoch in range(0, num_epoch):
+        print("EPOCH: ", epoch)
         ## timer per epoch
         t0 = time.time()
         profiler.set_current_epoch(epoch)
@@ -699,6 +700,11 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
             data = data.to(get_device())
             ytrue = data.y
             pred = model(data)
+            ## Debug ##
+            # Check if pred has nans
+            if torch.isnan(pred[0]).any():
+                raise ValueError("NANs in prediction")
+            ## Debug End ##
             if model.module.var_output:
                 pred = pred[0]
             for ihead in range(model.module.num_heads):
