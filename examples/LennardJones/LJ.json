@@ -1,0 +1,75 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "Dataset": {
+    "name": "LJdataset",
+    "format": "XYZ",
+    "node_features": {
+      "name": ["atom_type"],
+      "dim": [1],
+      "column_index": [0]
+    },
+    "graph_features":{
+      "name": ["total_energy"],
+      "dim": [1],
+      "column_index": [0]
+    }
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "periodic_boundary_conditions": true,
+      "model_type": "DimeNet",
+      "radius": 5.0,
+      "max_neighbours": 5,
+      "int_emb_size": 32,
+      "out_emb_size": 16,
+      "basis_emb_size": 8,
+      "num_gaussians": 10,
+      "num_filters": 8,
+      "num_before_skip": 1,
+      "num_after_skip": 1,
+      "envelope_exponent": 5,
+      "num_radial": 5,
+      "num_spherical": 2,
+      "hidden_dim": 20,
+      "num_conv_layers": 4,
+      "output_heads": {
+        "node": {
+          "num_headlayers": 2,
+          "dim_headlayers": [60,20],
+          "type": "mlp"
+        }
+      },
+      "task_weights": [1]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [0],
+      "output_index": [
+        0
+      ],
+      "type": [
+        "node"
+      ],
+      "output_dim": [1],
+      "output_names": ["graph_energy"]
+    },
+    "Training": {
+      "num_epoch": 15,
+      "batch_size": 64,
+      "perc_train": 0.7,
+      "patience": 20,
+      "early_stopping": true,
+      "Optimizer": {
+        "type": "Adam",
+        "learning_rate": 0.005
+      },
+      "conv_checkpointing": false
+    }
+  },
+  "Visualization": {
+    "plot_init_solution": true,
+    "plot_hist_solution": true,
+    "create_plots": true
+ }
+}

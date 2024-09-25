@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -15,12 +15,13 @@ import pytest
 import subprocess
 
 
-@pytest.mark.parametrize("example", ["qm9", "md17", "LennardJones"])
+@pytest.mark.parametrize("example", ["LennardJones"])
+@pytest.mark.parametrize("model_type", ["SchNet", "EGNN", "DimeNet", "PNAPlus"])
 @pytest.mark.mpi_skip()
-def pytest_examples(example):
+def pytest_examples(example, model_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
-    file_path = os.path.join(path, example + ".py")
-    return_code = subprocess.call(["python", file_path])
+    file_path = os.path.join(path, example + ".py")  # Assuming different model scripts
+    return_code = subprocess.call(["python", file_path, "--model_type", model_type])
 
     # Check the file ran without error.
     assert return_code == 0
