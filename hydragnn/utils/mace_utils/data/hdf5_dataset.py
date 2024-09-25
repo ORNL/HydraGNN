@@ -2,6 +2,7 @@ from glob import glob
 from typing import List
 
 from torch.utils.data import ConcatDataset, Dataset
+
 # Try import but pass otherwise
 try:
     import h5py
