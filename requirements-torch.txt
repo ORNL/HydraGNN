@@ -1,5 +1,6 @@
 torch==2.0.1
 torchvision
 torchaudio
+wheel # Pre-requisite for pytorch-ema
 git+https://github.com/fadel/pytorch_ema
 torchmetrics

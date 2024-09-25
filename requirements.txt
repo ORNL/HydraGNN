@@ -7,3 +7,4 @@ psutil
 sympy
 e3nn
 matscipy
+wheel
