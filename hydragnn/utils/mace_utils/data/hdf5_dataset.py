@@ -1,8 +1,12 @@
 from glob import glob
 from typing import List
 
-import h5py
 from torch.utils.data import ConcatDataset, Dataset
+# Try import but pass otherwise
+try:
+    import h5py
+except ImportError:
+    pass
 
 from hydragnn.utils.mace_utils.data.atomic_data import AtomicData
 from hydragnn.utils.mace_utils.data.utils import Configuration
