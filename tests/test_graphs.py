@@ -215,33 +215,30 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     unittest_train_model(model_type, ci_input, False, overwrite_data)
 
 
-# Test only models
-# "PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", 
-@pytest.mark.parametrize("model_type", ["MACE"])
+# Test only models 
+@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"])
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 
 
 # Test across equivariant models
-# "EGNN", "SchNet", 
-@pytest.mark.parametrize("model_type", ["MACE"])
+@pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "MACE"])
 def pytest_train_equivariant_model(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
 
 
 # Test vector output
-# "PNA", "PNAPlus", 
-@pytest.mark.parametrize("model_type", ["MACE"])
+@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "MACE"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
 
 
-# @pytest.mark.parametrize(
-#     "model_type",
-#     ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN"],
-# )
-# def pytest_train_model_conv_head(model_type, overwrite_data=False):
-#     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+@pytest.mark.parametrize(
+    "model_type",
+    ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN"],
+)
+def pytest_train_model_conv_head(model_type, overwrite_data=False):
+    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
 
 
 # def debug_train_model_vectoroutput(model_type="MACE", overwrite_data=False):
