@@ -3,4 +3,4 @@ torchvision
 torchaudio
 wheel # Pre-requisite for pytorch-ema
 git+https://github.com/fadel/pytorch_ema
-torchmetrics==1.3.2
+torchmetrics==1.0.3
