@@ -23,7 +23,7 @@
 ### (1) Message passing and interaction blocks are equivariant to the O(3) group. And invariant to the T(3) group (translations).
 ### (2) Predictions are made in an n-body expansion, where n is the numnber of layers. This is done by creating multi-body
 ###     interactions, then decoding them. Layer 1 will decode 1-body interactions, layer 2 will decode w-body interactions,
-###     and so on. So, for a 3-layer model predicting energy, there are 3 outputs for energy, one at each layer, and they 
+###     and so on. So, for a 3-layer model predicting energy, there are 3 outputs for energy, one at each layer, and they
 ###     are summed at the end. This requires some adjustment to the behavior from Base.py
 
 from typing import Any, Callable, Dict, List, Optional, Type, Union
@@ -81,16 +81,16 @@ class MACEStack(Base):
         *args,
         **kwargs,
     ):
-        """Notes On MACEStack Arguments:"""  
+        """Notes On MACEStack Arguments:"""
         # MACE args that we have given definitions for and the reasons why:
         ## Note: These can be changed in the future if the desired argument options change
         ## interaction_cls / interaction_cls_first: The choice of interaction block type should not make much of a difference and would require more imports in create.py and/or string handling
         ## Atomic Energies: This is not agnostic to what we're predicting, which is a requirement of HYDRA. We also don't have base atomic energies to load, so we simply one-hot encode the atomic numbers and train.
         ## Atomic Numbers / num_elements: It's more robust in preventing errors to just cover the entire periodic table (1-118)
-        
+
         # MACE args that we have dropped and the resons why:
         ## pair repulsion, distance_transform, compute_virials, etc: HYDRA's framework is meant to compute based on graph or node type, so must be agnostic to these property specific types of computations
-        
+
         # MACE args constructed by HYDRA args
         ## Reasoning: Oftentimes, MACE arguments show similarity to HYDRA arguments, but are labelled differently
         ## num_interactions is represented by num_conv_layers
@@ -109,23 +109,31 @@ class MACEStack(Base):
         self.interaction_cls = RealAgnosticAttResidualInteractionBlock
         self.interaction_cls_first = RealAgnosticAttResidualInteractionBlock
         self.num_elements = 118  # Number of elements in the periodic table
-        atomic_numbers = list(range(1, self.num_elements+1))
+        atomic_numbers = list(range(1, self.num_elements + 1))
         # Optional
-        num_polynomial_cutoff = 5 if num_polynomial_cutoff is None else num_polynomial_cutoff
+        num_polynomial_cutoff = (
+            5 if num_polynomial_cutoff is None else num_polynomial_cutoff
+        )
         self.correlation = [2] if correlation is None else correlation
         radial_type = "bessel" if radial_type is None else radial_type
-            
+
         # Making Irreps
-        self.node_attr_irreps = o3.Irreps([(self.num_elements, (0, 1))])  # 118 is the number of elements in the periodic table
-        self.sh_irreps = o3.Irreps.spherical_harmonics(max_ell)  # This makes the irreps string
+        self.node_attr_irreps = o3.Irreps(
+            [(self.num_elements, (0, 1))]
+        )  # 118 is the number of elements in the periodic table
+        self.sh_irreps = o3.Irreps.spherical_harmonics(
+            max_ell
+        )  # This makes the irreps string
         self.edge_feats_irreps = o3.Irreps(f"{num_bessel}x0e")
-        
+
         super().__init__(*args, **kwargs)
-        
+
         self.spherical_harmonics = o3.SphericalHarmonics(
-            self.sh_irreps, normalize=True, normalization="component"  # This makes the spherical harmonic class to be called with forward
+            self.sh_irreps,
+            normalize=True,
+            normalization="component",  # This makes the spherical harmonic class to be called with forward
         )
-        
+
         # Register buffers are made when parameters need to be saved and transferred with the model, but not trained.
         self.register_buffer(
             "atomic_numbers", torch.tensor(atomic_numbers, dtype=torch.int64)
@@ -146,48 +154,100 @@ class MACEStack(Base):
             distance_transform=None,
         )
         self.node_embedding = LinearNodeEmbeddingBlock(
-            irreps_in=self.node_attr_irreps, irreps_out=create_irreps_string(self.hidden_dim, 0)  # Changed this to hidden_dim because no longer had node_feats_irreps
+            irreps_in=self.node_attr_irreps,
+            irreps_out=create_irreps_string(
+                self.hidden_dim, 0
+            ),  # Changed this to hidden_dim because no longer had node_feats_irreps
         )
-
 
     def _init_conv(self):
         # Multihead Decoders
         ## This integrates HYDRA multihead nature with MACE's layer-wise readouts
         ## NOTE Norm techniques (feature_layers in HYDRA) are not advised for use in equivariant models as it can break equivariance
         self.multihead_decoders = ModuleList()
-        hidden_irreps = o3.Irreps(create_irreps_string(self.hidden_dim, self.node_max_ell))
-        final_hidden_irreps = o3.Irreps(create_irreps_string(self.hidden_dim, 0))  # Only scalars are outputted in the last layer
-        
+        hidden_irreps = o3.Irreps(
+            create_irreps_string(self.hidden_dim, self.node_max_ell)
+        )
+        final_hidden_irreps = o3.Irreps(
+            create_irreps_string(self.hidden_dim, 0)
+        )  # Only scalars are outputted in the last layer
+
         last_layer = 1 == self.num_conv_layers
-        
-        self.multihead_decoders.append(MultiheadDecoderBlock(self.node_attr_irreps, self.node_max_ell, self.config_heads, self.head_dims, self.head_type, self.num_heads, self.activation_function, self.num_nodes, nonlinear=True))  # For base-node traits
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim, first_layer=True))
-        self.multihead_decoders.append(MultiheadDecoderBlock(hidden_irreps, self.node_max_ell, self.config_heads, self.head_dims, self.head_type, self.num_heads, self.activation_function, self.num_nodes, nonlinear=last_layer))
+
+        self.multihead_decoders.append(
+            MultiheadDecoderBlock(
+                self.node_attr_irreps,
+                self.node_max_ell,
+                self.config_heads,
+                self.head_dims,
+                self.head_type,
+                self.num_heads,
+                self.activation_function,
+                self.num_nodes,
+                nonlinear=True,
+            )
+        )  # For base-node traits
+        self.graph_convs.append(
+            self.get_conv(self.input_dim, self.hidden_dim, first_layer=True)
+        )
+        self.multihead_decoders.append(
+            MultiheadDecoderBlock(
+                hidden_irreps,
+                self.node_max_ell,
+                self.config_heads,
+                self.head_dims,
+                self.head_type,
+                self.num_heads,
+                self.activation_function,
+                self.num_nodes,
+                nonlinear=last_layer,
+            )
+        )
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer=last_layer)
+            conv = self.get_conv(
+                self.hidden_dim, self.hidden_dim, last_layer=last_layer
+            )
             self.graph_convs.append(conv)
-            self.multihead_decoders.append(MultiheadDecoderBlock(final_hidden_irreps, self.node_max_ell, self.config_heads, self.head_dims, self.head_type, self.num_heads, self.activation_function, self.num_nodes, nonlinear=last_layer))  # Last layer will be nonlinear node decoding
-        
+            self.multihead_decoders.append(
+                MultiheadDecoderBlock(
+                    final_hidden_irreps,
+                    self.node_max_ell,
+                    self.config_heads,
+                    self.head_dims,
+                    self.head_type,
+                    self.num_heads,
+                    self.activation_function,
+                    self.num_nodes,
+                    nonlinear=last_layer,
+                )
+            )  # Last layer will be nonlinear node decoding
+
     def get_conv(self, input_dim, output_dim, first_layer=False, last_layer=False):
         hidden_dim = output_dim if input_dim == 1 else input_dim
-        
+
         # All of these should be constructed with HYDRA dimensional arguments
         ## Radial
-        radial_MLP_dim = math.ceil(float(hidden_dim) / 3)  # Go based off hidden_dim for radial_MLP
+        radial_MLP_dim = math.ceil(
+            float(hidden_dim) / 3
+        )  # Go based off hidden_dim for radial_MLP
         radial_MLP = [radial_MLP_dim, radial_MLP_dim, radial_MLP_dim]
         ## Input, Hidden, and Output irreps sizing (this is usually just hidden in MACE)
         ### Input dimensions are handled implicitly
         ### Hidden
-        hidden_irreps = create_irreps_string(hidden_dim, self.node_max_ell) 
+        hidden_irreps = create_irreps_string(hidden_dim, self.node_max_ell)
         hidden_irreps = o3.Irreps(hidden_irreps)
         node_feats_irreps = o3.Irreps([(hidden_irreps.count(o3.Irrep(0, 1)), (0, 1))])
-        num_features = hidden_irreps.count(o3.Irrep(0, 1))  # Multiple copies of spherical harmonics for multiple interactions. They are 'combined' in a certain way during .simplify()  ## This makes it a requirement that hidden irreps all have the same number of channels
-        interaction_irreps = (self.sh_irreps * num_features).sort()[0].simplify()  #.sort() is a tuple, so we need the [0] element for the sorted result
+        num_features = hidden_irreps.count(
+            o3.Irrep(0, 1)
+        )  # Multiple copies of spherical harmonics for multiple interactions. They are 'combined' in a certain way during .simplify()  ## This makes it a requirement that hidden irreps all have the same number of channels
+        interaction_irreps = (
+            (self.sh_irreps * num_features).sort()[0].simplify()
+        )  # .sort() is a tuple, so we need the [0] element for the sorted result
         ### Output
-        output_irreps = create_irreps_string(output_dim, self.node_max_ell) 
+        output_irreps = create_irreps_string(output_dim, self.node_max_ell)
         output_irreps = o3.Irreps(output_irreps)
-        
+
         # Constructing convolutional layers
         if first_layer:
             hidden_irreps_out = hidden_irreps
@@ -212,15 +272,13 @@ class MACEStack(Base):
                 num_elements=self.num_elements,
                 use_sc=use_sc_first,
             )
-            sizing = o3.Linear(hidden_irreps_out, output_irreps)  # Change sizing to output_irreps
+            sizing = o3.Linear(
+                hidden_irreps_out, output_irreps
+            )  # Change sizing to output_irreps
         elif last_layer:
             # Select only scalars output for last layer
-            hidden_irreps_out = str(
-                hidden_irreps[0]
-            )  
-            output_irreps = str(
-                output_irreps[0]
-                )
+            hidden_irreps_out = str(hidden_irreps[0])
+            output_irreps = str(output_irreps[0])
             inter = self.interaction_cls(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=hidden_irreps,
@@ -238,7 +296,9 @@ class MACEStack(Base):
                 num_elements=self.num_elements,
                 use_sc=True,
             )
-            sizing = o3.Linear(hidden_irreps_out, output_irreps)  # Change sizing to output_irreps
+            sizing = o3.Linear(
+                hidden_irreps_out, output_irreps
+            )  # Change sizing to output_irreps
         else:
             hidden_irreps_out = hidden_irreps
             inter = self.interaction_cls(
@@ -258,13 +318,14 @@ class MACEStack(Base):
                 num_elements=self.num_elements,
                 use_sc=True,
             )
-            sizing = o3.Linear(hidden_irreps_out, output_irreps)  # Change sizing to output_irreps
+            sizing = o3.Linear(
+                hidden_irreps_out, output_irreps
+            )  # Change sizing to output_irreps
 
-        
         input_args = "node_attributes, pos, node_features, edge_attributes, edge_features, edge_index"
         # readout_args = "node_energies"
         conv_args = "node_attributes, edge_attributes, edge_features, edge_index"  # node_features is not used here because it's passed through in the forward
-        
+
         if self.use_edge_attr:
             input_args += ", edge_attr"
             conv_args += ", edge_attr"
@@ -276,7 +337,10 @@ class MACEStack(Base):
                     (inter, "node_features, " + conv_args + " -> node_features, sc"),
                     (prod, "node_features, sc, node_attributes -> node_features"),
                     (sizing, "node_features -> node_features"),
-                    (lambda node_features, pos: [node_features, pos], "node_features, pos -> node_features, pos"),
+                    (
+                        lambda node_features, pos: [node_features, pos],
+                        "node_features, pos -> node_features, pos",
+                    ),
                 ],
             )
         else:
@@ -286,60 +350,77 @@ class MACEStack(Base):
                     (inter, "node_features, " + conv_args + " -> node_features, sc"),
                     (prod, "node_features, sc, node_attributes -> node_features"),
                     (sizing, "node_features -> node_features"),
-                    (lambda node_features, pos: [node_features, pos], "node_features, pos -> node_features, pos"),
+                    (
+                        lambda node_features, pos: [node_features, pos],
+                        "node_features, pos -> node_features, pos",
+                    ),
                 ],
             )
-            
+
     def forward(self, data):
         data, conv_args = self._conv_args(data)
         node_features = data.node_features
         node_attributes = data.node_attributes
         pos = data.pos
-        
+
         ### encoder / decoder part ####
         ## NOTE Norm techniques (feature_layers in HYDRA) are not advised for use in equivariant models as it can break equivariance
-        
+
         ### There is a readout before the first convolution layer ###
         outputs = []
-        output = self.multihead_decoders[0](data, node_attributes) # [index][n_output, size_output]
+        output = self.multihead_decoders[0](
+            data, node_attributes
+        )  # [index][n_output, size_output]
         # Create outputs first
         outputs = output
-        
+
         ### Do conv --> readout --> repeat for each convolution layer ###
         for conv, readout in zip(self.graph_convs, self.multihead_decoders[1:]):
             if not self.conv_checkpointing:
-                node_features, pos = conv(node_features=node_features, pos=pos, **conv_args)
-                output = readout(data, node_features) # [index][n_output, size_output]
+                node_features, pos = conv(
+                    node_features=node_features, pos=pos, **conv_args
+                )
+                output = readout(data, node_features)  # [index][n_output, size_output]
             else:
                 node_features, pos = checkpoint(
-                    conv, use_reentrant=False, node_features=node_features, pos=pos, **conv_args
+                    conv,
+                    use_reentrant=False,
+                    node_features=node_features,
+                    pos=pos,
+                    **conv_args,
                 )
-                output = readout(data, node_features) # output is a list of tensors with [index][n_output, size_output]
+                output = readout(
+                    data, node_features
+                )  # output is a list of tensors with [index][n_output, size_output]
             # Sum predictions for each index, taking care of size differences
             for idx, prediction in enumerate(output):
                 outputs[idx] = outputs[idx] + prediction
-        
+
         return outputs
 
     def _conv_args(self, data):
         assert (
             data.pos is not None
         ), "MACE requires node positions (data.pos) to be set."
-        
-        # Center positions at 0 per graph. This is a requirement for equivariant models that 
-        # initialize the spherical harmonics, since the initial spherical harmonic projection 
+
+        # Center positions at 0 per graph. This is a requirement for equivariant models that
+        # initialize the spherical harmonics, since the initial spherical harmonic projection
         # uses the nodal position vector  x/||x|| as the input to the spherical harmonics.
         # If we didn't center at 0, these models wouldn't even be invariant to translation.
         mean_pos = scatter(data.pos, data.batch, dim=0, reduce="mean")
         data.pos = data.pos - mean_pos[data.batch]
-        
+
         # Create node_attrs from atomic numbers. Later on it may contain more information
         ## Node attrs are intrinsic properties of the atoms, like charge, atomic number, etc..
         ## data.node_attrs is already used as a method or smt in another place, so has been renamed to data.node_attributes from MACE and same with other data variable names
-        one_hot = torch.nn.functional.one_hot(data["x"].long().squeeze(-1), num_classes=118).float()  # [n_atoms, 118]  ## 118 atoms in the peridoic table
+        one_hot = torch.nn.functional.one_hot(
+            data["x"].long().squeeze(-1), num_classes=118
+        ).float()  # [n_atoms, 118]  ## 118 atoms in the peridoic table
         data.node_attributes = one_hot  # To-Do: Add more information to node_attrs
-        data.shifts = torch.zeros((data.edge_index.shape[1], 3), dtype=data.pos.dtype, device=data.pos.device)  # Shifts takes into account pbc conditions, but I believe we already generate data.pos to take it into account
-        
+        data.shifts = torch.zeros(
+            (data.edge_index.shape[1], 3), dtype=data.pos.dtype, device=data.pos.device
+        )  # Shifts takes into account pbc conditions, but I believe we already generate data.pos to take it into account
+
         # Embeddings
         node_feats = self.node_embedding(data["node_attributes"])
         vectors, lengths = get_edge_vectors_and_lengths(
@@ -351,13 +432,13 @@ class MACEStack(Base):
         edge_features = self.radial_embedding(
             lengths, data["node_attributes"], data["edge_index"], self.atomic_numbers
         )
-        
+
         # Variable names
         data.node_features = node_feats
         data.edge_attributes = edge_attributes
         data.edge_features = edge_features
         data.lengths = lengths
-         
+
         conv_args = {
             "node_attributes": data.node_attributes,
             "edge_attributes": data.edge_attributes,
@@ -366,8 +447,7 @@ class MACEStack(Base):
         }
 
         return data, conv_args
-    
-    
+
     def _multihead(self):
         # NOTE Multihead is skipped as it's an integral part of MACE's architecture to have a decoder after every layer,
         # and a convolutional layer in decoding is not supported. Therefore, this final step is not necessary for MACE.
@@ -376,17 +456,29 @@ class MACEStack(Base):
 
     def __str__(self):
         return "MACEStack"
-    
-    
-    
-def create_irreps_string(n: int, ell: int):  # Custom function to allow for use of HYDRA arguments in creating irreps
-        irreps = [f"{n}x{ell}{'e' if ell % 2 == 0 else 'o'}" for ell in range(ell + 1)]
-        return " + ".join(irreps)
-    
+
+
+def create_irreps_string(
+    n: int, ell: int
+):  # Custom function to allow for use of HYDRA arguments in creating irreps
+    irreps = [f"{n}x{ell}{'e' if ell % 2 == 0 else 'o'}" for ell in range(ell + 1)]
+    return " + ".join(irreps)
+
 
 @compile_mode("script")
 class MultiheadDecoderBlock(torch.nn.Module):
-    def __init__(self, input_irreps, node_max_ell, config_heads, head_dims, head_type, num_heads, activation_function, num_nodes, nonlinear=False):
+    def __init__(
+        self,
+        input_irreps,
+        node_max_ell,
+        config_heads,
+        head_dims,
+        head_type,
+        num_heads,
+        activation_function,
+        num_nodes,
+        nonlinear=False,
+    ):
         super(MultiheadDecoderBlock, self).__init__()
         self.input_irreps = input_irreps
         self.node_max_ell = node_max_ell if not nonlinear else 0
@@ -403,15 +495,25 @@ class MultiheadDecoderBlock(torch.nn.Module):
 
         # Create shared dense layers for graph-level output if applicable
         if "graph" in self.config_heads:
-            graph_input_irreps = o3.Irreps(f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e")
+            graph_input_irreps = o3.Irreps(
+                f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e"
+            )
             dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
             sharedlayers_irreps = o3.Irreps(f"{dim_sharedlayers}x0e")
             denselayers = []
             denselayers.append(o3.Linear(graph_input_irreps, sharedlayers_irreps))
-            denselayers.append(nn.Activation(irreps_in=sharedlayers_irreps, acts=[self.activation_function]))
+            denselayers.append(
+                nn.Activation(
+                    irreps_in=sharedlayers_irreps, acts=[self.activation_function]
+                )
+            )
             for _ in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
                 denselayers.append(o3.Linear(sharedlayers_irreps, sharedlayers_irreps))
-                denselayers.append(nn.Activation(irreps_in=sharedlayers_irreps, acts=[self.activation_function]))
+                denselayers.append(
+                    nn.Activation(
+                        irreps_in=sharedlayers_irreps, acts=[self.activation_function]
+                    )
+                )
             self.graph_shared = Sequential(*denselayers)
 
         # Create layers for each head
@@ -422,12 +524,20 @@ class MultiheadDecoderBlock(torch.nn.Module):
                 denselayers = []
                 head_hidden_irreps = o3.Irreps(f"{hidden_dim_graph[0]}x0e")
                 denselayers.append(o3.Linear(sharedlayers_irreps, head_hidden_irreps))
-                denselayers.append(nn.Activation(irreps_in=head_hidden_irreps, acts=[self.activation_function]))
+                denselayers.append(
+                    nn.Activation(
+                        irreps_in=head_hidden_irreps, acts=[self.activation_function]
+                    )
+                )
                 for ilayer in range(num_layers_graph - 1):
                     input_irreps = o3.Irreps(f"{hidden_dim_graph[ilayer]}x0e")
                     output_irreps = o3.Irreps(f"{hidden_dim_graph[ilayer + 1]}x0e")
                     denselayers.append(o3.Linear(input_irreps, output_irreps))
-                    denselayers.append(nn.Activation(irreps_in=output_irreps, acts=[self.activation_function]))
+                    denselayers.append(
+                        nn.Activation(
+                            irreps_in=output_irreps, acts=[self.activation_function]
+                        )
+                    )
                 input_irreps = o3.Irreps(f"{hidden_dim_graph[-1]}x0e")
                 output_irreps = o3.Irreps(f"{self.head_dims[ihead]}x0e")
                 denselayers.append(o3.Linear(input_irreps, output_irreps))
@@ -453,27 +563,38 @@ class MultiheadDecoderBlock(torch.nn.Module):
                         self.num_nodes,
                         self.config_heads["node"]["type"],
                         self.activation_function,
-                        nonlinear=nonlinear
+                        nonlinear=nonlinear,
                     )
                     self.heads.append(head)
                 else:
-                    raise ValueError(f"Unknown head NN structure for node features: {self.node_NN_type}")
+                    raise ValueError(
+                        f"Unknown head NN structure for node features: {self.node_NN_type}"
+                    )
             else:
-                raise ValueError(f"Unknown head type: {self.head_type[ihead]}; supported types are 'graph' or 'node'")
-            
+                raise ValueError(
+                    f"Unknown head type: {self.head_type[ihead]}; supported types are 'graph' or 'node'"
+                )
+
     def forward(self, data, node_features):
         if data.batch is None:
-            graph_features = node_features[:,:self.hidden_dim].mean(dim=0, keepdim=True)  # Need to take only the type-0 irreps for aggregation
+            graph_features = node_features[:, : self.hidden_dim].mean(
+                dim=0, keepdim=True
+            )  # Need to take only the type-0 irreps for aggregation
         else:
-            graph_features = global_mean_pool(node_features[:,:self.input_irreps.count(o3.Irrep(0, 1))], data.batch.to(node_features.device))
+            graph_features = global_mean_pool(
+                node_features[:, : self.input_irreps.count(o3.Irrep(0, 1))],
+                data.batch.to(node_features.device),
+            )
         outputs = []
-        for (headloc, type_head) in zip(self.heads, self.head_type):
+        for headloc, type_head in zip(self.heads, self.head_type):
             if type_head == "graph":
                 x_graph_head = self.graph_shared(graph_features)
                 outputs.append(headloc(x_graph_head))
             else:  # Node-level output
                 if self.node_NN_type == "conv":
-                    raise ValueError("Node-level convolutional layers are not supported in MACE")
+                    raise ValueError(
+                        "Node-level convolutional layers are not supported in MACE"
+                    )
                 else:
                     x_node = headloc(node_features, data.batch)
                     outputs.append(x_node)
@@ -494,7 +615,7 @@ class MLPNode(torch.nn.Module):
         num_nodes,
         node_type,
         activation_function,
-        nonlinear=False
+        nonlinear=False,
     ):
         super().__init__()
         self.input_irreps = input_irreps
@@ -519,18 +640,26 @@ class MLPNode(torch.nn.Module):
             hidden_irreps = o3.Irreps(f"{hidden_dims[0]}x0e")  # Hidden irreps
 
             denselayers.append(o3.Linear(input_irreps, hidden_irreps))
-            denselayers.append(nn.Activation(irreps_in=hidden_irreps, acts=[self.activation_function]))
+            denselayers.append(
+                nn.Activation(irreps_in=hidden_irreps, acts=[self.activation_function])
+            )
 
             # Add intermediate layers
             for ilayer in range(self.num_layers - 1):
                 input_irreps = o3.Irreps(f"{hidden_dims[ilayer]}x0e")
                 hidden_irreps = o3.Irreps(f"{hidden_dims[ilayer + 1]}x0e")
                 denselayers.append(o3.Linear(input_irreps, hidden_irreps))
-                denselayers.append(nn.Activation(irreps_in=hidden_irreps, acts=[self.activation_function]))
+                denselayers.append(
+                    nn.Activation(
+                        irreps_in=hidden_irreps, acts=[self.activation_function]
+                    )
+                )
 
             # Last layer
             hidden_irreps = o3.Irreps(f"{hidden_dims[-1]}x0e")
-            output_irreps = o3.Irreps(f"{self.output_dim}x0e")  # Assuming head_dims has been passed for the final output
+            output_irreps = o3.Irreps(
+                f"{self.output_dim}x0e"
+            )  # Assuming head_dims has been passed for the final output
             denselayers.append(o3.Linear(hidden_irreps, output_irreps))
 
             # Append to MLP
@@ -555,7 +684,10 @@ class MLPNode(torch.nn.Module):
             outs = self.mlp[0](node_features)
         else:
             outs = torch.zeros(
-                (node_features.shape[0], self.head_dims[0]),  # Assuming `head_dims` defines the final output dimension
+                (
+                    node_features.shape[0],
+                    self.head_dims[0],
+                ),  # Assuming `head_dims` defines the final output dimension
                 dtype=node_features.dtype,
                 device=node_features.device,
             )

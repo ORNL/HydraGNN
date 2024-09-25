@@ -63,7 +63,9 @@ class NonLinearReadoutBlock(torch.nn.Module):
         super().__init__()
         self.hidden_irreps = MLP_irreps
         self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=self.hidden_irreps)
-        self.non_linearity = nn.Activation(irreps_in=self.hidden_irreps, acts=[gate])  # Need to adjust this to actually use the gate
+        self.non_linearity = nn.Activation(
+            irreps_in=self.hidden_irreps, acts=[gate]
+        )  # Need to adjust this to actually use the gate
         self.linear_2 = o3.Linear(
             irreps_in=self.hidden_irreps, irreps_out=o3.Irreps("0e")
         )
@@ -148,17 +150,23 @@ class AtomicEnergiesBlock(torch.nn.Module):
     def __repr__(self):
         formatted_energies = ", ".join([f"{x:.4f}" for x in self.atomic_energies])
         return f"{self.__class__.__name__}(energies=[{formatted_energies}])"
-    
+
+
 @compile_mode("script")
 class AtomicBlock(torch.nn.Module):
     def __init__(self, output_dim):
         super().__init__()
         # Initialize the atomic energies as a trainable parameter
-        self.atomic_energies = torch.nn.Parameter(torch.randn(118, output_dim))  # There are 118 known elements
+        self.atomic_energies = torch.nn.Parameter(
+            torch.randn(118, output_dim)
+        )  # There are 118 known elements
 
     def forward(self, atomic_numbers):
         # Perform the linear multiplication (no bias)
-        return atomic_numbers @ self.atomic_energies  # Output will now have shape [batch_size, output_dim]
+        return (
+            atomic_numbers @ self.atomic_energies
+        )  # Output will now have shape [batch_size, output_dim]
+
 
 @compile_mode("script")
 class RadialEmbeddingBlock(torch.nn.Module):
@@ -316,7 +324,9 @@ class TensorProductWeightsBlock(torch.nn.Module):
 @compile_mode("script")
 class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
     def _setup(self) -> None:
-        self.node_feats_down_irreps = o3.Irreps("64x0e")  # Interesting, this seems to be a required shaping
+        self.node_feats_down_irreps = o3.Irreps(
+            "64x0e"
+        )  # Interesting, this seems to be a required shaping
         # First linear
         self.linear_up = o3.Linear(
             self.node_feats_irreps,
@@ -354,12 +364,14 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         ## It is worth double-checking, but I believe this means that type 0 (scalar) irreps
         ## are being embedded by 3 layers of size 256 and the output dim, then activated.
         self.conv_tp_weights = nn.FullyConnectedNet(
-            [input_dim] + 3 * [256] + [self.conv_tp.weight_numel],  
+            [input_dim] + 3 * [256] + [self.conv_tp.weight_numel],
             torch.nn.functional.silu,
         )
 
         # Linear
-        irreps_mid = irreps_mid.simplify()  # .simplify() essentially combines irreps of the same type so that normalization is done across them all. The site has an in-depth explanation
+        irreps_mid = (
+            irreps_mid.simplify()
+        )  # .simplify() essentially combines irreps of the same type so that normalization is done across them all. The site has an in-depth explanation
         self.irreps_out = self.target_irreps
         self.linear = o3.Linear(
             irreps_mid,
@@ -371,7 +383,9 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         self.reshape = reshape_irreps(self.irreps_out)
 
         # Skip connection.
-        self.skip_linear = o3.Linear(self.node_feats_irreps, self.hidden_irreps)   # This will be size (num_nodes, 64*9) when there are 64 channels and irreps, 0, 1, 2 (1+3+5=9)  ## This becomes sc
+        self.skip_linear = o3.Linear(
+            self.node_feats_irreps, self.hidden_irreps
+        )  # This will be size (num_nodes, 64*9) when there are 64 channels and irreps, 0, 1, 2 (1+3+5=9)  ## This becomes sc
 
     def forward(
         self,

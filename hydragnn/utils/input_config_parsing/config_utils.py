@@ -55,7 +55,7 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_neighbours"] = len(deg) - 1
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
-        
+
     if config["NeuralNetwork"]["Architecture"]["model_type"] == "MACE":
         if hasattr(train_loader.dataset, "avg_num_neighbors"):
             ## Use avg neighbours used in the dataset.

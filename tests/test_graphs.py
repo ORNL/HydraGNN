@@ -215,8 +215,10 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
     unittest_train_model(model_type, ci_input, False, overwrite_data)
 
 
-# Test only models 
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"])
+# Test only models
+@pytest.mark.parametrize(
+    "model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"]
+)
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 
@@ -256,4 +258,3 @@ def pytest_train_model_conv_head(model_type, overwrite_data=False):
 # if __name__ == "__main__":
 #     # Manually call the function with the desired parameters for debugging in VSCode
 #     debug_train_model_vectoroutput(model_type="MACE", overwrite_data=True)
-
