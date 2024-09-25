@@ -122,7 +122,7 @@ def load_existing_model(
         model.load_checkpoint(os.path.join(path, model_name), model_name)
 
 
-## This function may cause OOM if datasets is too large
+## These functions may cause OOM if dataset is too large
 ## to fit in a single GPU (i.e., with DDP). Use with caution.
 ## Recommend to use calculate_PNA_degree_dist or calculate_avg_deg_dist
 def calculate_PNA_degree(loader, max_neighbours):
@@ -137,7 +137,8 @@ def calculate_PNA_degree(loader, max_neighbours):
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += torch.bincount(d, minlength=deg.numel())[: max_neighbours + 1]
         return deg
-    
+
+
 def calculate_avg_deg(loader):
     backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
     if backend == "torch":
@@ -164,6 +165,7 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     deg = deg.detach().cpu()
     return deg
+
 
 def calculate_avg_deg_dist(loader):
     assert dist.is_initialized()
@@ -192,6 +194,7 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
 
     deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
     return torch.tensor(deg)
+
 
 def calculate_avg_deg_mpi(loader):
     assert dist.is_initialized()
