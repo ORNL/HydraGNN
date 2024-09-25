@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import ase.data
 import ase.io
 import numpy as np
+
 # Try import but pass otherwise
 try:
     import h5py
