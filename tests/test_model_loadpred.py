@@ -102,5 +102,5 @@ def pytest_model_loadpred():
     unittest_model_prediction(config)
 
 
-if __name__ == "__main__":
-    pytest_model_loadpred()
+# if __name__ == "__main__":
+#     pytest_model_loadpred()
