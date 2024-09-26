@@ -1,9 +1,0 @@
-{ "NeuralNetwork": {
-	"Training": {
-	  "Optimizer": {
-		"learning_rate": 0.001,
-		"batch_size": 128
-	  }
-    }
-  }
-}

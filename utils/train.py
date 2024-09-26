@@ -48,7 +48,7 @@ import torch_geometric.data
 import torch
 import torch.distributed as dist
 
-from debug_dict import DebugDict
+# from debug_dict import DebugDict
 
 def run(argv):
     assert len(argv) == 3, f"Usage: {argv[0]} <config.json> <dataset.bp>"
@@ -66,7 +66,7 @@ def run(argv):
 
     config = json.loads( Path(cfgfile).read_text() )
     #print(config)
-    config = DebugDict(config)
+    # config = DebugDict(config)
     #world_size, world_rank = setup_ddp()
     comm_size, rank = setup_ddp()
     #rank = comm.Get_rank()
@@ -103,7 +103,7 @@ def run(argv):
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["Training"]["Optimizer"]["batch_size"]
+        trainset, valset, testset, config["NeuralNetwork"]["Training"]["Optimizer"]["batch_size"]
     )
     print("Created Dataloaders")
     #comm.Barrier()
@@ -124,6 +124,7 @@ def run(argv):
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
+    
     # tell pytorch to parallelize training over torch.distributed
     model = get_distributed_model(model, verbosity)
 
