@@ -190,9 +190,10 @@ class MACEStack(Base):
         self.graph_convs.append(
             self.get_conv(self.input_dim, self.hidden_dim, first_layer=True)
         )
+        irreps = hidden_irreps if not last_layer else final_hidden_irreps
         self.multihead_decoders.append(
             MultiheadDecoderBlock(
-                hidden_irreps,
+                irreps,
                 self.node_max_ell,
                 self.config_heads,
                 self.head_dims,
@@ -209,9 +210,10 @@ class MACEStack(Base):
                 self.hidden_dim, self.hidden_dim, last_layer=last_layer
             )
             self.graph_convs.append(conv)
+            irreps = hidden_irreps if not last_layer else final_hidden_irreps
             self.multihead_decoders.append(
                 MultiheadDecoderBlock(
-                    final_hidden_irreps,
+                    irreps,
                     self.node_max_ell,
                     self.config_heads,
                     self.head_dims,
