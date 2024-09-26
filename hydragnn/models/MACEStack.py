@@ -12,6 +12,7 @@
 # Adapted From:
 # GitHub: https://github.com/ACEsuit/mace
 # ArXiV: https://arxiv.org/pdf/2206.07697
+# Date: August 27, 2024  |  12:37 (EST)
 ###########################################################################################
 # Implementation of MACE models and other models based E(3)-Equivariant MPNNs
 # Authors: Ilyes Batatia, Gregor Simm
@@ -414,7 +415,7 @@ class MACEStack(Base):
 
         # Create node_attrs from atomic numbers. Later on it may contain more information
         ## Node attrs are intrinsic properties of the atoms, like charge, atomic number, etc..
-        ## data.node_attrs is already used as a method or smt in another place, so has been renamed to data.node_attributes from MACE and same with other data variable names
+        ## data.node_attrs is already used in another place, so has been renamed to data.node_attributes from MACE and same with other data variable names
         one_hot = torch.nn.functional.one_hot(
             data["x"].long().squeeze(-1), num_classes=118
         ).float()  # [n_atoms, 118]  ## 118 atoms in the peridoic table

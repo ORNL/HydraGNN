@@ -26,3 +26,7 @@ def pytest_examples(example, model_type):
 
     # Check the file ran without error.
     assert return_code == 0
+
+
+# if __name__ == "__main__":
+#     pytest_examples("LennardJones", "MACE")
