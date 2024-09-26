@@ -20,6 +20,7 @@ from .blocks import (
     # ResidualElementDependentInteractionBlock,
     ScaleShiftBlock,
 )
+
 # from .loss import (
 #     DipoleSingleLoss,
 #     UniversalLoss,
@@ -40,6 +41,7 @@ from .blocks import (
 # )
 from .radial import BesselBasis, GaussianBasis, PolynomialCutoff, ZBLBasis
 from .symmetric_contraction import SymmetricContraction
+
 # from .utils import (
 #     compute_avg_num_neighbors,
 #     compute_fixed_charge_dipole,
