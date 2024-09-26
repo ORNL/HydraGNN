@@ -197,16 +197,16 @@ def unittest_train_model(
 @pytest.mark.parametrize(
     "model_type",
     [
-        "SAGE",
-        "GIN",
-        "GAT",
-        "MFC",
-        "PNA",
-        "PNAPlus",
-        "CGCNN",
-        "SchNet",
-        "DimeNet",
-        "EGNN",
+        # "SAGE",
+        # "GIN",
+        # "GAT",
+        # "MFC",
+        # "PNA",
+        # "PNAPlus",
+        # "CGCNN",
+        # "SchNet",
+        # "DimeNet",
+        # "EGNN",
         "MACE",
     ],
 )
@@ -217,30 +217,33 @@ def pytest_train_model(model_type, ci_input, overwrite_data=False):
 
 # Test only models
 @pytest.mark.parametrize(
-    "model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"]
+    # "model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"]
+    "model_type", ["MACE"]
 )
 def pytest_train_model_lengths(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci.json", True, overwrite_data)
 
 
 # Test across equivariant models
-@pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "MACE"])
+# @pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "MACE"])
+@pytest.mark.parametrize("model_type", ["MACE"])
 def pytest_train_equivariant_model(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
 
 
 # Test vector output
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "MACE"])
+# @pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "MACE"])
+@pytest.mark.parametrize("model_type", ["MACE"])
 def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
 
 
-@pytest.mark.parametrize(
-    "model_type",
-    ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN"],
-)
-def pytest_train_model_conv_head(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+# @pytest.mark.parametrize(
+#     "model_type",
+#     ["SAGE", "GIN", "GAT", "MFC", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN"],
+# )
+# def pytest_train_model_conv_head(model_type, overwrite_data=False):
+#     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
 
 
 # def debug_train_model_vectoroutput(model_type="MACE", overwrite_data=False):

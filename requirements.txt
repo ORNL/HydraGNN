@@ -5,7 +5,4 @@ tqdm
 tensorboard
 psutil
 sympy
-e3nn
 matscipy
-torch-ema
-torchmetrics
