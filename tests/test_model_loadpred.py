@@ -12,7 +12,7 @@ import os, json
 import torch
 import random
 import hydragnn
-from .test_graphs import unittest_train_model
+from tests.test_graphs import unittest_train_model
 
 
 def unittest_model_prediction(config):
@@ -81,11 +81,15 @@ def pytest_model_loadpred():
     else:
         with open(config_file, "r") as f:
             config = json.load(f)
+            print("\nFIRST CHECK ON INPUT DIM:")
+            print(config["NeuralNetwork"]["Architecture"]["input_dim"], "\n")
         for dataset_name, raw_data_path in config["Dataset"]["path"].items():
             if not os.path.isfile(raw_data_path):
                 print(dataset_name, "datasets not found: ", raw_data_path)
                 case_exist = False
                 break
+    print("\nSECOND CHECK ON INPUT DIM:")
+    print(config["NeuralNetwork"]["Architecture"]["input_dim"], "\n")
     if not case_exist:
         unittest_train_model(
             config["NeuralNetwork"]["Architecture"]["model_type"],
@@ -93,4 +97,10 @@ def pytest_model_loadpred():
             False,
             False,
         )
+    print("\nTHIRD CHECK ON INPUT DIM:")
+    print(config["NeuralNetwork"]["Architecture"]["input_dim"], "\n")
     unittest_model_prediction(config)
+
+
+if __name__ == "__main__":
+    pytest_model_loadpred()
