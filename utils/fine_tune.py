@@ -15,6 +15,7 @@ info = logging.info
 
 
 import mpi4py
+
 mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 from mpi4py import MPI
@@ -26,7 +27,8 @@ import time
 import hydragnn
 from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
-#from hydragnn.utils.distdataset import DistDataset
+
+# from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.distributed import (
     setup_ddp,
     get_distributed_model,
@@ -51,14 +53,17 @@ import torch.distributed as dist
 # from debug_dict import DebugDict
 from update_model import update_model
 
+
 def run(argv):
-    assert len(argv) == 4, f"Usage: {argv[0]} <pre_config.json> <ft_config.json> <dataset.bp>"
+    assert (
+        len(argv) == 4
+    ), f"Usage: {argv[0]} <pre_config.json> <ft_config.json> <dataset.bp>"
 
     precfgfile = argv[1]
-    ftcfgfile = argv[2] 
+    ftcfgfile = argv[2]
     dataset = argv[3]
-    log_name = 'experiment'
-    (Path('logs')/log_name).mkdir(exist_ok=True, parents=True)
+    log_name = "experiment"
+    (Path("logs") / log_name).mkdir(exist_ok=True, parents=True)
     verbosity = 1
 
     tr.initialize()
@@ -81,20 +86,22 @@ def run(argv):
     # get ddp model for proper loading
     model = hydragnn.utils.get_distributed_model(model, verbosity)
     # model path should be added to config
-    base = '/lustre/orion/cph161/proj-shared/zhangp/GB24/HydraGNN/logs/'
-    hydragnn.utils.load_existing_model(model, model_name='exp-strong-128-SMALL-1845292', path=base)
-  
+    base = "/lustre/orion/cph161/proj-shared/zhangp/GB24/HydraGNN/logs/"
+    hydragnn.utils.load_existing_model(
+        model, model_name="exp-strong-128-SMALL-1845292", path=base
+    )
+
     # unwrap DDP
-    model = model.module 
+    model = model.module
     # update model based on fine-tuning requirements (i.e. add the necessary heads)
-    model = update_model(model, ft_config) 
-    #re-wrap
-    model = hydragnn.utils.get_distributed_model(model, verbosity) 
+    model = update_model(model, ft_config)
+    # re-wrap
+    model = hydragnn.utils.get_distributed_model(model, verbosity)
 
     comm_size, rank = setup_ddp()
 
-    use_torch_backend = False # Fix to MPI backend
-    if True: # fix to adios format
+    use_torch_backend = False  # Fix to MPI backend
+    if True:  # fix to adios format
         shmem = ddstore = False
         if use_torch_backend:
             shmem = True
@@ -110,8 +117,8 @@ def run(argv):
         trainset = AdiosDataset(dataset, "trainset", comm, **opt)
         valset = AdiosDataset(dataset, "valset", comm)
         testset = AdiosDataset(dataset, "testset", comm)
-        #comm.Barrier()
-    
+        # comm.Barrier()
+
     print("Loaded dataset.")
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -119,22 +126,10 @@ def run(argv):
     )
 
     # first hurdle - we need to get metadata (what features are present) from adios datasets.
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
+    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, ft_config["Training"]["batch_size"]
     )
     print("Created Dataloaders")
-    #comm.Barrier()
-
-    # config = hydragnn.utils.update_config(pre_config, train_loader, val_loader, test_loader)
-    #comm.Barrier()
-    # print("Updated Config")
-
-    # if rank == 0:
-    #     hydragnn.utils.save_config(config, log_name)
     comm.Barrier()
 
     timer.stop()
@@ -163,7 +158,7 @@ def run(argv):
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
 
-    #if args.mae:
+    # if args.mae:
     #    import matplotlib.pyplot as plt
 
     #    ##################################################################################################################
@@ -207,7 +202,7 @@ def run(argv):
     #        fig.savefig(os.path.join("logs", log_name, varname + "_all.png"))
     #    plt.close()
 
-    #if tr.has("GPTLTracer"):
+    # if tr.has("GPTLTracer"):
     #    import gptl4py as gp
 
     #    eligible = rank if args.everyone else 0
@@ -216,6 +211,8 @@ def run(argv):
     #    gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
     #    gp.finalize()
 
-if __name__=="__main__":
+
+if __name__ == "__main__":
     import sys
+
     run(sys.argv)
