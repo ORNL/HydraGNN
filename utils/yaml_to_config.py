@@ -59,7 +59,16 @@ def group_features(tasks):
 
 def get_var_config(config, desc):
     """takes the pretrained config file and updates
-    it according to the description file"""
+    it according to the description file
+
+    Args:
+        config (dict): The pretrained model configuration to be updated.
+        desc (str): A description or specification that dictates the changes
+                    to be made to the configuration.
+
+    Returns:
+        dict: The updated configuration reflecting changes based on the description.
+    """
     group_names, group_sizes, group_type = group_features(desc["graph_tasks"])
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
     # var_config["node_feature_dims"] = config["NeuralNetwork"]["Variables_of_interest"]["input_node_feature_dims"]
@@ -68,7 +77,6 @@ def get_var_config(config, desc):
 
     ngrp = len(group_names)
     var_config["output_index"] = list(range(ngrp))
-    print(group_names, group_sizes)
     var_config["type"] = ["graph"] * ngrp
     # list of regression / prediction targets
     var_config["output_names"] = [
@@ -83,6 +91,14 @@ def get_var_config(config, desc):
 def get_arc_config(config, desc):
     """takes pretrained config file and updates the architecture for fine-tuning
     based on desc. this is default and can be changed once the config is generated
+
+    Args:
+        config (dict): The pretrained model configuration.
+        desc (str): A description or specification that guides how the architecture
+                    should be updated for fine-tuning.
+
+    Returns:
+        dict: The updated configuration with fine-tuning adjustments.
     """
     group_names, group_sizes, group_type = group_features(desc["graph_tasks"])
     ntasks = sum(group_sizes)
@@ -135,7 +151,7 @@ def main(argv):
     arc_config = get_arc_config(config, descr)
     train_config = get_training_config()
     ft_config = {
-        "NeuralNetwork": {"Architecture": config["NeuralNetwork"]["Architecture"] },
+        "NeuralNetwork": {"Architecture": config["NeuralNetwork"]["Architecture"]},
         "FTNeuralNetwork": {"Architecture": arc_config},
         "Variables_of_interest": var_config,
         "Training": train_config,
