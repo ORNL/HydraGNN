@@ -18,23 +18,6 @@ from .torch_tools import (
     voigt_to_matrix,
 )
 
-# from .train import SWAContainer, evaluate, train
-# from .utils import (
-#     AtomicNumberTable,
-#     MetricsLogger,
-#     atomic_numbers_to_indices,
-#     compute_c,
-#     compute_mae,
-#     compute_q95,
-#     compute_rel_mae,
-#     compute_rel_rmse,
-#     compute_rmse,
-#     get_atomic_number_table_from_zs,
-#     get_optimizer,
-#     get_tag,
-#     setup_logger,
-# )
-
 __all__ = [
     "TensorDict",
     "AtomicNumberTable",
