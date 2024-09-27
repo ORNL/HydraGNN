@@ -9,8 +9,8 @@ import numpy as np
 import torch
 from e3nn.util.jit import compile_mode
 
-from hydragnn.utils.mace_utils.tools.compile import simplify_if_compile
-from hydragnn.utils.mace_utils.tools.scatter import scatter_sum
+from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
+from hydragnn.utils.model.mace_utils.tools.scatter import scatter_sum
 
 
 @compile_mode("script")

@@ -12,31 +12,31 @@ ModuleFactory = Callable[..., nn.Module]
 TypeTuple = Tuple[type, ...]
 
 
-def prepare(func: ModuleFactory, allow_autograd: bool = True) -> ModuleFactory:
-    """Function transform that prepares a MACE module for torch.compile
+# def prepare(func: ModuleFactory, allow_autograd: bool = True) -> ModuleFactory:
+#     """Function transform that prepares a MACE module for torch.compile
 
-    Args:
-        func (ModuleFactory): A function that creates an nn.Module
-        allow_autograd (bool, optional): Force inductor compiler to inline call to
-            `torch.autograd.grad`. Defaults to True.
+#     Args:
+#         func (ModuleFactory): A function that creates an nn.Module
+#         allow_autograd (bool, optional): Force inductor compiler to inline call to
+#             `torch.autograd.grad`. Defaults to True.
 
-    Returns:
-        ModuleFactory: Decorated function that creates a torch.compile compatible module
-    """
-    if allow_autograd:
-        dynamo.allow_in_graph(autograd.grad)
-    elif dynamo.allowed_functions.is_allowed(autograd.grad):
-        dynamo.disallow_in_graph(autograd.grad)
+#     Returns:
+#         ModuleFactory: Decorated function that creates a torch.compile compatible module
+#     """
+#     if allow_autograd:
+#         dynamo.allow_in_graph(autograd.grad)
+#     elif dynamo.allowed_functions.is_allowed(autograd.grad):
+#         dynamo.disallow_in_graph(autograd.grad)
 
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        with disable_e3nn_codegen():
-            model = func(*args, **kwargs)
+#     @wraps(func)
+#     def wrapper(*args, **kwargs):
+#         with disable_e3nn_codegen():
+#             model = func(*args, **kwargs)
 
-        model = simplify(model)
-        return model
+#         model = simplify(model)
+#         return model
 
-    return wrapper
+#     return wrapper
 
 
 _SIMPLIFY_REGISTRY = set()

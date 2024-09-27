@@ -42,13 +42,13 @@ from torch_geometric.nn import (
 from torch_geometric.nn import global_mean_pool
 
 # Mace
-from hydragnn.utils.mace_utils.modules.blocks import (
+from hydragnn.utils.model.mace_utils.modules.blocks import (
     EquivariantProductBasisBlock,
     LinearNodeEmbeddingBlock,
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
 )
-from hydragnn.utils.mace_utils.modules.utils import (
+from hydragnn.utils.model.mace_utils.modules.utils import (
     get_edge_vectors_and_lengths,
 )
 

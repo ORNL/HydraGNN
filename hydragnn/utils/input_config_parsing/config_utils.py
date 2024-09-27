@@ -14,7 +14,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     check_if_graph_size_variable,
     gather_deg,
 )
-from hydragnn.utils.model import calculate_avg_deg
+from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from copy import deepcopy
 import json

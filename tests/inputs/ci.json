@@ -66,7 +66,7 @@
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 100,
+            "num_epoch": 10,
             "perc_train": 0.7,
             "EarlyStopping": true,
             "patience": 10,

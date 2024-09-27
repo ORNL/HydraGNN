@@ -13,7 +13,7 @@ import torch
 import random
 import hydragnn
 from tests.test_graphs import unittest_train_model
-from hydragnn.utils.config_utils import update_config
+from hydragnn.utils.input_config_parsing.config_utils import update_config
 
 
 def unittest_model_prediction(config):
