@@ -3,8 +3,6 @@ from typing import Callable, Dict, Optional, Type
 import torch
 
 from .blocks import (
-    # AgnosticNonlinearInteractionBlock,
-    # AgnosticResidualNonlinearInteractionBlock,
     AtomicEnergiesBlock,
     EquivariantProductBasisBlock,
     InteractionBlock,
@@ -15,9 +13,6 @@ from .blocks import (
     NonLinearReadoutBlock,
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
-    # RealAgnosticInteractionBlock,
-    # RealAgnosticResidualInteractionBlock,
-    # ResidualElementDependentInteractionBlock,
     ScaleShiftBlock,
 )
 
@@ -25,12 +20,7 @@ from .radial import BesselBasis, GaussianBasis, PolynomialCutoff, ZBLBasis
 from .symmetric_contraction import SymmetricContraction
 
 interaction_classes: Dict[str, Type[InteractionBlock]] = {
-    # "AgnosticNonlinearInteractionBlock": AgnosticNonlinearInteractionBlock,
-    # "ResidualElementDependentInteractionBlock": ResidualElementDependentInteractionBlock,
-    # "AgnosticResidualNonlinearInteractionBlock": AgnosticResidualNonlinearInteractionBlock,
-    # "RealAgnosticResidualInteractionBlock": RealAgnosticResidualInteractionBlock,
     "RealAgnosticAttResidualInteractionBlock": RealAgnosticAttResidualInteractionBlock,
-    # "RealAgnosticInteractionBlock": RealAgnosticInteractionBlock,
 }
 
 gate_dict: Dict[str, Optional[Callable]] = {
