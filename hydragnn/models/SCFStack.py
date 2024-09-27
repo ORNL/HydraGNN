@@ -26,7 +26,7 @@ from torch_geometric.nn.models.schnet import (
 
 from .Base import Base
 
-from ..utils import unsorted_segment_mean
+from hydragnn.utils.model import unsorted_segment_mean
 
 
 class SCFStack(Base):

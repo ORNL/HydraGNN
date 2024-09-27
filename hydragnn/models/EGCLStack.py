@@ -15,7 +15,7 @@ import torch.nn as nn
 from torch_geometric.nn import Sequential
 from .Base import Base
 
-from ..utils import unsorted_segment_mean
+from hydragnn.utils.model import unsorted_segment_mean
 
 
 class EGCLStack(Base):

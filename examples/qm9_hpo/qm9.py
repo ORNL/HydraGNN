@@ -75,7 +75,7 @@ log_name = args.log
 # Enable print to log file.
 hydragnn.utils.setup_log(log_name)
 
-# Use built-in torch_geometric dataset.
+# Use built-in torch_geometric datasets.
 # Filter function above used to run quick example.
 # NOTE: data is moved to the device in the pre-transform.
 # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
@@ -103,7 +103,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-# Run training with the given model and qm9 dataset.
+# Run training with the given model and qm9 datasets.
 writer = hydragnn.utils.get_summary_writer(log_name)
 hydragnn.utils.save_config(config, log_name)
 

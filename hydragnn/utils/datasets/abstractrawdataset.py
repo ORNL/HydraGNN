@@ -3,8 +3,6 @@ import numpy as np
 import random
 
 import torch
-from torch import tensor
-from torch_geometric.data import Data
 from torch_geometric.transforms import (
     Distance,
     NormalizeRotation,
@@ -12,38 +10,31 @@ from torch_geometric.transforms import (
     PointPairFeatures,
 )
 
-from hydragnn.utils import nsplit, tensor_divide, comm_reduce
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.distributed import nsplit, comm_reduce
+from hydragnn.utils.model.model import tensor_divide
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.preprocess.utils import (
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
     get_radius_graph,
     get_radius_graph_pbc,
-    get_radius_graph_config,
-    get_radius_graph_pbc_config,
 )
 from hydragnn.preprocess import (
-    update_predicted_values,
-    update_atom_features,
     stratified_sampling,
 )
-
-from sklearn.model_selection import StratifiedShuffleSplit
-
-from hydragnn.preprocess.dataset_descriptors import AtomFeatures
 
 from abc import ABC, abstractmethod
 
 
 class AbstractRawDataset(AbstractBaseDataset, ABC):
-    """Raw dataset class"""
+    """Raw datasets class"""
 
     def __init__(self, config, dist=False, sampling=None):
         super().__init__()
 
         """
         config:
-          shows the dataset path the target variables information, e.g, location and dimension, in data file
+          shows the datasets path the target variables information, e.g, location and dimension, in data file
         ###########
         dataset_list:
           list of datasets read from self.path_dictionary
@@ -215,7 +206,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
 
     def __normalize_dataset(self):
 
-        """Performs the normalization on Data objects and returns the normalized dataset."""
+        """Performs the normalization on Data objects and returns the normalized datasets."""
         num_node_features = len(self.node_feature_dim)
         num_graph_features = len(self.graph_feature_dim)
 

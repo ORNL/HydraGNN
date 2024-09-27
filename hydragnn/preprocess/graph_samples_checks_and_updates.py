@@ -20,7 +20,7 @@ import os
 
 from .dataset_descriptors import AtomFeatures
 
-## This function can be slow if dataset is too large. Use with caution.
+## This function can be slow if datasets is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_dist
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
     backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
@@ -175,7 +175,7 @@ class RadiusGraphPBC(RadiusGraph):
 
 
 def gather_deg(dataset):
-    from hydragnn.utils.print_utils import iterate_tqdm
+    from hydragnn.utils.print.print_utils import iterate_tqdm
 
     backend = os.getenv("HYDRAGNN_AGGR_BACKEND", "torch")
     if backend == "torch":
@@ -197,7 +197,7 @@ def gather_deg(dataset):
 
 def gather_deg_dist(dataset):
     import torch.distributed as dist
-    from hydragnn.utils.print_utils import iterate_tqdm
+    from hydragnn.utils.print.print_utils import iterate_tqdm
     from hydragnn.utils.distributed import get_device
 
     max_deg = 0
@@ -218,7 +218,7 @@ def gather_deg_dist(dataset):
 
 def gather_deg_mpi(dataset):
     from mpi4py import MPI
-    from hydragnn.utils.print_utils import iterate_tqdm
+    from hydragnn.utils.print.print_utils import iterate_tqdm
 
     max_deg = 0
     for data in iterate_tqdm(dataset, 2, desc="Degree max"):
@@ -290,47 +290,3 @@ def update_atom_features(atom_features: [AtomFeatures], data: Data):
     """
     feature_indices = [i for i in atom_features]
     data.x = data.x[:, feature_indices]
-
-
-def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=0):
-    """Given the dataset and the percentage of data you want to extract from it, method will
-    apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
-    In the case of the structures dataset where each structure contains 2 types of atoms, the category will
-    be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
-
-    Parameters
-    ----------
-    dataset: [Data]
-        A list of Data objects representing a structure that has atoms.
-    subsample_percentage: float
-        Percentage of the dataset.
-
-    Returns
-    ----------
-    [Data]
-        Subsample of the original dataset constructed using stratified sampling.
-    """
-    dataset_categories = []
-    print_distributed(verbosity, "Computing the categories for the whole dataset.")
-    for data in iterate_tqdm(dataset, verbosity):
-        frequencies = torch.bincount(data.x[:, 0].int())
-        frequencies = sorted(frequencies[frequencies > 0].tolist())
-        category = 0
-        for index, frequency in enumerate(frequencies):
-            category += frequency * (100 ** index)
-        dataset_categories.append(category)
-
-    subsample_indices = []
-    subsample = []
-
-    sss = StratifiedShuffleSplit(
-        n_splits=1, train_size=subsample_percentage, random_state=0
-    )
-
-    for subsample_index, rest_of_data_index in sss.split(dataset, dataset_categories):
-        subsample_indices = subsample_index.tolist()
-
-    for index in subsample_indices:
-        subsample.append(dataset[index])
-
-    return subsample

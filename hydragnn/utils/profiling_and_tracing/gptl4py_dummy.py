@@ -12,7 +12,6 @@ except ImportError:
 from __future__ import absolute_import
 from functools import wraps
 from contextlib import contextmanager
-import torch.cuda.nvtx as nvtx
 
 
 def initialize():

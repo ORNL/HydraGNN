@@ -15,9 +15,8 @@ import numpy as np
 import torch
 import torch.distributed as dist
 from torch.utils.tensorboard import SummaryWriter
-from torch_geometric.data import Data
 from torch_geometric.utils import degree
-from .print_utils import print_master, iterate_tqdm
+from hydragnn.utils.print.print_utils import print_master, iterate_tqdm
 
 from hydragnn.utils.distributed import (
     get_comm_size_and_rank,
@@ -123,7 +122,7 @@ def load_existing_model(
         model.load_checkpoint(os.path.join(path, model_name), model_name)
 
 
-## This function may cause OOM if dataset is too large
+## This function may cause OOM if datasets is too large
 ## to fit in a single GPU (i.e., with DDP). Use with caution.
 ## Recommend to use calculate_PNA_degree_dist
 def calculate_PNA_degree(loader, max_neighbours):

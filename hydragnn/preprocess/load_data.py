@@ -16,7 +16,6 @@ import random
 
 import torch
 import torch.distributed as dist
-import torch_geometric
 
 # FIXME: deprecated in torch_geometric 2.0
 try:
@@ -27,23 +26,21 @@ except:
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
-from hydragnn.preprocess.compositional_data_splitting import (
+from hydragnn.utils.datasets.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
 from hydragnn.utils.distributed import get_comm_size_and_rank
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 import pickle
 
-from hydragnn.utils.print_utils import print_master, log
+from hydragnn.utils.print.print_utils import log
 
-from torch_geometric.data import Batch, Dataset
+from torch_geometric.data import Batch
 from torch.utils.data.dataloader import _DatasetKind
 
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 import multiprocessing as mp
 import queue
-import time
-import sys
 import re
 
 
@@ -211,7 +208,7 @@ def dataset_loading_and_splitting(config: {}):
     if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
         transform_raw_data_to_serialized(config["Dataset"])
 
-    ##if total dataset is provided, split the dataset and save them to pkl files and update config with pkl file locations
+    ##if total datasets is provided, split the datasets and save them to pkl files and update config with pkl file locations
     if "total" in config["Dataset"]["path"].keys():
         total_to_train_val_test_pkls(config)
 
@@ -374,7 +371,7 @@ def total_to_train_val_test_pkls(config, isdist=False):
         file_dir = config["Dataset"]["path"]["total"]
     else:
         file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-    # if "total" raw dataset is provided, generate train/val/test pkl files and update config dict.
+    # if "total" raw datasets is provided, generate train/val/test pkl files and update config dict.
     with open(file_dir, "rb") as f:
         minmax_node_feature = pickle.load(f)
         minmax_graph_feature = pickle.load(f)

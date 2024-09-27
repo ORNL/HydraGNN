@@ -17,23 +17,21 @@ import torch
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.profile import Profiler
-from hydragnn.utils.distributed import get_device, print_peak_memory, check_remaining
-from hydragnn.preprocess.load_data import HydraDataLoader
-from hydragnn.utils.model import Checkpoint, EarlyStopping
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.profile import Profiler
+from hydragnn.utils.distributed import get_device, check_remaining
+from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 
 import os
 
 from torch.profiler import record_function
-import contextlib
-from unittest.mock import MagicMock
+
 from hydragnn.utils.distributed import get_comm_size_and_rank
 import torch.distributed as dist
 import pickle
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 import time
 from mpi4py import MPI
 

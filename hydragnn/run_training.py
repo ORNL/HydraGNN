@@ -12,7 +12,6 @@
 import os, json
 from functools import singledispatch
 
-import torch
 import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -20,16 +19,16 @@ from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import (
     setup_ddp,
     get_distributed_model,
-    print_peak_memory,
 )
+from hydragnn.utils.distributed import print_peak_memory
 from hydragnn.utils.model import (
     save_model,
     get_summary_writer,
     load_existing_model_config,
 )
-from hydragnn.utils.print_utils import print_distributed, setup_log
-from hydragnn.utils.time_utils import print_timers
-from hydragnn.utils.config_utils import (
+from hydragnn.utils.print.print_utils import print_distributed, setup_log
+from hydragnn.utils.profiling_and_tracing.time_utils import print_timers
+from hydragnn.utils.input_config_parsing.config_utils import (
     update_config,
     get_log_name_config,
     save_config,
