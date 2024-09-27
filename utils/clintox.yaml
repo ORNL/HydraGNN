@@ -1,0 +1,14 @@
+name: "clinical toxicity"
+authors: "Zhenqin Wu, Bharath Ramsundar, Evan N. Feinberg, Joseph Gomes, Caleb Geniesse, Aneesh S. Pappu, Karl Leswing and Vijay Pande"
+source: https://github.com/deepchem/deepchem/tree/master/examples/clintox
+ref: https://doi.org/10.1039/C7SC02664A
+
+split:  null # no test/train split column present
+smiles: smiles
+graph_tasks:
+  - name: FDA_APPROVED
+    type: binary
+    description: ""
+  - name: CT_TOX
+    type: binary
+    description: ""

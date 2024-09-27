@@ -208,8 +208,11 @@ def main():
         ):
             try:
                 data = generate_graphdata_from_smilestr(
-                    smilestr, ytarget, get_positions=True
+                    smilestr, ytarget, get_positions=True, 
+                    pretrained=True
                 )
+                # hack to make edge_attr as the models expect. 
+                data.edge_attr = torch.Tensor([1]).repeat(data.edge_index.shape[1]).unsqueeze(1) 
                 # TODO: ensure data.pos is populated (e.g. call rdkit)
                 # TODO: should we energy minimize these coordinates
 
