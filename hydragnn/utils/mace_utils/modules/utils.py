@@ -37,13 +37,13 @@ def get_edge_vectors_and_lengths(
     return vectors, lengths
 
 
-def _check_non_zero(std):
-    if std == 0.0:
-        logging.warning(
-            "Standard deviation of the scaling is zero, Changing to no scaling"
-        )
-        std = 1.0
-    return std
+# def _check_non_zero(std):
+#     if std == 0.0:
+#         logging.warning(
+#             "Standard deviation of the scaling is zero, Changing to no scaling"
+#         )
+#         std = 1.0
+#     return std
 
 
 def extract_invariant(x: torch.Tensor, num_layers: int, num_features: int, l_max: int):
