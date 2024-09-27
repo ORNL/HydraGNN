@@ -19,7 +19,7 @@ import torch_scatter
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.print_utils import print_master
+from hydragnn.utils.print.print_utils import print_master
 
 import inspect
 
@@ -264,7 +264,7 @@ class Base(Module):
                     assert (
                         self.num_nodes is not None
                     ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the dataset have different size, one MLP is shared across all nodes """
+                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
                     head_NN = MLPNode(
                         self.hidden_dim,
                         self.head_dims[ihead] * (1 + self.var_output),

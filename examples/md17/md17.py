@@ -52,15 +52,15 @@ world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
 log_name = "md17_test"
 # Enable print to log file.
-hydragnn.utils.setup_log(log_name)
+hydragnn.utils.print.print_utils.setup_log(log_name)
 
-# Use built-in torch_geometric dataset.
+# Use built-in torch_geometric datasets.
 # Filter function above used to run quick example.
 # NOTE: data is moved to the device in the pre-transform.
 # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
 compute_edges = hydragnn.preprocess.get_radius_graph_config(arch_config)
 
-# Fix for MD17 dataset
+# Fix for MD17 datasets
 torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
 
 dataset = torch_geometric.datasets.MD17(
@@ -76,13 +76,15 @@ train, val, test = hydragnn.preprocess.split_dataset(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
-config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+config = hydragnn.utils.input_config_parsing.update_config(
+    config, train_loader, val_loader, test_loader
+)
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"],
     verbosity=verbosity,
 )
-model = hydragnn.utils.get_distributed_model(model, verbosity)
+model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
 learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -90,9 +92,9 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-# Run training with the given model and qm9 dataset.
-writer = hydragnn.utils.get_summary_writer(log_name)
-hydragnn.utils.save_config(config, log_name)
+# Run training with the given model and md17 dataset.
+writer = hydragnn.utils.model.model.get_summary_writer(log_name)
+hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
 hydragnn.train.train_validate_test(
     model,

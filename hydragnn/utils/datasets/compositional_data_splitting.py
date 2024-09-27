@@ -115,8 +115,8 @@ def generate_partition(
 
 
 def compositional_stratified_splitting(dataset, perc_train):
-    """Given the dataset and the percentage of data you want to extract from it, method will
-    apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
+    """Given the datasets and the percentage of data you want to extract from it, method will
+    apply stratified sampling where X is the datasets and Y is are the category values for each datapoint.
     In the case each structure contains 2 types of atoms, the category will
     be constructed as such: number of atoms of type 1 + number of atoms of type 2 * 100.
     Parameters
@@ -124,11 +124,11 @@ def compositional_stratified_splitting(dataset, perc_train):
     dataset: [Data]
         A list of Data objects representing a structure that has atoms.
     subsample_percentage: float
-        Percentage of the dataset.
+        Percentage of the datasets.
     Returns
     ----------
     [Data]
-        Subsample of the original dataset constructed using stratified sampling.
+        Subsample of the original datasets constructed using stratified sampling.
     """
     dataset_categories = create_dataset_categories(dataset)
     dataset, dataset_categories = duplicate_unique_data_samples(

@@ -5,31 +5,29 @@ mpi4py.rc.threads = False
 
 import os, json
 import random
-import pickle
 
 import logging
 import sys
-from tqdm import tqdm
 from mpi4py import MPI
-from itertools import chain
 import argparse
-import time
 
 from rdkit.Chem.rdmolfiles import MolFromPDBFile
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.pickledataset import SimplePickleDataset
-from hydragnn.utils.smiles_utils import (
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_rdkit_molecule,
 )
 from hydragnn.utils.distributed import get_device
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import numpy as np
 
@@ -44,9 +42,9 @@ import torch.distributed as dist
 
 import warnings
 
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.distributed import nsplit
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
 # FIXME: this works fine for now because we train on GDB-9 molecules
 # for larger chemical spaces, the following atom representation has to be properly expanded
@@ -58,6 +56,7 @@ def info(*args, logtype="info", sep=" "):
 
 
 def dftb_to_graph(moldir, dftb_node_types, var_config):
+    pdb_filename = os.path.join(moldir, "smiles.pdb")
     pdb_filename = os.path.join(moldir, "smiles.pdb")
     mol = MolFromPDBFile(
         pdb_filename, sanitize=False, proximityBonding=True, removeHs=True

@@ -1,7 +1,7 @@
 import torch
 import contextlib
 from unittest.mock import MagicMock
-from torch.profiler import profile, record_function, ProfilerActivity
+from torch.profiler import ProfilerActivity
 
 from hydragnn.utils.distributed import get_device_name
 

@@ -5,11 +5,14 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.config_utils import get_log_name_config
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.lsmsdataset import LSMSDataset
-from hydragnn.utils.serializeddataset import SerializedWriter, SerializedDataset
+from hydragnn.utils.datasets.lsmsdataset import LSMSDataset
+from hydragnn.utils.datasets.serializeddataset import (
+    SerializedWriter,
+    SerializedDataset,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
 try:
@@ -65,10 +68,10 @@ if __name__ == "__main__":
     input_filename = os.path.join(dirpwd, args.inputfile)
     with open(input_filename, "r") as f:
         config = json.load(f)
-    hydragnn.utils.setup_log(get_log_name_config(config))
+    hydragnn.utils.print.setup_log(get_log_name_config(config))
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
     comm = MPI.COMM_WORLD
     ## Set up logging
@@ -172,7 +175,9 @@ if __name__ == "__main__":
     )
     timer.stop()
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_node_feature", None)
     config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_graph_feature", None)
 
@@ -185,7 +190,7 @@ if __name__ == "__main__":
         print_model(model)
     comm.Barrier()
 
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -194,12 +199,12 @@ if __name__ == "__main__":
     )
 
     log_name = get_log_name_config(config)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     if dist.is_initialized():
         dist.barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     hydragnn.train.train_validate_test(
         model,
@@ -215,7 +220,7 @@ if __name__ == "__main__":
         create_plots=True,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     sys.exit(0)
