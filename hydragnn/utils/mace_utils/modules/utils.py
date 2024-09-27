@@ -4,17 +4,12 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import torch
 import torch.nn
 import torch.utils.data
-from scipy.constants import c, e
-
-from hydragnn.utils.mace_utils.tools import to_numpy
-from hydragnn.utils.mace_utils.tools.scatter import scatter_sum
 
 from .blocks import AtomicEnergiesBlock
 
@@ -35,15 +30,6 @@ def get_edge_vectors_and_lengths(
         return vectors_normed, lengths
 
     return vectors, lengths
-
-
-# def _check_non_zero(std):
-#     if std == 0.0:
-#         logging.warning(
-#             "Standard deviation of the scaling is zero, Changing to no scaling"
-#         )
-#         std = 1.0
-#     return std
 
 
 def extract_invariant(x: torch.Tensor, num_layers: int, num_features: int, l_max: int):
