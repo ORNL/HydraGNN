@@ -281,7 +281,6 @@ class Checkpoint:
         self.use_deepspeed = use_deepspeed
 
     def __call__(self, model, optimizer, perf_metric):
-
         if (perf_metric > self.min_perf_metric + self.min_delta) or (
             self.count < self.warmup
         ):

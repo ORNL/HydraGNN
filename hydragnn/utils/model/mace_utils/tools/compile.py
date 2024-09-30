@@ -56,7 +56,6 @@ def prepare(func: ModuleFactory, allow_autograd: bool = True) -> ModuleFactory:
 _SIMPLIFY_REGISTRY = set()
 
 
-
 def simplify_if_compile(module: nn.Module) -> nn.Module:
     """Decorator to register a module for symbolic simplification
 
