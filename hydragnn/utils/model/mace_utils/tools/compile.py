@@ -3,6 +3,12 @@
 # Authors: Ilyes Batatia, Gregor Simm and David Kovacs
 # This code is pulled from the MACE repository, which is distributed under the MIT License
 ###########################################################################################
+# Taken From:
+# GitHub: https://github.com/ACEsuit/mace
+# ArXiV: https://arxiv.org/pdf/2206.07697
+# Date: August 27, 2024  |  12:37 (EST)
+###########################################################################################
+
 from contextlib import contextmanager
 from functools import wraps
 from typing import Callable, Tuple

@@ -4,6 +4,11 @@
 # Authors: Ilyes Batatia
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
+# Taken From:
+# GitHub: https://github.com/ACEsuit/mace
+# ArXiV: https://arxiv.org/pdf/2206.07697
+# Date: August 27, 2024  |  12:37 (EST)
+###########################################################################################
 
 from typing import Dict, Optional, Union
 
