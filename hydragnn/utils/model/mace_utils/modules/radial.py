@@ -10,7 +10,7 @@ import torch
 from e3nn.util.jit import compile_mode
 
 from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
-from hydragnn.utils.model.mace_utils.tools.scatter import scatter_sum
+from torch_scatter import scatter
 
 
 @compile_mode("script")
@@ -215,7 +215,9 @@ class ZBLBasis(torch.nn.Module):
             - (self.p * (self.p + 1.0) / 2) * torch.pow(x / r_max, self.p + 2)
         ) * (x < r_max)
         v_edges = 0.5 * v_edges * envelope
-        V_ZBL = scatter_sum(v_edges, receiver, dim=0, dim_size=node_attrs.size(0))
+        V_ZBL = scatter(
+            v_edges, receiver, dim=0, dim_size=node_attrs.size(0), reduce="sum"
+        )
         return V_ZBL.squeeze(-1)
 
     def __repr__(self):

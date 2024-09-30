@@ -13,7 +13,7 @@ from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
 from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
-from hydragnn.utils.model.mace_utils.tools.scatter import scatter_sum
+from torch_scatter import scatter
 
 from .irreps_tools import (
     linear_out_irreps,
@@ -72,60 +72,6 @@ class NonLinearReadoutBlock(torch.nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         x = self.non_linearity(self.linear_1(x))
-        return self.linear_2(x)  # [n_nodes, 1]
-
-
-@compile_mode("script")
-class LinearDipoleReadoutBlock(torch.nn.Module):
-    def __init__(self, irreps_in: o3.Irreps, dipole_only: bool = False):
-        super().__init__()
-        if dipole_only:
-            self.irreps_out = o3.Irreps("1x1o")
-        else:
-            self.irreps_out = o3.Irreps("1x0e + 1x1o")
-        self.linear = o3.Linear(irreps_in=irreps_in, irreps_out=self.irreps_out)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        return self.linear(x)  # [n_nodes, 1]
-
-
-@compile_mode("script")
-class NonLinearDipoleReadoutBlock(torch.nn.Module):
-    def __init__(
-        self,
-        irreps_in: o3.Irreps,
-        MLP_irreps: o3.Irreps,
-        gate: Callable,
-        dipole_only: bool = False,
-    ):
-        super().__init__()
-        self.hidden_irreps = MLP_irreps
-        if dipole_only:
-            self.irreps_out = o3.Irreps("1x1o")
-        else:
-            self.irreps_out = o3.Irreps("1x0e + 1x1o")
-        irreps_scalars = o3.Irreps(
-            [(mul, ir) for mul, ir in MLP_irreps if ir.l == 0 and ir in self.irreps_out]
-        )
-        irreps_gated = o3.Irreps(
-            [(mul, ir) for mul, ir in MLP_irreps if ir.l > 0 and ir in self.irreps_out]
-        )
-        irreps_gates = o3.Irreps([mul, "0e"] for mul, _ in irreps_gated)
-        self.equivariant_nonlin = nn.Gate(
-            irreps_scalars=irreps_scalars,
-            act_scalars=[gate for _, ir in irreps_scalars],
-            irreps_gates=irreps_gates,
-            act_gates=[gate] * len(irreps_gates),
-            irreps_gated=irreps_gated,
-        )
-        self.irreps_nonlin = self.equivariant_nonlin.irreps_in.simplify()
-        self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=self.irreps_nonlin)
-        self.linear_2 = o3.Linear(
-            irreps_in=self.hidden_irreps, irreps_out=self.irreps_out
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.equivariant_nonlin(self.linear_1(x))
         return self.linear_2(x)  # [n_nodes, 1]
 
 
@@ -413,8 +359,8 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         mji = self.conv_tp(
             node_feats_up[sender], edge_attrs, tp_weights
         )  # [n_edges, irreps]
-        message = scatter_sum(
-            src=mji, index=receiver, dim=0, dim_size=num_nodes
+        message = scatter(
+            src=mji, index=receiver, dim=0, dim_size=num_nodes, reduce="sum"
         )  # [n_nodes, irreps]
         message = self.linear(message) / self.avg_num_neighbors
         return (
