@@ -41,14 +41,14 @@ from torch_geometric.nn import (
 )  # This naming is because there is torch.nn.Sequential and torch_geometric.nn.Sequential
 from torch_geometric.nn import global_mean_pool
 
-# Mace
+# MACE
 from hydragnn.utils.model.mace_utils.modules.blocks import (
     EquivariantProductBasisBlock,
     LinearNodeEmbeddingBlock,
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
 )
-from hydragnn.utils.model.utils import (
+from hydragnn.utils.model.operations import (
     get_edge_vectors_and_lengths,
 )
 

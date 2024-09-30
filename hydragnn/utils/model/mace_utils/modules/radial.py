@@ -5,12 +5,13 @@
 ###########################################################################################
 
 import ase
+
 import numpy as np
 import torch
+from torch_scatter import scatter
 from e3nn.util.jit import compile_mode
 
 from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
-from torch_scatter import scatter
 
 
 @compile_mode("script")

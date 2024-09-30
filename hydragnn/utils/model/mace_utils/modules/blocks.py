@@ -8,18 +8,18 @@ from abc import abstractmethod
 from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
+import torch
 import torch.nn.functional
+from torch_scatter import scatter
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
 from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
-from torch_scatter import scatter
-
 from hydragnn.utils.model.irreps_tools import (
-    linear_out_irreps,
     reshape_irreps,
     tp_out_irreps_with_instructions,
 )
+
 from .radial import (
     AgnesiTransform,
     BesselBasis,
