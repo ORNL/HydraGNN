@@ -48,7 +48,7 @@ from hydragnn.utils.model.mace_utils.modules.blocks import (
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
 )
-from hydragnn.utils.model.mace_utils.modules.utils import (
+from hydragnn.utils.model.utils import (
     get_edge_vectors_and_lengths,
 )
 

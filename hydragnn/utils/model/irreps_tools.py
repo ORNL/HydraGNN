@@ -84,3 +84,19 @@ class reshape_irreps(torch.nn.Module):
             field = field.reshape(batch, mul, d)
             out.append(field)
         return torch.cat(out, dim=-1)
+
+
+def extract_invariant(x: torch.Tensor, num_layers: int, num_features: int, l_max: int):
+    out = []
+    for i in range(num_layers - 1):
+        out.append(
+            x[
+                :,
+                i
+                * (l_max + 1) ** 2
+                * num_features : (i * (l_max + 1) ** 2 + 1)
+                * num_features,
+            ]
+        )
+    out.append(x[:, -num_features:])
+    return torch.cat(out, dim=-1)

@@ -15,7 +15,7 @@ from e3nn.util.jit import compile_mode
 from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
 from torch_scatter import scatter
 
-from .irreps_tools import (
+from hydragnn.utils.model.irreps_tools import (
     linear_out_irreps,
     reshape_irreps,
     tp_out_irreps_with_instructions,
