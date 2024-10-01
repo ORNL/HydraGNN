@@ -470,27 +470,29 @@ def process_node_attributes(node_attributes, num_elements):
     assert (
         node_attributes.dim() == 1
     ), "MACE only supports raw atomic numbers as node_attributes. Your data.x \
-        isn't a 1D tensor after squeezing, are you using vector features? "
+        isn't a 1D tensor after squeezing, are you using vector features?"
 
     # Check that all elements are integers or integer-like (e.g., 1.0, 2.0), not floats like 1.1
-    # This is only a warning so that we don't enforce requirements on the tests
+    # This is only a warning so that we don't enforce this requirement on the tests.
     if not torch.all(node_attributes == node_attributes.round()):
         warnings.warn(
-            "MACE only supports raw atomic numbers as node_attributes. Your data.x "
-            "contains floats that do not align with atomic numbers."
+            "MACE only supports raw atomic numbers as node_attributes. Your data.x \
+            contains floats, which does not align with atomic numbers."
         )
 
     # Check that all atomic numbers are within the valid range (1 to num_elements)
-    # This is only a warning so that we don't enforce requirements on the tests
+    # This is only a warning so that we don't enforce this requirement on the tests.
     if not torch.all((node_attributes >= 1) & (node_attributes <= num_elements)):
         warnings.warn(
             "MACE only supports raw atomic numbers as node_attributes. Your data.x \
-            is not in the range 1-118, which doesn't align with atomic numbers."
+            is not in the range 1-118, which does not align with atomic numbers."
         )
+        node_attributes = torch.clamp(node_attributes, min=1, max=118)
 
     # Perform one-hot encoding
     one_hot = torch.nn.functional.one_hot(
-        node_attributes.long(), num_classes=num_elements
+        (node_attributes - 1).long(),
+        num_classes=num_elements,  # Subtract 1 to make atomic numbers 0-indexed for one-hot encoding
     ).float()  # [n_atoms, 118]
 
     return one_hot
