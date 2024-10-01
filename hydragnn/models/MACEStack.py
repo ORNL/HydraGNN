@@ -8,7 +8,6 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-
 # Adapted From:
 # GitHub: https://github.com/ACEsuit/mace
 # ArXiV: https://arxiv.org/pdf/2206.07697
@@ -22,12 +21,14 @@
 # NOTE MACE Architecture:
 ## There are two key ideas of MACE:
 ### (1) Message passing and interaction blocks are equivariant to the O(3) group. And invariant to the T(3) group (translations).
-### (2) Predictions are made in an n-body expansion, where n is the numnber of layers. This is done by creating multi-body
-###     interactions, then decoding them. Layer 1 will decode 1-body interactions, layer 2 will decode w-body interactions,
-###     and so on. So, for a 3-layer model predicting energy, there are 3 outputs for energy, one at each layer, and they
-###     are summed at the end. This requires some adjustment to the behavior from Base.py
+### (2) Predictions are made in an n-body expansion, where n is the numnber of convolutional layers+1. This is done by creating
+###     multi-body interactions, then decoding them. Decoding before anything else with 1-body interactions, Interaction Layer 1
+###     will decode 2-body interactions, layer 2 will decode 3-body interactions,and so on. So, for a 3-convolutional-layer model
+###     predicting energy, there are 4 outputs for energy: 1 before convolution + 3*(1 after each layer). These outputs are summed
+###     at the end. This requires some adjustment to the behavior from Base.py
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+# from typing import Any, Callable, Dict, List, Optional, Type, Union
+import warnings
 
 # Torch
 import torch
@@ -63,8 +64,6 @@ from .Base import Base
 # Etc
 import numpy as np
 import math
-
-# pylint: disable=C0302
 
 
 @compile_mode("script")
@@ -109,8 +108,8 @@ class MACEStack(Base):
         ## Defined
         self.interaction_cls = RealAgnosticAttResidualInteractionBlock
         self.interaction_cls_first = RealAgnosticAttResidualInteractionBlock
-        self.num_elements = 118  # Number of elements in the periodic table
-        atomic_numbers = list(range(1, self.num_elements + 1))
+        atomic_numbers = list(range(1, 119))  # 118 elements in the periodic table
+        self.num_elements = len(atomic_numbers)
         # Optional
         num_polynomial_cutoff = (
             5 if num_polynomial_cutoff is None else num_polynomial_cutoff
@@ -119,9 +118,6 @@ class MACEStack(Base):
         radial_type = "bessel" if radial_type is None else radial_type
 
         # Making Irreps
-        self.node_attr_irreps = o3.Irreps(
-            [(self.num_elements, (0, 1))]
-        )  # 118 is the number of elements in the periodic table
         self.sh_irreps = o3.Irreps.spherical_harmonics(
             max_ell
         )  # This makes the irreps string
@@ -166,6 +162,9 @@ class MACEStack(Base):
         ## This integrates HYDRA multihead nature with MACE's layer-wise readouts
         ## NOTE Norm techniques (feature_layers in HYDRA) are not advised for use in equivariant models as it can break equivariance
         self.multihead_decoders = ModuleList()
+        self.node_attr_irreps = o3.Irreps(
+            [(self.num_elements, (0, 1))]
+        )  # node_attr_irreps is created here because we need input_dim, which requires super(base) to be called, which calls _init_conv
         hidden_irreps = o3.Irreps(
             create_irreps_string(self.hidden_dim, self.node_max_ell)
         )
@@ -414,12 +413,9 @@ class MACEStack(Base):
         data.pos = data.pos - mean_pos[data.batch]
 
         # Create node_attrs from atomic numbers. Later on it may contain more information
-        ## Node attrs are intrinsic properties of the atoms, like charge, atomic number, etc..
+        ## Node attrs are intrinsic properties of the atoms. Currently, MACE only supports atomic number node attributes
         ## data.node_attrs is already used in another place, so has been renamed to data.node_attributes from MACE and same with other data variable names
-        one_hot = torch.nn.functional.one_hot(
-            data["x"].long().squeeze(-1), num_classes=118
-        ).float()  # [n_atoms, 118]  ## 118 atoms in the peridoic table
-        data.node_attributes = one_hot  # To-Do: Add more information to node_attrs
+        data.node_attributes = process_node_attributes(data["x"], self.num_elements)
         data.shifts = torch.zeros(
             (data.edge_index.shape[1], 3), dtype=data.pos.dtype, device=data.pos.device
         )  # Shifts takes into account pbc conditions, but I believe we already generate data.pos to take it into account
@@ -466,6 +462,38 @@ def create_irreps_string(
 ):  # Custom function to allow for use of HYDRA arguments in creating irreps
     irreps = [f"{n}x{ell}{'e' if ell % 2 == 0 else 'o'}" for ell in range(ell + 1)]
     return " + ".join(irreps)
+
+
+def process_node_attributes(node_attributes, num_elements):
+    # Check that node attributes are atomic numbers and process accordingly
+    node_attributes = node_attributes.squeeze()  # Squeeze all unnecessary dimensions
+    assert (
+        node_attributes.dim() == 1
+    ), "MACE only supports raw atomic numbers as node_attributes. Your data.x \
+        isn't a 1D tensor after squeezing, are you using vector features? "
+
+    # Check that all elements are integers or integer-like (e.g., 1.0, 2.0), not floats like 1.1
+    # This is only a warning so that we don't enforce requirements on the tests
+    if not torch.all(node_attributes == node_attributes.round()):
+        warnings.warn(
+            "MACE only supports raw atomic numbers as node_attributes. Your data.x "
+            "contains floats that do not align with atomic numbers."
+        )
+
+    # Check that all atomic numbers are within the valid range (1 to num_elements)
+    # This is only a warning so that we don't enforce requirements on the tests
+    if not torch.all((node_attributes >= 1) & (node_attributes <= num_elements)):
+        warnings.warn(
+            "MACE only supports raw atomic numbers as node_attributes. Your data.x \
+            is not in the range 1-118, which doesn't align with atomic numbers."
+        )
+
+    # Perform one-hot encoding
+    one_hot = torch.nn.functional.one_hot(
+        node_attributes.long(), num_classes=num_elements
+    ).float()  # [n_atoms, 118]
+
+    return one_hot
 
 
 @compile_mode("script")
