@@ -1,6 +1,6 @@
 from torch import tensor
 from torch_geometric.data import Data
-from hydragnn.utils.abstractrawdataset import AbstractRawDataset
+from hydragnn.utils.datasets.abstractrawdataset import AbstractRawDataset
 
 
 class LSMSDataset(AbstractRawDataset):

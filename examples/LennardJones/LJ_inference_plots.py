@@ -22,11 +22,11 @@ import torch_scatter
 import numpy as np
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.pickledataset import SimplePickleDataset
-from hydragnn.utils.config_utils import (
+from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.utils.input_config_parsing.config_utils import (
     update_config,
 )
 from hydragnn.models.create import create_model_config
@@ -35,7 +35,7 @@ from hydragnn.preprocess import create_dataloaders
 from scipy.interpolate import griddata
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 

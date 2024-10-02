@@ -1,5 +1,5 @@
 import torch
-from .distributed import get_device_name
+from hydragnn.utils.distributed import get_device_name
 from torch.distributed.optim import ZeroRedundancyOptimizer
 
 deepspeed_available = True
@@ -70,7 +70,7 @@ def select_zero_redundancy_optimizer(model, config):
     elif config["type"] == "Adamax":
         optimizer = ZeroRedundancyOptimizer(
             model.parameters(),
-            optimizer_class=torch.optim.Adagrad,
+            optimizer_class=torch.optim.Adamax,
             lr=config["learning_rate"],
         )
     elif config["type"] == "AdamW":

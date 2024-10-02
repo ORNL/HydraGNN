@@ -26,8 +26,7 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PAINNStack import PAINNStack
 
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.print_utils import print_distributed
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
 
 def create_model_config(

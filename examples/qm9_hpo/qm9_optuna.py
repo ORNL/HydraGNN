@@ -171,7 +171,7 @@ if __name__ == "__main__":
     # Enable print to log file.
     hydragnn.utils.setup_log(log_name)
 
-    # Use built-in torch_geometric dataset.
+    # Use built-in torch_geometric datasets.
     # Filter function above used to run quick example.
     # NOTE: data is moved to the device in the pre-transform.
     # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.

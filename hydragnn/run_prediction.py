@@ -15,7 +15,7 @@ from functools import singledispatch
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import setup_ddp, get_distributed_model
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.config_utils import (
+from hydragnn.utils.input_config_parsing.config_utils import (
     update_config,
     get_log_name_config,
     parse_deepspeed_config,

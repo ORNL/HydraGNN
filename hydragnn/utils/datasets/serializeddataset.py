@@ -1,10 +1,10 @@
 import os
 import pickle
 
-from .print_utils import log
+from hydragnn.utils.print.print_utils import log
 
-from hydragnn.utils import get_comm_size_and_rank
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
 
 class SerializedDataset(AbstractBaseDataset):
@@ -15,7 +15,7 @@ class SerializedDataset(AbstractBaseDataset):
         Parameters
         ----------
         basedir: basedir
-        datasetname: dataset name
+        datasetname: datasets name
         label: label
         """
         super().__init__()
@@ -62,9 +62,9 @@ class SerializedWriter:
         """
         Parameters
         ----------
-        dataset: locally owned dataset (should be iterable)
+        dataset: locally owned datasets (should be iterable)
         basedir: basedir
-        datasetname: dataset name
+        datasetname: datasets name
         label: label
         nmax: nmax in case of subdir
         minmax_node_feature: minmax_node_feature

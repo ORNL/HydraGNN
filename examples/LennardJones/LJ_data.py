@@ -32,9 +32,9 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 # HydraGNN
-from hydragnn.utils.abstractrawdataset import AbstractBaseDataset
-from hydragnn.utils import nsplit
-from hydragnn.preprocess.utils import get_radius_graph_pbc
+from hydragnn.utils.datasets.abstractrawdataset import AbstractBaseDataset
+from hydragnn.utils.distributed import nsplit
+from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
 
 # Angstrom unit
 primitive_bravais_lattice_constant_x = 3.8
