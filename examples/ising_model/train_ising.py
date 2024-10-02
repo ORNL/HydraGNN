@@ -11,20 +11,23 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.config_utils import get_log_name_config
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.model import print_model
-from hydragnn.utils.lsmsdataset import LSMSDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.lsmsdataset import LSMSDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -45,8 +48,8 @@ import math
 
 from create_configurations import E_dimensionless
 
-import hydragnn.utils.tracer as tr
-from hydragnn.utils import nsplit
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.distributed import nsplit
 
 
 def write_to_file(total_energy, atomic_features, count_config, dir, prefix):
@@ -189,10 +192,10 @@ if __name__ == "__main__":
     log_name = get_log_name_config(config)
     if args.log is not None:
         log_name = args.log
-    hydragnn.utils.setup_log(log_name)
+    hydragnn.utils.print.print_utils.setup_log(log_name)
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -364,7 +367,9 @@ if __name__ == "__main__":
     config["NeuralNetwork"]["Variables_of_interest"][
         "minmax_graph_feature"
     ] = trainset.minmax_graph_feature
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
     del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
     ## Good to sync with everyone right after DDStore setup
@@ -379,7 +384,7 @@ if __name__ == "__main__":
         print_model(model)
     comm.Barrier()
 
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -387,7 +392,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     if dist.is_initialized():
         dist.barrier()
@@ -407,8 +412,8 @@ if __name__ == "__main__":
         verbosity,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

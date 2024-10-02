@@ -11,9 +11,9 @@
 
 import os
 import numpy as np
-import hydragnn, tests
+import tests
 import pytest
-from utils.lsms import (
+from hydragnn.utils.lsms import (
     convert_raw_data_energy_to_gibbs,
 )
 

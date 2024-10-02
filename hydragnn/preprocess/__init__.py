@@ -1,6 +1,6 @@
 from .dataset_descriptors import AtomFeatures, StructureFeatures
 
-from .utils import (
+from .graph_samples_checks_and_updates import (
     check_if_graph_size_variable,
     check_if_graph_size_variable_dist,
     get_radius_graph,
@@ -10,8 +10,9 @@ from .utils import (
     RadiusGraphPBC,
     update_predicted_values,
     update_atom_features,
-    stratified_sampling,
 )
+
+from .stratified_sampling import stratified_sampling
 
 from .load_data import (
     dataset_loading_and_splitting,
@@ -26,4 +27,3 @@ from .serialized_dataset_loader import (
 )
 from .lsms_raw_dataset_loader import LSMS_RawDataLoader
 from .cfg_raw_dataset_loader import CFG_RawDataLoader
-from .compositional_data_splitting import compositional_stratified_splitting

@@ -11,8 +11,8 @@
 
 import time
 import torch
-from .distributed import get_comm_size_and_rank, get_device
-from .print_utils import print_distributed
+from hydragnn.utils.distributed import get_comm_size_and_rank, get_device
+from hydragnn.utils.print.print_utils import print_distributed
 
 
 class TimerError(Exception):

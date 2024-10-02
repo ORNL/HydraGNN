@@ -8,30 +8,31 @@ import logging
 import sys
 from tqdm import tqdm
 from mpi4py import MPI
-from itertools import chain
 import argparse
-import time
 import math
 
 import hydragnn
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.print.print_utils import print_distributed
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.utils.model import print_model
-from hydragnn.utils.smiles_utils import (
+from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
-from hydragnn.utils.config_utils import parse_deepspeed_config
+from hydragnn.utils.input_config_parsing.config_utils import parse_deepspeed_config
 from hydragnn.utils.distributed import get_deepspeed_init_args
-from hydragnn.utils import nsplit
+from hydragnn.utils.distributed import nsplit
 
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -92,7 +93,7 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets import AbstractBaseDataset
 
 
 def smiles_to_graph(datadir, files_list):
@@ -136,7 +137,7 @@ def smiles_to_graph(datadir, files_list):
 
 
 class OGBDataset(AbstractBaseDataset):
-    """OGBDataset dataset class"""
+    """OGBDataset datasets class"""
 
     def __init__(self, dirpath, var_config, dist=False):
         super().__init__()
@@ -314,7 +315,9 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = var_config["input_node_feature_dims"]
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp(use_deepspeed=args.use_deepspeed)
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp(
+        use_deepspeed=args.use_deepspeed
+    )
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -327,9 +330,9 @@ if __name__ == "__main__":
     )
 
     log_name = "ogb_" + inputfilesubstr
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     modelname = "ogb_" + inputfilesubstr
     if args.preonly:
@@ -445,7 +448,9 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     timer.stop()
 
     model = hydragnn.models.create_model_config(
@@ -458,7 +463,7 @@ if __name__ == "__main__":
     dist.barrier()
 
     if not args.use_deepspeed:
-        model = hydragnn.utils.get_distributed_model(model, verbosity)
+        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
         learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
             "learning_rate"
@@ -468,7 +473,7 @@ if __name__ == "__main__":
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
 
-        hydragnn.utils.load_existing_model_config(
+        hydragnn.utils.model.load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], optimizer=optimizer
         )
 
@@ -495,7 +500,7 @@ if __name__ == "__main__":
             optimizer=optimizer,
         )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
 
-        hydragnn.utils.load_existing_model_config(
+        hydragnn.utils.model.load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], use_deepspeed=True
         )
 
@@ -516,8 +521,8 @@ if __name__ == "__main__":
         use_deepspeed=args.use_deepspeed,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if args.mae:
         ##################################################################################################################

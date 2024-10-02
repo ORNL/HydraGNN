@@ -10,15 +10,14 @@
 ##############################################################################
 import pickle
 import os
-from hydragnn.preprocess.utils import check_if_graph_size_variable, gather_deg
-from hydragnn.utils.model import calculate_PNA_degree
-from hydragnn.utils import get_comm_size_and_rank
-import time
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    check_if_graph_size_variable,
+    gather_deg,
+)
+from hydragnn.utils.distributed import get_comm_size_and_rank
 from copy import deepcopy
 import json
-from torch_geometric.utils import degree
 import torch
-import torch.distributed as dist
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -48,7 +47,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     PNA_models = ["PNA", "PNAPlus", "PNAEq"]
     if config["NeuralNetwork"]["Architecture"]["model_type"] in PNA_models:
         if hasattr(train_loader.dataset, "pna_deg"):
-            ## Use max neighbours used in the dataset.
+            ## Use max neighbours used in the datasets.
             deg = torch.tensor(train_loader.dataset.pna_deg)
         else:
             deg = gather_deg(train_loader.dataset)
