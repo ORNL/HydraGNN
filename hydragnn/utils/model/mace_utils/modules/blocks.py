@@ -272,12 +272,19 @@ class TensorProductWeightsBlock(torch.nn.Module):
         )
 
 
+###########################################################################################
+# NOTE: Below is one of the many possible Interaction Blocks in the MACE architecture.
+#       Since there are adaptations to the original code in order to be integrated with
+#       the HydraGNN framework, and the changes between blocks are relatively minor, we've
+#       elected to adapt one general-purpose block here. Users can access the other blocks
+#       and adapt similarly from the original MACE code (linked with date at the top).
+###########################################################################################
 @compile_mode("script")
 class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
     def _setup(self) -> None:
         self.node_feats_down_irreps = o3.Irreps(
-            "64x0e"
-        )  # Interesting, this seems to be a required shaping
+            [(o3.Irreps(self.hidden_irreps).count(o3.Irrep(0, 1)), (0, 1))]
+        )
         # First linear
         self.linear_up = o3.Linear(
             self.node_feats_irreps,
@@ -313,9 +320,12 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         )
         # The following specifies the network architecture for embedding l=0 (scalar) irreps
         ## It is worth double-checking, but I believe this means that type 0 (scalar) irreps
-        ## are being embedded by 3 layers of size 256 and the output dim, then activated.
+        # are being embedded by 3 layers of size self.hidden_dim (scalar irreps) and the
+        # output dim, then activated.
         self.conv_tp_weights = nn.FullyConnectedNet(
-            [input_dim] + 3 * [256] + [self.conv_tp.weight_numel],
+            [input_dim]
+            + 3 * [o3.Irreps(self.hidden_irreps).count(o3.Irrep(0, 1))]
+            + [self.conv_tp.weight_numel],
             torch.nn.functional.silu,
         )
 
