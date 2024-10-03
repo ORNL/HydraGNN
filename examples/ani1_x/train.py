@@ -37,7 +37,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.utils.print.print_utils import log
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
