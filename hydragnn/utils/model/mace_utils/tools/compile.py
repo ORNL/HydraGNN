@@ -8,6 +8,12 @@
 # ArXiV: https://arxiv.org/pdf/2206.07697
 # Date: August 27, 2024  |  12:37 (EST)
 ###########################################################################################
+# NOTE: This file relates heavily to speedups in the MACE architecture which can be done by
+#       compiling correctly. As a result, much of this code can be commented and MACE will
+#       still function correctly. Specifically, only simplify_if_compile() and it's imports
+#       are required. However, for optimal performance, it is recommended to keep the entire
+#       file as-is.
+###########################################################################################
 
 from contextlib import contextmanager
 from functools import wraps
