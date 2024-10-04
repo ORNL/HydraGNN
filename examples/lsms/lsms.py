@@ -16,7 +16,7 @@ from hydragnn.utils.datasets.serializeddataset import (
 from hydragnn.preprocess.load_data import split_dataset
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 

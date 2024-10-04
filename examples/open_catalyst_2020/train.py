@@ -32,7 +32,7 @@ from utils.atoms_to_graphs import AtomsToGraphs
 from utils.preprocess import write_images_to_adios
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
