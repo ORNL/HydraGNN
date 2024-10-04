@@ -68,6 +68,10 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "radius" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["radius"] = None
+    if "radial_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["radial_type"] = None
+    if "distance_transform" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["distance_transform"] = None
     if "num_gaussians" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["num_gaussians"] = None
     if "num_filters" not in config["NeuralNetwork"]["Architecture"]:

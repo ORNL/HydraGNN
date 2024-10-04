@@ -71,13 +71,14 @@ class MACEStack(Base):
     def __init__(
         self,
         r_max: float,  # The cutoff radius for the radial basis functions and edge_index
+        radial_type: str,  # The type of radial basis function to use
+        distance_transform: str,  # The distance transform to use
         num_bessel: int,  # The number of radial bessel functions. This dictates the richness of radial information in message-passing.
         max_ell: int,  # Max l-type for CG-tensor product. Theoretically, there is no max l-type, but in practice, we need to truncate the CG-tensor product to keep tractible computation
         node_max_ell: int,  # Max l-type for node features
         avg_num_neighbors: float,
         num_polynomial_cutoff,  # The polynomial cutoff function ensures that the function goes to zero at the cutoff radius smoothly. Same as envelope_exponent for DimeNet
         correlation,  # Used in the product basis block and *roughly* determines the richness of interaction in the n-body interaction of layer 'n'.
-        radial_type,  # The type of radial basis function to use
         *args,
         **kwargs,
     ):
@@ -148,7 +149,7 @@ class MACEStack(Base):
             num_bessel=num_bessel,
             num_polynomial_cutoff=num_polynomial_cutoff,
             radial_type=radial_type,
-            distance_transform=None,
+            distance_transform=distance_transform,
         )
         self.node_embedding = LinearNodeEmbeddingBlock(
             irreps_in=self.node_attr_irreps,

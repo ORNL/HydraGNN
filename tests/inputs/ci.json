@@ -28,6 +28,7 @@
             "model_type": "PNA",
             "radius": 2.0,
             "max_neighbours": 100,
+            "radial_type": "bessel",
             "num_gaussians": 50,
             "envelope_exponent": 5,
             "int_emb_size": 64,
