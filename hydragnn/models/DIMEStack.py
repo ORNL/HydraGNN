@@ -19,7 +19,6 @@ from torch.nn import Identity, SiLU
 from torch_geometric.nn import Linear, Sequential
 from torch_geometric.nn.models.dimenet import (
     BesselBasisLayer,
-    EmbeddingBlock,
     InteractionPPBlock,
     OutputPPBlock,
     SphericalBasisLayer,
