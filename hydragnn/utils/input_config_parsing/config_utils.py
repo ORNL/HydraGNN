@@ -132,7 +132,7 @@ def update_config_edge_dim(config):
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim
-        # PNA would fail with integer edge_dim without edge_attr
+        # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
         config["edge_dim"] = 0
     return config
 
