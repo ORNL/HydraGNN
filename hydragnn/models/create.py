@@ -293,6 +293,7 @@ def create_model(
             num_before_skip,
             num_radial,
             num_spherical,
+            edge_dim,
             radius,
             input_dim,
             hidden_dim,
