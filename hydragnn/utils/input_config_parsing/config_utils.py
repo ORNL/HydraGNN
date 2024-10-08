@@ -124,15 +124,15 @@ def update_config_equivariance(config):
 
 def update_config_edge_dim(config):
     config["edge_dim"] = None
-    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN"]
+    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN", "DimeNet"]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
-        ), "Edge features can only be used with EGNN, SchNet, PNA, PNAPlus, and CGCNN."
+        ), "Edge features can only be used with DimeNet EGNN, SchNet, PNA, PNAPlus, and CGCNN."
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim
-        # PNA would fail with integer edge_dim without edge_attr
+        # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
         config["edge_dim"] = 0
     return config
 
