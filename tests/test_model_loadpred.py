@@ -96,7 +96,3 @@ def pytest_model_loadpred():
             False,
         )
     unittest_model_prediction(config)
-
-
-# if __name__ == "__main__":
-#     pytest_model_loadpred()
