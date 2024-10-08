@@ -74,6 +74,7 @@ class MACEStack(Base):
         radial_type: str,  # The type of radial basis function to use
         distance_transform: str,  # The distance transform to use
         num_bessel: int,  # The number of radial bessel functions. This dictates the richness of radial information in message-passing.
+        edge_dim: int,  # The dimension of HYDRA's optional edge attributes
         max_ell: int,  # Max l-type for CG-tensor product. Theoretically, there is no max l-type, but in practice, we need to truncate the CG-tensor product to keep tractible computation
         node_max_ell: int,  # Max l-type for node features
         avg_num_neighbors: float,
@@ -105,6 +106,7 @@ class MACEStack(Base):
         ## Passed
         self.node_max_ell = node_max_ell
         num_interactions = kwargs["num_conv_layers"]
+        self.edge_dim = edge_dim
         self.avg_num_neighbors = avg_num_neighbors
         ## Defined
         self.interaction_cls = RealAgnosticAttResidualInteractionBlock
@@ -163,9 +165,15 @@ class MACEStack(Base):
         ## This integrates HYDRA multihead nature with MACE's layer-wise readouts
         ## NOTE Norm techniques (feature_layers in HYDRA) are not advised for use in equivariant models as it can break equivariance
         self.multihead_decoders = ModuleList()
-        self.node_attr_irreps = o3.Irreps(
-            [(self.num_elements, (0, 1))]
-        )  # node_attr_irreps is created here because we need input_dim, which requires super(base) to be called, which calls _init_conv
+        # attr_irreps for node and edges are created here because we need input_dim, which requires super(base) to be called, which calls _init_conv
+        self.node_attr_irreps = o3.Irreps([(self.num_elements, (0, 1))])
+        # Edge Attributes are by default the spherical harmoncis but should be extended to include HYDRA's edge_attr is desired
+        if self.use_edge_attr:
+            self.edge_attrs_irreps = (
+                o3.Irreps(f"{self.edge_dim}x0e") + self.sh_irreps
+            ).simplify()  # Simplify combines irreps of the same type
+        else:
+            self.edge_attrs_irreps = self.sh_irreps
         hidden_irreps = o3.Irreps(
             create_irreps_string(self.hidden_dim, self.node_max_ell)
         )
@@ -245,7 +253,9 @@ class MACEStack(Base):
             o3.Irrep(0, 1)
         )  # Multiple copies of spherical harmonics for multiple interactions. They are 'combined' in a certain way during .simplify()  ## This makes it a requirement that hidden irreps all have the same number of channels
         interaction_irreps = (
-            (self.sh_irreps * num_features).sort()[0].simplify()
+            (self.sh_irreps * num_features)
+            .sort()[0]
+            .simplify()  # Kept as sh_irreps for the output of reshape irreps, whether or not edge_attr irreps are added from HYDRA functionality
         )  # .sort() is a tuple, so we need the [0] element for the sorted result
         ### Output
         output_irreps = create_irreps_string(output_dim, self.node_max_ell)
@@ -257,7 +267,7 @@ class MACEStack(Base):
             inter = self.interaction_cls_first(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=node_feats_irreps,
-                edge_attrs_irreps=self.sh_irreps,
+                edge_attrs_irreps=self.edge_attrs_irreps,
                 edge_feats_irreps=self.edge_feats_irreps,
                 target_irreps=interaction_irreps,  # Replace with output?
                 hidden_irreps=hidden_irreps_out,
@@ -285,7 +295,7 @@ class MACEStack(Base):
             inter = self.interaction_cls(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=hidden_irreps,
-                edge_attrs_irreps=self.sh_irreps,
+                edge_attrs_irreps=self.edge_attrs_irreps,
                 edge_feats_irreps=self.edge_feats_irreps,
                 target_irreps=interaction_irreps,
                 hidden_irreps=hidden_irreps_out,
@@ -307,7 +317,7 @@ class MACEStack(Base):
             inter = self.interaction_cls(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=hidden_irreps,
-                edge_attrs_irreps=self.sh_irreps,
+                edge_attrs_irreps=self.edge_attrs_irreps,
                 edge_feats_irreps=self.edge_feats_irreps,
                 target_irreps=interaction_irreps,
                 hidden_irreps=hidden_irreps_out,
@@ -326,12 +336,7 @@ class MACEStack(Base):
             )  # Change sizing to output_irreps
 
         input_args = "node_attributes, pos, node_features, edge_attributes, edge_features, edge_index"
-        # readout_args = "node_energies"
         conv_args = "node_attributes, edge_attributes, edge_features, edge_index"  # node_features is not used here because it's passed through in the forward
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
 
         if not last_layer:
             return PyGSequential(
@@ -429,6 +434,8 @@ class MACEStack(Base):
             shifts=data["shifts"],
         )
         edge_attributes = self.spherical_harmonics(vectors)
+        if self.use_edge_attr:
+            edge_attributes = torch.cat([data.edge_attr, edge_attributes], dim=1)
         edge_features = self.radial_embedding(
             lengths, data["node_attributes"], data["edge_index"], self.atomic_numbers
         )
@@ -437,7 +444,6 @@ class MACEStack(Base):
         data.node_features = node_feats
         data.edge_attributes = edge_attributes
         data.edge_features = edge_features
-        data.lengths = lengths
 
         conv_args = {
             "node_attributes": data.node_attributes,

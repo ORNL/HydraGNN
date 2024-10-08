@@ -378,6 +378,7 @@ def create_model(
             radial_type,
             distance_transform,
             num_radial,
+            edge_dim,
             max_ell,
             node_max_ell,
             avg_num_neighbors,
