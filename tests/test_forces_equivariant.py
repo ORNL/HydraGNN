@@ -16,8 +16,9 @@ import subprocess
 
 
 @pytest.mark.parametrize("example", ["LennardJones"])
-# @pytest.mark.parametrize("model_type", ["SchNet", "EGNN", "DimeNet", "PNAPlus", "MACE"])
-@pytest.mark.parametrize("model_type", ["MACE"])
+@pytest.mark.parametrize(
+    "model_type", ["SchNet", "EGNN", "DimeNet", "PNAPlus", "PNAEq", "MACE"]
+)
 @pytest.mark.mpi_skip()
 def pytest_examples(example, model_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
@@ -26,7 +27,3 @@ def pytest_examples(example, model_type):
 
     # Check the file ran without error.
     assert return_code == 0
-
-
-# if __name__ == "__main__":
-#     pytest_examples("LennardJones", "MACE")

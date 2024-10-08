@@ -19,7 +19,6 @@ from torch.nn import Identity, SiLU
 from torch_geometric.nn import Linear, Sequential
 from torch_geometric.nn.models.dimenet import (
     BesselBasisLayer,
-    EmbeddingBlock,
     InteractionPPBlock,
     OutputPPBlock,
     SphericalBasisLayer,
@@ -45,6 +44,7 @@ class DIMEStack(Base):
         num_before_skip,
         num_radial,
         num_spherical,
+        edge_dim,
         radius,
         *args,
         max_neighbours: Optional[int] = None,
@@ -57,6 +57,7 @@ class DIMEStack(Base):
         self.num_spherical = num_spherical
         self.num_before_skip = num_before_skip
         self.num_after_skip = num_after_skip
+        self.edge_dim = edge_dim
         self.radius = radius
 
         super().__init__(*args, **kwargs)
@@ -83,7 +84,10 @@ class DIMEStack(Base):
         ), "DimeNet requires more than one hidden dimension between input_dim and output_dim."
         lin = Linear(input_dim, hidden_dim)
         emb = HydraEmbeddingBlock(
-            num_radial=self.num_radial, hidden_channels=hidden_dim, act=SiLU()
+            num_radial=self.num_radial,
+            hidden_channels=hidden_dim,
+            act=SiLU(),
+            edge_dim=self.edge_dim,
         )
         inter = InteractionPPBlock(
             hidden_channels=hidden_dim,
@@ -104,16 +108,29 @@ class DIMEStack(Base):
             act=SiLU(),
             output_initializer="glorot_orthogonal",
         )
-        return Sequential(
-            "x, pos, rbf, sbf, i, j, idx_kj, idx_ji",
-            [
-                (lin, "x -> x"),
-                (emb, "x, rbf, i, j -> x1"),
-                (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                (dec, "x2, rbf, i -> c"),
-                (lambda x, pos: [x, pos], "c, pos -> c, pos"),
-            ],
-        )
+
+        if self.use_edge_attr:
+            return Sequential(
+                "x, pos, rbf, edge_attr, sbf, i, j, idx_kj, idx_ji",
+                [
+                    (lin, "x -> x"),
+                    (emb, "x, rbf, i, j, edge_attr -> x1"),
+                    (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
+                    (dec, "x2, rbf, i -> c"),
+                    (lambda x, pos: [x, pos], "c, pos -> c, pos"),
+                ],
+            )
+        else:
+            return Sequential(
+                "x, pos, rbf, sbf, i, j, idx_kj, idx_ji",
+                [
+                    (lin, "x -> x"),
+                    (emb, "x, rbf, i, j -> x1"),
+                    (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
+                    (dec, "x2, rbf, i -> c"),
+                    (lambda x, pos: [x, pos], "c, pos -> c, pos"),
+                ],
+            )
 
     def _conv_args(self, data):
         assert (
@@ -142,6 +159,12 @@ class DIMEStack(Base):
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
         }
+
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
+            conv_args.update({"edge_attr": data.edge_attr})
 
         return conv_args
 
@@ -182,20 +205,50 @@ def triplets(
     return col, row, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
 
-class HydraEmbeddingBlock(EmbeddingBlock):
-    def __init__(self, num_radial: int, hidden_channels: int, act: Callable):
-        super().__init__(
-            num_radial=num_radial, hidden_channels=hidden_channels, act=act
-        )
-        del self.emb  # Atomic embeddings are handled by Hydra.
+class HydraEmbeddingBlock(torch.nn.Module):
+    def __init__(
+        self,
+        num_radial: int,
+        hidden_channels: int,
+        act: Callable,
+        edge_dim: Optional[int] = None,
+    ):
+        super().__init__()
+        self.act = act
+
+        # self.emb = Embedding(95, hidden_channels)  # Atomic embeddings are handled by HYDRA
+        self.lin_rbf = Linear(num_radial, hidden_channels)
+        if edge_dim is not None:  # Optional edge features
+            self.edge_lin = Linear(edge_dim, hidden_channels)
+            self.lin = Linear(4 * hidden_channels, hidden_channels)
+        else:
+            self.lin = Linear(3 * hidden_channels, hidden_channels)
+
         self.reset_parameters()
 
     def reset_parameters(self):
         # self.emb.weight.data.uniform_(-sqrt(3), sqrt(3))
         self.lin_rbf.reset_parameters()
         self.lin.reset_parameters()
+        if hasattr(self, "edge_lin"):
+            self.edge_lin.reset_parameters()
 
-    def forward(self, x: Tensor, rbf: Tensor, i: Tensor, j: Tensor) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        rbf: Tensor,
+        i: Tensor,
+        j: Tensor,
+        edge_attr: Optional[Tensor] = None,
+    ) -> Tensor:
         # x = self.emb(x)
         rbf = self.act(self.lin_rbf(rbf))
-        return self.act(self.lin(torch.cat([x[i], x[j], rbf], dim=-1)))
+
+        # Include edge features if they are provided
+        if edge_attr is not None and hasattr(self, "edge_lin"):
+            edge_attr = self.act(self.edge_lin(edge_attr))
+            out = torch.cat([x[i], x[j], rbf, edge_attr], dim=-1)
+        else:
+            out = torch.cat([x[i], x[j], rbf], dim=-1)
+
+        return self.act(self.lin(out))

@@ -24,6 +24,7 @@ from hydragnn.models.SAGEStack import SAGEStack
 from hydragnn.models.SCFStack import SCFStack
 from hydragnn.models.DIMEStack import DIMEStack
 from hydragnn.models.EGCLStack import EGCLStack
+from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.MACEStack import MACEStack
 
 from hydragnn.utils.distributed import get_device
@@ -307,6 +308,7 @@ def create_model(
             num_before_skip,
             num_radial,
             num_spherical,
+            edge_dim,
             radius,
             input_dim,
             hidden_dim,
@@ -342,6 +344,28 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
+
+    elif model_type == "PNAEq":
+        assert pna_deg is not None, "PNAEq requires degree input."
+        model = PNAEqStack(
+            pna_deg,
+            edge_dim,
+            num_radial,
+            radius,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+        )
+
     elif model_type == "MACE":
         assert radius is not None, "MACE requires radius input."
         assert num_radial is not None, "MACE requires num_radial input."
@@ -373,7 +397,6 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
         )
-
     else:
         raise ValueError("Unknown model_type: {0}".format(model_type))
 
