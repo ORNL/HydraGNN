@@ -250,12 +250,7 @@ def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
         "DimeNet",
         "EGNN",
         "PNAEq",
-        "MACE",
     ],
 )
 def pytest_train_model_conv_head(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
-
-
-def train_model_conv_head(model_type, overwrite_data=False):
     unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
