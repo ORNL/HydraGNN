@@ -109,11 +109,7 @@ def create_model(
     num_filters: int = None,
     radius: float = None,
     equivariance: bool = False,
-    correlation: Union[int, List[int]] = None,
-    max_ell: int = None,
-    node_max_ell: int = None,
-    avg_num_neighbors: int = None,
-    conv_checkopinting: bool = False,
+    conv_checkpointing: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -401,7 +397,7 @@ def create_model(
     else:
         raise ValueError("Unknown model_type: {0}".format(model_type))
 
-    if conv_checkopinting:
+    if conv_checkpointing:
         model.enable_conv_checkpointing()
 
     timer.stop()
