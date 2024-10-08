@@ -44,7 +44,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
 
-    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA" or "PNAPlus":
+    PNA_models = ["PNA", "PNAPlus", "PNAEq"]
+    if config["NeuralNetwork"]["Architecture"]["model_type"] in PNA_models:
         if hasattr(train_loader.dataset, "pna_deg"):
             ## Use max neighbours used in the datasets.
             deg = torch.tensor(train_loader.dataset.pna_deg)
@@ -112,7 +113,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet"]
+    equivariant_models = ["EGNN", "SchNet", "PNAEq"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
