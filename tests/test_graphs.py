@@ -238,26 +238,16 @@ def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
 @pytest.mark.parametrize(
     "model_type",
     [
-        
         "SAGE",
-       
         "GIN",
-       
         "GAT",
-       
         "MFC",
-       
         "PNA",
-       
         "PNAPlus",
-       
         "SchNet",
-       
         "DimeNet",
-       
         "EGNN",
         "PNAEq",
-    ,
         "PAINN",
     ],
 )
