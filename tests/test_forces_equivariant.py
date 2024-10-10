@@ -17,7 +17,7 @@ import subprocess
 
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.parametrize(
-    "model_type", ["SchNet", "EGNN", "DimeNet", "PNAPlus", "PNAEq"]
+    "model_type", ["SchNet", "EGNN", "DimeNet", "PAINN", "PNAPlus"]
 )
 @pytest.mark.mpi_skip()
 def pytest_examples(example, model_type):
