@@ -44,7 +44,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
 
-    if config["NeuralNetwork"]["Architecture"]["model_type"] == "PNA" or "PNAPlus":
+    PNA_models = ["PNA", "PNAPlus", "PNAEq"]
+    if config["NeuralNetwork"]["Architecture"]["model_type"] in PNA_models:
         if hasattr(train_loader.dataset, "pna_deg"):
             ## Use max neighbours used in the datasets.
             deg = torch.tensor(train_loader.dataset.pna_deg)
@@ -112,7 +113,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet", "PAINN"]
+    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
@@ -124,15 +125,15 @@ def update_config_equivariance(config):
 
 def update_config_edge_dim(config):
     config["edge_dim"] = None
-    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN"]
+    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN", "DimeNet"]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
-        ), "Edge features can only be used with EGNN, SchNet, PNA, PNAPlus, and CGCNN."
+        ), "Edge features can only be used with DimeNet EGNN, SchNet, PNA, PNAPlus, and CGCNN."
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim
-        # PNA would fail with integer edge_dim without edge_attr
+        # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
         config["edge_dim"] = 0
     return config
 

@@ -24,7 +24,7 @@ from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.utils.distributed import nsplit
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
 except ImportError:
     pass
 
