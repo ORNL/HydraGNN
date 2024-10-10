@@ -136,7 +136,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet", "PNAEq", "MACE"]
+    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
