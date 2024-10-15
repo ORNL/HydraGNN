@@ -51,6 +51,16 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+def list_directories(path):
+    # List all items in the given path
+    items = os.listdir(path)
+
+    # Filter out items that are directories
+    directories = [item for item in items if os.path.isdir(os.path.join(path, item))]
+
+    return directories
+
+
 periodic_table = generate_dictionary_elements()
 
 # Reversing the dictionary so the elements become keys and the atomic numbers become values
@@ -75,11 +85,15 @@ class Alexandria(AbstractBaseDataset):
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
-        indices = ["pascal", "pbe", "pbe_1d", "pbe_2d", "pbesol", "scan"]
+        list_dirs = list_directories(
+            os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
+        )
 
-        for index in indices:
+        for index in list_dirs:
 
-            subdirpath = os.path.join(dirpath, "compressed_data", index)
+            subdirpath = os.path.join(
+                dirpath, "compressed_data", "alexandria.icams.rub.de", index
+            )
 
             total_file_list = os.listdir(subdirpath)
 
@@ -95,7 +109,7 @@ class Alexandria(AbstractBaseDataset):
                 if filepath.endswith("bz2"):
                     self.process_file_content(os.path.join(subdirpath, filepath))
                 else:
-                    print(f"{filepath} is not a .bz2 file to decompress")
+                    print(f"{filepath} is not a .bz2 file to decompress", flush=True)
 
     def get_data_dict(self, computed_entry_dict):
         """
@@ -124,15 +138,15 @@ class Alexandria(AbstractBaseDataset):
             assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
             assert pos.shape[0] > 0, "pos tensor does not have any atoms"
         except:
-            print(f"Structure {entry_id} does not have positional sites")
+            print(f"Structure {entry_id} does not have positional sites", flush=True)
             return data_object
-        natoms = torch.IntTensor([pos.shape[1]])
+        natoms = torch.IntTensor([pos.shape[0]])
 
         cell = None
         try:
             cell = torch.tensor(structure["lattice"]["matrix"]).to(torch.float32)
         except:
-            print(f"Structure {entry_id} does not have cell")
+            print(f"Structure {entry_id} does not have cell", flush=True)
             return data_object
 
         atomic_numbers = None
@@ -151,14 +165,17 @@ class Alexandria(AbstractBaseDataset):
                 pos.shape[0] == atomic_numbers.shape[0]
             ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
         except:
-            print(f"Structure {entry_id} does not have positional atomic numbers")
+            print(
+                f"Structure {entry_id} does not have positional atomic numbers",
+                flush=True,
+            )
             return data_object
 
         forces_numpy = None
         try:
             forces_numpy = get_forces_array_from_structure(structure)
         except:
-            print(f"Structure {entry_id} does not have forces")
+            print(f"Structure {entry_id} does not have forces", flush=True)
             return data_object
         forces = torch.tensor(forces_numpy).to(torch.float32)
 
@@ -173,7 +190,7 @@ class Alexandria(AbstractBaseDataset):
         try:
             total_energy = computed_entry_dict["data"]["energy_total"]
         except:
-            print(f"Structure {entry_id} does not have total energy")
+            print(f"Structure {entry_id} does not have total energy", flush=True)
             return data_object
         total_energy_tensor = (
             torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
@@ -288,8 +305,12 @@ class Alexandria(AbstractBaseDataset):
                 self.dataset.extend(filtered_computed_entry_dict)
 
             except OSError as e:
-                print("Failed to decompress data:", e)
+                print("Failed to decompress data:", e, flush=True)
                 decompressed_data = None
+            except json.JSONDecodeError as e:
+                print("Failed to decode JSON:", e, flush=True)
+            except Exception as e:
+                print("An error occurred:", e, flush=True)
 
     def len(self):
         return len(self.dataset)
