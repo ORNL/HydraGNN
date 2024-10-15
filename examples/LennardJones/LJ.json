@@ -30,6 +30,8 @@
       "num_before_skip": 1,
       "num_after_skip": 1,
       "envelope_exponent": 5,
+      "max_ell": 1,
+      "node_max_ell": 1,
       "num_radial": 5,
       "num_spherical": 2,
       "hidden_dim": 20,

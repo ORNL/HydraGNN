@@ -12,7 +12,8 @@ import os, json
 import torch
 import random
 import hydragnn
-from .test_graphs import unittest_train_model
+from tests.test_graphs import unittest_train_model
+from hydragnn.utils.input_config_parsing.config_utils import update_config
 
 
 def unittest_model_prediction(config):
@@ -23,6 +24,7 @@ def unittest_model_prediction(config):
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.load_data.dataset_loading_and_splitting(config=config)
+    config = update_config(config, train_loader, val_loader, test_loader)
 
     model = hydragnn.models.create.create_model_config(
         config=config["NeuralNetwork"],
