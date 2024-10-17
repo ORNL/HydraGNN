@@ -41,7 +41,7 @@ from torch_geometric.transforms import RadiusGraph, Distance
 
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 

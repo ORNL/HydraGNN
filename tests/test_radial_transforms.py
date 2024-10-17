@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -22,10 +22,13 @@ from hydragnn.utils.input_config_parsing.config_utils import merge_config
 
 
 # Main unit test function called by pytest wrappers.
+## Adapted from test_graphs.py ... Currently, only the single head model json is tested, although the multihead functionality remains.
 def unittest_train_model(
     model_type,
+    radial_type,
+    distance_transform,
     ci_input,
-    use_lengths,
+    use_lengths=True,
     overwrite_data=False,
     use_deepspeed=False,
     overwrite_config=None,
@@ -39,6 +42,8 @@ def unittest_train_model(
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    config["NeuralNetwork"]["Architecture"]["radial_type"] = radial_type
+    config["NeuralNetwork"]["Architecture"]["distance_transform"] = distance_transform
 
     # Overwrite config settings if provided
     if overwrite_config:
@@ -121,12 +126,8 @@ def unittest_train_model(
                         data_path, number_configurations=num_samples
                     )
 
-    # Since the config file uses PNA already, test the file overload here.
-    # All the other models need to use the locally modified dictionary.
-    if model_type == "PNA" and not use_lengths:
-        hydragnn.run_training(config_file, use_deepspeed)
-    else:
-        hydragnn.run_training(config, use_deepspeed)
+    # Run Training
+    hydragnn.run_training(config, use_deepspeed)
 
     (
         error,
@@ -138,28 +139,17 @@ def unittest_train_model(
     # Set RMSE and sample MAE error thresholds
     thresholds = {
         "SAGE": [0.20, 0.20],
-        "PNA": [0.20, 0.20],
-        "PNAPlus": [0.20, 0.20],
+        "PNA": [0.10, 0.10],
+        "PNAPlus": [0.10, 0.10],
         "MFC": [0.20, 0.30],
         "GIN": [0.25, 0.20],
         "GAT": [0.60, 0.70],
-        "CGCNN": [0.50, 0.40],
+        "CGCNN": [0.175, 0.175],
         "SchNet": [0.20, 0.20],
         "DimeNet": [0.50, 0.50],
         "EGNN": [0.20, 0.20],
-        "PNAEq": [0.60, 0.60],
-        "PAINN": [0.60, 0.60],
         "MACE": [0.60, 0.70],
     }
-    if use_lengths and ("vector" not in ci_input):
-        thresholds["CGCNN"] = [0.175, 0.175]
-        thresholds["PNA"] = [0.10, 0.10]
-        thresholds["PNAPlus"] = [0.10, 0.10]
-    if use_lengths and "vector" in ci_input:
-        thresholds["PNA"] = [0.2, 0.15]
-        thresholds["PNAPlus"] = [0.2, 0.15]
-    if ci_input == "ci_conv_head.json":
-        thresholds["GIN"] = [0.25, 0.40]
 
     verbosity = 2
 
@@ -195,65 +185,24 @@ def unittest_train_model(
     assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
 
 
-# Test across all models with both single/multihead
 @pytest.mark.parametrize(
     "model_type",
-    [
-        "SAGE",
-        "GIN",
-        "GAT",
-        "MFC",
-        "PNA",
-        "PNAPlus",
-        "CGCNN",
-        "SchNet",
-        "DimeNet",
-        "EGNN",
-        "PNAEq",
-        "PAINN",
-        "MACE",
-    ],
+    ["MACE"],
 )
-@pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input, overwrite_data=False):
-    unittest_train_model(model_type, ci_input, False, overwrite_data)
-
-
-# Test only models
-@pytest.mark.parametrize(
-    "model_type", ["PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"]
-)
-def pytest_train_model_lengths(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci.json", True, overwrite_data)
-
-
-# Test across equivariant models
-@pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
-def pytest_train_equivariant_model(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
-
-
-# Test vector output
-@pytest.mark.parametrize("model_type", ["PNA", "PNAPlus", "MACE"])
-def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
-
-
-@pytest.mark.parametrize(
-    "model_type",
-    [
-        "SAGE",
-        "GIN",
-        "GAT",
-        "MFC",
-        "PNA",
-        "PNAPlus",
-        "SchNet",
-        "DimeNet",
-        "EGNN",
-        "PNAEq",
-        "PAINN",
-    ],
-)
-def pytest_train_model_conv_head(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+@pytest.mark.parametrize("basis_function", ["bessel", "gaussian", "chebyshev"])
+@pytest.mark.parametrize("distance_transform", ["None", "Agnesi", "Soft"])
+def pytest_train_model_transforms(
+    model_type,
+    basis_function,
+    distance_transform,
+    use_lengths=True,
+    overwrite_data=False,
+):
+    unittest_train_model(
+        model_type,
+        basis_function,
+        distance_transform,
+        "ci.json",
+        use_lengths,
+        overwrite_data,
+    )

@@ -33,7 +33,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 

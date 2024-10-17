@@ -36,6 +36,8 @@
             "num_radial": 6,
             "num_spherical": 7,
             "num_filters": 126,
+            "max_ell": 1,
+            "node_max_ell": 1,
             "periodic_boundary_conditions": false,
             "hidden_dim": 8,
             "num_conv_layers": 2,
