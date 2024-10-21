@@ -126,7 +126,11 @@ def run(argv):
     )
 
     # first hurdle - we need to get metadata (what features are present) from adios datasets.
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, ft_config["Training"]["batch_size"]
     )
     print("Created Dataloaders")

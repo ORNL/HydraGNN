@@ -301,9 +301,7 @@ def parse_deepspeed_config(config):
         ds_config = {}
 
     if "train_micro_batch_size_per_gpu" not in ds_config:
-        ds_config["train_micro_batch_size_per_gpu"] = config[
-            "Training"
-        ]["batch_size"]
+        ds_config["train_micro_batch_size_per_gpu"] = config["Training"]["batch_size"]
         ds_config["gradient_accumulation_steps"] = 1
 
     if "steps_per_print" not in ds_config:
