@@ -52,12 +52,20 @@ def generate_graphdata_from_smilestr(simlestr, ytarget, types={}, var_config=Non
 
 
 def generate_graphdata_from_rdkit_molecule(
-    mol, ytarget, types={}, atomicdescriptors_torch_tensor=None, var_config=None
+    mol, ytarget, types={}, atomicdescriptors_torch_tensor=None,
+    var_config=None,
+    get_positions=False,
+    randomSeed=42,
+    maxAttempts=10
 ):
     bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
 
     mol = Chem.AddHs(mol)
     N = mol.GetNumAtoms()
+
+    if get_positions and mol.GetNumConformers() == 0:
+        Chem.EmbedMolecule(mol, randomSeed=randomSeed, maxAttempts=maxAttempts)
+        Chem.MMFFOptimizeMolecule(mol)
 
     type_idx = []
     atomic_number = []
@@ -65,6 +73,7 @@ def generate_graphdata_from_rdkit_molecule(
     sp = []
     sp2 = []
     sp3 = []
+    coordinates = []
     for atom in mol.GetAtoms():
         type_idx.append(types.get(atom.GetSymbol(), 0))
         atomic_number.append(atom.GetAtomicNum())
@@ -73,6 +82,9 @@ def generate_graphdata_from_rdkit_molecule(
         sp.append(1 if hybridization == HybridizationType.SP else 0)
         sp2.append(1 if hybridization == HybridizationType.SP2 else 0)
         sp3.append(1 if hybridization == HybridizationType.SP3 else 0)
+        if get_positions:
+            pos = mol.GetConformer().GetAtomPosition(atom.GetIdx())
+            coordinates.append([pos.x, pos.y, pos.z])
 
     z = torch.tensor(atomic_number, dtype=torch.long)
 
@@ -100,8 +112,10 @@ def generate_graphdata_from_rdkit_molecule(
         .t()
         .contiguous()
     )
+    #if get_positions: # NOTE: doubling the coordinates is deprecated
+    #    x = torch.cat([x, torch.tensor(coordinates, dtype=torch.float)], dim=-1)
 
-    if len(types) > 0:
+    if len(types) > 0: # FIXME: directly adding one_hot here should be deprecated
         x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
         x = torch.cat([x1.to(torch.float), x], dim=-1)
 
@@ -113,7 +127,10 @@ def generate_graphdata_from_rdkit_molecule(
 
     y = ytarget  # .squeeze()
 
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
+    if get_positions:
+         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, pos=torch.tensor(coordinates, dtype=torch.float))
+    else:
+        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
     if var_config is not None:
         hydragnn.preprocess.update_predicted_values(
             var_config["type"],
