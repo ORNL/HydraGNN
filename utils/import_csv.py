@@ -199,7 +199,7 @@ def main():
         ## local portion
         _smileset = smileset[rx.start : rx.stop]
         _valueset = valueset[rx.start : rx.stop]
-
+        missed_count = 0
         for smilestr, ytarget in tqdm(
             zip(_smileset, _valueset),
             disable=rank != 0,
@@ -208,8 +208,11 @@ def main():
         ):
             try:
                 data = generate_graphdata_from_smilestr(
-                    smilestr, ytarget
+                    smilestr, ytarget, get_positions=True, 
+                    pretrained=True
                 )
+                # hack to make edge_attr as the models expect. 
+                data.edge_attr = torch.Tensor([1]).repeat(data.edge_index.shape[1]).unsqueeze(1) 
                 # TODO: ensure data.pos is populated (e.g. call rdkit)
                 # TODO: should we energy minimize these coordinates
 
@@ -220,7 +223,8 @@ def main():
                     f"Exception in call to generate_graphdata_from_smilestr."
                     f" {e} for {smilestr}. Ignoring molecule and proceeding .."
                 )
-
+                missed_count += 1
+    print(f'missed {missed_count} molecules')
     # pre-compute PNA degrees
     pna_deg = gather_deg(dataset["trainset"])
     # this is stored with the trainset in pickle format
@@ -231,7 +235,6 @@ def main():
     node_names = [x.replace("atomicnumber", "atomic_number") for x in node_names]
     edge_names, edge_dims = get_edge_attribute_name()
     task_dims = [1]*len(task_names)
-
     attrs = {
         "x_name": node_names,
         "x_name/feature_count": np.array(node_dims),
