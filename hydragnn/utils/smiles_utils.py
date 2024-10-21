@@ -3,8 +3,7 @@ import torch
 import pickle, csv
 
 #########################################################
-# from rdkit import Chem
-from rdkit.Chem import AllChem as Chem
+from rdkit import Chem
 from rdkit.Chem.rdchem import BondType as BT
 from rdkit.Chem.rdchem import HybridizationType
 import torch.nn.functional as F
@@ -19,7 +18,7 @@ import hydragnn
 def get_node_attribute_name(types={}):
     atom_attr_name = ["" for k in range(len(types))]
     for k, idx in types.items():
-        atom_attr_name[idx] = "atom"+k
+        atom_attr_name[idx] = "atom" + k
     extra_attr_name = [
         "atomicnumber",
         "IsAromatic",
@@ -34,11 +33,21 @@ def get_node_attribute_name(types={}):
     ] * len(name_list)
     return name_list, dims_list
 
+
 def get_edge_attribute_name():
     names = ["SINGLE", "DOUBLE", "TRIPLE", "AROMATIC"]
-    return names, [1]*len(names)
+    return names, [1] * len(names)
 
-def generate_graphdata_from_smilestr(simlestr, ytarget, types={}, var_config=None, get_positions=False):
+
+def generate_graphdata_from_smilestr(
+    simlestr,
+    ytarget,
+    types={},
+    var_config=None,
+    get_positions=False,
+    randomSeed=42,
+    maxAttempts=10,
+):
 
     ps = Chem.SmilesParserParams()
     ps.removeHs = False
@@ -46,14 +55,21 @@ def generate_graphdata_from_smilestr(simlestr, ytarget, types={}, var_config=Non
     mol = Chem.MolFromSmiles(simlestr, ps)  # , sanitize=False , removeHs=False)
 
     data = generate_graphdata_from_rdkit_molecule(
-        mol, ytarget, types, var_config=var_config, get_positions=get_positions
+        mol, ytarget, types, None, var_config, get_positions, randomSeed, maxAttempts
     )
 
     return data
 
 
 def generate_graphdata_from_rdkit_molecule(
-    mol, ytarget, types={}, atomicdescriptors_torch_tensor=None, var_config=None, get_positions=False
+    mol,
+    ytarget,
+    types={},
+    atomicdescriptors_torch_tensor=None,
+    var_config=None,
+    get_positions=False,
+    randomSeed=42,
+    maxAttempts=10,
 ):
     bonds = {BT.SINGLE: 0, BT.DOUBLE: 1, BT.TRIPLE: 2, BT.AROMATIC: 3}
 
@@ -61,7 +77,7 @@ def generate_graphdata_from_rdkit_molecule(
     N = mol.GetNumAtoms()
 
     if get_positions and mol.GetNumConformers() == 0:
-        Chem.EmbedMolecule(mol, randomSeed=42)
+        Chem.EmbedMolecule(mol, randomSeed=randomSeed, maxAttempts=maxAttempts)
         Chem.MMFFOptimizeMolecule(mol)
 
     type_idx = []
@@ -79,13 +95,11 @@ def generate_graphdata_from_rdkit_molecule(
         sp.append(1 if hybridization == HybridizationType.SP else 0)
         sp2.append(1 if hybridization == HybridizationType.SP2 else 0)
         sp3.append(1 if hybridization == HybridizationType.SP3 else 0)
-
         if get_positions:
             pos = mol.GetConformer().GetAtomPosition(atom.GetIdx())
             coordinates.append([pos.x, pos.y, pos.z])
 
     z = torch.tensor(atomic_number, dtype=torch.long)
-
 
     row, col, edge_type = [], [], []
     for bond in mol.GetBonds():
@@ -111,8 +125,10 @@ def generate_graphdata_from_rdkit_molecule(
         .t()
         .contiguous()
     )
+    # if get_positions: # NOTE: doubling the coordinates is deprecated
+    #    x = torch.cat([x, torch.tensor(coordinates, dtype=torch.float)], dim=-1)
 
-    if len(types) > 0:
+    if len(types) > 0:  # FIXME: directly adding one_hot here should be deprecated
         x1 = F.one_hot(torch.tensor(type_idx), num_classes=len(types))
         x = torch.cat([x1.to(torch.float), x], dim=-1)
 
@@ -123,9 +139,15 @@ def generate_graphdata_from_rdkit_molecule(
         x = torch.cat([x, atomicdescriptors_torch_tensor], dim=-1).to(torch.float)
 
     y = ytarget  # .squeeze()
-    
+
     if get_positions:
-        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, pos=torch.tensor(coordinates, dtype=torch.float))
+        data = Data(
+            x=x,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            y=y,
+            pos=torch.tensor(coordinates, dtype=torch.float),
+        )
     else:
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y)
     if var_config is not None:

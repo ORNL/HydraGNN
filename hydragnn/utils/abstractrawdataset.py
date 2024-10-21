@@ -214,7 +214,6 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
             self.__normalize_dataset()
 
     def __normalize_dataset(self):
-
         """Performs the normalization on Data objects and returns the normalized dataset."""
         num_node_features = len(self.node_feature_dim)
         num_graph_features = len(self.graph_feature_dim)

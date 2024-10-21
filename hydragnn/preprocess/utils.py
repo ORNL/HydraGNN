@@ -20,6 +20,7 @@ import os
 
 from .dataset_descriptors import AtomFeatures
 
+
 ## This function can be slow if dataset is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_dist
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
@@ -317,7 +318,7 @@ def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=
         frequencies = sorted(frequencies[frequencies > 0].tolist())
         category = 0
         for index, frequency in enumerate(frequencies):
-            category += frequency * (100 ** index)
+            category += frequency * (100**index)
         dataset_categories.append(category)
 
     subsample_indices = []

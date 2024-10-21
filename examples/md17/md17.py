@@ -16,6 +16,7 @@ except:
 
 import hydragnn
 
+
 # Update each sample prior to loading.
 def md17_pre_transform(data):
     # Set descriptor as element type.
@@ -72,7 +73,11 @@ dataset = torch_geometric.datasets.MD17(
 train, val, test = hydragnn.preprocess.split_dataset(
     dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
 )
-(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+(
+    train_loader,
+    val_loader,
+    test_loader,
+) = hydragnn.preprocess.create_dataloaders(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
