@@ -44,8 +44,10 @@ torch.backends.cudnn.enabled = False
 
 from fairchem.core.datasets import AseDBDataset
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
 create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
@@ -63,8 +65,9 @@ dataset_names = [
     "aimd-from-PBE-1000-nvt",
     "aimd-from-PBE-3000-npt",
     "aimd-from-PBE-3000-nvt",
-    "rattled-relax"
+    "rattled-relax",
 ]
+
 
 class OMat2024(AbstractBaseDataset):
     def __init__(
@@ -72,7 +75,9 @@ class OMat2024(AbstractBaseDataset):
     ):
         super().__init__()
 
-        assert (data_type == "train") or (data_type == "val"), "data_type must be a string either equal to 'train' or to 'val'"
+        assert (data_type == "train") or (
+            data_type == "val"
+        ), "data_type must be a string either equal to 'train' or to 'val'"
 
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
@@ -91,14 +96,20 @@ class OMat2024(AbstractBaseDataset):
 
         for dataname in dataset_names:
 
-            dataset = AseDBDataset(config=dict(src=os.path.join(dirpath, data_type, dataname), **config_kwargs))
+            dataset = AseDBDataset(
+                config=dict(
+                    src=os.path.join(dirpath, data_type, dataname), **config_kwargs
+                )
+            )
 
             rx = list(nsplit(range(dataset.num_samples), self.world_size))[self.rank]
 
             for index in rx:
                 xyz = torch.tensor(dataset.get_atoms(index).get_positions())
                 natoms = torch.IntTensor([xyz.shape[0]])
-                Z = torch.tensor(dataset.get_atoms(index).get_atomic_numbers()).unsqueeze(1)
+                Z = torch.tensor(
+                    dataset.get_atoms(index).get_atomic_numbers()
+                ).unsqueeze(1)
                 forces = torch.tensor(dataset.get_atoms(index).get_forces())
                 energy = torch.tensor(dataset.get_atoms(index).get_total_energy())
                 chemical_formula = dataset.get_atoms(index).get_chemical_formula()
@@ -434,4 +445,3 @@ if __name__ == "__main__":
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
     sys.exit(0)
-

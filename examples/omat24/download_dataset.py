@@ -31,11 +31,13 @@ DOWNLOAD_LINKS = {
         "aimd-from-PBE-3000-npt": "wget https://dl.fbaipublicfiles.com/opencatalystproject/data/omat/241018/omat/val/aimd-from-PBE-3000-npt.tar.gz",
         "aimd-from-PBE-3000-nvt": "wget https://dl.fbaipublicfiles.com/opencatalystproject/data/omat/241018/omat/val/aimd-from-PBE-3000-nvt.tar.gz",
         "rattled-relax": "wget https://dl.fbaipublicfiles.com/opencatalystproject/data/omat/241018/omat/val/rattled-relax.tar.gz",
-    }
+    },
 }
 
 
-assert DOWNLOAD_LINKS["train"].keys() == DOWNLOAD_LINKS["val"].keys(), "data partition names in train do not match with equivalent names in val"
+assert (
+    DOWNLOAD_LINKS["train"].keys() == DOWNLOAD_LINKS["val"].keys()
+), "data partition names in train do not match with equivalent names in val"
 dataset_names = list(DOWNLOAD_LINKS["train"].keys())
 
 
@@ -72,7 +74,7 @@ if __name__ == "__main__":
 
     args, _ = parser.parse_known_args()
 
-    for task in ['train', 'val']:
+    for task in ["train", "val"]:
         for split in dataset_names:
             get_data(
                 datadir=args.data_path,
