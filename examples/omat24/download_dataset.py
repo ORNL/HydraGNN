@@ -57,7 +57,7 @@ def get_data(datadir, task, split):
     logging.info("Extracting contents...")
     os.system(f"tar -xvf {filename} -C {datadir}")
     filename_without_extension = filename.replace(".tar.gz", "")
-    os.makedirs(os.path.join(datadir, task), exist_ok=False)
+    os.makedirs(os.path.join(datadir, task), exist_ok=True)
 
     # Move the directory
     shutil.move(filename_without_extension, os.path.join(datadir, task))
