@@ -42,7 +42,7 @@ dataset_names = list(DOWNLOAD_LINKS["train"].keys())
 
 
 def get_data(datadir, task, split):
-    os.makedirs(datadir, exist_ok=False)
+    os.makedirs(datadir, exist_ok=True)
 
     if (task == "train" or task == "val") and split is None:
         raise NotImplementedError(f"{task} requires a split to be defined.")
