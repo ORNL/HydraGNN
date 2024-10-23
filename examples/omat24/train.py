@@ -163,18 +163,6 @@ if __name__ == "__main__":
         "--inputfile", help="input file", type=str, default="omat24_energy.json"
     )
     parser.add_argument(
-        "--train_path",
-        help="path to training data",
-        type=str,
-        default="s2ef_train_200K_uncompressed",
-    )
-    parser.add_argument(
-        "--test_path",
-        help="path to testing data",
-        type=str,
-        default="s2ef_val_id_uncompressed",
-    )
-    parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
         type=bool,
