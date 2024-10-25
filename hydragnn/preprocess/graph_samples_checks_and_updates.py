@@ -271,6 +271,15 @@ def update_predicted_values(
                 ],
                 (-1, 1),
             )
+        elif type[item] == "pos":
+                    # index_counter_nodal_y = sum(node_feature_dim[: index[item]])
+                    feat_ = torch.reshape(
+                        data.pos[
+                            :,
+                            : node_feature_dim[index[item]]
+                        ],
+                        (-1, 1),
+                    )
         else:
             raise ValueError("Unknown output type", type[item])
         output_feature.append(feat_)

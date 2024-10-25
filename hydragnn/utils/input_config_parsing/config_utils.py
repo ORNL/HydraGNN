@@ -136,7 +136,7 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
+    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE", "HybridEGNN"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
@@ -188,7 +188,7 @@ def update_config_NN_outputs(config, data, graph_size_variable):
         for ihead in range(len(output_type)):
             if output_type[ihead] == "graph":
                 dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-            elif output_type[ihead] == "node":
+            elif output_type[ihead] == "node" or output_type[ihead] == "pos":
                 if (
                     graph_size_variable
                     and config["Architecture"]["output_heads"]["node"]["type"]
@@ -206,10 +206,13 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     else:
         for ihead in range(len(output_type)):
             if output_type[ihead] != "graph":
-                raise ValueError(
-                    "y_loc is needed for outputs that are not at graph levels",
-                    output_type[ihead],
-                )
+                if not "dynamic_target" in config["Variables_of_interest"] or\
+                    ("dynamic_target" in config["Variables_of_interest"] and\
+                     not config["Variables_of_interest"]["dynamic_target"]): # raise ValueError if yloc missing on non-graph, with "dynamic_target" set to false or missing
+                    raise ValueError(
+                        "y_loc is needed for outputs that are not at graph levels",
+                        output_type[ihead],
+                    )
         dims_list = config["Variables_of_interest"]["output_dim"]
 
     config["Architecture"]["output_dim"] = dims_list
