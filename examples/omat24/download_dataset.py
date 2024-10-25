@@ -52,15 +52,17 @@ def get_data(datadir, task, split):
     ), f'{task}/{split}" split not defined, please specify one of the following: {list(DOWNLOAD_LINKS[task].keys())}'
     download_link = DOWNLOAD_LINKS[task][split]
 
-    os.system(f"wget {download_link} -P {datadir}")
-    filename = os.path.join(datadir, os.path.basename(download_link))
-    logging.info("Extracting contents...")
-    os.system(f"tar -xvf {filename} -C {datadir}")
-    filename_without_extension = filename.replace(".tar.gz", "")
     os.makedirs(os.path.join(datadir, task), exist_ok=True)
 
+    os.system(f"wget {download_link} -P {datadir}")
+    filename = os.path.join(datadir, os.path.basename(download_link))
+
     # Move the directory
-    shutil.move(filename_without_extension, os.path.join(datadir, task))
+    new_filename = os.path.join(datadir, task, os.path.basename(download_link))
+    shutil.move(filename, new_filename)
+
+    logging.info("Extracting contents...")
+    os.system(f"tar -xvf {new_filename} -C {os.path.join(datadir, task)}")
 
 
 if __name__ == "__main__":
