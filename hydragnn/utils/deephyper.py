@@ -12,6 +12,7 @@ def master_from_host(host):
 
 def read_node_list():
     node_list = os.environ["SLURM_NODELIST"]
+    exclude_list = os.getenv("HYDRAGNN_EXCLUDE_NODELIST", "").split(",")
     if not "[" in node_list:
         return [
             node_list,
@@ -29,7 +30,6 @@ def read_node_list():
                     nodes.append(f"frontier{leading_zeros}{i}")
             else:
                 nodes.append(f"frontier{subset}")
-        nodes_string = ",".join(nodes)
     elif system == "perlmutter":
         node_subsets = node_list[4:-1].split(",")
         for subset in node_subsets:
@@ -41,7 +41,10 @@ def read_node_list():
                     nodes.append(f"nid{leading_zeros}{i}")
             else:
                 nodes.append(f"nid{subset}")
-        nodes_string = ",".join(nodes)
+
+    nodes = [ x for x in nodes if x not in exclude_list ]
+    nodes_string = ",".join(nodes)
+
     return nodes, nodes_string
 
 

@@ -1,10 +1,12 @@
+import mpi4py
+import torch
+
 import os, json
 import logging
 import sys
 from mpi4py import MPI
 import argparse
 
-import torch
 import numpy as np
 
 import hydragnn
@@ -29,12 +31,21 @@ import adios2 as ad2
 ## FIMME
 torch.backends.cudnn.enabled = False
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
+import random
+random.seed(0)
+np.random.seed(0)
+torch.use_deterministic_algorithms(True)
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
 def main():
+    print("gfm starting")
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
@@ -92,6 +103,7 @@ def main():
     parser.set_defaults(format="adios")
     args = parser.parse_args()
     args.parameters = vars(args)
+    assert torch.cuda.is_available()
 
     graph_feature_names = ["energy"]
     graph_feature_dims = [1]

@@ -4,6 +4,10 @@ import torch
 
 torch.backends.cudnn.enabled = False
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 # deprecated in torch_geometric 2.0
 try:
     from torch_geometric.loader import DataLoader
@@ -13,6 +17,8 @@ except:
 import pandas as pd
 import subprocess
 import re
+import time
+import random
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
@@ -48,19 +54,17 @@ def run(trial, dequed=None):
     # TODO: Launch a subprocess with `srun` to train neural networks
     params = trial.parameters
     log_name = "gfm" + "_" + str(trial.id)
-    master_addr = f"HYDRAGNN_MASTER_ADDR={dequed[0]}"
-    nodelist = ",".join(dequed)
 
     # time srun -u -n32 -c2 --ntasks-per-node=8 --gpus-per-node=8 --gpu-bind=closest
     prefix = " ".join(
         [
             f"srun",
-            f"-N {NNODES_PER_TRIAL} -n {NGPUS_PER_TRIAL}",
+            f"-N {NNODES_PER_TRIAL} -n {NGPUS_PER_TRIAL} -u",
             f"--ntasks-per-node=8 --gpus-per-node=8",
             f"--cpus-per-task {OMP_NUM_THREADS} --threads-per-core 1 --cpu-bind threads",
             f"--gpus-per-task=1 --gpu-bind=closest",
-            f"--export=ALL,{master_addr},HYDRAGNN_MAX_NUM_BATCH=100,HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1,HYDRAGNN_AGGR_BACKEND=mpi",
-            f"--nodelist={nodelist}",
+            f"--export=ALL,HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1,HYDRAGNN_AGGR_BACKEND=mpi",
+            # f"--nodelist={nodelist}",
             f"--output {DEEPHYPER_LOG_DIR}/output_{SLURM_JOB_ID}_{trial.id}.txt",
             f"--error {DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt",
         ]
@@ -70,6 +74,7 @@ def run(trial, dequed=None):
         [
             prefix,
             f"bash -c \"",
+            f"touch {DEEPHYPER_LOG_DIR}/trial_map_{trial.id}_\\$SLURM_STEP_ID;",
             f"{OMNISTAT_WRAPPER} rms;",
             python_exe,
             "-u",
@@ -79,19 +84,24 @@ def run(trial, dequed=None):
             f"--num_conv_layers={trial.parameters['num_conv_layers']}",
             f"--num_headlayers={trial.parameters['num_headlayers']}",
             f"--dim_headlayers={trial.parameters['dim_headlayers']}",
+            f"--batch_size={trial.parameters['batch_size']}",
             f"--multi",
             f"--ddstore",
-            f'--multi_model_list="ANI1x,MPTrj,OC2020-20M,OC2022,qm7x"',
+            f"--multi_model_list=ANI1x-v2,MPTrj-v2,OC2020-20M-v2,OC2022-v2,qm7x-v2",
             ## debugging
-            ##f'--multi_model_list="ANI1x"',
+            # f"--multi_model_list=ANI1x",
+            # f"--num_samples=1000",
             f"--num_epoch=10",
-            f"--log={log_name}",
-            f"; {OMNISTAT_WRAPPER} rms --nostep;",
-            f"touch {DEEPHYPER_LOG_DIR}/trial_map_{trial.id}_\\$SLURM_STEP_ID;",
+            f"--log={log_name};",
+            f"{OMNISTAT_WRAPPER} rms --nostep;",
             f"\"",
         ]
     )
     print("Command = ", command, flush=True, file=f)
+    ## try to avoid burst execution
+    random_int = random.randrange(NUM_CONCURRENT_TRIALS*10)
+    print(f"Random wait {random_int} sec", flush=True, file=f)
+    time.sleep(random_int)
 
     output = "F"
     try:
@@ -138,6 +148,7 @@ if __name__ == "__main__":
     problem.add_hyperparameter((100, 2000), "hidden_dim")  # discrete parameter
     problem.add_hyperparameter((2, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((300, 1000), "dim_headlayers")  # discrete parameter
+    problem.add_hyperparameter((16, 128), "batch_size")  # batch_size
     problem.add_hyperparameter(
         ["EGNN", "SchNet", "PNA"], "model_type"
     )  # categorical parameter
@@ -165,17 +176,29 @@ if __name__ == "__main__":
     search = CBO(
         problem,
         evaluator,
-        acq_func="UCB",
+        acq_func="UCBd", ## UCBd discards aleatoric
         multi_point_strategy="cl_min",  # Constant liar strategy
         random_state=42,
         # Location where to store the results
         log_dir=log_name,
         # Number of threads used to update surrogate model of BO
         n_jobs=OMP_NUM_THREADS,
+        acq_optimizer="mixedga",
+        acq_optimizer_freq=1,
     )
 
+    fname = os.path.join("gfm", "preloaded_results.csv")
+    if os.path.exists(fname):
+        t0 = time.time()
+        print("Read existing results:", fname)
+        preloaded_results = pd.read_csv(fname, header=0)
+        search.fit_surrogate(preloaded_results)
+        t1 = time.time()
+        print("Fit done:", t1-t0)
+
+    print("Search starts")
     timeout = None
-    results = search.search(max_evals=200, timeout=timeout)
+    results = search.search(max_evals=10000, timeout=timeout)
     print(results)
 
     sys.exit(0)

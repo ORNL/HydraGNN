@@ -22,7 +22,7 @@ from hydragnn.utils.time_utils import Timer
 from hydragnn.utils.profile import Profiler
 from hydragnn.utils.distributed import get_device, print_peak_memory, check_remaining
 from hydragnn.preprocess.load_data import HydraDataLoader
-from hydragnn.utils.model import Checkpoint, EarlyStopping
+from hydragnn.utils.model import Checkpoint, EarlyStopping, save_model
 
 import os
 
@@ -36,6 +36,7 @@ import pickle
 import hydragnn.utils.tracer as tr
 import time
 from mpi4py import MPI
+import sys
 
 
 def get_nbatch(loader):
@@ -71,6 +72,12 @@ def train_validate_test(
     EarlyStop = (
         config["Training"]["EarlyStopping"]
         if "EarlyStopping" in config["Training"]
+        else False
+    )
+
+    CheckRemainingTime = (
+        config["Training"]["CheckRemainingTime"]
+        if "CheckRemainingTime" in config["Training"]
         else False
     )
 
@@ -144,7 +151,9 @@ def train_validate_test(
     timer = Timer("train_validate_test")
     timer.start()
 
-    for epoch in range(0, num_epoch):
+    epoch_start = config["Training"].get("epoch_start", 0)
+    for epoch in range(epoch_start, num_epoch):
+        os.environ["HYDRAGNN_EPOCH"] = str(epoch)
         ## timer per epoch
         t0 = time.time()
         profiler.set_current_epoch(epoch)
@@ -241,13 +250,14 @@ def train_validate_test(
                 )
                 break
 
-        should_stop = check_remaining(t0)
-        if should_stop:
-            print_distributed(
-                verbosity,
-                "No time left. Early stop.",
-            )
-            break
+        if CheckRemainingTime:
+            should_stop = check_remaining(t0)
+            if should_stop:
+                print_distributed(
+                    verbosity,
+                    "No time left. Early stop.",
+                )
+                break
 
     timer.stop()
 
@@ -441,6 +451,7 @@ def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
+    _, rank = get_comm_size_and_rank()
     model.train()
 
     use_ddstore = (
@@ -463,6 +474,14 @@ def train(loader, model, opt, verbosity, profiler=None, use_deepspeed=False):
     for ibatch, data in iterate_tqdm(
         enumerate(loader), verbosity, desc="Train", total=nbatch
     ):
+        # print("ibatch,data.data.num_graphs:", ibatch, data.num_graphs)
+        # for i in range(data.num_graphs):
+        #     print(f"batch graph {i}: x:", data[i].num_nodes)
+        #     print(f"batch graph {i}: x:", data[i].x.shape)
+        #     print(f"batch graph {i}: y:", data[i].y.shape, data[i].y[0])
+        # print("ibatch,data.x:", ibatch, data.x.shape, data.x[:,1:4].min(), data.x[:,1:4].max())
+        # print("ibatch,data.y:", ibatch, data.y.shape, data.y.min(), data.y.max())
+        # print(data.y) ## 1 per graph + 3 force values per node
         if ibatch >= nbatch:
             break
         if use_ddstore:
