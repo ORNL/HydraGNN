@@ -20,6 +20,7 @@ import os
 
 from .dataset_descriptors import AtomFeatures
 
+
 ## This function can be slow if datasets is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_dist
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
@@ -272,14 +273,11 @@ def update_predicted_values(
                 (-1, 1),
             )
         elif type[item] == "pos":
-                    # index_counter_nodal_y = sum(node_feature_dim[: index[item]])
-                    feat_ = torch.reshape(
-                        data.pos[
-                            :,
-                            : node_feature_dim[index[item]]
-                        ],
-                        (-1, 1),
-                    )
+            # index_counter_nodal_y = sum(node_feature_dim[: index[item]])
+            feat_ = torch.reshape(
+                data.pos[:, : node_feature_dim[index[item]]],
+                (-1, 1),
+            )
         else:
             raise ValueError("Unknown output type", type[item])
         output_feature.append(feat_)
