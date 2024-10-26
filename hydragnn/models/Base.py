@@ -342,27 +342,35 @@ class Base(Module):
             elif type_head == "pos":
                 # print("POS OUT: ", pos)
                 if self.equivariance:
-                    x_node = pos - data.pos # following 3.2 The Dynamics in "Equivariant Diffusion for Molecule Generation in 3D" (Hoogeboom et al 2022)
+                    x_node = (
+                        pos - data.pos
+                    )  # following 3.2 The Dynamics in "Equivariant Diffusion for Molecule Generation in 3D" (Hoogeboom et al 2022)
                     # calculate the center of gravity for each subgraph
-                    sg_num_nodes = [d.num_nodes for d in data.to_data_list()] # TODO - inefficient
+                    sg_num_nodes = [
+                        d.num_nodes for d in data.to_data_list()
+                    ]  # TODO - inefficient
                     com_ten = []
                     # std_ten = []
                     place = 0
                     for sgnn in sg_num_nodes:
-                        sg_x_node = x_node[place:place+sgnn]
-                        com_ten.append(sg_x_node.mean(dim=0, keepdim=True).tile(sgnn, 1))
+                        sg_x_node = x_node[place : place + sgnn]
+                        com_ten.append(
+                            sg_x_node.mean(dim=0, keepdim=True).tile(sgnn, 1)
+                        )
                         # std_ten.append(sg_x_node.std() * torch.ones_like(sg_x_node))
                         place += sgnn
                     com_ten = torch.cat(com_ten, dim=0)
                     # std_ten = torch.cat(std_ten, dim=0)
-                    x_node = x_node - com_ten # subtract centers of mass
+                    x_node = x_node - com_ten  # subtract centers of mass
                     # x_node = x_node / std_ten # normalize output like GroupNorm
                 else:
                     x_node = pos
             else:
-                raise NotImplementedError("Head type {} not recognized".format(type_head))
+                raise NotImplementedError(
+                    "Head type {} not recognized".format(type_head)
+                )
             outputs.append(x_node)
-        return outputs 
+        return outputs
 
     def loss(self, pred, value, head_index):
         var = None
