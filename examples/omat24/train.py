@@ -96,15 +96,19 @@ class OMat2024(AbstractBaseDataset):
 
         for dataname in dataset_names:
 
+            torch.distributed.barrier()
+
+            print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
+
             dataset = AseDBDataset(
                 config=dict(
                     src=os.path.join(dirpath, data_type, dataname), **config_kwargs
                 )
             )
 
-            rx = list(nsplit(range(dataset.num_samples), self.world_size))[self.rank]
+            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[self.rank]
 
-            for index in rx:
+            for index in iterate_tqdm(rx, verbosity_level=2):
                 xyz = torch.tensor(dataset.get_atoms(index).get_positions())
                 natoms = torch.IntTensor([xyz.shape[0]])
                 Z = torch.tensor(
@@ -115,7 +119,7 @@ class OMat2024(AbstractBaseDataset):
                 chemical_formula = dataset.get_atoms(index).get_chemical_formula()
 
                 if self.energy_per_atom:
-                    energy /= natoms
+                    energy /= natoms.item()
 
                 data = Data(pos=xyz, x=Z, force=forces, energy=energy, y=energy)
                 data.x = torch.cat((data.x, xyz, forces), dim=1)
