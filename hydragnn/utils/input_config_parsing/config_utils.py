@@ -206,9 +206,10 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     else:
         for ihead in range(len(output_type)):
             if output_type[ihead] != "graph":
-                if not "dynamic_target" in config["Variables_of_interest"] or\
-                    ("dynamic_target" in config["Variables_of_interest"] and\
-                     not config["Variables_of_interest"]["dynamic_target"]): # raise ValueError if yloc missing on non-graph, with "dynamic_target" set to false or missing
+                if not "dynamic_target" in config["Variables_of_interest"] or (
+                    "dynamic_target" in config["Variables_of_interest"]
+                    and not config["Variables_of_interest"]["dynamic_target"]
+                ):  # raise ValueError if yloc missing on non-graph, with "dynamic_target" set to false or missing
                     raise ValueError(
                         "y_loc is needed for outputs that are not at graph levels",
                         output_type[ihead],

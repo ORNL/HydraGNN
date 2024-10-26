@@ -56,14 +56,12 @@ class HybridEGCLStack(EGCLStack):
             # Calculate MSE if position noise
             elif ihead == 1:
                 head_loss = self.mse(head_pred, head_val)
-            
+
             # Add loss to total loss and list of tasks loss
-            tot_loss += (
-                head_loss * self.loss_weights[ihead]
-            )
+            tot_loss += head_loss * self.loss_weights[ihead]
             tasks_loss.append(head_loss)
 
         return tot_loss, tasks_loss
-    
+
     def __str__(self):
         return "HybridEGCLStack"

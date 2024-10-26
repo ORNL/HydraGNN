@@ -26,7 +26,6 @@ class EGCLStack(Base):
         max_neighbours: Optional[int] = None,
         **kwargs,
     ):
-
         self.edge_dim = (
             0 if edge_attr_dim is None else edge_attr_dim
         )  # Must be named edge_dim to trigger use by Base
@@ -159,7 +158,6 @@ class E_GCL(nn.Module):
         self.clamp = clamp
 
         if self.equivariant:
-
             layer = nn.Linear(hidden_channels, 1, bias=False)
             torch.nn.init.xavier_uniform_(layer.weight, gain=0.001)
 
