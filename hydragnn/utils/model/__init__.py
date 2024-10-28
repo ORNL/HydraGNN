@@ -10,3 +10,7 @@ from .model import (
     EarlyStopping,
     print_model,
 )
+from .operations import (
+    get_edge_vectors_and_lengths,
+    get_pbc_edge_vectors_and_lengths,
+)

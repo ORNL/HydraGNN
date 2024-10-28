@@ -49,14 +49,14 @@ from hydragnn.utils.model.mace_utils.modules.blocks import (
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
 )
-from hydragnn.utils.model.operations import (
+from hydragnn.utils.model import (
     get_edge_vectors_and_lengths,
+    get_pbc_edge_vectors_and_lengths,
 )
 
 # E3NN
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
-
 
 # HydraGNN
 from .Base import Base
@@ -258,7 +258,7 @@ class MACEStack(Base):
             .simplify()  # Kept as sh_irreps for the output of reshape irreps, whether or not edge_attr irreps are added from HYDRA functionality
         )  # .sort() is a tuple, so we need the [0] element for the sorted result
         ### Output
-        output_irreps = create_irreps_string(output_dim, self.node_max_ell)
+        output_irreps = create_irreps_string(output_dim, 0)
         output_irreps = o3.Irreps(output_irreps)
 
         # Constructing convolutional layers
@@ -428,11 +428,21 @@ class MACEStack(Base):
 
         # Embeddings
         node_feats = self.node_embedding(data["node_attributes"])
-        vectors, lengths = get_edge_vectors_and_lengths(
-            positions=data["pos"],
-            edge_index=data["edge_index"],
-            shifts=data["shifts"],
-        )
+        # Compute vectors and lengths
+        if data.supercell_size is not None:
+            vectors, lengths = get_pbc_edge_vectors_and_lengths(
+                positions=data["pos"],
+                edge_index=data["edge_index"],
+                supercell_size=data["supercell_size"],
+                batch=data["batch"],
+                shifts=data["shifts"],
+            )
+        else:
+            vectors, lengths = get_edge_vectors_and_lengths(
+                positions=data["pos"],
+                edge_index=data["edge_index"],
+                shifts=data["shifts"],
+            )
         edge_attributes = self.spherical_harmonics(vectors)
         if self.use_edge_attr:
             edge_attributes = torch.cat([data.edge_attr, edge_attributes], dim=1)

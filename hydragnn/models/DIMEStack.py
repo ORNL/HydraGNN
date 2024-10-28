@@ -25,6 +25,10 @@ from torch_geometric.nn.models.dimenet import (
 )
 from torch_geometric.utils import scatter
 
+from hydragnn.utils.model import (
+    get_edge_vectors_and_lengths,
+    get_pbc_edge_vectors_and_lengths,
+)
 from .Base import Base
 
 
@@ -136,18 +140,44 @@ class DIMEStack(Base):
         assert (
             data.pos is not None
         ), "DimeNet requires node positions (data.pos) to be set."
+
+        # Extract indices for triplets
         i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(
             data.edge_index, num_nodes=data.x.size(0)
         )
-        dist = (data.pos[i] - data.pos[j]).pow(2).sum(dim=-1).sqrt()
 
-        # Calculate angles.
-        pos_i = data.pos[idx_i]
-        pos_ji, pos_ki = data.pos[idx_j] - pos_i, data.pos[idx_k] - pos_i
+        # Compute vectors and lengths
+        if data.supercell_size is not None:
+            _, dist = get_pbc_edge_vectors_and_lengths(
+                data.pos, data.edge_index, data.supercell_size, data.batch
+            )  # Shape: (n_edges, 1)
+            pos_ji, _ = get_pbc_edge_vectors_and_lengths(
+                data.pos,
+                torch.cat([idx_i.unsqueeze(0), idx_j.unsqueeze(0)], dim=0),
+                data.supercell_size,
+                data.batch,
+            )  # i->j vector
+            pos_kj, _ = get_pbc_edge_vectors_and_lengths(
+                data.pos,
+                torch.cat([idx_j.unsqueeze(0), idx_k.unsqueeze(0)], dim=0),
+                data.supercell_size,
+                data.batch,
+            )  # j->k vector
+            pos_ki = pos_kj - pos_ji  # i->k vector (this must be done carefully in pbc)
+        else:
+            dist = torch.linalg.norm(
+                data.pos[i] - data.pos[j], dim=-1, keepdim=True
+            )  # Shape: (n_edges, 1)
+            pos_ji = data.pos[idx_j] - data.pos[idx_i]  # i->j vector
+            pos_ki = data.pos[idx_k] - data.pos[idx_i]  # i->k vector
+
+        # Compute angles using adjusted vectors
         a = (pos_ji * pos_ki).sum(dim=-1)
         b = torch.cross(pos_ji, pos_ki).norm(dim=-1)
         angle = torch.atan2(b, a)
 
+        # Compute radial and spherical basis functions
+        dist = dist.squeeze()
         rbf = self.rbf(dist)
         sbf = self.sbf(dist, angle, idx_kj)
 
@@ -159,12 +189,6 @@ class DIMEStack(Base):
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
         }
-
-        if self.use_edge_attr:
-            assert (
-                data.edge_attr is not None
-            ), "Data must have edge attributes if use_edge_attributes is set."
-            conv_args.update({"edge_attr": data.edge_attr})
 
         return conv_args
 
