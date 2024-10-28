@@ -545,20 +545,15 @@ class MultiheadDecoderBlock(torch.nn.Module):
         self.node_NN_type = None
         self.heads = ModuleList()
 
-        # Create layer to have only zero-irreps
-        input_dim = self.input_irreps.count(o3.Irrep(0, 1))
-        scalar_input_irreps = o3.Irreps(f"{input_dim}x0e")
-        node_down = o3.Linear(self.input_irreps, scalar_input_irreps)
-
         # Create shared dense layers for graph-level output if applicable
         if "graph" in self.config_heads:
-            # graph_input_irreps = o3.Irreps(
-            #     f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e"
-            # )
+            graph_input_irreps = o3.Irreps(
+                f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e"
+            )
             dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
             sharedlayers_irreps = o3.Irreps(f"{dim_sharedlayers}x0e")
             denselayers = []
-            denselayers.append(o3.Linear(scalar_input_irreps, sharedlayers_irreps))
+            denselayers.append(o3.Linear(graph_input_irreps, sharedlayers_irreps))
             denselayers.append(
                 nn.Activation(
                     irreps_in=sharedlayers_irreps, acts=[self.activation_function]
@@ -609,9 +604,9 @@ class MultiheadDecoderBlock(torch.nn.Module):
                     ), "num_nodes must be a positive integer for MLP"
                     num_layers_node = self.config_heads["node"]["num_headlayers"]
                     hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+                    input_irreps = o3.Irreps(f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e")
                     head = MLPNode(
-                        scalar_input_irreps,
-                        self.node_max_ell,
+                        input_irreps,
                         self.config_heads,
                         num_layers_node,
                         hidden_dim_node,
@@ -633,14 +628,14 @@ class MultiheadDecoderBlock(torch.nn.Module):
                 )
 
     def forward(self, data, node_features):
-        node_features_scalar = node_down(node_features)
+        # node_features_scalar = self.node_down(node_features)
         if data.batch is None:
-            graph_features = node_features_scalar.mean(
+            graph_features = node_features[:, : self.input_irreps.count(o3.Irrep(0, 1))].mean(
                 dim=0, keepdim=True
             )  # Need to take only the type-0 irreps for aggregation
         else:
             graph_features = global_mean_pool(
-                node_features_scalar,
+                node_features[:, : self.input_irreps.count(o3.Irrep(0, 1))],
                 data.batch.to(node_features.device),
             )
         outputs = []
@@ -664,7 +659,6 @@ class MLPNode(torch.nn.Module):
     def __init__(
         self,
         input_irreps,
-        node_max_ell,
         config_heads,
         num_layers,
         hidden_dims,
@@ -679,7 +673,6 @@ class MLPNode(torch.nn.Module):
         self.input_irreps = input_irreps
         self.hidden_dims = hidden_dims
         self.output_dim = output_dim
-        self.node_max_ell = node_max_ell if not nonlinear else 0
         self.config_heads = config_heads
         self.num_layers = num_layers
         self.node_type = node_type
