@@ -147,7 +147,9 @@ class DIMEStack(Base):
         )
 
         # Compute vectors and lengths
-        if data.supercell_size is not None:
+        if (
+            hasattr(data, "supercell_size") and data.supercell_size is not None
+        ):  # PBC Case
             _, dist = get_pbc_edge_vectors_and_lengths(
                 data.pos, data.edge_index, data.supercell_size, data.batch
             )  # Shape: (n_edges, 1)

@@ -106,13 +106,15 @@ class PNAPlusStack(Base):
         ), "PNA+ requires node positions (data.pos) to be set."
 
         # Compute vectors and lengths
-        if data.supercell_size is not None:
+        if (
+            hasattr(data, "supercell_size") and data.supercell_size is not None
+        ):  # PBC Case
             _, dist = get_pbc_edge_vectors_and_lengths(
                 data.pos, data.edge_index, data.supercell_size, data.batch
             )  # Shape: (n_edges, 1)
         else:
-            dist = torch.linalg.norm(
-                data.pos[i] - data.pos[j], dim=-1, keepdim=True
+            _, dist = get_edge_vectors_and_lengths(
+                data.pos, data.edge_index
             )  # Shape: (n_edges, 1)
         dist = dist.squeeze()
         rbf = self.rbf(dist)
