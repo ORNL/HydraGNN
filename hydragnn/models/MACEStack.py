@@ -49,14 +49,11 @@ from hydragnn.utils.model.mace_utils.modules.blocks import (
     RadialEmbeddingBlock,
     RealAgnosticAttResidualInteractionBlock,
 )
-from hydragnn.utils.model.operations import (
-    get_edge_vectors_and_lengths,
-)
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 # E3NN
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
-
 
 # HydraGNN
 from .Base import Base
@@ -197,7 +194,9 @@ class MACEStack(Base):
             )
         )  # For base-node traits
         self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, first_layer=True)
+            self.get_conv(
+                self.input_dim, self.hidden_dim, first_layer=True, last_layer=last_layer
+            )
         )
         irreps = hidden_irreps if not last_layer else final_hidden_irreps
         self.multihead_decoders.append(
@@ -262,7 +261,34 @@ class MACEStack(Base):
         output_irreps = o3.Irreps(output_irreps)
 
         # Constructing convolutional layers
-        if first_layer:
+        if first_layer and last_layer:
+            # This is the case when there's only one convolutional layer
+            hidden_irreps_out = str(hidden_irreps[0])
+            output_irreps = str(output_irreps[0])
+            inter = self.interaction_cls_first(
+                node_attrs_irreps=self.node_attr_irreps,
+                node_feats_irreps=node_feats_irreps,
+                edge_attrs_irreps=self.edge_attrs_irreps,
+                edge_feats_irreps=self.edge_feats_irreps,
+                target_irreps=interaction_irreps,
+                hidden_irreps=hidden_irreps_out,
+                avg_num_neighbors=self.avg_num_neighbors,
+                radial_MLP=radial_MLP,
+            )
+            use_sc_first = False
+            if "Residual" in str(self.interaction_cls_first):
+                use_sc_first = True
+            prod = EquivariantProductBasisBlock(
+                node_feats_irreps=interaction_irreps,
+                target_irreps=hidden_irreps_out,
+                correlation=self.correlation[0],
+                num_elements=self.num_elements,
+                use_sc=use_sc_first,
+            )
+            sizing = o3.Linear(
+                hidden_irreps_out, output_irreps
+            )  # Change sizing to output_irreps
+        elif first_layer:
             hidden_irreps_out = hidden_irreps
             inter = self.interaction_cls_first(
                 node_attrs_irreps=self.node_attr_irreps,
@@ -428,6 +454,7 @@ class MACEStack(Base):
 
         # Embeddings
         node_feats = self.node_embedding(data["node_attributes"])
+        # Compute vectors and lengths
         vectors, lengths = get_edge_vectors_and_lengths(
             positions=data["pos"],
             edge_index=data["edge_index"],
@@ -592,9 +619,11 @@ class MultiheadDecoderBlock(torch.nn.Module):
                     ), "num_nodes must be a positive integer for MLP"
                     num_layers_node = self.config_heads["node"]["num_headlayers"]
                     hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+                    input_irreps = o3.Irreps(
+                        f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e"
+                    )
                     head = MLPNode(
-                        self.input_irreps,
-                        self.node_max_ell,
+                        input_irreps,
                         self.config_heads,
                         num_layers_node,
                         hidden_dim_node,
@@ -617,7 +646,9 @@ class MultiheadDecoderBlock(torch.nn.Module):
 
     def forward(self, data, node_features):
         if data.batch is None:
-            graph_features = node_features[:, : self.hidden_dim].mean(
+            graph_features = node_features[
+                :, : self.input_irreps.count(o3.Irrep(0, 1))
+            ].mean(
                 dim=0, keepdim=True
             )  # Need to take only the type-0 irreps for aggregation
         else:
@@ -636,7 +667,10 @@ class MultiheadDecoderBlock(torch.nn.Module):
                         "Node-level convolutional layers are not supported in MACE"
                     )
                 else:
-                    x_node = headloc(node_features, data.batch)
+                    x_node = headloc(
+                        node_features[:, : self.input_irreps.count(o3.Irrep(0, 1))],
+                        data.batch,
+                    )
                     outputs.append(x_node)
         return outputs
 
@@ -646,7 +680,6 @@ class MLPNode(torch.nn.Module):
     def __init__(
         self,
         input_irreps,
-        node_max_ell,
         config_heads,
         num_layers,
         hidden_dims,
@@ -661,7 +694,6 @@ class MLPNode(torch.nn.Module):
         self.input_irreps = input_irreps
         self.hidden_dims = hidden_dims
         self.output_dim = output_dim
-        self.node_max_ell = node_max_ell if not nonlinear else 0
         self.config_heads = config_heads
         self.num_layers = num_layers
         self.node_type = node_type
