@@ -192,6 +192,12 @@ class DIMEStack(Base):
             "idx_ji": idx_ji,
         }
 
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
+            conv_args.update({"edge_attr": data.edge_attr})
+
         return conv_args
 
 
