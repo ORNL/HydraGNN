@@ -33,6 +33,10 @@ from torch_geometric.nn.models.dimenet import BesselBasisLayer
 from torch_geometric.typing import Adj
 
 # HydraGNN
+from hydragnn.utils.model import (
+    get_edge_vectors_and_lengths,
+    get_pbc_edge_vectors_and_lengths,
+)
 from .Base import Base
 
 
@@ -101,10 +105,19 @@ class PNAPlusStack(Base):
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."
 
-        j, i = data.edge_index  # j->i
-        dist = (data.pos[i] - data.pos[j]).pow(2).sum(dim=-1).sqrt()
+        # Compute vectors and lengths
+        if (
+            hasattr(data, "supercell_size") and data.supercell_size is not None
+        ):  # PBC Case
+            _, dist = get_pbc_edge_vectors_and_lengths(
+                data.pos, data.edge_index, data.supercell_size, data.batch
+            )  # Shape: (n_edges, 1)
+        else:
+            _, dist = get_edge_vectors_and_lengths(
+                data.pos, data.edge_index
+            )  # Shape: (n_edges, 1)
+        dist = dist.squeeze()
         rbf = self.rbf(dist)
-        # rbf = dist.unsqueeze(-1)
         conv_args = {"edge_index": data.edge_index.to(torch.long), "rbf": rbf}
 
         if self.use_edge_attr:
