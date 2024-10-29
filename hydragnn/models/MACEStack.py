@@ -604,7 +604,9 @@ class MultiheadDecoderBlock(torch.nn.Module):
                     ), "num_nodes must be a positive integer for MLP"
                     num_layers_node = self.config_heads["node"]["num_headlayers"]
                     hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
-                    input_irreps = o3.Irreps(f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e")
+                    input_irreps = o3.Irreps(
+                        f"{self.input_irreps.count(o3.Irrep(0, 1))}x0e"
+                    )
                     head = MLPNode(
                         input_irreps,
                         self.config_heads,
@@ -628,9 +630,10 @@ class MultiheadDecoderBlock(torch.nn.Module):
                 )
 
     def forward(self, data, node_features):
-        # node_features_scalar = self.node_down(node_features)
         if data.batch is None:
-            graph_features = node_features[:, : self.input_irreps.count(o3.Irrep(0, 1))].mean(
+            graph_features = node_features[
+                :, : self.input_irreps.count(o3.Irrep(0, 1))
+            ].mean(
                 dim=0, keepdim=True
             )  # Need to take only the type-0 irreps for aggregation
         else:
@@ -649,7 +652,10 @@ class MultiheadDecoderBlock(torch.nn.Module):
                         "Node-level convolutional layers are not supported in MACE"
                     )
                 else:
-                    x_node = headloc(node_features_scalar, data.batch)
+                    x_node = headloc(
+                        node_features[:, : self.input_irreps.count(o3.Irrep(0, 1))],
+                        data.batch,
+                    )
                     outputs.append(x_node)
         return outputs
 
