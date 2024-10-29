@@ -197,7 +197,9 @@ class MACEStack(Base):
             )
         )  # For base-node traits
         self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, first_layer=True)
+            self.get_conv(
+                self.input_dim, self.hidden_dim, first_layer=True, last_layer=last_layer
+            )
         )
         irreps = hidden_irreps if not last_layer else final_hidden_irreps
         self.multihead_decoders.append(
@@ -262,7 +264,34 @@ class MACEStack(Base):
         output_irreps = o3.Irreps(output_irreps)
 
         # Constructing convolutional layers
-        if first_layer:
+        if first_layer and last_layer:
+            # This is the case when there's only one convolutional layer
+            hidden_irreps_out = str(hidden_irreps[0])
+            output_irreps = str(output_irreps[0])
+            inter = self.interaction_cls_first(
+                node_attrs_irreps=self.node_attr_irreps,
+                node_feats_irreps=node_feats_irreps,
+                edge_attrs_irreps=self.edge_attrs_irreps,
+                edge_feats_irreps=self.edge_feats_irreps,
+                target_irreps=interaction_irreps,
+                hidden_irreps=hidden_irreps_out,
+                avg_num_neighbors=self.avg_num_neighbors,
+                radial_MLP=radial_MLP,
+            )
+            use_sc_first = False
+            if "Residual" in str(self.interaction_cls_first):
+                use_sc_first = True
+            prod = EquivariantProductBasisBlock(
+                node_feats_irreps=interaction_irreps,
+                target_irreps=hidden_irreps_out,
+                correlation=self.correlation[0],
+                num_elements=self.num_elements,
+                use_sc=use_sc_first,
+            )
+            sizing = o3.Linear(
+                hidden_irreps_out, output_irreps
+            )  # Change sizing to output_irreps
+        elif first_layer:
             hidden_irreps_out = hidden_irreps
             inter = self.interaction_cls_first(
                 node_attrs_irreps=self.node_attr_irreps,
