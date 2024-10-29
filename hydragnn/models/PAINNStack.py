@@ -44,9 +44,7 @@ class PAINNStack(Base):
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
-        self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, last_layer)
-        )
+        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
@@ -161,12 +159,10 @@ class PAINNStack(Base):
         i, j = data.edge_index[0], data.edge_index[1]
         diff = data.pos[i] - data.pos[j]
         dist = diff.pow(2).sum(dim=-1).sqrt()
-        norm_diff = diff / (dist.unsqueeze(-1) + 1e-8)
+        norm_diff = diff / dist.unsqueeze(-1)
 
         # Instantiate tensor to hold equivariant traits
-        v = torch.zeros(
-            data.x.size(0), 3, data.x.size(1), device=data.x.device, requires_grad=True
-        )
+        v = torch.zeros(data.x.size(0), 3, data.x.size(1), device=data.x.device)
         data.v = v
 
         conv_args = {
@@ -190,7 +186,7 @@ class PainnMessage(nn.Module):
 
         self.scalar_message_mlp = nn.Sequential(
             nn.Linear(node_size, node_size),
-            nn.Sigmoid(),
+            nn.SiLU(),
             nn.Linear(node_size, node_size * 3),
         )
 
@@ -246,13 +242,13 @@ class PainnUpdate(nn.Module):
         if not self.last_layer:
             self.update_mlp = nn.Sequential(
                 nn.Linear(node_size * 2, node_size),
-                nn.Sigmoid(),
+                nn.SiLU(),
                 nn.Linear(node_size, node_size * 3),
             )
         else:
             self.update_mlp = nn.Sequential(
                 nn.Linear(node_size * 2, node_size),
-                nn.Sigmoid(),
+                nn.SiLU(),
                 nn.Linear(node_size, node_size * 2),
             )
 
