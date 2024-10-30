@@ -101,9 +101,7 @@ class PNAPlusStack(Base):
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."
 
-        j, i = data.edge_index  # j->i
-        dist = (data.pos[i] - data.pos[j]).pow(2).sum(dim=-1).sqrt()
-        rbf = self.rbf(dist)
+        rbf = self.rbf(data.edge_dist)
         # rbf = dist.unsqueeze(-1)
         conv_args = {"edge_index": data.edge_index.to(torch.long), "rbf": rbf}
 
