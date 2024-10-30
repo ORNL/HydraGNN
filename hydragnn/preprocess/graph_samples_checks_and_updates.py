@@ -10,9 +10,11 @@
 ##############################################################################
 
 import torch
-from torch_geometric.transforms import RadiusGraph
-from torch_geometric.utils import remove_self_loops, degree
+import torch_geometric
 from torch_geometric.data import Data
+from torch_geometric.data.datapipes import functional_transform
+from torch_geometric.transforms import BaseTransform
+from torch_geometric.utils import remove_self_loops, degree
 
 import ase
 import ase.neighborlist
@@ -107,11 +109,12 @@ def get_radius_graph(radius, max_neighbours, loop=False):
     )
 
 
-def get_radius_graph_pbc(radius, max_neighbours, loop=False):
+def get_radius_graph_pbc(radius, max_neighbours, loop=False, pbc=True):
     return RadiusGraphPBC(
         r=radius,
         loop=loop,
         max_num_neighbors=max_neighbours,
+        pbc=pbc,
     )
 
 
@@ -123,12 +126,75 @@ def get_radius_graph_config(config, loop=False):
     )
 
 
-def get_radius_graph_pbc_config(config, loop=False):
+def get_radius_graph_pbc_config(config, loop=False, pbc=True):
     return RadiusGraphPBC(
         r=config["radius"],
         loop=loop,
         max_num_neighbors=config["max_neighbours"],
+        pbc=pbc,
     )
+ 
+
+# Slightly Customized torch radius graph to always return edge_vec and edge_dist
+@functional_transform('custom_radius_graph')
+class RadiusGraph(BaseTransform):
+    r"""Creates edges based on node positions :obj:`data.pos` to all points
+    within a given distance (functional name: :obj:`radius_graph`).
+
+    Args:
+        r (float): The distance.
+        loop (bool, optional): If :obj:`True`, the graph will contain
+            self-loops. (default: :obj:`False`)
+        max_num_neighbors (int, optional): The maximum number of neighbors to
+            return for each element in :obj:`y`.
+            This flag is only needed for CUDA tensors. (default: :obj:`32`)
+        flow (str, optional): The flow direction when using in combination with
+            message passing (:obj:`"source_to_target"` or
+            :obj:`"target_to_source"`). (default: :obj:`"source_to_target"`)
+        num_workers (int): Number of workers to use for computation. Has no
+            effect in case :obj:`batch` is not :obj:`None`, or the input lies
+            on the GPU. (default: :obj:`1`)
+    """
+    def __init__(
+        self,
+        r: float,
+        loop: bool = False,
+        max_num_neighbors: int = 32,
+        flow: str = 'source_to_target',
+        num_workers: int = 1,
+        pbc: bool = False,  # Pbc can be a bool or a list of bools
+    ) -> None:
+        self.r = r
+        self.loop = loop
+        self.max_num_neighbors = max_num_neighbors
+        self.flow = flow
+        self.num_workers = num_workers
+        self.pbc = pbc
+
+    def forward(self, data: Data) -> Data:
+        assert data.pos is not None
+
+        data.edge_index = torch_geometric.nn.radius_graph(
+            data.pos,
+            self.r,
+            data.batch,
+            self.loop,
+            max_num_neighbors=self.max_num_neighbors,
+            flow=self.flow,
+            num_workers=self.num_workers,
+        )
+        
+        # Added these 3 lines
+        i,j = data.edge_index
+        data.edge_vec = data.pos[j] - data.pos[i]
+        data.edge_dist = torch.norm(edge_vec, dim=1).unsqueeze(1)
+        
+        data.edge_attr = None
+
+        return data
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(r={self.r})'
 
 
 class RadiusGraphPBC(RadiusGraph):
@@ -147,17 +213,22 @@ class RadiusGraphPBC(RadiusGraph):
         ase_atom_object = ase.Atoms(
             positions=data.pos,
             cell=data.supercell_size,
-            pbc=True,
+            pbc=self.pbc,
         )
-        # ‘i’ : first atom index
-        # ‘j’ : second atom index
+        # Get neighbors with PBC-aware relative vectors (displacement vectors)
+        # "i" : source atom index
+        # "j" : destination atom index
+        # "d" : distance
+        # "D" : displacement vector
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        edge_src, edge_dst, edge_length = ase.neighborlist.neighbor_list(
-            "ijd", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+        edge_src, edge_dst, edge_length, edge_displacement = ase.neighborlist.neighbor_list(
+            "ijdD", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
         )
         data.edge_index = torch.stack(
             [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0
         )
+        data.edge_dist = torch.tensor(edge_length, dtype=torch.float).unsqueeze(1)
+        data.edge_vec = torch.tensor(edge_displacement, dtype=torch.float)
 
         # ensure no duplicate edges
         num_edges = data.edge_index.size(1)

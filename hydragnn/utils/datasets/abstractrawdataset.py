@@ -338,12 +338,13 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         if self.rotational_invariance:
             self.dataset[:] = [rotational_invariance(data) for data in self.dataset]
 
-        if self.periodic_boundary_conditions:
+        if self.periodic_boundary_conditions or any(self.periodic_boundary_conditions):
             # edge lengths already added manually if using PBC, so no need to call Distance.
             compute_edges = get_radius_graph_pbc(
                 radius=self.radius,
                 loop=False,
                 max_neighbours=self.max_neighbours,
+                pbc=self.periodic_boundary_conditions,
             )
         else:
             compute_edges = get_radius_graph(
