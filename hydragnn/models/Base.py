@@ -346,12 +346,8 @@ class Base(Module):
 
             elif type_head == "pos":
                 if self.equivariance:
-                    x_node = (
-                        pos - data.pos
-                    )  
-                    sg_num_nodes = [
-                        d.num_nodes for d in data.to_data_list()
-                    ]  
+                    x_node = pos - data.pos
+                    sg_num_nodes = [d.num_nodes for d in data.to_data_list()]
                     com_ten = []
                     place = 0
                     for sgnn in sg_num_nodes:
@@ -361,7 +357,7 @@ class Base(Module):
                         )
                         place += sgnn
                     com_ten = torch.cat(com_ten, dim=0)
-                    x_node = x_node - com_ten 
+                    x_node = x_node - com_ten
                 else:
                     x_node = pos
             else:
