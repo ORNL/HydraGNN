@@ -339,10 +339,11 @@ class Base(Module):
                         c, pos = conv(x=x, pos=pos, **conv_args)
                         c = batch_norm(c)
                         x = self.activation_function(c)
-                        outputs.append(x_node[:, :head_dim])
-                        outputs_var.append(x_node[:, head_dim:] ** 2)
+                    x_node = x
                 else:
                     x_node = headloc(x=x, batch=data.batch)
+                outputs.append(x_node[:, :head_dim])
+                outputs_var.append(x_node[:, head_dim:] ** 2)
 
             elif type_head == "pos":
                 if self.equivariance:
@@ -360,11 +361,12 @@ class Base(Module):
                     x_node = x_node - com_ten
                 else:
                     x_node = pos
+                # TODO: implement output_var for this type_head?
+                outputs.append(x_node)
             else:
                 raise NotImplementedError(
                     "Head type {} not recognized".format(type_head)
                 )
-            outputs.append(x_node)
         if self.var_output:
             return outputs, outputs_var
         return outputs
