@@ -59,7 +59,6 @@ class PAINNStack(Base):
         assert (
             hidden_dim > 1
         ), "PainnNet requires more than one hidden dimension between input_dim and output_dim."
-        print("hidden_dim", input_dim)
         self_inter = PainnMessage(
             node_size=input_dim, edge_size=self.num_radial, cutoff=self.radius
         )
@@ -184,8 +183,6 @@ class PainnMessage(nn.Module):
             dim=1,
         )
 
-        print(node_vector[edge[:, 1]].shape)
-        print(gate_state_vector.shape)
         # num_pairs * 3 * node_size, num_pairs * node_size
         message_vector = node_vector[edge[:, 1]] * gate_state_vector.unsqueeze(1)
         edge_vector = gate_edge_vector.unsqueeze(1) * (
