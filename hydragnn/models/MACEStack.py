@@ -70,6 +70,8 @@ import math
 class MACEStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         r_max: float,  # The cutoff radius for the radial basis functions and edge_index
         radial_type: str,  # The type of radial basis function to use
         distance_transform: str,  # The distance transform to use
@@ -126,7 +128,7 @@ class MACEStack(Base):
         )  # This makes the irreps string
         self.edge_feats_irreps = o3.Irreps(f"{num_bessel}x0e")
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.spherical_harmonics = o3.SphericalHarmonics(
             self.sh_irreps,
@@ -335,70 +337,67 @@ class MACEStack(Base):
                 hidden_irreps_out, output_irreps
             )  # Change sizing to output_irreps
 
-        input_args = "node_attributes, pos, node_features, edge_attributes, edge_features, edge_index"
-        conv_args = "node_attributes, edge_attributes, edge_features, edge_index"  # node_features is not used here because it's passed through in the forward
-
         if not last_layer:
             return PyGSequential(
-                input_args,
+                self.input_args,
                 [
-                    (inter, "node_features, " + conv_args + " -> node_features, sc"),
+                    (
+                        inter,
+                        "inv_node_feat, " + self.conv_args + " -> node_features, sc",
+                    ),
                     (prod, "node_features, sc, node_attributes -> node_features"),
                     (sizing, "node_features -> node_features"),
                     (
-                        lambda node_features, pos: [node_features, pos],
-                        "node_features, pos -> node_features, pos",
+                        lambda node_features, equiv_node_feat: [
+                            node_features,
+                            equiv_node_feat,
+                        ],
+                        "node_features, equiv_node_feat -> node_features, equiv_node_feat",
                     ),
                 ],
             )
         else:
             return PyGSequential(
-                input_args,
+                self.input_args,
                 [
-                    (inter, "node_features, " + conv_args + " -> node_features, sc"),
+                    (
+                        inter,
+                        "inv_node_feat, " + self.conv_args + " -> node_features, sc",
+                    ),
                     (prod, "node_features, sc, node_attributes -> node_features"),
                     (sizing, "node_features -> node_features"),
                     (
-                        lambda node_features, pos: [node_features, pos],
-                        "node_features, pos -> node_features, pos",
+                        lambda node_features, equiv_node_feat: [
+                            node_features,
+                            equiv_node_feat,
+                        ],
+                        "node_features, equiv_node_feat -> node_features, equiv_node_feat",
                     ),
                 ],
             )
 
     def forward(self, data):
-        data, conv_args = self._conv_args(data)
-        node_features = data.node_features
-        node_attributes = data.node_attributes
-        pos = data.pos
-
-        ### encoder / decoder part ####
-        ## NOTE Norm techniques (feature_layers in HYDRA) are not advised for use in equivariant models as it can break equivariance
-
-        ### There is a readout before the first convolution layer ###
-        outputs = []
-        output = self.multihead_decoders[0](
-            data, node_attributes
-        )  # [index][n_output, size_output]
-        # Create outputs first
-        outputs = output
+        inv_node_feat, equiv_node_feat, outputs, conv_args = self._embedding(data)
 
         ### Do conv --> readout --> repeat for each convolution layer ###
         for conv, readout in zip(self.graph_convs, self.multihead_decoders[1:]):
             if not self.conv_checkpointing:
-                node_features, pos = conv(
-                    node_features=node_features, pos=pos, **conv_args
+                inv_node_feat, equiv_node_feat = conv(
+                    inv_node_feat=inv_node_feat,
+                    equiv_node_feat=equiv_node_feat,
+                    **conv_args,
                 )
-                output = readout(data, node_features)  # [index][n_output, size_output]
+                output = readout(data, inv_node_feat)  # [index][n_output, size_output]
             else:
-                node_features, pos = checkpoint(
+                inv_node_feat, equiv_node_feat = checkpoint(
                     conv,
                     use_reentrant=False,
-                    node_features=node_features,
-                    pos=pos,
+                    inv_node_feat=inv_node_feat,
+                    equiv_node_feat=equiv_node_feat,
                     **conv_args,
                 )
                 output = readout(
-                    data, node_features
+                    data, inv_node_feat
                 )  # output is a list of tensors with [index][n_output, size_output]
             # Sum predictions for each index, taking care of size differences
             for idx, prediction in enumerate(output):
@@ -406,7 +405,7 @@ class MACEStack(Base):
 
         return outputs
 
-    def _conv_args(self, data):
+    def _embedding(self, data):
         assert (
             data.pos is not None
         ), "MACE requires node positions (data.pos) to be set."
@@ -452,7 +451,15 @@ class MACEStack(Base):
             "edge_index": data.edge_index,
         }
 
-        return data, conv_args
+        node_attributes = data.node_attributes
+        outputs = []
+        output = self.multihead_decoders[0](
+            data, node_attributes
+        )  # [index][n_output, size_output]
+        # Create outputs first
+        outputs = output
+
+        return data.node_features, data.pos, outputs, conv_args
 
     def _multihead(self):
         # NOTE Multihead is skipped as it's an integral part of MACE's architecture to have a decoder after every layer,

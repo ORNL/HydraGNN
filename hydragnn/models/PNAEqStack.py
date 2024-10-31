@@ -42,7 +42,15 @@ class PNAEqStack(Base):
     """
 
     def __init__(
-        self, deg: list, edge_dim: int, num_radial: int, radius: float, *args, **kwargs
+        self,
+        input_args,
+        conv_args,
+        deg: list,
+        edge_dim: int,
+        num_radial: int,
+        radius: float,
+        *args,
+        **kwargs,
     ):
 
         self.x_aggregators = ["mean", "min", "max", "std"]
@@ -58,7 +66,7 @@ class PNAEqStack(Base):
         self.num_radial = num_radial
         self.radius = radius
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = rbf_BasisLayer(self.num_radial, self.radius)
 
@@ -90,8 +98,8 @@ class PNAEqStack(Base):
         )
         update = PainnUpdate(node_size=input_dim, last_layer=last_layer)
         """
-        The following linear layers are to get the correct sizing of embeddings. This is 
-        necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly 
+        The following linear layers are to get the correct sizing of embeddings. This is
+        necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly
         because node_scalar and node-vector are updated through an additive skip connection.
         """
         # Embed down to output size
@@ -104,91 +112,50 @@ class PNAEqStack(Base):
             geom_nn.Linear(input_dim, output_dim) if not last_layer else None
         )
 
-        input_args = "x, v, pos, edge_index, edge_rbf, edge_vec"
-        conv_args = "x, v, edge_index, edge_rbf, edge_vec"
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         if not last_layer:
             return geom_nn.Sequential(
-                input_args,
+                self.input_args,
                 [
-                    (message, conv_args + " -> x, v"),
-                    (update, "x, v -> x, v"),
-                    (node_embed_out, "x -> x"),
-                    (vec_embed_out, "v -> v"),
-                    (lambda x, v, pos: [x, v, pos], "x, v, pos -> x, v, pos"),
+                    (message, self.conv_args + " -> inv_node_feat, equiv_node_feat"),
+                    (
+                        update,
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
+                    (node_embed_out, "inv_node_feat -> inv_node_feat"),
+                    (vec_embed_out, "equiv_node_feat -> equiv_node_feat"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
         else:
             return geom_nn.Sequential(
-                input_args,
+                self.input_args,
                 [
-                    (message, conv_args + " -> x, v"),
+                    (message, self.conv_args + " -> inv_node_feat, equiv_node_feat"),
                     (
                         update,
-                        "x, v -> x",
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat",
                     ),  # v is not updated in the last layer to avoid hanging gradients
                     (
                         node_embed_out,
-                        "x -> x",
+                        "inv_node_feat -> inv_node_feat",
                     ),  # No need to embed down v because it's not used anymore
-                    (lambda x, v, pos: [x, v, pos], "x, v, pos -> x, v, pos"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
 
-    def forward(self, data):
-        data, conv_args = self._conv_args(
-            data
-        )  # Added v to data here (necessary for PNAEq Stack)
-        x = data.x
-        v = data.v
-        pos = data.pos
-
-        ### encoder part ####
-        for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
-            if not self.conv_checkpointing:
-                c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)  # Added v here
-            else:
-                c, v, pos = checkpoint(  # Added v here
-                    conv, use_reentrant=False, x=x, v=v, pos=pos, **conv_args
-                )
-            x = self.activation_function(feat_layer(c))
-
-        #### multi-head decoder part####
-        # shared dense layers for graph level output
-        if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
-        else:
-            x_graph = geom_nn.global_mean_pool(x, data.batch.to(x.device))
-        outputs = []
-        outputs_var = []
-        for head_dim, headloc, type_head in zip(
-            self.head_dims, self.heads_NN, self.head_type
-        ):
-            if type_head == "graph":
-                x_graph_head = self.graph_shared(x_graph)
-                output_head = headloc(x_graph_head)
-                outputs.append(output_head[:, :head_dim])
-                outputs_var.append(output_head[:, head_dim:] ** 2)
-            else:
-                if self.node_NN_type == "conv":
-                    for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)
-                        c = batch_norm(c)
-                        x = self.activation_function(c)
-                    x_node = x
-                else:
-                    x_node = headloc(x=x, batch=data.batch)
-                outputs.append(x_node[:, :head_dim])
-                outputs_var.append(x_node[:, head_dim:] ** 2)
-        if self.var_output:
-            return outputs, outputs_var
-        return outputs
-
-    def _conv_args(self, data):
+    def _embedding(self, data):
         assert (
             data.pos is not None
         ), "PNAEq requires node positions (data.pos) to be set."
@@ -210,7 +177,7 @@ class PNAEqStack(Base):
             "edge_vec": norm_diff,
         }
 
-        return data, conv_args
+        return data.x, data.v, conv_args
 
 
 class PainnMessage(MessagePassing):

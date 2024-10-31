@@ -21,6 +21,8 @@ from .Base import Base
 class GATStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         heads: int,
         negative_slope: float,
         *args,
@@ -30,7 +32,7 @@ class GATStack(Base):
         self.heads = heads
         self.negative_slope = negative_slope
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
     def _init_conv(self):
         """Here this function overwrites _init_conv() in Base since it has different implementation
@@ -99,18 +101,17 @@ class GATStack(Base):
             concat=concat,
         )
 
-        input_args = "x, pos, edge_index"
-        conv_args = "x, edge_index"
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         return Sequential(
-            input_args,
+            self.input_args,
             [
-                (gat, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (gat, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda inv_node_feat, equiv_node_feat: [
+                        inv_node_feat,
+                        equiv_node_feat,
+                    ],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 

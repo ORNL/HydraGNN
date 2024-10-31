@@ -33,14 +33,14 @@ class GINStack(Base):
             train_eps=True,
         )
 
-        input_args = "x, pos, edge_index"
-        conv_args = "x, edge_index"
-
         return Sequential(
-            input_args,
+            self.input_args,
             [
-                (gin, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (gin, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda x, equiv_node_feat: [x, equiv_node_feat],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 

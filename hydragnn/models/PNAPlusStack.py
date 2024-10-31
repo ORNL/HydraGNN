@@ -39,6 +39,8 @@ from .Base import Base
 class PNAPlusStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         deg: list,
         edge_dim: int,
         envelope_exponent: int,
@@ -61,7 +63,7 @@ class PNAPlusStack(Base):
         self.num_radial = num_radial
         self.radius = radius
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = BesselBasisLayer(
             self.num_radial, self.radius, self.envelope_exponent
@@ -81,22 +83,21 @@ class PNAPlusStack(Base):
             divide_input=False,
         )
 
-        input_args = "x, pos, edge_index, rbf"
-        conv_args = "x, edge_index, rbf"
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         return PyGSequential(
-            input_args,
+            self.input_args,
             [
-                (pna, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (pna, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda inv_node_feat, equiv_node_feat: [
+                        inv_node_feat,
+                        equiv_node_feat,
+                    ],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 
-    def _conv_args(self, data):
+    def _embedding(self, data):
         assert (
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."
@@ -113,7 +114,7 @@ class PNAPlusStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return conv_args
+        return data.x, data.pos, conv_args
 
     def __str__(self):
         return "PNAStack"

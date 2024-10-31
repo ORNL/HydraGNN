@@ -28,14 +28,17 @@ class SAGEStack(Base):
             out_channels=output_dim,
         )
 
-        input_args = "x, pos, edge_index"
-        conv_args = "x, edge_index"
-
         return Sequential(
-            input_args,
+            self.input_args,
             [
-                (sage, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (sage, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda inv_node_feat, equiv_node_feat: [
+                        inv_node_feat,
+                        equiv_node_feat,
+                    ],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 

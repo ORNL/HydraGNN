@@ -27,6 +27,8 @@ import inspect
 class Base(Module):
     def __init__(
         self,
+        input_args: str,
+        conv_args: str,
         input_dim: int,
         hidden_dim: int,
         output_dim: list,
@@ -46,6 +48,8 @@ class Base(Module):
     ):
         super().__init__()
         self.device = get_device()
+        self.input_args = input_args
+        self.conv_args = conv_args
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
@@ -104,6 +108,10 @@ class Base(Module):
             and self.edge_dim > 0
         ):
             self.use_edge_attr = True
+            if "edge_attr" not in self.input_args:
+                self.input_args += ", edge_attr"
+            if "edge_attr" not in self.conv_args:
+                self.conv_args += ", edge_attr"
 
         # Option to only train final property layers.
         self.freeze_conv = freeze_conv
@@ -127,14 +135,14 @@ class Base(Module):
             self.graph_convs.append(conv)
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
-    def _conv_args(self, data):
+    def _embedding(self, data):
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
         if self.use_edge_attr:
             assert (
                 data.edge_attr is not None
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
-        return conv_args
+        return data.x, data.pos, conv_args
 
     def _freeze_conv(self):
         for module in [self.graph_convs, self.feature_layers]:
@@ -301,19 +309,27 @@ class Base(Module):
         self.conv_checkpointing = True
 
     def forward(self, data):
-        x = data.x
-        pos = data.pos
-
         ### encoder part ####
-        conv_args = self._conv_args(data)
+        inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
+
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
-                c, pos = conv(x=x, pos=pos, **conv_args)
-            else:
-                c, pos = checkpoint(
-                    conv, use_reentrant=False, x=x, pos=pos, **conv_args
+                inv_node_feat, equiv_node_feat = conv(
+                    inv_node_feat=inv_node_feat,
+                    equiv_node_feat=equiv_node_feat,
+                    **conv_args
                 )
-            x = self.activation_function(feat_layer(c))
+            else:
+                inv_node_feat, equiv_node_feat = checkpoint(
+                    conv,
+                    use_reentrant=False,
+                    inv_node_feat=inv_node_feat,
+                    equiv_node_feat=equiv_node_feat,
+                    **conv_args
+                )
+            inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
+
+        x = inv_node_feat
 
         #### multi-head decoder part####
         # shared dense layers for graph level output
@@ -333,11 +349,17 @@ class Base(Module):
                 outputs_var.append(output_head[:, head_dim:] ** 2)
             else:
                 if self.node_NN_type == "conv":
+                    inv_node_feat = x
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        c, pos = conv(x=x, pos=pos, **conv_args)
-                        c = batch_norm(c)
-                        x = self.activation_function(c)
-                    x_node = x
+                        inv_node_feat, equiv_node_feat = conv(
+                            inv_node_feat=inv_node_feat,
+                            equiv_node_feat=equiv_node_feat,
+                            **conv_args
+                        )
+                        inv_node_feat = batch_norm(inv_node_feat)
+                        inv_node_feat = self.activation_function(inv_node_feat)
+                    x_node = inv_node_feat
+                    x = inv_node_feat
                 else:
                     x_node = headloc(x=x, batch=data.batch)
                 outputs.append(x_node[:, :head_dim])

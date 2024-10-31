@@ -21,6 +21,8 @@ from hydragnn.utils.model import unsorted_segment_mean
 class EGCLStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         edge_attr_dim: int,
         *args,
         max_neighbours: Optional[int] = None,
@@ -30,7 +32,11 @@ class EGCLStack(Base):
         self.edge_dim = (
             0 if edge_attr_dim is None else edge_attr_dim
         )  # Must be named edge_dim to trigger use by Base
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
+
+        assert (
+            self.input_args == "inv_node_feat, equiv_node_feat, edge_index, edge_attr"
+        )
         pass
 
     def _init_conv(self):
@@ -56,21 +62,33 @@ class EGCLStack(Base):
 
         if self.equivariance and not last_layer:
             return Sequential(
-                "x, pos, edge_index, edge_attr",
+                self.input_args,
                 [
-                    (egcl, "x, pos, edge_index, edge_attr -> x, pos"),
+                    (
+                        egcl,
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
         else:
             return Sequential(
-                "x, pos, edge_index, edge_attr",
+                self.input_args,
                 [
-                    (egcl, "x, pos, edge_index, edge_attr -> x"),
-                    (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                    (
+                        egcl,
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat",
+                    ),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
 
-    def _conv_args(self, data):
+    def _embedding(self, data):
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
@@ -82,7 +100,7 @@ class EGCLStack(Base):
                 "edge_attr": None,
             }
 
-        return conv_args
+        return data.x, data.pos, conv_args
 
     def __str__(self):
         return "EGCLStack"

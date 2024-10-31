@@ -19,6 +19,8 @@ from .Base import Base
 class PNAStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         deg: list,
         edge_dim: int,
         *args,
@@ -35,7 +37,7 @@ class PNAStack(Base):
         self.deg = torch.Tensor(deg)
         self.edge_dim = edge_dim
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
         pna = PNAConv(
@@ -50,18 +52,17 @@ class PNAStack(Base):
             divide_input=False,
         )
 
-        input_args = "x, pos, edge_index"
-        conv_args = "x, edge_index"
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         return Sequential(
-            input_args,
+            self.input_args,
             [
-                (pna, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (pna, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda inv_node_feat, equiv_node_feat: [
+                        inv_node_feat,
+                        equiv_node_feat,
+                    ],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 
