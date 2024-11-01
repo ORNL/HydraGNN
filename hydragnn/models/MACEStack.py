@@ -266,6 +266,7 @@ class MACEStack(Base):
         # Constructing convolutional layers
         if first_layer:
             hidden_irreps_out = hidden_irreps
+            combine = CombineBlock()
             inter = self.interaction_cls_first(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=node_feats_irreps,
@@ -290,10 +291,12 @@ class MACEStack(Base):
             sizing = o3.Linear(
                 hidden_irreps_out, output_irreps
             )  # Change sizing to output_irreps
+            split = SplitBlock(hidden_irreps)
         elif last_layer:
             # Select only scalars output for last layer
             hidden_irreps_out = str(hidden_irreps[0])
             output_irreps = str(output_irreps[0])
+            combine = CombineBlock()
             inter = self.interaction_cls(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=hidden_irreps,
@@ -314,8 +317,10 @@ class MACEStack(Base):
             sizing = o3.Linear(
                 hidden_irreps_out, output_irreps
             )  # Change sizing to output_irreps
+            split = SplitBlock(hidden_irreps)
         else:
             hidden_irreps_out = hidden_irreps
+            combine = CombineBlock()
             inter = self.interaction_cls(
                 node_attrs_irreps=self.node_attr_irreps,
                 node_feats_irreps=hidden_irreps,
@@ -336,14 +341,16 @@ class MACEStack(Base):
             sizing = o3.Linear(
                 hidden_irreps_out, output_irreps
             )  # Change sizing to output_irreps
+            split = SplitBlock(hidden_irreps)
 
         if not last_layer:
             return PyGSequential(
                 self.input_args,
                 [
+                    (combine, "inv_node_feat, equiv_node_feat -> node_features"),
                     (
                         inter,
-                        "inv_node_feat, " + self.conv_args + " -> node_features, sc",
+                        "node_features, " + self.conv_args + " -> node_features, sc",
                     ),
                     (prod, "node_features, sc, node_attributes -> node_features"),
                     (sizing, "node_features -> node_features"),
@@ -354,15 +361,17 @@ class MACEStack(Base):
                         ],
                         "node_features, equiv_node_feat -> node_features, equiv_node_feat",
                     ),
+                    (split, "node_features -> inv_node_feat, equiv_node_feat"),
                 ],
             )
         else:
             return PyGSequential(
                 self.input_args,
                 [
+                    (combine, "inv_node_feat, equiv_node_feat -> node_features"),
                     (
                         inter,
-                        "inv_node_feat, " + self.conv_args + " -> node_features, sc",
+                        "node_features, " + self.conv_args + " -> node_features, sc",
                     ),
                     (prod, "node_features, sc, node_attributes -> node_features"),
                     (sizing, "node_features -> node_features"),
@@ -373,11 +382,18 @@ class MACEStack(Base):
                         ],
                         "node_features, equiv_node_feat -> node_features, equiv_node_feat",
                     ),
+                    (split, "node_features -> inv_node_feat, equiv_node_feat"),
                 ],
             )
 
     def forward(self, data):
-        inv_node_feat, equiv_node_feat, outputs, conv_args = self._embedding(data)
+        inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
+
+        ### MACE has a readout block before convolutions ###
+        output = self.multihead_decoders[0](
+            data, data.node_attributes
+        )  # [index][n_output, size_output]
+        outputs = output
 
         ### Do conv --> readout --> repeat for each convolution layer ###
         for conv, readout in zip(self.graph_convs, self.multihead_decoders[1:]):
@@ -451,15 +467,11 @@ class MACEStack(Base):
             "edge_index": data.edge_index,
         }
 
-        node_attributes = data.node_attributes
-        outputs = []
-        output = self.multihead_decoders[0](
-            data, node_attributes
-        )  # [index][n_output, size_output]
-        # Create outputs first
-        outputs = output
-
-        return data.node_features, data.pos, outputs, conv_args
+        return (
+            data.node_features[:, : self.hidden_dim],
+            data.node_features[:, self.hidden_dim :],
+            conv_args,
+        )
 
     def _multihead(self):
         # NOTE Multihead is skipped as it's an integral part of MACE's architecture to have a decoder after every layer,
@@ -510,6 +522,25 @@ def process_node_attributes(node_attributes, num_elements):
     ).float()  # [n_atoms, 118]
 
     return one_hot
+
+
+@compile_mode("script")
+class CombineBlock(torch.nn.Module):
+    def __init__(self):
+        super(CombineBlock, self).__init__()
+
+    def forward(self, inv_node_features, equiv_node_features):
+        return torch.cat([inv_node_features, equiv_node_features], dim=1)
+
+
+@compile_mode("script")
+class SplitBlock(torch.nn.Module):
+    def __init__(self, irreps):
+        super(SplitBlock, self).__init__()
+        self.dim = irreps.count(o3.Irrep(0, 1))
+
+    def forward(self, node_features):
+        return node_features[:, : self.dim], node_features[:, self.dim :]
 
 
 @compile_mode("script")
