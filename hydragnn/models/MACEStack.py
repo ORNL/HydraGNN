@@ -403,7 +403,9 @@ class MACEStack(Base):
                     equiv_node_feat=equiv_node_feat,
                     **conv_args,
                 )
-                output = readout(data, inv_node_feat)  # [index][n_output, size_output]
+                output = readout(
+                    data, torch.cat([inv_node_feat, equiv_node_feat], dim=1)
+                )  # [index][n_output, size_output]
             else:
                 inv_node_feat, equiv_node_feat = checkpoint(
                     conv,
@@ -413,7 +415,7 @@ class MACEStack(Base):
                     **conv_args,
                 )
                 output = readout(
-                    data, inv_node_feat
+                    data, torch.cat([inv_node_feat, equiv_node_feat], dim=1)
                 )  # output is a list of tensors with [index][n_output, size_output]
             # Sum predictions for each index, taking care of size differences
             for idx, prediction in enumerate(output):
