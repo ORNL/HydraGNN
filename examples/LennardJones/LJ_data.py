@@ -173,7 +173,7 @@ class LJDataset(AbstractBaseDataset):
             .unsqueeze(0)
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-            pbc=True,
+            pbc=[True, True, True],
         )
 
         # Create pbc edges and lengths
@@ -329,6 +329,7 @@ def create_configuration(
     data.supercell_size = torch.diag(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
+    data.pbc = [True, True, True]
 
     create_graph_connectivity_pbc = get_radius_graph_pbc(
         radius_cutoff, max_num_neighbors

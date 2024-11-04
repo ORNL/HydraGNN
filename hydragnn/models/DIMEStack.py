@@ -144,29 +144,26 @@ class DIMEStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
+        super()._embedding(
+            data
+        )  # Getting edge_attr(optional), edge_vec, edge_dist is done in the parent class Base
         # Calculate triplet indices
         i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(
             data.edge_index, num_nodes=data.x.size(0)
         )
 
-        # Calculate edge vectors and lengths
-        edge_vec, edge_dist = get_edge_vectors_and_lengths(
-            data.pos, data.edge_index, data.shifts
-        )
-
         # Calculate angles
-        pos_ji = edge_vec[idx_ji]
-        pos_kj = edge_vec[idx_kj]
+        pos_ji = data.edge_vec[idx_ji]
+        pos_kj = data.edge_vec[idx_kj]
         pos_ki = (
-            pos_kj - pos_ji
+            pos_kj + pos_ji
         )  # It's important to calculate the vectors separately and then add in case of periodic boundary conditions
         a = (pos_ji * pos_ki).sum(dim=-1)
         b = torch.cross(pos_ji, pos_ki).norm(dim=-1)
         angle = torch.atan2(b, a)
 
-        rbf = self.rbf(edge_dist)
-        sbf = self.sbf(edge_dist, angle, idx_kj)
+        rbf = self.rbf(data.edge_dist.squeeze())
+        sbf = self.sbf(data.edge_dist.squeeze(), angle, idx_kj)
 
         conv_args = {
             "rbf": rbf,
@@ -176,13 +173,7 @@ class DIMEStack(Base):
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
         }
-
-        if self.use_edge_attr:
-            assert (
-                data.edge_attr is not None
-            ), "Data must have edge attributes if use_edge_attributes is set."
-            conv_args.update({"edge_attr": data.edge_attr})
-
+        
         return data.x, data.pos, conv_args
 
 

@@ -156,7 +156,12 @@ class RadiusGraphPBC(RadiusGraph):
         # 'd' : absolute distance
         # 'S' : shift vector
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        edge_src, edge_dst, edge_length, edge_shifts = ase.neighborlist.neighbor_list(
+        (
+            edge_src,
+            edge_dst,
+            edge_length,
+            edge_cell_shifts,
+        ) = ase.neighborlist.neighbor_list(
             "ijdS", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
         )
         data.edge_index = torch.stack(
@@ -166,16 +171,19 @@ class RadiusGraphPBC(RadiusGraph):
 
         # ensure no duplicate edges
         unique_edge_index, unique_indices = torch.unique(
-            data.edge_index, dim=1, return_inverse=False
+            data.edge_index, dim=1, return_inverse=False  # Shape: [n_edges]
         )
-        assert unique_edge_index.size(1) == data.edge_index.size(
+        assert unique_edge_index.unsqueeze(0).size(1) == data.edge_index.size(
             1
         ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
 
         data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(
             1
         )  # Shape: [n_edges, 1]
-        data.shifts = torch.tensor(edge_shifts)  # Shape: [n_edges, 3]
+        # ASE returns whether the cell was shifted or not (-1,0,1). Multiply by the cell size to get the actual shift
+        data.edge_shifts = torch.matmul(
+            torch.tensor(edge_cell_shifts).float(), data.supercell_size.float()
+        )  # Shape: [n_edges, 3]
 
         return data
 

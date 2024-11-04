@@ -137,13 +137,11 @@ class Base(Module):
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _embedding(self, data):
-        if not hasattr(data, "edge_shifts"):
-            data.edge_shifts = torch.zeros(
-                (data.edge_index.size(1), 3), device=data.edge_index.device
-            )
+        if not hasattr(data, "shifts"):
+            data.shifts = torch.zeros_like(data.edge_index.shape(1), 3)
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
-        edge_vec, edge_dist = get_edge_vectors_and_lengths(
-            data.pos, data.edge_index, data.shifts
+        data.edge_vec, data.edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.edge_shifts
         )
         if self.use_edge_attr:
             assert (
