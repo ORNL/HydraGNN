@@ -146,6 +146,7 @@ class DIMEStack(Base):
 
     def _embedding(self, data):
         super()._embedding(data)
+
         assert (
             data.pos is not None
         ), "DimeNet requires node positions (data.pos) to be set."
@@ -181,6 +182,12 @@ class DIMEStack(Base):
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
         }
+
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
+            conv_args.update({"edge_attr": data.edge_attr})
 
         return data.x, data.pos, conv_args
 

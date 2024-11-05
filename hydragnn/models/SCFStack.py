@@ -18,7 +18,6 @@ from torch.nn import Identity, Linear, ReLU, Sequential
 from torch_geometric.nn import Sequential as PyGSeq
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.models.schnet import (
-    CFConv,
     GaussianSmearing,
     RadiusInteractionGraph,
     ShiftedSoftplus,
@@ -136,17 +135,16 @@ class SCFStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
-
         if (self.use_edge_attr) and (self.equivariance):
             raise Exception(
                 "For SchNet if using edge attributes, then E(3)-equivariance cannot be ensured. Please disable equivariance or edge attributes."
             )
         elif self.use_edge_attr:
             edge_index = data.edge_index
-            _, edge_weight = get_edge_vectors_and_lengths(
-                data.pos, edge_index, data.edge_shifts
-            )
+            data.edge_shifts = torch.zeros(data.edge_index.size(1), 3).to(
+                data.edge_index.device
+            )  # pbc edge shifts are currently not supported in positional update models
+            edge_weight = data.edge_attr.norm(dim=-1)
 
             conv_args = {
                 "edge_index": edge_index,
@@ -216,7 +214,6 @@ class CFConv(MessagePassing):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
-        edge_shifts: Tensor,
     ) -> Tensor:
         C = 0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0)
         W = self.nn(edge_attr) * C.view(-1, 1)
@@ -224,6 +221,9 @@ class CFConv(MessagePassing):
         x = self.lin1(x)
 
         if self.equivariant:
+            edge_shifts = torch.zeros(edge_index.size(1), 3).to(
+                coord.device
+            )  # pbc edge shifts are currently not supported in positional update models
             coord_diff, radial = get_edge_vectors_and_lengths(
                 pos, edge_index, edge_shifts, normalize=True, eps=1.0
             )

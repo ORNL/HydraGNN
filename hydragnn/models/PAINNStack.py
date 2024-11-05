@@ -173,9 +173,8 @@ class PainnMessage(nn.Module):
         filter_weight = self.filter_layer(
             sinc_expansion(edge_dist, self.edge_size, self.cutoff)
         )
-        filter_weight = filter_weight * cosine_cutoff(edge_dist, self.cutoff).unsqueeze(
-            -1
-        )
+        filter_weight = filter_weight * cosine_cutoff(edge_dist, self.cutoff)
+
         scalar_out = self.scalar_message_mlp(node_scalar)
         filter_out = filter_weight * scalar_out[edge[:, 1]]
 
@@ -187,9 +186,9 @@ class PainnMessage(nn.Module):
 
         # num_pairs * 3 * node_size, num_pairs * node_size
         message_vector = node_vector[edge[:, 1]] * gate_state_vector.unsqueeze(1)
-        edge_vector = gate_edge_vector.unsqueeze(1) * (
-            edge_diff / edge_dist.unsqueeze(-1)
-        ).unsqueeze(-1)
+        edge_vector = gate_edge_vector.unsqueeze(1) * (edge_diff / edge_dist).unsqueeze(
+            -1
+        )
         message_vector = message_vector + edge_vector
 
         # sum message
@@ -268,9 +267,7 @@ def sinc_expansion(edge_dist: torch.Tensor, edge_size: int, cutoff: float):
     sin(n * pi * d / d_cut) / d
     """
     n = torch.arange(edge_size, device=edge_dist.device) + 1
-    return torch.sin(
-        edge_dist.unsqueeze(-1) * n * torch.pi / cutoff
-    ) / edge_dist.unsqueeze(-1)
+    return torch.sin(edge_dist * n * torch.pi / cutoff) / edge_dist
 
 
 def cosine_cutoff(edge_dist: torch.Tensor, cutoff: float):

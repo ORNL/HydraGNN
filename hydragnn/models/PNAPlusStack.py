@@ -99,7 +99,6 @@ class PNAPlusStack(Base):
         )
 
     def _embedding(self, data):
-        super()._embedding(data)
         assert (
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."
@@ -111,6 +110,12 @@ class PNAPlusStack(Base):
         rbf = self.rbf(edge_dist.squeeze())
 
         conv_args = {"edge_index": data.edge_index.to(torch.long), "rbf": rbf}
+
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
+            conv_args.update({"edge_attr": data.edge_attr})
 
         return data.x, data.pos, conv_args
 

@@ -180,6 +180,12 @@ class PNAEqStack(Base):
             "edge_vec": norm_edge_vec,
         }
 
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
+            conv_args.update({"edge_attr": data.edge_attr})
+
         return data.x, data.v, conv_args
 
 
