@@ -138,6 +138,8 @@ class RadiusGraphPBC(RadiusGraph):
 
     def __call__(self, data):
         data.edge_attr = None
+        data.edge_shifts = None
+        # pbc = getattr(data, 'pbc', [True, True, True])
         assert (
             "batch" not in data
         ), "Periodic boundary conditions not currently supported on batches."
@@ -147,26 +149,33 @@ class RadiusGraphPBC(RadiusGraph):
         ase_atom_object = ase.Atoms(
             positions=data.pos,
             cell=data.supercell_size,
-            pbc=True,
+            pbc=data.pbc,
         )
-        # ‘i’ : first atom index
-        # ‘j’ : second atom index
+        # 'i' : first atom index
+        # 'j' : second atom index
+        # 'd' : absolute distance
+        # 'S' : shift vector
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        edge_src, edge_dst, edge_length = ase.neighborlist.neighbor_list(
-            "ijd", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+        edge_src, edge_dst, edge_length, edge_shifts = ase.neighborlist.neighbor_list(
+            "ijdS", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
         )
         data.edge_index = torch.stack(
-            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0
+            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)],
+            dim=0,  # Shape: [2, n_edges]
         )
 
         # ensure no duplicate edges
-        num_edges = data.edge_index.size(1)
-        data.coalesce()
-        assert num_edges == data.edge_index.size(
+        unique_edge_index, unique_indices = torch.unique(
+            data.edge_index, dim=1, return_inverse=False
+        )
+        assert unique_edge_index.size(1) == data.edge_index.size(
             1
         ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
 
-        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(1)
+        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(
+            1
+        )  # Shape: [n_edges, 1]
+        data.shifts = torch.tensor(edge_shifts)  # Shape: [n_edges, 3]
 
         return data
 
