@@ -106,17 +106,24 @@ class OMat2024(AbstractBaseDataset):
                 )
             )
 
-            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[self.rank]
+            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
+                self.rank
+            ]
 
             for index in iterate_tqdm(rx, verbosity_level=2):
                 try:
                     xyz = torch.tensor(dataset.get_atoms(index).get_positions())
                     natoms = torch.IntTensor([xyz.shape[0]])
                     Z = torch.tensor(
-                        dataset.get_atoms(index).get_atomic_numbers(), dtype=torch.float32
+                        dataset.get_atoms(index).get_atomic_numbers(),
+                        dtype=torch.float32,
                     ).unsqueeze(1)
-                    energy = torch.tensor(dataset.get_atoms(index).get_total_energy(), dtype=torch.float32).unsqueeze(0)
-                    forces = torch.tensor(dataset.get_atoms(index).get_forces(), dtype=torch.float32)
+                    energy = torch.tensor(
+                        dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
+                    ).unsqueeze(0)
+                    forces = torch.tensor(
+                        dataset.get_atoms(index).get_forces(), dtype=torch.float32
+                    )
                     chemical_formula = dataset.get_atoms(index).get_chemical_formula()
 
                     if self.energy_per_atom:
