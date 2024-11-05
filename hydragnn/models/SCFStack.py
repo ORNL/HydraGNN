@@ -27,6 +27,7 @@ from torch_geometric.nn.models.schnet import (
 from .Base import Base
 
 from hydragnn.utils.model import unsorted_segment_mean
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class SCFStack(Base):
@@ -135,13 +136,17 @@ class SCFStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
         if (self.use_edge_attr) and (self.equivariance):
             raise Exception(
                 "For SchNet if using edge attributes, then E(3)-equivariance cannot be ensured. Please disable equivariance or edge attributes."
             )
         elif self.use_edge_attr:
             edge_index = data.edge_index
-            edge_weight = data.edge_attr.norm(dim=-1)
+            _, edge_weight = get_edge_vectors_and_lengths(
+                data.pos, edge_index, data.edge_shifts
+            )
 
             conv_args = {
                 "edge_index": edge_index,
@@ -211,6 +216,7 @@ class CFConv(MessagePassing):
         edge_index: Tensor,
         edge_weight: Tensor,
         edge_attr: Tensor,
+        edge_shifts: Tensor,
     ) -> Tensor:
         C = 0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0)
         W = self.nn(edge_attr) * C.view(-1, 1)
@@ -218,7 +224,9 @@ class CFConv(MessagePassing):
         x = self.lin1(x)
 
         if self.equivariant:
-            radial, coord_diff = self.coord2radial(edge_index, pos)
+            coord_diff, radial = get_edge_vectors_and_lengths(
+                pos, edge_index, edge_shifts, normalize=True, eps=1.0
+            )
             pos = self.coord_model(pos, edge_index, coord_diff, W)
 
         x = self.propagate(edge_index, x=x, W=W)
@@ -230,13 +238,3 @@ class CFConv(MessagePassing):
 
     def message(self, x_j: Tensor, W: Tensor) -> Tensor:
         return x_j * W
-
-    def coord2radial(self, edge_index, coord):
-        row, col = edge_index
-        coord_diff = coord[row] - coord[col]
-        radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
-
-        norm = torch.sqrt(radial) + 1
-        coord_diff = coord_diff / (norm)
-
-        return radial, coord_diff
