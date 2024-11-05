@@ -31,6 +31,8 @@ class PAINNStack(Base):
     def __init__(
         self,
         # edge_dim: int,   # To-Do: Add edge_features
+        input_args,
+        conv_args,
         num_radial: int,
         radius: float,
         *args,
@@ -40,13 +42,11 @@ class PAINNStack(Base):
         self.num_radial = num_radial
         self.radius = radius
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
-        self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, last_layer)
-        )
+        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
@@ -64,8 +64,8 @@ class PAINNStack(Base):
         )
         cross_inter = PainnUpdate(node_size=input_dim, last_layer=last_layer)
         """
-        The following linear layers are to get the correct sizing of embeddings. This is 
-        necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly 
+        The following linear layers are to get the correct sizing of embeddings. This is
+        necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly
         because node_scalar and node-vector are updated through a sum.
         """
         node_embed_out = nn.Sequential(
@@ -77,82 +77,54 @@ class PAINNStack(Base):
 
         if not last_layer:
             return geom_nn.Sequential(
-                "x, v, pos, edge_index, diff, dist",
+                self.input_args,
                 [
-                    (self_inter, "x, v, edge_index, diff, dist -> x, v"),
-                    (cross_inter, "x, v -> x, v"),
-                    (node_embed_out, "x -> x"),
-                    (vec_embed_out, "v -> v"),
-                    (lambda x, v, pos: [x, v, pos], "x, v, pos -> x, v, pos"),
+                    (
+                        self_inter,
+                        "inv_node_feat, equiv_node_feat, edge_index, diff, dist -> inv_node_feat, equiv_node_feat",
+                    ),
+                    (
+                        cross_inter,
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
+                    (node_embed_out, "inv_node_feat -> inv_node_feat"),
+                    (vec_embed_out, "equiv_node_feat -> equiv_node_feat"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
         else:
             return geom_nn.Sequential(
-                "x, v, pos, edge_index, diff, dist",
+                self.input_args,
                 [
-                    (self_inter, "x, v, edge_index, diff, dist -> x, v"),
+                    (
+                        self_inter,
+                        "inv_node_feat, equiv_node_feat, edge_index, diff, dist -> inv_node_feat, equiv_node_feat",
+                    ),
                     (
                         cross_inter,
-                        "x, v -> x",
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat",
                     ),  # v is not updated in the last layer to avoid hanging gradients
                     (
                         node_embed_out,
-                        "x -> x",
+                        "inv_node_feat -> inv_node_feat",
                     ),  # No need to embed down v because it's not used anymore
-                    (lambda x, v, pos: [x, v, pos], "x, v, pos -> x, v, pos"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
 
-    def forward(self, data):
-        data, conv_args = self._conv_args(
-            data
-        )  # Added v to data here (necessary for PAINN Stack)
-        x = data.x
-        v = data.v
-        pos = data.pos
-
-        ### encoder part ####
-        for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
-            if not self.conv_checkpointing:
-                c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)  # Added v here
-            else:
-                c, v, pos = checkpoint(  # Added v here
-                    conv, use_reentrant=False, x=x, v=v, pos=pos, **conv_args
-                )
-            x = self.activation_function(feat_layer(c))
-
-        #### multi-head decoder part####
-        # shared dense layers for graph level output
-        if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
-        else:
-            x_graph = geom_nn.global_mean_pool(x, data.batch.to(x.device))
-        outputs = []
-        outputs_var = []
-        for head_dim, headloc, type_head in zip(
-            self.head_dims, self.heads_NN, self.head_type
-        ):
-            if type_head == "graph":
-                x_graph_head = self.graph_shared(x_graph)
-                output_head = headloc(x_graph_head)
-                outputs.append(output_head[:, :head_dim])
-                outputs_var.append(output_head[:, head_dim:] ** 2)
-            else:
-                if self.node_NN_type == "conv":
-                    for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)
-                        c = batch_norm(c)
-                        x = self.activation_function(c)
-                    x_node = x
-                else:
-                    x_node = headloc(x=x, batch=data.batch)
-                outputs.append(x_node[:, :head_dim])
-                outputs_var.append(x_node[:, head_dim:] ** 2)
-        if self.var_output:
-            return outputs, outputs_var
-        return outputs
-
-    def _conv_args(self, data):
+    def _embedding(self, data):
         assert (
             data.pos is not None
         ), "PAINNNet requires node positions (data.pos) to be set."
@@ -173,7 +145,7 @@ class PAINNStack(Base):
             "dist": dist,
         }
 
-        return data, conv_args
+        return data.x, data.v, conv_args
 
 
 class PainnMessage(nn.Module):

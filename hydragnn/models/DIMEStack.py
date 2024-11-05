@@ -36,6 +36,8 @@ class DIMEStack(Base):
 
     def __init__(
         self,
+        input_args,
+        conv_args,
         basis_emb_size,
         envelope_exponent,
         int_emb_size,
@@ -60,7 +62,7 @@ class DIMEStack(Base):
         self.edge_dim = edge_dim
         self.radius = radius
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = BesselBasisLayer(num_radial, radius, envelope_exponent)
         self.sbf = SphericalBasisLayer(
@@ -111,28 +113,37 @@ class DIMEStack(Base):
 
         if self.use_edge_attr:
             return Sequential(
-                "x, pos, rbf, edge_attr, sbf, i, j, idx_kj, idx_ji",
+                self.input_args,
                 [
-                    (lin, "x -> x"),
-                    (emb, "x, rbf, i, j, edge_attr -> x1"),
+                    (lin, "inv_node_feat -> inv_node_feat"),
+                    (emb, "inv_node_feat, rbf, i, j, edge_attr -> x1"),
                     (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                    (dec, "x2, rbf, i -> c"),
-                    (lambda x, pos: [x, pos], "c, pos -> c, pos"),
+                    (dec, "x2, rbf, i -> inv_node_feat"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
         else:
             return Sequential(
-                "x, pos, rbf, sbf, i, j, idx_kj, idx_ji",
+                self.input_args,
                 [
-                    (lin, "x -> x"),
-                    (emb, "x, rbf, i, j -> x1"),
+                    (lin, "inv_node_feat -> inv_node_feat"),
+                    (emb, "inv_node_feat, rbf, i, j -> x1"),
                     (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                    (dec, "x2, rbf, i -> c"),
-                    (lambda x, pos: [x, pos], "c, pos -> c, pos"),
+                    (dec, "x2, rbf, i -> inv_node_feat"),
+                    (
+                        lambda x, pos: [x, pos],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
 
-    def _conv_args(self, data):
+    def _embedding(self, data):
         assert (
             data.pos is not None
         ), "DimeNet requires node positions (data.pos) to be set."
@@ -166,7 +177,7 @@ class DIMEStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return conv_args
+        return data.x, data.pos, conv_args
 
 
 """

@@ -127,6 +127,8 @@ def create_model(
     # Note: model-specific inputs must come first.
     if model_type == "GIN":
         model = GINStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
             input_dim,
             hidden_dim,
             output_dim,
@@ -145,6 +147,8 @@ def create_model(
     elif model_type == "PNA":
         assert pna_deg is not None, "PNA requires degree input."
         model = PNAStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
             pna_deg,
             edge_dim,
             input_dim,
@@ -170,6 +174,8 @@ def create_model(
         assert num_radial is not None, "PNAPlus requires num_radial input."
         assert radius is not None, "PNAPlus requires radius input."
         model = PNAPlusStack(
+            "inv_node_feat, equiv_node_feat, edge_index, rbf",
+            "inv_node_feat, edge_index, rbf",
             pna_deg,
             edge_dim,
             envelope_exponent,
@@ -195,6 +201,8 @@ def create_model(
         heads = 6
         negative_slope = 0.05
         model = GATStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
             heads,
             negative_slope,
             input_dim,
@@ -215,6 +223,8 @@ def create_model(
     elif model_type == "MFC":
         assert max_neighbours is not None, "MFC requires max_neighbours input."
         model = MFCStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
             max_neighbours,
             input_dim,
             hidden_dim,
@@ -233,6 +243,8 @@ def create_model(
 
     elif model_type == "CGCNN":
         model = CGCNNStack(
+            "inv_node_feat, equiv_node_feat, edge_index",  # input_args
+            "inv_node_feat, edge_index",  # conv_args
             edge_dim,
             input_dim,
             output_dim,
@@ -250,6 +262,8 @@ def create_model(
 
     elif model_type == "SAGE":
         model = SAGEStack(
+            "inv_node_feat, equiv_node_feat, edge_index",  # input_args
+            "inv_node_feat, edge_index",  # conv_args
             input_dim,
             hidden_dim,
             output_dim,
@@ -269,6 +283,8 @@ def create_model(
         assert num_filters is not None, "SchNet requires num_filters input."
         assert radius is not None, "SchNet requires radius input."
         model = SCFStack(
+            "inv_node_feat, equiv_node_feat, batch",
+            "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_attr",
             num_gaussians,
             num_filters,
             radius,
@@ -301,6 +317,8 @@ def create_model(
         assert num_spherical is not None, "DimeNet requires num_spherical input."
         assert radius is not None, "DimeNet requires radius input."
         model = DIMEStack(
+            "inv_node_feat, equiv_node_feat, rbf, sbf, i, j, idx_kj, idx_ji",  # input_args
+            "",  # conv_args
             basis_emb_size,
             envelope_exponent,
             int_emb_size,
@@ -329,6 +347,8 @@ def create_model(
 
     elif model_type == "EGNN":
         model = EGCLStack(
+            "inv_node_feat, equiv_node_feat, edge_index, edge_attr",  # input_args
+            "",  # conv_args
             edge_dim,
             input_dim,
             hidden_dim,
@@ -349,6 +369,8 @@ def create_model(
     elif model_type == "PAINN":
         model = PAINNStack(
             # edge_dim,   # To-do add edge_features
+            "inv_node_feat, equiv_node_feat, edge_index, diff, dist",
+            "",
             num_radial,
             radius,
             input_dim,
@@ -368,6 +390,8 @@ def create_model(
     elif model_type == "PNAEq":
         assert pna_deg is not None, "PNAEq requires degree input."
         model = PNAEqStack(
+            "inv_node_feat, equiv_node_feat, edge_index, edge_rbf, edge_vec",
+            "inv_node_feat, equiv_node_feat, edge_index, edge_rbf, edge_vec",
             pna_deg,
             edge_dim,
             num_radial,
@@ -394,6 +418,8 @@ def create_model(
         assert max_ell >= 1, "MACE requires max_ell >= 1."
         assert node_max_ell >= 1, "MACE requires node_max_ell >= 1."
         model = MACEStack(
+            "node_attributes, equiv_node_feat, inv_node_feat, edge_attributes, edge_features, edge_index",
+            "node_attributes, edge_attributes, edge_features, edge_index",
             radius,
             radial_type,
             distance_transform,

@@ -21,13 +21,15 @@ from .Base import Base
 class MFCStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         max_degree: int,
         *args,
         **kwargs,
     ):
         self.max_degree = max_degree
 
-        super().__init__(*args, **kwargs)
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
     def get_conv(self, input_dim, output_dim):
         mfc = MFConv(
@@ -36,14 +38,14 @@ class MFCStack(Base):
             max_degree=self.max_degree,
         )
 
-        input_args = "x, pos, edge_index"
-        conv_args = "x, edge_index"
-
         return Sequential(
-            input_args,
+            self.input_args,
             [
-                (mfc, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (mfc, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda x, pos: [x, pos],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 
