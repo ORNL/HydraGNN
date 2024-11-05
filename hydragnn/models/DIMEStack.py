@@ -26,6 +26,7 @@ from torch_geometric.nn.models.dimenet import (
 from torch_geometric.utils import scatter
 
 from .Base import Base
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class DIMEStack(Base):
@@ -144,17 +145,24 @@ class DIMEStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(
-            data
-        )  # Getting edge_attr(optional), edge_vec, edge_dist is done in the parent class Base
+        super()._embedding(data)
+        assert (
+            data.pos is not None
+        ), "DimeNet requires node positions (data.pos) to be set."
+
         # Calculate triplet indices
         i, j, idx_i, idx_j, idx_k, idx_kj, idx_ji = triplets(
             data.edge_index, num_nodes=data.x.size(0)
         )
 
+        # Calculate edge_vec and edge_dist
+        edge_vec, edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.shifts
+        )
+
         # Calculate angles
-        pos_ji = data.edge_vec[idx_ji]
-        pos_kj = data.edge_vec[idx_kj]
+        pos_ji = edge_vec[idx_ji]
+        pos_kj = edge_vec[idx_kj]
         pos_ki = (
             pos_kj + pos_ji
         )  # It's important to calculate the vectors separately and then add in case of periodic boundary conditions
@@ -162,8 +170,8 @@ class DIMEStack(Base):
         b = torch.cross(pos_ji, pos_ki).norm(dim=-1)
         angle = torch.atan2(b, a)
 
-        rbf = self.rbf(data.edge_dist.squeeze())
-        sbf = self.sbf(data.edge_dist.squeeze(), angle, idx_kj)
+        rbf = self.rbf(edge_dist.squeeze())
+        sbf = self.sbf(edge_dist.squeeze(), angle, idx_kj)
 
         conv_args = {
             "rbf": rbf,
@@ -173,7 +181,7 @@ class DIMEStack(Base):
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
         }
-        
+
         return data.x, data.pos, conv_args
 
 

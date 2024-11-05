@@ -173,7 +173,11 @@ class LJDataset(AbstractBaseDataset):
             .unsqueeze(0)
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-            pbc=[True, True, True],
+            pbc=[
+                True,
+                True,
+                True,
+            ],  # LJ example always has periodic boundary conditions
         )
 
         # Create pbc edges and lengths

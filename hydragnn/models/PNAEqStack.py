@@ -32,7 +32,9 @@ from torch_geometric.nn.dense.linear import Linear as geom_Linear
 from torch_geometric.nn.aggr.scaler import DegreeScalerAggregation
 from torch_geometric.typing import Adj, OptTensor
 
+# HydraGNN
 from .Base import Base
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class PNAEqStack(Base):
@@ -156,16 +158,17 @@ class PNAEqStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
         assert (
             data.pos is not None
         ), "PNAEq requires node positions (data.pos) to be set."
 
-        # Calculate relative vectors and distances
-        i, j = data.edge_index[0], data.edge_index[1]
-        diff = data.pos[i] - data.pos[j]
-        dist = diff.pow(2).sum(dim=-1).sqrt()
-        rbf = self.rbf(dist)
-        norm_diff = diff / dist.unsqueeze(-1)
+        # Edge vector and distance features
+        norm_edge_vec, edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.shifts, normalize=True
+        )
+        rbf = self.rbf(edge_dist.squeeze())
 
         # Instantiate tensor to hold equivariant traits
         v = torch.zeros(data.x.size(0), 3, data.x.size(1), device=data.x.device)
@@ -174,7 +177,7 @@ class PNAEqStack(Base):
         conv_args = {
             "edge_index": data.edge_index.t().to(torch.long),
             "edge_rbf": rbf,
-            "edge_vec": norm_diff,
+            "edge_vec": norm_edge_vec,
         }
 
         return data.x, data.v, conv_args

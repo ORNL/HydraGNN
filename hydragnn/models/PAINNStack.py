@@ -20,6 +20,7 @@ from torch_geometric import nn as geom_nn
 from torch.utils.checkpoint import checkpoint
 
 from .Base import Base
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class PAINNStack(Base):
@@ -125,15 +126,16 @@ class PAINNStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
         assert (
             data.pos is not None
-        ), "PAINNNet requires node positions (data.pos) to be set."
+        ), "PAINN requires node positions (data.pos) to be set."
 
-        # Calculate relative vectors and distances
-        i, j = data.edge_index[0], data.edge_index[1]
-        diff = data.pos[i] - data.pos[j]
-        dist = diff.pow(2).sum(dim=-1).sqrt()
-        norm_diff = diff / dist.unsqueeze(-1)
+        # Get normalized edge vectors and lengths
+        norm_edge_vec, edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.shifts, normalize=True
+        )
 
         # Instantiate tensor to hold equivariant traits
         v = torch.zeros(data.x.size(0), 3, data.x.size(1), device=data.x.device)
@@ -141,8 +143,8 @@ class PAINNStack(Base):
 
         conv_args = {
             "edge_index": data.edge_index.t().to(torch.long),
-            "diff": norm_diff,
-            "dist": dist,
+            "diff": norm_edge_vec,
+            "dist": edge_dist,
         }
 
         return data.x, data.v, conv_args

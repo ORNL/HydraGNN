@@ -140,7 +140,7 @@ def update_config_equivariance(config):
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for EGNN, SchNet, and MACE."
+        ), "E(3) equivariance can only be ensured for EGNN, SchNet, PNAEq, PAINN, and MACE."
     elif "equivariance" not in config:
         config["equivariance"] = False
     return config

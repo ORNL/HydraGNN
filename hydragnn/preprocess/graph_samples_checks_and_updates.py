@@ -146,6 +146,11 @@ class RadiusGraphPBC(RadiusGraph):
         assert hasattr(
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
+        # NOTE Cutoff radius being less than half the smallest supercell dimension is a sufficient, but not necessary condition for no dupe connections.
+        #      However, to prevent an issue from being unobserved until long into an experiment, we assert this condition.
+        assert self.r < min(
+            torch.diagonal(data.supercell_size)
+        ), "Cutoff radius must be smaller than the smallest supercell dimension."
         ase_atom_object = ase.Atoms(
             positions=data.pos,
             cell=data.supercell_size,

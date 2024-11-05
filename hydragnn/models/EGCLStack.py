@@ -89,6 +89,7 @@ class EGCLStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,

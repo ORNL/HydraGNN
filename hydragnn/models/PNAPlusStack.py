@@ -34,6 +34,7 @@ from torch_geometric.typing import Adj
 
 # HydraGNN
 from .Base import Base
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class PNAPlusStack(Base):
@@ -102,17 +103,13 @@ class PNAPlusStack(Base):
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."
 
-        j, i = data.edge_index  # j->i
-        dist = (data.pos[i] - data.pos[j]).pow(2).sum(dim=-1).sqrt()
-        rbf = self.rbf(dist)
-        # rbf = dist.unsqueeze(-1)
-        conv_args = {"edge_index": data.edge_index.to(torch.long), "rbf": rbf}
+        # Radial embedding
+        _, edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.shifts
+        )
+        rbf = self.rbf(edge_dist.squeeze())
 
-        if self.use_edge_attr:
-            assert (
-                data.edge_attr is not None
-            ), "Data must have edge attributes if use_edge_attributes is set."
-            conv_args.update({"edge_attr": data.edge_attr})
+        conv_args = {"edge_index": data.edge_index.to(torch.long), "rbf": rbf}
 
         return data.x, data.pos, conv_args
 

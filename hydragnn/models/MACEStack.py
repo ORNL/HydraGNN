@@ -64,6 +64,7 @@ from hydragnn.utils.model.mace_utils.modules.blocks import (
     NonLinearMultiheadDecoderBlock,
     LinearMultiheadDecoderBlock,
 )
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 # Etc
 import numpy as np
