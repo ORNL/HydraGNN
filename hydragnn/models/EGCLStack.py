@@ -92,8 +92,8 @@ class EGCLStack(Base):
     def _embedding(self, data):
         super()._embedding(data)
 
-        edge_shifts = torch.zeros(edge_index.size(1), 3).to(
-            data.edge_index.device
+        data.edge_shifts = torch.zeros(
+            (data.edge_index.size(1), 3), device=data.edge_index.device
         )  # Override. pbc edge shifts are currently not supported in positional update models
 
         if self.edge_dim > 0:
@@ -238,8 +238,8 @@ class E_GCL(nn.Module):
 
     def forward(self, x, coord, edge_index, edge_attr, node_attr=None):
         row, col = edge_index
-        edge_shifts = torch.zeros(edge_index.size(1), 3).to(
-            coord.device
+        edata.edge_shifts = torch.zeros(
+            (edge_index.size(1), 3), device=coord.device
         )  # pbc edge shifts are currently not supported in positional update models
         coord_diff, radial = get_edge_vectors_and_lengths(
             coord, edge_index, edge_shifts, normalize=self.norm_diff, eps=1.0

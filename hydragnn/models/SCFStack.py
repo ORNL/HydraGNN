@@ -143,8 +143,8 @@ class SCFStack(Base):
             )
         elif self.use_edge_attr:
             edge_index = data.edge_index
-            data.edge_shifts = torch.zeros(data.edge_index.size(1), 3).to(
-                data.edge_index.device
+            data.edge_shifts = torch.zeros(
+                (data.edge_index.size(1), 3), device=data.edge_index.device
             )  # Override. pbc edge shifts are currently not supported in positional update models
             edge_weight = data.edge_attr.norm(dim=-1)
 
@@ -223,8 +223,8 @@ class CFConv(MessagePassing):
         x = self.lin1(x)
 
         if self.equivariant:
-            edge_shifts = torch.zeros(edge_index.size(1), 3).to(
-                coord.device
+            data.edge_shifts = torch.zeros(
+                (edge_index.size(1), 3), device=coord.device
             )  # pbc edge shifts are currently not supported in positional update models
             coord_diff, radial = get_edge_vectors_and_lengths(
                 pos, edge_index, edge_shifts, normalize=True, eps=1.0
