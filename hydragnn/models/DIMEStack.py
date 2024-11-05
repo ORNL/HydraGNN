@@ -157,7 +157,7 @@ class DIMEStack(Base):
 
         # Calculate edge_vec and edge_dist
         edge_vec, edge_dist = get_edge_vectors_and_lengths(
-            data.pos, data.edge_index, data.shifts
+            data.pos, data.edge_index, data.edge_shifts
         )
 
         # Calculate angles

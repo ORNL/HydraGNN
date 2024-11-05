@@ -16,6 +16,7 @@ from torch_geometric.nn import Sequential
 from .Base import Base
 
 from hydragnn.utils.model import unsorted_segment_mean
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class EGCLStack(Base):
@@ -66,7 +67,7 @@ class EGCLStack(Base):
                 [
                     (
                         egcl,
-                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat, equiv_node_feat",
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts -> inv_node_feat, equiv_node_feat",
                     ),
                 ],
             )
@@ -76,7 +77,7 @@ class EGCLStack(Base):
                 [
                     (
                         egcl,
-                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat",
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts -> inv_node_feat",
                     ),
                     (
                         lambda inv_node_feat, equiv_node_feat: [
@@ -90,15 +91,18 @@ class EGCLStack(Base):
 
     def _embedding(self, data):
         super()._embedding(data)
+
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
                 "edge_attr": data.edge_attr,
+                "edge_shifts": data.edge_shifts,
             }
         else:
             conv_args = {
                 "edge_index": data.edge_index,
                 "edge_attr": None,
+                "edge_shifts": data.edge_shifts,
             }
 
         return data.x, data.pos, conv_args
@@ -230,20 +234,12 @@ class E_GCL(nn.Module):
         coord = coord + agg * self.coords_weight
         return coord
 
-    def coord2radial(self, edge_index, coord):
+    def forward(self, x, coord, edge_index, edge_attr, edge_shifts, node_attr=None):
         row, col = edge_index
-        coord_diff = coord[row] - coord[col]
-        radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
-
-        if self.norm_diff:
-            norm = torch.sqrt(radial) + 1
-            coord_diff = coord_diff / (norm)
-
-        return radial, coord_diff
-
-    def forward(self, x, coord, edge_index, edge_attr, node_attr=None):
-        row, col = edge_index
-        radial, coord_diff = self.coord2radial(edge_index, coord)
+        # NOTE EGCL does not currently re-update shifts for the case that positional updates change the pbc edge_vec
+        coord_diff, radial = get_edge_vectors_and_lengths(
+            coord, edge_index, edge_shifts, normalize=self.norm_diff, eps=1.0
+        )
         # Message Passing
         edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
         if self.equivariant:

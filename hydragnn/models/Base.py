@@ -138,7 +138,7 @@ class Base(Module):
 
     def _embedding(self, data):
         if not hasattr(data, "edge_shifts"):
-            data.shifts = torch.zeros((data.edge_index.size(1), 3))
+            data.edge_shifts = torch.zeros((data.edge_index.size(1), 3))
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
         if self.use_edge_attr:
             assert (

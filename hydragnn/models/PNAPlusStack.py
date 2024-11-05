@@ -99,13 +99,14 @@ class PNAPlusStack(Base):
         )
 
     def _embedding(self, data):
+        super()._embedding(data)
         assert (
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."
 
         # Radial embedding
         _, edge_dist = get_edge_vectors_and_lengths(
-            data.pos, data.edge_index, data.shifts
+            data.pos, data.edge_index, data.edge_shifts
         )
         rbf = self.rbf(edge_dist.squeeze())
 

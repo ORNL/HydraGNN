@@ -134,7 +134,7 @@ class PAINNStack(Base):
 
         # Get normalized edge vectors and lengths
         norm_edge_vec, edge_dist = get_edge_vectors_and_lengths(
-            data.pos, data.edge_index, data.shifts, normalize=True
+            data.pos, data.edge_index, data.edge_shifts, normalize=True
         )
 
         # Instantiate tensor to hold equivariant traits
