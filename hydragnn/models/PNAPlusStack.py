@@ -99,6 +99,8 @@ class PNAPlusStack(Base):
         )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
         assert (
             data.pos is not None
         ), "PNA+ requires node positions (data.pos) to be set."

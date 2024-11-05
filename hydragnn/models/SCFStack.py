@@ -135,6 +135,8 @@ class SCFStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
         if (self.use_edge_attr) and (self.equivariance):
             raise Exception(
                 "For SchNet if using edge attributes, then E(3)-equivariance cannot be ensured. Please disable equivariance or edge attributes."
@@ -143,7 +145,7 @@ class SCFStack(Base):
             edge_index = data.edge_index
             data.edge_shifts = torch.zeros(data.edge_index.size(1), 3).to(
                 data.edge_index.device
-            )  # pbc edge shifts are currently not supported in positional update models
+            )  # Override. pbc edge shifts are currently not supported in positional update models
             edge_weight = data.edge_attr.norm(dim=-1)
 
             conv_args = {

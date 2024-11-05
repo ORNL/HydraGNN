@@ -92,6 +92,10 @@ class EGCLStack(Base):
     def _embedding(self, data):
         super()._embedding(data)
 
+        edge_shifts = torch.zeros(edge_index.size(1), 3).to(
+            data.edge_index.device
+        )  # Override. pbc edge shifts are currently not supported in positional update models
+
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
