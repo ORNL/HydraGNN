@@ -17,7 +17,7 @@ import torch
 # Function for the computation of edge vectors and lengths (MIT License (see MIT.md))
 # Authors: Ilyes Batatia, Gregor Simm and David Kovacs
 ###########################################################################################
-# NOTE Shifts are applied tot ake into account periodic boundary conditions. If there are no PBCs, the shifts are 0.
+# NOTE Shifts are applied to take into account periodic boundary conditions. If there are no PBCs, the shifts are 0.
 def get_edge_vectors_and_lengths(
     positions: torch.Tensor,  # [n_nodes, 3]
     edge_index: torch.Tensor,  # [2, n_edges]
