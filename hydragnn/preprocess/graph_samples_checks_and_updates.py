@@ -139,13 +139,15 @@ class RadiusGraphPBC(RadiusGraph):
     def __call__(self, data):
         data.edge_attr = None
         data.edge_shifts = None
-        # pbc = getattr(data, 'pbc', [True, True, True])
         assert (
             "batch" not in data
         ), "Periodic boundary conditions not currently supported on batches."
         assert hasattr(
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
+        assert hasattr(
+            data, "pbc"
+        ), "The data must contain the data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
         # NOTE Cutoff radius being less than half the smallest supercell dimension is a sufficient, but not necessary condition for no dupe connections.
         #      However, to prevent an issue from being unobserved until long into an experiment, we assert this condition.
         assert self.r < min(
