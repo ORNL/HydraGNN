@@ -223,8 +223,8 @@ class CFConv(MessagePassing):
         x = self.lin1(x)
 
         if self.equivariant:
-            data.edge_shifts = torch.zeros(
-                (edge_index.size(1), 3), device=coord.device
+            edge_shifts = torch.zeros(
+                (edge_index.size(1), 3), device=edge_index.device
             )  # pbc edge shifts are currently not supported in positional update models
             coord_diff, radial = get_edge_vectors_and_lengths(
                 pos, edge_index, edge_shifts, normalize=True, eps=1.0
