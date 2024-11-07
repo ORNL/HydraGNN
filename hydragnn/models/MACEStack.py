@@ -402,8 +402,12 @@ class MACEStack(Base):
         # initialize the spherical harmonics, since the initial spherical harmonic projection
         # uses the nodal position vector  x/||x|| as the input to the spherical harmonics.
         # If we didn't center at 0, these models wouldn't even be invariant to translation.
-        mean_pos = scatter(data.pos, data.batch, dim=0, reduce="mean")
-        data.pos = data.pos - mean_pos[data.batch]
+        if data.batch is None:
+            mean_pos = data.pos.mean(dim=0, keepdim=True)
+            data.pos = data.pos - mean_pos
+        else:
+            mean_pos = scatter(data.pos, data.batch, dim=0, reduce="mean")
+            data.pos = data.pos - mean_pos[data.batch]
 
         # Get edge vectors and distances
         edge_vec, edge_dist = get_edge_vectors_and_lengths(
