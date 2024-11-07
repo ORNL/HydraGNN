@@ -100,3 +100,10 @@ def extract_invariant(x: torch.Tensor, num_layers: int, num_features: int, l_max
         )
     out.append(x[:, -num_features:])
     return torch.cat(out, dim=-1)
+
+
+# Added by HydraGNN group:
+def create_irreps_string(n: int, ell: int):  # Custom function to create irreps easily
+    # By choice and somewhat regular convention, the default parity is for all even ell values and odd for all odd ell values
+    irreps = [f"{n}x{ell}{'e' if ell % 2 == 0 else 'o'}" for ell in range(ell + 1)]
+    return " + ".join(irreps)

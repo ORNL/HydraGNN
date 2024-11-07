@@ -25,6 +25,7 @@ from hydragnn.utils.model.mace_utils.tools.compile import simplify_if_compile
 from hydragnn.utils.model.irreps_tools import (
     reshape_irreps,
     tp_out_irreps_with_instructions,
+    create_irreps_string,
 )
 
 from .radial import (

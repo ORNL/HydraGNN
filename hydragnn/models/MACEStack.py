@@ -57,6 +57,7 @@ from e3nn.util.jit import compile_mode
 # HydraGNN
 from .Base import Base
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.utils.model.irreps_tools import create_irreps_string
 from hydragnn.utils.model.mace_utils.modules.blocks import (
     CombineBlock,
     SplitBlock,
@@ -449,14 +450,6 @@ class MACEStack(Base):
 
     def __str__(self):
         return "MACEStack"
-
-
-def create_irreps_string(
-    n: int, ell: int
-):  # Custom function to create irreps easily for MACE
-    # By choice and somewhat regular convention, the default parity is for all even ell values and odd for all odd ell values
-    irreps = [f"{n}x{ell}{'e' if ell % 2 == 0 else 'o'}" for ell in range(ell + 1)]
-    return " + ".join(irreps)
 
 
 def process_node_attributes(node_attributes, num_elements):
