@@ -20,6 +20,7 @@ from hydragnn.utils.model import activation_function_selection, loss_function_se
 import sys
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 import inspect
 
@@ -136,6 +137,10 @@ class Base(Module):
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _embedding(self, data):
+        if not hasattr(data, "edge_shifts"):
+            data.edge_shifts = torch.zeros(
+                (data.edge_index.size(1), 3), device=data.edge_index.device
+            )
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
         if self.use_edge_attr:
             assert (

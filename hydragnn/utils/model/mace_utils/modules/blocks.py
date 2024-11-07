@@ -15,7 +15,9 @@ from typing import Callable, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn.functional
+from torch.nn import ModuleList, Sequential, Linear
 from torch_scatter import scatter
+from torch_geometric.nn import global_mean_pool
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
@@ -402,3 +404,404 @@ class ScaleShiftBlock(torch.nn.Module):
         return (
             f"{self.__class__.__name__}(scale={self.scale:.6f}, shift={self.shift:.6f})"
         )
+
+
+###########################################################################################
+# The following block are created by the HydraGNN team, mainly for compatibility between
+# HydraGNN's Multihead architecture and MACE's Decoding architecture.
+###########################################################################################
+
+
+@compile_mode("script")
+class LinearMultiheadDecoderBlock(torch.nn.Module):
+    def __init__(
+        self,
+        input_irreps,
+        config_heads,
+        head_dims,
+        head_type,
+        num_heads,
+        activation_function,
+        num_nodes,
+    ):
+        # NOTE The readouts of MACE take in irreps of higher order than just scalars. This is fed through o3.Linear
+        #      to reduce to scalars. To implement this in HYDRAGNN, the first layer of the node output head
+        #      will be such a layer, then all further layers will operate on scalars. Graph-level output heads, on
+        #      the other hand, will always operate on the scalar part of the irreps, because pooling may break
+        #      equivariance. (To-Do: Check for equivariant pooling methods)
+
+        # NOTE It's a key point of the MACE architecture that all decoders before the last layer are linear. In order
+        #      to avoid numerical instability from many stacked linear layers without activation, the MultiheadDecoderBlock
+        #      class will be split into linear and nonlinear versions. The nonlinear version stacks layers in the same way
+        #      that HYDRAGNN normally would, but the linear version ignores many parameters to have only one layer.
+
+        super(LinearMultiheadDecoderBlock, self).__init__()
+        self.input_irreps = input_irreps
+        self.config_heads = config_heads
+        self.head_dims = head_dims
+        self.head_type = head_type
+        self.num_heads = num_heads
+        self.activation_function = activation_function
+        self.num_nodes = num_nodes
+
+        self.graph_shared = None
+        self.node_NN_type = None
+        self.heads_NN = ModuleList()
+
+        self.input_scalar_dim = input_irreps.count(o3.Irrep(0, 1))
+
+        for ihead in range(self.num_heads):
+            # mlp for each head output
+            if self.head_type[ihead] == "graph":
+                denselayers = []
+                denselayers.append(
+                    Linear(
+                        self.input_scalar_dim,
+                        self.head_dims[ihead],
+                    )
+                )
+                head_NN = Sequential(*denselayers)
+            elif self.head_type[ihead] == "node":
+                self.node_NN_type = self.config_heads["node"]["type"]
+                head_NN = ModuleList()
+                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
+                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
+                    assert (
+                        self.num_nodes is not None
+                    ), "num_nodes must be positive integer for MLP"
+                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                    head_NN = LinearMLPNode(
+                        input_irreps,
+                        self.head_dims[ihead],
+                        self.num_mlp,
+                        self.config_heads["node"]["type"],
+                        self.activation_function,
+                        self.num_nodes,
+                    )
+                elif self.node_NN_type == "conv":
+                    raise ValueError(
+                        "Node-level convolutional layers are not supported in MACE"
+                    )
+                else:
+                    raise ValueError(
+                        "Unknown head NN structure for node features"
+                        + self.node_NN_type
+                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                    )
+            else:
+                raise ValueError(
+                    "Unknown head type"
+                    + self.head_type[ihead]
+                    + "; currently only support 'graph' or 'node'"
+                )
+            self.heads_NN.append(head_NN)
+
+    def forward(self, data, node_features):
+        # Take only the type-0 irreps for graph aggregation
+        if data.batch is None:
+            graph_features = node_features[:, : self.input_scalar_dim].mean(
+                dim=0, keepdim=True
+            )
+        else:
+            graph_features = global_mean_pool(
+                node_features[:, : self.input_scalar_dim],
+                data.batch.to(node_features.device),
+            )
+        outputs = []
+        for headloc, type_head in zip(self.heads_NN, self.head_type):
+            if type_head == "graph":
+                outputs.append(headloc(graph_features))
+            else:  # Node-level output
+                if self.node_NN_type == "conv":
+                    raise ValueError(
+                        "Node-level convolutional layers are not supported in MACE"
+                    )
+                else:
+                    x_node = headloc(node_features, data.batch)
+                    outputs.append(x_node)
+        return outputs
+
+
+@compile_mode("script")
+class NonLinearMultiheadDecoderBlock(torch.nn.Module):
+    def __init__(
+        self,
+        input_irreps,
+        config_heads,
+        head_dims,
+        head_type,
+        num_heads,
+        activation_function,
+        num_nodes,
+    ):
+        # NOTE The readouts of MACE take in irreps of higher order than just scalars. This is fed through o3.Linear
+        #      to reduce to scalars. To implement this in HYDRAGNN, the first layer of the node output head
+        #      will be such a layer, then all further layers will operate on scalars. Graph-level output heads, on
+        #      the other hand, will always operate on the scalar part of the irreps, because pooling may break
+        #      equivariance. (To-Do: Check for equivariant pooling methods)
+
+        # NOTE It's a key point of the MACE architecture that all decoders before the last layer are linear. In order
+        #      to avoid numerical instability from many stacked linear layers without activation, the MultiheadDecoderBlock
+        #      class will be split into linear and nonlinear versions. The nonlinear version stacks layers in the same way
+        #      that HYDRAGNN normally would, but the linear version ignores many parameters to have only one layer.
+
+        super(NonLinearMultiheadDecoderBlock, self).__init__()
+        self.input_irreps = input_irreps
+        self.config_heads = config_heads
+        self.head_dims = head_dims
+        self.head_type = head_type
+        self.num_heads = num_heads
+        self.activation_function = activation_function
+        self.num_nodes = num_nodes
+
+        self.graph_shared = None
+        self.node_NN_type = None
+        self.heads_NN = ModuleList()
+
+        self.input_scalar_dim = input_irreps.count(o3.Irrep(0, 1))
+
+        # Create shared dense layers for graph-level output if applicable
+        if "graph" in self.config_heads:
+            denselayers = []
+            dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
+            denselayers.append(
+                Linear(self.input_scalar_dim, dim_sharedlayers)
+            )  # Count scalar irreps for input
+            denselayers.append(self.activation_function)
+            for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
+                denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+                denselayers.append(self.activation_function)
+            self.graph_shared = Sequential(*denselayers)
+
+        for ihead in range(self.num_heads):
+            # mlp for each head output
+            if self.head_type[ihead] == "graph":
+                num_head_hidden = self.config_heads["graph"]["num_headlayers"]
+                dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
+                denselayers = []
+                denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
+                denselayers.append(self.activation_function)
+                for ilayer in range(num_head_hidden - 1):
+                    denselayers.append(
+                        Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
+                    )
+                    denselayers.append(self.activation_function)
+                denselayers.append(
+                    Linear(
+                        dim_head_hidden[-1],
+                        self.head_dims[ihead],
+                    )
+                )
+                head_NN = Sequential(*denselayers)
+            elif self.head_type[ihead] == "node":
+                self.node_NN_type = self.config_heads["node"]["type"]
+                head_NN = ModuleList()
+                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
+                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
+                    assert (
+                        self.num_nodes is not None
+                    ), "num_nodes must be positive integer for MLP"
+                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                    hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+                    head_NN = NonLinearMLPNode(
+                        input_irreps,
+                        self.head_dims[ihead],
+                        self.num_mlp,
+                        hidden_dim_node,
+                        self.config_heads["node"]["type"],
+                        self.activation_function,
+                        self.num_nodes,
+                    )
+                elif self.node_NN_type == "conv":
+                    raise ValueError(
+                        "Node-level convolutional layers are not supported in MACE"
+                    )
+                else:
+                    raise ValueError(
+                        "Unknown head NN structure for node features"
+                        + self.node_NN_type
+                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                    )
+            else:
+                raise ValueError(
+                    "Unknown head type"
+                    + self.head_type[ihead]
+                    + "; currently only support 'graph' or 'node'"
+                )
+            self.heads_NN.append(head_NN)
+
+    def forward(self, data, node_features):
+        # Take only the type-0 irreps for graph aggregation
+        if data.batch is None:
+            graph_features = node_features[:, : self.input_scalar_dim].mean(
+                dim=0, keepdim=True
+            )
+        else:
+            graph_features = global_mean_pool(
+                node_features[:, : self.input_scalar_dim],
+                data.batch.to(node_features.device),
+            )
+        outputs = []
+        for headloc, type_head in zip(self.heads_NN, self.head_type):
+            if type_head == "graph":
+                x_graph_head = self.graph_shared(graph_features)
+                outputs.append(headloc(x_graph_head))
+            else:  # Node-level output
+                if self.node_NN_type == "conv":
+                    raise ValueError(
+                        "Node-level convolutional layers are not supported in MACE"
+                    )
+                else:
+                    x_node = headloc(node_features, data.batch)
+                    outputs.append(x_node)
+        return outputs
+
+
+@compile_mode("script")
+class LinearMLPNode(torch.nn.Module):
+    def __init__(
+        self,
+        input_irreps,
+        output_dim,
+        # No longer need hidden_dim_node because there is only one layer
+        num_mlp,
+        node_type,
+        activation_function,
+        num_nodes,
+    ):
+        super().__init__()
+        self.input_irreps = input_irreps
+        self.output_dim = output_dim
+        self.num_mlp = num_mlp
+        self.node_type = node_type
+        self.activation_function = activation_function
+        self.num_nodes = num_nodes
+
+        self.mlp = ModuleList()
+        for _ in range(self.num_mlp):
+            denselayers = []
+            output_irreps = o3.Irreps(create_irreps_string(output_dim, 0))
+            denselayers.append(
+                o3.Linear(input_irreps, output_irreps)
+            )  # First layer is o3.Linear and takes all irreps down to scalars
+            self.mlp.append(Sequential(*denselayers))
+
+    def node_features_reshape(self, x, batch):
+        """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
+        num_features = x.shape[1]
+        batch_size = batch.max() + 1
+        out = torch.zeros(
+            (batch_size, num_features, self.num_nodes),
+            dtype=x.dtype,
+            device=x.device,
+        )
+        for inode in range(self.num_nodes):
+            inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
+            out[:, :, inode] = x[inode_index, :]
+        return out
+
+    def forward(self, x: torch.Tensor, batch: torch.Tensor):
+        if self.node_type == "mlp":
+            outs = self.mlp[0](x)
+        else:
+            outs = torch.zeros(
+                (x.shape[0], self.output_dim),
+                dtype=x.dtype,
+                device=x.device,
+            )
+            x_nodes = self.node_features_reshape(x, batch)
+            for inode in range(self.num_nodes):
+                inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
+                outs[inode_index, :] = self.mlp[inode](x_nodes[:, :, inode])
+        return outs
+
+    def __str__(self):
+        return "MLPNode"
+
+
+@compile_mode("script")
+class NonLinearMLPNode(torch.nn.Module):
+    def __init__(
+        self,
+        input_irreps,
+        output_dim,
+        num_mlp,
+        hidden_dim_node,
+        node_type,
+        activation_function,
+        num_nodes,
+    ):
+        super().__init__()
+        self.input_irreps = input_irreps
+        self.output_dim = output_dim
+        self.num_mlp = num_mlp
+        self.node_type = node_type
+        self.activation_function = activation_function
+        self.num_nodes = num_nodes
+
+        self.mlp = ModuleList()
+        for _ in range(self.num_mlp):
+            denselayers = []
+            hidden_irreps = o3.Irreps(create_irreps_string(hidden_dim_node[0], 0))
+            denselayers.append(
+                o3.Linear(input_irreps, hidden_irreps)
+            )  # First layer is o3.Linear and takes all irreps down to scalars
+            denselayers.append(self.activation_function)
+            for ilayer in range(len(hidden_dim_node) - 1):
+                denselayers.append(
+                    Linear(hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1])
+                )
+                denselayers.append(self.activation_function)
+            denselayers.append(Linear(hidden_dim_node[-1], output_dim))
+            self.mlp.append(Sequential(*denselayers))
+
+    def node_features_reshape(self, x, batch):
+        """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
+        num_features = x.shape[1]
+        batch_size = batch.max() + 1
+        out = torch.zeros(
+            (batch_size, num_features, self.num_nodes),
+            dtype=x.dtype,
+            device=x.device,
+        )
+        for inode in range(self.num_nodes):
+            inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
+            out[:, :, inode] = x[inode_index, :]
+        return out
+
+    def forward(self, x: torch.Tensor, batch: torch.Tensor):
+        if self.node_type == "mlp":
+            outs = self.mlp[0](x)
+        else:
+            outs = torch.zeros(
+                (x.shape[0], self.output_dim),
+                dtype=x.dtype,
+                device=x.device,
+            )
+            x_nodes = self.node_features_reshape(x, batch)
+            for inode in range(self.num_nodes):
+                inode_index = [i for i in range(inode, batch.shape[0], self.num_nodes)]
+                outs[inode_index, :] = self.mlp[inode](x_nodes[:, :, inode])
+        return outs
+
+    def __str__(self):
+        return "MLPNode"
+
+
+@compile_mode("script")
+class CombineBlock(torch.nn.Module):
+    def __init__(self):
+        super(CombineBlock, self).__init__()
+
+    def forward(self, inv_node_features, equiv_node_features):
+        return torch.cat([inv_node_features, equiv_node_features], dim=1)
+
+
+@compile_mode("script")
+class SplitBlock(torch.nn.Module):
+    def __init__(self, irreps):
+        super(SplitBlock, self).__init__()
+        self.dim = irreps.count(o3.Irrep(0, 1))
+
+    def forward(self, node_features):
+        return node_features[:, : self.dim], node_features[:, self.dim :]
