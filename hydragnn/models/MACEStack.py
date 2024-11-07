@@ -322,7 +322,7 @@ class MACEStack(Base):
         prod = EquivariantProductBasisBlock(
             node_feats_irreps=interaction_irreps,
             target_irreps=hidden_irreps,
-            correlation=self.correlation[0],
+            correlation=self.correlation[0],  # Currently uniform across all layers
             num_elements=self.num_elements,
             use_sc=use_sc,
         )
