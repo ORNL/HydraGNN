@@ -150,8 +150,8 @@ class RadiusGraphPBC(RadiusGraph):
         ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
         # NOTE Cutoff radius being less than half the smallest supercell dimension is a sufficient, but not necessary condition for no dupe connections.
         #      However, to prevent an issue from being unobserved until long into an experiment, we assert this condition.
-        assert self.r < min(
-            torch.diagonal(data.supercell_size)
+        assert (
+            self.r < min(torch.diagonal(data.supercell_size)) / 2
         ), "Cutoff radius must be smaller than the smallest supercell dimension."
         ase_atom_object = ase.Atoms(
             positions=data.pos,
