@@ -153,8 +153,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
-        if self.r_pbc:
-            data.pbc = [True, True, True]
         data = self.radius_graph(data)
         data = transform_coordinates(data)
 
