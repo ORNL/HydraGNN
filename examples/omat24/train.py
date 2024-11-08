@@ -112,7 +112,7 @@ class OMat2024(AbstractBaseDataset):
 
             for index in iterate_tqdm(rx, verbosity_level=2):
                 try:
-                    xyz = torch.tensor(dataset.get_atoms(index).get_positions())
+                    xyz = torch.tensor(dataset.get_atoms(index).get_positions(), dtype=torch.float32)
                     natoms = torch.IntTensor([xyz.shape[0]])
                     Z = torch.tensor(
                         dataset.get_atoms(index).get_atomic_numbers(),
