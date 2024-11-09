@@ -125,6 +125,8 @@ class SerializedDataLoader:
             dataset[:] = [rotational_invariance(data) for data in dataset]
 
         if self.periodic_boundary_conditions:
+            for data in dataset:
+                data.pbc = [True, True, True]
             # edge lengths already added manually if using PBC, so no need to call Distance.
             compute_edges = get_radius_graph_pbc(
                 radius=self.radius,

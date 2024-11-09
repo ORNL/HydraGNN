@@ -20,6 +20,7 @@ from torch_geometric import nn as geom_nn
 from torch.utils.checkpoint import checkpoint
 
 from .Base import Base
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class PAINNStack(Base):
@@ -125,15 +126,16 @@ class PAINNStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
         assert (
             data.pos is not None
-        ), "PAINNNet requires node positions (data.pos) to be set."
+        ), "PAINN requires node positions (data.pos) to be set."
 
-        # Calculate relative vectors and distances
-        i, j = data.edge_index[0], data.edge_index[1]
-        diff = data.pos[i] - data.pos[j]
-        dist = diff.pow(2).sum(dim=-1).sqrt()
-        norm_diff = diff / dist.unsqueeze(-1)
+        # Get normalized edge vectors and lengths
+        norm_edge_vec, edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.edge_shifts, normalize=True
+        )
 
         # Instantiate tensor to hold equivariant traits
         v = torch.zeros(data.x.size(0), 3, data.x.size(1), device=data.x.device)
@@ -141,8 +143,8 @@ class PAINNStack(Base):
 
         conv_args = {
             "edge_index": data.edge_index.t().to(torch.long),
-            "diff": norm_diff,
-            "dist": dist,
+            "diff": norm_edge_vec,
+            "dist": edge_dist,
         }
 
         return data.x, data.v, conv_args
@@ -171,9 +173,8 @@ class PainnMessage(nn.Module):
         filter_weight = self.filter_layer(
             sinc_expansion(edge_dist, self.edge_size, self.cutoff)
         )
-        filter_weight = filter_weight * cosine_cutoff(edge_dist, self.cutoff).unsqueeze(
-            -1
-        )
+        filter_weight = filter_weight * cosine_cutoff(edge_dist, self.cutoff)
+
         scalar_out = self.scalar_message_mlp(node_scalar)
         filter_out = filter_weight * scalar_out[edge[:, 1]]
 
@@ -185,9 +186,9 @@ class PainnMessage(nn.Module):
 
         # num_pairs * 3 * node_size, num_pairs * node_size
         message_vector = node_vector[edge[:, 1]] * gate_state_vector.unsqueeze(1)
-        edge_vector = gate_edge_vector.unsqueeze(1) * (
-            edge_diff / edge_dist.unsqueeze(-1)
-        ).unsqueeze(-1)
+        edge_vector = gate_edge_vector.unsqueeze(1) * (edge_diff / edge_dist).unsqueeze(
+            -1
+        )
         message_vector = message_vector + edge_vector
 
         # sum message
@@ -266,9 +267,7 @@ def sinc_expansion(edge_dist: torch.Tensor, edge_size: int, cutoff: float):
     sin(n * pi * d / d_cut) / d
     """
     n = torch.arange(edge_size, device=edge_dist.device) + 1
-    return torch.sin(
-        edge_dist.unsqueeze(-1) * n * torch.pi / cutoff
-    ) / edge_dist.unsqueeze(-1)
+    return torch.sin(edge_dist * n * torch.pi / cutoff) / edge_dist
 
 
 def cosine_cutoff(edge_dist: torch.Tensor, cutoff: float):

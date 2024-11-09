@@ -138,35 +138,59 @@ class RadiusGraphPBC(RadiusGraph):
 
     def __call__(self, data):
         data.edge_attr = None
+        data.edge_shifts = None
         assert (
             "batch" not in data
         ), "Periodic boundary conditions not currently supported on batches."
         assert hasattr(
             data, "supercell_size"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
+        assert hasattr(
+            data, "pbc"
+        ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
+        # NOTE Cutoff radius being less than half the smallest supercell dimension is a sufficient, but not necessary condition for no dupe connections.
+        #      However, to prevent an issue from being unobserved until long into an experiment, we assert this condition.
+        assert (
+            self.r < min(torch.diagonal(data.supercell_size)) / 2
+        ), "Cutoff radius must be smaller than half the smallest supercell dimension."
         ase_atom_object = ase.Atoms(
             positions=data.pos,
             cell=data.supercell_size,
-            pbc=True,
+            pbc=data.pbc,
         )
-        # ‘i’ : first atom index
-        # ‘j’ : second atom index
+        # 'i' : first atom index
+        # 'j' : second atom index
+        # 'd' : absolute distance
+        # 'S' : shift vector
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        edge_src, edge_dst, edge_length = ase.neighborlist.neighbor_list(
-            "ijd", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+        (
+            edge_src,
+            edge_dst,
+            edge_length,
+            edge_cell_shifts,
+        ) = ase.neighborlist.neighbor_list(
+            "ijdS", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
         )
         data.edge_index = torch.stack(
-            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)], dim=0
+            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)],
+            dim=0,  # Shape: [2, n_edges]
         )
 
         # ensure no duplicate edges
-        num_edges = data.edge_index.size(1)
-        data.coalesce()
-        assert num_edges == data.edge_index.size(
+        unique_edge_index, unique_indices = torch.unique(
+            data.edge_index, dim=1, return_inverse=False  # Shape: [n_edges]
+        )
+        assert unique_edge_index.unsqueeze(0).size(1) == data.edge_index.size(
             1
         ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
 
-        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(1)
+        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(
+            1
+        )  # Shape: [n_edges, 1]
+        # ASE returns whether the cell was shifted or not (-1,0,1). Multiply by the cell size to get the actual shift
+        data.edge_shifts = torch.matmul(
+            torch.tensor(edge_cell_shifts).float(), data.supercell_size.float()
+        )  # Shape: [n_edges, 3]
 
         return data
 

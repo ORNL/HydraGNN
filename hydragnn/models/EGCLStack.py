@@ -16,6 +16,7 @@ from torch_geometric.nn import Sequential
 from .Base import Base
 
 from hydragnn.utils.model import unsorted_segment_mean
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class EGCLStack(Base):
@@ -89,6 +90,12 @@ class EGCLStack(Base):
             )
 
     def _embedding(self, data):
+        super()._embedding(data)
+
+        data.edge_shifts = torch.zeros(
+            (data.edge_index.size(1), 3), device=data.edge_index.device
+        )  # Override. pbc edge shifts are currently not supported in positional update models
+
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
@@ -229,20 +236,14 @@ class E_GCL(nn.Module):
         coord = coord + agg * self.coords_weight
         return coord
 
-    def coord2radial(self, edge_index, coord):
-        row, col = edge_index
-        coord_diff = coord[row] - coord[col]
-        radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
-
-        if self.norm_diff:
-            norm = torch.sqrt(radial) + 1
-            coord_diff = coord_diff / (norm)
-
-        return radial, coord_diff
-
     def forward(self, x, coord, edge_index, edge_attr, node_attr=None):
         row, col = edge_index
-        radial, coord_diff = self.coord2radial(edge_index, coord)
+        edge_shifts = torch.zeros(
+            (edge_index.size(1), 3), device=edge_index.device
+        )  # pbc edge shifts are currently not supported in positional update models
+        coord_diff, radial = get_edge_vectors_and_lengths(
+            coord, edge_index, edge_shifts, normalize=self.norm_diff, eps=1.0
+        )
         # Message Passing
         edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
         if self.equivariant:

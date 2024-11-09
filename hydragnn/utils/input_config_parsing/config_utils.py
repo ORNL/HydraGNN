@@ -140,7 +140,7 @@ def update_config_equivariance(config):
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["model_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for EGNN, SchNet, and MACE."
+        ), "E(3) equivariance can only be ensured for EGNN, SchNet, PNAEq, PAINN, and MACE."
     elif "equivariance" not in config:
         config["equivariance"] = False
     return config
@@ -148,11 +148,20 @@ def update_config_equivariance(config):
 
 def update_config_edge_dim(config):
     config["edge_dim"] = None
-    edge_models = ["PNAPlus", "PNA", "CGCNN", "SchNet", "EGNN", "DimeNet", "MACE"]
+    edge_models = [
+        "PNA",
+        "PNAPlus",
+        "PNAEq",
+        "CGCNN",
+        "SchNet",
+        "EGNN",
+        "DimeNet",
+        "MACE",
+    ]
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
-        ), "Edge features can only be used with DimeNet, MACE, EGNN, SchNet, PNA, PNAPlus, and CGCNN."
+        ), "Edge features can only be used with DimeNet, MACE, EGNN, SchNet, PNA, PNAPlus, PNAEq, and CGCNN."
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim

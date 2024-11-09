@@ -106,7 +106,6 @@ class LJDataset(AbstractBaseDataset):
             self.dataset.append(self.transform_input_to_data_object_base(filepath))
 
     def transform_input_to_data_object_base(self, filepath):
-
         # Using readline()
         file = open(filepath, "r")
 
@@ -174,6 +173,11 @@ class LJDataset(AbstractBaseDataset):
             .unsqueeze(0)
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
+            pbc=[
+                True,
+                True,
+                True,
+            ],  # LJ example always has periodic boundary conditions
         )
 
         # Create pbc edges and lengths
@@ -205,7 +209,6 @@ def deterministic_graph_data(
     unit_cell_z_range: list = [3, 4],
     relative_maximum_atomic_displacement: float = 1e-1,
 ):
-
     comm = MPI.COMM_WORLD
     comm_size = comm.Get_size()
     comm_rank = comm.Get_rank()
@@ -330,6 +333,7 @@ def create_configuration(
     data.supercell_size = torch.diag(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
+    data.pbc = [True, True, True]
 
     create_graph_connectivity_pbc = get_radius_graph_pbc(
         radius_cutoff, max_num_neighbors
@@ -379,27 +383,23 @@ class AtomicStructureHandler:
     def __init__(
         self, list_atom_types, bravais_lattice_constants, radius_cutoff, formula
     ):
-
         self.bravais_lattice_constants = bravais_lattice_constants
         self.radius_cutoff = radius_cutoff
         self.formula = formula
 
     def compute(self, data):
-
         assert data.pos.shape[0] == data.x.shape[0]
 
         interatomic_potential = torch.zeros([data.pos.shape[0], 1])
         interatomic_forces = torch.zeros([data.pos.shape[0], 3])
 
         for node_id in range(data.pos.shape[0]):
-
             neighbor_list_indices = torch.where(data.edge_index[0, :] == node_id)[
                 0
             ].tolist()
             neighbor_list = data.edge_index[1, neighbor_list_indices]
 
             for neighbor_id, edge_id in zip(neighbor_list, neighbor_list_indices):
-
                 neighbor_pos = data.pos[neighbor_id, :]
                 distance_vector = data.pos[neighbor_id, :] - data.pos[node_id, :]
 
