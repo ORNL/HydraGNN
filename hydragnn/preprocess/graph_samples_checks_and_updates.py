@@ -144,19 +144,14 @@ class RadiusGraphPBC(RadiusGraph):
             "batch" not in data
         ), "Periodic boundary conditions not currently supported on batches."
         assert hasattr(
-            data, "supercell_size"
+            data, "cell"
         ), "The data must contain the size of the supercell to apply periodic boundary conditions."
         assert hasattr(
             data, "pbc"
         ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
-        # NOTE Cutoff radius being less than half the smallest supercell dimension is a sufficient, but not necessary condition for no dupe connections.
-        #      However, to prevent an issue from being unobserved until long into an experiment, we assert this condition.
-        assert (
-            self.r < min(torch.diagonal(data.supercell_size)) / 2
-        ), "Cutoff radius must be smaller than half the smallest supercell dimension."
         ase_atom_object = ase.Atoms(
             positions=data.pos,
-            cell=data.supercell_size,
+            cell=data.cell,
             pbc=data.pbc,
         )
         # 'i' : first atom index
@@ -179,7 +174,7 @@ class RadiusGraphPBC(RadiusGraph):
 
         # ensure no duplicate edges
         unique_edge_index, unique_indices = torch.unique(
-            data.edge_index, dim=1, return_inverse=False  # Shape: [n_edges]
+            data.edge_index, dim=1, return_inverse=False
         )
         assert unique_edge_index.unsqueeze(0).size(1) == data.edge_index.size(
             1
@@ -190,7 +185,7 @@ class RadiusGraphPBC(RadiusGraph):
         )  # Shape: [n_edges, 1]
         # ASE returns whether the cell was shifted or not (-1,0,1). Multiply by the cell size to get the actual shift
         data.edge_shifts = torch.matmul(
-            torch.tensor(edge_cell_shifts).float(), data.supercell_size.float()
+            torch.tensor(edge_cell_shifts).float(), data.cell.float()
         )  # Shape: [n_edges, 3]
 
         return data

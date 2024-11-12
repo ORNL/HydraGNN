@@ -52,7 +52,7 @@ class AtomsToGraphs:
         self,
         max_neigh=200,
         radius=6,
-        r_pbc=False,
+        r_pbc=True,
     ):
         self.max_neigh = max_neigh
         self.radius = radius
@@ -86,15 +86,23 @@ class AtomsToGraphs:
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
         positions = torch.Tensor(atoms.get_positions())
-        cell = torch.Tensor(np.array(atoms.get_cell())).view(1, 3, 3)
+        cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
+        pbc = atoms.get_pbc()
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
 
+        # Check if data has data.pbc and throw error if not
+        if not hasattr(atoms, "pbc"):
+            raise ValueError(
+                "The atoms object does not have the periodic boundary conditions."
+            )
+
         # put the minimum data in torch geometric data object
         data = Data(
             cell=cell,
+            pbc=pbc,
             pos=positions,
             atomic_numbers=atomic_numbers,
             natoms=natoms,

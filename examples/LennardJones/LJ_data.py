@@ -167,7 +167,7 @@ class LJDataset(AbstractBaseDataset):
         forces_pre_scaled = forces * forces_pre_scaling_factor
 
         data = Data(
-            supercell_size=torch_supercell.to(torch.float32),
+            cell=torch_supercell.to(torch.float32),
             num_nodes=num_nodes,
             grad_energy_post_scaling_factor=grad_energy_post_scaling_factor,
             forces_pre_scaling_factor=torch.tensor(forces_pre_scaling_factor).to(
@@ -345,7 +345,7 @@ def create_configuration(
     supercell_size_x = primitive_bravais_lattice_constant_x * uc_x
     supercell_size_y = primitive_bravais_lattice_constant_y * uc_y
     supercell_size_z = primitive_bravais_lattice_constant_z * uc_z
-    data.supercell_size = torch.diag(
+    data.cell = torch.diag(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
     data.pbc = [True, True, True]
@@ -375,7 +375,7 @@ def create_configuration(
     filetxt = total_energy_str + "\n" + energy_per_atom_str
 
     for index in range(0, 3):
-        numpy_row = data.supercell_size[index, :].detach().numpy()
+        numpy_row = data.cell[index, :].detach().numpy()
         numpy_string_row = numpy.array2string(numpy_row, precision=64, separator="\t")
         filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
@@ -426,23 +426,23 @@ class AtomicStructureHandler:
                     ## in the code. Because of this, we can simply adjust the neighbor position coordinate-wise to be closer than
                     ## as done in the following lines of code. The logic goes that if the distance vector[index] is larger than half the supercell size,
                     ## then there is a closer distance at +- supercell_size[index], and we adjust to that for each coordinate
-                    if abs(distance_vector[0]) > data.supercell_size[0, 0] / 2:
+                    if abs(distance_vector[0]) > data.cell[0, 0] / 2:
                         if distance_vector[0] > 0:
-                            neighbor_pos[0] -= data.supercell_size[0, 0]
+                            neighbor_pos[0] -= data.cell[0, 0]
                         else:
-                            neighbor_pos[0] += data.supercell_size[0, 0]
+                            neighbor_pos[0] += data.cell[0, 0]
 
-                    if abs(distance_vector[1]) > data.supercell_size[1, 1] / 2:
+                    if abs(distance_vector[1]) > data.cell[1, 1] / 2:
                         if distance_vector[1] > 0:
-                            neighbor_pos[1] -= data.supercell_size[1, 1]
+                            neighbor_pos[1] -= data.cell[1, 1]
                         else:
-                            neighbor_pos[1] += data.supercell_size[1, 1]
+                            neighbor_pos[1] += data.cell[1, 1]
 
-                    if abs(distance_vector[2]) > data.supercell_size[2, 2] / 2:
+                    if abs(distance_vector[2]) > data.cell[2, 2] / 2:
                         if distance_vector[2] > 0:
-                            neighbor_pos[2] -= data.supercell_size[2, 2]
+                            neighbor_pos[2] -= data.cell[2, 2]
                         else:
-                            neighbor_pos[2] += data.supercell_size[2, 2]
+                            neighbor_pos[2] += data.cell[2, 2]
 
                 # The distance vecor may need to be updated after applying PBCs
                 distance_vector = data.pos[node_id, :] - neighbor_pos
