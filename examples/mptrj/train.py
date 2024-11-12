@@ -150,7 +150,7 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 # Creating the Data object
                 data = Data(
-                    supercell_size=lattice_mat,
+                    cell=lattice_mat,
                     energy=energy,
                     force=forces,
                     # stress=torch.tensor(stresses, dtype=torch.float32),

@@ -66,7 +66,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         data_type,
         energy_per_atom=True,
         dist=False,
-        r_pbc=False,
+        r_pbc=True,
     ):
         super().__init__()
 
@@ -126,7 +126,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
         positions = torch.Tensor(atoms.get_positions())
-        cell = torch.Tensor(np.array(atoms.get_cell())).view(1, 3, 3)
+        cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
+        pbc = atoms.get_pbc()
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
@@ -135,6 +136,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         # put the minimum data in torch geometric data object
         data = Data(
             cell=cell,
+            pbc=pbc,
             pos=positions,
             atomic_numbers=atomic_numbers,
             natoms=natoms,

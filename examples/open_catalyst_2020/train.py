@@ -89,7 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
+        a2g = AtomsToGraphs(max_neigh=50, radius=3, r_pbc=True)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
+    datadir = os.path.join(dirpwd, "datasets")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
