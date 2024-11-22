@@ -1,14 +1,15 @@
+import sys
 import os, json
-
+import pdb
 import torch
 import torch_geometric
+from torch_geometric.datasets import ZINC
+import torch_geometric.transforms as T
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
-# FIX random seed
-random_state = 0
-torch.manual_seed(random_state)
-
-import torch_geometric
+# torch.cuda.set_device(0)
+# os.environ['CUDA_VISIBLE_DEVICES'] = ''
+os.environ['KINETO_LOG_LEVEL'] = '3'
 
 # deprecated in torch_geometric 2.0
 try:
@@ -24,10 +25,8 @@ try:
 except:
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
-num_samples = 1000
-
 # Configurable run choices (JSON file that accompanies this example script).
-filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
+filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zinc.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
@@ -36,54 +35,38 @@ var_config = config["NeuralNetwork"]["Variables_of_interest"]
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
-log_name = "qm9_test"
+log_name = "zinc_test"
 # Enable print to log file.
 hydragnn.utils.print.print_utils.setup_log(log_name)
 
-# LPE
-transform = AddLaplacianEigenvectorPE(k=config["NeuralNetwork"]["Architecture"]["pe_dim"],attr_name='pe',is_undirected=True)
-
-# Update each sample prior to loading.
-def qm9_pre_transform(data):
-    # LPE
-    data = transform(data)
-    # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
-    # Only predict free energy (index 10 of 19 properties) for this run.
-    data.y = data.y[:, 10] / len(data.x)
-    graph_features_dim = [1]
-    node_feature_dim = [1]
+# Use built-in torch_geometric dataset.
+# NOTE: data is moved to the device in the pre-transform.
+# NOTE: transforms/filters will NOT be re-run unless the zinc/processed/ directory is removed.
+lapPE = AddLaplacianEigenvectorPE(k=config["NeuralNetwork"]["Architecture"]["pe_dim"],attr_name='pe',is_undirected=True)
+def zinc_pre_transform(data):
+    data.x = data.x.float().view(-1,1)
+    data.edge_attr = data.edge_attr.float().view(-1,1)
+    data = lapPE(data)
     source_pe = data.pe[data.edge_index[0]] 
     target_pe = data.pe[data.edge_index[1]] 
     data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference
     return data
 
-def qm9_pre_filter(data):
-    return data.idx < num_samples
+train = ZINC(root='dataset/zinc', subset=True, split='train', pre_transform=zinc_pre_transform)
+val = ZINC(root='dataset/zinc', subset=True, split='val', pre_transform=zinc_pre_transform)
+test = ZINC(root='dataset/zinc', subset=True, split='test', pre_transform=zinc_pre_transform)
 
-
-# Use built-in torch_geometric datasets.
-# Filter function above used to run quick example.
-# NOTE: data is moved to the device in the pre-transform.
-# NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
-dataset = torch_geometric.datasets.QM9(
-    root="dataset/qm9", pre_transform=qm9_pre_transform, pre_filter=qm9_pre_filter
-)
-train, val, test = hydragnn.preprocess.split_dataset(
-    dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
-)
 (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
-config = hydragnn.utils.input_config_parsing.update_config(
-    config, train_loader, val_loader, test_loader
-)
+config = hydragnn.utils.input_config_parsing.update_config(config, train_loader, val_loader, test_loader)
 
 model = hydragnn.models.create_model_config(
     config=config["NeuralNetwork"],
     verbosity=verbosity,
 )
+
 model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
 learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
@@ -92,7 +75,9 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
 )
 
-# Run training with the given model and qm9 datasets.
+hydragnn.utils.model.model.load_existing_model_config(model=model, config=config["NeuralNetwork"]["Training"])
+
+# Run training with the given model and zinc dataset.
 writer = hydragnn.utils.model.model.get_summary_writer(log_name)
 hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
@@ -108,3 +93,12 @@ hydragnn.train.train_validate_test(
     log_name,
     verbosity,
 )
+
+
+# //"message_passing": "PNA",
+#             // "radius": 7,
+#             // "max_neighbours": 5,
+#             // "periodic_boundary_conditions": false,
+#             // "pe_dim": 6,
+#             // "edge_features": [0],
+#             // "hidden_dim": 128,

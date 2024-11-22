@@ -51,23 +51,18 @@ class SCFStack(Base):
         pass
 
     def _init_conv(self):
-
         self.distance_expansion = GaussianSmearing(0.0, self.radius, self.num_gaussians)
         self.interaction_graph = RadiusInteractionGraph(
             self.radius, self.max_neighbours
         )
-
         # comment on why equiv avoids last layer
         last_layer = 1 == self.num_conv_layers
-        self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, last_layer)
-        )
-        self.feature_layers.append(Identity())
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim, last_layer)))
+        self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)
-            self.graph_convs.append(conv)
-            self.feature_layers.append(Identity())
+            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)))
+            self.feature_layers.append(nn.Identity())
 
     def get_conv(self, input_dim, output_dim, last_layer):
         mlp = Sequential(
@@ -158,7 +153,19 @@ class SCFStack(Base):
                 "batch": data.batch,
             }
 
-        return data.x, data.pos, conv_args
+        if self.use_global_attn:
+            x = self.pos_emb(data.pe)
+            e = self.rel_pos_emb(data.rel_pe)
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            if self.use_edge_attr:
+                e = torch.cat((self.edge_emb(conv_args['edge_attr']), e), 1 )
+                e = self.edge_lin(e)    
+            conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args 
+        else:
+            return data.x, data.pos, conv_args
 
     def __str__(self):
         return "SCFStack"

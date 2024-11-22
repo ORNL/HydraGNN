@@ -73,11 +73,10 @@ class DIMEStack(Base):
         pass
 
     def _init_conv(self):
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim)))
         self.feature_layers.append(Identity())
         for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim)))
             self.feature_layers.append(Identity())
 
     def get_conv(self, input_dim, output_dim):
@@ -189,7 +188,19 @@ class DIMEStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return data.x, data.pos, conv_args
+        if self.use_global_attn:
+            x = self.pos_emb(data.pe)
+            e = self.rel_pos_emb(data.rel_pe)
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            if self.use_edge_attr:
+                e = torch.cat((self.edge_emb(conv_args['edge_attr']), e), 1 )
+                e = self.edge_lin(e)    
+            conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args 
+        else:
+            return data.x, data.pos, conv_args
 
 
 """

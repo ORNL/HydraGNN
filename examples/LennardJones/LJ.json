@@ -19,7 +19,7 @@
   "NeuralNetwork": {
     "Architecture": {
       "periodic_boundary_conditions": true,
-      "model_type": "DimeNet",
+      "mpnn_type": "DimeNet",
       "radius": 5.0,
       "max_neighbours": 5,
       "int_emb_size": 32,

@@ -219,13 +219,13 @@ class MACEStack(Base):
 
         # First Conv and Decoder
         self.graph_convs.append(
-            self.get_conv(
+            self._apply_global_attn( self.get_conv(
                 self.hidden_dim,
                 self.hidden_dim,
                 first_layer=True,
                 last_layer=last_layer,
             )  # Node features are already converted to hidden_dim via one-hot embedding
-        )
+        ) )
         irreps = hidden_irreps if not last_layer else final_hidden_irreps
         self.multihead_decoders.append(
             get_multihead_decoder(
@@ -244,8 +244,8 @@ class MACEStack(Base):
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
             self.graph_convs.append(
-                self.get_conv(self.hidden_dim, self.hidden_dim, last_layer=last_layer)
-            )
+                self._apply_global_attn( self.get_conv(self.hidden_dim, self.hidden_dim, last_layer=last_layer)
+            ) )
             irreps = hidden_irreps if not last_layer else final_hidden_irreps
             self.multihead_decoders.append(
                 get_multihead_decoder(
@@ -441,11 +441,23 @@ class MACEStack(Base):
             "edge_index": data.edge_index,
         }
 
-        return (
-            data.node_features[:, : self.hidden_dim],
-            data.node_features[:, self.hidden_dim :],
-            conv_args,
-        )
+        if self.use_global_attn:
+            x = self.pos_emb(data.pe)
+            e = self.rel_pos_emb(data.rel_pe)
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            if self.use_edge_attr:
+                e = torch.cat((self.edge_emb(conv_args['edge_attr']), e), 1 )
+                e = self.edge_lin(e)    
+            conv_args.update({"edge_attr": e})
+            return ( x[:, : self.hidden_dim], x[:, self.hidden_dim :], conv_args ) 
+        else:
+            return (
+                data.node_features[:, : self.hidden_dim],
+                data.node_features[:, self.hidden_dim :],
+                conv_args,
+            )
 
     def _multihead(self):
         # NOTE Multihead is skipped as it's an integral part of MACE's architecture to have a decoder after every layer,

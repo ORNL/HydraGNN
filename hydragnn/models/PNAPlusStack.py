@@ -119,7 +119,19 @@ class PNAPlusStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return data.x, data.pos, conv_args
+        if self.use_global_attn:
+            x = self.pos_emb(data.pe)
+            e = self.rel_pos_emb(data.rel_pe)
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            if self.use_edge_attr:
+                e = torch.cat((self.edge_emb(conv_args['edge_attr']), e), 1 )
+                e = self.edge_lin(e)    
+            conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args 
+        else:
+            return data.x, data.pos, conv_args
 
     def __str__(self):
         return "PNAStack"

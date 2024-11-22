@@ -23,7 +23,9 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "model_type": "PNA",
+            "global_attn_engine": "GPS",
+            "global_attn_type": "multihead",
+            "mpnn_type": "PNA",
             "radius": 2.0,
             "max_neighbours": 100,
             "envelope_exponent": 5,

@@ -5,7 +5,7 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "model_type": "GIN",
+            "mpnn_type": "GIN",
             "radius": 7,
             "max_neighbours": 5,
             "periodic_boundary_conditions": false,

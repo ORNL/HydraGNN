@@ -13,14 +13,16 @@ import torch
 from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
-from torch.nn import GaussianNLLLoss
+from torch_geometric.nn import Sequential as PyGSequential
 from torch.utils.checkpoint import checkpoint
 import torch_scatter
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
+import pdb
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.globalAtt.gps import GPSConv
 
 import inspect
 
@@ -30,7 +32,11 @@ class Base(Module):
         self,
         input_args: str,
         conv_args: str,
+        global_attn_engine: str,
+        global_attn_type: str,            
         input_dim: int,
+        pe_dim: int,
+        global_attn_heads: int,
         hidden_dim: int,
         output_dim: list,
         output_type: list,
@@ -51,9 +57,14 @@ class Base(Module):
         self.device = get_device()
         self.input_args = input_args
         self.conv_args = conv_args
+        self.global_attn_engine = global_attn_engine
+        self.global_attn_type = global_attn_type
         self.input_dim = input_dim
+        self.pe_dim = pe_dim
+        self.global_attn_heads = global_attn_heads
         self.hidden_dim = hidden_dim
         self.dropout = dropout
+        self.global_attn_dropout = dropout
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -119,6 +130,27 @@ class Base(Module):
         # Option to set initially large output bias (UQ).
         self.initial_bias = initial_bias
 
+        # Specify global attention usage
+        if self.global_attn_engine:
+            self.use_global_attn = True
+            self.embed_dim = hidden_dim
+        else:
+            self.use_global_attn = False
+            self.embed_dim = input_dim
+
+        self.use_encodings = False # provision to decouple encodings from globalAtt later
+
+        # Specify learnable embeddings
+        if self.use_global_attn or self.use_encodings:
+            self.pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False) 
+            self.rel_pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False) 
+            if self.input_dim:
+                self.node_emb = Linear(self.input_dim, self.hidden_dim, bias=False)
+                self.node_lin = Linear(2*self.hidden_dim, self.hidden_dim, bias=False)
+            if self.use_edge_attr:
+                self.edge_emb = Linear(self.edge_dim, self.hidden_dim, bias=False)
+                self.edge_lin = Linear(2*self.hidden_dim, self.hidden_dim, bias=False)
+
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
@@ -127,13 +159,39 @@ class Base(Module):
             self._set_bias()
 
         self.conv_checkpointing = False
+    
+    def _apply_global_attn(self, mpnn):
+        if self.use_global_attn:
+            if self.global_attn_engine == 'GPS':
+                global_attn_layer = GPSConv(
+                    channels=self.hidden_dim,
+                    conv=mpnn,
+                    heads=self.global_attn_heads,
+                    dropout=self.global_attn_dropout,
+                    attn_type=self.global_attn_type
+                    )
 
+            return PyGSequential(
+                self.input_args,
+                [
+                    (global_attn_layer, self.conv_args + " -> inv_node_feat"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
+                ],
+            )
+        else:
+            return mpnn
+ 
     def _init_conv(self):
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim)))
         self.feature_layers.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim)))
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _embedding(self, data):
@@ -147,7 +205,20 @@ class Base(Module):
                 data.edge_attr is not None
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
-        return data.x, data.pos, conv_args
+
+        if self.use_global_attn:
+            x = self.pos_emb(data.pe)
+            e = self.rel_pos_emb(data.rel_pe)
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            if self.use_edge_attr:
+                e = torch.cat((self.edge_emb(conv_args['edge_attr']), e), 1 )
+                e = self.edge_lin(e)    
+            conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args 
+        else:
+            return data.x, data.pos, conv_args
 
     def _freeze_conv(self):
         for module in [self.graph_convs, self.feature_layers]:
@@ -316,7 +387,7 @@ class Base(Module):
     def forward(self, data):
         ### encoder part ####
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
-
+        # pdb.set_trace()
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
                 inv_node_feat, equiv_node_feat = conv(
