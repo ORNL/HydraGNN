@@ -42,19 +42,21 @@ class EGCLStack(Base):
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
-        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim, last_layer)))
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim, last_layer, edge_dim=self.edge_embed_dim)))
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)))
+            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim, last_layer, edge_dim=self.edge_embed_dim)))
             self.feature_layers.append(nn.Identity())
 
-    def get_conv(self, input_dim, output_dim, last_layer=False):
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        if not edge_dim:
+            edge_dim = self.edge_dim    
         egcl = E_GCL(
             input_channels=input_dim,
             output_channels=output_dim,
             hidden_channels=self.hidden_dim,
-            edge_attr_dim=self.edge_dim,
+            edge_attr_dim=edge_dim,
             equivariant=self.equivariance and not last_layer,
         )
 

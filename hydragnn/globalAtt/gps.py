@@ -131,22 +131,22 @@ class GPSConv(torch.nn.Module):
 
     def forward(
         self,
-        x: Tensor,
+        inv_node_feat: Tensor,
+        equiv_node_feat: Tensor,
         edge_index: Adj,
-        batch: Optional[torch.Tensor] = None,
         edge_attr: Optional[torch.Tensor] = None,
+        batch: Optional[torch.Tensor] = None,
     ) -> Tensor:
         """Runs the forward pass of the module."""
         hs = []
-        kwargs = dict()
+        kwargs = {"edge_index":edge_index}
         if edge_attr is not None:
             kwargs.update({"edge_attr":edge_attr})
-            
+        pdb.set_trace()  
         if self.conv is not None:  # Local MPNN.
-            # pdb.set_trace()
-            h, _ = self.conv(x, edge_index, **kwargs)
+            h, equiv_node_feat = self.conv(inv_node_feat=inv_node_feat, equiv_node_feat=equiv_node_feat, **kwargs) 
             h = F.dropout(h, p=self.dropout, training=self.training)
-            h = h + x
+            h = h + inv_node_feat
             if self.norm1 is not None:
                 if self.norm_with_batch:
                     h = self.norm1(h, batch=batch)
@@ -155,7 +155,7 @@ class GPSConv(torch.nn.Module):
             hs.append(h)
 
         # Global attention transformer-style model.
-        h, mask = to_dense_batch(x, batch)
+        h, mask = to_dense_batch(inv_node_feat, batch)
 
         if isinstance(self.attn, torch.nn.MultiheadAttention):
             h, _ = self.attn(h, h, h, key_padding_mask=~mask,
@@ -165,7 +165,7 @@ class GPSConv(torch.nn.Module):
 
         h = h[mask]
         h = F.dropout(h, p=self.dropout, training=self.training)
-        h = h + x  # Residual connection.
+        h = h + inv_node_feat  # Residual connection.
         if self.norm2 is not None:
             if self.norm_with_batch:
                 h = self.norm2(h, batch=batch)
@@ -182,7 +182,7 @@ class GPSConv(torch.nn.Module):
             else:
                 out = self.norm3(out)
 
-        return out
+        return out, equiv_node_feat
 
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}({self.channels}, '

@@ -31,14 +31,14 @@ class Base(Module):
     def __init__(
         self,
         input_args: str,
-        conv_args: str,
-        global_attn_engine: str,
-        global_attn_type: str,            
+        conv_args: str,            
         input_dim: int,
-        pe_dim: int,
-        global_attn_heads: int,
         hidden_dim: int,
         output_dim: list,
+        pe_dim: int,
+        global_attn_engine: str,
+        global_attn_type: str,
+        global_attn_heads: int,
         output_type: list,
         config_heads: dict,
         activation_function_type: str,
@@ -133,10 +133,15 @@ class Base(Module):
         # Specify global attention usage
         if self.global_attn_engine:
             self.use_global_attn = True
-            self.embed_dim = hidden_dim
+            self.embed_dim = self.edge_embed_dim = hidden_dim
+            if "edge_attr" not in self.input_args:
+                self.input_args += ", edge_attr"
+            if "edge_attr" not in self.conv_args:
+                self.conv_args += ", edge_attr"
         else:
             self.use_global_attn = False
             self.embed_dim = input_dim
+            self.edge_embed_dim = self.edge_dim
 
         self.use_encodings = False # provision to decouple encodings from globalAtt later
 
@@ -163,35 +168,21 @@ class Base(Module):
     def _apply_global_attn(self, mpnn):
         if self.use_global_attn:
             if self.global_attn_engine == 'GPS':
-                global_attn_layer = GPSConv(
+                return GPSConv(
                     channels=self.hidden_dim,
                     conv=mpnn,
                     heads=self.global_attn_heads,
                     dropout=self.global_attn_dropout,
                     attn_type=self.global_attn_type
                     )
-
-            return PyGSequential(
-                self.input_args,
-                [
-                    (global_attn_layer, self.conv_args + " -> inv_node_feat"),
-                    (
-                        lambda inv_node_feat, equiv_node_feat: [
-                            inv_node_feat,
-                            equiv_node_feat,
-                        ],
-                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
-                    ),
-                ],
-            )
         else:
             return mpnn
  
     def _init_conv(self):
-        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim)))
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim, edge_dim=self.edge_embed_dim)))
         self.feature_layers.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim)))
+            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim, self.hidden_dim, edge_dim=self.edge_embed_dim)))
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _embedding(self, data):
@@ -206,6 +197,7 @@ class Base(Module):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
+        # TODO: add comment on why and what
         if self.use_global_attn:
             x = self.pos_emb(data.pe)
             e = self.rel_pos_emb(data.rel_pe)
@@ -387,7 +379,7 @@ class Base(Module):
     def forward(self, data):
         ### encoder part ####
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
-        # pdb.set_trace()
+        pdb.set_trace()
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
                 inv_node_feat, equiv_node_feat = conv(

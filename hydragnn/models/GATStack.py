@@ -13,10 +13,10 @@ import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
 from torch.nn import ReLU, Linear
-from torch_geometric.nn import GATv2Conv, BatchNorm, Sequential
+from torch_geometric.nn import  BatchNorm, Sequential #GATv2Conv,
 
 from .Base import Base
-
+from .gat import GATv2Conv
 
 class GATStack(Base):
     def __init__(
@@ -37,12 +37,12 @@ class GATStack(Base):
     def _init_conv(self):
         """Here this function overwrites _init_conv() in Base since it has different implementation
         in terms of dimensions due to the multi-head attention"""
-        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim, True)))
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.embed_dim, self.hidden_dim, concat=True)))
         self.feature_layers.append(BatchNorm(self.hidden_dim * self.hidden_dim))
         for _ in range(self.num_conv_layers - 2):
-            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, True)))
+            self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, concat=True)))
             self.feature_layers.append(BatchNorm(self.hidden_dim * self.heads))
-        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, False)))
+        self.graph_convs.append(self._apply_global_attn(self.get_conv(self.hidden_dim * self.heads, self.hidden_dim, concat=False)))
         self.feature_layers.append(BatchNorm(self.hidden_dim))    
 
     def _init_node_conv(self):

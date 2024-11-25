@@ -5,9 +5,9 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "global_attn_engine": "",
+            "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
-            "mpnn_type": "PNA",
+            "mpnn_type": "GAT",
             "radius": 7,
             "max_neighbours": 5,
             "periodic_boundary_conditions": false,

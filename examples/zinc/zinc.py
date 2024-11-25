@@ -47,6 +47,7 @@ def zinc_pre_transform(data):
     data.x = data.x.float().view(-1,1)
     data.edge_attr = data.edge_attr.float().view(-1,1)
     data = lapPE(data)
+    # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]] 
     target_pe = data.pe[data.edge_index[1]] 
     data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference

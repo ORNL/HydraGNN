@@ -24,7 +24,7 @@ try:
 except:
     os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
-num_samples = 1000
+# num_samples = 1000
 
 # Configurable run choices (JSON file that accompanies this example script).
 filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
@@ -53,6 +53,7 @@ def qm9_pre_transform(data):
     data.y = data.y[:, 10] / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
+    # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]] 
     target_pe = data.pe[data.edge_index[1]] 
     data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference

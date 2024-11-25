@@ -70,14 +70,16 @@ class PNAPlusStack(Base):
             self.num_radial, self.radius, self.envelope_exponent
         )
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
+        if not edge_dim:
+            edge_dim = self.edge_dim
         pna = PNAConv(
             in_channels=input_dim,
             out_channels=output_dim,
             aggregators=self.aggregators,
             scalers=self.scalers,
             deg=self.deg,
-            edge_dim=self.edge_dim,
+            edge_dim=edge_dim,
             num_radial=self.num_radial,
             pre_layers=1,
             post_layers=1,
