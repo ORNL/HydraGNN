@@ -162,7 +162,7 @@ def update_config_edge_dim(config):
     if "edge_features" in config and config["edge_features"]:
         assert (
             config["model_type"] in edge_models
-        ), "Edge features can only be used with DimeNet, MACE, EGNN, SchNet, PNA, PNAPlus, PNAEq, and CGCNN."
+        ), "Edge features can only be used with GAT, PNA, PNAPlus, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE"
         config["edge_dim"] = len(config["edge_features"])
     elif config["model_type"] == "CGCNN":
         # CG always needs an integer edge_dim
