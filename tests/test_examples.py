@@ -31,9 +31,33 @@ import subprocess
         "PAINN",
     ],
 )
-@pytest.mark.parametrize("example", ["qm9", "md17", "LennardJones"])
+@pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples(example, model_type):
+def pytest_examples_energy(example, model_type):
+    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+    file_path = os.path.join(path, example + ".py")
+
+    # Add the --model_type argument for the subprocess call
+    return_code = subprocess.call(["python", file_path, "--model_type", model_type])
+
+    # Check the file ran without error.
+    assert return_code == 0
+
+
+@pytest.mark.parametrize(
+    "model_type",
+    [
+        "PNAPlus",
+        "SchNet",
+        "DimeNet",
+        "EGNN",
+        "PNAEq",
+        "PAINN",
+    ],
+)
+@pytest.mark.parametrize("example", ["LennardJones"])
+@pytest.mark.mpi_skip()
+def pytest_examples_grad_forces(example, model_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
 
