@@ -25,12 +25,14 @@ class GATStack(Base):
         conv_args,
         heads: int,
         negative_slope: float,
+        edge_dim: int,
         *args,
         **kwargs,
     ):
         # note that self.heads is a parameter in GATConv, not the num_heads in the output part
         self.heads = heads
         self.negative_slope = negative_slope
+        self.edge_dim = edge_dim
 
         super().__init__(input_args, conv_args, *args, **kwargs)
 
@@ -98,6 +100,7 @@ class GATStack(Base):
             negative_slope=self.negative_slope,
             dropout=self.dropout,
             add_self_loops=True,
+            edge_dim=self.edge_dim,
             concat=concat,
         )
 
