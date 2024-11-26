@@ -149,6 +149,7 @@ def update_config_equivariance(config):
 def update_config_edge_dim(config):
     config["edge_dim"] = None
     edge_models = [
+        "GAT",
         "PNA",
         "PNAPlus",
         "PNAEq",
