@@ -12,6 +12,7 @@ except ImportError:
 
 import hydragnn
 
+num_samples = 1000
 
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
@@ -38,8 +39,6 @@ def main(model_type=None):
         os.environ["SERIALIZED_DATA_PATH"]
     except KeyError:
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
-    num_samples = 1000
 
     # Configurable run choices (JSON file that accompanies this example script).
     filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
