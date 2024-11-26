@@ -15,12 +15,30 @@ import pytest
 import subprocess
 
 
+@pytest.mark.parametrize(
+    "model_type",
+    [
+        "SAGE",
+        "GIN",
+        "GAT",
+        "MFC",
+        "PNA",
+        "PNAPlus",
+        "SchNet",
+        "DimeNet",
+        "EGNN",
+        "PNAEq",
+        "PAINN",
+    ],
+)
 @pytest.mark.parametrize("example", ["qm9", "md17", "LennardJones"])
 @pytest.mark.mpi_skip()
-def pytest_examples(example):
+def pytest_examples(example, model_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
-    return_code = subprocess.call(["python", file_path])
+
+    # Add the --model_type argument for the subprocess call
+    return_code = subprocess.call(["python", file_path, "--model_type", model_type])
 
     # Check the file ran without error.
     assert return_code == 0
