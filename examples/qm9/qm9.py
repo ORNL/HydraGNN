@@ -45,6 +45,10 @@ def main(model_type=None):
     with open(filename, "r") as f:
         config = json.load(f)
 
+    # If a model type is provided, update the configuration accordingly.
+    if model_type:
+        config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+
     verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
@@ -72,10 +76,6 @@ def main(model_type=None):
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-
-    # If a model type is provided, update the configuration accordingly.
-    if model_type:
-        config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
