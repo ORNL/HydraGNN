@@ -56,6 +56,7 @@ def pytest_examples_energy(example, model_type):
         "EGNN",
         "PNAEq",
         "PAINN",
+        "MACE",
     ],
 )
 @pytest.mark.parametrize("example", ["LennardJones"])
