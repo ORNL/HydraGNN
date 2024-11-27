@@ -44,8 +44,8 @@ def pytest_examples_energy(example, model_type):
     assert return_code == 0
 
 
-# NOTE the grad forces example with LennardJones requires 
-#      there to be a positional gradient via using 
+# NOTE the grad forces example with LennardJones requires
+#      there to be a positional gradient via using
 #      positions in torch operations for message-passing.
 @pytest.mark.parametrize(
     "model_type",
