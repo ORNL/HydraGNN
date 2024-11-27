@@ -210,14 +210,15 @@ class PainnMessage(MessagePassing):
         **kwargs,
     ):
 
-        super().__init__()
+        degree_scaler_aggregation = DegreeScalerAggregation(
+            aggr=x_aggregators, scaler=x_scalers, deg=deg
+        )
+
+        super().__init__(aggr=degree_scaler_aggregation, node_dim=0, **kwargs)
 
         assert node_size % towers == 0
 
         self.node_size = node_size  # We keep input and output dim the same here because of the skip connection
-        self.x_aggregators = x_aggregators
-        self.x_scalers = x_scalers
-        self.deg = deg
         self.num_radial = num_radial
         self.edge_dim = edge_dim
 
@@ -334,11 +335,7 @@ class PainnMessage(MessagePassing):
         message_vector = message_vector + edge_vector
 
         # Aggregate and scale message_scalar
-        # message_scalar = aggregate_and_scale(self.x_aggregators, self.x_scalers, message_scalar, src, self.deg)
-        degree_scaler_aggregation = DegreeScalerAggregation(
-            aggr=self.x_aggregators, scaler=self.x_scalers, deg=self.deg
-        )
-        message_scalar = degree_scaler_aggregation(
+        message_scalar = self.aggr_module(
             message_scalar.squeeze(1), index=src, dim_size=x.shape[0]
         ).unsqueeze(
             1

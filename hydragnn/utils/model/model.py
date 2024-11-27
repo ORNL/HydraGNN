@@ -146,8 +146,8 @@ def calculate_avg_deg(loader):
     elif backend == "mpi":
         return calculate_avg_deg_mpi(loader)
     else:
-        deg = 0
-        counter = 0
+        deg = torch.zeros(1, dtype=torch.long)
+        counter = torch.zeros(1, dtype=torch.long)
         for data in iterate_tqdm(loader, 2, desc="Calculate avg degree"):
             d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
             deg += d.sum()
@@ -169,14 +169,14 @@ def calculate_PNA_degree_dist(loader, max_neighbours):
 
 def calculate_avg_deg_dist(loader):
     assert dist.is_initialized()
-    deg = 0
-    counter = 0
+    deg = torch.zeros(1, dtype=torch.long)
+    counter = torch.zeros(1, dtype=torch.long)
     for data in iterate_tqdm(loader, 2, desc="Calculate avg degree"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += d.sum()
         counter += d.size(0)
-    deg = torch.tensor(deg)
-    counter = torch.tensor(counter)
+    deg = deg.to(get_device())
+    counter = counter.to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     dist.all_reduce(counter, op=dist.ReduceOp.SUM)
     deg = deg.detach().cpu()
@@ -198,16 +198,16 @@ def calculate_PNA_degree_mpi(loader, max_neighbours):
 
 def calculate_avg_deg_mpi(loader):
     assert dist.is_initialized()
-    deg = 0
-    counter = 0
+    deg = torch.zeros(1, dtype=torch.long)
+    counter = torch.zeros(1, dtype=torch.long)
     for data in iterate_tqdm(loader, 2, desc="Calculate avg degree"):
         d = degree(data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long)
         deg += d.sum()
         counter += d.size(0)
     from mpi4py import MPI
 
-    deg = MPI.COMM_WORLD.allreduce(deg, op=MPI.SUM)
-    counter = MPI.COMM_WORLD.allreduce(counter, op=MPI.SUM)
+    deg = MPI.COMM_WORLD.allreduce(deg.numpy(), op=MPI.SUM)
+    counter = MPI.COMM_WORLD.allreduce(counter.numpy(), op=MPI.SUM)
     return deg / counter
 
 

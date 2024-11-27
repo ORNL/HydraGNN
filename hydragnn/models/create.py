@@ -205,6 +205,7 @@ def create_model(
             "inv_node_feat, edge_index",
             heads,
             negative_slope,
+            edge_dim,
             input_dim,
             hidden_dim,
             output_dim,

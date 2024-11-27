@@ -399,10 +399,12 @@ class Base(Module):
         tasks_loss = []
         # Energies
         node_energy_pred = pred[0]
-        graph_energy_pred = torch_scatter.scatter_add(
-            node_energy_pred, data.batch, dim=0
-        ).float()
-        graph_energy_true = data.energy
+        graph_energy_pred = (
+            torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+            .squeeze()
+            .float()
+        )
+        graph_energy_true = data.energy.squeeze().float()
         energy_loss_weight = self.loss_weights[
             0
         ]  # There should only be one loss-weight for energy
