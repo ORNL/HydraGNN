@@ -201,7 +201,8 @@ https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/mod
 """
 
 
-# NOTE DimeNet's triplet angles are Invariant to transformation, so DimeNet is invariant despite including angular features.
+# NOTE DimeNet's triplet angles are Invariant to rotational, translational, and mirroring transformations.
+#      Therefore, DimeNet is an invariant message-passing layer despite including angular features.
 def triplets(
     edge_index: Tensor,
     num_nodes: int,
