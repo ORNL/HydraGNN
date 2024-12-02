@@ -93,12 +93,6 @@ class AtomsToGraphs:
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
 
-        # Check if data has data.pbc and throw error if not
-        if not hasattr(atoms, "pbc"):
-            raise ValueError(
-                "The atoms object does not have the periodic boundary conditions."
-            )
-
         # put the minimum data in torch geometric data object
         data = Data(
             cell=cell,
