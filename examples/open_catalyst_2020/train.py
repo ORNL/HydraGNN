@@ -187,7 +187,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "datasets")
+    datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
