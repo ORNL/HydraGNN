@@ -34,10 +34,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
-from hydragnn.preprocess.graph_samples_checks_and_updates import (
-    RadiusGraph,
-    RadiusGraphPBC,
-)
+from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
 
 from ase.io import read
 
@@ -66,7 +63,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
         data_type,
         energy_per_atom=True,
         dist=False,
-        r_pbc=True,
     ):
         super().__init__()
 
@@ -74,11 +70,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.data_path = dirpath
         self.energy_per_atom = energy_per_atom
 
-        self.r_pbc = r_pbc
-        if self.r_pbc:
-            self.radius_graph = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
-        else:
-            self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
+        # NOTE Open Catalyst 2020 dataset has PBC: 
+        #      https://pubs.acs.org/doi/10.1021/acscatal.0c04525#_i3 (Section 2: Tasks, paragraph 2)
+        self.radius_graph = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
