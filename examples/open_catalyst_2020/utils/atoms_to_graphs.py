@@ -15,10 +15,7 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
-from hydragnn.preprocess.graph_samples_checks_and_updates import (
-    RadiusGraph,
-    RadiusGraphPBC,
-)
+from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
@@ -52,20 +49,15 @@ class AtomsToGraphs:
         self,
         max_neigh=200,
         radius=6,
-        r_pbc=True,
     ):
         self.max_neigh = max_neigh
         self.radius = radius
-        self.r_pbc = r_pbc
-
-        if self.r_pbc:
-            self.radius_graph = RadiusGraphPBC(
-                self.radius, loop=False, max_num_neighbors=self.max_neigh
-            )
-        else:
-            self.radius_graph = RadiusGraph(
-                self.radius, loop=False, max_num_neighbors=self.max_neigh
-            )
+        
+        # NOTE Open Catalyst 2020 dataset has PBC: 
+        #      https://pubs.acs.org/doi/10.1021/acscatal.0c04525#_i3 (Section 2: Tasks, paragraph 2)
+        self.radius_graph = RadiusGraphPBC(
+            self.radius, loop=False, max_num_neighbors=self.max_neigh
+        )
 
     def convert(
         self,
