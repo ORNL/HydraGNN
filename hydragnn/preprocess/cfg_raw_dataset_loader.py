@@ -75,7 +75,7 @@ class CFG_RawDataLoader(AbstractRawDataLoader):
 
         data_object = Data()
 
-        data_object.supercell_size = tensor(ase_object.cell.array).float()
+        data_object.cell = tensor(ase_object.cell.array).float()
         data_object.pos = tensor(ase_object.arrays["positions"]).float()
         proton_numbers = np.expand_dims(ase_object.arrays["numbers"], axis=1)
         masses = np.expand_dims(ase_object.arrays["masses"], axis=1)
