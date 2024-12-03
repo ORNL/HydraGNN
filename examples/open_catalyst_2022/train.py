@@ -70,8 +70,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.data_path = dirpath
         self.energy_per_atom = energy_per_atom
 
-        # NOTE Open Catalyst 2020 dataset has PBC:
-        #      https://pubs.acs.org/doi/10.1021/acscatal.0c04525#_i3 (Section 2: Tasks, paragraph 2)
+        # NOTE Open Catalyst 2022 dataset has PBC:
+        #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
         self.radius_graph = RadiusGraphPBC(3.0, loop=False, max_num_neighbors=50)
 
         # Threshold for atomic forces in eV/angstrom
