@@ -89,7 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=3)
+        a2g = AtomsToGraphs(max_neigh=50, radius=3.0)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
