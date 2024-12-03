@@ -48,12 +48,12 @@ class AtomsToGraphs:
     def __init__(
         self,
         max_neigh=200,
-        radius=6,
+        radius=3.0,
     ):
         self.max_neigh = max_neigh
         self.radius = radius
-        
-        # NOTE Open Catalyst 2020 dataset has PBC: 
+
+        # NOTE Open Catalyst 2020 dataset has PBC:
         #      https://pubs.acs.org/doi/10.1021/acscatal.0c04525#_i3 (Section 2: Tasks, paragraph 2)
         self.radius_graph = RadiusGraphPBC(
             self.radius, loop=False, max_num_neighbors=self.max_neigh

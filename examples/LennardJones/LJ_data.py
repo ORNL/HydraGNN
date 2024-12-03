@@ -403,7 +403,6 @@ class AtomicStructureHandler:
         self.bravais_lattice_constants = bravais_lattice_constants
         self.radius_cutoff = radius_cutoff
         self.formula = formula
-    
 
     # Calculate the potential energy with torch gradient tracking, then simply use autograd to calculate the forces
     def compute(self, data):
@@ -411,28 +410,38 @@ class AtomicStructureHandler:
         assert data.pos.shape[0] == data.x.shape[0]
         node_potential = torch.zeros([data.pos.shape[0], 1])
         node_forces = torch.zeros([data.pos.shape[0], 3])
-        
+
         # Calculate
         data.pos.requires_grad = True
         edge_vec, edge_dist = get_edge_vectors_and_lengths(
             positions=data.pos,
             edge_index=data.edge_index,
             shifts=data.edge_shifts,
-            normalize=False
+            normalize=False,
         )
-        
+
         # Sum potential by edge, node, and total
-        edge_potential = self.formula.potential_energy(edge_dist)  # Shape [num_edges, 1]
-        node_potential = scatter(edge_potential, data.edge_index[0], dim=0, dim_size=data.pos.shape[0], reduce='add')  # Shape [num_nodes, 1]
+        edge_potential = self.formula.potential_energy(
+            edge_dist
+        )  # Shape [num_edges, 1]
+        node_potential = scatter(
+            edge_potential,
+            data.edge_index[0],
+            dim=0,
+            dim_size=data.pos.shape[0],
+            reduce="add",
+        )  # Shape [num_nodes, 1]
         total_potential = torch.sum(node_potential, dim=0, keepdim=True)  # Shape [1]
-        
+
         # Autograd to calculate forces
         node_forces = -torch.autograd.grad(
             total_potential,
             data.pos,
             grad_outputs=torch.ones_like(total_potential),
-        )[0]  # Shape [num_nodes, 3]
-        
+        )[
+            0
+        ]  # Shape [num_nodes, 3]
+
         # Append to data
         data.x = torch.cat((data.x, node_potential, node_forces), dim=1)
 
@@ -443,14 +452,13 @@ class LJpotential:
     def __init__(self, epsilon, sigma):
         self.epsilon = epsilon
         self.sigma = sigma
-        
+
     def potential_energy(self, pair_distance):
         return (
             4
             * self.epsilon
             * ((self.sigma / pair_distance) ** 12 - (self.sigma / pair_distance) ** 6)
         )
-
 
 
 """Etc"""
