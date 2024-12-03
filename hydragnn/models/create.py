@@ -371,7 +371,7 @@ def create_model(
         model = PAINNStack(
             "inv_node_feat, equiv_node_feat, edge_index, diff, dist",
             "inv_node_feat, equiv_node_feat, edge_index, diff, dist",
-            edge_dim
+            edge_dim,
             num_radial,
             radius,
             input_dim,
