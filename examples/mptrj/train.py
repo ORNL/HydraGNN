@@ -26,10 +26,7 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
-from hydragnn.preprocess.graph_samples_checks_and_updates import (
-    RadiusGraph,
-    RadiusGraphPBC,
-)
+from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
@@ -69,7 +66,7 @@ class MPTrjDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
 
         self.dist = dist
         if self.dist:
@@ -124,6 +121,7 @@ class MPTrjDataset(AbstractBaseDataset):
                 lattice_mat = torch.tensor(
                     info["atoms"]["lattice_mat"], dtype=torch.float32
                 )
+                pbc = info["atoms"]["pbc"]
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
                 # Multiply 'lattice_mat' by the transpose of 'coords'
@@ -151,6 +149,7 @@ class MPTrjDataset(AbstractBaseDataset):
                 # Creating the Data object
                 data = Data(
                     cell=lattice_mat,
+                    pbc=pbc,
                     energy=energy,
                     force=forces,
                     # stress=torch.tensor(stresses, dtype=torch.float32),
