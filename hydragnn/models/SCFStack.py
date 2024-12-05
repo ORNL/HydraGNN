@@ -187,7 +187,13 @@ class SCFStack(Base):
                     e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
                     e = self.edge_lin(e)
                 edge_weight = e.norm(dim=-1)
-                conv_args.update({"edge_index": data.edge_index, "edge_weight": edge_weight, "edge_attr": e})
+                conv_args.update(
+                    {
+                        "edge_index": data.edge_index,
+                        "edge_weight": edge_weight,
+                        "edge_attr": e,
+                    }
+                )
             return x, data.pos, conv_args
         else:
             return data.x, data.pos, conv_args
