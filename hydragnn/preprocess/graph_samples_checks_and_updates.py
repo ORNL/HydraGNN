@@ -11,7 +11,7 @@
 
 import torch
 from torch_geometric.transforms import RadiusGraph
-from torch_geometric.utils import remove_self_loops, degree
+from torch_geometric.utils import remove_self_loops, degree, lexsort
 from torch_geometric.data import Data
 
 import ase
@@ -133,8 +133,8 @@ def get_radius_graph_pbc_config(config, loop=False):
 
 
 class RadiusGraphPBC(RadiusGraph):
-    r"""Creates edges based on node positions :obj:`pos` to all points within a
-    given distance, including periodic images.
+    r"""Creates edges based on node positions `pos` to all points within a
+    given distance, including periodic images, and limits the number of neighbors per node.
     """
 
     def __call__(self, data):
@@ -167,28 +167,63 @@ class RadiusGraphPBC(RadiusGraph):
         ) = ase.neighborlist.neighbor_list(
             "ijdS", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
         )
+
+        # Convert to tensors
+        edge_src = torch.LongTensor(edge_src)
+        edge_dst = torch.LongTensor(edge_dst)
+        edge_length = torch.tensor(edge_length, dtype=torch.float)
+        edge_cell_shifts = torch.tensor(edge_cell_shifts, dtype=torch.float)
+
+        # Limit neighbors per node using the helper function
+        edge_src, edge_length, edge_dst, edge_cell_shifts = self._limit_neighbors(
+            edge_src, edge_length, self.max_num_neighbors, edge_dst, edge_cell_shifts
+        )
+
+        # Assign to data
         data.edge_index = torch.stack(
-            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)],
+            [edge_src, edge_dst],
             dim=0,  # Shape: [2, n_edges]
         )
-
-        # ensure no duplicate edges
-        unique_edge_index, unique_indices = torch.unique(
-            data.edge_index, dim=1, return_inverse=False
-        )
-        assert unique_edge_index.unsqueeze(0).size(1) == data.edge_index.size(
-            1
-        ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
-
-        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(
-            1
-        )  # Shape: [n_edges, 1]
-        # ASE returns whether the cell was shifted or not (-1,0,1). Multiply by the cell size to get the actual shift
+        data.edge_attr = edge_length.unsqueeze(1)  # Shape: [n_edges, 1]
+        # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
         data.edge_shifts = torch.matmul(
-            torch.tensor(edge_cell_shifts).float(), data.cell.float()
+            edge_cell_shifts, data.cell.float()
         )  # Shape: [n_edges, 3]
 
         return data
+
+    # Function to keep only the closest `max_num_neighbors` per node
+    def _limit_neighbors(
+        self, edge_src, edge_length, max_num_neighbors, *edge_var_args
+    ):
+        num_edges = edge_src.size(0)
+
+        # Sort primarily by source node and secondarily by edge length, then apply to edge args
+        sorted_indices = lexsort([edge_length, edge_src])
+        edge_src_sorted, edge_length_sorted = (
+            edge_src[sorted_indices],
+            edge_length[sorted_indices],
+        )
+        edge_var_args_sorted = [
+            edge_var_arg[sorted_indices] for edge_var_arg in edge_var_args
+        ]
+
+        # Get counts of neighbors and create a mask to keep only `max_num_neighbors` per node
+        _, counts = edge_src_sorted.unique_consecutive(return_counts=True)
+        repeated_src_start_indices = torch.repeat_interleave(
+            counts.cumsum(0) - counts, counts
+        )
+        src_node_count = torch.arange(num_edges) - repeated_src_start_indices
+        mask = src_node_count < max_num_neighbors
+
+        # Filter edge args
+        edge_src_limited = edge_src_sorted[mask]
+        edge_length_limited = edge_length_sorted[mask]
+        edge_var_args_limited = [
+            edge_var_arg[mask] for edge_var_arg in edge_var_args_sorted
+        ]
+
+        return [edge_src_limited] + [edge_length_limited] + edge_var_args_limited
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
