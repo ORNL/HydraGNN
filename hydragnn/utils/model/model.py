@@ -31,6 +31,8 @@ def activation_function_selection(activation_function_string: str):
         return torch.nn.ReLU()
     elif activation_function_string == "selu":
         return torch.nn.SELU()
+    elif activation_function_string == "silu":
+        return torch.nn.SiLU()
     elif activation_function_string == "prelu":
         return torch.nn.PReLU()
     elif activation_function_string == "elu":

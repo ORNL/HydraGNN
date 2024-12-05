@@ -295,12 +295,15 @@ class Base(Module):
                     head_NN.append(self.convs_node_output[inode_feature])
                     head_NN.append(self.batch_norms_node_output[inode_feature])
                     inode_feature += 1
+
                 else:
                     raise ValueError(
                         "Unknown head NN structure for node features"
                         + self.node_NN_type
                         + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                     )
+            elif self.head_type[ihead] == "pos":
+                head_NN = torch.nn.Identity()
             else:
                 raise ValueError(
                     "Unknown head type"
@@ -337,7 +340,6 @@ class Base(Module):
         x = inv_node_feat
 
         #### multi-head decoder part####
-        # shared dense layers for graph level output
         if data.batch is None:
             x_graph = x.mean(dim=0, keepdim=True)
         else:
@@ -352,7 +354,7 @@ class Base(Module):
                 output_head = headloc(x_graph_head)
                 outputs.append(output_head[:, :head_dim])
                 outputs_var.append(output_head[:, head_dim:] ** 2)
-            else:
+            elif type_head == "node":
                 if self.node_NN_type == "conv":
                     inv_node_feat = x
                     for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
@@ -369,6 +371,29 @@ class Base(Module):
                     x_node = headloc(x=x, batch=data.batch)
                 outputs.append(x_node[:, :head_dim])
                 outputs_var.append(x_node[:, head_dim:] ** 2)
+
+            elif type_head == "pos":
+                if self.equivariance:
+                    x_node = pos - data.pos
+                    sg_num_nodes = [d.num_nodes for d in data.to_data_list()]
+                    com_ten = []
+                    place = 0
+                    for sgnn in sg_num_nodes:
+                        sg_x_node = x_node[place : place + sgnn]
+                        com_ten.append(
+                            sg_x_node.mean(dim=0, keepdim=True).tile(sgnn, 1)
+                        )
+                        place += sgnn
+                    com_ten = torch.cat(com_ten, dim=0)
+                    x_node = x_node - com_ten
+                else:
+                    x_node = pos
+                # TODO: implement output_var for this type_head?
+                outputs.append(x_node)
+            else:
+                raise NotImplementedError(
+                    "Head type {} not recognized".format(type_head)
+                )
         if self.var_output:
             return outputs, outputs_var
         return outputs
