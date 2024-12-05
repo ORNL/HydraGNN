@@ -34,8 +34,10 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
-from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
-
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 from ase.io import read
 
 try:
@@ -72,7 +74,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         # NOTE Open Catalyst 2022 dataset has PBC:
         #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
-        self.radius_graph = RadiusGraphPBC(3.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(3.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(3.0, loop=False, max_num_neighbors=50)
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
@@ -120,12 +123,22 @@ class OpenCatalystDataset(AbstractBaseDataset):
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
         positions = torch.Tensor(atoms.get_positions())
-        cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
-        pbc = atoms.get_pbc()
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
+
+        cell = None
+        try:
+            cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
+        except:
+            print(f"Structure does not have cell", flush=True)
+
+        pbc = None
+        try:
+            pbc = atoms.get_pbc()
+        except:
+            print(f"Structure does not have pbc", flush=True)
 
         # put the minimum data in torch geometric data object
         data = Data(
@@ -149,7 +162,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
-        data = self.radius_graph(data)
+        if data.pbc is not None and data.cell is not None:
+            try:
+                data = self.radius_graph_pbc(data)
+            except:
+                print(
+                    f"Structure could not successfully apply pbc radius graph",
+                    flush=True,
+                )
+                data = self.radius_graph(data)
+        else:
+            data = self.radius_graph(data)
+
         data = transform_coordinates(data)
 
         return data

@@ -53,6 +53,7 @@ primitive_bravais_lattice_constant_z = 3.8
 
 def create_dataset(path, config):
     radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
+    max_num_neighbors = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     number_configurations = (
         config["Dataset"]["number_configurations"]
         if "number_configurations" in config["Dataset"]
@@ -75,6 +76,7 @@ def create_dataset(path, config):
         atom_types,
         atomic_structure_handler=atomic_structure_handler,
         radius_cutoff=radius_cutoff,
+        max_num_neighbors=max_num_neighbors,
         relative_maximum_atomic_displacement=1e-1,
         number_configurations=number_configurations,
     )
