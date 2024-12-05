@@ -84,6 +84,7 @@ class Alexandria(AbstractBaseDataset):
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
 
         list_dirs = list_directories(
             os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
@@ -147,6 +148,13 @@ class Alexandria(AbstractBaseDataset):
             cell = torch.tensor(structure["lattice"]["matrix"]).to(torch.float32)
         except:
             print(f"Structure {entry_id} does not have cell", flush=True)
+            return data_object
+
+        pbc = None
+        try:
+            pbc = structure["lattice"]["pbc"]
+        except:
+            print(f"Structure {entry_id} does not have pbc", flush=True)
             return data_object
 
         atomic_numbers = None
@@ -236,6 +244,7 @@ class Alexandria(AbstractBaseDataset):
         data_object = Data(
             pos=pos,
             cell=cell,
+            pbc=pbc,
             atomic_numbers=atomic_numbers,
             forces=forces,
             # entry_id=entry_id,
@@ -260,7 +269,18 @@ class Alexandria(AbstractBaseDataset):
             [data_object.atomic_numbers, data_object.pos, data_object.forces], dim=1
         )
 
-        data_object = self.radius_graph(data_object)
+        if data_object.pbc is not None and data_object.cell is not None:
+            try:
+                data_object = self.radius_graph_pbc(data_object)
+            except:
+                print(
+                    f"Structure {entry_id} could not successfully apply pbc radius graph",
+                    flush=True,
+                )
+                data_object = self.radius_graph(data_object)
+        else:
+            data_object = self.radius_graph(data_object)
+
         data_object = transform_coordinates(data_object)
 
         return data_object

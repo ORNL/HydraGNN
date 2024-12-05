@@ -15,7 +15,10 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
-from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
@@ -55,7 +58,10 @@ class AtomsToGraphs:
 
         # NOTE Open Catalyst 2020 dataset has PBC:
         #      https://pubs.acs.org/doi/10.1021/acscatal.0c04525#_i3 (Section 2: Tasks, paragraph 2)
-        self.radius_graph = RadiusGraphPBC(
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neigh
+        )
+        self.radius_graph_pbc = RadiusGraphPBC(
             self.radius, loop=False, max_num_neighbors=self.max_neigh
         )
 
@@ -78,12 +84,22 @@ class AtomsToGraphs:
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
         positions = torch.Tensor(atoms.get_positions())
-        cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
-        pbc = atoms.get_pbc()
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
+
+        cell = None
+        try:
+            cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
+        except:
+            print(f"Structure does not have cell", flush=True)
+
+        pbc = None
+        try:
+            pbc = atoms.get_pbc()
+        except:
+            print(f"Structure does not have pbc", flush=True)
 
         # put the minimum data in torch geometric data object
         data = Data(
@@ -107,7 +123,18 @@ class AtomsToGraphs:
 
         data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
-        data = self.radius_graph(data)
+        if data.pbc is not None and data.cell is not None:
+            try:
+                data = self.radius_graph_pbc(data)
+            except:
+                print(
+                    f"Structure could not successfully apply pbc radius graph",
+                    flush=True,
+                )
+                data = self.radius_graph(data)
+        else:
+            data = self.radius_graph(data)
+
         data = transform_coordinates(data)
 
         return data

@@ -26,7 +26,10 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
-from hydragnn.preprocess.graph_samples_checks_and_updates import RadiusGraphPBC
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
@@ -66,7 +69,8 @@ class MPTrjDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
 
         self.dist = dist
         if self.dist:
@@ -118,10 +122,20 @@ class MPTrjDataset(AbstractBaseDataset):
                 info["magmom"] = k["magmom"]
 
                 # Convert lists to PyTorch tensors
-                lattice_mat = torch.tensor(
-                    info["atoms"]["lattice_mat"], dtype=torch.float32
-                )
-                pbc = info["atoms"]["pbc"]
+                lattice_mat = None
+                try:
+                    lattice_mat = torch.tensor(
+                        info["atoms"]["lattice_mat"], dtype=torch.float32
+                    )
+                except:
+                    print(f"Structure does not have lattice_mat", flush=True)
+
+                pbc = None
+                try:
+                    pbc = info["atoms"]["pbc"]
+                except:
+                    print(f"Structure does not have pbc", flush=True)
+
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
                 # Multiply 'lattice_mat' by the transpose of 'coords'
@@ -160,7 +174,18 @@ class MPTrjDataset(AbstractBaseDataset):
                     y=energy,
                 )
 
-                data = self.radius_graph(data)
+                if data.pbc is not None and data.cell is not None:
+                    try:
+                        data = self.radius_graph_pbc(data)
+                    except:
+                        print(
+                            f"Structure could not successfully apply pbc radius graph",
+                            flush=True,
+                        )
+                        data = self.radius_graph(data)
+                else:
+                    data = self.radius_graph(data)
+
                 data = transform_coordinates(data)
                 if self.check_forces_values(data.force):
                     self.dataset.append(data)
