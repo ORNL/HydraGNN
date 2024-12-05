@@ -133,7 +133,7 @@ def get_radius_graph_pbc_config(config, loop=False):
 
 
 class RadiusGraphPBC(RadiusGraph):
-    r"""Creates edges based on node positions `pos` to all points within a
+    r"""Creates edges based on node positions :obj:`pos` to all points within a
     given distance, including periodic images, and limits the number of neighbors per node.
     """
 
