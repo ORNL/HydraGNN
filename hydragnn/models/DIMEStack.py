@@ -12,6 +12,8 @@
 from typing import Callable, Optional, Tuple
 from torch_geometric.typing import SparseTensor
 
+import pdb
+
 import torch
 from torch import Tensor
 from torch.nn import Identity, SiLU
@@ -62,7 +64,7 @@ class DIMEStack(Base):
         self.num_after_skip = num_after_skip
         self.edge_dim = edge_dim
         self.radius = radius
-
+        self.is_edge_model = True  # specify that mpnn can handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = BesselBasisLayer(num_radial, radius, envelope_exponent)
@@ -73,15 +75,28 @@ class DIMEStack(Base):
         pass
 
     def _init_conv(self):
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.graph_convs.append(
+            self._apply_global_attn(
+                self.get_conv(
+                    self.embed_dim, self.hidden_dim, edge_dim=self.edge_embed_dim
+                )
+            )
+        )
         self.feature_layers.append(Identity())
         for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim, self.hidden_dim, edge_dim=self.edge_embed_dim
+                    )
+                )
+            )
             self.feature_layers.append(Identity())
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
         hidden_dim = output_dim if input_dim == 1 else input_dim
+        if not edge_dim:
+            edge_dim = self.edge_dim
         assert (
             hidden_dim > 1
         ), "DimeNet requires more than one hidden dimension between input_dim and output_dim."
@@ -90,7 +105,7 @@ class DIMEStack(Base):
             num_radial=self.num_radial,
             hidden_channels=hidden_dim,
             act=SiLU(),
-            edge_dim=self.edge_dim,
+            edge_dim=edge_dim,
         )
         inter = InteractionPPBlock(
             hidden_channels=hidden_dim,
@@ -112,7 +127,9 @@ class DIMEStack(Base):
             output_initializer="glorot_orthogonal",
         )
 
-        if self.use_edge_attr:
+        if self.use_edge_attr or (
+            self.use_global_attn and self.is_edge_model
+        ):  # check if gps is being used and mpnn can handle edge feats
             return Sequential(
                 self.input_args,
                 [
@@ -189,7 +206,20 @@ class DIMEStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return data.x, data.pos, conv_args
+        if self.use_global_attn:
+            x = self.pos_emb(data.pe)
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args
+        else:
+            return data.x, data.pos, conv_args
 
 
 """
@@ -201,8 +231,6 @@ https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/mod
 """
 
 
-# NOTE DimeNet's triplet angles are Invariant to rotational, translational, and mirroring transformations.
-#      Therefore, DimeNet is an invariant message-passing layer despite including angular features.
 def triplets(
     edge_index: Tensor,
     num_nodes: int,

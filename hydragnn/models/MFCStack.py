@@ -28,10 +28,10 @@ class MFCStack(Base):
         **kwargs,
     ):
         self.max_degree = max_degree
-
+        self.is_edge_model = False  # specify that mpnn cannot handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
         mfc = MFConv(
             in_channels=input_dim,
             out_channels=output_dim,

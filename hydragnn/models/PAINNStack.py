@@ -43,29 +43,48 @@ class PAINNStack(Base):
         self.edge_dim = edge_dim
         self.num_radial = num_radial
         self.radius = radius
-
+        self.is_edge_model = True  # specify that mpnn cannot handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.graph_convs.append(
+            self._apply_global_attn(
+                self.get_conv(
+                    self.embed_dim,
+                    self.hidden_dim,
+                    last_layer,
+                    edge_dim=self.edge_embed_dim,
+                )
+            )
+        )
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim,
+                        self.hidden_dim,
+                        last_layer,
+                        edge_dim=self.edge_embed_dim,
+                    )
+                )
+            )
             self.feature_layers.append(nn.Identity())
 
-    def get_conv(self, input_dim, output_dim, last_layer=False):
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
         hidden_dim = output_dim if input_dim == 1 else input_dim
         assert (
             hidden_dim > 1
         ), "PainnNet requires more than one hidden dimension between input_dim and output_dim."
+        if not edge_dim:
+            edge_dim = self.edge_dim
         self_inter = PainnMessage(
             node_size=input_dim,
             num_radial=self.num_radial,
             cutoff=self.radius,
-            edge_dim=self.edge_dim,
+            edge_dim=edge_dim,
         )
         cross_inter = PainnUpdate(node_size=input_dim, last_layer=last_layer)
         """
@@ -141,10 +160,6 @@ class PAINNStack(Base):
             data.pos, data.edge_index, data.edge_shifts, normalize=True
         )
 
-        # Instantiate tensor to hold equivariant traits
-        v = torch.zeros(data.x.size(0), 3, data.x.size(1), device=data.x.device)
-        data.v = v
-
         conv_args = {
             "edge_index": data.edge_index.t().to(torch.long),
             "diff": norm_edge_vec,
@@ -157,7 +172,25 @@ class PAINNStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return data.x, data.v, conv_args
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+        else:
+            x = data.x
+        # Instantiate tensor to hold equivariant traits
+        v = torch.zeros(x.size(0), 3, x.size(1), device=x.device)
+        return x, v, conv_args
 
 
 class PainnMessage(nn.Module):
