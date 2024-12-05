@@ -20,7 +20,7 @@ from torch_geometric.transforms import (
     Spherical,
     PointPairFeatures,
 )
-
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 from hydragnn.preprocess import update_predicted_values, update_atom_features
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
@@ -85,6 +85,13 @@ class SerializedDataLoader:
         assert len(self.node_feature_name) == len(self.node_feature_col)
         assert len(self.graph_feature_name) == len(self.graph_feature_dim)
         assert len(self.graph_feature_name) == len(self.graph_feature_col)
+
+        # LPE
+        self.compute_lapPE = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+            attr_name="pe",
+            is_undirected=True,
+        )
 
         self.dist = dist
         if self.dist:
@@ -167,10 +174,19 @@ class SerializedDataLoader:
 
         # Descriptors about topology of the local environment
         if self.spherical_coordinates:
-            self.dataset[:] = [Spherical(data) for data in self.dataset]
+            dataset[:] = [Spherical(data) for data in dataset]
 
         if self.point_pair_features:
-            self.dataset[:] = [PointPairFeatures(data) for data in self.dataset]
+            dataset[:] = [PointPairFeatures(data) for data in dataset]
+
+        # LPE
+        dataset[:] = [self.compute_lapPE(data) for data in dataset]
+
+        # Relative LPE
+        for data in dataset:
+            source_pe = data.pe[data.edge_index[0]]
+            target_pe = data.pe[data.edge_index[1]]
+            data.rel_pe = torch.abs(source_pe - target_pe)
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
@@ -222,7 +238,7 @@ class SerializedDataLoader:
             frequencies = sorted(frequencies[frequencies > 0].tolist())
             category = 0
             for index, frequency in enumerate(frequencies):
-                category += frequency * (100 ** index)
+                category += frequency * (100**index)
             dataset_categories.append(category)
 
         subsample_indices = []

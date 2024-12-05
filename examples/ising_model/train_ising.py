@@ -86,7 +86,7 @@ def create_dataset_mpi(
         np.random.seed(seed)
 
     count_config = 0
-    rx = list(nsplit(range(0, L ** 3), comm_size))[rank]
+    rx = list(nsplit(range(0, L**3), comm_size))[rank]
     info("rx", rx.start, rx.stop)
     for num_downs in range(rx.start, rx.stop):
         subdir = os.path.join(dir, str(num_downs))
@@ -98,13 +98,13 @@ def create_dataset_mpi(
         prefix = "output_%d_" % num_downs
         subdir = os.path.join(dir, str(num_downs))
 
-        primal_configuration = np.ones((L ** 3,))
+        primal_configuration = np.ones((L**3,))
         for down in range(0, num_downs):
             primal_configuration[down] = -1.0
 
         # If the current composition has a total number of possible configurations above
         # the hard cutoff threshold, a random configurational subset is picked
-        if scipy.special.binom(L ** 3, num_downs) > histogram_cutoff:
+        if scipy.special.binom(L**3, num_downs) > histogram_cutoff:
             for num_config in range(0, histogram_cutoff):
                 config = np.random.permutation(primal_configuration)
                 config = np.reshape(config, (L, L, L))
@@ -355,7 +355,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
     timer.stop()

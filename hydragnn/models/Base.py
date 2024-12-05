@@ -13,14 +13,16 @@ import torch
 from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
-from torch.nn import GaussianNLLLoss
+from torch_geometric.nn import Sequential as PyGSequential
 from torch.utils.checkpoint import checkpoint
 import torch_scatter
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
+import pdb
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.globalAtt.gps import GPSConv
 
 import inspect
 
@@ -33,6 +35,10 @@ class Base(Module):
         input_dim: int,
         hidden_dim: int,
         output_dim: list,
+        pe_dim: int,
+        global_attn_engine: str,
+        global_attn_type: str,
+        global_attn_heads: int,
         output_type: list,
         config_heads: dict,
         activation_function_type: str,
@@ -51,9 +57,14 @@ class Base(Module):
         self.device = get_device()
         self.input_args = input_args
         self.conv_args = conv_args
+        self.global_attn_engine = global_attn_engine
+        self.global_attn_type = global_attn_type
         self.input_dim = input_dim
+        self.pe_dim = pe_dim
+        self.global_attn_heads = global_attn_heads
         self.hidden_dim = hidden_dim
         self.dropout = dropout
+        self.global_attn_dropout = dropout
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -119,6 +130,45 @@ class Base(Module):
         # Option to set initially large output bias (UQ).
         self.initial_bias = initial_bias
 
+        # Specify global attention usage: specify input embedding dims and edge embedding dims; if model can handle edge features, enforce use of relative edge encodings
+        if self.global_attn_engine:
+            self.use_global_attn = True
+            self.embed_dim = self.edge_embed_dim = (
+                hidden_dim  # ensure that all input to gps have the same dimensionality
+            )
+            if self.is_edge_model:
+                if "edge_attr" not in self.input_args:
+                    self.input_args += ", edge_attr"
+                if "edge_attr" not in self.conv_args:
+                    self.conv_args += ", edge_attr"
+        else:
+            self.use_global_attn = False
+            # ensure that all inputs maintain original dimensionality if gps is turned off
+            self.embed_dim = input_dim
+            self.edge_embed_dim = (
+                self.edge_dim
+                if (hasattr(self, "edge_dim") and (self.edge_dim is not None))
+                else None
+            )
+
+        self.use_encodings = (
+            False  # provision to decouple encodings from globalAtt later
+        )
+
+        # Specify learnable embeddings
+        if self.use_global_attn or self.use_encodings:
+            self.pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False)
+            if self.input_dim:
+                self.node_emb = Linear(self.input_dim, self.hidden_dim, bias=False)
+                self.node_lin = Linear(2 * self.hidden_dim, self.hidden_dim, bias=False)
+            if self.is_edge_model:
+                self.rel_pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False)
+                if self.use_edge_attr:
+                    self.edge_emb = Linear(self.edge_dim, self.hidden_dim, bias=False)
+                    self.edge_lin = Linear(
+                        2 * self.hidden_dim, self.hidden_dim, bias=False
+                    )
+
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
@@ -128,12 +178,38 @@ class Base(Module):
 
         self.conv_checkpointing = False
 
+    def _apply_global_attn(self, mpnn):
+        # choose to use global attention or mpnn
+        if self.use_global_attn:
+            # specify global attention engine; use this to support more engines in future
+            if self.global_attn_engine == "GPS":
+                return GPSConv(
+                    channels=self.hidden_dim,
+                    conv=mpnn,
+                    heads=self.global_attn_heads,
+                    dropout=self.global_attn_dropout,
+                    attn_type=self.global_attn_type,
+                )
+        else:
+            return mpnn
+
     def _init_conv(self):
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.graph_convs.append(
+            self._apply_global_attn(
+                self.get_conv(
+                    self.embed_dim, self.hidden_dim, edge_dim=self.edge_embed_dim
+                )
+            )
+        )
         self.feature_layers.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim, self.hidden_dim, edge_dim=self.edge_embed_dim
+                    )
+                )
+            )
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _embedding(self, data):
@@ -147,7 +223,24 @@ class Base(Module):
                 data.edge_attr is not None
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
-        return data.x, data.pos, conv_args
+
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args
+        else:
+            return data.x, data.pos, conv_args
 
     def _freeze_conv(self):
         for module in [self.graph_convs, self.feature_layers]:
