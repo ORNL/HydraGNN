@@ -6,7 +6,7 @@ def run(job):
     if job.parameters["function"] == "linear":
         y = x + b
     elif job.parameters["function"] == "cubic":
-        y = x**3 + b
+        y = x ** 3 + b
 
     # Maximization!
     return y

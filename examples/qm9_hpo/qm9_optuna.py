@@ -74,11 +74,7 @@ def objective(trial):
     if model_type not in ["EGNN", "SchNet", "DimeNet"]:
         config["NeuralNetwork"]["Architecture"]["equivariance"] = False
 
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
+    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
