@@ -19,8 +19,8 @@
   "NeuralNetwork": {
     "Architecture": {
       "periodic_boundary_conditions": true,
-      "global_attn_engine": "GPS",
-      "global_attn_type": "multihead",
+      "global_attn_engine": "",
+      "global_attn_type": "",
       "mpnn_type": "EGNN",
       "radius": 5.0,
       "max_neighbours": 5,

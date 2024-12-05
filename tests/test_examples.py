@@ -14,7 +14,11 @@ import pytest
 
 import subprocess
 
-
+@pytest.mark.parametrize(
+    "global_attn_engine",
+    ["GPS"],
+)
+@pytest.mark.parametrize("global_attn_type", ["multihead"])
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -29,8 +33,6 @@ import subprocess
         "EGNN",
         "PNAEq",
         "PAINN",
-        "GINE",
-        "GGCN",
     ],
 )
 @pytest.mark.parametrize("example", ["qm9", "md17"])

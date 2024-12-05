@@ -159,7 +159,7 @@ class SCFStack(Base):
             raise Exception(
                 "For SchNet if using edge attributes or edge encodings for gps, then E(3)-equivariance cannot be ensured. Please disable equivariance or edge attributes."
             )
-        elif self.use_edge_attr or (self.use_global_attn and self.is_edge_model):
+        elif self.use_edge_attr:
             edge_index = data.edge_index
             data.edge_shifts = torch.zeros(
                 (data.edge_index.size(1), 3), device=data.edge_index.device
@@ -186,7 +186,8 @@ class SCFStack(Base):
                 if self.use_edge_attr:
                     e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
                     e = self.edge_lin(e)
-                conv_args.update({"edge_attr": e})
+                edge_weight = e.norm(dim=-1)
+                conv_args.update({"edge_index": data.edge_index, "edge_weight": edge_weight, "edge_attr": e})
             return x, data.pos, conv_args
         else:
             return data.x, data.pos, conv_args
