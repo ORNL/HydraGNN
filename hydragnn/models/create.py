@@ -321,10 +321,11 @@ def create_model(
         assert num_filters is not None, "SchNet requires num_filters input."
         assert radius is not None, "SchNet requires radius input."
         model = SCFStack(
-            "inv_node_feat, equiv_node_feat, batch",
-            "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_attr",
-            num_gaussians,
+            "",  # Depends on SchNet usage of edge_features
+            "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf",
             num_filters,
+            edge_dim,
+            num_gaussians,
             radius,
             input_dim,
             hidden_dim,
