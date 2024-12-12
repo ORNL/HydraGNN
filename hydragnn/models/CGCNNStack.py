@@ -59,8 +59,6 @@ class CGCNNStack(Base):
             assert self.conv_args == "inv_node_feat, edge_index"
 
     def get_conv(self, input_dim, _, edge_dim=None):
-        if not edge_dim:
-            edge_dim = self.edge_dim
         cgcnn = CGConv(
             channels=input_dim,
             dim=edge_dim,

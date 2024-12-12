@@ -78,8 +78,6 @@ class PAINNStack(Base):
         assert (
             hidden_dim > 1
         ), "PainnNet requires more than one hidden dimension between input_dim and output_dim."
-        if not edge_dim:
-            edge_dim = self.edge_dim
         self_inter = PainnMessage(
             node_size=input_dim,
             num_radial=self.num_radial,

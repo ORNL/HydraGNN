@@ -95,8 +95,6 @@ class DIMEStack(Base):
 
     def get_conv(self, input_dim, output_dim, edge_dim=None):
         hidden_dim = output_dim if input_dim == 1 else input_dim
-        if not edge_dim:
-            edge_dim = self.edge_dim
         assert (
             hidden_dim > 1
         ), "DimeNet requires more than one hidden dimension between input_dim and output_dim."

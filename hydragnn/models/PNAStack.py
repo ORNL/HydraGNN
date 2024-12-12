@@ -40,8 +40,6 @@ class PNAStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
     def get_conv(self, input_dim, output_dim, edge_dim=None):
-        if not edge_dim:
-            edge_dim = self.edge_dim
         pna = PNAConv(
             in_channels=input_dim,
             out_channels=output_dim,

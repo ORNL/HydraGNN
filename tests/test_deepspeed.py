@@ -2,6 +2,7 @@ import pytest
 
 from tests.test_graphs import unittest_train_model
 
+
 # Test vector output
 @pytest.mark.parametrize("model_type", ["PNA"])
 @pytest.mark.mpi

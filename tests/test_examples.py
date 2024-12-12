@@ -11,7 +11,7 @@
 
 import os
 import pytest
-
+import pdb
 import subprocess
 
 
@@ -41,9 +41,19 @@ import subprocess
 def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
-
     # Add the --mpnn_type argument for the subprocess call
-    return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    return_code = subprocess.call(
+        [
+            "python",
+            file_path,
+            "--mpnn_type",
+            mpnn_type,
+            "--global_attn_engine",
+            global_attn_engine,
+            "--global_attn_type",
+            global_attn_type,
+        ]
+    )
 
     # Check the file ran without error.
     assert return_code == 0

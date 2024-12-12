@@ -130,7 +130,8 @@ class Base(Module):
         # Option to set initially large output bias (UQ).
         self.initial_bias = initial_bias
 
-        # Specify global attention usage: specify input embedding dims and edge embedding dims; if model can handle edge features, enforce use of relative edge encodings
+        # Specify global attention usage: specify input embedding dims and edge embedding dims;
+        # if model can handle edge features, enforce use of relative edge encodings
         if self.global_attn_engine:
             self.use_global_attn = True
             self.embed_dim = (
@@ -227,7 +228,7 @@ class Base(Module):
         if self.use_global_attn:
             # encode node positional embeddings
             x = self.pos_emb(data.pe)
-            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            # if node features are available, generate mebeddings, concatenate with positional embeddings and map to hidden dim
             if self.input_dim:
                 x = torch.cat((self.node_emb(data.x.float()), x), 1)
                 x = self.node_lin(x)

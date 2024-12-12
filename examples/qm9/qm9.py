@@ -1,4 +1,5 @@
 import os
+import pdb
 import json
 import torch
 import torch_geometric
@@ -94,6 +95,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     train, val, test = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
+
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
     )
@@ -141,6 +143,18 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Specify the model type for training (default: None).",
+    )
+    parser.add_argument(
+        "--global_attn_engine",
+        type=str,
+        default=None,
+        help="Specify if global attention is being used (default: None).",
+    )
+    parser.add_argument(
+        "--global_attn_type",
+        type=str,
+        default=None,
+        help="Specify the global attention type (default: None).",
     )
     args = parser.parse_args()
     main(mpnn_type=args.mpnn_type)

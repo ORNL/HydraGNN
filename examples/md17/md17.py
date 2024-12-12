@@ -142,5 +142,20 @@ if __name__ == "__main__":
         default=None,
         help="Specify the model type for training (default: None).",
     )
+
+    parser.add_argument(
+        "--global_attn_engine",
+        type=str,
+        default=None,
+        help="Specify if global attention is being used (default: None).",
+    )
+
+    parser.add_argument(
+        "--global_attn_type",
+        type=str,
+        default=None,
+        help="Specify the global attention type (default: None).",
+    )
+
     args = parser.parse_args()
     main(mpnn_type=args.mpnn_type)

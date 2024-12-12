@@ -154,8 +154,6 @@ class GATStack(Base):
             self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
 
     def get_conv(self, input_dim, output_dim, concat, edge_dim=None):
-        if not edge_dim:
-            edge_dim = self.edge_dim
         gat = GATv2Conv(
             in_channels=input_dim,
             out_channels=output_dim,

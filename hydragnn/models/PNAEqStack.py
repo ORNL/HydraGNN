@@ -105,8 +105,6 @@ class PNAEqStack(Base):
         assert (
             hidden_dim > 1
         ), "PNAEq requires more than one hidden dimension between input_dim and output_dim."
-        if not edge_dim:
-            edge_dim = self.edge_dim
         message = PainnMessage(
             node_size=input_dim,
             x_aggregators=self.x_aggregators,
