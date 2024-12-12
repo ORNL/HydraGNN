@@ -23,6 +23,7 @@ from torch_geometric.nn.models.schnet import (
     RadiusInteractionGraph,
     ShiftedSoftplus,
 )
+from torch_geometric.typing import OptTensor
 
 from .Base import Base
 
@@ -36,6 +37,7 @@ class SCFStack(Base):
         input_args,
         conv_args,
         num_filters: int,
+        edge_dim: int,
         num_gaussians: list,
         radius: float,
         *args,
@@ -45,6 +47,7 @@ class SCFStack(Base):
         self.radius = radius
         self.max_neighbours = max_neighbours
         self.num_filters = num_filters
+        self.edge_dim = edge_dim
         self.num_gaussians = num_gaussians
         self.is_edge_model = True  # specify that mpnn can handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
@@ -84,10 +87,9 @@ class SCFStack(Base):
             self.feature_layers.append(nn.Identity())
 
     def get_conv(self, input_dim, output_dim, last_layer, edge_dim=None):
-        if not edge_dim:
-            edge_dim = self.num_gaussians
+        mlp_edge_dim = self.num_gaussians + edge_dim if edge_dim else self.num_gaussians
         mlp = Sequential(
-            Linear(edge_dim, self.num_filters),
+            Linear(mlp_edge_dim, self.num_filters),
             ShiftedSoftplus(),
             Linear(self.num_filters, self.num_filters),
         )
@@ -103,7 +105,7 @@ class SCFStack(Base):
 
         if self.use_edge_attr or (self.use_global_attn and self.is_edge_model):
             return PyGSeq(
-                self.input_args,
+                "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf, batch, edge_attr",
                 [
                     (interaction, self.conv_args + " -> inv_node_feat"),
                     (
@@ -117,13 +119,13 @@ class SCFStack(Base):
             )
         elif self.equivariance and not last_layer:
             return PyGSeq(
-                self.input_args,
+                "inv_node_feat, equiv_node_feat, batch",
                 [
                     (
                         self.interaction_graph,
                         "equiv_node_feat, batch -> edge_index, edge_weight",
                     ),
-                    (self.distance_expansion, "edge_weight -> edge_attr"),
+                    (self.distance_expansion, "edge_weight -> edge_rbf"),
                     (
                         interaction,
                         self.conv_args + " -> inv_node_feat, equiv_node_feat",
@@ -132,13 +134,13 @@ class SCFStack(Base):
             )
         else:
             return PyGSeq(
-                self.input_args,
+                "inv_node_feat, equiv_node_feat, batch",
                 [
                     (
                         self.interaction_graph,
                         "equiv_node_feat, batch -> edge_index, edge_weight",
                     ),
-                    (self.distance_expansion, "edge_weight -> edge_attr"),
+                    (self.distance_expansion, "edge_weight -> edge_rbf"),
                     (interaction, self.conv_args + " -> inv_node_feat"),
                     (
                         lambda inv_node_feat, equiv_node_feat: [
@@ -159,18 +161,28 @@ class SCFStack(Base):
             raise Exception(
                 "For SchNet if using edge attributes or edge encodings for gps, then E(3)-equivariance cannot be ensured. Please disable equivariance or edge attributes."
             )
-        elif self.use_edge_attr:
+        elif self.use_edge_attr or (self.use_global_attn and self.is_edge_model):
             edge_index = data.edge_index
             data.edge_shifts = torch.zeros(
                 (data.edge_index.size(1), 3), device=data.edge_index.device
             )  # Override. pbc edge shifts are currently not supported in positional update models
-            edge_weight = data.edge_attr.norm(dim=-1)
+            edge_vec, edge_dist = get_edge_vectors_and_lengths(
+                data.pos, edge_index, data.edge_shifts, normalize=False
+            )
+            edge_weight = edge_dist.squeeze()
 
             conv_args = {
                 "edge_index": edge_index,
                 "edge_weight": edge_weight,
-                "edge_attr": self.distance_expansion(edge_weight),
+                "edge_rbf": self.distance_expansion(edge_weight),
+                "batch": data.batch,
             }
+            if self.use_edge_attr:
+                conv_args.update(
+                    {
+                        "edge_attr": data.edge_attr,
+                    }
+                )
         else:
             conv_args = {
                 "batch": data.batch,
@@ -186,11 +198,8 @@ class SCFStack(Base):
                 if self.use_edge_attr:
                     e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
                     e = self.edge_lin(e)
-                edge_weight = e.norm(dim=-1)
                 conv_args.update(
                     {
-                        "edge_index": data.edge_index,
-                        "edge_weight": edge_weight,
                         "edge_attr": e,
                     }
                 )
@@ -253,10 +262,14 @@ class CFConv(MessagePassing):
         pos: Tensor,
         edge_index: Tensor,
         edge_weight: Tensor,
-        edge_attr: Tensor,
+        edge_rbf: Tensor,
+        edge_attr: OptTensor = None,
     ) -> Tensor:
         C = 0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0)
-        W = self.nn(edge_attr) * C.view(-1, 1)
+        if edge_attr is None:
+            W = self.nn(edge_rbf) * C.view(-1, 1)
+        else:
+            W = self.nn(torch.cat([edge_rbf, edge_attr], dim=-1)) * C.view(-1, 1)
 
         x = self.lin1(x)
 

@@ -92,7 +92,7 @@ class GPSConv(torch.nn.Module):
         self,
         inv_node_feat: Tensor,
         equiv_node_feat: Tensor,
-        batch: Optional[torch.Tensor] = None,
+        graph_batch: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Tensor:
         """Runs the forward pass of the module."""
@@ -105,13 +105,13 @@ class GPSConv(torch.nn.Module):
             h = h + inv_node_feat
             if self.norm1 is not None:
                 if self.norm_with_batch:
-                    h = self.norm1(h, batch=batch)
+                    h = self.norm1(h, batch=graph_batch)
                 else:
                     h = self.norm1(h)
             hs.append(h)
 
         # Global attention transformer-style model.
-        h, mask = to_dense_batch(inv_node_feat, batch)
+        h, mask = to_dense_batch(inv_node_feat, graph_batch)
 
         if isinstance(self.attn, torch.nn.MultiheadAttention):
             h, _ = self.attn(h, h, h, key_padding_mask=~mask, need_weights=False)
@@ -123,7 +123,7 @@ class GPSConv(torch.nn.Module):
         h = h + inv_node_feat  # Residual connection.
         if self.norm2 is not None:
             if self.norm_with_batch:
-                h = self.norm2(h, batch=batch)
+                h = self.norm2(h, batch=graph_batch)
             else:
                 h = self.norm2(h)
         hs.append(h)
@@ -133,7 +133,7 @@ class GPSConv(torch.nn.Module):
         out = out + self.mlp(out)
         if self.norm3 is not None:
             if self.norm_with_batch:
-                out = self.norm3(out, batch=batch)
+                out = self.norm3(out, batch=graph_batch)
             else:
                 out = self.norm3(out)
 
