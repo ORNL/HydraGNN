@@ -51,7 +51,7 @@ class AtomsToGraphs:
     def __init__(
         self,
         max_neigh=200,
-        radius=3.0,
+        radius=6.0,
     ):
         self.max_neigh = max_neigh
         self.radius = radius
