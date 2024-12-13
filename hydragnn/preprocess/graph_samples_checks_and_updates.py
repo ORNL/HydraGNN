@@ -16,9 +16,12 @@ from torch_geometric.data import Data
 
 import ase
 import ase.neighborlist
+import numpy as np
 import os
 
 from .dataset_descriptors import AtomFeatures
+from hydragnn.utils.distributed import get_device
+
 
 
 ## This function can be slow if datasets is too large. Use with caution.
@@ -165,65 +168,100 @@ class RadiusGraphPBC(RadiusGraph):
             edge_length,
             edge_cell_shifts,
         ) = ase.neighborlist.neighbor_list(
-            "ijdS", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+            "ijdS",
+            a=ase_atom_object,
+            cutoff=self.r,
+            self_interaction=True,  # We want self-interactions across periodic boundaries
         )
 
-        # Convert to tensors
-        edge_src = torch.LongTensor(edge_src)
-        edge_dst = torch.LongTensor(edge_dst)
-        edge_length = torch.tensor(edge_length, dtype=torch.float)
-        edge_cell_shifts = torch.tensor(edge_cell_shifts, dtype=torch.float)
+        # Eliminate true self-loops
+        if not self.loop:
+            (
+                edge_src,
+                edge_dst,
+                edge_length,
+                edge_cell_shifts,
+            ) = self._remove_true_self_loops(
+                edge_src, edge_dst, edge_length, edge_cell_shifts
+            )
 
-        # Limit neighbors per node using the helper function
-        edge_src, edge_length, edge_dst, edge_cell_shifts = self._limit_neighbors(
-            edge_src, edge_length, self.max_num_neighbors, edge_dst, edge_cell_shifts
+        # Limit neighbors per node
+        edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
+            edge_src, edge_dst, edge_length, edge_cell_shifts, self.max_num_neighbors
         )
 
         # Assign to data
+        device = get_device(data)
         data.edge_index = torch.stack(
-            [edge_src, edge_dst],
+            [
+                torch.tensor(edge_src, dtype=torch.long, device=device),
+                torch.tensor(edge_dst, dtype=torch.long, device=device),
+            ],
             dim=0,  # Shape: [2, n_edges]
         )
-        data.edge_attr = edge_length.unsqueeze(1)  # Shape: [n_edges, 1]
+        data.edge_attr = torch.tensor(
+            edge_length, dtype=torch.float, device=device
+        ).unsqueeze(
+            1
+        )  # Shape: [n_edges, 1]
         # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
         data.edge_shifts = torch.matmul(
-            edge_cell_shifts, data.cell.float()
+            torch.tensor(edge_cell_shifts, dtype=torch.float, device=device),
+            data.cell.float(),
         )  # Shape: [n_edges, 3]
 
         return data
 
-    # Function to keep only the closest `max_num_neighbors` per node
-    def _limit_neighbors(
-        self, edge_src, edge_length, max_num_neighbors, *edge_var_args
+    def _remove_true_self_loops(
+        self, edge_src, edge_dst, edge_length, edge_cell_shifts
     ):
-        num_edges = edge_src.size(0)
+        # Create mask to remove true self loops (i.e. the same source and destination node, with no shifts across periodic boundaries)
+        true_self_edges = edge_src == edge_dst
+        true_self_edges &= np.all(edge_cell_shifts == 0, axis=1)
+        mask = ~true_self_edges
 
-        # Sort primarily by source node and secondarily by edge length, then apply to edge args
-        sorted_indices = lexsort([edge_length, edge_src])
-        edge_src_sorted, edge_length_sorted = (
+        # Apply the mask and return
+        return (
+            edge_src[mask],
+            edge_dst[mask],
+            edge_length[mask],
+            edge_cell_shifts[mask],
+        )
+
+    def _limit_neighbors(
+        self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors
+    ):
+        # Lexsort primarily by src node, and then by edge_dist
+        sorted_indices = np.lexsort((edge_length, edge_src))
+        (
+            edge_src_sorted,
+            edge_dst_sorted,
+            edge_length_sorted,
+            edge_cell_shifts_sorted,
+        ) = (
             edge_src[sorted_indices],
+            edge_dst[sorted_indices],
             edge_length[sorted_indices],
+            edge_cell_shifts[sorted_indices],
         )
-        edge_var_args_sorted = [
-            edge_var_arg[sorted_indices] for edge_var_arg in edge_var_args
-        ]
 
-        # Get counts of neighbors and create a mask to keep only `max_num_neighbors` per node
-        _, counts = edge_src_sorted.unique_consecutive(return_counts=True)
-        repeated_src_start_indices = torch.repeat_interleave(
-            counts.cumsum(0) - counts, counts
+        # Create a mask to keep only `max_num_neighbors` per node
+        unique_src, counts = np.unique(edge_src, return_counts=True)
+        mask = np.zeros_like(edge_src, dtype=bool)
+        start_idx = 0
+        for src, count in zip(unique_src, counts):
+            end_idx = start_idx + count
+            # Keep only the first max_num_neighbors for this src
+            mask[start_idx : start_idx + min(count, max_num_neighbors)] = True
+            start_idx = end_idx
+
+        # Apply the mask and return
+        return (
+            edge_src_sorted[mask],
+            edge_dst_sorted[mask],
+            edge_length_sorted[mask],
+            edge_cell_shifts_sorted[mask],
         )
-        src_node_count = torch.arange(num_edges) - repeated_src_start_indices
-        mask = src_node_count < max_num_neighbors
-
-        # Filter edge args
-        edge_src_limited = edge_src_sorted[mask]
-        edge_length_limited = edge_length_sorted[mask]
-        edge_var_args_limited = [
-            edge_var_arg[mask] for edge_var_arg in edge_var_args_sorted
-        ]
-
-        return [edge_src_limited] + [edge_length_limited] + edge_var_args_limited
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
