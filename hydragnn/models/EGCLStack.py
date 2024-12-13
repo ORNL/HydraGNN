@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -33,6 +33,7 @@ class EGCLStack(Base):
         self.edge_dim = (
             0 if edge_attr_dim is None else edge_attr_dim
         )  # Must be named edge_dim to trigger use by Base
+        self.is_edge_model = True  # specify that mpnn can handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         assert (
@@ -43,21 +44,38 @@ class EGCLStack(Base):
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
         self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, last_layer)
+            self._apply_global_attn(
+                self.get_conv(
+                    self.embed_dim,
+                    self.hidden_dim,
+                    last_layer,
+                    edge_dim=self.edge_embed_dim,
+                )
+            )
         )
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim,
+                        self.hidden_dim,
+                        last_layer,
+                        edge_dim=self.edge_embed_dim,
+                    )
+                )
+            )
             self.feature_layers.append(nn.Identity())
 
-    def get_conv(self, input_dim, output_dim, last_layer=False):
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        if not edge_dim:
+            edge_dim = self.edge_dim
         egcl = E_GCL(
             input_channels=input_dim,
             output_channels=output_dim,
             hidden_channels=self.hidden_dim,
-            edge_attr_dim=self.edge_dim,
+            edge_attr_dim=edge_dim,
             equivariant=self.equivariance and not last_layer,
         )
 
@@ -107,7 +125,23 @@ class EGCLStack(Base):
                 "edge_attr": None,
             }
 
-        return data.x, data.pos, conv_args
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args
+        else:
+            return data.x, data.pos, conv_args
 
     def __str__(self):
         return "EGCLStack"

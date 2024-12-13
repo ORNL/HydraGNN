@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -44,9 +44,8 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
         config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
     )
-
     PNA_models = ["PNA", "PNAPlus", "PNAEq"]
-    if config["NeuralNetwork"]["Architecture"]["model_type"] in PNA_models:
+    if config["NeuralNetwork"]["Architecture"]["mpnn_type"] in PNA_models:
         if hasattr(train_loader.dataset, "pna_deg"):
             ## Use max neighbours used in the datasets.
             deg = torch.tensor(train_loader.dataset.pna_deg)
@@ -57,7 +56,16 @@ def update_config(config, train_loader, val_loader, test_loader):
     else:
         config["NeuralNetwork"]["Architecture"]["pna_deg"] = None
 
-    if config["NeuralNetwork"]["Architecture"]["model_type"] == "MACE":
+    # Set CGCNN hidden dim to input dim if global attention is not being used
+    if (
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "CGCNN"
+        and not config["NeuralNetwork"]["Architecture"]["global_attn_engine"]
+    ):
+        config["NeuralNetwork"]["Architecture"]["hidden_dim"] = config["NeuralNetwork"][
+            "Architecture"
+        ]["input_dim"]
+
+    if config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "MACE":
         if hasattr(train_loader.dataset, "avg_num_neighbors"):
             ## Use avg neighbours used in the dataset.
             avg_num_neighbors = torch.tensor(train_loader.dataset.avg_num_neighbors)
@@ -139,7 +147,7 @@ def update_config_equivariance(config):
     equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
     if "equivariance" in config and config["equivariance"]:
         assert (
-            config["model_type"] in equivariant_models
+            config["mpnn_type"] in equivariant_models
         ), "E(3) equivariance can only be ensured for EGNN, SchNet, PNAEq, PAINN, and MACE."
     elif "equivariance" not in config:
         config["equivariance"] = False
@@ -162,10 +170,10 @@ def update_config_edge_dim(config):
     ]
     if "edge_features" in config and config["edge_features"]:
         assert (
-            config["model_type"] in edge_models
-        ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE"
+            config["mpnn_type"] in edge_models
+        ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
         config["edge_dim"] = len(config["edge_features"])
-    elif config["model_type"] == "CGCNN":
+    elif config["mpnn_type"] == "CGCNN":
         # CG always needs an integer edge_dim
         # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
         config["edge_dim"] = 0
@@ -282,7 +290,7 @@ def update_config_minmax(dataset_path, config):
 
 def get_log_name_config(config):
     return (
-        config["NeuralNetwork"]["Architecture"]["model_type"]
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"]
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-ncl-"

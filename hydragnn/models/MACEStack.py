@@ -139,6 +139,7 @@ class MACEStack(Base):
         # NOTE the super() call is done at this point because some of the arguments are needed for the initialization of the
         # Base class. For example, _init_ calls _init_conv, which requires self.edge_attr_irreps, self.node_attr_irreps, etc.
         # Other arguments such as the radial type may be moved before the super() call just for streamlining the code.
+        self.is_edge_model = True  # specify that mpnn can handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         ############################ Post Inheritance ############################
@@ -219,12 +220,14 @@ class MACEStack(Base):
 
         # First Conv and Decoder
         self.graph_convs.append(
-            self.get_conv(
-                self.hidden_dim,
-                self.hidden_dim,
-                first_layer=True,
-                last_layer=last_layer,
-            )  # Node features are already converted to hidden_dim via one-hot embedding
+            self._apply_global_attn(
+                self.get_conv(
+                    self.hidden_dim,
+                    self.hidden_dim,
+                    first_layer=True,
+                    last_layer=last_layer,
+                )  # Node features are already converted to hidden_dim via one-hot embedding
+            )
         )
         irreps = hidden_irreps if not last_layer else final_hidden_irreps
         self.multihead_decoders.append(
@@ -244,7 +247,11 @@ class MACEStack(Base):
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
             self.graph_convs.append(
-                self.get_conv(self.hidden_dim, self.hidden_dim, last_layer=last_layer)
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim, self.hidden_dim, last_layer=last_layer
+                    )
+                )
             )
             irreps = hidden_irreps if not last_layer else final_hidden_irreps
             self.multihead_decoders.append(
@@ -441,11 +448,27 @@ class MACEStack(Base):
             "edge_index": data.edge_index,
         }
 
-        return (
-            data.node_features[:, : self.hidden_dim],
-            data.node_features[:, self.hidden_dim :],
-            conv_args,
-        )
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((data.node_features, x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((data.edge_features, e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_features": e})
+            return (x[:, : self.hidden_dim], x[:, self.hidden_dim :], conv_args)
+        else:
+            return (
+                data.node_features[:, : self.hidden_dim],
+                data.node_features[:, self.hidden_dim :],
+                conv_args,
+            )
 
     def _multihead(self):
         # NOTE Multihead is skipped as it's an integral part of MACE's architecture to have a decoder after every layer,

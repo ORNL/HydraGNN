@@ -1,7 +1,9 @@
 import os
+import pdb
 import json
 import torch
 import torch_geometric
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
 
 # deprecated in torch_geometric 2.0
@@ -14,7 +16,7 @@ import hydragnn
 
 
 # Update each sample prior to loading.
-def md17_pre_transform(data, compute_edges):
+def md17_pre_transform(data, compute_edges, transform):
     # Set descriptor as element type.
     data.x = data.z.float().view(-1, 1)
     # Only predict energy (index 0 of 2 properties) for this run.
@@ -22,6 +24,11 @@ def md17_pre_transform(data, compute_edges):
     graph_features_dim = [1]
     node_feature_dim = [1]
     data = compute_edges(data)
+    data = transform(data)
+    # gps requires relative edge features, introduced rel_lapPe as edge encodings
+    source_pe = data.pe[data.edge_index[0]]
+    target_pe = data.pe[data.edge_index[1]]
+    data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference
     return data
 
 
@@ -30,7 +37,7 @@ def md17_pre_filter(data):
     return torch.rand(1) < 0.25
 
 
-def main(model_type=None):
+def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     # FIX random seed
     random_state = 0
     torch.manual_seed(random_state)
@@ -47,18 +54,33 @@ def main(model_type=None):
     arch_config = config["NeuralNetwork"]["Architecture"]
 
     # If a model type is provided, update the configuration
-    if model_type:
-        config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    if global_attn_engine:
+        config["NeuralNetwork"]["Architecture"][
+            "global_attn_engine"
+        ] = global_attn_engine
+
+    if global_attn_type:
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+
+    if mpnn_type:
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
 
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
-    log_name = f"md17_test_{model_type}" if model_type else "md17_test"
+    log_name = f"md17_test_{mpnn_type}" if mpnn_type else "md17_test"
     # Enable print to log file.
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
     # Preprocess configurations for edge computation
     compute_edges = hydragnn.preprocess.get_radius_graph_config(arch_config)
+
+    # LPE
+    transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
 
     # Fix for MD17 datasets
     torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
@@ -66,7 +88,7 @@ def main(model_type=None):
     dataset = torch_geometric.datasets.MD17(
         root="dataset/md17",
         name="uracil",
-        pre_transform=lambda data: md17_pre_transform(data, compute_edges),
+        pre_transform=lambda data: md17_pre_transform(data, compute_edges, transform),
         pre_filter=md17_pre_filter,
     )
     train, val, test = hydragnn.preprocess.split_dataset(
@@ -115,10 +137,25 @@ if __name__ == "__main__":
         description="Run MD17 example with an optional model type."
     )
     parser.add_argument(
-        "--model_type",
+        "--mpnn_type",
         type=str,
         default=None,
         help="Specify the model type for training (default: None).",
     )
+
+    parser.add_argument(
+        "--global_attn_engine",
+        type=str,
+        default=None,
+        help="Specify if global attention is being used (default: None).",
+    )
+
+    parser.add_argument(
+        "--global_attn_type",
+        type=str,
+        default=None,
+        help="Specify the global attention type (default: None).",
+    )
+
     args = parser.parse_args()
-    main(model_type=args.model_type)
+    main(mpnn_type=args.mpnn_type)

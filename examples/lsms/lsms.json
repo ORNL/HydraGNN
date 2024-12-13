@@ -21,7 +21,7 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "model_type": "PNA",
+            "mpnn_type": "PNA",
             "radius": 7,
             "max_neighbours": 100,
             "periodic_boundary_conditions": false,

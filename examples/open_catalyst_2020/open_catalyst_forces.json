@@ -4,7 +4,7 @@
     },
    "NeuralNetwork": {
         "Architecture": {
-            "model_type": "EGNN",
+            "mpnn_type": "EGNN",
             "equivariance": true,
             "radius": 5.0,
             "max_neighbours": 100000,

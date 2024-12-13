@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -63,21 +63,21 @@ class PNAPlusStack(Base):
         self.envelope_exponent = envelope_exponent
         self.num_radial = num_radial
         self.radius = radius
-
+        self.is_edge_model = True  # specify that mpnn can handle edge features
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = BesselBasisLayer(
             self.num_radial, self.radius, self.envelope_exponent
         )
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
         pna = PNAConv(
             in_channels=input_dim,
             out_channels=output_dim,
             aggregators=self.aggregators,
             scalers=self.scalers,
             deg=self.deg,
-            edge_dim=self.edge_dim,
+            edge_dim=edge_dim,
             num_radial=self.num_radial,
             pre_layers=1,
             post_layers=1,
@@ -119,7 +119,23 @@ class PNAPlusStack(Base):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
-        return data.x, data.pos, conv_args
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args
+        else:
+            return data.x, data.pos, conv_args
 
     def __str__(self):
         return "PNAStack"

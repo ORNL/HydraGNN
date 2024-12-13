@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -20,9 +20,10 @@ from .Base import Base
 
 class SAGEStack(Base):
     def __init__(self, *args, **kwargs):
+        self.is_edge_model = False  # specify that mpnn cannot handle edge features
         super().__init__(*args, **kwargs)
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
         sage = SAGEConv(
             in_channels=input_dim,
             out_channels=output_dim,
