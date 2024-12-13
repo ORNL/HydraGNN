@@ -74,8 +74,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         # NOTE Open Catalyst 2022 dataset has PBC:
         #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
-        self.radius_graph = RadiusGraph(3.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(3.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
@@ -189,7 +189,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
         return data_list
 
     def check_forces_values(self, forces):
-
         # Calculate the L2 norm for each row
         norms = torch.norm(forces, p=2, dim=1)
         # Check if all norms are less than the threshold
@@ -441,7 +440,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
