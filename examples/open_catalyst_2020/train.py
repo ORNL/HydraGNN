@@ -89,7 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=3.0)
+        a2g = AtomsToGraphs(max_neigh=5, radius=6.0)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -110,7 +110,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
         random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
-
         # Calculate the L2 norm for each row
         norms = torch.norm(forces, p=2, dim=1)
         # Check if all norms are less than the threshold
@@ -179,7 +178,7 @@ if __name__ == "__main__":
         dest="format",
         const="pickle",
     )
-    parser.set_defaults(format="adios")
+    parser.set_defaults(format="pickle")
     args = parser.parse_args()
 
     graph_feature_names = ["energy"]
@@ -359,7 +358,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
