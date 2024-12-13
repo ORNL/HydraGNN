@@ -11,8 +11,8 @@
 
 import torch
 from torch_geometric.transforms import RadiusGraph
-from torch_geometric.utils import remove_self_loops, degree, lexsort
 from torch_geometric.data import Data
+from torch_geometric.utils import remove_self_loops, degree
 
 import ase
 import ase.neighborlist
@@ -215,7 +215,7 @@ class RadiusGraphPBC(RadiusGraph):
     def _remove_true_self_loops(
         self, edge_src, edge_dst, edge_length, edge_cell_shifts
     ):
-        # Create mask to remove true self loops (i.e. the same source and destination node, with no shifts across periodic boundaries)
+        # Create a mask to remove true self loops (i.e. the same source and destination node, with no shifts across periodic boundaries)
         true_self_edges = edge_src == edge_dst
         true_self_edges &= np.all(edge_cell_shifts == 0, axis=1)
         mask = ~true_self_edges
@@ -233,17 +233,10 @@ class RadiusGraphPBC(RadiusGraph):
     ):
         # Lexsort primarily by src node, and then by edge_dist
         sorted_indices = np.lexsort((edge_length, edge_src))
-        (
-            edge_src_sorted,
-            edge_dst_sorted,
-            edge_length_sorted,
-            edge_cell_shifts_sorted,
-        ) = (
-            edge_src[sorted_indices],
-            edge_dst[sorted_indices],
-            edge_length[sorted_indices],
-            edge_cell_shifts[sorted_indices],
-        )
+        edge_src, edge_dst, edge_length, edge_cell_shifts = [
+            edge_arg[sorted_indices]
+            for edge_arg in [edge_src, edge_dst, edge_length, edge_cell_shifts]
+        ]
 
         # Create a mask to keep only `max_num_neighbors` per node
         unique_src, counts = np.unique(edge_src, return_counts=True)
@@ -257,10 +250,10 @@ class RadiusGraphPBC(RadiusGraph):
 
         # Apply the mask and return
         return (
-            edge_src_sorted[mask],
-            edge_dst_sorted[mask],
-            edge_length_sorted[mask],
-            edge_cell_shifts_sorted[mask],
+            edge_src[mask],
+            edge_dst[mask],
+            edge_length[mask],
+            edge_cell_shifts[mask],
         )
 
     def __repr__(self) -> str:
