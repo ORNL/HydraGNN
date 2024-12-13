@@ -89,7 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=5, radius=6.0)
+        a2g = AtomsToGraphs(max_neigh=50, radius=6.0)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         dest="format",
         const="pickle",
     )
-    parser.set_defaults(format="pickle")
+    parser.set_defaults(format="adios")
     args = parser.parse_args()
 
     graph_feature_names = ["energy"]
