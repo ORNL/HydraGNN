@@ -23,12 +23,13 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.distributed import get_device
+from hydragnn.utils.distributed import get_device, setup_ddp
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
 from hydragnn.utils.input_config_parsing.config_utils import (
     update_config,
 )
+from hydragnn.utils.print import setup_log
 from hydragnn.models.create import create_model_config
 from hydragnn.preprocess import create_dataloaders
 
@@ -101,6 +102,25 @@ def getcolordensity(xdata, ydata):
     return hist2d_norm
 
 
+from sklearn.metrics import r2_score
+
+
+def get_r2(energy_true_list, energy_pred_list, forces_true_list, forces_pred_list):
+    # Convert inputs to numpy arrays
+    energy_true_list = np.array(energy_true_list)
+    energy_pred_list = np.array(energy_pred_list)
+    forces_true_list = np.array(forces_true_list)
+    forces_pred_list = np.array(forces_pred_list)
+
+    # Compute R^2 for energy
+    energy_r2 = r2_score(energy_true_list, energy_pred_list)
+
+    # Compute R^2 for forces (flatten both arrays for 1D comparison)
+    forces_r2 = r2_score(forces_true_list.flatten(), forces_pred_list.flatten())
+
+    return energy_r2, forces_r2
+
+
 if __name__ == "__main__":
 
     modelname = "LJ"
@@ -132,10 +152,10 @@ if __name__ == "__main__":
     input_filename = os.path.join(dirpwd, args.inputfile)
     with open(input_filename, "r") as f:
         config = json.load(f)
-    hydragnn.utils.print.setup_log(get_log_name_config(config))
+    setup_log(get_log_name_config(config))
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
+    comm_size, rank = setup_ddp()
     ##################################################################################################################
     comm = MPI.COMM_WORLD
 
@@ -182,7 +202,7 @@ if __name__ == "__main__":
     variable_index = 0
     # for output_name, output_type, output_dim in zip(config["NeuralNetwork"]["Variables_of_interest"]["output_names"], config["NeuralNetwork"]["Variables_of_interest"]["type"], config["NeuralNetwork"]["Variables_of_interest"]["output_dim"]):
 
-    test_MAE = 0.0
+    # test_MAE = 0.0
 
     num_samples = len(testset)
     energy_true_list = []
@@ -196,7 +216,7 @@ if __name__ == "__main__":
             0
         ]  # Note that this is sensitive to energy and forces prediction being single-task (current requirement)
         energy_pred = torch.sum(node_energy_pred, dim=0).float()
-        test_MAE += torch.norm(energy_pred - data.energy, p=1).item() / len(testset)
+        # test_MAE += torch.norm(energy_pred - data.energy, p=1).item() / len(testset)
         # predicted.backward(retain_graph=True)
         # gradients = data.pos.grad
         grads_energy = torch.autograd.grad(
@@ -211,6 +231,12 @@ if __name__ == "__main__":
         forces_pred_list.extend((-grads_energy).flatten().tolist())
         forces_true_list.extend(data.forces.flatten().tolist())
 
+    test_energy_r2, test_force_r2 = get_r2(
+        energy_true_list, energy_pred_list, forces_true_list, forces_pred_list
+    )
+    print(f"Test R2 energy: ", test_energy_r2)
+    print(f"Test R2 forces: ", test_force_r2)
+
     hist2d_norm = getcolordensity(energy_true_list, energy_pred_list)
 
     fig, ax = plt.subplots()
@@ -220,12 +246,12 @@ if __name__ == "__main__":
     plt.colorbar()
     plt.xlabel("True values")
     plt.ylabel("Predicted values")
-    plt.title(f"energy")
+    plt.title(f"Energy")
     plt.draw()
     plt.tight_layout()
     plt.savefig(f"./energy_Scatterplot" + ".png", dpi=400)
 
-    print(f"Test MAE energy: ", test_MAE)
+    # print(f"Test MAE energy: ", test_MAE)
 
     hist2d_norm = getcolordensity(forces_pred_list, forces_true_list)
     fig, ax = plt.subplots()
