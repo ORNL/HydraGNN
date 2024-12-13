@@ -186,11 +186,14 @@ class LJDataset(AbstractBaseDataset):
             .unsqueeze(0)
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-            pbc=[
-                True,
-                True,
-                True,
-            ],  # LJ example always has periodic boundary conditions
+            pbc=torch.tensor(
+                [
+                    True,
+                    True,
+                    True,
+                ],
+                dtype=torch.bool,
+            ),  # LJ example always has periodic boundary conditions
         )
 
         # Create pbc edges and lengths
@@ -352,30 +355,21 @@ def create_configuration(
     data.cell = torch.diag(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
-    data.pbc = [True, True, True]
+    data.pbc = torch.tensor([True, True, True], dtype=torch.bool)
+    data.x = torch.cat([atom_types, positions], dim=1)
 
     create_graph_connectivity_pbc = get_radius_graph_pbc(
         radius_cutoff, max_num_neighbors
     )
     data = create_graph_connectivity_pbc(data)
 
-    atomic_descriptors = torch.cat(
-        (
-            atom_types,
-            positions,
-        ),
-        1,
-    )
-
-    data.x = atomic_descriptors
-
     data = atomic_structure_handler.compute(data)
 
     total_energy = torch.sum(data.x[:, 4])
     energy_per_atom = total_energy / number_nodes
 
-    total_energy_str = numpy.array2string(total_energy.detach().numpy())
-    energy_per_atom_str = numpy.array2string(energy_per_atom.detach().numpy())
+    total_energy_str = numpy.array2string(total_energy.detach().cpu().numpy())
+    energy_per_atom_str = numpy.array2string(energy_per_atom.detach().cpu().numpy())
     filetxt = total_energy_str + "\n" + energy_per_atom_str
 
     for index in range(0, 3):

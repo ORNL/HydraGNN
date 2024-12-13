@@ -141,8 +141,6 @@ class RadiusGraphPBC(RadiusGraph):
     """
 
     def __call__(self, data):
-        data.edge_attr = None
-        data.edge_shifts = None
         assert (
             "batch" not in data
         ), "Periodic boundary conditions not currently supported on batches."
@@ -152,6 +150,22 @@ class RadiusGraphPBC(RadiusGraph):
         assert hasattr(
             data, "pbc"
         ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
+        # Ensure data consistency
+        if not isinstance(data.pos, torch.Tensor):
+            data.pos = torch.tensor(data.pos, dtype=torch.float)
+        device = (
+            data.pos.device
+        )  # Have canonical device obtained from `data.pos` in-line with PyG RadiusGraph
+        if not isinstance(data.cell, torch.Tensor):
+            data.cell = torch.tensor(data.cell, dtype=torch.float, device=device)
+        if not isinstance(data.pbc, torch.Tensor):
+            data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
+        # Ensure device consistency
+        if data.cell.device != device:
+            data.cell = data.cell.to(device)
+        if data.pbc.device != device:
+            data.pbc = data.pbc.to(device)
+
         ase_atom_object = ase.Atoms(
             positions=data.pos,
             cell=data.cell,
@@ -191,7 +205,6 @@ class RadiusGraphPBC(RadiusGraph):
         )
 
         # Assign to data
-        device = get_device(data)
         data.edge_index = torch.stack(
             [
                 torch.tensor(edge_src, dtype=torch.long, device=device),
@@ -207,7 +220,7 @@ class RadiusGraphPBC(RadiusGraph):
         # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
         data.edge_shifts = torch.matmul(
             torch.tensor(edge_cell_shifts, dtype=torch.float, device=device),
-            data.cell.float(),
+            data.cell,
         )  # Shape: [n_edges, 3]
 
         return data
