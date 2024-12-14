@@ -23,7 +23,6 @@ from .dataset_descriptors import AtomFeatures
 from hydragnn.utils.distributed import get_device
 
 
-
 ## This function can be slow if datasets is too large. Use with caution.
 ## Recommend to use check_if_graph_size_variable_dist
 def check_if_graph_size_variable(train_loader, val_loader, test_loader):
