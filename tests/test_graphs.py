@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -23,7 +23,9 @@ from hydragnn.utils.input_config_parsing.config_utils import merge_config
 
 # Main unit test function called by pytest wrappers.
 def unittest_train_model(
-    model_type,
+    mpnn_type,
+    global_attn_engine,
+    global_attn_type,
     ci_input,
     use_lengths,
     overwrite_data=False,
@@ -38,7 +40,9 @@ def unittest_train_model(
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
     with open(config_file, "r") as f:
         config = json.load(f)
-    config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+    config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+    config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
 
     # Overwrite config settings if provided
     if overwrite_config:
@@ -77,7 +81,7 @@ def unittest_train_model(
 
     # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
     # hence here we decrease the loss weight coefficient for graph-level head in MFC.
-    if model_type == "MFC" and ci_input == "ci_multihead.json":
+    if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
         config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
 
     # Only run with edge lengths for models that support them.
@@ -123,7 +127,7 @@ def unittest_train_model(
 
     # Since the config file uses PNA already, test the file overload here.
     # All the other models need to use the locally modified dictionary.
-    if model_type == "PNA" and not use_lengths:
+    if mpnn_type == "PNA" and not use_lengths:
         hydragnn.run_training(config_file, use_deepspeed)
     else:
         hydragnn.run_training(config, use_deepspeed)
@@ -160,19 +164,18 @@ def unittest_train_model(
         thresholds["PNAPlus"] = [0.2, 0.15]
     if ci_input == "ci_conv_head.json":
         thresholds["GIN"] = [0.25, 0.40]
+        thresholds["SchNet"] = [0.30, 0.30]
 
     verbosity = 2
 
     for ihead in range(len(true_values)):
         error_head_mse = error_mse_task[ihead]
         error_str = (
-            str("{:.6f}".format(error_head_mse))
-            + " < "
-            + str(thresholds[model_type][0])
+            str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
         )
         hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
         assert (
-            error_head_mse < thresholds[model_type][0]
+            error_head_mse < thresholds[mpnn_type][0]
         ), "Head RMSE checking failed for " + str(ihead)
 
         head_true = true_values[ihead]
@@ -183,21 +186,21 @@ def unittest_train_model(
         error_str = (
             "{:.6f}".format(sample_mean_abs_error)
             + " < "
-            + str(thresholds[model_type][1])
+            + str(thresholds[mpnn_type][1])
         )
         assert (
-            sample_mean_abs_error < thresholds[model_type][1]
+            sample_mean_abs_error < thresholds[mpnn_type][1]
         ), "MAE sample checking failed!"
 
     # Check RMSE error
-    error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[model_type][0])
+    error_str = str("{:.6f}".format(error)) + " < " + str(thresholds[mpnn_type][0])
     hydragnn.utils.print.print_distributed(verbosity, "total: " + error_str)
-    assert error < thresholds[model_type][0], "Total RMSE checking failed!" + str(error)
+    assert error < thresholds[mpnn_type][0], "Total RMSE checking failed!" + str(error)
 
 
 # Test across all models with both single/multihead
 @pytest.mark.parametrize(
-    "model_type",
+    "mpnn_type",
     [
         "SAGE",
         "GIN",
@@ -215,27 +218,57 @@ def unittest_train_model(
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(model_type, ci_input, overwrite_data=False):
-    unittest_train_model(model_type, ci_input, False, overwrite_data)
+def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+    unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+
+# Test models that allow edge attributes
+@pytest.mark.parametrize(
+    "mpnn_type",
+    ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
+)
+def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
+    unittest_train_model(mpnn_type, None, None, "ci.json", True, overwrite_data)
+
+
+# Test models that allow edge attributes with global attention mechanisms
+@pytest.mark.parametrize(
+    "global_attn_engine",
+    ["GPS"],
+)
+@pytest.mark.parametrize("global_attn_type", ["multihead"])
+@pytest.mark.parametrize(
+    "mpnn_type",
+    ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
+)
+def pytest_train_model_lengths_global_attention(
+    mpnn_type, global_attn_engine, global_attn_type, overwrite_data=False
+):
+    unittest_train_model(
+        mpnn_type, global_attn_engine, global_attn_type, "ci.json", True, overwrite_data
+    )
 
 
 # Test only models
 @pytest.mark.parametrize(
-    "model_type", ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "EGNN", "MACE"]
+    "mpnn_type",
+    ["MACE"],
 )
-def pytest_train_model_lengths(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci.json", True, overwrite_data)
+def pytest_train_mace_model_lengths(mpnn_type, overwrite_data=False):
+    unittest_train_model(mpnn_type, None, None, "ci.json", True, overwrite_data)
 
 
 # Test across equivariant models
-@pytest.mark.parametrize("model_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
-def pytest_train_equivariant_model(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_equivariant.json", False, overwrite_data)
+@pytest.mark.parametrize("mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
+def pytest_train_equivariant_model(mpnn_type, overwrite_data=False):
+    unittest_train_model(
+        mpnn_type, None, None, "ci_equivariant.json", False, overwrite_data
+    )
 
 
 # Test vector output
 @pytest.mark.parametrize(
-    "model_type",
+    "mpnn_type",
     [
         "GAT",
         "PNA",
@@ -246,12 +279,14 @@ def pytest_train_equivariant_model(model_type, overwrite_data=False):
         "PNAEq",
     ],
 )
-def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_vectoroutput.json", True, overwrite_data)
+def pytest_train_model_vectoroutput(mpnn_type, overwrite_data=False):
+    unittest_train_model(
+        mpnn_type, None, None, "ci_vectoroutput.json", True, overwrite_data
+    )
 
 
 @pytest.mark.parametrize(
-    "model_type",
+    "mpnn_type",
     [
         "SAGE",
         "GIN",
@@ -266,5 +301,7 @@ def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
         "PAINN",
     ],
 )
-def pytest_train_model_conv_head(model_type, overwrite_data=False):
-    unittest_train_model(model_type, "ci_conv_head.json", False, overwrite_data)
+def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+    unittest_train_model(
+        mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+    )

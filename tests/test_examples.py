@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -11,12 +11,17 @@
 
 import os
 import pytest
-
+import pdb
 import subprocess
 
 
 @pytest.mark.parametrize(
-    "model_type",
+    "global_attn_engine",
+    ["GPS"],
+)
+@pytest.mark.parametrize("global_attn_type", ["multihead"])
+@pytest.mark.parametrize(
+    "mpnn_type",
     [
         "SAGE",
         "GIN",
@@ -33,12 +38,22 @@ import subprocess
 )
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples_energy(example, model_type):
+def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
-
-    # Add the --model_type argument for the subprocess call
-    return_code = subprocess.call(["python", file_path, "--model_type", model_type])
+    # Add the --mpnn_type argument for the subprocess call
+    return_code = subprocess.call(
+        [
+            "python",
+            file_path,
+            "--mpnn_type",
+            mpnn_type,
+            "--global_attn_engine",
+            global_attn_engine,
+            "--global_attn_type",
+            global_attn_type,
+        ]
+    )
 
     # Check the file ran without error.
     assert return_code == 0
@@ -48,7 +63,7 @@ def pytest_examples_energy(example, model_type):
 #      there to be a positional gradient via using
 #      positions in torch operations for message-passing.
 @pytest.mark.parametrize(
-    "model_type",
+    "mpnn_type",
     [
         "PNAPlus",
         "SchNet",
@@ -61,12 +76,12 @@ def pytest_examples_energy(example, model_type):
 )
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.mpi_skip()
-def pytest_examples_grad_forces(example, model_type):
+def pytest_examples_grad_forces(example, mpnn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
 
-    # Add the --model_type argument for the subprocess call
-    return_code = subprocess.call(["python", file_path, "--model_type", model_type])
+    # Add the --mpnn_type argument for the subprocess call
+    return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
 
     # Check the file ran without error.
     assert return_code == 0

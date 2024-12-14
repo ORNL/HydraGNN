@@ -11,8 +11,9 @@
             "radius": 7,
             "max_neighbours": 5,
             "periodic_boundary_conditions": false,
-            "pe_dim": 2,
+            "pe_dim": 6,
             "global_attn_heads": 8,
+            "edge_features": ["length"],
             "hidden_dim": 64,
             "num_conv_layers": 2,
             "int_emb_size": 32,
@@ -46,12 +47,13 @@
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 2,
+            "num_epoch": 20,
             "perc_train": 0.7,
             "loss_function_type": "mse",
             "batch_size": 64,
+            "Checkpoint": 1,
             "continue": 0,
-            "startfrom": "existing_model",
+            "startfrom": "zinc_test",
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 1e-3

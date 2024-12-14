@@ -4,7 +4,7 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "model_type": "PNA",
+            "mpnn_type": "PNA",
             "max_neighbours": 20,
             "hidden_dim": 55,
             "num_conv_layers": 6,

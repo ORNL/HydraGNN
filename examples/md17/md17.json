@@ -5,11 +5,15 @@
     "NeuralNetwork": {
         "Profile": {"enable": 1},
         "Architecture": {
-            "model_type": "GIN",
+            "global_attn_engine": "GPS",
+            "global_attn_type": "multihead",
+            "mpnn_type": "SchNet",
             "radius": 7,
             "max_neighbours": 5,
             "periodic_boundary_conditions": false,
-            "hidden_dim": 5,
+            "pe_dim": 6,
+            "global_attn_heads": 8,
+            "hidden_dim": 64,
             "num_conv_layers": 6,
             "int_emb_size": 32,
             "out_emb_size": 16,
