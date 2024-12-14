@@ -43,13 +43,14 @@ except ImportError:
 from LJ_data import info
 
 import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score
 
 plt.rcParams.update({"font.size": 16})
 
 
 def get_log_name_config(config):
     return (
-        config["NeuralNetwork"]["Architecture"]["model_type"]
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"]
         + "-r-"
         + str(config["NeuralNetwork"]["Architecture"]["radius"])
         + "-ncl-"
@@ -180,11 +181,6 @@ if __name__ == "__main__":
     load_existing_model(model, modelname, path="./logs/")
     model.eval()
 
-    variable_index = 0
-    # for output_name, output_type, output_dim in zip(config["NeuralNetwork"]["Variables_of_interest"]["output_names"], config["NeuralNetwork"]["Variables_of_interest"]["type"], config["NeuralNetwork"]["Variables_of_interest"]["output_dim"]):
-
-    test_MAE = 0.0
-
     num_samples = len(testset)
     energy_true_list = []
     energy_pred_list = []
@@ -197,9 +193,6 @@ if __name__ == "__main__":
             0
         ]  # Note that this is sensitive to energy and forces prediction being single-task (current requirement)
         energy_pred = torch.sum(node_energy_pred, dim=0).float()
-        test_MAE += torch.norm(energy_pred - data.energy, p=1).item() / len(testset)
-        # predicted.backward(retain_graph=True)
-        # gradients = data.pos.grad
         grads_energy = torch.autograd.grad(
             outputs=energy_pred,
             inputs=data.pos,
@@ -211,6 +204,14 @@ if __name__ == "__main__":
         energy_true_list.extend(data.energy.tolist())
         forces_pred_list.extend((-grads_energy).flatten().tolist())
         forces_true_list.extend(data.forces.flatten().tolist())
+
+    # Show R2 Metrics
+    print(
+        f"R2 energy: ", r2_score(np.array(energy_true_list), np.array(energy_pred_list))
+    )
+    print(
+        f"R2 forces: ", r2_score(np.array(forces_true_list), np.array(forces_pred_list))
+    )
 
     hist2d_norm = getcolordensity(energy_true_list, energy_pred_list)
 
@@ -225,8 +226,6 @@ if __name__ == "__main__":
     plt.draw()
     plt.tight_layout()
     plt.savefig(f"./energy_Scatterplot" + ".png", dpi=400)
-
-    print(f"Test MAE energy: ", test_MAE)
 
     hist2d_norm = getcolordensity(forces_pred_list, forces_true_list)
     fig, ax = plt.subplots()
