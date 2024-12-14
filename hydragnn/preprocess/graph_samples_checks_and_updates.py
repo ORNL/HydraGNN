@@ -140,30 +140,10 @@ class RadiusGraphPBC(RadiusGraph):
     """
 
     def __call__(self, data):
-        assert (
-            "batch" not in data
-        ), "Periodic boundary conditions not currently supported on batches."
-        assert hasattr(
-            data, "cell"
-        ), "The data must contain the size of the supercell to apply periodic boundary conditions."
-        assert hasattr(
-            data, "pbc"
-        ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
-        # Ensure data consistency
-        if not isinstance(data.pos, torch.Tensor):
-            data.pos = torch.tensor(data.pos, dtype=torch.float)
-        device = (
-            data.pos.device
-        )  # Have canonical device obtained from `data.pos` in-line with PyG RadiusGraph
-        if not isinstance(data.cell, torch.Tensor):
-            data.cell = torch.tensor(data.cell, dtype=torch.float, device=device)
-        if not isinstance(data.pbc, torch.Tensor):
-            data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
-        # Ensure device consistency
-        if data.cell.device != device:
-            data.cell = data.cell.to(device)
-        if data.pbc.device != device:
-            data.pbc = data.pbc.to(device)
+        # Checks for attributes and ensures data type and device consistency
+        data, device, dtype = self._check_and_standardize_data(
+            data
+        )  # dtype gives us whether to use float32 or float64
 
         ase_atom_object = ase.Atoms(
             positions=data.pos,
@@ -187,7 +167,7 @@ class RadiusGraphPBC(RadiusGraph):
             self_interaction=True,  # We want self-interactions across periodic boundaries
         )
 
-        # Eliminate true self-loops
+        # Eliminate true self-loops if desired
         if not self.loop:
             (
                 edge_src,
@@ -212,13 +192,13 @@ class RadiusGraphPBC(RadiusGraph):
             dim=0,  # Shape: [2, n_edges]
         )
         data.edge_attr = torch.tensor(
-            edge_length, dtype=torch.float, device=device
+            edge_length, dtype=dtype, device=device
         ).unsqueeze(
             1
         )  # Shape: [n_edges, 1]
         # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
         data.edge_shifts = torch.matmul(
-            torch.tensor(edge_cell_shifts, dtype=torch.float, device=device),
+            torch.tensor(edge_cell_shifts, dtype=dtype, device=device),
             data.cell,
         )  # Shape: [n_edges, 3]
 
@@ -227,7 +207,7 @@ class RadiusGraphPBC(RadiusGraph):
     def _remove_true_self_loops(
         self, edge_src, edge_dst, edge_length, edge_cell_shifts
     ):
-        # Create a mask to remove true self loops (i.e. the same source and destination node, with no shifts across periodic boundaries)
+        # Create a mask to remove true self loops (i.e. the same source and destination node in the same cell)
         true_self_edges = edge_src == edge_dst
         true_self_edges &= np.all(edge_cell_shifts == 0, axis=1)
         mask = ~true_self_edges
@@ -243,7 +223,7 @@ class RadiusGraphPBC(RadiusGraph):
     def _limit_neighbors(
         self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors
     ):
-        # Lexsort primarily by src node, and then by edge_dist
+        # Lexsort will sort primarily by edge_src, then by edge_dst within each src node
         sorted_indices = np.lexsort((edge_length, edge_src))
         edge_src, edge_dst, edge_length, edge_cell_shifts = [
             edge_arg[sorted_indices]
@@ -267,6 +247,35 @@ class RadiusGraphPBC(RadiusGraph):
             edge_length[mask],
             edge_cell_shifts[mask],
         )
+
+    def _check_and_standardize_data(self, data):
+        assert (
+            "batch" not in data
+        ), "Periodic boundary conditions not currently supported on batches."
+        assert hasattr(
+            data, "cell"
+        ), "The data must contain data.cell as a 3x3 matrix to apply periodic boundary conditions."
+        assert hasattr(
+            data, "pbc"
+        ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
+
+        # Ensure data consistency in terms of device and type
+        if not isinstance(data.pos, torch.Tensor):
+            data.pos = torch.tensor(data.pos)
+        if data.pos.dtype not in [torch.float32, torch.float64]:
+            data.pos = data.pos.to(torch.get_default_dtype())
+        # Canonicalize based off data.pos, similar to PyG's default behavior
+        device, dtype = data.pos.device, data.pos.dtype
+        if not isinstance(data.cell, torch.Tensor):
+            data.cell = torch.tensor(data.cell, dtype=dtype, device=device)
+        if not isinstance(data.pbc, torch.Tensor):
+            data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
+        if data.cell.device != device:
+            data.cell = data.cell.to(device)
+        if data.pbc.device != device:
+            data.pbc = data.pbc.to(device)
+
+        return data, device, dtype
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
