@@ -24,7 +24,10 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraphPBC,
+    gather_deg,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
@@ -50,7 +53,12 @@ def info(*args, logtype="info", sep=" "):
 
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
-create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
+create_graph_fromXYZ = RadiusGraph(
+    r=5.0, max_num_neighbors=50
+)  # radius cutoff in angstrom
+create_graph_fromXYZPBC = RadiusGraphPBC(
+    r=5.0, max_num_neighbors=50
+)  # radius cutoff in angstrom
 compute_edge_lengths = Distance(norm=False, cat=True)
 
 
@@ -128,12 +136,51 @@ class OMat2024(AbstractBaseDataset):
                     )
                     chemical_formula = dataset.get_atoms(index).get_chemical_formula()
 
+                    cell = None
+                    try:
+                        cell = torch.tensor(
+                            dataset.get_atoms(index).get_cell(), dtype=torch.float32
+                        ).view(3, 3)
+                    except:
+                        print(
+                            f"Atomic structure {chemical_formula} does not have cell",
+                            flush=True,
+                        )
+
+                    pbc = None
+                    try:
+                        pbc = dataset.get_atoms(index).get_pbc()
+                    except:
+                        print(
+                            f"Atomic structure {chemical_formula} does not have pbc",
+                            flush=True,
+                        )
+
                     if self.energy_per_atom:
                         energy /= natoms.item()
 
-                    data = Data(pos=xyz, x=Z, force=forces, energy=energy, y=energy)
+                    data = Data(
+                        pos=xyz,
+                        cell=cell,
+                        pbc=pbc,
+                        x=Z,
+                        force=forces,
+                        energy=energy,
+                        y=energy,
+                    )
                     data.x = torch.cat((data.x, xyz, forces), dim=1)
-                    data = create_graph_fromXYZ(data)
+
+                    if data.pbc is not None and data.cell is not None:
+                        try:
+                            data = create_graph_fromXYZPBC(data)
+                        except:
+                            print(
+                                f"Structure could not successfully apply pbc radius graph",
+                                flush=True,
+                            )
+                            data = self.create_graph_from_XYZ(data)
+                    else:
+                        data = create_graph_fromXYZ(data)
 
                     # Add edge length as edge feature
                     data = compute_edge_lengths(data)
