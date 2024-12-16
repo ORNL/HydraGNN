@@ -266,14 +266,18 @@ class RadiusGraphPBC(RadiusGraph):
             data.pos = data.pos.to(torch.get_default_dtype())
         # Canonicalize based off data.pos, similar to PyG's default behavior
         device, dtype = data.pos.device, data.pos.dtype
-        if not isinstance(data.cell, torch.Tensor):
+        if not (
+            isinstance(data.cell, torch.Tensor)
+            and data.cell.dtype == dtype
+            and data.cell.device == device
+        ):
             data.cell = torch.tensor(data.cell, dtype=dtype, device=device)
-        if not isinstance(data.pbc, torch.Tensor):
+        if not (
+            isinstance(data.pbc, torch.Tensor)
+            and data.pbc.dtype == torch.bool
+            and data.pbc.device == device
+        ):
             data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
-        if data.cell.device != device:
-            data.cell = data.cell.to(device)
-        if data.pbc.device != device:
-            data.pbc = data.pbc.to(device)
 
         return data, device, dtype
 
