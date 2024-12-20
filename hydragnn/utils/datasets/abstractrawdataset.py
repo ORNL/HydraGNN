@@ -205,7 +205,6 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
             self.__normalize_dataset()
 
     def __normalize_dataset(self):
-
         """Performs the normalization on Data objects and returns the normalized datasets."""
         num_node_features = len(self.node_feature_dim)
         num_graph_features = len(self.graph_feature_dim)
@@ -339,6 +338,8 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
             self.dataset[:] = [rotational_invariance(data) for data in self.dataset]
 
         if self.periodic_boundary_conditions:
+            for data in dataset:
+                data.pbc = [True, True, True]
             # edge lengths already added manually if using PBC, so no need to call Distance.
             compute_edges = get_radius_graph_pbc(
                 radius=self.radius,

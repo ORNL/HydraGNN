@@ -17,6 +17,7 @@
 ## Maybe do PNA aggregation for vectorial? To maintain equivariance, aggregation could only the Identity, but all scalers are valid.
 
 from typing import Any, Callable, Dict, List, Optional, Union
+import pdb
 
 # Torch
 import torch
@@ -32,7 +33,9 @@ from torch_geometric.nn.dense.linear import Linear as geom_Linear
 from torch_geometric.nn.aggr.scaler import DegreeScalerAggregation
 from torch_geometric.typing import Adj, OptTensor
 
+# HydraGNN
 from .Base import Base
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class PNAEqStack(Base):
@@ -42,7 +45,15 @@ class PNAEqStack(Base):
     """
 
     def __init__(
-        self, deg: list, edge_dim: int, num_radial: int, radius: float, *args, **kwargs
+        self,
+        input_args,
+        conv_args,
+        deg: list,
+        edge_dim: int,
+        num_radial: int,
+        radius: float,
+        *args,
+        **kwargs,
     ):
 
         self.x_aggregators = ["mean", "min", "max", "std"]
@@ -57,22 +68,39 @@ class PNAEqStack(Base):
         self.edge_dim = edge_dim
         self.num_radial = num_radial
         self.radius = radius
-
-        super().__init__(*args, **kwargs)
+        self.is_edge_model = True  # specify that mpnn can handle edge features
+        super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = rbf_BasisLayer(self.num_radial, self.radius)
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
-        self.graph_convs.append(self.get_conv(self.input_dim, self.hidden_dim))
+        self.graph_convs.append(
+            self._apply_global_attn(
+                self.get_conv(
+                    self.embed_dim,
+                    self.hidden_dim,
+                    last_layer,
+                    edge_dim=self.edge_embed_dim,
+                )
+            )
+        )
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim,
+                        self.hidden_dim,
+                        last_layer,
+                        edge_dim=self.edge_embed_dim,
+                    )
+                )
+            )
             self.feature_layers.append(nn.Identity())
 
-    def get_conv(self, input_dim, output_dim, last_layer=False):
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
         hidden_dim = output_dim if input_dim == 1 else input_dim
         assert (
             hidden_dim > 1
@@ -82,7 +110,7 @@ class PNAEqStack(Base):
             x_aggregators=self.x_aggregators,
             x_scalers=self.x_scalers,
             deg=self.deg,
-            edge_dim=self.edge_dim,
+            edge_dim=edge_dim,
             num_radial=self.num_radial,
             pre_layers=1,
             post_layers=1,
@@ -90,8 +118,8 @@ class PNAEqStack(Base):
         )
         update = PainnUpdate(node_size=input_dim, last_layer=last_layer)
         """
-        The following linear layers are to get the correct sizing of embeddings. This is 
-        necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly 
+        The following linear layers are to get the correct sizing of embeddings. This is
+        necessary to use the hidden_dim, output_dim of HYDRAGNN's stacked conv layers correctly
         because node_scalar and node-vector are updated through an additive skip connection.
         """
         # Embed down to output size
@@ -104,113 +132,93 @@ class PNAEqStack(Base):
             geom_nn.Linear(input_dim, output_dim) if not last_layer else None
         )
 
-        input_args = "x, v, pos, edge_index, edge_rbf, edge_vec"
-        conv_args = "x, v, edge_index, edge_rbf, edge_vec"
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         if not last_layer:
             return geom_nn.Sequential(
-                input_args,
+                self.input_args,
                 [
-                    (message, conv_args + " -> x, v"),
-                    (update, "x, v -> x, v"),
-                    (node_embed_out, "x -> x"),
-                    (vec_embed_out, "v -> v"),
-                    (lambda x, v, pos: [x, v, pos], "x, v, pos -> x, v, pos"),
+                    (message, self.conv_args + " -> inv_node_feat, equiv_node_feat"),
+                    (
+                        update,
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
+                    (node_embed_out, "inv_node_feat -> inv_node_feat"),
+                    (vec_embed_out, "equiv_node_feat -> equiv_node_feat"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
         else:
             return geom_nn.Sequential(
-                input_args,
+                self.input_args,
                 [
-                    (message, conv_args + " -> x, v"),
+                    (message, self.conv_args + " -> inv_node_feat, equiv_node_feat"),
                     (
                         update,
-                        "x, v -> x",
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat",
                     ),  # v is not updated in the last layer to avoid hanging gradients
                     (
                         node_embed_out,
-                        "x -> x",
+                        "inv_node_feat -> inv_node_feat",
                     ),  # No need to embed down v because it's not used anymore
-                    (lambda x, v, pos: [x, v, pos], "x, v, pos -> x, v, pos"),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
 
-    def forward(self, data):
-        data, conv_args = self._conv_args(
-            data
-        )  # Added v to data here (necessary for PNAEq Stack)
-        x = data.x
-        v = data.v
-        pos = data.pos
+    def _embedding(self, data):
+        super()._embedding(data)
 
-        ### encoder part ####
-        for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
-            if not self.conv_checkpointing:
-                c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)  # Added v here
-            else:
-                c, v, pos = checkpoint(  # Added v here
-                    conv, use_reentrant=False, x=x, v=v, pos=pos, **conv_args
-                )
-            x = self.activation_function(feat_layer(c))
-
-        #### multi-head decoder part####
-        # shared dense layers for graph level output
-        if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
-        else:
-            x_graph = geom_nn.global_mean_pool(x, data.batch.to(x.device))
-        outputs = []
-        outputs_var = []
-        for head_dim, headloc, type_head in zip(
-            self.head_dims, self.heads_NN, self.head_type
-        ):
-            if type_head == "graph":
-                x_graph_head = self.graph_shared(x_graph)
-                output_head = headloc(x_graph_head)
-                outputs.append(output_head[:, :head_dim])
-                outputs_var.append(output_head[:, head_dim:] ** 2)
-            else:
-                if self.node_NN_type == "conv":
-                    for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        c, v, pos = conv(x=x, v=v, pos=pos, **conv_args)
-                        c = batch_norm(c)
-                        x = self.activation_function(c)
-                    x_node = x
-                else:
-                    x_node = headloc(x=x, batch=data.batch)
-                outputs.append(x_node[:, :head_dim])
-                outputs_var.append(x_node[:, head_dim:] ** 2)
-        if self.var_output:
-            return outputs, outputs_var
-        return outputs
-
-    def _conv_args(self, data):
         assert (
             data.pos is not None
         ), "PNAEq requires node positions (data.pos) to be set."
 
-        # Calculate relative vectors and distances
-        i, j = data.edge_index[0], data.edge_index[1]
-        diff = data.pos[i] - data.pos[j]
-        dist = diff.pow(2).sum(dim=-1).sqrt()
-        rbf = self.rbf(dist)
-        norm_diff = diff / dist.unsqueeze(-1)
-
-        # Instantiate tensor to hold equivariant traits
-        v = torch.zeros(data.x.size(0), 3, data.x.size(1), device=data.x.device)
-        data.v = v
+        # Edge vector and distance features
+        norm_edge_vec, edge_dist = get_edge_vectors_and_lengths(
+            data.pos, data.edge_index, data.edge_shifts, normalize=True
+        )
+        rbf = self.rbf(edge_dist.squeeze())
 
         conv_args = {
             "edge_index": data.edge_index.t().to(torch.long),
             "edge_rbf": rbf,
-            "edge_vec": norm_diff,
+            "edge_vec": norm_edge_vec,
         }
 
-        return data, conv_args
+        if self.use_edge_attr:
+            assert (
+                data.edge_attr is not None
+            ), "Data must have edge attributes if use_edge_attributes is set."
+            conv_args.update({"edge_attr": data.edge_attr})
+
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+        else:
+            x = data.x
+        # Instantiate tensor to hold equivariant traits
+        v = torch.zeros(x.size(0), 3, x.size(1), device=x.device)
+        return x, v, conv_args
 
 
 class PainnMessage(MessagePassing):
@@ -234,14 +242,15 @@ class PainnMessage(MessagePassing):
         **kwargs,
     ):
 
-        super().__init__()
+        degree_scaler_aggregation = DegreeScalerAggregation(
+            aggr=x_aggregators, scaler=x_scalers, deg=deg
+        )
+
+        super().__init__(aggr=degree_scaler_aggregation, node_dim=0, **kwargs)
 
         assert node_size % towers == 0
 
         self.node_size = node_size  # We keep input and output dim the same here because of the skip connection
-        self.x_aggregators = x_aggregators
-        self.x_scalers = x_scalers
-        self.deg = deg
         self.num_radial = num_radial
         self.edge_dim = edge_dim
 
@@ -358,11 +367,7 @@ class PainnMessage(MessagePassing):
         message_vector = message_vector + edge_vector
 
         # Aggregate and scale message_scalar
-        # message_scalar = aggregate_and_scale(self.x_aggregators, self.x_scalers, message_scalar, src, self.deg)
-        degree_scaler_aggregation = DegreeScalerAggregation(
-            aggr=self.x_aggregators, scaler=self.x_scalers, deg=self.deg
-        )
-        message_scalar = degree_scaler_aggregation(
+        message_scalar = self.aggr_module(
             message_scalar.squeeze(1), index=src, dim_size=x.shape[0]
         ).unsqueeze(
             1

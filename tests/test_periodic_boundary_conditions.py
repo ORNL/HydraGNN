@@ -84,6 +84,7 @@ def pytest_periodic_h2():
     data.supercell_size = torch.tensor(
         [[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]]
     )
+    data.pbc = [True, True, True]
     data.atom_types = [1, 1]
     data.pos = torch.tensor([[1.0, 1.0, 1.0], [1.43, 1.43, 1.43]])
     data.x = torch.tensor([[3, 5, 7], [9, 11, 13]])
@@ -108,6 +109,7 @@ def pytest_periodic_bcc_large():
     # Convert to PyG
     data2 = Data()
     data2.supercell_size = torch.tensor(supercell.cell[:])
+    data2.pbc = [True, True, True]
     data2.atom_types = np.ones(len(supercell)) * 27
     data2.pos = torch.tensor(supercell.positions)
     data2.x = torch.randn(data2.pos.size(0), 1)
