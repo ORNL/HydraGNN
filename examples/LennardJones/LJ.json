@@ -21,7 +21,7 @@
       "periodic_boundary_conditions": true,
       "global_attn_engine": "",
       "global_attn_type": "",
-      "mpnn_type": "EGNN",
+      "mpnn_type": "DimeNet",
       "radius": 5.0,
       "max_neighbours": 5,
       "int_emb_size": 32,
@@ -61,7 +61,7 @@
       "output_names": ["graph_energy"]
     },
     "Training": {
-      "num_epoch": 15,
+      "num_epoch": 25,
       "batch_size": 64,
       "perc_train": 0.7,
       "patience": 20,

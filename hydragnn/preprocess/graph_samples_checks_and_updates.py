@@ -11,14 +11,16 @@
 
 import torch
 from torch_geometric.transforms import RadiusGraph
-from torch_geometric.utils import remove_self_loops, degree
 from torch_geometric.data import Data
+from torch_geometric.utils import remove_self_loops, degree
 
 import ase
 import ase.neighborlist
+import numpy as np
 import os
 
 from .dataset_descriptors import AtomFeatures
+from hydragnn.utils.distributed import get_device
 
 
 ## This function can be slow if datasets is too large. Use with caution.
@@ -134,29 +136,18 @@ def get_radius_graph_pbc_config(config, loop=False):
 
 class RadiusGraphPBC(RadiusGraph):
     r"""Creates edges based on node positions :obj:`pos` to all points within a
-    given distance, including periodic images.
+    given distance, including periodic images, and limits the number of neighbors per node.
     """
 
     def __call__(self, data):
-        data.edge_attr = None
-        data.edge_shifts = None
-        assert (
-            "batch" not in data
-        ), "Periodic boundary conditions not currently supported on batches."
-        assert hasattr(
-            data, "supercell_size"
-        ), "The data must contain the size of the supercell to apply periodic boundary conditions."
-        assert hasattr(
-            data, "pbc"
-        ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
-        # NOTE Cutoff radius being less than half the smallest supercell dimension is a sufficient, but not necessary condition for no dupe connections.
-        #      However, to prevent an issue from being unobserved until long into an experiment, we assert this condition.
-        assert (
-            self.r < min(torch.diagonal(data.supercell_size)) / 2
-        ), "Cutoff radius must be smaller than half the smallest supercell dimension."
+        # Checks for attributes and ensures data type and device consistency
+        data, device, dtype = self._check_and_standardize_data(
+            data
+        )  # dtype gives us whether to use float32 or float64
+
         ase_atom_object = ase.Atoms(
             positions=data.pos,
-            cell=data.supercell_size,
+            cell=data.cell,
             pbc=data.pbc,
         )
         # 'i' : first atom index
@@ -170,30 +161,125 @@ class RadiusGraphPBC(RadiusGraph):
             edge_length,
             edge_cell_shifts,
         ) = ase.neighborlist.neighbor_list(
-            "ijdS", a=ase_atom_object, cutoff=self.r, self_interaction=self.loop
+            "ijdS",
+            a=ase_atom_object,
+            cutoff=self.r,
+            self_interaction=True,  # We want self-interactions across periodic boundaries
         )
+
+        # Eliminate true self-loops if desired
+        if not self.loop:
+            (
+                edge_src,
+                edge_dst,
+                edge_length,
+                edge_cell_shifts,
+            ) = self._remove_true_self_loops(
+                edge_src, edge_dst, edge_length, edge_cell_shifts
+            )
+
+        # Limit neighbors per node
+        edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
+            edge_src, edge_dst, edge_length, edge_cell_shifts, self.max_num_neighbors
+        )
+
+        # Assign to data
         data.edge_index = torch.stack(
-            [torch.LongTensor(edge_src), torch.LongTensor(edge_dst)],
+            [
+                torch.tensor(edge_src, dtype=torch.long, device=device),
+                torch.tensor(edge_dst, dtype=torch.long, device=device),
+            ],
             dim=0,  # Shape: [2, n_edges]
         )
-
-        # ensure no duplicate edges
-        unique_edge_index, unique_indices = torch.unique(
-            data.edge_index, dim=1, return_inverse=False  # Shape: [n_edges]
-        )
-        assert unique_edge_index.unsqueeze(0).size(1) == data.edge_index.size(
-            1
-        ), "Adding periodic boundary conditions would result in duplicate edges. Cutoff radius must be reduced or system size increased."
-
-        data.edge_attr = torch.tensor(edge_length, dtype=torch.float).unsqueeze(
+        data.edge_attr = torch.tensor(
+            edge_length, dtype=dtype, device=device
+        ).unsqueeze(
             1
         )  # Shape: [n_edges, 1]
-        # ASE returns whether the cell was shifted or not (-1,0,1). Multiply by the cell size to get the actual shift
+        # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
         data.edge_shifts = torch.matmul(
-            torch.tensor(edge_cell_shifts).float(), data.supercell_size.float()
+            torch.tensor(edge_cell_shifts, dtype=dtype, device=device),
+            data.cell,
         )  # Shape: [n_edges, 3]
 
         return data
+
+    def _remove_true_self_loops(
+        self, edge_src, edge_dst, edge_length, edge_cell_shifts
+    ):
+        # Create a mask to remove true self loops (i.e. the same source and destination node in the same cell)
+        true_self_edges = edge_src == edge_dst
+        true_self_edges &= np.all(edge_cell_shifts == 0, axis=1)
+        mask = ~true_self_edges
+
+        # Apply the mask and return
+        return (
+            edge_src[mask],
+            edge_dst[mask],
+            edge_length[mask],
+            edge_cell_shifts[mask],
+        )
+
+    def _limit_neighbors(
+        self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors
+    ):
+        # Lexsort will sort primarily by edge_src, then by edge_dst within each src node
+        sorted_indices = np.lexsort((edge_length, edge_src))
+        edge_src, edge_dst, edge_length, edge_cell_shifts = [
+            edge_arg[sorted_indices]
+            for edge_arg in [edge_src, edge_dst, edge_length, edge_cell_shifts]
+        ]
+
+        # Create a mask to keep only `max_num_neighbors` per node
+        unique_src, counts = np.unique(edge_src, return_counts=True)
+        mask = np.zeros_like(edge_src, dtype=bool)
+        start_idx = 0
+        for src, count in zip(unique_src, counts):
+            end_idx = start_idx + count
+            # Keep only the first max_num_neighbors for this src
+            mask[start_idx : start_idx + min(count, max_num_neighbors)] = True
+            start_idx = end_idx
+
+        # Apply the mask and return
+        return (
+            edge_src[mask],
+            edge_dst[mask],
+            edge_length[mask],
+            edge_cell_shifts[mask],
+        )
+
+    def _check_and_standardize_data(self, data):
+        assert (
+            "batch" not in data
+        ), "Periodic boundary conditions not currently supported on batches."
+        assert hasattr(
+            data, "cell"
+        ), "The data must contain data.cell as a 3x3 matrix to apply periodic boundary conditions."
+        assert hasattr(
+            data, "pbc"
+        ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
+
+        # Ensure data consistency in terms of device and type
+        if not isinstance(data.pos, torch.Tensor):
+            data.pos = torch.tensor(data.pos)
+        if data.pos.dtype not in [torch.float32, torch.float64]:
+            data.pos = data.pos.to(torch.get_default_dtype())
+        # Canonicalize based off data.pos, similar to PyG's default behavior
+        device, dtype = data.pos.device, data.pos.dtype
+        if not (
+            isinstance(data.cell, torch.Tensor)
+            and data.cell.dtype == dtype
+            and data.cell.device == device
+        ):
+            data.cell = torch.tensor(data.cell, dtype=dtype, device=device)
+        if not (
+            isinstance(data.pbc, torch.Tensor)
+            and data.pbc.dtype == torch.bool
+            and data.pbc.device == device
+        ):
+            data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
+
+        return data, device, dtype
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"

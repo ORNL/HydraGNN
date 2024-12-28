@@ -89,7 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
+        a2g = AtomsToGraphs(max_neigh=50, radius=6.0)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -110,7 +110,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
         random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
-
         # Calculate the L2 norm for each row
         norms = torch.norm(forces, p=2, dim=1)
         # Check if all norms are less than the threshold

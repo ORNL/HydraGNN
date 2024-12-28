@@ -21,6 +21,7 @@ numpy.set_printoptions(linewidth=numpy.inf)
 import torch
 from torch_geometric.data import Data
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
+from torch_scatter import scatter
 
 # torch.set_default_tensor_type(torch.DoubleTensor)
 # torch.set_default_dtype(torch.float64)
@@ -36,6 +37,7 @@ mpi4py.rc.threads = False
 from hydragnn.utils.datasets.abstractrawdataset import AbstractBaseDataset
 from hydragnn.utils.distributed import nsplit
 from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 # Angstrom unit
 primitive_bravais_lattice_constant_x = 3.8
@@ -51,6 +53,7 @@ primitive_bravais_lattice_constant_z = 3.8
 
 def create_dataset(path, config):
     radius_cutoff = config["NeuralNetwork"]["Architecture"]["radius"]
+    max_num_neighbors = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
     number_configurations = (
         config["Dataset"]["number_configurations"]
         if "number_configurations" in config["Dataset"]
@@ -73,6 +76,7 @@ def create_dataset(path, config):
         atom_types,
         atomic_structure_handler=atomic_structure_handler,
         radius_cutoff=radius_cutoff,
+        max_num_neighbors=max_num_neighbors,
         relative_maximum_atomic_displacement=1e-1,
         number_configurations=number_configurations,
     )
@@ -167,7 +171,7 @@ class LJDataset(AbstractBaseDataset):
         forces_pre_scaled = forces * forces_pre_scaling_factor
 
         data = Data(
-            supercell_size=torch_supercell.to(torch.float32),
+            cell=torch_supercell.to(torch.float32),
             num_nodes=num_nodes,
             grad_energy_post_scaling_factor=grad_energy_post_scaling_factor,
             forces_pre_scaling_factor=torch.tensor(forces_pre_scaling_factor).to(
@@ -182,11 +186,14 @@ class LJDataset(AbstractBaseDataset):
             .unsqueeze(0)
             .to(torch.float32),
             energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
-            pbc=[
-                True,
-                True,
-                True,
-            ],  # LJ example always has periodic boundary conditions
+            pbc=torch.tensor(
+                [
+                    True,
+                    True,
+                    True,
+                ],
+                dtype=torch.bool,
+            ),  # LJ example always has periodic boundary conditions
         )
 
         # Create pbc edges and lengths
@@ -345,37 +352,28 @@ def create_configuration(
     supercell_size_x = primitive_bravais_lattice_constant_x * uc_x
     supercell_size_y = primitive_bravais_lattice_constant_y * uc_y
     supercell_size_z = primitive_bravais_lattice_constant_z * uc_z
-    data.supercell_size = torch.diag(
+    data.cell = torch.diag(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
-    data.pbc = [True, True, True]
+    data.pbc = torch.tensor([True, True, True], dtype=torch.bool)
+    data.x = torch.cat([atom_types, positions], dim=1)
 
     create_graph_connectivity_pbc = get_radius_graph_pbc(
         radius_cutoff, max_num_neighbors
     )
     data = create_graph_connectivity_pbc(data)
 
-    atomic_descriptors = torch.cat(
-        (
-            atom_types,
-            positions,
-        ),
-        1,
-    )
-
-    data.x = atomic_descriptors
-
     data = atomic_structure_handler.compute(data)
 
     total_energy = torch.sum(data.x[:, 4])
     energy_per_atom = total_energy / number_nodes
 
-    total_energy_str = numpy.array2string(total_energy.detach().numpy())
-    energy_per_atom_str = numpy.array2string(energy_per_atom.detach().numpy())
+    total_energy_str = numpy.array2string(total_energy.detach().cpu().numpy())
+    energy_per_atom_str = numpy.array2string(energy_per_atom.detach().cpu().numpy())
     filetxt = total_energy_str + "\n" + energy_per_atom_str
 
     for index in range(0, 3):
-        numpy_row = data.supercell_size[index, :].detach().numpy()
+        numpy_row = data.cell[index, :].detach().numpy()
         numpy_string_row = numpy.array2string(numpy_row, precision=64, separator="\t")
         filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
 
@@ -402,72 +400,46 @@ class AtomicStructureHandler:
         self.radius_cutoff = radius_cutoff
         self.formula = formula
 
+    # Calculate the potential energy with torch gradient tracking, then simply use autograd to calculate the forces
     def compute(self, data):
+        # Instantiate
         assert data.pos.shape[0] == data.x.shape[0]
+        node_potential = torch.zeros([data.pos.shape[0], 1])
+        node_forces = torch.zeros([data.pos.shape[0], 3])
 
-        interatomic_potential = torch.zeros([data.pos.shape[0], 1])
-        interatomic_forces = torch.zeros([data.pos.shape[0], 3])
-
-        for node_id in range(data.pos.shape[0]):
-            neighbor_list_indices = torch.where(data.edge_index[0, :] == node_id)[
-                0
-            ].tolist()
-            neighbor_list = data.edge_index[1, neighbor_list_indices]
-
-            for neighbor_id, edge_id in zip(neighbor_list, neighbor_list_indices):
-                neighbor_pos = data.pos[neighbor_id, :]
-                distance_vector = data.pos[neighbor_id, :] - data.pos[node_id, :]
-
-                # Adjust the neighbor position based on periodic boundary conditions (PBC)
-                ## If the distance between the atoms is larger than the cutoff radius, the edge is because of PBC conditions
-                if torch.norm(distance_vector) > self.radius_cutoff:
-                    ## At this point, we know that the edge is due to PBC conditions, so we need to adjust the neighbor position. We also know that
-                    ## that this connection MUST be the closest connection possible as a result of the asserted radius_cutoff < supercell_size earlier
-                    ## in the code. Because of this, we can simply adjust the neighbor position coordinate-wise to be closer than
-                    ## as done in the following lines of code. The logic goes that if the distance vector[index] is larger than half the supercell size,
-                    ## then there is a closer distance at +- supercell_size[index], and we adjust to that for each coordinate
-                    if abs(distance_vector[0]) > data.supercell_size[0, 0] / 2:
-                        if distance_vector[0] > 0:
-                            neighbor_pos[0] -= data.supercell_size[0, 0]
-                        else:
-                            neighbor_pos[0] += data.supercell_size[0, 0]
-
-                    if abs(distance_vector[1]) > data.supercell_size[1, 1] / 2:
-                        if distance_vector[1] > 0:
-                            neighbor_pos[1] -= data.supercell_size[1, 1]
-                        else:
-                            neighbor_pos[1] += data.supercell_size[1, 1]
-
-                    if abs(distance_vector[2]) > data.supercell_size[2, 2] / 2:
-                        if distance_vector[2] > 0:
-                            neighbor_pos[2] -= data.supercell_size[2, 2]
-                        else:
-                            neighbor_pos[2] += data.supercell_size[2, 2]
-
-                # The distance vecor may need to be updated after applying PBCs
-                distance_vector = data.pos[node_id, :] - neighbor_pos
-
-                # pair_distance = data.edge_attr[edge_id].item()
-                interatomic_potential[node_id] += self.formula.potential_energy(
-                    distance_vector
-                )
-
-                derivative_x = self.formula.derivative_x(distance_vector)
-                derivative_y = self.formula.derivative_y(distance_vector)
-                derivative_z = self.formula.derivative_z(distance_vector)
-
-                interatomic_forces_contribution_x = -derivative_x
-                interatomic_forces_contribution_y = -derivative_y
-                interatomic_forces_contribution_z = -derivative_z
-
-                interatomic_forces[node_id, 0] += interatomic_forces_contribution_x
-                interatomic_forces[node_id, 1] += interatomic_forces_contribution_y
-                interatomic_forces[node_id, 2] += interatomic_forces_contribution_z
-
-        data.x = torch.cat(
-            (data.x, interatomic_potential, interatomic_forces),
-            1,
+        # Calculate
+        data.pos.requires_grad = True
+        edge_vec, edge_dist = get_edge_vectors_and_lengths(
+            positions=data.pos,
+            edge_index=data.edge_index,
+            shifts=data.edge_shifts,
+            normalize=False,
         )
+
+        # Sum potential by edge, node, and total
+        edge_potential = self.formula.potential_energy(
+            edge_dist
+        )  # Shape [num_edges, 1]
+        node_potential = scatter(
+            edge_potential,
+            data.edge_index[0],
+            dim=0,
+            dim_size=data.pos.shape[0],
+            reduce="add",
+        )  # Shape [num_nodes, 1]
+        total_potential = torch.sum(node_potential, dim=0, keepdim=True)  # Shape [1]
+
+        # Autograd to calculate forces
+        node_forces = -torch.autograd.grad(
+            total_potential,
+            data.pos,
+            grad_outputs=torch.ones_like(total_potential),
+        )[
+            0
+        ]  # Shape [num_nodes, 3]
+
+        # Append to data
+        data.x = torch.cat((data.x, node_potential, node_forces), dim=1)
 
         return data
 
@@ -477,39 +449,12 @@ class LJpotential:
         self.epsilon = epsilon
         self.sigma = sigma
 
-    def potential_energy(self, distance_vector):
-        pair_distance = torch.norm(distance_vector)
+    def potential_energy(self, pair_distance):
         return (
             4
             * self.epsilon
             * ((self.sigma / pair_distance) ** 12 - (self.sigma / pair_distance) ** 6)
         )
-
-    def radial_derivative(self, distance_vector):
-        pair_distance = torch.norm(distance_vector)
-        return (
-            4
-            * self.epsilon
-            * (
-                -12 * (self.sigma / pair_distance) ** 12 * 1 / pair_distance
-                + 6 * (self.sigma / pair_distance) ** 6 * 1 / pair_distance
-            )
-        )
-
-    def derivative_x(self, distance_vector):
-        pair_distance = torch.norm(distance_vector)
-        radial_derivative = self.radial_derivative(pair_distance)
-        return radial_derivative * (distance_vector[0].item()) / pair_distance
-
-    def derivative_y(self, distance_vector):
-        pair_distance = torch.norm(distance_vector)
-        radial_derivative = self.radial_derivative(pair_distance)
-        return radial_derivative * (distance_vector[1].item()) / pair_distance
-
-    def derivative_z(self, distance_vector):
-        pair_distance = torch.norm(distance_vector)
-        radial_derivative = self.radial_derivative(pair_distance)
-        return radial_derivative * (distance_vector[2].item()) / pair_distance
 
 
 """Etc"""
