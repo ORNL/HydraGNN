@@ -93,13 +93,20 @@ def run(trial):
 
     # log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
+    if trial.parameters["global_attn_heads"] is not None:
+        trial_config["NeuralNetwork"]["Architecture"][
+            "global_attn_heads"
+        ] = trial.parameters["global_attn_heads"]
+        global_attn_heads = trial.parameters["global_attn_heads"]
+        hidden_dim = global_attn_heads * trial.parameters["hidden_dim"]
+    else:
+        hidden_dim = trial.parameters["hidden_dim"]
+
     # Update the config dictionary with the suggested hyperparameters
     trial_config["NeuralNetwork"]["Architecture"]["mpnn_type"] = trial.parameters[
         "mpnn_type"
     ]
-    trial_config["NeuralNetwork"]["Architecture"]["hidden_dim"] = trial.parameters[
-        "hidden_dim"
-    ]
+    trial_config["NeuralNetwork"]["Architecture"]["hidden_dim"] = hidden_dim
     trial_config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = trial.parameters[
         "num_conv_layers"
     ]
@@ -180,7 +187,6 @@ if __name__ == "__main__":
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
     from deephyper.hpo import HpProblem, CBO
-    from deephyper.hpo import CBO
     from deephyper.evaluator import Evaluator
 
     # define the variable you want to optimize
@@ -188,9 +194,13 @@ if __name__ == "__main__":
 
     # Define the search space for hyperparameters
     problem.add_hyperparameter((1, 2), "num_conv_layers")  # discrete parameter
-    problem.add_hyperparameter((50, 52), "hidden_dim")  # discrete parameter
+    problem.add_hyperparameter((1, 100), "hidden_dim")  # discrete parameter
     problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((1, 3), "dim_headlayers")  # discrete parameter
+
+    # Include "global_attn_heads" to list of hyperparameters if global attention engine is used
+    if config["NeuralNetwork"]["Architecture"]["global_attn_engine"] is not None:
+        problem.add_hyperparameter([2, 4, 8], "global_attn_heads")  # discrete parameter
     problem.add_hyperparameter(
         ["EGNN", "PNA", "SchNet", "DimeNet"], "mpnn_type"
     )  # categorical parameter
