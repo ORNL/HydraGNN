@@ -3,6 +3,7 @@ import logging
 
 import torch
 import torch_geometric
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 torch.backends.cudnn.enabled = False
 
@@ -14,33 +15,55 @@ except:
 
 import hydragnn
 
+num_samples = 1000
 
 # Update each sample prior to loading.
-def qm9_pre_transform(data):
+def qm9_pre_transform(data, transform):
+    # LPE
+    data = transform(data)
     # Set descriptor as element type.
     data.x = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
     data.y = data.y[:, 10] / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
+    # gps requires relative edge features, introduced rel_lapPe as edge encodings
+    source_pe = data.pe[data.edge_index[0]]
+    target_pe = data.pe[data.edge_index[1]]
+    data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference
     return data
 
 
-log_name = "qm9"
+def qm9_pre_filter(data):
+    return data.idx < num_samples
 
-# Use built-in torch_geometric datasets.
-# Filter function above used to run quick example.
-# NOTE: data is moved to the device in the pre-transform.
-# NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
-dataset = torch_geometric.datasets.QM9(
-    root="dataset/qm9", pre_transform=qm9_pre_transform
-)
+
+log_name = "qm9"
 
 # Configurable run choices (JSON file that accompanies this example script).
 filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qm9.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
+
+
+# LPE
+transform = AddLaplacianEigenvectorPE(
+    k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+    attr_name="pe",
+    is_undirected=True,
+)
+
+# Use built-in torch_geometric datasets.
+# Filter function above used to run quick example.
+# NOTE: data is moved to the device in the pre-transform.
+# NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
+dataset = torch_geometric.datasets.QM9(
+    root="dataset/qm9",
+    pre_transform=lambda data: qm9_pre_transform(data, transform),
+    pre_filter=qm9_pre_filter,
+)
+
 
 trainset, valset, testset = hydragnn.preprocess.split_dataset(dataset, 0.8, False)
 (train_loader, val_loader, test_loader) = hydragnn.preprocess.create_dataloaders(
@@ -71,8 +94,8 @@ def run(trial):
     # log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
     # Update the config dictionary with the suggested hyperparameters
-    trial_config["NeuralNetwork"]["Architecture"]["model_type"] = trial.parameters[
-        "model_type"
+    trial_config["NeuralNetwork"]["Architecture"]["mpnn_type"] = trial.parameters[
+        "mpnn_type"
     ]
     trial_config["NeuralNetwork"]["Architecture"]["hidden_dim"] = trial.parameters[
         "hidden_dim"
@@ -94,7 +117,7 @@ def run(trial):
             "dim_headlayers"
         ] = dim_headlayers
 
-    if trial.parameters["model_type"] not in ["EGNN", "SchNet", "DimeNet"]:
+    if trial.parameters["mpnn_type"] not in ["EGNN", "SchNet", "DimeNet"]:
         trial_config["NeuralNetwork"]["Architecture"]["equivariance"] = False
 
     trial_config = hydragnn.utils.input_config_parsing.update_config(
@@ -169,7 +192,7 @@ if __name__ == "__main__":
     problem.add_hyperparameter((1, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((1, 3), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter(
-        ["EGNN", "PNA", "SchNet", "DimeNet"], "model_type"
+        ["EGNN", "PNA", "SchNet", "DimeNet"], "mpnn_type"
     )  # categorical parameter
 
     # Define the search space for hyperparameters
