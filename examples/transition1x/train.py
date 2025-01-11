@@ -96,7 +96,9 @@ class Transition1xDataset(AbstractBaseDataset):
         self.forces_norm_threshold = 1000.0
 
         # loop through all configurations in the data set
-        dataloader = Dataloader(self.data_path, comm_rank=self.rank, comm_size=self.world_size)
+        dataloader = Dataloader(
+            self.data_path, comm_rank=self.rank, comm_size=self.world_size
+        )
 
         for i, configuration in enumerate(dataloader):
 
