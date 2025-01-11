@@ -23,22 +23,29 @@ from torch_geometric.transforms import RadiusGraph, Distance
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
-from hydragnn.utils.print_utils import iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-
-from hydragnn.utils.distributed import get_device
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.model import print_model
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+)
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
+from hydragnn.utils.distributed import nsplit
 
 torch.set_default_dtype(torch.float32)
 
@@ -47,8 +54,6 @@ from utils.create_graph_data import Dataloader
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
-
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
 create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
@@ -108,7 +113,6 @@ class Transition1xDataset(AbstractBaseDataset):
                     )
                     .to(torch.float32)
                 ).t()
-                print(atomic_numbers.shape)
                 assert (
                     pos.shape[0] == atomic_numbers.shape[0]
                 ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
@@ -208,7 +212,7 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="transition1x.json")
+    parser.add_argument("--inputfile", help="input file", type=str, default="transition1x_energy.json")
     parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
@@ -251,7 +255,7 @@ if __name__ == "__main__":
         "hVDIP",
         "hRAT",
     ]
-    node_feature_dims = [1, 3, 3, 1, 1, 1]
+    node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
@@ -279,7 +283,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -292,8 +296,8 @@ if __name__ == "__main__":
     )
 
     log_name = "transition1x" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -429,11 +433,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
@@ -441,7 +447,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -449,7 +455,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -469,8 +475,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp
