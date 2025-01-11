@@ -4,6 +4,8 @@ import sys
 from mpi4py import MPI
 import argparse
 
+import numpy as np
+
 import random
 
 import torch
@@ -103,8 +105,19 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         for item in list_atomistic_structures:
+
+            # Calculate chemical composition
+            atomic_number_list = item.atomic_numbers.tolist()
+            assert len(atomic_number_list) == item.natoms
+            ## 118: number of atoms in the periodic table
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
+            item.chemical_composition = chemical_composition
+
+            item = self.graphgps_transform(item)
+
             if self.check_forces_values(item.forces):
-                item = self.graphgps_transform(item)
                 self.dataset.append(item)
             else:
                 print(

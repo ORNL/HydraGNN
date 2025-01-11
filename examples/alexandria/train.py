@@ -6,8 +6,9 @@ import sys
 from mpi4py import MPI
 import argparse
 
-import random
 import numpy as np
+
+import random
 
 import torch
 from torch_geometric.data import Data
@@ -247,12 +248,20 @@ class Alexandria(AbstractBaseDataset):
 
         x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
         data_object = Data(
             natoms=natoms,
             pos=pos,
             cell=cell,
             pbc=pbc,
             atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
             # entry_id=entry_id,
             x=x,
             energy=total_energy_tensor,

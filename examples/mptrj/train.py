@@ -4,6 +4,8 @@ import sys
 from mpi4py import MPI
 import argparse
 
+import numpy as np
+
 import random
 
 import torch
@@ -165,6 +167,13 @@ class MPTrjDataset(AbstractBaseDataset):
                 forces = torch.tensor(forces, dtype=torch.float32)
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
+                # Calculate chemical composition
+                atomic_number_list = atomic_numbers.tolist()
+                assert len(atomic_number_list) == natoms
+                ## 118: number of atoms in the periodic table
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
                 # Creating the Data object
                 data_object = Data(
                     natoms=natoms,
@@ -172,6 +181,7 @@ class MPTrjDataset(AbstractBaseDataset):
                     cell=lattice_mat,
                     pbc=pbc,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
+                    chemical_composition=chemical_composition,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,

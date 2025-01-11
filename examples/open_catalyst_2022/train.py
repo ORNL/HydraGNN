@@ -113,6 +113,16 @@ class OpenCatalystDataset(AbstractBaseDataset):
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
             list_atomistic_structures = self.traj_to_torch_geom(traj_file)
             for item in list_atomistic_structures:
+
+                # Calculate chemical composition
+                atomic_number_list = item.atomic_numbers.tolist()
+                assert len(atomic_number_list) == item.natoms
+                ## 118: number of atoms in the periodic table
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
+                item.chemical_composition = chemical_composition
+
                 if self.check_forces_values(item.forces):
                     self.dataset.append(item)
                 else:
