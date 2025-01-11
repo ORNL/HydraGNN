@@ -2,10 +2,7 @@
 
 import h5py
 
-import torch
-
-from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from hydragnn.utils.distributed import nsplit
 
 REFERENCE_ENERGIES = {
     1: -13.62222753701504,
@@ -82,7 +79,11 @@ class Dataloader:
             # Access the "/data" group
             formulas_list = [formula for formula, group in split.items()]
 
-            for formula in formulas_list:
+            formulas_list_local = list(nsplit(formulas_list, self.comm_size))[
+                self.comm_rank
+            ]
+
+            for formula in formulas_list_local:
                 for rxn, subgrp in split[formula].items():
                     reactant = next(generator(formula, rxn, subgrp["reactant"]))
                     product = next(generator(formula, rxn, subgrp["product"]))

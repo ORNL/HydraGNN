@@ -77,6 +77,9 @@ class Transition1xDataset(AbstractBaseDataset):
         self.data_path = os.path.join(dirpath, "transition1x-release.h5")
         self.energy_per_atom = energy_per_atom
 
+        self.world_size = 1
+        self.rank = 0
+
         self.dist = dist
         if self.dist:
             assert torch.distributed.is_initialized()
@@ -93,7 +96,7 @@ class Transition1xDataset(AbstractBaseDataset):
         self.forces_norm_threshold = 1000.0
 
         # loop through all configurations in the data set
-        dataloader = Dataloader(self.data_path)
+        dataloader = Dataloader(self.data_path, comm_rank=self.rank, comm_size=self.world_size)
 
         for i, configuration in enumerate(dataloader):
 
@@ -194,6 +197,8 @@ class Transition1xDataset(AbstractBaseDataset):
                     data_object = self.graphgps_transform(data_object)
 
                 self.dataset.append(data_object)
+
+                random.shuffle(self.dataset)
 
             except:
                 continue
