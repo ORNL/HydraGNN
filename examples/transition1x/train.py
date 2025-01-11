@@ -51,6 +51,7 @@ torch.set_default_dtype(torch.float32)
 
 from utils.create_graph_data import Dataloader
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -63,10 +64,17 @@ compute_edge_lengths = Distance(norm=False, cat=True)
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
 
-    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
+    def __init__(
+        self,
+        dirpath,
+        var_config,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+    ):
         super().__init__()
 
-        self.data_path = os.path.join(dirpath, 'transition1x-release.h5')
+        self.data_path = os.path.join(dirpath, "transition1x-release.h5")
         self.energy_per_atom = energy_per_atom
 
         self.dist = dist
@@ -93,25 +101,23 @@ class Transition1xDataset(AbstractBaseDataset):
 
             pos = None
             try:
-                pos = torch.tensor(
-                    configuration['positions']
-                ).to(torch.float32)
+                pos = torch.tensor(configuration["positions"]).to(torch.float32)
                 assert pos.shape[0] > 0, "pos tensor does not have any atoms"
-                assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
+                assert (
+                    pos.shape[1] == 3
+                ), "pos tensor does not have 3 coordinates per atom"
             except:
-                print(f"Structure {configuration} does not have positional sites", flush=True)
+                print(
+                    f"Structure {configuration} does not have positional sites",
+                    flush=True,
+                )
                 continue
             natoms = torch.IntTensor([pos.shape[0]])
 
             atomic_numbers = None
             try:
                 atomic_numbers = (
-                    torch.tensor(
-                        [
-                            configuration['atomic_numbers']
-                        ]
-                    )
-                    .to(torch.float32)
+                    torch.tensor([configuration["atomic_numbers"]]).to(torch.float32)
                 ).t()
                 assert (
                     pos.shape[0] == atomic_numbers.shape[0]
@@ -125,16 +131,20 @@ class Transition1xDataset(AbstractBaseDataset):
 
             forces = None
             try:
-                forces = torch.tensor(configuration['wB97x_6-31G(d).forces']).to(torch.float32)
+                forces = torch.tensor(configuration["wB97x_6-31G(d).forces"]).to(
+                    torch.float32
+                )
             except:
                 print(f"Structure {configuration} does not have forces", flush=True)
                 continue
 
             total_energy = None
             try:
-                total_energy = configuration['wB97x_6-31G(d).energy']
+                total_energy = configuration["wB97x_6-31G(d).energy"]
             except:
-                print(f"Structure {configuration} does not have total energy", flush=True)
+                print(
+                    f"Structure {configuration} does not have total energy", flush=True
+                )
                 continue
             total_energy_tensor = (
                 torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
@@ -154,7 +164,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 # check forces values
                 assert self.check_forces_values(
                     forces
-                    ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
                 data_object = Data(
                     natoms=natoms,
@@ -212,7 +222,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="transition1x_energy.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="transition1x_energy.json"
+    )
     parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",

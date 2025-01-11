@@ -20,7 +20,7 @@ def get_molecular_reference_energy(atomic_numbers):
 
 
 def generator(formula, rxn, grp):
-    """ Iterates through a h5 group """
+    """Iterates through a h5 group"""
 
     energies = grp["wB97x_6-31G(d).energy"]
     forces = grp["wB97x_6-31G(d).forces"]
@@ -75,46 +75,48 @@ class Dataloader:
             print("MASSI: length of formulas_list: ", len(formulas_list))
 
             for formula in formulas_list:
-                    for rxn, subgrp in split[formula].items():
-                        reactant = next(generator(formula, rxn, subgrp["reactant"]))
-                        product = next(generator(formula, rxn, subgrp["product"]))
+                for rxn, subgrp in split[formula].items():
+                    reactant = next(generator(formula, rxn, subgrp["reactant"]))
+                    product = next(generator(formula, rxn, subgrp["product"]))
 
-                        if self.only_final:
-                            transition_state = next(
-                                generator(formula, rxn, subgrp["transition_state"])
-                            )
-                            yield {
-                                "rxn": rxn,
-                                "reactant": reactant,
-                                "product": product,
-                                "transition_state": transition_state,
-                            }
-                        else:
-                            yield reactant
-                            yield product
-                            for molecule in generator(formula, rxn, subgrp):
-                                yield molecule
+                    if self.only_final:
+                        transition_state = next(
+                            generator(formula, rxn, subgrp["transition_state"])
+                        )
+                        yield {
+                            "rxn": rxn,
+                            "reactant": reactant,
+                            "product": product,
+                            "transition_state": transition_state,
+                        }
+                    else:
+                        yield reactant
+                        yield product
+                        for molecule in generator(formula, rxn, subgrp):
+                            yield molecule
+
 
 from argparse import ArgumentParser
+
 
 def main(args):  # pylint: disable=redefined-outer-name
     # loop through all configurations in the data set
     dataloader = Dataloader(args.h5file)
     counter = 0
     for i, configuration in enumerate(dataloader):
-        print('\n', configuration.pop('formula'), "\n##########")
+        print("\n", configuration.pop("formula"), "\n##########")
 
         print(configuration)
-        if i>10:
+        if i > 10:
             break
         counter += 1
 
     print("Total number of samples: ", counter)
 
+
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("h5file", nargs='?', default="dataset/transition1x-release.h5")
+    parser.add_argument("h5file", nargs="?", default="dataset/transition1x-release.h5")
     args = parser.parse_args()
 
     main(args)
-
