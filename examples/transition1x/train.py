@@ -56,6 +56,7 @@ torch.set_default_dtype(torch.float32)
 
 from utils.create_graph_data import Dataloader
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 

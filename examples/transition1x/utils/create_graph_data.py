@@ -13,6 +13,7 @@ REFERENCE_ENERGIES = {
     9: -2712.8213146878606,
 }
 
+
 def get_molecular_reference_energy(atomic_numbers):
     molecular_reference_energy = 0
     for atomic_number in atomic_numbers:
