@@ -57,7 +57,14 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 
 class ANI1xDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
+    def __init__(
+        self,
+        dirpath,
+        var_config,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+    ):
         super().__init__()
 
         self.var_config = var_config
@@ -114,7 +121,7 @@ class ANI1xDataset(AbstractBaseDataset):
                     .to(torch.float32)
                 )
 
-                energy_per_atom = energy/natoms
+                energy_per_atom = energy.detach().clone() / natoms
                 forces = torch.from_numpy(F[frame_id]).to(torch.float32)
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
@@ -122,15 +129,15 @@ class ANI1xDataset(AbstractBaseDataset):
                 atomic_number_list = atomic_numbers.tolist()
                 assert len(atomic_number_list) == natoms
                 ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
                 data_object = Data(
                     natoms=natoms,
                     pos=pos,
-                    cell=None, # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=None, # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_shifts=None, # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     x=x,

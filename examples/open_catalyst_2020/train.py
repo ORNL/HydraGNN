@@ -53,7 +53,13 @@ def info(*args, logtype="info", sep=" "):
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, data_type, graphgps_transform=None, energy_per_atom=True, dist=False
+        self,
+        dirpath,
+        var_config,
+        data_type,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
     ):
         super().__init__()
 
@@ -110,7 +116,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             atomic_number_list = item.atomic_numbers.tolist()
             assert len(atomic_number_list) == item.natoms
             ## 118: number of atoms in the periodic table
-            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
             item.chemical_composition = chemical_composition

@@ -54,6 +54,7 @@ from fairchem.core.datasets import AseDBDataset
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
@@ -76,7 +77,13 @@ dataset_names = [
 
 class OMat2024(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, data_type, graphgps_transform=None, energy_per_atom=True, dist=False
+        self,
+        dirpath,
+        var_config,
+        data_type,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
     ):
         super().__init__()
 
@@ -133,7 +140,7 @@ class OMat2024(AbstractBaseDataset):
                     energy = torch.tensor(
                         dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
                     ).unsqueeze(0)
-                    energy_per_atom = energy/natoms
+                    energy_per_atom = energy / natoms
                     forces = torch.tensor(
                         dataset.get_atoms(index).get_forces(), dtype=torch.float32
                     )
@@ -168,8 +175,10 @@ class OMat2024(AbstractBaseDataset):
                     atomic_number_list = atomic_numbers.tolist()
                     assert len(atomic_number_list) == natoms
                     ## 118: number of atoms in the periodic table
-                    hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
-                    chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+                    hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+                    chemical_composition = (
+                        torch.tensor(hist).unsqueeze(1).to(torch.float32)
+                    )
 
                     data_object = Data(
                         natoms=natoms,

@@ -64,7 +64,13 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 class MPTrjDataset(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False, tmpfs=None
+        self,
+        dirpath,
+        var_config,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+        tmpfs=None,
     ):
         super().__init__()
 
@@ -163,7 +169,7 @@ class MPTrjDataset(AbstractBaseDataset):
                     dtype=torch.float32,
                 ).view(-1, 1)
                 energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(0)
-                energy_per_atom = energy / natoms
+                energy_per_atom = energy.detach().clone() / natoms
                 forces = torch.tensor(forces, dtype=torch.float32)
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
@@ -171,7 +177,7 @@ class MPTrjDataset(AbstractBaseDataset):
                 atomic_number_list = atomic_numbers.tolist()
                 assert len(atomic_number_list) == natoms
                 ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
                 # Creating the Data object

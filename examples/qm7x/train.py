@@ -68,6 +68,7 @@ EPBE0_atom = {
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
@@ -78,7 +79,14 @@ from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 class QM7XDataset(AbstractBaseDataset):
     """QM7-XDataset datasets class"""
 
-    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
+    def __init__(
+        self,
+        dirpath,
+        var_config,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+    ):
         super().__init__()
 
         self.qm7x_node_types = qm7x_node_types
@@ -207,7 +215,7 @@ class QM7XDataset(AbstractBaseDataset):
                 ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
                 energy = torch.tensor(EPBE0, dtype=torch.float32).unsqueeze(0)
-                energy_per_atom = energy / natoms
+                energy_per_atom = energy.detach().clone() / natoms
 
                 x = torch.cat((atomic_numbers, pos, forces, hCHG, hVDIP, hRAT), dim=1)
 
@@ -215,15 +223,15 @@ class QM7XDataset(AbstractBaseDataset):
                 atomic_number_list = atomic_numbers.tolist()
                 assert len(atomic_number_list) == natoms
                 ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
                 data_object = Data(
                     natoms=natoms,
                     pos=pos,
-                    cell=None, # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=None, # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_shifts=None, # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     x=x,

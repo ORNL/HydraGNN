@@ -118,7 +118,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
                 atomic_number_list = item.atomic_numbers.tolist()
                 assert len(atomic_number_list) == item.natoms
                 ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
                 item.chemical_composition = chemical_composition
@@ -156,7 +156,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
-        energy_per_atom_tensor = energy_tensor/natoms
+        energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
 
         x = torch.cat((atomic_numbers, pos, forces), dim=1)
