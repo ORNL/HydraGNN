@@ -37,7 +37,8 @@ torch.manual_seed(random_state)
 import torch.distributed as dist
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance
+from torch_geometric.transforms import RadiusGraph, Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 
 try:
@@ -67,26 +68,29 @@ EPBE0_atom = {
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+# transform_coordinates = Spherical(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-
-# FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
-create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
-compute_edge_lengths = Distance(norm=False, cat=True)
 
 
 class QM7XDataset(AbstractBaseDataset):
     """QM7-XDataset datasets class"""
 
-    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
+    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
         super().__init__()
 
         self.qm7x_node_types = qm7x_node_types
         self.var_config = var_config
         self.energy_per_atom = energy_per_atom
 
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+
+        self.graphgps_transform = graphgps_transform
+
         # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 100.0
+        self.forces_norm_threshold = 1000.0
 
         self.dist = dist
         if self.dist:
@@ -150,16 +154,16 @@ class QM7XDataset(AbstractBaseDataset):
 
         for confid in conf_ids[rx.start : rx.stop]:
             ## get atomic positions and numbers
-            xyz = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(
+            pos = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(
                 torch.float32
             )
-            Z = (
+            atomic_numbers = (
                 torch.Tensor(fMOL[molid][confid]["atNUM"])
                 .unsqueeze(1)
                 .to(torch.float32)
             )
 
-            natoms = xyz.shape[0]
+            natoms = pos.shape[0]
 
             ## get quantum mechanical properties and add them to properties buffer
             forces = torch.from_numpy(np.array(fMOL[molid][confid]["pbe0FOR"])).to(
@@ -202,23 +206,56 @@ class QM7XDataset(AbstractBaseDataset):
                     forces
                 ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
+                energy = torch.tensor(EPBE0, dtype=torch.float32).unsqueeze(0)
+                energy_per_atom = energy / natoms
+
+                x = torch.cat((atomic_numbers, pos, forces, hCHG, hVDIP, hRAT), dim=1)
+
+                data_object = Data(
+                    natoms=natoms,
+                    pos=pos,
+                    cell=None, # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=None, # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    edge_shifts=None, # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
+                    x=x,
+                    energy=energy,
+                    energy_per_atom=energy_per_atom,
+                    force=forces,
+                )
+
                 if self.energy_per_atom:
-                    energy = EPBE0 / natoms
+                    data_object.y = data_object.energy_per_atom
                 else:
-                    energy = EPBE0
+                    data_object.y = data_object.energy
 
-                # data = Data(
-                #    pos=xyz, x=Z, molid=molid, confid=confid
-                # )
-                data = Data(pos=xyz, x=Z, force=forces, energy=energy, y=energy)
-                data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
+                if data_object.pbc is not None and data_object.cell is not None:
+                    try:
+                        data_object = self.radius_graph_pbc(data_object)
+                    except:
+                        print(
+                            f"Structure could not successfully apply pbc radius graph",
+                            flush=True,
+                        )
+                        data_object = self.radius_graph(data_object)
+                else:
+                    data_object = self.radius_graph(data_object)
 
-                data = create_graph_fromXYZ(data)
+                data_object = transform_coordinates(data_object)
 
-                # Add edge length as edge feature
-                data = compute_edge_lengths(data)
-                data.edge_attr = data.edge_attr.to(torch.float32)
-                subset.append(data)
+                # LPE
+                if self.graphgps_transform is not None:
+                    data_object = self.graphgps_transform(data_object)
+
+                if self.check_forces_values(data_object.forces):
+                    self.dataset.append(data_object)
+                else:
+                    print(
+                        f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                        flush=True,
+                    )
+
+                subset.append(data_object)
             except AssertionError as e:
                 print(f"Assertion error occurred: {e}")
 
@@ -300,6 +337,13 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -330,6 +374,7 @@ if __name__ == "__main__":
         total = QM7XDataset(
             os.path.join(datadir),
             var_config,
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )

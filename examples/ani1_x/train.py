@@ -15,6 +15,7 @@ torch.manual_seed(random_state)
 
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -51,12 +52,12 @@ def info(*args, logtype="info", sep=" "):
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
 
 class ANI1xDataset(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
+    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
         super().__init__()
 
         self.var_config = var_config
@@ -65,6 +66,8 @@ class ANI1xDataset(AbstractBaseDataset):
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+
+        self.graphgps_transform = graphgps_transform
 
         self.dist = dist
         if self.dist:
@@ -103,35 +106,47 @@ class ANI1xDataset(AbstractBaseDataset):
             # extract positions, energies, and forces for each step
             for frame_id in local_trajectories_id:
 
-                positions = torch.from_numpy(X[frame_id]).to(torch.float32)
+                pos = torch.from_numpy(X[frame_id]).to(torch.float32)
                 energy = (
                     torch.tensor(E[frame_id])
                     .unsqueeze(0)
                     .unsqueeze(1)
                     .to(torch.float32)
                 )
-                if self.energy_per_atom:
-                    energy /= natoms
-                forces = torch.from_numpy(F[frame_id]).to(torch.float32)
-                x = torch.cat([atomic_numbers, positions, forces], dim=1)
 
-                data = Data(
-                    energy=energy,
-                    force=forces,
+                energy_per_atom = energy/natoms
+                forces = torch.from_numpy(F[frame_id]).to(torch.float32)
+                x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+                data_object = Data(
                     natoms=natoms,
-                    # stress=torch.tensor(stresses, dtype=torch.float32),
-                    # magmom=torch.tensor(magmom, dtype=torch.float32),
-                    pos=positions,
+                    pos=pos,
+                    cell=None, # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=None, # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    edge_shifts=None, # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     x=x,
-                    y=energy,
+                    energy=energy,
+                    energy_per_atom=energy_per_atom,
+                    force=forces,
                 )
 
-                data = self.radius_graph(data)
-                data = transform_coordinates(data)
+                if self.energy_per_atom:
+                    data_object.y = data_object.energy_per_atom
+                else:
+                    data_object.y = data_object.energy
 
-                if self.check_forces_values(data.force):
-                    self.dataset.append(data)
+                data_object = self.radius_graph(data_object)
+
+                # Build edge attributes
+                data_object = transform_coordinates(data_object)
+
+                # LPE
+                if self.graphgps_transform is not None:
+                    data_object = self.graphgps_transform(data_object)
+
+                if self.check_forces_values(data_object.force):
+                    self.dataset.append(data_object)
                 else:
                     print(
                         f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
@@ -241,6 +256,13 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -270,6 +292,7 @@ if __name__ == "__main__":
         total = ANI1xDataset(
             os.path.join(datadir),
             var_config,
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )

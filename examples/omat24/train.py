@@ -13,7 +13,8 @@ random_state = 0
 torch.manual_seed(random_state)
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance
+from torch_geometric.transforms import RadiusGraph, Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -51,15 +52,9 @@ from fairchem.core.datasets import AseDBDataset
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
-
-# FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
-create_graph_fromXYZ = RadiusGraph(
-    r=5.0, max_num_neighbors=50
-)  # radius cutoff in angstrom
-create_graph_fromXYZPBC = RadiusGraphPBC(
-    r=5.0, max_num_neighbors=50
-)  # radius cutoff in angstrom
-compute_edge_lengths = Distance(norm=False, cat=True)
+# transform_coordinates = Spherical(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
 
 dataset_names = [
@@ -79,7 +74,7 @@ dataset_names = [
 
 class OMat2024(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
+        self, dirpath, var_config, data_type, graphgps_transform=None, energy_per_atom=True, dist=False
     ):
         super().__init__()
 
@@ -90,6 +85,11 @@ class OMat2024(AbstractBaseDataset):
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
+
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
+
+        self.graphgps_transform = graphgps_transform
 
         config_kwargs = {}  # see tutorial on additional configuration
 
@@ -120,17 +120,18 @@ class OMat2024(AbstractBaseDataset):
 
             for index in iterate_tqdm(rx, verbosity_level=2):
                 try:
-                    xyz = torch.tensor(
+                    pos = torch.tensor(
                         dataset.get_atoms(index).get_positions(), dtype=torch.float32
                     )
-                    natoms = torch.IntTensor([xyz.shape[0]])
-                    Z = torch.tensor(
+                    natoms = torch.IntTensor([pos.shape[0]])
+                    atomic_numbers = torch.tensor(
                         dataset.get_atoms(index).get_atomic_numbers(),
                         dtype=torch.float32,
                     ).unsqueeze(1)
                     energy = torch.tensor(
                         dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
                     ).unsqueeze(0)
+                    energy_per_atom = energy/natoms
                     forces = torch.tensor(
                         dataset.get_atoms(index).get_forces(), dtype=torch.float32
                     )
@@ -159,37 +160,48 @@ class OMat2024(AbstractBaseDataset):
                     if self.energy_per_atom:
                         energy /= natoms.item()
 
-                    data = Data(
-                        pos=xyz,
+                    x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+                    data_object = Data(
+                        natoms=natoms,
+                        pos=pos,
                         cell=cell,
                         pbc=pbc,
-                        x=Z,
-                        force=forces,
+                        atomic_numbers=atomic_numbers,
+                        x=x,
                         energy=energy,
-                        y=energy,
+                        energy_per_atom=energy_per_atom,
+                        forces=forces,
                     )
-                    data.x = torch.cat((data.x, xyz, forces), dim=1)
 
-                    if data.pbc is not None and data.cell is not None:
+                    if self.energy_per_atom:
+                        data_object.y = data_object.energy_per_atom
+                    else:
+                        data_object.y = data_object.energy
+
+                    if data_object.pbc is not None and data_object.cell is not None:
                         try:
-                            data = create_graph_fromXYZPBC(data)
+                            data_object = self.radius_graph_pbc(data_object)
                         except:
                             print(
                                 f"Structure could not successfully apply pbc radius graph",
                                 flush=True,
                             )
-                            data = self.create_graph_from_XYZ(data)
+                            data_object = self.radius_graph(data_object)
                     else:
-                        data = create_graph_fromXYZ(data)
+                        data_object = self.radius_graph(data_object)
 
-                    # Add edge length as edge feature
-                    data = compute_edge_lengths(data)
-                    data.edge_attr = data.edge_attr.to(torch.float32)
-                    if self.check_forces_values(data.force):
-                        self.dataset.append(data)
+                    data_object = transform_coordinates(data_object)
+
+                    # LPE
+                    if self.graphgps_transform is not None:
+                        data_object = self.graphgps_transform(data_object)
+
+                    if self.check_forces_values(data_object.forces):
+                        self.dataset.append(data_object)
                     else:
                         print(
-                            f"L2-norm of force tensor is {data.force.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                            f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
                             flush=True,
                         )
 
@@ -280,6 +292,13 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -313,6 +332,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type="train",
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )

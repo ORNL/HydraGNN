@@ -12,6 +12,8 @@ import torch
 random_state = 0
 torch.manual_seed(random_state)
 
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
+
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
@@ -49,13 +51,15 @@ def info(*args, logtype="info", sep=" "):
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
+        self, dirpath, var_config, data_type, graphgps_transform=None, energy_per_atom=True, dist=False
     ):
         super().__init__()
 
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
+
+        self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
@@ -99,7 +103,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         for item in list_atomistic_structures:
-            if self.check_forces_values(item.force):
+            if self.check_forces_values(item.forces):
+                item = self.graphgps_transform(item)
                 self.dataset.append(item)
             else:
                 print(
@@ -200,6 +205,13 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -233,6 +245,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.train_path,
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
