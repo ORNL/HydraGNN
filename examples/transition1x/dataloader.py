@@ -72,8 +72,6 @@ class Dataloader:
             # Access the "/data" group
             formulas_list = [formula for formula, group in split.items()]
 
-            print("MASSI: length of formulas_list: ", len(formulas_list))
-
             for formula in formulas_list:
                 for rxn, subgrp in split[formula].items():
                     reactant = next(generator(formula, rxn, subgrp["reactant"]))
