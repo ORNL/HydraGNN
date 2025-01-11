@@ -62,6 +62,7 @@ def list_directories(path):
 
     return directories
 
+
 periodic_table = generate_dictionary_elements()
 
 # Reversing the dictionary so the elements become keys and the atomic numbers become values
