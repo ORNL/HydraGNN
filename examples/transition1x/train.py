@@ -23,32 +23,38 @@ from torch_geometric.transforms import RadiusGraph, Distance
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
-from hydragnn.utils.print_utils import iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-
-from hydragnn.utils.distributed import get_device
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.model import print_model
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+)
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
+from hydragnn.utils.distributed import nsplit
 
 torch.set_default_dtype(torch.float32)
 
 from utils.create_graph_data import Dataloader
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
-
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
 create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
@@ -58,11 +64,21 @@ compute_edge_lengths = Distance(norm=False, cat=True)
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
 
-    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
+    def __init__(
+        self,
+        dirpath,
+        var_config,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+    ):
         super().__init__()
 
-        self.data_path = os.path.join(dirpath, 'transition1x-release.h5')
+        self.data_path = os.path.join(dirpath, "transition1x-release.h5")
         self.energy_per_atom = energy_per_atom
+
+        self.world_size = 1
+        self.rank = 0
 
         self.dist = dist
         if self.dist:
@@ -80,7 +96,9 @@ class Transition1xDataset(AbstractBaseDataset):
         self.forces_norm_threshold = 1000.0
 
         # loop through all configurations in the data set
-        dataloader = Dataloader(self.data_path)
+        dataloader = Dataloader(
+            self.data_path, comm_rank=self.rank, comm_size=self.world_size
+        )
 
         for i, configuration in enumerate(dataloader):
 
@@ -88,27 +106,24 @@ class Transition1xDataset(AbstractBaseDataset):
 
             pos = None
             try:
-                pos = torch.tensor(
-                    configuration['positions']
-                ).to(torch.float32)
+                pos = torch.tensor(configuration["positions"]).to(torch.float32)
                 assert pos.shape[0] > 0, "pos tensor does not have any atoms"
-                assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
+                assert (
+                    pos.shape[1] == 3
+                ), "pos tensor does not have 3 coordinates per atom"
             except:
-                print(f"Structure {configuration} does not have positional sites", flush=True)
+                print(
+                    f"Structure {configuration} does not have positional sites",
+                    flush=True,
+                )
                 continue
             natoms = torch.IntTensor([pos.shape[0]])
 
             atomic_numbers = None
             try:
                 atomic_numbers = (
-                    torch.tensor(
-                        [
-                            configuration['atomic_numbers']
-                        ]
-                    )
-                    .to(torch.float32)
+                    torch.tensor([configuration["atomic_numbers"]]).to(torch.float32)
                 ).t()
-                print(atomic_numbers.shape)
                 assert (
                     pos.shape[0] == atomic_numbers.shape[0]
                 ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
@@ -121,16 +136,20 @@ class Transition1xDataset(AbstractBaseDataset):
 
             forces = None
             try:
-                forces = torch.tensor(configuration['wB97x_6-31G(d).forces']).to(torch.float32)
+                forces = torch.tensor(configuration["wB97x_6-31G(d).forces"]).to(
+                    torch.float32
+                )
             except:
                 print(f"Structure {configuration} does not have forces", flush=True)
                 continue
 
             total_energy = None
             try:
-                total_energy = configuration['wB97x_6-31G(d).energy']
+                total_energy = configuration["wB97x_6-31G(d).energy"]
             except:
-                print(f"Structure {configuration} does not have total energy", flush=True)
+                print(
+                    f"Structure {configuration} does not have total energy", flush=True
+                )
                 continue
             total_energy_tensor = (
                 torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
@@ -150,7 +169,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 # check forces values
                 assert self.check_forces_values(
                     forces
-                    ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
                 data_object = Data(
                     natoms=natoms,
@@ -181,6 +200,8 @@ class Transition1xDataset(AbstractBaseDataset):
 
                 self.dataset.append(data_object)
 
+                random.shuffle(self.dataset)
+
             except:
                 continue
 
@@ -208,7 +229,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="transition1x.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="transition1x_energy.json"
+    )
     parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
@@ -251,7 +274,7 @@ if __name__ == "__main__":
         "hVDIP",
         "hRAT",
     ]
-    node_feature_dims = [1, 3, 3, 1, 1, 1]
+    node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
@@ -279,7 +302,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -292,8 +315,8 @@ if __name__ == "__main__":
     )
 
     log_name = "transition1x" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -429,11 +452,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
@@ -441,7 +466,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -449,7 +474,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -469,8 +494,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

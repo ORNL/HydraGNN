@@ -2,10 +2,7 @@
 
 import h5py
 
-import torch
-
-from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from hydragnn.utils.distributed import nsplit
 
 REFERENCE_ENERGIES = {
     1: -13.62222753701504,
@@ -14,6 +11,7 @@ REFERENCE_ENERGIES = {
     8: -2041.8396277138045,
     9: -2712.8213146878606,
 }
+
 
 def get_molecular_reference_energy(atomic_numbers):
     molecular_reference_energy = 0
@@ -24,7 +22,7 @@ def get_molecular_reference_energy(atomic_numbers):
 
 
 def generator(formula, rxn, grp):
-    """ Iterates through a h5 group """
+    """Iterates through a h5 group"""
 
     energies = grp["wB97x_6-31G(d).energy"]
     forces = grp["wB97x_6-31G(d).forces"]
@@ -56,7 +54,9 @@ class Dataloader:
     state instead of all configurations for each reaction and return them in dictionaries.
     """
 
-    def __init__(self, hdf5_file, datasplit="data", comm_size=1, comm_rank=0, only_final=False):
+    def __init__(
+        self, hdf5_file, datasplit="data", comm_size=1, comm_rank=0, only_final=False
+    ):
         self.hdf5_file = hdf5_file
         self.only_final = only_final
 
@@ -79,7 +79,11 @@ class Dataloader:
             # Access the "/data" group
             formulas_list = [formula for formula, group in split.items()]
 
-            for formula in formulas_list:
+            formulas_list_local = list(nsplit(formulas_list, self.comm_size))[
+                self.comm_rank
+            ]
+
+            for formula in formulas_list_local:
                 for rxn, subgrp in split[formula].items():
                     reactant = next(generator(formula, rxn, subgrp["reactant"]))
                     product = next(generator(formula, rxn, subgrp["product"]))
@@ -99,4 +103,3 @@ class Dataloader:
                         yield product
                         for molecule in generator(formula, rxn, subgrp):
                             yield molecule
-
