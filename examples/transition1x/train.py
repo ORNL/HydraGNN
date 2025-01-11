@@ -56,7 +56,6 @@ torch.set_default_dtype(torch.float32)
 
 from utils.create_graph_data import Dataloader
 
-
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -234,7 +233,6 @@ class Transition1xDataset(AbstractBaseDataset):
             self.dataset.append(data_object)
 
             random.shuffle(self.dataset)
-
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
