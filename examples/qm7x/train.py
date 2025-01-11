@@ -72,6 +72,9 @@ EPBE0_atom = {
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+# transform_coordinates = Spherical(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
