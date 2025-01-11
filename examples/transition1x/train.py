@@ -13,6 +13,15 @@ import logging
 import sys
 import argparse
 
+import numpy as np
+
+import torch
+import torch.distributed as dist
+
+from torch_geometric.data import Data
+from torch_geometric.transforms import RadiusGraph, Distance
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
+
 import hydragnn
 from hydragnn.utils.print_utils import iterate_tqdm, log
 from hydragnn.utils.time_utils import Timer
@@ -23,13 +32,6 @@ from hydragnn.utils.distdataset import DistDataset
 from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
 from hydragnn.preprocess.utils import gather_deg
 
-import numpy as np
-
-from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance
-import torch
-import torch.distributed as dist
-
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
@@ -38,8 +40,9 @@ except ImportError:
 from hydragnn.utils import nsplit
 import hydragnn.utils.tracer as tr
 
-
 torch.set_default_dtype(torch.float32)
+
+from utils.create_graph_data import Dataloader
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -55,29 +58,44 @@ compute_edge_lengths = Distance(norm=False, cat=True)
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
 
-    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
+    def __init__(self, dirpath, var_config, graphgps_transform=None, energy_per_atom=True, dist=False):
         super().__init__()
 
+        self.data_path = os.path.join(dirpath, 'transition1x-release.h5')
         self.energy_per_atom = energy_per_atom
+
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
+        self.energy_per_atom = energy_per_atom
+
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+
+        self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 1000.0
 
         # loop through all configurations in the data set
-        dataloader = Dataloader(args.h5file)
-        counter = 0
+        dataloader = Dataloader(self.data_path)
+
         for i, configuration in enumerate(dataloader):
+
+            data_object = None
 
             pos = None
             try:
                 pos = torch.tensor(
                     configuration['positions']
                 ).to(torch.float32)
-                assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
                 assert pos.shape[0] > 0, "pos tensor does not have any atoms"
+                assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
             except:
-                print(f"Structure {entry_id} does not have positional sites", flush=True)
-                return data_object
+                print(f"Structure {configuration} does not have positional sites", flush=True)
+                continue
             natoms = torch.IntTensor([pos.shape[0]])
 
             atomic_numbers = None
@@ -96,56 +114,82 @@ class Transition1xDataset(AbstractBaseDataset):
                 ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
             except:
                 print(
-                    f"Structure {entry_id} does not have positional atomic numbers",
+                    f"Structure {configuration} does not have positional atomic numbers",
                     flush=True,
                 )
-                return data_object
+                continue
 
             forces = None
             try:
                 forces = torch.tensor(configuration['wB97x_6-31G(d).forces']).to(torch.float32)
             except:
-                print(f"Structure {entry_id} does not have forces", flush=True)
-                return data_object
+                print(f"Structure {configuration} does not have forces", flush=True)
+                continue
 
             total_energy = None
             try:
                 total_energy = configuration['wB97x_6-31G(d).energy']
             except:
-                print(f"Structure {entry_id} does not have total energy", flush=True)
-                return data_object
+                print(f"Structure {configuration} does not have total energy", flush=True)
+                continue
             total_energy_tensor = (
                 torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
             )
             total_energy_per_atom_tensor = total_energy_tensor.detach().clone() / natoms
 
+            x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+            # Calculate chemical composition
+            atomic_number_list = atomic_numbers.tolist()
+            assert len(atomic_number_list) == natoms
+            ## 118: number of atoms in the periodic table
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 1))
+            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
             try:
                 # check forces values
                 assert self.check_forces_values(
                     forces
-                    ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configurantion['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                    ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
-                # data = Data(
-                #    pos=xyz, x=Z, molid=molid, confid=confid
-                # )
-                data = Data(pos=xyz, x=Z)
-                data.x = torch.cat((data.x, xyz, forces, hCHG, hVDIP, hRAT), dim=1)
+                data_object = Data(
+                    natoms=natoms,
+                    pos=pos,
+                    cell=None,
+                    pbc=None,
+                    atomic_numbers=atomic_numbers,
+                    chemical_composition=chemical_composition,
+                    x=x,
+                    energy=total_energy_tensor,
+                    energy_per_atom=total_energy_per_atom_tensor,
+                    forces=forces,
+                )
 
                 if self.energy_per_atom:
-                    data.y = EPBE0 / natoms
+                    data_object.y = data_object.total_energy_per_atom
                 else:
-                    data.y = EPBE0
+                    data_object.y = data_object.total_energy
 
-                data = create_graph_fromXYZ(data)
+                data_object = self.radius_graph(data_object)
 
-                # Add edge length as edge feature
-                data = compute_edge_lengths(data)
-                data.edge_attr = data.edge_attr.to(torch.float32)
-                subset.append(data)
-            except AssertionError as e:
-                print(f"Assertion error occurred: {e}")
+                # Build edge attributes
+                data_object = self.transform_coordinates(data_object)
 
-        return subset
+                # LPE
+                if self.graphgps_transform is not None:
+                    data_object = self.graphgps_transform(data_object)
+
+                self.dataset.append(data_object)
+
+            except:
+                continue
+
+    def check_forces_values(self, forces):
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
@@ -164,7 +208,7 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="qm7x.json")
+    parser.add_argument("--inputfile", help="input file", type=str, default="transition1x.json")
     parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
@@ -209,7 +253,7 @@ if __name__ == "__main__":
     ]
     node_feature_dims = [1, 3, 3, 1, 1, 1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset/Transition1x")
+    datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -222,6 +266,13 @@ if __name__ == "__main__":
     var_config["graph_feature_dims"] = graph_feature_dims
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
+
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -250,9 +301,10 @@ if __name__ == "__main__":
     if args.preonly:
 
         ## local data
-        total = Transition1xDatasetDataset(
+        total = Transition1xDataset(
             os.path.join(datadir),
             var_config,
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
