@@ -256,7 +256,6 @@ class Alexandria(AbstractBaseDataset):
 
         x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
-<<<<<<< HEAD
         # Calculate chemical composition
         atomic_number_list = atomic_numbers.tolist()
         assert len(atomic_number_list) == natoms
@@ -266,9 +265,6 @@ class Alexandria(AbstractBaseDataset):
 
         data_object = Data(
             dataset_name="alexandria",
-=======
-        data_object = Data(
->>>>>>> 5dfbe21 (data attributes updated for consistency across datasets)
             natoms=natoms,
             pos=pos,
             cell=cell,
@@ -277,11 +273,9 @@ class Alexandria(AbstractBaseDataset):
             edge_attr=None,
             edge_shifts=None,
             atomic_numbers=atomic_numbers,
-<<<<<<< HEAD
             chemical_composition=chemical_composition,
             smiles_string=None,
-=======
->>>>>>> 5dfbe21 (data attributes updated for consistency across datasets)
+            chemical_composition=chemical_composition,
             # entry_id=entry_id,
             x=x,
             energy=total_energy_tensor,
@@ -299,11 +293,7 @@ class Alexandria(AbstractBaseDataset):
         if self.energy_per_atom:
             data_object.y = data_object.energy_per_atom
         else:
-<<<<<<< HEAD
             data_object.y = data_object.energy
-=======
-            data_object.y = data_object.total_energy
->>>>>>> 5dfbe21 (data attributes updated for consistency across datasets)
 
         if data_object.pbc is not None and data_object.cell is not None:
             try:
@@ -332,10 +322,6 @@ class Alexandria(AbstractBaseDataset):
                 flush=True,
             )
             return None
-<<<<<<< HEAD
-=======
-
->>>>>>> 5dfbe21 (data attributes updated for consistency across datasets)
 
     def process_file_content(self, filepath):
         """
