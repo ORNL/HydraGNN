@@ -265,6 +265,7 @@ class Alexandria(AbstractBaseDataset):
         chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
         data_object = Data(
+            dataset_name="alexandria",
             natoms=natoms,
             pos=pos,
             cell=cell,

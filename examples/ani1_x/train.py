@@ -133,6 +133,7 @@ class ANI1xDataset(AbstractBaseDataset):
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
                 data_object = Data(
+                    dataset_name="ani1x",
                     natoms=natoms,
                     pos=pos,
                     cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets

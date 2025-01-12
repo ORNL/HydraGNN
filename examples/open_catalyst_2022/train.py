@@ -163,6 +163,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         # put the minimum data in torch geometric data object
         data_object = Data(
+            dataset_name="oc2022",
             natoms=natoms,
             pos=pos,
             cell=cell,

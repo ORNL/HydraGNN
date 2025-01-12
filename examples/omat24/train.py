@@ -181,6 +181,7 @@ class OMat2024(AbstractBaseDataset):
                     )
 
                     data_object = Data(
+                        dataset_name="omat24",
                         natoms=natoms,
                         pos=pos,
                         cell=cell,

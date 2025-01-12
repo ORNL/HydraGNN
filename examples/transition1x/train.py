@@ -172,6 +172,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
 
                 data_object = Data(
+                    dataset_name="transition1x",
                     natoms=natoms,
                     pos=pos,
                     cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets

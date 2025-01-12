@@ -182,6 +182,7 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 # Creating the Data object
                 data_object = Data(
+                    dataset_name="mptrj",
                     natoms=natoms,
                     pos=pos,
                     cell=lattice_mat,

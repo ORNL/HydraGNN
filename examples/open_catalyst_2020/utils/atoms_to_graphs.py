@@ -111,6 +111,7 @@ class AtomsToGraphs:
 
         # put the minimum data in torch geometric data object
         data_object = Data(
+            dataset_name="oc2020",
             natoms=natoms,
             pos=positions,
             cell=cell,
