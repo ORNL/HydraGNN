@@ -138,6 +138,8 @@ class ANI1xDataset(AbstractBaseDataset):
                     pos=pos,
                     cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
                     pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    edge_index = None,
+                    edge_attr=None,
                     edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,

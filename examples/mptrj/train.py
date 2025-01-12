@@ -187,6 +187,9 @@ class MPTrjDataset(AbstractBaseDataset):
                     pos=pos,
                     cell=lattice_mat,
                     pbc=pbc,
+                    edge_index=None,
+                    edge_attr=None,
+                    edge_shifts=None,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     x=x,
