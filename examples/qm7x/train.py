@@ -240,7 +240,7 @@ class QM7XDataset(AbstractBaseDataset):
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
-                    force=forces,
+                    forces=forces,
                 )
 
                 if self.energy_per_atom:
