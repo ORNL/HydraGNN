@@ -120,6 +120,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
             item.chemical_composition = chemical_composition
+            item.smiles_string = None
 
             item = self.graphgps_transform(item)
 

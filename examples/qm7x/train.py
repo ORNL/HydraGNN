@@ -49,6 +49,10 @@ except ImportError:
 from hydragnn.utils.distributed import nsplit
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
+from hydragnn.utils.descriptors_and_embeddings import xyz2mol
+
+from rdkit import Chem
+
 # FIXME: this works fine for now because we train on QM7-X molecules
 # for larger chemical spaces, the following atom representation has to be properly expanded
 qm7x_node_types = {"H": 0, "C": 1, "N": 2, "O": 3, "S": 4, "Cl": 5}
@@ -225,6 +229,26 @@ class QM7XDataset(AbstractBaseDataset):
                 ## 118: number of atoms in the periodic table
                 hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+                pos_list = pos.tolist()
+                atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+                try:
+                    mol = xyz2mol(
+                        atomic_number_list_int,
+                        pos_list,
+                        charge=0,
+                        allow_charged_fragments=True,
+                        use_graph=False,
+                        use_huckel=False,
+                        embed_chiral=True,
+                        use_atom_maps=False,
+                    )
+
+                    assert (
+                        len(mol) == 1
+                    ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
+                    smiles_string = Chem.MolToSmiles(mol[0])
+                except:
+                    smiles_string = None
 
                 data_object = Data(
                     dataset_name="qm7x",
@@ -237,6 +261,7 @@ class QM7XDataset(AbstractBaseDataset):
                     edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
+                    smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,

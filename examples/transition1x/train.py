@@ -38,7 +38,12 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
+
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
+
+from hydragnn.utils.descriptors_and_embeddings import xyz2mol
+
+from rdkit import Chem
 
 try:
     from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
@@ -164,6 +169,26 @@ class Transition1xDataset(AbstractBaseDataset):
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+            pos_list = pos.tolist()
+            atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+            try:
+                mol = xyz2mol(
+                    atomic_number_list_int,
+                    pos_list,
+                    charge=0,
+                    allow_charged_fragments=True,
+                    use_graph=False,
+                    use_huckel=False,
+                    embed_chiral=True,
+                    use_atom_maps=False,
+                )
+
+                assert (
+                    len(mol) == 1
+                ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
+                smiles_string = Chem.MolToSmiles(mol[0])
+            except:
+                smiles_string = None
 
             try:
                 # check forces values
@@ -182,6 +207,7 @@ class Transition1xDataset(AbstractBaseDataset):
                     edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,
                     chemical_composition=chemical_composition,
+                    smiles_string=smiles_string,
                     x=x,
                     energy=total_energy_tensor,
                     energy_per_atom=total_energy_per_atom_tensor,

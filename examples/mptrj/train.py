@@ -192,6 +192,7 @@ class MPTrjDataset(AbstractBaseDataset):
                     edge_shifts=None,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
+                    smiles_string=None,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,

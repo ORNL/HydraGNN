@@ -37,6 +37,10 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log
 
+from hydragnn.utils.descriptors_and_embeddings import xyz2mol
+
+from rdkit import Chem
+
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
@@ -131,6 +135,26 @@ class ANI1xDataset(AbstractBaseDataset):
                 ## 118: number of atoms in the periodic table
                 hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+                pos_list = pos.tolist()
+                atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+                try:
+                    mol = xyz2mol(
+                        atomic_number_list_int,
+                        pos_list,
+                        charge=0,
+                        allow_charged_fragments=True,
+                        use_graph=False,
+                        use_huckel=False,
+                        embed_chiral=True,
+                        use_atom_maps=False,
+                    )
+
+                    assert (
+                        len(mol) == 1
+                    ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
+                    smiles_string = Chem.MolToSmiles(mol[0])
+                except:
+                    smiles_string = None
 
                 data_object = Data(
                     dataset_name="ani1x",
@@ -138,11 +162,12 @@ class ANI1xDataset(AbstractBaseDataset):
                     pos=pos,
                     cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
                     pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_index = None,
+                    edge_index=None,
                     edge_attr=None,
                     edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
+                    smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,

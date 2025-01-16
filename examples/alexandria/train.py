@@ -275,6 +275,7 @@ class Alexandria(AbstractBaseDataset):
             edge_shifts=None,
             atomic_numbers=atomic_numbers,
             chemical_composition=chemical_composition,
+            smiles_string=None,
             # entry_id=entry_id,
             x=x,
             energy=total_energy_tensor,

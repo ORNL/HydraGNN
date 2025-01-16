@@ -159,6 +159,13 @@ class OpenCatalystDataset(AbstractBaseDataset):
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
 
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
         x = torch.cat((atomic_numbers, pos, forces), dim=1)
 
         # put the minimum data in torch geometric data object
@@ -172,6 +179,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
             edge_attr=None,
             edge_shifts=None,
             atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
+            smiles_string=None,
             x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
