@@ -166,9 +166,6 @@ class OMat2024(AbstractBaseDataset):
                             flush=True,
                         )
 
-                    if self.energy_per_atom:
-                        energy /= natoms.item()
-
                     x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
                     # Calculate chemical composition
