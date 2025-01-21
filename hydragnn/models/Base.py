@@ -10,7 +10,7 @@
 ##############################################################################
 
 import torch
-from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
+from torch.nn import ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch_geometric.nn import Sequential as PyGSequential
@@ -77,10 +77,10 @@ class Base(Module):
         self.head_dims = output_dim
         self.num_heads = len(self.head_dims)
         ##convolutional layers for node level predictions
-        self.convs_node_hidden = ModuleList()
-        self.batch_norms_node_hidden = ModuleList()
-        self.convs_node_output = ModuleList()
-        self.batch_norms_node_output = ModuleList()
+        self.convs_node_hidden = ModuleDict({})
+        self.batch_norms_node_hidden = ModuleDict({})
+        self.convs_node_output = ModuleDict({})
+        self.batch_norms_node_output = ModuleDict({})
         self.equivariance = equivariance
         self.activation_function = activation_function_selection(
             activation_function_type
@@ -261,140 +261,169 @@ class Base(Module):
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
-        if (
-            "node" not in self.config_heads
-            or self.config_heads["node"]["type"] != "conv"
-        ):
-            return
+        nodeconfiglist = self.config_heads["node"]
+        for branchdict in nodeconfiglist:
+            #only support conv for all node branches
+            if branchdict["type"] != "conv":
+                return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        # In this part, each head has same number of convolutional layers, but can have different output dimension
-        if "last_layer" in inspect.signature(self.get_conv).parameters:
-            self.convs_node_hidden.append(
-                self.get_conv(
-                    self.hidden_dim, self.hidden_dim_node[0], last_layer=False
-                )
-            )
-        else:
-            self.convs_node_hidden.append(
-                self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
-            )
-        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
-        for ilayer in range(self.num_conv_layers_node - 1):
-            # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+
+        for branchdict in nodeconfiglist:
+            branchtype = branchdict["type"]
+            brancharct = branchdict["architecture"]
+            num_conv_layers_node = brancharct["num_headlayers"]
+            hidden_dim_node = brancharct["dim_headlayers"]
+            
+            convs_node_hidden = ModuleList()
+            batch_norms_node_hidden = ModuleList()
+            convs_node_output = ModuleList()
+            batch_norms_node_output = ModuleList()
+
+            # In this part, each head has same number of convolutional layers, but can have different output dimension
             if "last_layer" in inspect.signature(self.get_conv).parameters:
-                self.convs_node_hidden.append(
+                convs_node_hidden.append(
                     self.get_conv(
-                        self.hidden_dim_node[ilayer],
-                        self.hidden_dim_node[ilayer + 1],
-                        last_layer=False,
+                        self.hidden_dim, hidden_dim_node[0], last_layer=False
                     )
                 )
             else:
-                self.convs_node_hidden.append(
-                    self.get_conv(
-                        self.hidden_dim_node[ilayer], self.hidden_dim_node[ilayer + 1]
-                    )
+                convs_node_hidden.append(
+                    self.get_conv(self.hidden_dim, hidden_dim_node[0])
                 )
-            self.batch_norms_node_hidden.append(
-                BatchNorm(self.hidden_dim_node[ilayer + 1])
-            )
-        for ihead in node_feature_ind:
-            # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
-            if "last_layer" in inspect.signature(self.get_conv).parameters:
-                self.convs_node_output.append(
-                    self.get_conv(
-                        self.hidden_dim_node[-1],
-                        self.head_dims[ihead] * (1 + self.var_output),
-                        last_layer=True,
+            batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[0]))
+            for ilayer in range(num_conv_layers_node - 1):
+                # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+                if "last_layer" in inspect.signature(self.get_conv).parameters:
+                    convs_node_hidden.append(
+                        self.get_conv(
+                            hidden_dim_node[ilayer],
+                            hidden_dim_node[ilayer + 1],
+                            last_layer=False,
+                        )
                     )
-                )
-            else:
-                self.convs_node_output.append(
-                    self.get_conv(
-                        self.hidden_dim_node[-1],
-                        self.head_dims[ihead] * (1 + self.var_output),
+                else:
+                    convs_node_hidden.append(
+                        self.get_conv(
+                            hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1]
+                        )
                     )
+                batch_norms_node_hidden.append(
+                    BatchNorm(hidden_dim_node[ilayer + 1])
                 )
-            self.batch_norms_node_output.append(
-                BatchNorm(self.head_dims[ihead] * (1 + self.var_output))
-            )
+            for ihead in node_feature_ind:
+                # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+                if "last_layer" in inspect.signature(self.get_conv).parameters:
+                    convs_node_output.append(
+                        self.get_conv(
+                            hidden_dim_node[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                            last_layer=True,
+                        )
+                    )
+                else:
+                    convs_node_output.append(
+                        self.get_conv(
+                            hidden_dim_node[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                        )
+                    )
+                batch_norms_node_output.append(
+                    BatchNorm(self.head_dims[ihead] * (1 + self.var_output))
+                )
+            self.convs_node_hidden[branchtype] = convs_node_hidden
+            self.batch_norms_node_hidden[branchtype] = batch_norms_node_hidden
+            self.convs_node_output[branchtype] = convs_node_output
+            self.batch_norms_node_output[branchtype] = batch_norms_node_output
 
     def _multihead(self):
+        #typename = config_heads_type["type"]
+        #self.multiheads[typename]=Module()
+        #self.multiheads[typename].heads_NN=ModuleList()
+       
+        self.graph_shared = ModuleDict({})
         ############multiple heads/taks################
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
         if "graph" in self.config_heads:
-            denselayers = []
-            dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
-            denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
-            denselayers.append(self.activation_function)
-            for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
-                denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+            for branchdict in self.config_heads["graph"]:
+                denselayers = []
+                dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
+                denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
                 denselayers.append(self.activation_function)
-            self.graph_shared = Sequential(*denselayers)
+                for ishare in range(branchdict["architecture"]["num_sharedlayers"] - 1):
+                    denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+                    denselayers.append(self.activation_function)
+                self.graph_shared[branchdict["type"]] = Sequential(*denselayers)
 
         if "node" in self.config_heads:
-            self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-            self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
             self._init_node_conv()
 
         inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
+            head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                num_head_hidden = self.config_heads["graph"]["num_headlayers"]
-                dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
-                denselayers = []
-                denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
-                denselayers.append(self.activation_function)
-                for ilayer in range(num_head_hidden - 1):
-                    denselayers.append(
-                        Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
-                    )
+                for branchdict in self.config_heads["graph"]: 
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    dim_sharedlayers= brancharct["dim_sharedlayers"]
+                    num_head_hidden = brancharct["num_headlayers"]
+                    dim_head_hidden = brancharct["dim_headlayers"]
+                    denselayers = []
+                    denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                     denselayers.append(self.activation_function)
-                denselayers.append(
-                    Linear(
-                        dim_head_hidden[-1],
-                        self.head_dims[ihead] * (1 + self.var_output),
+                    for ilayer in range(num_head_hidden - 1):
+                        denselayers.append(
+                            Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
+                        )
+                        denselayers.append(self.activation_function)
+                    denselayers.append(
+                        Linear(
+                            dim_head_hidden[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                        )
                     )
-                )
-                head_NN = Sequential(*denselayers)
+                    head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                self.node_NN_type = self.config_heads["node"]["type"]
-                head_NN = ModuleList()
-                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
-                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
-                    assert (
-                        self.num_nodes is not None
-                    ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
-                    head_NN = MLPNode(
-                        self.hidden_dim,
-                        self.head_dims[ihead] * (1 + self.var_output),
-                        self.num_mlp,
-                        self.hidden_dim_node,
-                        self.config_heads["node"]["type"],
-                        self.activation_function,
-                    )
-                elif self.node_NN_type == "conv":
-                    for conv, batch_norm in zip(
-                        self.convs_node_hidden, self.batch_norms_node_hidden
-                    ):
-                        head_NN.append(conv)
-                        head_NN.append(batch_norm)
-                    head_NN.append(self.convs_node_output[inode_feature])
-                    head_NN.append(self.batch_norms_node_output[inode_feature])
-                    inode_feature += 1
-                else:
-                    raise ValueError(
-                        "Unknown head NN structure for node features"
-                        + self.node_NN_type
-                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
-                    )
+                for branchdict in self.config_heads["node"]: 
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    hidden_dim_node = brancharct["dim_headlayers"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        assert (
+                            self.num_nodes is not None
+                        ), "num_nodes must be positive integer for MLP"
+                        # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                        head_NN[branchtype] = MLPNode(
+                            self.hidden_dim,
+                            self.head_dims[ihead] * (1 + self.var_output),
+                            self.num_mlp,
+                            hidden_dim_node,
+                            node_NN_type,
+                            self.activation_function,
+                        )
+                    elif node_NN_type == "conv":
+                        head_NN[branchtype] = ModuleList()
+                        for conv, batch_norm in zip(
+                            self.convs_node_hidden[branchtype], self.batch_norms_node_hidden[branchtype]
+                        ):
+                            head_NN[branchtype].append(conv)
+                            head_NN[branchtype].append(batch_norm)
+                        head_NN[branchtype].append(self.convs_node_output[branchtype][inode_feature])
+                        head_NN[branchtype].append(self.batch_norms_node_output[branchtype][inode_feature])
+                        inode_feature += 1
+                    else:
+                        raise ValueError(
+                            "Unknown head NN structure for node features"
+                            + self.node_NN_type
+                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        )
             else:
                 raise ValueError(
                     "Unknown head type"
@@ -438,18 +467,24 @@ class Base(Module):
             x_graph = global_mean_pool(x, data.batch.to(x.device))
         outputs = []
         outputs_var = []
+
+        #FIXME: will replace it with Max's new dataset
+        #data.branchtype = f"branch-{torch.randint(0,2,(1,))[0].item()+1}"
+        branchtype = f"branch-{torch.randint(0,2,(1,))[0].item()+1}"
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                x_graph_head = self.graph_shared(x_graph)
-                output_head = headloc(x_graph_head)
+                x_graph_head = self.graph_shared[branchtype](x_graph)
+                output_head = headloc[branchtype](x_graph_head)
                 outputs.append(output_head[:, :head_dim])
                 outputs_var.append(output_head[:, head_dim:] ** 2)
             else:
-                if self.node_NN_type == "conv":
+                # assuming all node types are the same
+                node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
+                if node_NN_type == "conv":
                     inv_node_feat = x
-                    for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
+                    for conv, batch_norm in zip(headloc[branchtype][0::2], headloc[branchtype][1::2]):
                         inv_node_feat, equiv_node_feat = conv(
                             inv_node_feat=inv_node_feat,
                             equiv_node_feat=equiv_node_feat,
@@ -460,7 +495,7 @@ class Base(Module):
                     x_node = inv_node_feat
                     x = inv_node_feat
                 else:
-                    x_node = headloc(x=x, batch=data.batch)
+                    x_node = headloc[branchtype](x=x, batch=data.batch)
                 outputs.append(x_node[:, :head_dim])
                 outputs_var.append(x_node[:, head_dim:] ** 2)
         if self.var_output:
