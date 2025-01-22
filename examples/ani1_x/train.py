@@ -87,7 +87,7 @@ class ANI1xDataset(AbstractBaseDataset):
             self.rank = torch.distributed.get_rank()
 
         # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 100.0
+        self.forces_norm_threshold = 1000.0
 
         self.convert_trajectories_to_graphs()
 
