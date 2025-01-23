@@ -19,7 +19,7 @@ from hydragnn.utils.print.print_utils import log
 from hydragnn.utils.distributed import nsplit
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
@@ -225,7 +225,7 @@ def main():
                 fname = os.path.join(
                     os.path.dirname(__file__), "./dataset/%s.bp" % model
                 )
-                with ad2.open(fname, "r", MPI.COMM_SELF) as f:
+                with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
                     attrs = f.available_attributes()
@@ -357,7 +357,11 @@ def main():
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
