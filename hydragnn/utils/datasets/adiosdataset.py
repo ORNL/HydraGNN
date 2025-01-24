@@ -8,7 +8,12 @@ from hydragnn.utils.print.print_utils import log, log0, iterate_tqdm
 import numpy as np
 
 try:
-    import adios2 as ad2
+    import adios2
+    adios2_version = [int(x) for x in adios2.__version__.split(".")]
+    if adios2_version[0] <= 2 and adios2_version[1] < 10:
+        import adios2 as ad2
+    else:
+        import adios2.bindings as ad2
 except ImportError:
     pass
 
@@ -34,7 +39,7 @@ def adios2_open(*args, **kwargs):
     if adios2_version[0] <= 2 and adios2_version[1] < 10:
         f_adios2_open = ad2.open
     else:
-        f_adios2_open = ad2.Stream
+        f_adios2_open = adios2.Stream
     return f_adios2_open(*args, **kwargs)
 
 
