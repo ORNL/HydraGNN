@@ -182,7 +182,7 @@ class QM7XDataset(AbstractBaseDataset):
                 torch.float32
             )
             Eatoms = (
-                torch.tensor(sum([EPBE0_atom[zi.item()] for zi in Z]))
+                torch.tensor(sum([EPBE0_atom[zi.item()] for zi in atomic_numbers]))
                 .unsqueeze(0)
                 .to(torch.float32)
             )  # eatoms
