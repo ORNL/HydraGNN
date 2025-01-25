@@ -273,17 +273,7 @@ class QM7XDataset(AbstractBaseDataset):
                 else:
                     data_object.y = data_object.energy
 
-                if data_object.pbc is not None and data_object.cell is not None:
-                    try:
-                        data_object = self.radius_graph_pbc(data_object)
-                    except:
-                        print(
-                            f"Structure could not successfully apply pbc radius graph",
-                            flush=True,
-                        )
-                        data_object = self.radius_graph(data_object)
-                else:
-                    data_object = self.radius_graph(data_object)
+                data_object = self.radius_graph(data_object)
 
                 data_object = transform_coordinates(data_object)
 

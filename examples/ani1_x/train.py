@@ -26,6 +26,7 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
+from hydragnn.utils.print.print_utils import iterate_tqdm
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
@@ -94,7 +95,7 @@ class ANI1xDataset(AbstractBaseDataset):
     def convert_trajectories_to_graphs(self):
 
         # Example for extracting DFT/DZ energies and forces
-        for data_trj in self.iter_data_buckets(self.data_path, keys=self.data_keys):
+        for data_trj in iterate_tqdm(self.iter_data_buckets(self.data_path, keys=self.data_keys), verbosity=2):
 
             X = data_trj["coordinates"]
             Z = data_trj["atomic_numbers"]
@@ -188,7 +189,7 @@ class ANI1xDataset(AbstractBaseDataset):
                 if self.graphgps_transform is not None:
                     data_object = self.graphgps_transform(data_object)
 
-                if self.check_forces_values(data_object.force):
+                if self.check_forces_values(data_object.forces):
                     self.dataset.append(data_object)
                 else:
                     print(
