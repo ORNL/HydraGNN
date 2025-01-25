@@ -175,7 +175,7 @@ class QM7XDataset(AbstractBaseDataset):
                 .to(torch.float32)
             )
 
-            natoms = pos.shape[0]
+            natoms = torch.IntTensor([pos.shape[0]])
 
             ## get quantum mechanical properties and add them to properties buffer
             forces = torch.from_numpy(np.array(fMOL[molid][confid]["pbe0FOR"])).to(
