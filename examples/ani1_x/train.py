@@ -95,7 +95,7 @@ class ANI1xDataset(AbstractBaseDataset):
     def convert_trajectories_to_graphs(self):
 
         # Example for extracting DFT/DZ energies and forces
-        for data_trj in iterate_tqdm(self.iter_data_buckets(self.data_path, keys=self.data_keys), verbosity=2):
+        for data_trj in iterate_tqdm(self.iter_data_buckets(self.data_path, keys=self.data_keys), verbosity_level=2):
 
             X = data_trj["coordinates"]
             Z = data_trj["atomic_numbers"]
