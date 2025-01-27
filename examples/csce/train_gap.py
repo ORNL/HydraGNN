@@ -288,6 +288,7 @@ if __name__ == "__main__":
                 data = generate_graphdata_from_smilestr(
                     smilestr, ytarget, csce_node_types, var_config
                 )
+                data.dataset_name = 'csce'
                 dataset_lists[idataset].append(data)
 
         trainset = dataset_lists[0]
