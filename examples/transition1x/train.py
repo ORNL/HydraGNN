@@ -195,45 +195,45 @@ class Transition1xDataset(AbstractBaseDataset):
                 assert self.check_forces_values(
                     forces
                 ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
-
-                data_object = Data(
-                    dataset_name="transition1x",
-                    natoms=natoms,
-                    pos=pos,
-                    cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_index=None,
-                    edge_attr=None,
-                    edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
-                    atomic_numbers=atomic_numbers,
-                    chemical_composition=chemical_composition,
-                    smiles_string=smiles_string,
-                    x=x,
-                    energy=total_energy_tensor,
-                    energy_per_atom=total_energy_per_atom_tensor,
-                    forces=forces,
-                )
-
-                if self.energy_per_atom:
-                    data_object.y = data_object.energy_per_atom
-                else:
-                    data_object.y = data_object.energy
-
-                data_object = self.radius_graph(data_object)
-
-                # Build edge attributes
-                data_object = self.transform_coordinates(data_object)
-
-                # LPE
-                if self.graphgps_transform is not None:
-                    data_object = self.graphgps_transform(data_object)
-
-                self.dataset.append(data_object)
-
-                random.shuffle(self.dataset)
-
             except:
                 continue
+
+            data_object = Data(
+                dataset_name="transition1x",
+                natoms=natoms,
+                pos=pos,
+                cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                edge_index=None,
+                edge_attr=None,
+                edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                atomic_numbers=atomic_numbers,
+                chemical_composition=chemical_composition,
+                smiles_string=smiles_string,
+                x=x,
+                energy=total_energy_tensor,
+                energy_per_atom=total_energy_per_atom_tensor,
+                forces=forces,
+            )
+
+            if self.energy_per_atom:
+                data_object.y = data_object.energy_per_atom
+            else:
+                data_object.y = data_object.energy
+
+            data_object = self.radius_graph(data_object)
+
+            # Build edge attributes
+            data_object = self.transform_coordinates(data_object)
+
+            # LPE
+            if self.graphgps_transform is not None:
+                data_object = self.graphgps_transform(data_object)
+
+            self.dataset.append(data_object)
+
+            random.shuffle(self.dataset)
+
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
