@@ -215,9 +215,9 @@ class Transition1xDataset(AbstractBaseDataset):
                 )
 
                 if self.energy_per_atom:
-                    data_object.y = data_object.total_energy_per_atom
+                    data_object.y = data_object.energy_per_atom
                 else:
-                    data_object.y = data_object.total_energy
+                    data_object.y = data_object.energy
 
                 data_object = self.radius_graph(data_object)
 
