@@ -3,6 +3,7 @@
 import h5py
 
 from hydragnn.utils.distributed import nsplit
+from hydragnn.utils.print.print_utils import iterate_tqdm
 
 REFERENCE_ENERGIES = {
     1: -13.62222753701504,
@@ -83,7 +84,7 @@ class Dataloader:
                 self.comm_rank
             ]
 
-            for formula in formulas_list_local:
+            for formula in iterate_tqdm(formulas_list_local, verbosity_level=2):
                 for rxn, subgrp in split[formula].items():
                     reactant = next(generator(formula, rxn, subgrp["reactant"]))
                     product = next(generator(formula, rxn, subgrp["product"]))
