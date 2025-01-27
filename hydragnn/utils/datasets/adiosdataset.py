@@ -142,6 +142,13 @@ class AdiosWriter:
         log0("Adios saving:", self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         total_ns = 0
+
+        # Look for the dataset_name in any one of the Data samples and add it as an ADIOS attribute
+        dataset_name = self._get_dataset_name()
+        if dataset_name is not None:
+            if 'dataset_name' not in self.attributes:
+                self.attributes['dataset_name'] = dataset_name
+
         for label in self.dataset:
             if len(self.dataset[label]) == 0:
                 ## If there is no data to save, simply do empty operations as follows.
@@ -167,11 +174,14 @@ class AdiosWriter:
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 keys = data.keys() if callable(data.keys) else data.keys
+                keys.remove('dataset_name')  # we dont need this to be added to the keys
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
 
             for k in keys:
+                if k == 'dataset_name' : continue
+
                 arr_list = list()
                 for data in self.dataset[label]:
                     if isinstance(data[k], torch.Tensor):
@@ -276,6 +286,23 @@ class AdiosWriter:
         t1 = time.time()
         log0("Adios saving time (sec): ", (t1 - t0))
 
+    def _get_dataset_name(self):
+        """
+        Get dataset name from the first data object
+
+        Returns
+        -------
+        str
+            dataset name
+        """
+        if len(self.dataset) == 0:
+            return None
+        for label in self.dataset:
+            for data in self.dataset[label]:
+                keys = data.keys() if callable(data.keys) else data.keys
+                if "dataset_name" in keys:
+                    return data.dataset_name
+        return None
 
 class AdiosDataset(AbstractBaseDataset):
     """Adios datasets class"""
@@ -379,6 +406,7 @@ class AdiosDataset(AbstractBaseDataset):
         adios_read_time = 0.0
         ddstore_time = 0.0
         t0 = time.time()
+
         with ad2.open(self.filename, "r", self.comm) as f:
             f.__next__()
             t1 = time.time()
@@ -398,6 +426,14 @@ class AdiosDataset(AbstractBaseDataset):
                 ).reshape((2, -1))
             if "pna_deg" in self.attrs:
                 self.pna_deg = self.read_attribute0(f, "pna_deg")
+
+            # all processes should get the dataset name - a global attribute
+            self.dataset_name = None
+            if 'dataset_name' in self.attrs:
+                _val = f.read_attribute_string('dataset_name')
+                if type(_val) == list and len(_val) > 0:
+                    self.dataset_name = _val[0]
+
             t2 = time.time()
             log0("Read attr time (sec): ", (t2 - t1))
 
@@ -410,6 +446,8 @@ class AdiosDataset(AbstractBaseDataset):
             nbytes = 0
             t3 = time.time()
             for k in self.keys:
+                if k == 'dataset_name': continue
+
                 self.variable_count[k] = self.read0(
                     f, "%s/%s/variable_count" % (label, k)
                 )
