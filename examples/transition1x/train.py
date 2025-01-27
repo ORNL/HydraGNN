@@ -19,7 +19,7 @@ import torch
 import torch.distributed as dist
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
@@ -62,8 +62,9 @@ def info(*args, logtype="info", sep=" "):
 
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
-create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
-compute_edge_lengths = Distance(norm=False, cat=True)
+# transform_coordinates = Spherical(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
 
 class Transition1xDataset(AbstractBaseDataset):
@@ -224,7 +225,7 @@ class Transition1xDataset(AbstractBaseDataset):
             data_object = self.radius_graph(data_object)
 
             # Build edge attributes
-            data_object = self.transform_coordinates(data_object)
+            data_object = transform_coordinates(data_object)
 
             # LPE
             if self.graphgps_transform is not None:
