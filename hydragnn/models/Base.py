@@ -263,7 +263,7 @@ class Base(Module):
         # 2. one graph for one node features (currently implemented)
         nodeconfiglist = self.config_heads["node"]
         for branchdict in nodeconfiglist:
-            #only support conv for all node branches
+            # only support conv for all node branches
             if branchdict["type"] != "conv":
                 return
         node_feature_ind = [
@@ -277,7 +277,7 @@ class Base(Module):
             brancharct = branchdict["architecture"]
             num_conv_layers_node = brancharct["num_headlayers"]
             hidden_dim_node = brancharct["dim_headlayers"]
-            
+
             convs_node_hidden = ModuleList()
             batch_norms_node_hidden = ModuleList()
             convs_node_output = ModuleList()
@@ -286,9 +286,7 @@ class Base(Module):
             # In this part, each head has same number of convolutional layers, but can have different output dimension
             if "last_layer" in inspect.signature(self.get_conv).parameters:
                 convs_node_hidden.append(
-                    self.get_conv(
-                        self.hidden_dim, hidden_dim_node[0], last_layer=False
-                    )
+                    self.get_conv(self.hidden_dim, hidden_dim_node[0], last_layer=False)
                 )
             else:
                 convs_node_hidden.append(
@@ -311,9 +309,7 @@ class Base(Module):
                             hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1]
                         )
                     )
-                batch_norms_node_hidden.append(
-                    BatchNorm(hidden_dim_node[ilayer + 1])
-                )
+                batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[ilayer + 1]))
             for ihead in node_feature_ind:
                 # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
                 if "last_layer" in inspect.signature(self.get_conv).parameters:
@@ -340,10 +336,10 @@ class Base(Module):
             self.batch_norms_node_output[branchtype] = batch_norms_node_output
 
     def _multihead(self):
-        #typename = config_heads_type["type"]
-        #self.multiheads[typename]=Module()
-        #self.multiheads[typename].heads_NN=ModuleList()
-       
+        # typename = config_heads_type["type"]
+        # self.multiheads[typename]=Module()
+        # self.multiheads[typename].heads_NN=ModuleList()
+
         self.graph_shared = ModuleDict({})
         ############multiple heads/taks################
         # shared dense layers for heads with graph level output
@@ -367,10 +363,10 @@ class Base(Module):
             # mlp for each head output
             head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                for branchdict in self.config_heads["graph"]: 
+                for branchdict in self.config_heads["graph"]:
                     branchtype = branchdict["type"]
                     brancharct = branchdict["architecture"]
-                    dim_sharedlayers= brancharct["dim_sharedlayers"]
+                    dim_sharedlayers = brancharct["dim_sharedlayers"]
                     num_head_hidden = brancharct["num_headlayers"]
                     dim_head_hidden = brancharct["dim_headlayers"]
                     denselayers = []
@@ -389,7 +385,7 @@ class Base(Module):
                     )
                     head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                for branchdict in self.config_heads["node"]: 
+                for branchdict in self.config_heads["node"]:
                     branchtype = branchdict["type"]
                     brancharct = branchdict["architecture"]
                     hidden_dim_node = brancharct["dim_headlayers"]
@@ -411,12 +407,17 @@ class Base(Module):
                     elif node_NN_type == "conv":
                         head_NN[branchtype] = ModuleList()
                         for conv, batch_norm in zip(
-                            self.convs_node_hidden[branchtype], self.batch_norms_node_hidden[branchtype]
+                            self.convs_node_hidden[branchtype],
+                            self.batch_norms_node_hidden[branchtype],
                         ):
                             head_NN[branchtype].append(conv)
                             head_NN[branchtype].append(batch_norm)
-                        head_NN[branchtype].append(self.convs_node_output[branchtype][inode_feature])
-                        head_NN[branchtype].append(self.batch_norms_node_output[branchtype][inode_feature])
+                        head_NN[branchtype].append(
+                            self.convs_node_output[branchtype][inode_feature]
+                        )
+                        head_NN[branchtype].append(
+                            self.batch_norms_node_output[branchtype][inode_feature]
+                        )
                         inode_feature += 1
                     else:
                         raise ValueError(
@@ -445,7 +446,7 @@ class Base(Module):
                 inv_node_feat, equiv_node_feat = conv(
                     inv_node_feat=inv_node_feat,
                     equiv_node_feat=equiv_node_feat,
-                    **conv_args
+                    **conv_args,
                 )
             else:
                 inv_node_feat, equiv_node_feat = checkpoint(
@@ -453,7 +454,7 @@ class Base(Module):
                     use_reentrant=False,
                     inv_node_feat=inv_node_feat,
                     equiv_node_feat=equiv_node_feat,
-                    **conv_args
+                    **conv_args,
                 )
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
 
@@ -468,36 +469,59 @@ class Base(Module):
         outputs = []
         outputs_var = []
 
-        #FIXME: will replace it with Max's new dataset
-        #data.branchtype = f"branch-{torch.randint(0,2,(1,))[0].item()+1}"
-        branchtype = f"branch-{torch.randint(0,2,(1,))[0].item()+1}"
+        datasetIDs = data.dataset_name.unique()
+        unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                x_graph_head = self.graph_shared[branchtype](x_graph)
-                output_head = headloc[branchtype](x_graph_head)
-                outputs.append(output_head[:, :head_dim])
-                outputs_var.append(output_head[:, head_dim:] ** 2)
+                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                headvar = torch.zeros(
+                    (len(data.dataset_name), head_dim * self.var_output),
+                    device=x.device,
+                )
+                for ID in datasetIDs:
+                    mask = data.dataset_name == ID
+                    branchtype = f"branch-{ID.item()}"
+                    x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
+                    output_head = headloc[branchtype](x_graph_head)
+                    head[mask] = output_head[:, :head_dim]
+                    headvar[mask] = output_head[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
             else:
                 # assuming all node types are the same
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
-                if node_NN_type == "conv":
-                    inv_node_feat = x
-                    for conv, batch_norm in zip(headloc[branchtype][0::2], headloc[branchtype][1::2]):
-                        inv_node_feat, equiv_node_feat = conv(
-                            inv_node_feat=inv_node_feat,
-                            equiv_node_feat=equiv_node_feat,
-                            **conv_args
+                head = torch.zeros((x.shape[0], head_dim), device=x.device)
+                headvar = torch.zeros(
+                    (x.shape[0], head_dim * self.var_output), device=x.device
+                )
+                for ID in datasetIDs:
+                    mask = data.dataset_name == ID
+                    mask_nodes = torch.repeat_interleave(mask, node_counts)
+                    branchtype = f"branch-{ID.item()}"
+                    if node_NN_type == "conv":
+                        inv_node_feat = x[mask_nodes, :]
+                        equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
+                        for conv, batch_norm in zip(
+                            headloc[branchtype][0::2], headloc[branchtype][1::2]
+                        ):
+                            inv_node_feat, equiv_node_feat_ = conv(
+                                inv_node_feat=inv_node_feat,
+                                equiv_node_feat=equiv_node_feat_,
+                                **conv_args,
+                            )
+                            inv_node_feat = batch_norm(inv_node_feat)
+                            inv_node_feat = self.activation_function(inv_node_feat)
+                        x_node = inv_node_feat
+                    else:
+                        x_node = headloc[branchtype](
+                            x=x[mask_nodes, :], batch=data.batch[mask_nodes]
                         )
-                        inv_node_feat = batch_norm(inv_node_feat)
-                        inv_node_feat = self.activation_function(inv_node_feat)
-                    x_node = inv_node_feat
-                    x = inv_node_feat
-                else:
-                    x_node = headloc[branchtype](x=x, batch=data.batch)
-                outputs.append(x_node[:, :head_dim])
-                outputs_var.append(x_node[:, head_dim:] ** 2)
+                    head[mask_nodes] = x_node[:, :head_dim]
+                    headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
         if self.var_output:
             return outputs, outputs_var
         return outputs

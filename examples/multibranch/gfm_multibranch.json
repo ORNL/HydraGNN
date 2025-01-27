@@ -22,13 +22,12 @@
             "global_attn_heads": 8,
             "global_attn_engine": "",
             "global_attn_type": "",
-            "edge_features": ["length"],
             "hidden_dim": 50,
             "num_conv_layers": 3,
             "output_heads": {
                 "graph": [
                     {
-                        "type": "branch-1",
+                        "type": "branch-0",
                         "architecture": {
                             "num_sharedlayers": 2,
                             "dim_sharedlayers": 50,
@@ -40,7 +39,7 @@
                         }
                     },
                     {
-                        "type": "branch-2",
+                        "type": "branch-1",
                         "architecture": {
                             "num_sharedlayers": 1,
                             "dim_sharedlayers": 20,
@@ -53,7 +52,7 @@
                 ],
                 "node": [
                     {
-                        "type": "branch-1",
+                        "type": "branch-0",
                         "architecture": {
                             "num_headlayers": 2,
                             "dim_headlayers": [
@@ -64,7 +63,7 @@
                         }
                     },
                     {
-                        "type": "branch-2",
+                        "type": "branch-1",
                         "architecture": {
                             "num_headlayers": 1,
                             "dim_headlayers": [
@@ -88,7 +87,7 @@
             "type": ["graph", "node"]
         },
         "Training": {
-            "num_epoch": 50,
+            "num_epoch": 250,
             "EarlyStopping": true,
             "perc_train": 0.9,
             "loss_function_type": "mae",

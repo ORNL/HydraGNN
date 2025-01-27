@@ -156,9 +156,10 @@ if __name__ == "__main__":
             ndata_list = list()
             pna_deg_list = list()
             for model in modellist:
-                fname = os.path.join(
-                    os.path.dirname(__file__), "./dataset/%s.bp" % model
-                )
+                # fname = os.path.join(
+                #    os.path.dirname(__file__), "./dataset/%s.bp" % model
+                # )
+                fname = model
                 with ad2.open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
@@ -221,8 +222,10 @@ if __name__ == "__main__":
             "edge_attr",
             "pos",
             "y",
+            "dataset_name",
         ]
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
+        # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
+        fname = mymodel
         trainset = AdiosDataset(
             fname,
             "trainset",
@@ -313,9 +316,13 @@ if __name__ == "__main__":
 
     if args.ddstore:
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
-        os.environ["HYDRAGNN_USE_ddstore"] = "1"        
+        os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
@@ -323,7 +330,7 @@ if __name__ == "__main__":
         test_sampler_shuffle=False,
     )
 
-    #for data in train_loader:
+    # for data in train_loader:
     #    print("Pei debugging 3", data)
 
     config = hydragnn.utils.input_config_parsing.update_config(
