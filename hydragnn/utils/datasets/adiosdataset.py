@@ -146,8 +146,8 @@ class AdiosWriter:
         # Look for the dataset_name in any one of the Data samples and add it as an ADIOS attribute
         dataset_name = self._get_dataset_name()
         if dataset_name is not None:
-            if 'dataset_name' not in self.attributes:
-                self.attributes['dataset_name'] = dataset_name
+            if "dataset_name" not in self.attributes:
+                self.attributes["dataset_name"] = dataset_name
 
         for label in self.dataset:
             if len(self.dataset[label]) == 0:
@@ -174,13 +174,14 @@ class AdiosWriter:
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 keys = data.keys() if callable(data.keys) else data.keys
-                keys.remove('dataset_name')  # we dont need this to be added to the keys
+                keys.remove("dataset_name")  # we dont need this to be added to the keys
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
 
             for k in keys:
-                if k == 'dataset_name' : continue
+                if k == "dataset_name":
+                    continue
 
                 arr_list = list()
                 for data in self.dataset[label]:
@@ -303,6 +304,7 @@ class AdiosWriter:
                 if "dataset_name" in keys:
                     return data.dataset_name
         return None
+
 
 class AdiosDataset(AbstractBaseDataset):
     """Adios datasets class"""
@@ -429,8 +431,8 @@ class AdiosDataset(AbstractBaseDataset):
 
             # all processes should get the dataset name - a global attribute
             self.dataset_name = None
-            if 'dataset_name' in self.attrs:
-                _val = f.read_attribute_string('dataset_name')
+            if "dataset_name" in self.attrs:
+                _val = f.read_attribute_string("dataset_name")
                 if type(_val) == list and len(_val) > 0:
                     self.dataset_name = _val[0]
 
@@ -446,7 +448,8 @@ class AdiosDataset(AbstractBaseDataset):
             nbytes = 0
             t3 = time.time()
             for k in self.keys:
-                if k == 'dataset_name': continue
+                if k == "dataset_name":
+                    continue
 
                 self.variable_count[k] = self.read0(
                     f, "%s/%s/variable_count" % (label, k)
