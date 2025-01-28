@@ -108,7 +108,9 @@ def generate_graphdata_from_rdkit_molecule(
 
     y = ytarget  # .squeeze()
 
-    data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, **{'dataset_name': None})
+    data = Data(
+        x=x, edge_index=edge_index, edge_attr=edge_attr, y=y, **{"dataset_name": None}
+    )
     if var_config is not None:
         hydragnn.preprocess.update_predicted_values(
             var_config["type"],
