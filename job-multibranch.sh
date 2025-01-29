@@ -3,7 +3,7 @@
 #SBATCH -J HydraGNN
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
-#SBATCH -t 00:30:00
+#SBATCH -t 00:03:00
 #SBATCH -p batch
 ##SBATCH -q debug
 #SBATCH -N 1 #16 
@@ -74,7 +74,7 @@ export datadir1=/lustre/orion/cph161/world-shared/mlupopa/Supercomputing2025/Hyd
 export datadir2=/lustre/orion/cph161/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/ani1_x/dataset/ANI1x.bp
 
 srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py \
---inputfile=gfm_multibranch.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1,$datadir2 
+--inputfile=gfm_multibranch_physics-informed.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1,$datadir2 
 
 #srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py --inputfile=gfm_multibranch.json --num_samples=100 --multi --ddstore --multi_model_list=ANI1x-v3,MPTrj-v3
 
