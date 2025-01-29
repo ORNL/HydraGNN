@@ -3,7 +3,7 @@
 #SBATCH -J HydraGNN
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
-#SBATCH -t 00:03:00
+#SBATCH -t 00:30:00
 #SBATCH -p batch
 ##SBATCH -q debug
 #SBATCH -N 1 #16 
