@@ -7,7 +7,7 @@
             "mpnn_type": "EGNN",
             "equivariance": true,
             "radius": 5.0,
-            "max_neighbours": 10000,
+            "max_neighbours": 100000,
             "num_gaussians": 50,
             "envelope_exponent": 5,
             "int_emb_size": 64,
