@@ -53,12 +53,7 @@ def check_node_feature_dim(var_config):
     # NOTE Since changing json parsing functions requires base-level code changes and the imposed requirement is already being obeyed
     # in the data setup for GFM, a quick check has been placed here instead.
     if var_config["node_feature_dims"][var_config["output_index"][0]] != 1:
-        raise ValueError(
-            "Your node feature dim at the output index is not equal to 1. \
-            This is expected to lead to a size match between the nodal \
-            head output dimension (equal to node feature dim) and the \
-            dimension which is expected by energy (1)."
-        )
+        raise ValueError("Your node feature dim at the output index is not equal to 1.")
 
 
 if __name__ == "__main__":
