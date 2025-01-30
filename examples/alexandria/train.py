@@ -291,9 +291,9 @@ class Alexandria(AbstractBaseDataset):
         )
 
         if self.energy_per_atom:
-            data_object.y = data_object.total_energy_per_atom
+            data_object.y = data_object.energy_per_atom
         else:
-            data_object.y = data_object.total_energy
+            data_object.y = data_object.energy
 
         if data_object.pbc is not None and data_object.cell is not None:
             try:
