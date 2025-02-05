@@ -174,7 +174,10 @@ class AdiosWriter:
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 keys = data.keys() if callable(data.keys) else data.keys
-                keys.remove("dataset_name")  # we dont need this to be added to the keys
+                if "dataset_name" in keys:
+                    keys.remove(
+                        "dataset_name"
+                    )  # we dont need this to be added to the keys
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
