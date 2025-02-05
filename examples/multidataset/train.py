@@ -402,4 +402,25 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+    if tr.has("NVIDIATracer"):
+        print(f"NVIDIATracer exists")
+        import hydragnn.utils.profiling_and_tracing.nvidiaTracer as et
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
+            et.pr_file(f"./logs/{log_name}/gpuLogs", eligible)
+
+    if tr.has("AMDTracer"):
+        print(f"AMDTracer exists")
+        import hydragnn.utils.profiling_and_tracing.amdTracer as et
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
+            et.pr_file(f"./logs/{log_name}/gpuLogs", eligible)
+            
+    if tr.has("CRAYPMTracer"):
+        print(f"CRAYPMtracer exists")
+        import hydragnn.utils.profiling_and_tracing.craypmTracer as et
+        eligible = rank if args.everyone else 0
+        if rank == eligible:
+            et.pr_file(f"./logs/{log_name}/crayLogs", eligible)
+            
     sys.exit(0)

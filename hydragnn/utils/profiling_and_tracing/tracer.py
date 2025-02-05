@@ -60,6 +60,84 @@ except:
 
 
 try:
+    import hydragnn.utils.profiling_and_tracing.amdTracer as amd
+
+    class AMDTracer(Tracer):
+        def __init__(self, **kwargs):
+            amd.initialize()
+
+        def start(self, name):
+            amd.start(name)
+
+        def stop(self, name):
+            amd.stop(name)
+
+        def enable(self):
+            pass
+
+        def disable(self):
+            pass
+
+        def reset(self):
+            pass
+
+except:
+    print(f"Error importing AMD Tracer")
+    pass
+
+
+try:
+    import hydragnn.utils.profiling_and_tracing.nvidiaTracer as et
+
+    class NVIDIATracer(Tracer):
+        def __init__(self, **kwargs):
+            et.initialize()
+
+        def start(self, name):
+            et.start(name)
+
+        def stop(self, name):
+            et.stop(name)
+
+        def enable(self):
+            et.enable()
+
+        def disable(self):
+            et.disable()
+
+        def reset(self):
+            et.reset()
+except:
+    print(f"Error importing NVIDIATracer")
+    pass
+
+try:
+    import hydragnn.utils.profiling_and_tracing.craypmTracer as ct
+
+    class CRAYPMTracer(Tracer):
+        def __init__(self, **kwargs):
+            ct.initialize()
+
+        def start(self, name):
+            ct.start(name)
+
+        def stop(self, name):
+            ct.stop(name)
+
+        def enable(self):
+            ct.enable()
+
+        def disable(self):
+            ct.disable()
+
+        def reset(self):
+            ct.reset()
+except:
+    print(f"Error importing CRAYPMTracer")
+    pass
+
+
+try:
     import scorep.user as sp
 
     class SCOREPTracer(Tracer):
@@ -92,7 +170,7 @@ def has(name):
     return name in __tracer_list__
 
 
-def initialize(trlist=["GPTLTracer", "SCOREPTracer"], verbose=False, **kwargs):
+def initialize(trlist=["GPTLTracer", "SCOREPTracer", "CRAYPMTracer", "AMDTracer"], verbose=False, **kwargs):
     for trname in trlist:
         try:
             tr = globals()[trname](**kwargs)
