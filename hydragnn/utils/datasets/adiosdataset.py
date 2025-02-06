@@ -150,8 +150,6 @@ class AdiosWriter:
                 self.attributes["dataset_name"] = dataset_name
 
         for label in self.dataset:
-            has_smiles = False
-
             if len(self.dataset[label]) == 0:
                 ## If there is no data to save, simply do empty operations as follows.
                 ## This process will call multiple allgather in a sequential order
@@ -177,24 +175,20 @@ class AdiosWriter:
                 data = self.dataset[label][0]
                 keys = data.keys() if callable(data.keys) else data.keys
 
-                # Don't add dataset_name or smiles to 'keys'
+                # Don't add dataset_name to 'keys'
                 if "dataset_name" in keys:
                     keys.remove("dataset_name")
-
-                if "smiles" in keys:
-                    has_smiles = True
-                    keys.remove("smiles")
 
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
 
-            # Write smiles data if the data has smiles strings
-            if has_smiles:
-                self._write_smiles_data(label)
-
             for k in keys:
                 if k == "dataset_name":
+                    continue
+
+                if k == "smiles":
+                    self._write_smiles_data(label)
                     continue
 
                 arr_list = list()
