@@ -186,6 +186,10 @@ class AdiosWriter:
                 if k == "dataset_name":
                     continue
 
+                if k == "smiles":
+                    self._write_smiles_data(label)
+                    continue
+
                 arr_list = list()
                 for data in self.dataset[label]:
                     if isinstance(data[k], torch.Tensor):
@@ -307,6 +311,63 @@ class AdiosWriter:
                 if "dataset_name" in keys:
                     return data.dataset_name
         return None
+
+    def _write_smiles_data(self, label):
+        """
+        Write smiles data into the adios file
+        This will write two global arrays, one for the smiles data and another for the string lengths
+        e.g., assume 2 processes where each process has two strings: "abcd", "ef", "ghi", "j", then
+        array 1: smiles:  ["abcdefghij"]
+        array 2: lengths: [4,2,3,1]
+        """
+
+        # Collect smiles strings in a list
+        _smiles_data = list()
+        for data in self.dataset[label]:
+            _smiles_data.append(data.smiles)
+
+        # Convert to uint8 array
+        local_smiles = [
+            np.frombuffer(s.encode("utf-8"), dtype=np.uint8) for s in _smiles_data
+        ]
+        local_smiles_arr = np.concatenate(local_smiles)
+
+        # 1. Calculate sizes and offsets for the global smiles array
+        local_size = local_smiles_arr.size
+        all_sizes = self.comm.allgather(local_size)
+        offsets = sum(all_sizes[: self.rank])
+        global_sizes = sum(all_sizes)
+
+        # Write smiles data
+        data_var = self.io.DefineVariable(
+            f"{label}/smiles",
+            local_smiles_arr,
+            [global_sizes],
+            [offsets],
+            [local_size],
+            ad2.ConstantDims,
+        )
+        self.writer.Put(data_var, local_smiles_arr, ad2.Mode.Sync)
+
+        # 2. Calculate sizes and offsets for the global lengths array
+        local_lengths = np.array([arr.size for arr in local_smiles])
+        if any(x == 0 for x in local_lengths):
+            print("something is 0")
+
+        all_lengths = self.comm.allgather(local_lengths.size)
+        offsets = sum(all_lengths[: self.rank])
+        global_sizes = sum(all_lengths)
+
+        # Write lengths data
+        offsets_var = self.io.DefineVariable(
+            f"{label}/smiles_lengths",
+            local_lengths,
+            [global_sizes],
+            [offsets],
+            [local_lengths.size],
+            ad2.ConstantDims,
+        )
+        self.writer.Put(offsets_var, local_lengths, ad2.Mode.Sync)
 
 
 class AdiosDataset(AbstractBaseDataset):
