@@ -150,6 +150,8 @@ class AdiosWriter:
                 self.attributes["dataset_name"] = dataset_name
 
         for label in self.dataset:
+            has_smiles = False
+
             if len(self.dataset[label]) == 0:
                 ## If there is no data to save, simply do empty operations as follows.
                 ## This process will call multiple allgather in a sequential order
@@ -174,20 +176,25 @@ class AdiosWriter:
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 keys = data.keys() if callable(data.keys) else data.keys
+
+                # Don't add dataset_name or smiles to 'keys'
                 if "dataset_name" in keys:
-                    keys.remove(
-                        "dataset_name"
-                    )  # we dont need this to be added to the keys
+                    keys.remove("dataset_name")
+
+                if "smiles" in keys:
+                    has_smiles = True
+                    keys.remove("smiles")
+
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
 
+            # Write smiles data if the data has smiles strings
+            if has_smiles:
+                self._write_smiles_data(label)
+
             for k in keys:
                 if k == "dataset_name":
-                    continue
-
-                if k == "smiles":
-                    self._write_smiles_data(label)
                     continue
 
                 arr_list = list()
@@ -316,7 +323,7 @@ class AdiosWriter:
         """
         Write smiles data into the adios file
         This will write two global arrays, one for the smiles data and another for the string lengths
-        e.g., assume 2 processes where each process has two strings: "abcd", "ef", "ghi", "j", then
+        e.g., assume 2 processes where P0 has "abcd", "ef", and P1 has "ghi", "j", then
         array 1: smiles:  ["abcdefghij"]
         array 2: lengths: [4,2,3,1]
         """
