@@ -289,6 +289,7 @@ if __name__ == "__main__":
                     smilestr, ytarget, csce_node_types, var_config
                 )
                 data.dataset_name = "csce"
+                data.smiles = smilestr
                 dataset_lists[idataset].append(data)
 
         trainset = dataset_lists[0]
