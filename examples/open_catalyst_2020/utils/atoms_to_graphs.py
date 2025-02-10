@@ -21,8 +21,8 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 )
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
 
 class AtomsToGraphs:
@@ -101,43 +101,52 @@ class AtomsToGraphs:
         except:
             print(f"Structure does not have pbc", flush=True)
 
+        energy = atoms.get_potential_energy(apply_constraint=False)
+        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
+
+        forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
+
+        x = torch.cat((atomic_numbers, positions, forces), dim=1)
+
         # put the minimum data in torch geometric data object
-        data = Data(
+        data_object = Data(
+            dataset_name="oc2020",
+            natoms=natoms,
+            pos=positions,
             cell=cell,
             pbc=pbc,
-            pos=positions,
+            edge_index=None,
+            edge_attr=None,
+            edge_shifts=None,
             atomic_numbers=atomic_numbers,
-            natoms=natoms,
+            x=x,
+            energy=energy_tensor,
+            energy_per_atom=energy_per_atom_tensor,
+            forces=forces,
             tags=tags,
         )
 
-        energy = atoms.get_potential_energy(apply_constraint=False)
-        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
-        if energy_per_atom:
-            energy_tensor /= natoms
-        data.energy = energy_tensor
-        data.y = energy_tensor
+        if self.energy_per_atom:
+            data_object.y = data_object.energy_per_atom
+        else:
+            data_object.y = data_object.energy
 
-        forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
-        data.force = forces
-
-        data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
-
-        if data.pbc is not None and data.cell is not None:
+        if data_object.pbc is not None and data_object.cell is not None:
             try:
-                data = self.radius_graph_pbc(data)
+                data_object = self.radius_graph_pbc(data_object)
             except:
                 print(
                     f"Structure could not successfully apply pbc radius graph",
                     flush=True,
                 )
-                data = self.radius_graph(data)
+                data_object = self.radius_graph(data_object)
         else:
-            data = self.radius_graph(data)
+            data_object = self.radius_graph(data_object)
 
-        data = transform_coordinates(data)
+        data_object = transform_coordinates(data_object)
 
-        return data
+        return data_object
 
     def convert_all(
         self,
