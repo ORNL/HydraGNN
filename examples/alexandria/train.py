@@ -350,7 +350,8 @@ class Alexandria(AbstractBaseDataset):
                     self.get_data_dict(entry)
                     for entry in iterate_tqdm(
                         data["entries"],
-                        desc=f"Processing file {filepath}",
+                        #desc=f"Processing file {filepath}",
+                        desc=None,
                         verbosity_level=2,
                     )
                 ]
