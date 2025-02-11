@@ -1,0 +1,2 @@
+# to uncompress .7z file after download
+conda install -c conda-forge p7zip

@@ -66,7 +66,6 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
-
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
 
@@ -172,6 +171,7 @@ class Transition1xDataset(AbstractBaseDataset):
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
             pos_list = pos.tolist()
             atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+            """
             try:
                 mol = xyz2mol(
                     atomic_number_list_int,
@@ -190,6 +190,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 smiles_string = Chem.MolToSmiles(mol[0])
             except:
                 smiles_string = None
+            """
 
             try:
                 # check forces values
@@ -324,11 +325,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -360,7 +363,8 @@ if __name__ == "__main__":
         total = Transition1xDataset(
             os.path.join(datadir),
             var_config,
-            graphgps_transform=graphgps_transform,
+            #graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
