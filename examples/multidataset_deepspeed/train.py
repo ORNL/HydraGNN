@@ -59,12 +59,36 @@ if __name__ == "__main__":
     parser.add_argument("--log", help="log name")
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
-    parser.add_argument("--hidden_dim", type=int, help="number of channel per layer", default=None)
-    parser.add_argument("--num_conv_layers", type=int, help="number of layers", default=None)
-    parser.add_argument("--model_debug", action="store_true", help="print model size only", default=False)
-    parser.add_argument("--full_test", action="store_true", help="ignore all num_samples, using full test set", default=False)
-    parser.add_argument("--conv_checkpointing", action="store_true", help="enable checkpointing for conv layers", default=False)
-    parser.add_argument("--zero_opt", action="store_true", help="enable zero optimizer with stage 1", default=False)
+    parser.add_argument(
+        "--hidden_dim", type=int, help="number of channel per layer", default=None
+    )
+    parser.add_argument(
+        "--num_conv_layers", type=int, help="number of layers", default=None
+    )
+    parser.add_argument(
+        "--model_debug",
+        action="store_true",
+        help="print model size only",
+        default=False,
+    )
+    parser.add_argument(
+        "--full_test",
+        action="store_true",
+        help="ignore all num_samples, using full test set",
+        default=False,
+    )
+    parser.add_argument(
+        "--conv_checkpointing",
+        action="store_true",
+        help="enable checkpointing for conv layers",
+        default=False,
+    )
+    parser.add_argument(
+        "--zero_opt",
+        action="store_true",
+        help="enable zero optimizer with stage 1",
+        default=False,
+    )
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
@@ -136,8 +160,10 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.hidden_dim
 
     if args.num_conv_layers is not None:
-        config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = args.num_conv_layers
-    
+        config["NeuralNetwork"]["Architecture"][
+            "num_conv_layers"
+        ] = args.num_conv_layers
+
     if args.conv_checkpointing:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = True
 
@@ -183,9 +209,7 @@ if __name__ == "__main__":
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
     elif args.format == "pickle":
         info("Pickle load")
-        basedir = os.path.join(
-            args.dataset_path, "%s.pickle" % modelname
-        )
+        basedir = os.path.join(args.dataset_path, "%s.pickle" % modelname)
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=var_config
         )
@@ -386,7 +410,7 @@ if __name__ == "__main__":
     print_model(model)
 
     if args.model_debug:
-        for num_conv_layers in [4,5,6]:
+        for num_conv_layers in [4, 5, 6]:
             print("==== num_conv_layers: ", num_conv_layers)
             config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = num_conv_layers
             model = hydragnn.models.create_model_config(
@@ -409,9 +433,7 @@ if __name__ == "__main__":
     ds_config = parse_deepspeed_config(config)
 
     if args.zero_opt:
-        ds_config["zero_optimization"] = {
-        "stage": 1
-    }
+        ds_config["zero_optimization"] = {"stage": 1}
 
     # create deepspeed model
     model, optimizer, _, _ = deepspeed.initialize(
@@ -419,7 +441,7 @@ if __name__ == "__main__":
         model=model,
         config=ds_config,
         dist_init_required=False,
-        optimizer=optimizer, # optimizer is managed by deepspeed
+        optimizer=optimizer,  # optimizer is managed by deepspeed
     )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
 
     hydragnn.utils.model.load_existing_model_config(
@@ -443,7 +465,9 @@ if __name__ == "__main__":
         use_deepspeed=True,
     )
 
-    hydragnn.utils.model.save_model(model, optimizer, log_name, use_deepspeed=True) # optimizer is managed by deepspeed model
+    hydragnn.utils.model.save_model(
+        model, optimizer, log_name, use_deepspeed=True
+    )  # optimizer is managed by deepspeed model
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
@@ -455,4 +479,4 @@ if __name__ == "__main__":
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
 
-    os._exit(0) # force quit
+    os._exit(0)  # force quit
