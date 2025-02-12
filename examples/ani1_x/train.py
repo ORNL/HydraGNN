@@ -138,6 +138,7 @@ class ANI1xDataset(AbstractBaseDataset):
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
                 pos_list = pos.tolist()
                 atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+                """
                 try:
                     mol = xyz2mol(
                         atomic_number_list_int,
@@ -156,19 +157,21 @@ class ANI1xDataset(AbstractBaseDataset):
                     smiles_string = Chem.MolToSmiles(mol[0])
                 except:
                     smiles_string = None
+                """
 
                 data_object = Data(
-                    dataset_name="ani1x",
+                    #dataset_name="ani1x",
+                    dataset_name=torch.IntTensor([0]),
                     natoms=natoms,
                     pos=pos,
-                    cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_index=None,
-                    edge_attr=None,
-                    edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    #cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    #pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    #edge_index=None,
+                    #edge_attr=None,
+                    #edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
-                    smiles_string=smiles_string,
+                    #smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
@@ -304,11 +307,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -339,7 +344,8 @@ if __name__ == "__main__":
         total = ANI1xDataset(
             os.path.join(datadir),
             var_config,
-            graphgps_transform=graphgps_transform,
+            #graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
