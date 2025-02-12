@@ -201,17 +201,18 @@ class Transition1xDataset(AbstractBaseDataset):
                 continue
 
             data_object = Data(
-                dataset_name="transition1x",
+                #dataset_name="transition1x",
+                dataset_name=torch.IntTensor([2]),
                 natoms=natoms,
                 pos=pos,
-                cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                edge_index=None,
-                edge_attr=None,
-                edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                #cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                #pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                #edge_index=None,
+                #edge_attr=None,
+                #edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                 atomic_numbers=atomic_numbers,
                 chemical_composition=chemical_composition,
-                smiles_string=smiles_string,
+                #smiles_string=smiles_string,
                 x=x,
                 energy=total_energy_tensor,
                 energy_per_atom=total_energy_per_atom_tensor,
