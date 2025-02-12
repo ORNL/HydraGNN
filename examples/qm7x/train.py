@@ -77,9 +77,6 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
-# transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
-# transform_coordinates = Distance(norm=False, cat=False)
 
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
@@ -257,18 +254,18 @@ class QM7XDataset(AbstractBaseDataset):
                 """
 
                 data_object = Data(
-                    #dataset_name="qm7x",
+                    # dataset_name="qm7x",
                     dataset_name=torch.IntTensor([1]),
                     natoms=natoms,
                     pos=pos,
-                    #cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    #pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    #edge_index=None,
-                    #edge_attr=None,
-                    #edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    # cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    # pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    # edge_index=None,
+                    # edge_attr=None,
+                    # edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
-                    #smiles_string=smiles_string,
+                    # smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
