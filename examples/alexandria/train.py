@@ -156,20 +156,23 @@ class Alexandria(AbstractBaseDataset):
             print(f"Structure {entry_id} does not have positional sites", flush=True)
             return data_object
         natoms = torch.IntTensor([pos.shape[0]])
-
+        
         cell = None
         try:
-            cell = torch.tensor(structure["lattice"]["matrix"]).to(torch.float32)
+            cell = torch.tensor(structure["lattice"]["matrix"], dtype=torch.float32)
         except:
             print(f"Structure {entry_id} does not have cell", flush=True)
-            return data_object
 
         pbc = None
         try:
             pbc = structure["lattice"]["pbc"]
         except:
             print(f"Structure {entry_id} does not have pbc", flush=True)
-            return data_object
+
+        # If either cell or pbc were not read, we set to defaults which are not none.
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = [False, False, False]
 
         atomic_numbers = None
         try:
@@ -295,7 +298,7 @@ class Alexandria(AbstractBaseDataset):
         else:
             data_object.y = data_object.energy
 
-        if data_object.pbc is not None and data_object.cell is not None:
+        if any(data_object["pbc"]):
             try:
                 data_object = self.radius_graph_pbc(data_object)
             except:

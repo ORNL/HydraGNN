@@ -166,6 +166,11 @@ class OMat2024(AbstractBaseDataset):
                             flush=True,
                         )
 
+                    # If either cell or pbc were not read, we set to defaults which are not none.
+                    if cell is None or pbc is None:
+                        cell = torch.eye(3, dtype=torch.float32)
+                        pbc = [False, False, False]
+
                     x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
                     # Calculate chemical composition
@@ -200,7 +205,7 @@ class OMat2024(AbstractBaseDataset):
                     else:
                         data_object.y = data_object.energy
 
-                    if data_object.pbc is not None and data_object.cell is not None:
+                    if any(data_object["pbc"]):
                         try:
                             data_object = self.radius_graph_pbc(data_object)
                         except:

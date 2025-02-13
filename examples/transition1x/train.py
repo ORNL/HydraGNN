@@ -123,6 +123,9 @@ class Transition1xDataset(AbstractBaseDataset):
                 )
                 continue
             natoms = torch.IntTensor([pos.shape[0]])
+            
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = [False, False, False]
 
             atomic_numbers = None
             try:

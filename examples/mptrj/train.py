@@ -133,18 +133,16 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 # Convert lists to PyTorch tensors
                 lattice_mat = None
+                pbc = None
                 try:
                     lattice_mat = torch.tensor(
                         info["atoms"]["lattice_mat"], dtype=torch.float32
                     )
+                    pbc = [True, True, True]
                 except:
                     print(f"Structure does not have lattice_mat", flush=True)
-
-                pbc = None
-                try:
-                    pbc = info["atoms"]["pbc"]
-                except:
-                    print(f"Structure does not have pbc", flush=True)
+                    lattice_mat = torch.eye(3, dtype=torch.float32)
+                    pbc = [False, False, False]
 
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
@@ -206,7 +204,7 @@ class MPTrjDataset(AbstractBaseDataset):
                 else:
                     data_object.y = data_object.energy
 
-                if data_object.pbc is not None and data_object.cell is not None:
+                if any(data_object["pbc"]):
                     try:
                         data_object = self.radius_graph_pbc(data_object)
                     except:
