@@ -122,6 +122,8 @@ class ANI1xDataset(AbstractBaseDataset):
             for frame_id in local_trajectories_id:
 
                 pos = torch.from_numpy(X[frame_id]).to(torch.float32)
+                cell = torch.eye(3, dtype=torch.float32)
+                pbc = [False, False, False]
                 energy = (
                     torch.tensor(E[frame_id])
                     .unsqueeze(0)

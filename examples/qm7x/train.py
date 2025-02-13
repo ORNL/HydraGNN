@@ -170,6 +170,8 @@ class QM7XDataset(AbstractBaseDataset):
             pos = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(
                 torch.float32
             )
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = [False, False, False]
             atomic_numbers = (
                 torch.Tensor(fMOL[molid][confid]["atNUM"])
                 .unsqueeze(1)

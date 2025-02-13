@@ -153,6 +153,11 @@ class OpenCatalystDataset(AbstractBaseDataset):
             pbc = atoms.get_pbc()
         except:
             print(f"Structure does not have pbc", flush=True)
+        
+        # If either cell or pbc were not read, we set to defaults which are not none.
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = [False, False, False]
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
@@ -193,7 +198,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         else:
             data_object.y = data_object.energy
 
-        if data_object.pbc is not None and data_object.cell is not None:
+        if any(data_object["pbc"]):
             try:
                 data_object = self.radius_graph_pbc(data_object)
             except:
