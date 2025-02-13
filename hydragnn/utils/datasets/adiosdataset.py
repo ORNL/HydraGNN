@@ -476,21 +476,27 @@ class AdiosDataset(AbstractBaseDataset):
 
         with ad2.open(self.filename, "r", self.comm) as f:
             f.__next__()
+
             t1 = time.time()
             self.vars = f.available_variables()
             self.attrs = f.available_attributes()
             self.keys = self.read_attribute_string0(f, "%s/keys" % label)
+
             if keys is not None:
                 self.setkeys(keys)
+
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
+
             if "minmax_graph_feature" in self.attrs:
                 self.minmax_graph_feature = self.read_attribute0(
                     f, "minmax_graph_feature"
                 ).reshape((2, -1))
+
             if "minmax_node_feature" in self.attrs:
                 self.minmax_node_feature = self.read_attribute0(
                     f, "minmax_node_feature"
                 ).reshape((2, -1))
+
             if "pna_deg" in self.attrs:
                 self.pna_deg = self.read_attribute0(f, "pna_deg")
 
@@ -513,7 +519,13 @@ class AdiosDataset(AbstractBaseDataset):
             nbytes = 0
             t3 = time.time()
             for k in self.keys:
+
+                # dataset_name should not be a key, but if it is, it has already been read as an attr
                 if k == "dataset_name":
+                    continue
+
+                if k == "smiles":
+                    self._read_smiles_strings(label, f)
                     continue
 
                 self.variable_count[k] = self.read0(
@@ -648,6 +660,7 @@ class AdiosDataset(AbstractBaseDataset):
                         ),
                     )
                     nbytes += self.data[k].size * self.data[k].itemsize
+
             t6 = time.time()
             log0("Overall time (sec): ", t6 - t1)
             log0("DDStore adding time (sec): ", ddstore_time)
@@ -671,8 +684,50 @@ class AdiosDataset(AbstractBaseDataset):
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
             self.node_feature_dim = self.var_config["node_feature_dims"]
 
-    ## rank=0 read and bcast
+    def _read_smiles_strings(self, label, f):
+        """
+        Add smiles data to self.data['smiles']
+        It will read from two global arrays - 'smiles_data' and 'smiles_lengths'
+        e.g., assume we have the following:
+        array 1: smiles_data:    ["abcdefghij"]
+        array 2: smiles_lengths: [4,2,3,1]
+        If we have 2 processes, then P0 will have ["abcd", "ef"], and
+        P1 will have ["ghi", "j"]
+        """
+        self.smiles_strings = list()
+
+        # First we will read the string lengths
+        lengths_varname = f"{label}/smiles_lengths"
+        global_size = int(self.vars[lengths_varname]["Shape"].split(",")[0])
+
+        # Calculate individual process's portion
+        local_size = global_size // self.comm_size
+        local_size += self.rank < (global_size % self.comm_size)
+        all_local_sizes = self.comm.allgather(local_size)
+        local_offset = sum(all_local_sizes[: self.rank])
+
+        # Read the string lengths. e.g. P0 will get [4,2], and P1 will get [3,1]
+        local_string_lengths = f.read(lengths_varname, [local_offset], [local_size])
+
+        # Now we will read the smiles strings as uint8 arrays
+        data_varname = f"{label}/smiles_data"
+        local_size = sum(local_string_lengths)
+        all_local_sizes = self.comm.allgather(local_size)
+        local_offset = sum(all_local_sizes[: self.rank])
+
+        # Read the smiles strings. e.g. P0 will get "abcdef" and P1 will get "ghij" uint8 arrays
+        local_data = f.read(data_varname, [local_offset], [local_size])
+
+        # Convert uint8 arrays to strings
+        start = 0
+        for l in local_string_lengths:
+            np_str_arr = local_data[start : start + l]
+            start += l
+            string_value = np_str_arr.tobytes().decode("utf-8")
+            self.smiles_strings.append(string_value)
+
     def read0(self, f, vname):
+        ## rank=0 read and bcast
         if self.rank == 0:
             val = f.read(vname)
         else:
