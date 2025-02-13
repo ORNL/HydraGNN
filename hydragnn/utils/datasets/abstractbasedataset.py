@@ -47,11 +47,6 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
             if self.dataset_name is not None:
                 obj.dataset_name = self.dataset_name
 
-        # Get the smiles string if it exists
-        if hasattr(self, "smiles"):
-            if self.smiles is not None:
-                obj.smiles = self.smiles[idx]
-
         return obj
 
     def __iter__(self):
