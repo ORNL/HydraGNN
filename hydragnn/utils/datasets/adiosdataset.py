@@ -188,7 +188,7 @@ class AdiosWriter:
                     continue
 
                 if k == "smiles":
-                    self._write_smiles_data(label)
+                    self._write_smiles_strings(label)
                     continue
 
                 arr_list = list()
@@ -313,13 +313,13 @@ class AdiosWriter:
                     return data.dataset_name
         return None
 
-    def _write_smiles_data(self, label):
+    def _write_smiles_strings(self, label):
         """
         Write smiles data into the adios file
         This will write two global arrays, one for the smiles data and another for the string lengths
         e.g., assume 2 processes where P0 has "abcd", "ef", and P1 has "ghi", "j", then
-        array 1: smiles:  ["abcdefghij"]
-        array 2: lengths: [4,2,3,1]
+        array 1: smiles_data:    ["abcdefghij"]
+        array 2: smiles_lengths: [4,2,3,1]
         """
 
         # Collect smiles strings in a list
@@ -341,7 +341,7 @@ class AdiosWriter:
 
         # Write smiles data
         data_var = self.io.DefineVariable(
-            f"{label}/smiles",
+            f"{label}/smiles_data",
             local_smiles_arr,
             [global_sizes],
             [offsets],
