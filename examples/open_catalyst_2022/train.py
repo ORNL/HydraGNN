@@ -206,7 +206,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         else:
             data_object.y = data_object.energy
 
-        if any(data_object["pbc"]):
+        if data_object.pbc.any():
             try:
                 data_object = self.radius_graph_pbc(data_object)
                 data_object = transform_coordinates_pbc(data_object)
