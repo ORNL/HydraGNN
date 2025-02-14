@@ -123,7 +123,6 @@ class ANI1xDataset(AbstractBaseDataset):
                 pos = torch.from_numpy(X[frame_id]).to(torch.float32)
                 cell = torch.eye(3, dtype=torch.float32)
                 pbc = torch.tensor([False, False, False], dtype=torch.bool)
-                edge_shifts = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
                 energy = (
                     torch.tensor(E[frame_id])
                     .unsqueeze(0)
@@ -169,11 +168,10 @@ class ANI1xDataset(AbstractBaseDataset):
                     dataset_name=torch.IntTensor([0]),
                     natoms=natoms,
                     pos=pos,
-                    #cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    #pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
                     #edge_index=None,
                     #edge_attr=None,
-                    #edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     #smiles_string=smiles_string,
@@ -192,6 +190,12 @@ class ANI1xDataset(AbstractBaseDataset):
 
                 # Build edge attributes
                 data_object = transform_coordinates(data_object)
+                
+                # Default edge_shifts for when radius_graph_pbc is not activated
+                data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+                    
+                # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+                data_object.pbc = data_object.pbc.int()
 
                 # LPE
                 if self.graphgps_transform is not None:

@@ -139,6 +139,8 @@ class MPTrjDataset(AbstractBaseDataset):
                 # Convert lists to PyTorch tensors
                 lattice_mat = None
                 pbc = None
+                # MPTrj does not define pbc in its samples because they are all implicitly 3D-periodic
+                # Therefore, we apply pbc if we can read the cell and default otherwise
                 try:
                     lattice_mat = torch.tensor(
                         info["atoms"]["lattice_mat"], dtype=torch.float32
@@ -148,9 +150,6 @@ class MPTrjDataset(AbstractBaseDataset):
                     print(f"Structure does not have lattice_mat", flush=True)
                     lattice_mat = torch.eye(3, dtype=torch.float32)
                     pbc = torch.tensor([False, False, False], dtype=torch.bool)
-                    
-                # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
-                edge_shifts = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
 
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
@@ -195,7 +194,6 @@ class MPTrjDataset(AbstractBaseDataset):
                     pbc=pbc,
                     edge_index=None,
                     edge_attr=None,
-                    edge_shifts=edge_shifts,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     smiles_string=None,
@@ -226,6 +224,13 @@ class MPTrjDataset(AbstractBaseDataset):
                 else:
                     data_object = self.radius_graph(data_object)
                     data_object = transform_coordinates(data_object)
+                    
+                # Default edge_shifts for when radius_graph_pbc is not activated
+                if not hasattr(data_object, "edge_shifts"):
+                    data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+                    
+                # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+                data_object.pbc = data_object.pbc.int()
 
                 # LPE
                 if self.graphgps_transform is not None:
