@@ -10,14 +10,18 @@
 ##############################################################################
 
 import torch
+from torch_scatter import scatter
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.data import Data
 from torch_geometric.utils import remove_self_loops, degree
+from torch_geometric.data.datapipes import functional_transform
+from torch_geometric.transforms import LocalCartesian, Distance
 
 import ase
 import ase.neighborlist
 import numpy as np
 import os
+from typing import Tuple
 
 from .dataset_descriptors import AtomFeatures
 from hydragnn.utils.distributed import get_device
@@ -135,8 +139,8 @@ def get_radius_graph_pbc_config(config, loop=False):
 
 
 class RadiusGraphPBC(RadiusGraph):
-    r"""Creates edges based on node positions :obj:`pos` to all points within a
-    given distance, including periodic images, and limits the number of neighbors per node.
+    r"""Creates edges and edge features based on node positions :obj:`pos` to all points within
+    a given distance, including periodic images, and limits the number of neighbors per node.
     """
 
     def __call__(self, data):
@@ -146,9 +150,9 @@ class RadiusGraphPBC(RadiusGraph):
         )  # dtype gives us whether to use float32 or float64
 
         ase_atom_object = ase.Atoms(
-            positions=data.pos,
-            cell=data.cell,
-            pbc=data.pbc,
+            positions=data.pos.cpu().numpy(),
+            cell=data.cell.cpu().numpy(),
+            pbc=data.pbc.tolist(),
         )
         # 'i' : first atom index
         # 'j' : second atom index
@@ -191,11 +195,6 @@ class RadiusGraphPBC(RadiusGraph):
             ],
             dim=0,  # Shape: [2, n_edges]
         )
-        data.edge_attr = torch.tensor(
-            edge_length, dtype=dtype, device=device
-        ).unsqueeze(
-            1
-        )  # Shape: [n_edges, 1]
         # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
         data.edge_shifts = torch.matmul(
             torch.tensor(edge_cell_shifts, dtype=dtype, device=device),
@@ -283,6 +282,99 @@ class RadiusGraphPBC(RadiusGraph):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
+
+
+@functional_transform("pbc_distance")
+class PBCDistance(Distance):
+    """
+    A PBC-aware version of the `Distance` transform from
+    Pytorch-Geometric that adds the effect of edge_shifts in PBC
+    """
+
+    def forward(self, data: Data) -> Data:
+        # We still do the same checks as the parent, plus ensure edge_shifts is present:
+        assert data.pos is not None, "'data.pos' is required."
+        assert data.edge_index is not None, "'data.edge_index' is required."
+        assert hasattr(
+            data, "edge_shifts"
+        ), "'data.edge_shifts' is required for PBC distances."
+
+        # For convenience, read attributes as in parent's forward:
+        (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
+
+        # === Key difference: add edge_shifts to the coordinate difference ===
+        shift_vec = pos[col] - pos[row] + data.edge_shifts
+        dist = torch.norm(shift_vec, p=2, dim=-1).view(-1, 1)
+
+        # === Replicate the parent's normalization logic ===
+        if self.norm and dist.numel() > 0:
+            max_val = float(dist.max()) if self.max is None else self.max
+
+            length = self.interval[1] - self.interval[0]
+            dist = length * (dist / max_val) + self.interval[0]
+
+        # === Replicate the parent's concatenation logic ===
+        if pseudo is not None and self.cat:
+            pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+            data.edge_attr = torch.cat([pseudo, dist.to(pseudo.dtype)], dim=-1)
+        else:
+            data.edge_attr = dist
+
+        return data
+
+
+@functional_transform("pbc_local_cartesian")
+class PBCLocalCartesian(LocalCartesian):
+    """
+    A PBC-aware version of the `LocalCartesian` transform from
+    Pytorch-Geometric that adds the effect of edge_shifts in PBC
+    """
+
+    def forward(self, data: Data) -> Data:
+        assert data.pos is not None, "'data.pos' is required."
+        assert data.edge_index is not None, "'data.edge_index' is required."
+        assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
+
+        (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
+
+        # Instead of (pos[row] - pos[col]), we add `edge_shifts`:
+        cart = (pos[row] - pos[col]) + data.edge_shifts
+        cart = cart.view(-1, 1) if cart.dim() == 1 else cart
+
+        if self.norm:
+            max_value = scatter(
+                cart.abs(), col, dim=0, dim_size=pos.size(0), reduce="max"
+            )
+            max_value = max_value.max(dim=-1, keepdim=True)[0]
+
+            length = self.interval[1] - self.interval[0]
+            center = (self.interval[0] + self.interval[1]) / 2
+            cart = length * cart / (2 * max_value[col].clamp_min(1e-9)) + center
+
+        if pseudo is not None and self.cat:
+            pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+            data.edge_attr = torch.cat([pseudo, cart.type_as(pseudo)], dim=-1)
+        else:
+            data.edge_attr = cart
+
+        return data
+
+
+def pbc_as_tensor(pbc):
+    # Function to convert pbc to a tensor of 3 booleans, regardless of input type
+    pbc_t = torch.as_tensor(pbc, dtype=torch.bool)
+    shape = pbc_t.shape
+
+    if shape == ():  # single bool
+        val = pbc_t.item()
+        return torch.tensor([val, val, val], dtype=torch.bool)
+    elif shape == (1,):  # list or array of one bool
+        val = pbc_t.item()
+        return torch.tensor([val, val, val], dtype=torch.bool)
+    elif shape == (3,):  # list or array of 3 bools
+        return pbc_t
+    else:
+        raise ValueError(f"Invalid PBC shape {shape}. Expect scalar, (1,), or (3,).")
 
 
 def gather_deg(dataset):
