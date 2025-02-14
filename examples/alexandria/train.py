@@ -174,13 +174,13 @@ class Alexandria(AbstractBaseDataset):
         except:
             print(f"Structure {entry_id} does not have pbc", flush=True)
 
-        # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
-        edge_shifts = torch.tensor([0, 0, 0], dtype=torch.float32)
-
         # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
+            
+        # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
+        edge_shifts = torch.tensor([0, 0, 0], dtype=torch.float32)
 
         atomic_numbers = None
         try:
