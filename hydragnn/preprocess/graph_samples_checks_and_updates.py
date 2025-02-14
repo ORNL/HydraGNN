@@ -152,7 +152,7 @@ class RadiusGraphPBC(RadiusGraph):
         ase_atom_object = ase.Atoms(
             positions=data.pos.cpu().numpy(),
             cell=data.cell.cpu().numpy(),
-            pbc=data.pbc.tolist(),
+            pbc=data.pbc.cpu().tolist(),
         )
         # 'i' : first atom index
         # 'j' : second atom index
