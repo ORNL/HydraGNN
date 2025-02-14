@@ -174,13 +174,10 @@ class Alexandria(AbstractBaseDataset):
         except:
             print(f"Structure {entry_id} does not have pbc", flush=True)
 
-        # If either cell or pbc were not read, we set to defaults which are not none.
+        # If either cell or pbc were not read, we set to defaults
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
-            
-        # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
-        edge_shifts = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
 
         atomic_numbers = None
         try:
@@ -283,7 +280,6 @@ class Alexandria(AbstractBaseDataset):
             pbc=pbc,
             edge_index=None,
             edge_attr=None,
-            edge_shifts=edge_shifts,
             atomic_numbers=atomic_numbers,
             chemical_composition=chemical_composition,
             smiles_string=None,
@@ -320,7 +316,14 @@ class Alexandria(AbstractBaseDataset):
                 data_object = transform_coordinates(data_object)
         else:
             data_object = self.radius_graph(data_object)
-            data_object = transform_coordinates(data_object)        
+            data_object = transform_coordinates(data_object)
+            
+        # Default edge_shifts for when radius_graph_pbc is not activated
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+            
+        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+        data_object.pbc = data_object.pbc.int()
 
         # LPE
         if self.graphgps_transform is not None:

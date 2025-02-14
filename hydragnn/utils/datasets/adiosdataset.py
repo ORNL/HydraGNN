@@ -175,11 +175,7 @@ class AdiosWriter:
                 arr_list = list()
                 for data in self.dataset[label]:
                     if isinstance(data[k], torch.Tensor):
-                        if data[k].dtype == torch.bool:
-                            # Adios requires does not support bools so we convert to int
-                            arr_list.append(data[k].cpu().numpy().astype(int))
-                        else: 
-                            arr_list.append(data[k].cpu().numpy())
+                        arr_list.append(data[k].cpu().numpy())
                     elif isinstance(data[k], np.ndarray):
                         arr_list.append(data[k])
                     elif isinstance(data[k], (np.floating, np.integer)):
@@ -781,10 +777,6 @@ class AdiosDataset(AbstractBaseDataset):
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self._data[k][tuple(slice_list)]
-                    
-                    # If this is our pbc data, convert int->bool
-                    if k == "pbc":
-                        val = val.astype(bool)
 
                     v = torch.tensor(val)
                     exec("data_object.%s = v" % (k))
