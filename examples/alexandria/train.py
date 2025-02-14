@@ -164,7 +164,7 @@ class Alexandria(AbstractBaseDataset):
         
         cell = None
         try:
-            cell = torch.tensor(structure["lattice"]["matrix"], dtype=torch.float32)
+            cell = torch.tensor(structure["lattice"]["matrix"], dtype=torch.float32).view(3,3)
         except:
             print(f"Structure {entry_id} does not have cell", flush=True)
 

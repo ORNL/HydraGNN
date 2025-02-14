@@ -144,7 +144,7 @@ class MPTrjDataset(AbstractBaseDataset):
                 try:
                     lattice_mat = torch.tensor(
                         info["atoms"]["lattice_mat"], dtype=torch.float32
-                    )
+                    ).view(3,3)
                     pbc = torch.tensor([True, True, True], dtype=torch.bool)
                 except:
                     print(f"Structure does not have lattice_mat", flush=True)
