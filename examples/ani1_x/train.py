@@ -31,6 +31,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -123,7 +126,8 @@ class ANI1xDataset(AbstractBaseDataset):
 
                 pos = torch.from_numpy(X[frame_id]).to(torch.float32)
                 cell = torch.eye(3, dtype=torch.float32)
-                pbc = [False, False, False]
+                pbc = torch.tensor([False, False, False], dtype=torch.bool)
+                edge_shifts = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
                 energy = (
                     torch.tensor(E[frame_id])
                     .unsqueeze(0)

@@ -180,7 +180,7 @@ class Alexandria(AbstractBaseDataset):
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
             
         # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
-        edge_shifts = torch.tensor([0, 0, 0], dtype=torch.float32)
+        edge_shifts = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
 
         atomic_numbers = None
         try:
@@ -313,7 +313,7 @@ class Alexandria(AbstractBaseDataset):
                 data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure {entry_id} could not successfully apply pbc radius graph or its transform",
+                    f"Structure {entry_id} could not successfully apply one or both of the pbc radius graph and positional transform",
                     flush=True,
                 )
                 data_object = self.radius_graph(data_object)

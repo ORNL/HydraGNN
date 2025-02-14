@@ -31,6 +31,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -61,6 +64,8 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 class MPTrjDataset(AbstractBaseDataset):
     def __init__(
@@ -138,11 +143,14 @@ class MPTrjDataset(AbstractBaseDataset):
                     lattice_mat = torch.tensor(
                         info["atoms"]["lattice_mat"], dtype=torch.float32
                     )
-                    pbc = [True, True, True]
+                    pbc = torch.tensor([True, True, True], dtype=torch.bool)
                 except:
                     print(f"Structure does not have lattice_mat", flush=True)
                     lattice_mat = torch.eye(3, dtype=torch.float32)
-                    pbc = [False, False, False]
+                    pbc = torch.tensor([False, False, False], dtype=torch.bool)
+                    
+                # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
+                edge_shifts = torch.tensor([0.0, 0.0, 0.0], dtype=torch.float32)
 
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
@@ -187,7 +195,7 @@ class MPTrjDataset(AbstractBaseDataset):
                     pbc=pbc,
                     edge_index=None,
                     edge_attr=None,
-                    edge_shifts=None,
+                    edge_shifts=edge_shifts,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     smiles_string=None,
@@ -204,19 +212,20 @@ class MPTrjDataset(AbstractBaseDataset):
                 else:
                     data_object.y = data_object.energy
 
-                if any(data_object["pbc"]):
+                if data_object.pbc.any():
                     try:
                         data_object = self.radius_graph_pbc(data_object)
+                        data_object = transform_coordinates_pbc(data_object)
                     except:
                         print(
-                            f"Structure could not successfully apply pbc radius graph",
+                            f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
                             flush=True,
                         )
                         data_object = self.radius_graph(data_object)
+                        data_object = transform_coordinates(data_object)
                 else:
                     data_object = self.radius_graph(data_object)
-
-                data_object = transform_coordinates(data_object)
+                    data_object = transform_coordinates(data_object)
 
                 # LPE
                 if self.graphgps_transform is not None:
