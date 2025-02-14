@@ -292,28 +292,20 @@ class PBCDistance(Distance):
     """
 
     def forward(self, data: Data) -> Data:
-        # We still do the same checks as the parent, plus ensure edge_shifts is present:
         assert data.pos is not None, "'data.pos' is required."
         assert data.edge_index is not None, "'data.edge_index' is required."
-        assert hasattr(
-            data, "edge_shifts"
-        ), "'data.edge_shifts' is required for PBC distances."
-
-        # For convenience, read attributes as in parent's forward:
+        assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
         (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
 
-        # === Key difference: add edge_shifts to the coordinate difference ===
-        shift_vec = pos[col] - pos[row] + data.edge_shifts
-        dist = torch.norm(shift_vec, p=2, dim=-1).view(-1, 1)
+        vec = pos[col] - pos[row] + data.edge_shifts  # Key change is adding edge_shifts
+        dist = torch.norm(vec, p=2, dim=-1).view(-1, 1)
 
-        # === Replicate the parent's normalization logic ===
         if self.norm and dist.numel() > 0:
             max_val = float(dist.max()) if self.max is None else self.max
 
             length = self.interval[1] - self.interval[0]
             dist = length * (dist / max_val) + self.interval[0]
 
-        # === Replicate the parent's concatenation logic ===
         if pseudo is not None and self.cat:
             pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
             data.edge_attr = torch.cat([pseudo, dist.to(pseudo.dtype)], dim=-1)
@@ -334,11 +326,9 @@ class PBCLocalCartesian(LocalCartesian):
         assert data.pos is not None, "'data.pos' is required."
         assert data.edge_index is not None, "'data.edge_index' is required."
         assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
-
         (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
 
-        # Instead of (pos[row] - pos[col]), we add `edge_shifts`:
-        cart = (pos[row] - pos[col]) + data.edge_shifts
+        cart = (pos[row] - pos[col]) + data.edge_shifts  # Key change is adding edge_shifts
         cart = cart.view(-1, 1) if cart.dim() == 1 else cart
 
         if self.norm:
