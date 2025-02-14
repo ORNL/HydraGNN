@@ -29,6 +29,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -72,6 +75,8 @@ reversed_dict_periodic_table = {value: key for key, value in periodic_table.item
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 class Alexandria(AbstractBaseDataset):
     def __init__(
@@ -165,14 +170,17 @@ class Alexandria(AbstractBaseDataset):
 
         pbc = None
         try:
-            pbc = structure["lattice"]["pbc"]
+            pbc = pbc_as_tensor(structure["lattice"]["pbc"])
         except:
             print(f"Structure {entry_id} does not have pbc", flush=True)
+
+        # Default edge_shifts which will be overwritten if we use RadiusGraphPBC
+        edge_shifts = torch.tensor([0, 0, 0], dtype=torch.float32)
 
         # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
-            pbc = [False, False, False]
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         atomic_numbers = None
         try:
@@ -275,7 +283,7 @@ class Alexandria(AbstractBaseDataset):
             pbc=pbc,
             edge_index=None,
             edge_attr=None,
-            edge_shifts=None,
+            edge_shifts=edge_shifts,
             atomic_numbers=atomic_numbers,
             chemical_composition=chemical_composition,
             smiles_string=None,
@@ -298,20 +306,21 @@ class Alexandria(AbstractBaseDataset):
         else:
             data_object.y = data_object.energy
 
-        if any(data_object["pbc"]):
+        # Apply radius graph and build edge attributes accordingly
+        if data_object.pbc.any():
             try:
                 data_object = self.radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure {entry_id} could not successfully apply pbc radius graph",
+                    f"Structure {entry_id} could not successfully apply pbc radius graph or its transform",
                     flush=True,
                 )
                 data_object = self.radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
         else:
             data_object = self.radius_graph(data_object)
-
-        # Build edge attributes
-        data_object = transform_coordinates(data_object)
+            data_object = transform_coordinates(data_object)        
 
         # LPE
         if self.graphgps_transform is not None:
