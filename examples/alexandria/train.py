@@ -159,7 +159,6 @@ class Alexandria(AbstractBaseDataset):
             assert pos.shape[0] > 0, "pos tensor does not have any atoms"
         except:
             print(f"Structure {entry_id} does not have positional sites", flush=True)
-            return data_object
         natoms = torch.IntTensor([pos.shape[0]])
         
         cell = None

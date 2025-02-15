@@ -297,7 +297,7 @@ class PBCDistance(Distance):
         assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
         (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
 
-        vec = pos[col] - pos[row] + data.edge_shifts  # Key change is adding edge_shifts
+        vec = pos[col] - pos[row] + data.edge_shifts  # The key change is adding edge_shifts
         dist = torch.norm(vec, p=2, dim=-1).view(-1, 1)
 
         if self.norm and dist.numel() > 0:
@@ -328,7 +328,7 @@ class PBCLocalCartesian(LocalCartesian):
         assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
         (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
 
-        cart = (pos[row] - pos[col]) + data.edge_shifts  # Key change is adding edge_shifts
+        cart = (pos[row] - pos[col]) - data.edge_shifts  # The key change is adding edge_shifts
         cart = cart.view(-1, 1) if cart.dim() == 1 else cart
 
         if self.norm:
