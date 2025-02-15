@@ -38,6 +38,9 @@ from hydragnn.utils.print.print_utils import iterate_tqdm, log
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from ase.io import read
 
@@ -57,6 +60,8 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
@@ -150,9 +155,14 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         pbc = None
         try:
-            pbc = atoms.get_pbc()
+            pbc = pbc_as_tensor(atoms.get_pbc())
         except:
             print(f"Structure does not have pbc", flush=True)
+        
+        # If either cell or pbc were not read, we set to defaults which are not none.
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
@@ -177,7 +187,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
             pbc=pbc,
             edge_index=None,
             edge_attr=None,
-            edge_shifts=None,
             atomic_numbers=atomic_numbers,
             chemical_composition=chemical_composition,
             smiles_string=None,
@@ -193,19 +202,27 @@ class OpenCatalystDataset(AbstractBaseDataset):
         else:
             data_object.y = data_object.energy
 
-        if data_object.pbc is not None and data_object.cell is not None:
+        if data_object.pbc.any():
             try:
                 data_object = self.radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure could not successfully apply pbc radius graph",
+                    f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
                     flush=True,
                 )
                 data_object = self.radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
         else:
             data_object = self.radius_graph(data_object)
-
-        data_object = transform_coordinates(data_object)
+            data_object = transform_coordinates(data_object)
+            
+        # Default edge_shifts for when radius_graph_pbc is not activated
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+            
+        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+        data_object.pbc = data_object.pbc.int()
 
         # LPE
         if self.graphgps_transform is not None:
