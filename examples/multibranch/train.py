@@ -22,6 +22,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.utils.distributed import nsplit
+from hydragnn.utils.distributed import get_device
 
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosDataset
@@ -31,16 +32,28 @@ except ImportError:
 from scipy.interpolate import BSpline, make_interp_spline
 import adios2 as ad2
 
-import deepspeed
-from hydragnn.utils.input_config_parsing import parse_deepspeed_config
-from hydragnn.utils.distributed import get_deepspeed_init_args
-
 ## FIMME
 torch.backends.cudnn.enabled = False
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+def check_node_feature_dim(var_config):
+    # NOTE: The following check is made to ensure compatibility with the json parsing of node features
+    # and compute_grad_energy.
+    # NOTE: In short: We need the node feature used to set up data.y to be of dimension 1, since this will dictate our
+    # nodal MLP head output dimension. Since we have node_feature_dims[0] == 1 and output_index == 0, this is already true.
+    # NOTE: In detail: When using Hydra for physics-informed force prediction for the GFM, we have the following structure:
+    # --> Load with ADIOS -->
+    # --> update_predicted_values(): defines y_loc = [0, node_feature_dims[output_index]*num_nodes] -->
+    # --> update_config_NN_outputs(): y_loc exists, so it defines output_dim = [(node_feature_dims[output_index]*num_nodes)/num_nodes]  = [node_feature_dims[output_index]] -->
+    # --> Base() ... MLPNode(): defines node MLP head with output_dim ... This must be equal to 1 as expected for nodal energy predictions
+    # NOTE Since changing json parsing functions requires base-level code changes and the imposed requirement is already being obeyed
+    # in the data setup for GFM, a quick check has been placed here instead.
+    if var_config["node_feature_dims"][var_config["output_index"][0]] != 1:
+        raise ValueError("Your node feature dim at the output index is not equal to 1.")
 
 
 if __name__ == "__main__":
@@ -50,47 +63,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="gfm_multitasking.json"
     )
-    parser.add_argument(
-        "--dataset_path", help="path to the dataset", type=str, default="./dataset"
-    )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
-
-    parser.add_argument(
-        "--hidden_dim", type=int, help="number of channel per layer", default=None
-    )
-    parser.add_argument(
-        "--num_conv_layers", type=int, help="number of layers", default=None
-    )
-    parser.add_argument(
-        "--model_debug",
-        action="store_true",
-        help="print model size only",
-        default=False,
-    )
-    parser.add_argument(
-        "--full_test",
-        action="store_true",
-        help="ignore all num_samples, using full test set",
-        default=False,
-    )
-    parser.add_argument(
-        "--conv_checkpointing",
-        action="store_true",
-        help="enable checkpointing for conv layers",
-        default=False,
-    )
-    parser.add_argument(
-        "--zero_opt",
-        action="store_true",
-        help="enable zero optimizer with stage 1",
-        default=False,
-    )
-
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
@@ -139,6 +117,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
+    datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -151,6 +130,7 @@ if __name__ == "__main__":
     var_config["graph_feature_dims"] = graph_feature_dims
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
+    check_node_feature_dim(var_config)
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -158,20 +138,9 @@ if __name__ == "__main__":
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
-    if args.hidden_dim is not None:
-        config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.hidden_dim
-
-    if args.num_conv_layers is not None:
-        config["NeuralNetwork"]["Architecture"][
-            "num_conv_layers"
-        ] = args.num_conv_layers
-
-    if args.conv_checkpointing:
-        config["NeuralNetwork"]["Training"]["conv_checkpointing"] = True
-
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp(use_deepspeed=True)
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -196,43 +165,7 @@ if __name__ == "__main__":
     timer = Timer("load_data")
     timer.start()
 
-    if args.format == "adios":
-        info("Adios load")
-        assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
-        opt = {
-            "preload": False,
-            "shmem": args.shmem,
-            "ddstore": args.ddstore,
-            "ddstore_width": args.ddstore_width,
-        }
-        fname = os.path.join(args.dataset_path, "%s.bp" % modelname)
-        trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
-        valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
-        testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
-    elif args.format == "pickle":
-        info("Pickle load")
-        basedir = os.path.join(args.dataset_path, "%s.pickle" % modelname)
-        trainset = SimplePickleDataset(
-            basedir=basedir, label="trainset", var_config=var_config
-        )
-        valset = SimplePickleDataset(
-            basedir=basedir, label="valset", var_config=var_config
-        )
-        testset = SimplePickleDataset(
-            basedir=basedir, label="testset", var_config=var_config
-        )
-        # minmax_node_feature = trainset.minmax_node_feature
-        # minmax_graph_feature = trainset.minmax_graph_feature
-        pna_deg = trainset.pna_deg
-        if args.ddstore:
-            opt = {"ddstore_width": args.ddstore_width}
-            trainset = DistDataset(trainset, "trainset", comm, **opt)
-            valset = DistDataset(valset, "valset", comm, **opt)
-            testset = DistDataset(testset, "testset", comm, **opt)
-            # trainset.minmax_node_feature = minmax_node_feature
-            # trainset.minmax_graph_feature = minmax_graph_feature
-            trainset.pna_deg = pna_deg
-    elif args.format == "multi":
+    if args.format == "multi":
         ## Reading multiple datasets, which requires the following arguments:
         ## --multi_model_list: the list dataset/model names
         modellist = args.multi_model_list.split(",")
@@ -240,7 +173,10 @@ if __name__ == "__main__":
             ndata_list = list()
             pna_deg_list = list()
             for model in modellist:
-                fname = os.path.join(args.dataset_path, "%s.bp" % model)
+                # fname = os.path.join(
+                #    os.path.dirname(__file__), "./dataset/%s.bp" % model
+                # )
+                fname = model
                 with ad2.open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
@@ -303,8 +239,10 @@ if __name__ == "__main__":
             "edge_attr",
             "pos",
             "y",
+            "dataset_name",
         ]
-        fname = os.path.join(args.dataset_path, "%s.bp" % mymodel)
+        # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
+        fname = mymodel
         trainset = AdiosDataset(
             fname,
             "trainset",
@@ -343,9 +281,7 @@ if __name__ == "__main__":
         for dataset in [testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
             num_samples = len(rx)
-            if args.full_test:
-                pass
-            elif args.num_test_samples is not None:
+            if args.num_test_samples is not None:
                 num_samples = args.num_test_samples
             elif args.num_samples is not None:
                 num_samples = args.num_samples
@@ -353,7 +289,21 @@ if __name__ == "__main__":
 
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
-
+        """
+        #FIXME: will replace it with Max's new dataset
+        datasets=[]
+        for dataset in [trainset, valset, testset]:
+            dataset_=[]
+            for data in dataset:
+                data.branchtype = f"branch-{mycolor}"
+                print("Pei debugging 1", data)
+                dataset_.append(data.to(get_device()))
+            datasets.append(dataset_)
+        trainset, valset, testset = datasets
+        for dataset in [trainset, valset, testset]:
+            for data in dataset:
+                print("Pei debugging 2", data)
+        """
         # print(
         #     rank,
         #     "color, moddelname, local size(trainset,valset,testset):",
@@ -385,13 +335,20 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
         test_sampler_shuffle=False,
     )
+
+    # for data in train_loader:
+    #    print("Pei debugging 3", data)
 
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
@@ -407,23 +364,10 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)
-
-    if args.model_debug:
-        for num_conv_layers in [4, 5, 6]:
-            print("==== num_conv_layers: ", num_conv_layers)
-            config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = num_conv_layers
-            model = hydragnn.models.create_model_config(
-                config=config["NeuralNetwork"],
-                verbosity=verbosity,
-            )
-            model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
-            # Print details of neural network architecture
-            print_model(model)
-        exit()
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -431,23 +375,8 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    # create temporary deepspeed configuration
-    ds_config = parse_deepspeed_config(config)
-
-    if args.zero_opt:
-        ds_config["zero_optimization"] = {"stage": 1}
-
-    # create deepspeed model
-    model, optimizer, _, _ = deepspeed.initialize(
-        args=get_deepspeed_init_args(),
-        model=model,
-        config=ds_config,
-        dist_init_required=False,
-        optimizer=optimizer,  # optimizer is managed by deepspeed
-    )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
-
     hydragnn.utils.model.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], use_deepspeed=True
+        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
     ##################################################################################################################
@@ -464,13 +393,9 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        use_deepspeed=True,
     )
 
-    hydragnn.utils.model.save_model(
-        model, optimizer, log_name, use_deepspeed=True
-    )  # optimizer is managed by deepspeed model
-
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
@@ -481,6 +406,4 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
-
-    os._exit(0)  # force quit
-    
+    sys.exit(0)

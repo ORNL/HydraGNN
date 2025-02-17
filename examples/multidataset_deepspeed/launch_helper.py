@@ -19,17 +19,19 @@ def submit_job(nodes, width, depth, dataset_size, zero=False, ckpt=False):
     process = subprocess.Popen(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True
     )
+
     stdout, stderr = process.communicate()
     # Extract the job ID
     output = stdout.strip()
     job_id = int(output.split()[-1])
     return job_id
 
-
+  
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Submit jobs with varying parameters.")
     parser.add_argument("--width", type=int, required=True, help="Width of the model.")
     parser.add_argument("--depth", type=int, required=True, help="Depth of the model.")
+
     parser.add_argument(
         "--zero",
         action="store_true",

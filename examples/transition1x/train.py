@@ -13,76 +13,61 @@ import logging
 import sys
 import argparse
 
-import hydragnn
-from hydragnn.utils.print.print_utils import iterate_tqdm, log
-from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+import numpy as np
 
-from hydragnn.utils.distributed import get_device
-from hydragnn.preprocess.load_data import split_dataset
+import torch
+import torch.distributed as dist
+
+from torch_geometric.data import Data
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
+
+import hydragnn
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.model import print_model
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.datasets.distdataset import DistDataset
 from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+)
+from hydragnn.preprocess.load_data import split_dataset
 
-import numpy as np
-
-import torch
-
-# FIX random seed
-random_state = 0
-torch.manual_seed(random_state)
-
-import torch.distributed as dist
-
-from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance, Spherical, LocalCartesian
-from torch_geometric.transforms import AddLaplacianEigenvectorPE
-
-
-try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
-except ImportError:
-    pass
-
-from hydragnn.utils.distributed import nsplit
 import hydragnn.utils.profiling_and_tracing.tracer as tr
+
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 from hydragnn.utils.descriptors_and_embeddings import xyz2mol
 
 from rdkit import Chem
 
-# FIXME: this works fine for now because we train on QM7-X molecules
-# for larger chemical spaces, the following atom representation has to be properly expanded
-qm7x_node_types = {"H": 0, "C": 1, "N": 2, "O": 3, "S": 4, "Cl": 5}
+try:
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+except ImportError:
+    pass
+
+from hydragnn.utils.distributed import nsplit
 
 torch.set_default_dtype(torch.float32)
 
-EPBE0_atom = {
-    6: -1027.592489146,
-    17: -12516.444619523,
-    1: -13.641404161,
-    7: -1484.274819088,
-    8: -2039.734879322,
-    16: -10828.707468187,
-}
+from utils.create_graph_data import Dataloader
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+# FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
-
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-
-
-class QM7XDataset(AbstractBaseDataset):
-    """QM7-XDataset datasets class"""
+class Transition1xDataset(AbstractBaseDataset):
+    """Transition1xDataset dataset class"""
 
     def __init__(
         self,
@@ -94,8 +79,18 @@ class QM7XDataset(AbstractBaseDataset):
     ):
         super().__init__()
 
-        self.qm7x_node_types = qm7x_node_types
-        self.var_config = var_config
+        self.data_path = os.path.join(dirpath, "transition1x-release.h5")
+        self.energy_per_atom = energy_per_atom
+
+        self.world_size = 1
+        self.rank = 0
+
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
@@ -105,206 +100,157 @@ class QM7XDataset(AbstractBaseDataset):
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 1000.0
 
-        self.dist = dist
-        if self.dist:
-            assert torch.distributed.is_initialized()
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
+        # loop through all configurations in the data set
+        dataloader = Dataloader(
+            self.data_path, comm_rank=self.rank, comm_size=self.world_size
+        )
 
-        if os.path.isdir(dirpath):
-            dirfiles = sorted(os.listdir(dirpath))
-        else:
-            filelist = dirpath
-            info("Reading filelist:", filelist)
-            dirpath = os.path.dirname(dirpath)
-            dirlist = list()
-            with open(filelist, "r") as f:
-                lines = f.readlines()
-                for line in lines:
-                    dirlist.append(line.rstrip())
+        for i, configuration in enumerate(dataloader):
 
-        setids_files = [x for x in dirfiles if x.endswith("hdf5")]
+            data_object = None
 
-        self.read_setids(dirpath, setids_files)
-
-    def check_forces_values(self, forces):
-
-        # Calculate the L2 norm for each row
-        norms = torch.norm(forces, p=2, dim=1)
-        # Check if all norms are less than the threshold
-
-        return torch.all(norms < self.forces_norm_threshold).item()
-
-    def read_setids(self, dirpath, setids_files):
-
-        for setid in setids_files:
-            ## load HDF5 file
-            fMOL = h5py.File(dirpath + "/" + setid, "r")
-
-            ## get IDs of HDF5 files and loop through
-            mol_ids = list(fMOL.keys())
-
-            if self.dist:
-                random.shuffle(mol_ids)
-
-                x = torch.tensor(len(mol_ids), requires_grad=False).to(get_device())
-                y = x.clone().detach().requires_grad_(False)
-                torch.distributed.all_reduce(x, op=torch.distributed.ReduceOp.MAX)
-                assert x == y
-                log("molecule dirlist", len(mol_ids))
-
-            for mol_id in iterate_tqdm(mol_ids, verbosity_level=2, desc="Load"):
-                self.dataset.extend(self.hdf5_to_graph(fMOL, mol_id))
-
-    def hdf5_to_graph(self, fMOL, molid):
-
-        subset = []
-
-        ## get IDs of individual configurations/conformations of molecule
-        conf_ids = list(fMOL[molid].keys())
-
-        rx = list(nsplit(range(len(conf_ids)), comm_size))[rank]
-
-        for confid in conf_ids[rx.start : rx.stop]:
-            ## get atomic positions and numbers
-            pos = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(
-                torch.float32
-            )
+            pos = None
+            try:
+                pos = torch.tensor(configuration["positions"]).to(torch.float32)
+                assert pos.shape[0] > 0, "pos tensor does not have any atoms"
+                assert (
+                    pos.shape[1] == 3
+                ), "pos tensor does not have 3 coordinates per atom"
+            except:
+                print(
+                    f"Structure {configuration} does not have positional sites",
+                    flush=True,
+                )
+                continue
+            natoms = torch.IntTensor([pos.shape[0]])
+            
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
-            atomic_numbers = (
-                torch.Tensor(fMOL[molid][confid]["atNUM"])
-                .unsqueeze(1)
-                .to(torch.float32)
-            )
 
-            natoms = torch.IntTensor([pos.shape[0]])
+            atomic_numbers = None
+            try:
+                atomic_numbers = (
+                    torch.tensor([configuration["atomic_numbers"]]).to(torch.float32)
+                ).t()
+                assert (
+                    pos.shape[0] == atomic_numbers.shape[0]
+                ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
+            except:
+                print(
+                    f"Structure {configuration} does not have positional atomic numbers",
+                    flush=True,
+                )
+                continue
 
-            ## get quantum mechanical properties and add them to properties buffer
-            forces = torch.from_numpy(np.array(fMOL[molid][confid]["pbe0FOR"])).to(
-                torch.float32
+            forces = None
+            try:
+                forces = torch.tensor(configuration["wB97x_6-31G(d).forces"]).to(
+                    torch.float32
+                )
+            except:
+                print(f"Structure {configuration} does not have forces", flush=True)
+                continue
+
+            total_energy = None
+            try:
+                total_energy = configuration["wB97x_6-31G(d).energy"]
+            except:
+                print(
+                    f"Structure {configuration} does not have total energy", flush=True
+                )
+                continue
+            total_energy_tensor = (
+                torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
             )
-            Eatoms = (
-                torch.tensor(sum([EPBE0_atom[zi.item()] for zi in atomic_numbers]))
-                .unsqueeze(0)
-                .to(torch.float32)
-            )  # eatoms
-            EPBE0 = (
-                torch.tensor(float(list(fMOL[molid][confid]["ePBE0"])[0]))
-                .unsqueeze(0)
-                .to(torch.float32)
-            )  # energy
-            EMBD = (
-                torch.tensor(float(list(fMOL[molid][confid]["eMBD"])[0]))
-                .unsqueeze(0)
-                .to(torch.float32)
-            )  # embd
-            hCHG = torch.from_numpy(np.array(fMOL[molid][confid]["hCHG"])).to(
-                torch.float32
-            )  # charge
-            POL = float(list(fMOL[molid][confid]["mPOL"])[0])
-            hVDIP = torch.from_numpy(np.array(fMOL[molid][confid]["hVDIP"])).to(
-                torch.float32
-            )  # dipole moment
-            HLGAP = (
-                torch.tensor(fMOL[molid][confid]["HLgap"])
-                .unsqueeze(1)
-                .to(torch.float32)
-            )  # HL gap
-            hRAT = torch.from_numpy(np.array(fMOL[molid][confid]["hRAT"])).to(
-                torch.float32
-            )  # hirshfeld ratios
+            total_energy_per_atom_tensor = total_energy_tensor.detach().clone() / natoms
+
+            x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+            # Calculate chemical composition
+            atomic_number_list = atomic_numbers.tolist()
+            assert len(atomic_number_list) == natoms
+            ## 118: number of atoms in the periodic table
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+            pos_list = pos.tolist()
+            atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+            """
+            try:
+                mol = xyz2mol(
+                    atomic_number_list_int,
+                    pos_list,
+                    charge=0,
+                    allow_charged_fragments=True,
+                    use_graph=False,
+                    use_huckel=False,
+                    embed_chiral=True,
+                    use_atom_maps=False,
+                )
+
+                assert (
+                    len(mol) == 1
+                ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
+                smiles_string = Chem.MolToSmiles(mol[0])
+            except:
+                smiles_string = None
+            """
 
             try:
                 # check forces values
                 assert self.check_forces_values(
                     forces
-                ), f"qm7x dataset - molid:{molid} - confid:{confid} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+                ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+            except:
+                continue
 
-                energy = torch.tensor(EPBE0, dtype=torch.float32).unsqueeze(0)
-                energy_per_atom = energy.detach().clone() / natoms
+            data_object = Data(
+                #dataset_name="transition1x",
+                dataset_name=torch.IntTensor([2]),
+                natoms=natoms,
+                pos=pos,
+                cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                #edge_index=None,
+                #edge_attr=None,
+                atomic_numbers=atomic_numbers,
+                chemical_composition=chemical_composition,
+                #smiles_string=smiles_string,
+                x=x,
+                energy=total_energy_tensor,
+                energy_per_atom=total_energy_per_atom_tensor,
+                forces=forces,
+            )
 
-                x = torch.cat((atomic_numbers, pos, forces, hCHG, hVDIP, hRAT), dim=1)
+            if self.energy_per_atom:
+                data_object.y = data_object.energy_per_atom
+            else:
+                data_object.y = data_object.energy
 
-                # Calculate chemical composition
-                atomic_number_list = atomic_numbers.tolist()
-                assert len(atomic_number_list) == natoms
-                ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-                pos_list = pos.tolist()
-                atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
-                """
-                try:
-                    mol = xyz2mol(
-                        atomic_number_list_int,
-                        pos_list,
-                        charge=0,
-                        allow_charged_fragments=True,
-                        use_graph=False,
-                        use_huckel=False,
-                        embed_chiral=True,
-                        use_atom_maps=False,
-                    )
+            data_object = self.radius_graph(data_object)
 
-                    assert (
-                        len(mol) == 1
-                    ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
-                    smiles_string = Chem.MolToSmiles(mol[0])
-                except:
-                    smiles_string = None
-                """
-
-                data_object = Data(
-                    # dataset_name="qm7x",
-                    dataset_name=torch.IntTensor([1]),
-                    natoms=natoms,
-                    pos=pos,
-                    cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    # edge_index=None,
-                    # edge_attr=None,
-                    atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
-                    chemical_composition=chemical_composition,
-                    # smiles_string=smiles_string,
-                    x=x,
-                    energy=energy,
-                    energy_per_atom=energy_per_atom,
-                    forces=forces,
-                )
-
-                if self.energy_per_atom:
-                    data_object.y = data_object.energy_per_atom
-                else:
-                    data_object.y = data_object.energy
-
-                data_object = self.radius_graph(data_object)
-
-                data_object = transform_coordinates(data_object)
+            # Build edge attributes
+            data_object = transform_coordinates(data_object)
+            
+            # Default edge_shifts for when radius_graph_pbc is not activated
+            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
                 
-                # Default edge_shifts for when radius_graph_pbc is not activated
-                data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-                    
-                # FIXME: PBC from bool --> int32 to be accepted by ADIOS
-                data_object.pbc = data_object.pbc.int()
+            # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+            data_object.pbc = data_object.pbc.int()
 
-                # LPE
-                if self.graphgps_transform is not None:
-                    data_object = self.graphgps_transform(data_object)
+            # LPE
+            if self.graphgps_transform is not None:
+                data_object = self.graphgps_transform(data_object)
 
-                if self.check_forces_values(data_object.forces):
-                    self.dataset.append(data_object)
-                else:
-                    print(
-                        f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                        flush=True,
-                    )
+            self.dataset.append(data_object)
 
-                subset.append(data_object)
-            except AssertionError as e:
-                print(f"Assertion error occurred: {e}")
+            random.shuffle(self.dataset)
 
-        return subset
+    def check_forces_values(self, forces):
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
@@ -323,7 +269,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="qm7x.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="transition1x_energy.json"
+    )
     parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
@@ -369,9 +317,9 @@ if __name__ == "__main__":
         "hVDIP",
         "hRAT",
     ]
-    node_feature_dims = [1, 3, 3, 1, 1, 1]
+    node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset/QM7-X")
+    datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -393,7 +341,6 @@ if __name__ == "__main__":
         is_undirected=True,
     )
     """
-    graphgps_transform = None
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -412,20 +359,21 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "qm7x" if args.log is None else args.log
+    log_name = "transition1x" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "qm7x"
+    modelname = "transition1x"
     if args.preonly:
 
         ## local data
-        total = QM7XDataset(
+        total = Transition1xDataset(
             os.path.join(datadir),
             var_config,
-            graphgps_transform=graphgps_transform,
+            #graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
