@@ -17,6 +17,7 @@ torch.manual_seed(random_state)
 from torch_geometric.data import Data
 
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -37,6 +38,9 @@ from hydragnn.utils.print.print_utils import iterate_tqdm, log
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from ase.io import read
 
@@ -53,9 +57,11 @@ def info(*args, logtype="info", sep=" "):
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
@@ -63,6 +69,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         dirpath,
         var_config,
         data_type,
+        graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
     ):
@@ -76,6 +83,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
         #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
         self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
         self.radius_graph_pbc = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
+
+        self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
@@ -109,7 +118,17 @@ class OpenCatalystDataset(AbstractBaseDataset):
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
             list_atomistic_structures = self.traj_to_torch_geom(traj_file)
             for item in list_atomistic_structures:
-                if self.check_forces_values(item.force):
+
+                # Calculate chemical composition
+                atomic_number_list = item.atomic_numbers.tolist()
+                assert len(atomic_number_list) == item.natoms
+                ## 118: number of atoms in the periodic table
+                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
+                item.chemical_composition = chemical_composition
+
+                if self.check_forces_values(item.forces):
                     self.dataset.append(item)
                 else:
                     print(
@@ -122,8 +141,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
     def ase_to_torch_geom(self, atoms):
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
-        positions = torch.Tensor(atoms.get_positions())
-        natoms = torch.IntTensor([positions.shape[0]])
+        pos = torch.Tensor(atoms.get_positions())
+        natoms = torch.IntTensor([pos.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
@@ -136,47 +155,80 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         pbc = None
         try:
-            pbc = atoms.get_pbc()
+            pbc = pbc_as_tensor(atoms.get_pbc())
         except:
             print(f"Structure does not have pbc", flush=True)
-
-        # put the minimum data in torch geometric data object
-        data = Data(
-            cell=cell,
-            pbc=pbc,
-            pos=positions,
-            atomic_numbers=atomic_numbers,
-            natoms=natoms,
-            tags=tags,
-        )
+        
+        # If either cell or pbc were not read, we set to defaults which are not none.
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
-        if self.energy_per_atom:
-            energy_tensor /= natoms
-        data.energy = energy_tensor
-        data.y = energy_tensor
-
+        energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
-        data.force = forces
 
-        data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
-        if data.pbc is not None and data.cell is not None:
+        x = torch.cat((atomic_numbers, pos, forces), dim=1)
+
+        # put the minimum data in torch geometric data object
+        data_object = Data(
+            dataset_name="oc2022",
+            natoms=natoms,
+            pos=pos,
+            cell=cell,
+            pbc=pbc,
+            edge_index=None,
+            edge_attr=None,
+            atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
+            smiles_string=None,
+            x=x,
+            energy=energy_tensor,
+            energy_per_atom=energy_per_atom_tensor,
+            forces=forces,
+            tags=tags,
+        )
+
+        if self.energy_per_atom:
+            data_object.y = data_object.energy_per_atom
+        else:
+            data_object.y = data_object.energy
+
+        if data_object.pbc.any():
             try:
-                data = self.radius_graph_pbc(data)
+                data_object = self.radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure could not successfully apply pbc radius graph",
+                    f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
                     flush=True,
                 )
-                data = self.radius_graph(data)
+                data_object = self.radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
         else:
-            data = self.radius_graph(data)
+            data_object = self.radius_graph(data_object)
+            data_object = transform_coordinates(data_object)
+            
+        # Default edge_shifts for when radius_graph_pbc is not activated
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+            
+        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+        data_object.pbc = data_object.pbc.int()
 
-        data = transform_coordinates(data)
+        # LPE
+        if self.graphgps_transform is not None:
+            data_object = self.graphgps_transform(data_object)
 
-        return data
+        return data_object
 
     def traj_to_torch_geom(self, traj_file):
         traj_file_path = os.path.join(
@@ -185,7 +237,16 @@ class OpenCatalystDataset(AbstractBaseDataset):
         traj = read(traj_file_path, ":", parallel=False)
         data_list = []
         for step in traj:
-            data_list.append(self.ase_to_torch_geom(step))
+            data_object = self.ase_to_torch_geom(step)
+            if self.check_forces_values(data_object.forces):
+                self.dataset.append(data_object)
+            else:
+                print(
+                    f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                    flush=True,
+                )
+            data_list.append(data_object)
+
         return data_list
 
     def check_forces_values(self, forces):
@@ -231,7 +292,7 @@ if __name__ == "__main__":
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
         type=bool,
-        default=True,
+        default=False,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -240,6 +301,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -278,6 +342,13 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -308,6 +379,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.train_path,
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -487,6 +559,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        compute_grad_energy=args.compute_grad_energy,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

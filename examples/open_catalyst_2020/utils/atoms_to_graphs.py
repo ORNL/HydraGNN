@@ -18,12 +18,17 @@ from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 class AtomsToGraphs:
     """A class to help convert periodic atomic structures to graphs.
@@ -97,47 +102,68 @@ class AtomsToGraphs:
 
         pbc = None
         try:
-            pbc = atoms.get_pbc()
+            pbc = pbc_as_tensor(atoms.get_pbc())
         except:
             print(f"Structure does not have pbc", flush=True)
-
-        # put the minimum data in torch geometric data object
-        data = Data(
-            cell=cell,
-            pbc=pbc,
-            pos=positions,
-            atomic_numbers=atomic_numbers,
-            natoms=natoms,
-            tags=tags,
-        )
+        
+        # If either cell or pbc were not read, we set to defaults which are not none.
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
-        if energy_per_atom:
-            energy_tensor /= natoms
-        data.energy = energy_tensor
-        data.y = energy_tensor
+        energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
 
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
-        data.force = forces
 
-        data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
+        x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
-        if data.pbc is not None and data.cell is not None:
+        # put the minimum data in torch geometric data object
+        data_object = Data(
+            dataset_name="oc2020",
+            natoms=natoms,
+            pos=positions,
+            cell=cell,
+            pbc=pbc,
+            edge_index=None,
+            edge_attr=None,
+            atomic_numbers=atomic_numbers,
+            x=x,
+            energy=energy_tensor,
+            energy_per_atom=energy_per_atom_tensor,
+            forces=forces,
+            tags=tags,
+        )
+
+        if self.energy_per_atom:
+            data_object.y = data_object.energy_per_atom
+        else:
+            data_object.y = data_object.energy
+
+        if data_object.pbc.any():
             try:
-                data = self.radius_graph_pbc(data)
+                data_object = self.radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure could not successfully apply pbc radius graph",
+                    f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
                     flush=True,
                 )
-                data = self.radius_graph(data)
+                data_object = self.radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
         else:
-            data = self.radius_graph(data)
+            data_object = self.radius_graph(data_object)
+            data_object = transform_coordinates(data_object)
+            
+        # Default edge_shifts for when radius_graph_pbc is not activated
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+            
+        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+        data_object.pbc = data_object.pbc.int()
 
-        data = transform_coordinates(data)
-
-        return data
+        return data_object
 
     def convert_all(
         self,

@@ -4,6 +4,8 @@ import sys
 from mpi4py import MPI
 import argparse
 
+import numpy as np
+
 import random
 
 import torch
@@ -11,6 +13,8 @@ import torch
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
+
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -49,13 +53,21 @@ def info(*args, logtype="info", sep=" "):
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
+        self,
+        dirpath,
+        var_config,
+        data_type,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
     ):
         super().__init__()
 
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
+
+        self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
@@ -99,7 +111,20 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         for item in list_atomistic_structures:
-            if self.check_forces_values(item.force):
+
+            # Calculate chemical composition
+            atomic_number_list = item.atomic_numbers.tolist()
+            assert len(atomic_number_list) == item.natoms
+            ## 118: number of atoms in the periodic table
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
+            item.chemical_composition = chemical_composition
+            item.smiles_string = None
+
+            item = self.graphgps_transform(item)
+
+            if self.check_forces_values(item.forces):
                 self.dataset.append(item)
             else:
                 print(
@@ -152,7 +177,7 @@ if __name__ == "__main__":
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
         type=bool,
-        default=True,
+        default=False,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -162,6 +187,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -200,6 +228,13 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -233,6 +268,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.train_path,
+            graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -405,6 +441,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        compute_grad_energy=args.compute_grad_energy,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
