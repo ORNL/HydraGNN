@@ -204,8 +204,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 continue
 
             data_object = Data(
-                #dataset_name="transition1x",
-                dataset_name=torch.IntTensor([2]),
+                dataset_name="transition1x",
                 natoms=natoms,
                 pos=pos,
                 cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets

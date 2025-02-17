@@ -164,8 +164,7 @@ class ANI1xDataset(AbstractBaseDataset):
                 """
 
                 data_object = Data(
-                    #dataset_name="ani1x",
-                    dataset_name=torch.IntTensor([0]),
+                    dataset_name="ani1x",
                     natoms=natoms,
                     pos=pos,
                     cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
