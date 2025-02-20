@@ -32,6 +32,10 @@ except ImportError:
 from scipy.interpolate import BSpline, make_interp_spline
 import adios2 as ad2
 
+import torch.distributed as dist
+from torch.distributed.device_mesh import init_device_mesh
+from hydragnn.models import MultiTaskModelMP
+
 ## FIMME
 torch.backends.cudnn.enabled = False
 
@@ -85,6 +89,9 @@ if __name__ == "__main__":
         type=int,
         help="set num test samples per process for weak-scaling test",
         default=None,
+    )
+    parser.add_argument(
+        "--taskparallel", action="store_true", help="enable task parallel"
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -219,14 +226,47 @@ if __name__ == "__main__":
         pna_deg = comm.bcast(pna_deg, root=0)
         assert comm_size == sum(process_list)
 
-        colorlist = list()
-        color = 0
-        for n in process_list:
-            for _ in range(n):
-                colorlist.append(color)
-            color += 1
-        mycolor = colorlist[rank]
-        mymodel = modellist[mycolor]
+        if args.taskparallel:
+            ## task parallel with device mesh
+            mesh_2d = init_device_mesh(
+                "cuda",
+                (len(modellist), comm_size // len(modellist)),
+                mesh_dim_names=("dim1", "dim2"),
+            )
+            world_group = dist.group.WORLD
+            dim1_group = mesh_2d["dim1"].get_group()
+            dim2_group = mesh_2d["dim2"].get_group()
+            dim1_group_size = dist.get_world_size(group=dim1_group)
+            dim2_group_size = dist.get_world_size(group=dim2_group)
+            dim1_group_rank = dist.get_rank(group=dim1_group)
+            dim2_group_rank = dist.get_rank(group=dim2_group)
+            # mesh_2d: 0 0 0
+            # mesh_2d: 1 0 1
+            # mesh_2d: 2 0 2
+            # mesh_2d: 3 0 3
+            # mesh_2d: 4 1 0
+            # mesh_2d: 5 1 1
+            # mesh_2d: 6 1 2
+            # mesh_2d: 7 1 3
+            print(
+                "mesh_2d:",
+                dist.get_rank(group=world_group),
+                dist.get_rank(group=dim1_group),
+                dist.get_rank(group=dim2_group),
+            )
+            device = get_device()
+
+            mycolor = dim1_group_rank  ## branch id
+            mymodel = modellist[mycolor]
+        else:
+            colorlist = list()
+            color = 0
+            for n in process_list:
+                for _ in range(n):
+                    colorlist.append(color)
+                color += 1
+            mycolor = colorlist[rank]
+            mymodel = modellist[mycolor]
 
         local_comm = comm.Split(mycolor, rank)
         local_comm_rank = local_comm.Get_rank()
@@ -245,6 +285,7 @@ if __name__ == "__main__":
         ]
         # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
         fname = mymodel
+        print("mymodel:", rank, mycolor, mymodel)
         trainset = AdiosDataset(
             fname,
             "trainset",
@@ -319,12 +360,20 @@ if __name__ == "__main__":
         assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
         if args.ddstore:
             opt = {"ddstore_width": args.ddstore_width, "local": True}
-            trainset = DistDataset(trainset, "trainset", comm, **opt)
-            valset = DistDataset(valset, "valset", comm, **opt)
-            testset = DistDataset(testset, "testset", comm, **opt)
-            trainset.pna_deg = pna_deg
-            valset.pna_deg = pna_deg
-            testset.pna_deg = pna_deg
+            if args.taskparallel:
+                trainset = DistDataset(trainset, "trainset", local_comm, **opt)
+                valset = DistDataset(valset, "valset", local_comm, **opt)
+                testset = DistDataset(testset, "testset", local_comm, **opt)
+                trainset.pna_deg = pna_deg
+                valset.pna_deg = pna_deg
+                testset.pna_deg = pna_deg
+            else:
+                trainset = DistDataset(trainset, "trainset", comm, **opt)
+                valset = DistDataset(valset, "valset", comm, **opt)
+                testset = DistDataset(testset, "testset", comm, **opt)
+                trainset.pna_deg = pna_deg
+                valset.pna_deg = pna_deg
+                testset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -337,7 +386,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
@@ -362,7 +415,12 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+
+    ## task parallel
+    if args.taskparallel:
+        model = MultiTaskModelMP(model, dim1_group_rank, dim2_group)
+    else:
+        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)
