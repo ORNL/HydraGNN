@@ -49,7 +49,7 @@ from utils.generate_dictionary import generate_dictionary_elements
 inverted_dict = generate_dictionary_elements()
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
