@@ -46,7 +46,7 @@ from hydragnn.utils.descriptors_and_embeddings import xyz2mol
 from rdkit import Chem
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -382,9 +382,14 @@ if __name__ == "__main__":
             perc_train=0.9,
             stratify_splitting=False,
         )
-        print("Local splitting: ", len(total), len(trainset), len(valset), len(testset))
+        print("Local splitting: ", len(total), len(trainset), len(valset), len(testset), flush=True)
+
+        print("Before COMM.Barrier()", flush=True)
+        comm.Barrier()
+        print("After COMM.Barrier()", flush=True)
 
         deg = gather_deg(trainset)
+
         config["pna_deg"] = deg
 
         setnames = ["trainset", "valset", "testset"]
