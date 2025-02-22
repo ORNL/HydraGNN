@@ -136,7 +136,7 @@ class AtomsToGraphs:
             tags=tags,
         )
 
-        if self.energy_per_atom:
+        if energy_per_atom:
             data_object.y = data_object.energy_per_atom
         else:
             data_object.y = data_object.energy
