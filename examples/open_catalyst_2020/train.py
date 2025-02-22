@@ -81,11 +81,12 @@ class OpenCatalystDataset(AbstractBaseDataset):
         mx = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            #cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            cmd = f"find {self.data_path} -maxdepth 1 -type f -name '*.txt' | wc -l"
             print("Check the number of files:", cmd)
             out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             mx = int(out.stdout)
-            print("Total the number of files:", mx)
+            print("Total number of files:", mx)
         mx = MPI.COMM_WORLD.bcast(mx, root=0)
         if mx == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
