@@ -91,7 +91,7 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--taskparallel", action="store_true", help="enable task parallel"
+        "--task_parallel", action="store_true", help="enable task parallel"
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -226,7 +226,7 @@ if __name__ == "__main__":
         pna_deg = comm.bcast(pna_deg, root=0)
         assert comm_size == sum(process_list)
 
-        if args.taskparallel:
+        if args.task_parallel:
             ## task parallel with device mesh
             mesh_2d = init_device_mesh(
                 "cuda",
@@ -360,7 +360,7 @@ if __name__ == "__main__":
         assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
         if args.ddstore:
             opt = {"ddstore_width": args.ddstore_width, "local": True}
-            if args.taskparallel:
+            if args.task_parallel:
                 trainset = DistDataset(trainset, "trainset", local_comm, **opt)
                 valset = DistDataset(valset, "valset", local_comm, **opt)
                 testset = DistDataset(testset, "testset", local_comm, **opt)
@@ -417,7 +417,7 @@ if __name__ == "__main__":
     )
 
     ## task parallel
-    if args.taskparallel:
+    if args.task_parallel:
         model = MultiTaskModelMP(model, dim1_group_rank, dim2_group)
     else:
         model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)

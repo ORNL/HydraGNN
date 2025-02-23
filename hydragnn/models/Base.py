@@ -25,7 +25,8 @@ from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import GPSConv
 
 import inspect
-
+import os
+import torch.distributed as dist
 
 class Base(Module):
     def __init__(
@@ -470,6 +471,15 @@ class Base(Module):
         outputs_var = []
 
         datasetIDs = data.dataset_name.unique()
+        # ## FIXME
+        # head_filter = os.getenv("HYDRAGNN_HEAD_FILTER", None)
+        # if head_filter is not None:
+        #     my_branch = int(head_filter)
+        #     my_branch = torch.tensor([my_branch], dtype=torch.int32).to(datasetIDs.device)
+        #     rank = dist.get_rank(group=dist.group.WORLD)
+        #     print(rank, "common datasetIDs:", datasetIDs[torch.isin(datasetIDs, my_branch)], datasetIDs)
+        #     datasetIDs = datasetIDs[torch.isin(datasetIDs, my_branch)]
+
         unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type

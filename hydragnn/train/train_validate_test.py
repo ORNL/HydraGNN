@@ -22,6 +22,7 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
+from hydragnn.models import MultiTaskModelMP
 
 import os
 
@@ -34,6 +35,13 @@ import pickle
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import time
 from mpi4py import MPI
+import sys
+
+def checK_grad_after_sync(rank, model):
+    # Get the final gradient after DDP synchronization
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            print(f"Rank {rank}, {name} gradient AFTER sync: {param.grad.sum()}")
 
 
 def get_nbatch(loader):
@@ -530,6 +538,9 @@ def train(
                 model.backward(loss)
             else:
                 loss.backward()
+                # world_rank = dist.get_rank()
+                # if world_rank in [0, 1, 4, 5]:
+                #     checK_grad_after_sync(world_rank, model)
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()

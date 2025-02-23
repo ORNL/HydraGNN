@@ -1,16 +1,154 @@
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+import torch.nn as nn
+from collections import OrderedDict
+from torch_geometric.nn import global_mean_pool
 
+def average_gradients(model, group):
+    """Averages gradients across all processes using all_reduce."""
+    group_size = dist.get_world_size(group=group)
+    
+    for param in model.parameters():
+        if param.grad is not None:
+            dist.all_reduce(param.grad, group=group, op=dist.ReduceOp.SUM)
+            param.grad /= group_size  # Normalize by the number of processes
 
-class MultiTaskModelMP:
+class EncoderModel(nn.Module):
+    def __init__(self, base_model):
+        super().__init__()
+        self.device = base_model.device
+        self._embedding = base_model._embedding  # Use existing embedding function
+        self.graph_convs = base_model.graph_convs
+        self.feature_layers = base_model.feature_layers
+        self.activation_function = base_model.activation_function
+        self.conv_checkpointing = base_model.conv_checkpointing
+
+    def forward(self, data):
+        ### encoder part ####
+        inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
+
+        for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
+            if not self.conv_checkpointing:
+                inv_node_feat, equiv_node_feat = conv(
+                    inv_node_feat=inv_node_feat,
+                    equiv_node_feat=equiv_node_feat,
+                    **conv_args,
+                )
+            else:
+                inv_node_feat, equiv_node_feat = checkpoint(
+                    conv,
+                    use_reentrant=False,
+                    inv_node_feat=inv_node_feat,
+                    equiv_node_feat=equiv_node_feat,
+                    **conv_args,
+                )
+            inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
+
+        return inv_node_feat, equiv_node_feat, conv_args
+
+class DecoderModel(nn.Module):
+    def __init__(self, base_model):
+        super().__init__()
+        self.device = base_model.device
+        self.graph_shared = base_model.graph_shared
+        self.heads_NN = base_model.heads_NN
+        self.head_dims = base_model.head_dims
+        self.head_type = base_model.head_type
+        self.config_heads = base_model.config_heads
+        self.var_output = base_model.var_output
+        self.activation_function = base_model.activation_function
+
+    def forward(self, data, encoded_feats):
+        ## Take encoded features as input
+        inv_node_feat, equiv_node_feat, conv_args = encoded_feats
+        x = inv_node_feat
+    
+        #### multi-head decoder part####
+        # shared dense layers for graph level output
+        if data.batch is None:
+            x_graph = x.mean(dim=0, keepdim=True)
+        else:
+            x_graph = global_mean_pool(x, data.batch.to(x.device))
+
+        outputs = []
+        outputs_var = []
+
+        datasetIDs = data.dataset_name.unique()
+        # ## FIXME
+        # head_filter = os.getenv("HYDRAGNN_HEAD_FILTER", None)
+        # if head_filter is not None:
+        #     my_branch = int(head_filter)
+        #     my_branch = torch.tensor([my_branch], dtype=torch.int32).to(datasetIDs.device)
+        #     rank = dist.get_rank(group=dist.group.WORLD)
+        #     print(rank, "common datasetIDs:", datasetIDs[torch.isin(datasetIDs, my_branch)], datasetIDs)
+        #     datasetIDs = datasetIDs[torch.isin(datasetIDs, my_branch)]
+
+        unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
+        for head_dim, headloc, type_head in zip(
+            self.head_dims, self.heads_NN, self.head_type
+        ):
+            if type_head == "graph":
+                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                headvar = torch.zeros(
+                    (len(data.dataset_name), head_dim * self.var_output),
+                    device=x.device,
+                )
+                for ID in datasetIDs:
+                    mask = data.dataset_name == ID
+                    branchtype = f"branch-{ID.item()}"
+                    x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
+                    output_head = headloc[branchtype](x_graph_head)
+                    head[mask] = output_head[:, :head_dim]
+                    headvar[mask] = output_head[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
+            else:
+                # assuming all node types are the same
+                node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
+                head = torch.zeros((x.shape[0], head_dim), device=x.device)
+                headvar = torch.zeros(
+                    (x.shape[0], head_dim * self.var_output), device=x.device
+                )
+                for ID in datasetIDs:
+                    mask = data.dataset_name == ID
+                    mask_nodes = torch.repeat_interleave(mask, node_counts)
+                    branchtype = f"branch-{ID.item()}"
+                    if node_NN_type == "conv":
+                        inv_node_feat = x[mask_nodes, :]
+                        equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
+                        for conv, batch_norm in zip(
+                            headloc[branchtype][0::2], headloc[branchtype][1::2]
+                        ):
+                            inv_node_feat, equiv_node_feat_ = conv(
+                                inv_node_feat=inv_node_feat,
+                                equiv_node_feat=equiv_node_feat_,
+                                **conv_args,
+                            )
+                            inv_node_feat = batch_norm(inv_node_feat)
+                            inv_node_feat = self.activation_function(inv_node_feat)
+                        x_node = inv_node_feat
+                    else:
+                        x_node = headloc[branchtype](
+                            x=x[mask_nodes, :], batch=data.batch[mask_nodes]
+                        )
+                    head[mask_nodes] = x_node[:, :head_dim]
+                    headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
+        if self.var_output:
+            return outputs, outputs_var
+        return outputs
+
+class MultiTaskModelMP(nn.Module):
     def __init__(
         self,
-        model: torch.nn.Module,
+        base_model: torch.nn.Module,
         group_color: int,
         head_pg: dist.ProcessGroup,
     ):
-        self.model = model
+        super().__init__()
+
         self.shared_pg = dist.group.WORLD
         self.head_pg = head_pg
         self.shared_pg_size = dist.get_world_size(group=self.shared_pg)
@@ -30,62 +168,51 @@ class MultiTaskModelMP:
         self.branch_id = group_color
         print(self.shared_pg_rank, "branch_id:", self.branch_id)
 
-        self.ddp_shared = list()
-        self.ddp_head = list()
-        for name, layer in model.named_children():
-            num_params = sum(p.numel() for p in layer.parameters())
-            if num_params == 0:
-                continue
-            if "heads_NN" in name:
-                delete_list = list()
-                for i in range(len(layer)):
-                    for k in layer[i]:
-                        if k not in f"branch-{self.branch_id}":
-                            delete_list.append((i, k))
+        self.encoder = EncoderModel(base_model)
+        self.decoder = DecoderModel(base_model)
 
-                for i, k in delete_list:
-                    print(self.shared_pg_rank, "delete:", i, k)
-                    del layer[i][k]
+        for name, layer in self.decoder.heads_NN.named_children():
+            delete_list = list()
+            for k in layer.keys():
+                if k != f"branch-{self.branch_id}":
+                    delete_list.append(k)
+            
+            for k in delete_list:
+                del layer[k]
 
-                ddp_module = DDP(layer, process_group=self.head_pg)
-                self.ddp_head.append(ddp_module)
-            else:
-                ddp_module = DDP(layer, process_group=self.shared_pg)
-                self.ddp_shared.append(ddp_module)
-
-        ## For compatibility
-        self_group = dist.new_group([self.shared_pg_rank])
-        self.model = DDP(self.model, process_group=self_group)
-        self.module = self.model.module
-
-        return
-
-    def forward(self, x):
-        # Forward through the row-replicated shared backbone
-        return self.model(x)
+        self.encoder = DDP(self.encoder, process_group=self.shared_pg)
+        self.decoder = DDP(self.decoder, process_group=self.head_pg)
+        self.module = base_model
+    
+    def forward(self, data):
+        encoded_feats = self.encoder(data)  # First call (encoder)
+        out = self.decoder(data, encoded_feats)  # Second call (decoder)
+        return out
 
     def parameters(self):
-        return self.model.parameters()
+        for x in self.encoder.parameters():
+            yield x
+        for x in self.decoder.parameters():
+            yield x
 
     def named_parameters(self):
-        return self.model.named_parameters()
+        for name, param in self.encoder.named_parameters():
+            yield name, param
+        for name, param in self.decoder.named_parameters():
+            yield name, param
 
     def state_dict(self):
-        return self.model.state_dict()
+        return OrderedDict(list(self.encoder.state_dict().items()) + list(self.decoder.state_dict().items()))
 
     def train(self):
-        for submodel in self.ddp_shared:
-            submodel.train()
-
-        for submodel in self.ddp_head:
-            submodel.train()
+        self.encoder.train()
+        self.decoder.train()
 
     def eval(self):
-        for submodel in self.ddp_shared:
-            submodel.eval()
+        self.encoder.eval()
+        self.decoder.eval()
 
-        for submodel in self.ddp_head:
-            submodel.eval()
+    def gradient_all_reduce(self):
+        average_gradients(self.encoder, self.shared_pg)
+        average_gradients(self.decoder, self.head_pg)
 
-    def __call__(self, x):
-        return self.model(x)

@@ -388,9 +388,7 @@ class PainnMessage(MessagePassing):
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}({self.in_channels}, "
-            f"{self.in_channels}, towers={self.towers}, "
-            f"edge_dim={self.edge_dim})"
+            f"{self.__class__.__name__}(edge_dim={self.edge_dim})"
         )
 
 
