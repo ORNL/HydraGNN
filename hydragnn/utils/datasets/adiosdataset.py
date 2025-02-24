@@ -187,9 +187,9 @@ class AdiosWriter:
                 if k == "dataset_name":
                     continue
 
-                if k == "smiles":
-                    self._write_smiles_strings(label)
-                    continue
+                # if k == "smiles":
+                #     self._write_smiles_strings(label)
+                #     continue
 
                 arr_list = list()
                 for data in self.dataset[label]:
@@ -199,6 +199,9 @@ class AdiosWriter:
                         arr_list.append(data[k])
                     elif isinstance(data[k], (np.floating, np.integer)):
                         arr_list.append(np.array((data[k],)))
+                    elif isinstance(data[k], str):
+                        arr = np.frombuffer(data[k].encode("utf-8"), dtype=np.uint8)
+                        arr_list.append(arr)
                     else:
                         print("Error: type(data[k]):", label, k, type(data[k]))
                         raise NotImplementedError(
@@ -524,9 +527,9 @@ class AdiosDataset(AbstractBaseDataset):
                 if k == "dataset_name":
                     continue
 
-                if k == "smiles":
-                    self._read_smiles_strings(label, f)
-                    continue
+                # if k == "smiles":
+                #     self._read_smiles_strings(label, f)
+                #     continue
 
                 self.variable_count[k] = self.read0(
                     f, "%s/%s/variable_count" % (label, k)
@@ -616,6 +619,8 @@ class AdiosDataset(AbstractBaseDataset):
                             dtype = np.int32
                         elif vartype == "int64_t":
                             dtype = np.int64
+                        elif vartype == "uint8_t":
+                            dtype = np.uint8
                         else:
                             raise ValueError(vartype)
 
@@ -850,6 +855,8 @@ class AdiosDataset(AbstractBaseDataset):
                         dtype = np.int32
                     elif vartype == "int64_t":
                         dtype = np.int64
+                    elif vartype == "uint8_t":
+                        dtype = np.uint8
                     else:
                         raise ValueError(vartype)
 
@@ -869,7 +876,11 @@ class AdiosDataset(AbstractBaseDataset):
                     # log0("getitem out-of-memory:", self.label, k, idx)
                     val = self.f.read("%s/%s" % (self.label, k), start, count)
 
-                v = torch.tensor(val)
+                if val.dtype == np.uint8:
+                    ## Tensors do not support strings. We use strings as they are. No converting to tensors.
+                    v = val.tobytes().decode("utf-8")
+                else:
+                    v = torch.tensor(val)
                 exec("data_object.%s = v" % (k))
             if self.enable_cache:
                 self.cache[idx] = data_object
