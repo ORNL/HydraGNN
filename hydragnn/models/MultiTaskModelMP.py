@@ -5,14 +5,16 @@ import torch.nn as nn
 from collections import OrderedDict
 from torch_geometric.nn import global_mean_pool
 
+
 def average_gradients(model, group):
     """Averages gradients across all processes using all_reduce."""
     group_size = dist.get_world_size(group=group)
-    
+
     for param in model.parameters():
         if param.grad is not None:
             dist.all_reduce(param.grad, group=group, op=dist.ReduceOp.SUM)
             param.grad /= group_size  # Normalize by the number of processes
+
 
 class EncoderModel(nn.Module):
     def __init__(self, base_model):
@@ -47,6 +49,7 @@ class EncoderModel(nn.Module):
 
         return inv_node_feat, equiv_node_feat, conv_args
 
+
 class DecoderModel(nn.Module):
     def __init__(self, base_model):
         super().__init__()
@@ -63,7 +66,7 @@ class DecoderModel(nn.Module):
         ## Take encoded features as input
         inv_node_feat, equiv_node_feat, conv_args = encoded_feats
         x = inv_node_feat
-    
+
         #### multi-head decoder part####
         # shared dense layers for graph level output
         if data.batch is None:
@@ -140,6 +143,7 @@ class DecoderModel(nn.Module):
             return outputs, outputs_var
         return outputs
 
+
 class MultiTaskModelMP(nn.Module):
     def __init__(
         self,
@@ -176,14 +180,14 @@ class MultiTaskModelMP(nn.Module):
             for k in layer.keys():
                 if k != f"branch-{self.branch_id}":
                     delete_list.append(k)
-            
+
             for k in delete_list:
                 del layer[k]
 
         self.encoder = DDP(self.encoder, process_group=self.shared_pg)
         self.decoder = DDP(self.decoder, process_group=self.head_pg)
         self.module = base_model
-    
+
     def forward(self, data):
         encoded_feats = self.encoder(data)  # First call (encoder)
         out = self.decoder(data, encoded_feats)  # Second call (decoder)
@@ -202,7 +206,10 @@ class MultiTaskModelMP(nn.Module):
             yield name, param
 
     def state_dict(self):
-        return OrderedDict(list(self.encoder.state_dict().items()) + list(self.decoder.state_dict().items()))
+        return OrderedDict(
+            list(self.encoder.state_dict().items())
+            + list(self.decoder.state_dict().items())
+        )
 
     def train(self):
         self.encoder.train()
@@ -215,4 +222,3 @@ class MultiTaskModelMP(nn.Module):
     def gradient_all_reduce(self):
         average_gradients(self.encoder, self.shared_pg)
         average_gradients(self.decoder, self.head_pg)
-
