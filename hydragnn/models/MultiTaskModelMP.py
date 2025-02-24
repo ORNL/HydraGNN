@@ -77,17 +77,23 @@ class DecoderModel(nn.Module):
         outputs = []
         outputs_var = []
 
-        datasetIDs = data.dataset_name.unique() ## {2, 2, 2, 2, 2, 2}
+        datasetIDs = data.dataset_name.unique()  ## {2, 2, 2, 2, 2, 2}
         print("datasetIDs:", datasetIDs)
         ## FIXME
-        head_filter = os.getenv("HYDRAGNN_HEAD_FILTER", None) 
+        head_filter = os.getenv("HYDRAGNN_HEAD_FILTER", None)
         if head_filter is not None:
             my_branch = int(head_filter)
-            my_branch = torch.tensor([my_branch], dtype=torch.int32).to(datasetIDs.device)
+            my_branch = torch.tensor([my_branch], dtype=torch.int32).to(
+                datasetIDs.device
+            )
             rank = dist.get_rank(group=dist.group.WORLD)
-            print(rank, "common datasetIDs:", datasetIDs[torch.isin(datasetIDs, my_branch)], datasetIDs)
+            print(
+                rank,
+                "common datasetIDs:",
+                datasetIDs[torch.isin(datasetIDs, my_branch)],
+                datasetIDs,
+            )
             datasetIDs = datasetIDs[torch.isin(datasetIDs, my_branch)]
-
 
         unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
