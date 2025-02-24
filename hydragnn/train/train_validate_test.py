@@ -541,6 +541,7 @@ def train(
                 # world_rank = dist.get_rank()
                 # if world_rank in [0, 1, 4, 5]:
                 #     checK_grad_after_sync(world_rank, model)
+                # sys.exit()
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()

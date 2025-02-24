@@ -256,8 +256,8 @@ if __name__ == "__main__":
             )
             device = get_device()
 
-            mycolor = dim1_group_rank  ## branch id
-            mymodel = modellist[mycolor]
+            # mycolor = dim1_group_rank  ## branch id
+            # mymodel = modellist[mycolor]
         else:
             colorlist = list()
             color = 0
