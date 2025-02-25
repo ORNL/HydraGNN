@@ -97,8 +97,8 @@ class Alexandria(AbstractBaseDataset):
 
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(10.0, loop=False, max_num_neighbors=10)
+        self.radius_graph_pbc = RadiusGraphPBC(10.0, loop=False, max_num_neighbors=10)
 
         self.graphgps_transform = graphgps_transform
 
@@ -125,6 +125,8 @@ class Alexandria(AbstractBaseDataset):
                 local_file_list = total_file_list
 
             for filepath in local_file_list:
+
+                print(f"MASSI: rank{self.rank} - ", filepath)
 
                 if filepath.endswith("bz2"):
                     self.process_file_content(os.path.join(subdirpath, filepath))
