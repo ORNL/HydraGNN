@@ -58,6 +58,8 @@ from hydragnn.utils.distributed import nsplit
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+def bump(g):
+    return Data.from_dict(g.__dict__)
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
@@ -207,7 +209,10 @@ class OpenCatalystDataset(AbstractBaseDataset):
             cursor = txn.cursor()
 
             for key, value in iterate_tqdm(cursor, verbosity_level=2, desc="Processing OC22 LMDB"):
-                data = pickle.loads(value)  # Load trajectory data
+                old_data = pickle.loads(value)  # Load trajectory data
+                print("Old data: ", old_data)
+                data = bump(old_data)
+                print("Data: ", data)
 
                 num_steps = data["positions"].shape[0]  # Number of time steps
 
@@ -364,13 +369,16 @@ if __name__ == "__main__":
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
-        ## This is a local split
-        trainset, valset1, valset2 = split_dataset(
-            dataset=trainset,
-            perc_train=0.9,
-            stratify_splitting=False,
+        ## local data
+        valset = OpenCatalystDataset(
+            os.path.join(datadir),
+            var_config,
+            data_type=args.val_path,
+            #graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
         )
-        valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
             os.path.join(datadir),
             var_config,
@@ -381,6 +389,8 @@ if __name__ == "__main__":
             dist=True
         )
         ## Need as a list
+        trainset = trainset[:]
+        valset = valset[:]
         testset = testset[:]
         print(
             rank,
