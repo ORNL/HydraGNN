@@ -101,8 +101,8 @@ class OMat2024(AbstractBaseDataset):
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(10.0, loop=False, max_num_neighbors=10)
+        self.radius_graph_pbc = RadiusGraphPBC(10.0, loop=False, max_num_neighbors=10)
 
         self.graphgps_transform = graphgps_transform
 
