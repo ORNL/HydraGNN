@@ -1,6 +1,7 @@
 import os, re, json
 import logging
 import fnmatch
+import pickle
 import sys
 import lmdb
 from mpi4py import MPI
@@ -79,6 +80,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         self.var_config = var_config
         self.data_path = dirpath
+        self.data_type = data_type
         self.energy_per_atom = energy_per_atom
 
         # NOTE Open Catalyst 2022 dataset has PBC:
@@ -112,7 +114,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            self.traj_to_torch_geom(traj_file)
+            traj_file_path = os.path.join(dirpath, "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/", self.data_type, traj_file)
+            self.traj_to_torch_geom(traj_file_path)
 
         random.shuffle(self.dataset)
 
@@ -203,7 +206,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         with env.begin() as txn:
             cursor = txn.cursor()
 
-            for key, value in iterate_tqdm(cursor, desc="Processing OC22 LMDB"):
+            for key, value in iterate_tqdm(cursor, verbosity_level=2, desc="Processing OC22 LMDB"):
                 data = pickle.loads(value)  # Load trajectory data
 
                 num_steps = data["positions"].shape[0]  # Number of time steps
