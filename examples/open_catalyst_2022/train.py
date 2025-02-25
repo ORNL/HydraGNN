@@ -1,6 +1,8 @@
 import os, re, json
 import logging
+import fnmatch
 import sys
+import lmdb
 from mpi4py import MPI
 import argparse
 
@@ -87,7 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 100.0
+        self.forces_norm_threshold = 1000.0
 
         self.dist = dist
         if self.dist:
@@ -98,16 +100,10 @@ class OpenCatalystDataset(AbstractBaseDataset):
         trajectories_files_list = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            file_path = (
-                os.path.join(dirpath, "oc22_trajectories/trajectories/oc22/", data_type)
-                + "_t.txt"
-            )
-            # Open the file and read its contents line by line
-            with open(file_path, "r") as file:
-                trajectories_files_list = [line.strip() for line in file.readlines()]
+            trajectories_files_list = [f for f in os.listdir(os.path.join(dirpath, "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/", data_type)) if fnmatch.fnmatch(f, "*.lmdb")]
         trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
         if len(trajectories_files_list) == 0:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
+            raise RuntimeError("No *.lmdb files found. Did you uncompress?")
 
         ## We assume file names are "%d.trj"
         local_files_list = list(nsplit(trajectories_files_list, self.world_size))[
@@ -116,58 +112,29 @@ class OpenCatalystDataset(AbstractBaseDataset):
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            list_atomistic_structures = self.traj_to_torch_geom(traj_file)
-            for item in list_atomistic_structures:
-
-                # Calculate chemical composition
-                atomic_number_list = item.atomic_numbers.tolist()
-                assert len(atomic_number_list) == item.natoms
-                ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-
-                item.chemical_composition = chemical_composition
-
-                if self.check_forces_values(item.forces):
-                    self.dataset.append(item)
-                else:
-                    print(
-                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
-                        flush=True,
-                    )
+            self.traj_to_torch_geom(traj_file)
 
         random.shuffle(self.dataset)
 
-    def ase_to_torch_geom(self, atoms):
-        # set the atomic numbers, positions, and cell
-        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
-        pos = torch.Tensor(atoms.get_positions())
-        natoms = torch.IntTensor([pos.shape[0]])
-        # initialized to torch.zeros(natoms) if tags missing.
-        # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
-        tags = torch.Tensor(atoms.get_tags())
+    def update_torch_geom(self, data_dict, step):
+       
+        """
+        Convert a trajectory step to PyG Data object and save it as a file.
+        """
+        natoms = torch.tensor(data_dict["natoms"], dtype=torch.long)  # Number of atoms in the structure
+        atomic_numbers = torch.tensor(data_dict["atomic_numbers"], dtype=torch.long)  # Node feature: atomic numbers
+        positions = torch.tensor(data_dict["positions"][step], dtype=torch.float32)  # Node positions
+        forces = torch.tensor(data_dict["forces"][step], dtype=torch.float32)  # Force on atoms
+        energy_tensor = torch.tensor([data_dict["energy"][step]], dtype=torch.float32).unsqueeze(0)  # Scalar target: energy
+        cell = torch.tensor([data_dict["cell"][step]], dtype=torch.float32)  # Lattice vectors defining the periodic cell
+        pbc = torch.tensor([data_dict["pbc"][step]], dtype=torch.bool)  # Periodic boundary conditions (True/False) along each axis
 
-        cell = None
-        try:
-            cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
-        except:
-            print(f"Structure does not have cell", flush=True)
-
-        pbc = None
-        try:
-            pbc = pbc_as_tensor(atoms.get_pbc())
-        except:
-            print(f"Structure does not have pbc", flush=True)
-        
         # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-        energy = atoms.get_potential_energy(apply_constraint=False)
-        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
-        forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
 
         # Calculate chemical composition
         atomic_number_list = atomic_numbers.tolist()
@@ -182,19 +149,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
         data_object = Data(
             dataset_name="oc2022",
             natoms=natoms,
-            pos=pos,
+            pos=positions,
             cell=cell,
             pbc=pbc,
-            edge_index=None,
-            edge_attr=None,
+            #edge_index=None,
+            #edge_attr=None,
             atomic_numbers=atomic_numbers,
-            chemical_composition=chemical_composition,
-            smiles_string=None,
+            #chemical_composition=chemical_composition,
+            #smiles_string=None,
             x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
-            tags=tags,
         )
 
         if self.energy_per_atom:
@@ -231,23 +197,26 @@ class OpenCatalystDataset(AbstractBaseDataset):
         return data_object
 
     def traj_to_torch_geom(self, traj_file):
-        traj_file_path = os.path.join(
-            self.data_path, "oc22_trajectories/trajectories/oc22/raw_trajs/", traj_file
-        )
-        traj = read(traj_file_path, ":", parallel=False)
-        data_list = []
-        for step in traj:
-            data_object = self.ase_to_torch_geom(step)
-            if self.check_forces_values(data_object.forces):
-                self.dataset.append(data_object)
-            else:
-                print(
-                    f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                    flush=True,
-                )
-            data_list.append(data_object)
+        # Open LMDB
+        env = lmdb.open(traj_file, subdir=False, readonly=True, lock=False, readahead=False, meminit=False)
 
-        return data_list
+        with env.begin() as txn:
+            cursor = txn.cursor()
+
+            for key, value in iterate_tqdm(cursor, desc="Processing OC22 LMDB"):
+                data = pickle.loads(value)  # Load trajectory data
+
+                num_steps = data["positions"].shape[0]  # Number of time steps
+
+                for step in range(num_steps):
+                    data_object = self.update_torch_geom(data, step)
+                    if self.check_forces_values(data_object.forces):
+                        self.dataset.append(data_object)
+                    else:
+                        print(
+                            f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                            flush=True,
+                        )
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
@@ -280,13 +249,19 @@ if __name__ == "__main__":
         "--train_path",
         help="path to training data",
         type=str,
-        default="train_s2ef",
+        default="train",
+    )
+    parser.add_argument(
+        "--val_path",
+        help="path to testing data",
+        type=str,
+        default="val_id",
     )
     parser.add_argument(
         "--test_path",
         help="path to testing data",
         type=str,
-        default="val_id_s2ef",
+        default="test_id",
     )
     parser.add_argument(
         "--energy_per_atom",
