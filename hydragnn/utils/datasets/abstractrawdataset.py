@@ -55,12 +55,12 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         # self.serial_data_name_list = []
         self.normalize_features = (
             config["Dataset"]["normalize_features"]
-            if config["Dataset"]["normalize_features"] is not None
+            if "normalize_features" in config["Dataset"]
             else False
         )
         self.node_feature_name = (
             config["Dataset"]["node_features"]["name"]
-            if config["Dataset"]["node_features"]["name"] is not None
+            if "name" in config["Dataset"]["node_features"]
             else None
         )
         self.node_feature_dim = config["Dataset"]["node_features"]["dim"]

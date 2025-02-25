@@ -21,9 +21,13 @@
     },
     "NeuralNetwork": {
         "Architecture": {
+            "global_attn_engine": "",
+            "global_attn_type": "",
             "mpnn_type": "PNA",
             "radius": 7,
             "max_neighbours": 100000,
+            "pe_dim": 1,
+            "global_attn_heads": 8,
             "hidden_dim": 20,
             "num_conv_layers": 6,
             "output_heads": {

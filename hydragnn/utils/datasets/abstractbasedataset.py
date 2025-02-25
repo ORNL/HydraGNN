@@ -11,6 +11,7 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
     def __init__(self):
         super().__init__()
         self.dataset = list()
+        self.dataset_name = None
 
     @abstractmethod
     def get(self, idx):
@@ -39,7 +40,14 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
         return self.len()
 
     def __getitem__(self, idx):
-        return self.get(idx)
+        obj = self.get(idx)
+
+        # Get the dataset name if it exists
+        if hasattr(self, "dataset_name"):
+            if self.dataset_name is not None:
+                obj.dataset_name = self.dataset_name
+
+        return obj
 
     def __iter__(self):
         for idx in range(self.len()):
