@@ -126,8 +126,6 @@ class Alexandria(AbstractBaseDataset):
 
             for filepath in local_file_list:
 
-                print(f"MASSI: rank{self.rank} - ", filepath)
-
                 if filepath.endswith("bz2"):
                     self.process_file_content(os.path.join(subdirpath, filepath))
                 else:
