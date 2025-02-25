@@ -517,6 +517,10 @@ if __name__ == "__main__":
         )
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
+        print("Before COMM.Barrier()", flush=True)
+        comm.Barrier()
+        print("After COMM.Barrier()", flush=True)
+
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 

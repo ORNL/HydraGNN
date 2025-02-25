@@ -82,8 +82,8 @@ class MPTrjDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(10.0, loop=False, max_num_neighbors=10)
+        self.radius_graph_pbc = RadiusGraphPBC(10.0, loop=False, max_num_neighbors=10)
 
         self.graphgps_transform = graphgps_transform
 
@@ -383,6 +383,10 @@ if __name__ == "__main__":
             stratify_splitting=False,
         )
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
+
+        print("Before COMM.Barrier()", flush=True)
+        comm.Barrier()
+        print("After COMM.Barrier()", flush=True)
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
