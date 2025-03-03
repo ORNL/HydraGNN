@@ -9,7 +9,7 @@ Distributed PyTorch implementation of multi-headed graph convolutional neural ne
 
 - **Multi-headed prediction** for graph and node-level properties  
 - **Distributed Data Parallelism**
-- **Convolutional Layer** as a hyperparameter  
+- **Convolutional Layers** as a hyperparameter  
 - **Equivariance** in convolution and prediction  
 - **Global Attention** with linear scaling
 
