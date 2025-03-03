@@ -119,7 +119,7 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Examples: `75`, `100`, `250` (int)
     - `["batch_size"]`  
       Examples: `16`, `32`, `64` (int)
-    - `["Optimizer"]["learnin_rate"]`  
+    - `["Optimizer"]["learning_rate"]`  
       Examples: `2e-3`, `0.005` (float)
     - `["compute_grad_energy"]`  
       Use the gradient of energy to predict forces (bool)
