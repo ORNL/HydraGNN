@@ -99,7 +99,7 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
     - `["num_conv_layers"]`  
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["hidden_dim"]`  
-      Dimension of node embeddings (int)
+      Dimension of node embeddings during convolution (int)
     - `["output_heads"]`  
       Task types: `node`, `graph` (int)
 
