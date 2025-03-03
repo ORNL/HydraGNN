@@ -5,6 +5,15 @@ Distributed PyTorch implementation of multi-headed graph convolutional neural ne
 <img src="https://github.com/ORNL/HydraGNN/assets/2488656/a6d5369b-2a70-4eee-aa39-b2cf8dedf262" alt="HydraGNN_QRcode" width="300" />
 
 
+## Capabilities
+
+- **Multi-headed prediction** for graph and node-level properties  
+- **Distributed Data Parallelism**
+- **Convolutional Layer** as a hyperparameter  
+- **Equivariance** in convolution and prediction  
+- **Global Attention** with linear scaling
+
+
 ## Dependencies
 
 To install required packages with only basic capability (`torch`,
@@ -25,6 +34,7 @@ pip install -r requirements-dev.txt
 Detailed dependency installation instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Install)
 
+
 ## Installation
 
 After checking out HydgraGNN, we recommend to install HydraGNN in a
@@ -44,6 +54,7 @@ HydraGNN in your python tree as a static package:
 ```
 python setup.py install
 ```
+
 
 ## Running the code
 
@@ -76,9 +87,27 @@ HydraGNN uses a JSON configuration file (examples in `examples/`):
 
 There are many options for HydraGNN; the dataset and model type are particularly
 important:
- - `["Verbosity"]["level"]`: `0`, `1`, `2`, `3`, `4`
- - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms`
- - `["NeuralNetwork"]["Architecture"]["model_type"]`: `PNA`, `MFC`, `GIN`, `GAT`, `CGCNN`, `SchNet`, `DimeNet`, `EGNN`
+ - `["Verbosity"]["level"]`: `0`, `1`, `2`, `3`, `4` (int)
+ - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms` (str)
+
+Additionally, many important arguments fall with the “NeuralNetwork” section:
+ - `["NeuralNetwork"]
+   - ["Architecture"]
+     - ["mpnn_type"]: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
+     - ["num_conv_layers"]: `1`, `2`, `3`, `4`, ... (int)
+     - ["hidden_dim"]: Dimension of node embeddings (int)
+     - [“output_heads”]: `node`, `graph` (int)
+   - [“Variables of Interest”]  
+     - [“input_node_features”]: Indices selected from nodal data to be used as inputs (int)
+     - [“output_index”]: Indices selected from data to be used as targets (int)
+     - [“type”]: `node`, `graph` (string)
+     - [“output_dim”]: Dimensions of prediction tasks (list)
+     - **include graphic**
+   - [“Training”]  
+     - [“num_epoch”]: `75`, `100`, `250` (int)
+     - [“batch_size”]: `16`, `32`, `64` (int)
+     - [“Optimizer”][“learnin_rate”]: `2e-3`, `0.005` (float)
+     - [“compute_grad_energy”] Use the gradient of energy to predict forces (bool)
 
 ### Citations
 "HydraGNN: Distributed PyTorch implementation of multi-headed graph convolutional neural networks", Copyright ID#: 81929619
