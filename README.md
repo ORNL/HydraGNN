@@ -90,24 +90,40 @@ important:
  - `["Verbosity"]["level"]`: `0`, `1`, `2`, `3`, `4` (int)
  - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms` (str)
 
-Additionally, many important arguments fall with the “NeuralNetwork” section:
- - `["NeuralNetwork"]
-   - ["Architecture"]
-     - ["mpnn_type"]: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
-     - ["num_conv_layers"]: `1`, `2`, `3`, `4`, ... (int)
-     - ["hidden_dim"]: Dimension of node embeddings (int)
-     - [“output_heads”]: `node`, `graph` (int)
-   - [“Variables of Interest”]  
-     - [“input_node_features”]: Indices selected from nodal data to be used as inputs (int)
-     - [“output_index”]: Indices selected from data to be used as targets (int)
-     - [“type”]: `node`, `graph` (string)
-     - [“output_dim”]: Dimensions of prediction tasks (list)
-     - **include graphic**
-   - [“Training”]  
-     - [“num_epoch”]: `75`, `100`, `250` (int)
-     - [“batch_size”]: `16`, `32`, `64` (int)
-     - [“Optimizer”][“learnin_rate”]: `2e-3`, `0.005` (float)
-     - [“compute_grad_energy”] Use the gradient of energy to predict forces (bool)
+Additionally, many important arguments fall within the `["NeuralNetwork"]` section:
+
+- `["NeuralNetwork"]`
+  - `["Architecture"]`
+    - `["mpnn_type"]`  
+      Accepted types: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
+    - `["num_conv_layers"]`  
+      Examples: `1`, `2`, `3`, `4` ... (int)
+    - `["hidden_dim"]`  
+      Dimension of node embeddings (int)
+    - `["output_heads"]`  
+      Task types: `node`, `graph` (int)
+
+  - `["Variables of Interest"]`
+    - `["input_node_features"]`  
+      Indices from nodal data used as inputs (int)
+    - `["output_index"]`  
+      Indices from data used as targets (int)
+    - `["type"]`  
+      Either `node` or `graph` (string)
+    - `["output_dim"]`  
+      Dimensions of prediction tasks (list)
+    - *(include graphic)*
+
+  - `["Training"]`
+    - `["num_epoch"]`  
+      Examples: `75`, `100`, `250` (int)
+    - `["batch_size"]`  
+      Examples: `16`, `32`, `64` (int)
+    - `["Optimizer"]["learnin_rate"]`  
+      Examples: `2e-3`, `0.005` (float)
+    - `["compute_grad_energy"]`  
+      Use the gradient of energy to predict forces (bool)
+
 
 ### Citations
 "HydraGNN: Distributed PyTorch implementation of multi-headed graph convolutional neural networks", Copyright ID#: 81929619
