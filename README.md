@@ -114,7 +114,6 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Either `node` or `graph` (string)
     - `["output_dim"]`  
       Dimensions of prediction tasks (list)
-    - *(include graphic)*
 
   - `["Training"]`
     - `["num_epoch"]`  
