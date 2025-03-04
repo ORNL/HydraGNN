@@ -7,7 +7,7 @@ Distributed PyTorch implementation of multi-headed graph convolutional neural ne
 
 ## Capabilities
 
-<img src="images/HydraGNN-overview-3.png" alt="HydraGNN Overview" width="1100" />
+<img src="images/HydraGNN-overview-4.png" alt="HydraGNN Overview" width="1100" />
 
 - **Multi-headed Prediction** for graph and node-level properties  
 - **Distributed Data Parallelism** at supercomputing level
