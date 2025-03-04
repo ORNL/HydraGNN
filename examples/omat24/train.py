@@ -53,6 +53,7 @@ from hydragnn.utils.distributed import nsplit
 torch.backends.cudnn.enabled = False
 
 from fairchem.core.datasets import AseDBDataset
+import glob
 
 
 def info(*args, logtype="info", sep=" "):
@@ -117,21 +118,34 @@ class OMat2024(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
+        if data_type == "train":
+            total_file_list = glob.glob(os.path.join(dirpath, data_type, "**/*.aselmdb"), recursive=True)
+            rx = list(nsplit(total_file_list, self.world_size))[self.rank]
+            print(self.rank, "total:", len(total_file_list), "local:", len(rx))
+            dataset_list = rx
+        else:
+            dataset_list = dataset_names
+
         torch.distributed.barrier()
 
-        for dataname in dataset_names:
+        for dataname in dataset_list:
 
-            print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
+            # print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
 
             dataset = AseDBDataset(
                 config=dict(
                     src=os.path.join(dirpath, data_type, dataname), **config_kwargs
                 )
             )
+            # print(self.rank, "dataname:", dataname, "total:", dataset.num_samples)
 
-            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
-                self.rank
-            ]
+            if data_type == "train":
+                rx = list(range(dataset.num_samples))
+            else:
+                rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
+                    self.rank
+                ]
+                print(self.rank, "dataname:", dataname, "total:", dataset.num_samples, "local:", len(rx))
 
             for index in iterate_tqdm(rx, verbosity_level=2):
                 try:
@@ -247,6 +261,7 @@ class OMat2024(AbstractBaseDataset):
                 except Exception as e:
                     print(f"Rank {self.rank} reading - exception: ", e)
 
+        print(self.rank, "Done. Wait others.", flush=True)
         torch.distributed.barrier()
 
         random.shuffle(self.dataset)

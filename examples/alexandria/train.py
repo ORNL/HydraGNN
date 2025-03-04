@@ -1,6 +1,6 @@
 import bz2
 
-import os, json
+import os, json, yaml
 import logging
 import sys
 from mpi4py import MPI
@@ -50,7 +50,7 @@ except ImportError:
 
 import subprocess
 from hydragnn.utils.distributed import nsplit
-
+import glob
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -105,31 +105,22 @@ class Alexandria(AbstractBaseDataset):
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 1000.0
 
-        list_dirs = list_directories(
-            os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
-        )
+        data_dir = os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
+        # print("glob:", os.path.join(data_dir, "**/*.json.bz2"))
+        total_file_list = glob.glob(os.path.join(data_dir, "**/*.json.bz2"), recursive=True)
+        if self.dist:
+            local_file_list = list(nsplit(total_file_list, self.world_size))[
+                self.rank
+            ]
+        else:
+            local_file_list = total_file_list
+        print(self.rank, "Total flies:", len(total_file_list), "Local files:", len(local_file_list))
 
-        for index in list_dirs:
-
-            subdirpath = os.path.join(
-                dirpath, "compressed_data", "alexandria.icams.rub.de", index
-            )
-
-            total_file_list = os.listdir(subdirpath)
-
-            if self.dist:
-                local_file_list = list(nsplit(total_file_list, self.world_size))[
-                    self.rank
-                ]
+        for filepath in iterate_tqdm(local_file_list, verbosity_level=2):
+            if filepath.endswith("bz2"):
+                self.process_file_content(filepath)
             else:
-                local_file_list = total_file_list
-
-            for filepath in local_file_list:
-
-                if filepath.endswith("bz2"):
-                    self.process_file_content(os.path.join(subdirpath, filepath))
-                else:
-                    print(f"{filepath} is not a .bz2 file to decompress", flush=True)
+                print(f"{filepath} is not a .bz2 file to decompress", flush=True)
 
     def get_data_dict(self, computed_entry_dict):
         """
@@ -363,8 +354,7 @@ class Alexandria(AbstractBaseDataset):
                     self.get_data_dict(entry)
                     for entry in iterate_tqdm(
                         data["entries"],
-                        #desc=f"Processing file {filepath}",
-                        desc=None,
+                        desc=f"Rank {self.rank} - Processing file {os.path.basename(filepath)}",
                         verbosity_level=2,
                     )
                 ]
@@ -378,12 +368,12 @@ class Alexandria(AbstractBaseDataset):
                 self.dataset.extend(filtered_computed_entry_dict)
 
             except OSError as e:
-                print("Failed to decompress data:", e, flush=True)
+                print("Failed to decompress data:", e, os.path.basename(filepath), flush=True)
                 decompressed_data = None
             except json.JSONDecodeError as e:
-                print("Failed to decode JSON:", e, flush=True)
+                print("Failed to decode JSON:", e, os.path.basename(filepath), flush=True)
             except Exception as e:
-                print("An error occurred:", e, flush=True)
+                print("An error occurred:", e, os.path.basename(filepath), flush=True)
 
     def check_forces_values(self, forces):
 
