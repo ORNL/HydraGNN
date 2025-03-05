@@ -100,10 +100,19 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Accepted types: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
     - `["num_conv_layers"]`  
       Examples: `1`, `2`, `3`, `4` ... (int)
-    - `["hidden_dim"]`  
-      Dimension of node embeddings during convolution (int)
     - `["output_heads"]`  
       Task types: `node`, `graph` (int)
+    - `["global_attn_engine"]`
+      Accepted types: `GPS`, `None`
+    - `["global_attn_type"]`
+      Accepted types: `multihead`
+    - `["pe_dim"]`
+      Dimension of positional encodings (int)
+    - `["global_attn_heads"]`
+      Examples: `1`, `2`, `3`, `4` ... (int)
+    - `["hidden_dim"]`  
+      Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None" 
+            
 
   - `["Variables of Interest"]`
     - `["input_node_features"]`  
