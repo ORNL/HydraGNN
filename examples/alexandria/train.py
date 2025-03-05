@@ -52,6 +52,7 @@ import subprocess
 from hydragnn.utils.distributed import nsplit
 import glob
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
@@ -77,6 +78,7 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+
 
 class Alexandria(AbstractBaseDataset):
     def __init__(
@@ -107,14 +109,20 @@ class Alexandria(AbstractBaseDataset):
 
         data_dir = os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
         # print("glob:", os.path.join(data_dir, "**/*.json.bz2"))
-        total_file_list = glob.glob(os.path.join(data_dir, "**/*.json.bz2"), recursive=True)
+        total_file_list = glob.glob(
+            os.path.join(data_dir, "**/*.json.bz2"), recursive=True
+        )
         if self.dist:
-            local_file_list = list(nsplit(total_file_list, self.world_size))[
-                self.rank
-            ]
+            local_file_list = list(nsplit(total_file_list, self.world_size))[self.rank]
         else:
             local_file_list = total_file_list
-        print(self.rank, "Total flies:", len(total_file_list), "Local files:", len(local_file_list))
+        print(
+            self.rank,
+            "Total flies:",
+            len(total_file_list),
+            "Local files:",
+            len(local_file_list),
+        )
 
         for filepath in iterate_tqdm(local_file_list, verbosity_level=2):
             if filepath.endswith("bz2"):
@@ -151,10 +159,12 @@ class Alexandria(AbstractBaseDataset):
         except:
             print(f"Structure {entry_id} does not have positional sites", flush=True)
         natoms = torch.IntTensor([pos.shape[0]])
-        
+
         cell = None
         try:
-            cell = torch.tensor(structure["lattice"]["matrix"], dtype=torch.float32).view(3,3)
+            cell = torch.tensor(
+                structure["lattice"]["matrix"], dtype=torch.float32
+            ).view(3, 3)
         except:
             print(f"Structure {entry_id} does not have cell", flush=True)
 
@@ -307,11 +317,13 @@ class Alexandria(AbstractBaseDataset):
         else:
             data_object = self.radius_graph(data_object)
             data_object = transform_coordinates(data_object)
-            
+
         # Default edge_shifts for when radius_graph_pbc is not activated
         if not hasattr(data_object, "edge_shifts"):
-            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-            
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
+
         # FIXME: PBC from bool --> int32 to be accepted by ADIOS
         data_object.pbc = data_object.pbc.int()
 
@@ -368,10 +380,17 @@ class Alexandria(AbstractBaseDataset):
                 self.dataset.extend(filtered_computed_entry_dict)
 
             except OSError as e:
-                print("Failed to decompress data:", e, os.path.basename(filepath), flush=True)
+                print(
+                    "Failed to decompress data:",
+                    e,
+                    os.path.basename(filepath),
+                    flush=True,
+                )
                 decompressed_data = None
             except json.JSONDecodeError as e:
-                print("Failed to decode JSON:", e, os.path.basename(filepath), flush=True)
+                print(
+                    "Failed to decode JSON:", e, os.path.basename(filepath), flush=True
+                )
             except Exception as e:
                 print("An error occurred:", e, os.path.basename(filepath), flush=True)
 
@@ -494,7 +513,7 @@ if __name__ == "__main__":
         total = Alexandria(
             os.path.join(datadir),
             var_config,
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
@@ -619,7 +638,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
