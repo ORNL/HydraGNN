@@ -118,8 +118,11 @@ class OMat2024(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
+        ## Parallelizing over data files for training data. For val set, we parallelize over each molecules.
         if data_type == "train":
-            total_file_list = glob.glob(os.path.join(dirpath, data_type, "**/*.aselmdb"), recursive=True)
+            total_file_list = glob.glob(
+                os.path.join(dirpath, data_type, "**/*.aselmdb"), recursive=True
+            )
             rx = list(nsplit(total_file_list, self.world_size))[self.rank]
             print(self.rank, "total:", len(total_file_list), "local:", len(rx))
             dataset_list = rx
@@ -128,7 +131,7 @@ class OMat2024(AbstractBaseDataset):
 
         torch.distributed.barrier()
 
-        for dataname in dataset_list:
+        for dataset_index, dataname in enumerate(dataset_list):
 
             # print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
 
@@ -145,9 +148,21 @@ class OMat2024(AbstractBaseDataset):
                 rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
                     self.rank
                 ]
-                print(self.rank, "dataname:", dataname, "total:", dataset.num_samples, "local:", len(rx))
+                print(
+                    self.rank,
+                    "dataname:",
+                    dataname,
+                    "total:",
+                    dataset.num_samples,
+                    "local:",
+                    len(rx),
+                )
 
-            for index in iterate_tqdm(rx, verbosity_level=2):
+            for index in iterate_tqdm(
+                rx,
+                verbosity_level=2,
+                desc=f"Rank{self.rank} Dataset {dataset_index}/{len(dataset_list)}",
+            ):
                 try:
                     pos = torch.tensor(
                         dataset.get_atoms(index).get_positions(), dtype=torch.float32
@@ -238,11 +253,13 @@ class OMat2024(AbstractBaseDataset):
                     else:
                         data_object = self.radius_graph(data_object)
                         data_object = transform_coordinates(data_object)
-                        
+
                     # Default edge_shifts for when radius_graph_pbc is not activated
                     if not hasattr(data_object, "edge_shifts"):
-                        data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-                        
+                        data_object.edge_shifts = torch.zeros(
+                            (data_object.edge_index.size(1), 3), dtype=torch.float32
+                        )
+
                     # FIXME: PBC from bool --> int32 to be accepted by ADIOS
                     data_object.pbc = data_object.pbc.int()
 
@@ -391,7 +408,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type="train",
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
@@ -410,7 +427,7 @@ if __name__ == "__main__":
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
-            dist=True
+            dist=True,
         )
         ## Need as a list
         testset = testset[:]
@@ -528,7 +545,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
