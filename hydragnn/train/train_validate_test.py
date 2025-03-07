@@ -22,6 +22,7 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
+from hydragnn.models import MultiTaskModelMP
 
 import os
 
@@ -34,6 +35,14 @@ import pickle
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import time
 from mpi4py import MPI
+import sys
+
+
+def checK_grad_after_sync(rank, model):
+    # Get the final gradient after DDP synchronization
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            print(f"Rank {rank}, {name} gradient AFTER sync: {param.grad.sum()}")
 
 
 def get_nbatch(loader):
@@ -439,9 +448,9 @@ def gather_tensor_ranks(head_values):
             start_idx = i * max_size
             end_idx = start_idx + size.item()
             if end_idx > start_idx:
-                head_values[
-                    size_all[:i].sum() : size_all[:i].sum() + size.item()
-                ] = tensor_list[start_idx:end_idx]
+                head_values[size_all[:i].sum() : size_all[:i].sum() + size.item()] = (
+                    tensor_list[start_idx:end_idx]
+                )
 
     return head_values
 
@@ -530,6 +539,10 @@ def train(
                 model.backward(loss)
             else:
                 loss.backward()
+                # world_rank = dist.get_rank()
+                # if world_rank in [0, 1, 4, 5]:
+                #     checK_grad_after_sync(world_rank, model)
+                # sys.exit()
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()

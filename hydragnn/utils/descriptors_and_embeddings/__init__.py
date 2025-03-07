@@ -4,3 +4,4 @@ from .smiles_utils import (
     generate_graphdata_from_smilestr,
     generate_graphdata_from_rdkit_molecule,
 )
+from .xyz2mol import xyz2mol
