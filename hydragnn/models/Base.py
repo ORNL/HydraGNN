@@ -262,6 +262,7 @@ class Base(Module):
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
         nodeconfiglist = self.config_heads["node"]
+        assert self.num_branches==len(nodeconfiglist), "asumming node head has the same branches as grah head, if any"
         for branchdict in nodeconfiglist:
             # only support conv for all node branches
             if branchdict["type"] != "conv":
@@ -344,7 +345,9 @@ class Base(Module):
         ############multiple heads/taks################
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
+        self.num_branches = 1
         if "graph" in self.config_heads:
+            self.num_branches=len(self.config_heads["graph"])
             for branchdict in self.config_heads["graph"]:
                 denselayers = []
                 dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
@@ -480,13 +483,20 @@ class Base(Module):
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
                 )
-                for ID in datasetIDs:
-                    mask = data.dataset_name == ID
-                    branchtype = f"branch-{ID.item()}"
-                    x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
-                    output_head = headloc[branchtype](x_graph_head)
-                    head[mask] = output_head[:, :head_dim]
-                    headvar[mask] = output_head[:, head_dim:] ** 2
+                if self.num_branches==1:
+                    x_graph_head = self.graph_shared["branch-0"](x_graph)
+                    output_head = headloc["branch-0"](x_graph_head)
+                    head = output_head[:, :head_dim]
+                    headvar = output_head[:, head_dim:] ** 2
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        branchtype = f"branch-{ID.item()}"
+                        #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
+                        output_head = headloc[branchtype](x_graph_head)
+                        head[mask] = output_head[:, :head_dim]
+                        headvar[mask] = output_head[:, head_dim:] ** 2
                 outputs.append(head)
                 outputs_var.append(headvar)
             else:
@@ -496,13 +506,11 @@ class Base(Module):
                 headvar = torch.zeros(
                     (x.shape[0], head_dim * self.var_output), device=x.device
                 )
-                for ID in datasetIDs:
-                    mask = data.dataset_name == ID
-                    mask_nodes = torch.repeat_interleave(mask, node_counts)
-                    branchtype = f"branch-{ID.item()}"
+                if self.num_branches==1:
+                    branchtype="branch-0"
                     if node_NN_type == "conv":
-                        inv_node_feat = x[mask_nodes, :]
-                        equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
+                        inv_node_feat = x
+                        equiv_node_feat_ = equiv_node_feat
                         for conv, batch_norm in zip(
                             headloc[branchtype][0::2], headloc[branchtype][1::2]
                         ):
@@ -515,11 +523,35 @@ class Base(Module):
                             inv_node_feat = self.activation_function(inv_node_feat)
                         x_node = inv_node_feat
                     else:
-                        x_node = headloc[branchtype](
-                            x=x[mask_nodes, :], batch=data.batch[mask_nodes]
-                        )
-                    head[mask_nodes] = x_node[:, :head_dim]
-                    headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                        x_node = headloc[branchtype](x=x, batch=data.batch)
+                    head = x_node[:, :head_dim]
+                    headvar = x_node[:, head_dim:] ** 2
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask_nodes = torch.repeat_interleave(mask, node_counts)
+                        branchtype = f"branch-{ID.item()}"
+                        #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        if node_NN_type == "conv":
+                            inv_node_feat = x[mask_nodes, :]
+                            equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
+                            for conv, batch_norm in zip(
+                                headloc[branchtype][0::2], headloc[branchtype][1::2]
+                            ):
+                                inv_node_feat, equiv_node_feat_ = conv(
+                                    inv_node_feat=inv_node_feat,
+                                    equiv_node_feat=equiv_node_feat_,
+                                    **conv_args,
+                                )
+                                inv_node_feat = batch_norm(inv_node_feat)
+                                inv_node_feat = self.activation_function(inv_node_feat)
+                            x_node = inv_node_feat
+                        else:
+                            x_node = headloc[branchtype](
+                                x=x[mask_nodes, :], batch=data.batch[mask_nodes]
+                            )
+                        head[mask_nodes] = x_node[:, :head_dim]
+                        headvar[mask_nodes] = x_node[:, head_dim:] ** 2
                 outputs.append(head)
                 outputs_var.append(headvar)
         if self.var_output:

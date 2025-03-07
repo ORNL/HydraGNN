@@ -41,7 +41,7 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
 
     def __getitem__(self, idx):
         obj = self.get(idx)
-        tmp_dict={"ani1_x":torch.tensor([0]),
+        tmp_dict={"ani1x":torch.tensor([0]),
                   "qm7x":torch.tensor([1]),
                   "mptrj":torch.tensor([2]),
                   "alexandria":torch.tensor([3]),
