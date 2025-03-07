@@ -241,7 +241,7 @@ if __name__ == "__main__":
             "energy",
             "forces",
             "y",
-            "dataset_name",
+            #"dataset_name",
         ]
         # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
         fname = mymodel

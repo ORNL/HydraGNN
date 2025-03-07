@@ -48,6 +48,39 @@
                                 50
                             ]
                         }
+                    },
+                    {
+                        "type": "branch-2",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
+                    },
+                    {
+                        "type": "branch-3",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
+                    },
+                    {
+                        "type": "branch-4",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
                     }
                 ],
                 "node": [
@@ -64,6 +97,36 @@
                     },
                     {
                         "type": "branch-1",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-2",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-3",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-4",
                         "architecture": {
                             "num_headlayers": 1,
                             "dim_headlayers": [
