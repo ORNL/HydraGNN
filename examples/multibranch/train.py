@@ -256,8 +256,8 @@ if __name__ == "__main__":
             )
             device = get_device()
 
-            # mycolor = dim1_group_rank  ## branch id
-            # mymodel = modellist[mycolor]
+            mycolor = dim1_group_rank  ## branch id
+            mymodel = modellist[mycolor]
         else:
             colorlist = list()
             color = 0
@@ -281,7 +281,7 @@ if __name__ == "__main__":
             "energy",
             "forces",
             "y",
-            "dataset_name",
+            # "dataset_name", ## use set_dataset_id
         ]
         # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
         fname = mymodel
@@ -307,6 +307,9 @@ if __name__ == "__main__":
             var_config=var_config,
             keys=common_variable_names,
         )
+        trainset.set_dataset_id(mycolor)
+        valset.set_dataset_id(mycolor)
+        testset.set_dataset_id(mycolor)
 
         ## Set local set
         for dataset in [trainset, valset]:

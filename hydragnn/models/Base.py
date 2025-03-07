@@ -470,7 +470,7 @@ class Base(Module):
         outputs = []
         outputs_var = []
 
-        datasetIDs = data.dataset_name.unique()
+        datasetIDs = data.dataset_id.unique()
         # ## FIXME
         # head_filter = os.getenv("HYDRAGNN_HEAD_FILTER", None)
         # if head_filter is not None:
@@ -485,13 +485,13 @@ class Base(Module):
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                head = torch.zeros((len(data.dataset_id), head_dim), device=x.device)
                 headvar = torch.zeros(
-                    (len(data.dataset_name), head_dim * self.var_output),
+                    (len(data.dataset_id), head_dim * self.var_output),
                     device=x.device,
                 )
                 for ID in datasetIDs:
-                    mask = data.dataset_name == ID
+                    mask = data.dataset_id == ID
                     branchtype = f"branch-{ID.item()}"
                     x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                     output_head = headloc[branchtype](x_graph_head)
@@ -507,7 +507,7 @@ class Base(Module):
                     (x.shape[0], head_dim * self.var_output), device=x.device
                 )
                 for ID in datasetIDs:
-                    mask = data.dataset_name == ID
+                    mask = data.dataset_id == ID
                     mask_nodes = torch.repeat_interleave(mask, node_counts)
                     branchtype = f"branch-{ID.item()}"
                     if node_NN_type == "conv":
