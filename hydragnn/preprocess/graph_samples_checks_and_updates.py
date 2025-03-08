@@ -159,33 +159,65 @@ class RadiusGraphPBC(RadiusGraph):
         # 'd' : absolute distance
         # 'S' : shift vector
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        (
-            edge_src,
-            edge_dst,
-            edge_length,
-            edge_cell_shifts,
-        ) = ase.neighborlist.neighbor_list(
-            "ijdS",
-            a=ase_atom_object,
-            cutoff=self.r,
-            self_interaction=True,  # We want self-interactions across periodic boundaries
-        )
-
-        # Eliminate true self-loops if desired
-        if not self.loop:
+        # Attempt to guarantee that we will
+        cutoff = self.r
+        cutoff_multiplier = 1.25
+        max_attempts = 3
+        for attempt_num in range(max_attempts):
             (
                 edge_src,
                 edge_dst,
                 edge_length,
                 edge_cell_shifts,
-            ) = self._remove_true_self_loops(
-                edge_src, edge_dst, edge_length, edge_cell_shifts
+            ) = ase.neighborlist.neighbor_list(
+                "ijdS",
+                a=ase_atom_object,
+                cutoff=cutoff,
+                self_interaction=True,  # We want self-interactions across periodic boundaries
             )
 
-        # Limit neighbors per node
-        edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
-            edge_src, edge_dst, edge_length, edge_cell_shifts, self.max_num_neighbors
-        )
+            # Eliminate true self-loops if desired
+            if not self.loop:
+                (
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
+                ) = self._remove_true_self_loops(
+                    edge_src, edge_dst, edge_length, edge_cell_shifts
+                )
+
+            # Limit the in-degree per node
+            edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
+                edge_src,
+                edge_dst,
+                edge_length,
+                edge_cell_shifts,
+                self.max_num_neighbors,
+            )
+
+            # If all nodes appear in edge_dst, break and proceed
+            if np.unique(edge_dst).size == data.num_nodes:
+                break
+            elif attempt_num < max_attempts - 1:
+                # Otherwise, expand radius and retry
+                print(
+                    f"Not all nodes receive an edge, expanding radius from {cutoff} -> {cutoff * cutoff_multiplier}",
+                    flush=True,
+                )
+                cutoff *= cutoff_multiplier
+            else:
+                # Ensure each node has an in-degree >= 1
+                edge_src, edge_dst, edge_length, edge_cell_shifts = (
+                    self._ensure_connected(
+                        data.num_nodes,
+                        cutoff,
+                        edge_src,
+                        edge_dst,
+                        edge_length,
+                        edge_cell_shifts,
+                    )
+                )
 
         # Assign to data
         data.edge_index = torch.stack(
@@ -222,18 +254,18 @@ class RadiusGraphPBC(RadiusGraph):
     def _limit_neighbors(
         self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors
     ):
-        # Lexsort will sort primarily by edge_src, then by edge_dst within each src node
-        sorted_indices = np.lexsort((edge_length, edge_src))
+        # Lexsort will sort primarily by edge_dst, then by edge_length within each src node
+        sorted_indices = np.lexsort((edge_length, edge_dst))
         edge_src, edge_dst, edge_length, edge_cell_shifts = [
             edge_arg[sorted_indices]
             for edge_arg in [edge_src, edge_dst, edge_length, edge_cell_shifts]
         ]
 
         # Create a mask to keep only `max_num_neighbors` per node
-        unique_src, counts = np.unique(edge_src, return_counts=True)
-        mask = np.zeros_like(edge_src, dtype=bool)
+        unique_dst, counts = np.unique(edge_dst, return_counts=True)
+        mask = np.zeros_like(edge_dst, dtype=bool)
         start_idx = 0
-        for src, count in zip(unique_src, counts):
+        for dst, count in zip(unique_dst, counts):
             end_idx = start_idx + count
             # Keep only the first max_num_neighbors for this src
             mask[start_idx : start_idx + min(count, max_num_neighbors)] = True
@@ -246,6 +278,31 @@ class RadiusGraphPBC(RadiusGraph):
             edge_length[mask],
             edge_cell_shifts[mask],
         )
+
+    def _ensure_connected(
+        self, num_nodes, cutoff, edge_src, edge_dst, edge_length, edge_cell_shifts
+    ):
+        # In worst cases, create a purely artificial connection
+        all_nodes = np.arange(num_nodes)
+        missing = np.setdiff1d(all_nodes, np.unique(edge_dst))
+        if len(missing) > 0:
+            print(
+                f"WARNING: Some nodes are still missing in 'edge_dst'. They will be constructed artificially.",
+                flush=True,
+            )
+            for mnode in missing:
+                # Connect a random node from [0..num_nodes-1] not equal to the src. Use cutoff for dist and 0 for edge shifts
+                if num_nodes > 1:
+                    src_node = np.random.choice(all_nodes[all_nodes != mnode])
+                else:
+                    src_node = 0
+                edge_src = np.append(edge_src, src_node)
+                edge_dst = np.append(edge_dst, mnode)
+                edge_length = np.append(edge_length, cutoff - 1e-8)
+                edge_cell_shifts = np.vstack(
+                    [edge_cell_shifts, np.array([0.0, 0.0, 0.0])]
+                )
+        return edge_src, edge_dst, edge_length, edge_cell_shifts
 
     def _check_and_standardize_data(self, data):
         assert (
@@ -297,7 +354,7 @@ class PBCDistance(Distance):
         assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
         (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
 
-        vec = pos[col] - pos[row] + data.edge_shifts  # The key change is adding edge_shifts
+        vec = (pos[col] - pos[row] + data.edge_shifts)  # The key change is adding edge_shifts
         dist = torch.norm(vec, p=2, dim=-1).view(-1, 1)
 
         if self.norm and dist.numel() > 0:
