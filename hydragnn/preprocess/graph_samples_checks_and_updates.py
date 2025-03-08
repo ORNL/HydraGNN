@@ -159,7 +159,6 @@ class RadiusGraphPBC(RadiusGraph):
         # 'd' : absolute distance
         # 'S' : shift vector
         # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        # Attempt to guarantee that we will
         cutoff = self.r
         cutoff_multiplier = 1.25
         max_attempts = 3
