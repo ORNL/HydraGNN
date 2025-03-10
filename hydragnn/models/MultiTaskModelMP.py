@@ -203,7 +203,6 @@ class MultiTaskModelMP(nn.Module):
             if name != f"branch-{self.branch_id}":
                 delete_list.append(name)
 
-        print("delete_list:", delete_list)
         for k in delete_list:
             del self.decoder.graph_shared[k]
 
@@ -212,7 +211,6 @@ class MultiTaskModelMP(nn.Module):
             for k in layer.keys():
                 if k != f"branch-{self.branch_id}":
                     delete_list.append(k)
-            print("delete_list:", delete_list)
             for k in delete_list:
                 del layer[k]
 

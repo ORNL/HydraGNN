@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A LRN070
+#SBATCH -A CSC623
 #SBATCH -J HydraGNN-multibranch
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out

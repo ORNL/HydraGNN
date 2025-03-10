@@ -312,6 +312,12 @@ if __name__ == "__main__":
         ## Set local set
         for dataset in [trainset, valset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            if args.task_parallel:
+                ## Adjust to use the same number of samples
+                rx_min = comm.allreduce(len(rx), op=MPI.MIN)
+                rx = rx[:rx_min]
+
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx))
             if args.num_samples is not None:
                 if args.num_samples > len(rx):
                     log(
@@ -324,6 +330,11 @@ if __name__ == "__main__":
 
         for dataset in [testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            if args.task_parallel:
+                ## Adjust to use the same number of samples
+                rx_min = comm.allreduce(len(rx), op=MPI.MIN)
+                rx = rx[:rx_min]
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx))
             num_samples = len(rx)
             if args.num_test_samples is not None:
                 num_samples = args.num_test_samples
