@@ -150,7 +150,7 @@
             "type": ["graph", "node"]
         },
         "Training": {
-            "num_epoch": 250,
+            "num_epoch": 5,
             "EarlyStopping": true,
             "perc_train": 0.9,
             "loss_function_type": "mae",

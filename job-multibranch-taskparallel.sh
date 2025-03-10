@@ -3,10 +3,10 @@
 #SBATCH -J HydraGNN-multibranch
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
-#SBATCH -t 01:00:00
+#SBATCH -t 00:30:00
 #SBATCH -p batch 
 #SBATCH -q debug
-#SBATCH -N 1 #16 
+#SBATCH -N 5 #16 
 ##SBATCH -S 1
 
  
@@ -17,6 +17,10 @@ conda activate hydragnn_rocm624
  
 #export python path to use ADIOS2 v.2.9.2
 export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm624/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
+
+## Score-P
+module use -a /lustre/orion/world-shared/lrn070/jyc/frontier/sw/modulefiles
+module load scorep/8.4 scorep_binding_python/8.4
 
 which python
 python -c "import numpy; print(numpy.__version__)"
@@ -44,6 +48,13 @@ env | grep ^MI
 env | grep ^MPICH
 env | grep ^HYDRA
 
+## Score-P envs
+export SCOREP_ENABLE_PROFILING=false
+export SCOREP_ENABLE_TRACING=true
+export SCOREP_TOTAL_MEMORY=512M
+export SCOREP_EXPERIMENT_DIRECTORY=scorep-$SLURM_JOB_ID
+# SCOREP_OPT="-m scorep --verbose --keep-files --noinstrumenter --mpp=mpi"
+SCOREP_OPT=""
 
 #srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py  --multi --ddstore --multi_model_list=ANI1x-v3,MPTrj-v3,OC2020-20M-v3,OC2022-v3,qm7x-v3
 
@@ -57,6 +68,5 @@ export datadir4=/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/transition1
 #export datadir4=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_catalyst_2020
 #export datadir5=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/omat24
 
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py --log=GFM_multibranch --everyone \
---inputfile=gfm_multibranch.json --num_samples=400000 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4
-
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u $SCOREP_OPT ./examples/multibranch/train.py --log=GFM_taskparallel-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES --everyone \
+--inputfile=gfm_multibranch.json --num_samples=400000 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4 --task_parallel
