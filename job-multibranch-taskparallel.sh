@@ -69,4 +69,4 @@ export datadir4=/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/transition1
 #export datadir5=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/omat24
 
 srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u $SCOREP_OPT ./examples/multibranch/train.py --log=GFM_taskparallel-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES --everyone \
---inputfile=gfm_multibranch.json --num_samples=400000 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4 --task_parallel
+--inputfile=multibranch_GFM260.json --num_samples=400000 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4 --task_parallel
