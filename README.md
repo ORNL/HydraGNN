@@ -68,7 +68,19 @@ configuration options:
 import hydragnn
 hydragnn.run_training("examples/configuration.json")
 ```
-2. Making predictions from a previously trained model:
+2. Saving a model state:
+```
+import hydragnn
+model_name = model_checkpoint.pk
+hydragnn.save_model(model, optimizer, name, path="./logs/")
+```
+3. Loading a model state:
+```
+import hydragnn
+model_name = model_checkpoint.pk
+hydragnn.load_existing_model(model, model_name, path="./logs/")
+```
+4. Making predictions from a previously trained model:
 ```
 import hydragnn
 hydragnn.run_prediction("examples/configuration.json", model)
