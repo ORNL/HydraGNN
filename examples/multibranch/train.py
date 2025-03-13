@@ -40,22 +40,6 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-def check_node_feature_dim(var_config):
-    # NOTE: The following check is made to ensure compatibility with the json parsing of node features
-    # and compute_grad_energy.
-    # NOTE: In short: We need the node feature used to set up data.y to be of dimension 1, since this will dictate our
-    # nodal MLP head output dimension. Since we have node_feature_dims[0] == 1 and output_index == 0, this is already true.
-    # NOTE: In detail: When using Hydra for physics-informed force prediction for the GFM, we have the following structure:
-    # --> Load with ADIOS -->
-    # --> update_predicted_values(): defines y_loc = [0, node_feature_dims[output_index]*num_nodes] -->
-    # --> update_config_NN_outputs(): y_loc exists, so it defines output_dim = [(node_feature_dims[output_index]*num_nodes)/num_nodes]  = [node_feature_dims[output_index]] -->
-    # --> Base() ... MLPNode(): defines node MLP head with output_dim ... This must be equal to 1 as expected for nodal energy predictions
-    # NOTE Since changing json parsing functions requires base-level code changes and the imposed requirement is already being obeyed
-    # in the data setup for GFM, a quick check has been placed here instead.
-    if var_config["node_feature_dims"][var_config["output_index"][0]] != 1:
-        raise ValueError("Your node feature dim at the output index is not equal to 1.")
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -130,7 +114,6 @@ if __name__ == "__main__":
     var_config["graph_feature_dims"] = graph_feature_dims
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
-    check_node_feature_dim(var_config)
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
