@@ -183,7 +183,10 @@ def update_config_edge_dim(config):
 def check_output_dim_consistent(data, config):
     output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
     output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
-    if hasattr(data, "y_loc"):
+    if (
+        hasattr(data, "y_loc")
+        and not config["NeuralNetwork"]["Training"]["compute_grad_energy"]
+    ):
         for ihead in range(len(output_type)):
             if output_type[ihead] == "graph":
                 assert (
