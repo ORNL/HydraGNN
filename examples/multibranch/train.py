@@ -93,6 +93,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task_parallel", action="store_true", help="enable task parallel"
     )
+    parser.add_argument(
+        "--use_devicemesh", action="store_true", help="use device mesh"
+    )
+
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -226,7 +230,7 @@ if __name__ == "__main__":
         pna_deg = comm.bcast(pna_deg, root=0)
         assert comm_size == sum(process_list)
 
-        if args.task_parallel:
+        if args.task_parallel and args.use_devicemesh:
             ## task parallel with device mesh
             assert comm_size % len(modellist) == 0
             mesh_2d = init_device_mesh(
@@ -259,6 +263,9 @@ if __name__ == "__main__":
 
             mycolor = dim1_group_rank  ## branch id
             mymodel = modellist[mycolor]
+
+            branch_id = mycolor
+            branch_group = dim2_group
         else:
             colorlist = list()
             color = 0
@@ -268,6 +275,21 @@ if __name__ == "__main__":
                 color += 1
             mycolor = colorlist[rank]
             mymodel = modellist[mycolor]
+
+            if args.task_parallel:
+                ## non-uniform group size (cf. uniform group size using device mesh)
+                subgroup_list = list()
+                irank = 0
+                for n in process_list:
+                    subgroup_ranks = list()
+                    for _ in range(n):
+                        subgroup_ranks.append(irank)
+                        irank += 1
+                    subgroup = dist.new_group(ranks=subgroup_ranks)
+                    subgroup_list.append(subgroup)
+
+                branch_id = mycolor
+                branch_group = subgroup_list[mycolor]    
 
         local_comm = comm.Split(mycolor, rank)
         local_comm_rank = local_comm.Get_rank()
@@ -404,6 +426,7 @@ if __name__ == "__main__":
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
         test_sampler_shuffle=False,
+        group=branch_group if args.task_parallel else None,
     )
 
     # for data in train_loader:
@@ -426,7 +449,7 @@ if __name__ == "__main__":
 
     ## task parallel
     if args.task_parallel:
-        model = MultiTaskModelMP(model, dim1_group_rank, dim2_group)
+        model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
         model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 

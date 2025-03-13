@@ -230,18 +230,42 @@ def create_dataloaders(
     train_sampler_shuffle=True,
     val_sampler_shuffle=True,
     test_sampler_shuffle=True,
+    group=None,
+    oversampling=False,
 ):
     if dist.is_initialized():
+        if oversampling:
+            if train_sampler_shuffle:
+                train_sampler = BatchSampler(RandomSampler(trainset), batch_size=batch_size, drop_last=True)
+            else:
+                train_sampler = BatchSampler(trainset, batch_size=batch_size, drop_last=True)
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler(
-            trainset, shuffle=train_sampler_shuffle
-        )
-        val_sampler = torch.utils.data.distributed.DistributedSampler(
-            valset, shuffle=val_sampler_shuffle
-        )
-        test_sampler = torch.utils.data.distributed.DistributedSampler(
-            testset, shuffle=test_sampler_shuffle
-        )
+            if val_sampler_shuffle:
+                train_sampler = BatchSampler(RandomSampler(valset), batch_size=batch_size, drop_last=True)
+            else:
+                train_sampler = BatchSampler(valset, batch_size=batch_size, drop_last=True)
+
+            if test_sampler_shuffle:
+                train_sampler = BatchSampler(RandomSampler(testset), batch_size=batch_size, drop_last=True)
+            else:
+                train_sampler = BatchSampler(testset, batch_size=batch_size, drop_last=True)
+        else:
+
+            if group is None:
+                group = dist.group.WORLD
+            group_size = dist.get_world_size(group=group)
+            group_rank = dist.get_rank(group=group)
+
+            train_sampler = torch.utils.data.distributed.DistributedSampler(
+                trainset, num_replicas=group_size, rank=group_rank, shuffle=train_sampler_shuffle
+            )
+
+            val_sampler = torch.utils.data.distributed.DistributedSampler(
+                valset, num_replicas=group_size, rank=group_rank, shuffle=val_sampler_shuffle
+            )
+            test_sampler = torch.utils.data.distributed.DistributedSampler(
+                testset, num_replicas=group_size, rank=group_rank, shuffle=test_sampler_shuffle
+            )
 
         pin_memory = True
         persistent_workers = False

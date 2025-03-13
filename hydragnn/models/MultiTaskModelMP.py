@@ -189,11 +189,10 @@ class MultiTaskModelMP(nn.Module):
             group_color,
         )
 
-        assert self.shared_pg_size % self.head_pg_size == 0
-        self.total_num_heads = self.shared_pg_size // self.head_pg_size
+        # assert self.shared_pg_size % self.head_pg_size == 0
+        # self.total_num_heads = self.shared_pg_size // self.head_pg_size
         self.branch_id = group_color
         print(self.shared_pg_rank, "branch_id:", self.branch_id)
-        os.environ["HYDRAGNN_HEAD_FILTER"] = str(self.branch_id)
 
         self.encoder = EncoderModel(base_model)
         self.decoder = DecoderModel(base_model)
