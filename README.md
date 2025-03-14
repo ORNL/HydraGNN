@@ -69,7 +69,7 @@ hydragnn.run_training("examples/configuration.json")
 ```
 import hydragnn
 model_name = model_checkpoint.pk
-hydragnn.save_model(model, optimizer, name, path="./logs/")
+hydragnn.save_model(model, optimizer, model_name, path="./logs/")
 ```
 3. Loading a model state:
 ```
@@ -82,7 +82,7 @@ hydragnn.load_existing_model(model, model_name, path="./logs/")
 import hydragnn
 hydragnn.run_prediction("examples/configuration.json", model)
 ```
-The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference) on toy problems, which are included in the CI test workflows. Both `run_training` and `run_predictions` require a JSON input file for configurable options. Ad-hoc scripts for data pre-processing, training, and inference for specific datasets are provided in the examples folder.
+The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference) on toy problems, which are included in the CI test workflows. Both `run_training` and `run_predictions` require a JSON input file for configurable options. The `save_model` and `load_model` functions store and retrieve model checkpoints for continued training and subsequent inference. Ad-hoc example scripts where data pre-processing, training, and inference are done for specific datasets are provided in the `examples` folder.
 
 ### Datasets
 
