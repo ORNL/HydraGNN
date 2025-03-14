@@ -81,11 +81,12 @@ class OpenCatalystDataset(AbstractBaseDataset):
         mx = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            #cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            cmd = f"find {self.data_path} -maxdepth 1 -type f -name '*.txt' | wc -l"
             print("Check the number of files:", cmd)
             out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             mx = int(out.stdout)
-            print("Total the number of files:", mx)
+            print("Total number of files:", mx)
         mx = MPI.COMM_WORLD.bcast(mx, root=0)
         if mx == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
@@ -101,7 +102,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6.0)
+        a2g = AtomsToGraphs(max_neigh=10, radius=10.0)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -229,11 +230,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -268,7 +271,8 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.train_path,
-            graphgps_transform=graphgps_transform,
+            #graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -280,7 +284,13 @@ if __name__ == "__main__":
         )
         valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
+            os.path.join(datadir),
+            var_config,
+            data_type=args.test_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True
         )
         ## Need as a list
         testset = testset[:]

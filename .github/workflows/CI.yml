@@ -19,18 +19,18 @@ jobs:
 
     steps:
       - name: Setup Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
       - name: Checkout GCNN
-        uses: actions/checkout@v2.2.0
+        uses: actions/checkout@v4
       - name: Install MPI
         run: |
           sudo apt-get update
           sudo apt-get install -y libopenmpi-dev
           sudo apt-get clean
       - name: Cache pip
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: cache
         with:
           path: ${{ env.pythonLocation }}
