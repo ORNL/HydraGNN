@@ -21,7 +21,7 @@ Distributed PyTorch implementation of multi-headed graph convolutional neural ne
 To install required packages with only basic capability (`torch`,
 `torch_geometric`, and related packages)
 and to serialize+store the processed data for later sessions (`pickle5`):
-```
+```bash
 pip install -r requirements.txt
 pip install -r requirements-torch.txt
 pip install -r requirements-pyg.txt
@@ -29,7 +29,7 @@ pip install -r requirements-pyg.txt
 
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
-```
+```bash
 pip install -r requirements-dev.txt
 ```
 
@@ -42,18 +42,18 @@ Detailed dependency installation instructions are available on the
 After checking out HydgraGNN, we recommend to install HydraGNN in a
 developer mode so that you can use the files in your current location
 and update them if needed:
-```
+```bash
 python -m pip install -e .
 ```
 
 Or, simply type the following in the HydraGNN directory:
-```
+```bash
 export PYTHONPATH=$PWD:$PYTHONPATH
 ```
 
 Alternatively, if you have no plane to update, you can install
 HydraGNN in your python tree as a static package:
-```
+```bash
 python setup.py install
 ```
 
@@ -61,24 +61,24 @@ python setup.py install
 
 Below are the four main functionalities for running the code.
 1. Training a model, including continuing from a previously trained model using configuration options:
-```
+```python
 import hydragnn
 hydragnn.run_training("examples/configuration.json")
 ```
 2. Saving a model state:
-```
+```python
 import hydragnn
 model_name = model_checkpoint.pk
 hydragnn.save_model(model, optimizer, model_name, path="./logs/")
 ```
 3. Loading a model state:
-```
+```python
 import hydragnn
 model_name = model_checkpoint.pk
 hydragnn.load_existing_model(model, model_name, path="./logs/")
 ```
 4. Making predictions from a previously trained model:
-```
+```python
 import hydragnn
 hydragnn.run_prediction("examples/configuration.json", model)
 ```
