@@ -153,11 +153,8 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
-                # Multiply 'lattice_mat' by the transpose of 'coords'
-                result = torch.matmul(lattice_mat, coords.T)
-
-                # Transpose the result
-                pos = result.T.clone().detach()
+                # Multiply 'coords' by 'lattice_mat'
+                pos = torch.matmul(coords, lattice_mat)
 
                 natoms = torch.IntTensor([pos.shape[0]])
 
