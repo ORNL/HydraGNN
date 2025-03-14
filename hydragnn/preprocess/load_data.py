@@ -232,23 +232,14 @@ def create_dataloaders(
     test_sampler_shuffle=True,
     group=None,
     oversampling=False,
+    num_samples=None, ## tuple of number of samples (train, val, test)
 ):
     if dist.is_initialized():
         if oversampling:
-            if train_sampler_shuffle:
-                train_sampler = BatchSampler(RandomSampler(trainset), batch_size=batch_size, drop_last=True)
-            else:
-                train_sampler = BatchSampler(trainset, batch_size=batch_size, drop_last=True)
-
-            if val_sampler_shuffle:
-                train_sampler = BatchSampler(RandomSampler(valset), batch_size=batch_size, drop_last=True)
-            else:
-                train_sampler = BatchSampler(valset, batch_size=batch_size, drop_last=True)
-
-            if test_sampler_shuffle:
-                train_sampler = BatchSampler(RandomSampler(testset), batch_size=batch_size, drop_last=True)
-            else:
-                train_sampler = BatchSampler(testset, batch_size=batch_size, drop_last=True)
+            assert num_samples is not None
+            train_sampler = torch.utils.data.RandomSampler(trainset, replacement=True, num_samples=num_samples[0])
+            val_sampler = torch.utils.data.RandomSampler(valset, replacement=True, num_samples=num_samples[1])
+            test_sampler = torch.utils.data.RandomSampler(testset, replacement=True, num_samples=num_samples[2])
         else:
 
             if group is None:

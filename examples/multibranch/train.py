@@ -96,6 +96,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_devicemesh", action="store_true", help="use device mesh"
     )
+    parser.add_argument(
+        "--oversampling", action="store_true", help="use oversampling"
+    )
 
 
     group = parser.add_mutually_exclusive_group()
@@ -332,40 +335,51 @@ if __name__ == "__main__":
         )
 
         ## Set local set
+        num_samples_list = list()
         for dataset in [trainset, valset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            rx_limit = len(rx)
             if args.task_parallel:
                 ## Adjust to use the same number of samples
-                rx_min = comm.allreduce(len(rx), op=MPI.MIN)
-                rx = rx[:rx_min]
+                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
 
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx))
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
             if args.num_samples is not None:
-                if args.num_samples > len(rx):
+                if args.num_samples > rx_limit:
                     log(
                         f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
                     )
-                rx = rx[: args.num_samples]
+                else:
+                    rx_limit = args.num_samples
 
+            if rx_limit < len(rx):
+                rx = rx[:rx_limit]
+            num_samples_list.append(rx_limit)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
 
         for dataset in [testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            rx_limit = len(rx)
             if args.task_parallel:
                 ## Adjust to use the same number of samples
-                rx_min = comm.allreduce(len(rx), op=MPI.MIN)
-                rx = rx[:rx_min]
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx))
-            num_samples = len(rx)
+                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
+                
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
+            num_samples = rx_limit
             if args.num_test_samples is not None:
                 num_samples = args.num_test_samples
             elif args.num_samples is not None:
                 num_samples = args.num_samples
-            rx = rx[:num_samples]
+            if num_samples < rx_limit:
+                rx_limit = num_samples
 
+            if rx_limit < len(rx):
+                rx = rx[:rx_limit]
+            num_samples_list.append(rx_limit)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+        print("num_samples_list:", num_samples_list)
         """
         #FIXME: will replace it with Max's new dataset
         datasets=[]
@@ -427,8 +441,14 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Training"]["batch_size"],
         test_sampler_shuffle=False,
         group=branch_group if args.task_parallel else None,
+        oversampling=args.oversampling,
+        num_samples=num_samples_list,
     )
 
+    train_loader_count = sum(1 for _ in train_loader)
+    val_loader_count = sum(1 for _ in val_loader)
+    test_loader_count = sum(1 for _ in test_loader)
+    print(f"Total batches:", rank, train_loader_count, val_loader_count, test_loader_count)
     # for data in train_loader:
     #    print("Pei debugging 3", data)
 
