@@ -445,10 +445,6 @@ if __name__ == "__main__":
         num_samples=num_samples_list,
     )
 
-    train_loader_count = sum(1 for _ in train_loader)
-    val_loader_count = sum(1 for _ in val_loader)
-    test_loader_count = sum(1 for _ in test_loader)
-    print(f"Total batches:", rank, train_loader_count, val_loader_count, test_loader_count)
     # for data in train_loader:
     #    print("Pei debugging 3", data)
 
