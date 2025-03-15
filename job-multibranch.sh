@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A CPH161
+#SBATCH -A LRN070
 #SBATCH -J HydraGNN
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
