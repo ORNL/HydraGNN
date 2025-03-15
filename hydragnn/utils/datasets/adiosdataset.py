@@ -142,6 +142,13 @@ class AdiosWriter:
         log0("Adios saving:", self.filename)
         self.writer = self.io.Open(self.filename, ad2.Mode.Write, self.comm)
         total_ns = 0
+
+        # Look for the dataset_name in any one of the Data samples and add it as an ADIOS attribute
+        dataset_name = self._get_dataset_name()
+        if dataset_name is not None:
+            if "dataset_name" not in self.attributes:
+                self.attributes["dataset_name"] = dataset_name
+
         for label in self.dataset:
             if len(self.dataset[label]) == 0:
                 ## If there is no data to save, simply do empty operations as follows.
@@ -167,11 +174,23 @@ class AdiosWriter:
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
                 keys = data.keys() if callable(data.keys) else data.keys
+
+                # Don't add dataset_name to 'keys'
+                if "dataset_name" in keys:
+                    keys.remove("dataset_name")
+
                 self.io.DefineAttribute("%s/keys" % label, keys)
                 keys = sorted(keys)
                 self.comm.allgather(keys)
 
             for k in keys:
+                if k == "dataset_name":
+                    continue
+
+                # if k == "smiles":
+                #     self._write_smiles_strings(label)
+                #     continue
+
                 arr_list = list()
                 for data in self.dataset[label]:
                     if isinstance(data[k], torch.Tensor):
@@ -180,6 +199,9 @@ class AdiosWriter:
                         arr_list.append(data[k])
                     elif isinstance(data[k], (np.floating, np.integer)):
                         arr_list.append(np.array((data[k],)))
+                    elif isinstance(data[k], str):
+                        arr = np.frombuffer(data[k].encode("utf-8"), dtype=np.uint8)
+                        arr_list.append(arr)
                     else:
                         print("Error: type(data[k]):", label, k, type(data[k]))
                         raise NotImplementedError(
@@ -275,6 +297,81 @@ class AdiosWriter:
         self.writer.Close()
         t1 = time.time()
         log0("Adios saving time (sec): ", (t1 - t0))
+
+    def _get_dataset_name(self):
+        """
+        Get dataset name from the first data object
+
+        Returns
+        -------
+        str
+            dataset name
+        """
+        if len(self.dataset) == 0:
+            return None
+        for label in self.dataset:
+            for data in self.dataset[label]:
+                keys = data.keys() if callable(data.keys) else data.keys
+                if "dataset_name" in keys:
+                    return data.dataset_name
+        return None
+
+    def _write_smiles_strings(self, label):
+        """
+        Write smiles data into the adios file
+        This will write two global arrays, one for the smiles data and another for the string lengths
+        e.g., assume 2 processes where P0 has "abcd", "ef", and P1 has "ghi", "j", then
+        array 1: smiles_data:    ["abcdefghij"]
+        array 2: smiles_lengths: [4,2,3,1]
+        """
+
+        # Collect smiles strings in a list
+        _smiles_data = list()
+        for data in self.dataset[label]:
+            _smiles_data.append(data.smiles)
+
+        # Convert to uint8 array
+        local_smiles = [
+            np.frombuffer(s.encode("utf-8"), dtype=np.uint8) for s in _smiles_data
+        ]
+        local_smiles_arr = np.concatenate(local_smiles)
+
+        # 1. Calculate sizes and offsets for the global smiles array
+        local_size = local_smiles_arr.size
+        all_sizes = self.comm.allgather(local_size)
+        offsets = sum(all_sizes[: self.rank])
+        global_sizes = sum(all_sizes)
+
+        # Write smiles data
+        data_var = self.io.DefineVariable(
+            f"{label}/smiles_data",
+            local_smiles_arr,
+            [global_sizes],
+            [offsets],
+            [local_size],
+            ad2.ConstantDims,
+        )
+        self.writer.Put(data_var, local_smiles_arr, ad2.Mode.Sync)
+
+        # 2. Calculate sizes and offsets for the global lengths array
+        local_lengths = np.array([arr.size for arr in local_smiles])
+        if any(x == 0 for x in local_lengths):
+            print("something is 0")
+
+        all_lengths = self.comm.allgather(local_lengths.size)
+        offsets = sum(all_lengths[: self.rank])
+        global_sizes = sum(all_lengths)
+
+        # Write lengths data
+        offsets_var = self.io.DefineVariable(
+            f"{label}/smiles_lengths",
+            local_lengths,
+            [global_sizes],
+            [offsets],
+            [local_lengths.size],
+            ad2.ConstantDims,
+        )
+        self.writer.Put(offsets_var, local_lengths, ad2.Mode.Sync)
 
 
 class AdiosDataset(AbstractBaseDataset):
@@ -379,25 +476,40 @@ class AdiosDataset(AbstractBaseDataset):
         adios_read_time = 0.0
         ddstore_time = 0.0
         t0 = time.time()
+
         with ad2.open(self.filename, "r", self.comm) as f:
             f.__next__()
+
             t1 = time.time()
             self.vars = f.available_variables()
             self.attrs = f.available_attributes()
             self.keys = self.read_attribute_string0(f, "%s/keys" % label)
+
             if keys is not None:
                 self.setkeys(keys)
+
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
+
             if "minmax_graph_feature" in self.attrs:
                 self.minmax_graph_feature = self.read_attribute0(
                     f, "minmax_graph_feature"
                 ).reshape((2, -1))
+
             if "minmax_node_feature" in self.attrs:
                 self.minmax_node_feature = self.read_attribute0(
                     f, "minmax_node_feature"
                 ).reshape((2, -1))
+
             if "pna_deg" in self.attrs:
                 self.pna_deg = self.read_attribute0(f, "pna_deg")
+
+            # all processes should get the dataset name - a global attribute
+            self.dataset_name = None
+            if "dataset_name" in self.attrs:
+                _val = f.read_attribute_string("dataset_name")
+                if type(_val) == list and len(_val) > 0:
+                    self.dataset_name = _val[0]
+
             t2 = time.time()
             log0("Read attr time (sec): ", (t2 - t1))
 
@@ -410,6 +522,15 @@ class AdiosDataset(AbstractBaseDataset):
             nbytes = 0
             t3 = time.time()
             for k in self.keys:
+
+                # dataset_name should not be a key, but if it is, it has already been read as an attr
+                if k == "dataset_name":
+                    continue
+
+                # if k == "smiles":
+                #     self._read_smiles_strings(label, f)
+                #     continue
+
                 self.variable_count[k] = self.read0(
                     f, "%s/%s/variable_count" % (label, k)
                 )
@@ -498,6 +619,8 @@ class AdiosDataset(AbstractBaseDataset):
                             dtype = np.int32
                         elif vartype == "int64_t":
                             dtype = np.int64
+                        elif vartype == "uint8_t":
+                            dtype = np.uint8
                         else:
                             raise ValueError(vartype)
 
@@ -542,6 +665,7 @@ class AdiosDataset(AbstractBaseDataset):
                         ),
                     )
                     nbytes += self.data[k].size * self.data[k].itemsize
+
             t6 = time.time()
             log0("Overall time (sec): ", t6 - t1)
             log0("DDStore adding time (sec): ", ddstore_time)
@@ -565,8 +689,50 @@ class AdiosDataset(AbstractBaseDataset):
             self.graph_feature_dim = self.var_config["graph_feature_dims"]
             self.node_feature_dim = self.var_config["node_feature_dims"]
 
-    ## rank=0 read and bcast
+    def _read_smiles_strings(self, label, f):
+        """
+        Add smiles data to self.data['smiles']
+        It will read from two global arrays - 'smiles_data' and 'smiles_lengths'
+        e.g., assume we have the following:
+        array 1: smiles_data:    ["abcdefghij"]
+        array 2: smiles_lengths: [4,2,3,1]
+        If we have 2 processes, then P0 will have ["abcd", "ef"], and
+        P1 will have ["ghi", "j"]
+        """
+        self.smiles_strings = list()
+
+        # First we will read the string lengths
+        lengths_varname = f"{label}/smiles_lengths"
+        global_size = int(self.vars[lengths_varname]["Shape"].split(",")[0])
+
+        # Calculate individual process's portion
+        local_size = global_size // self.comm_size
+        local_size += self.rank < (global_size % self.comm_size)
+        all_local_sizes = self.comm.allgather(local_size)
+        local_offset = sum(all_local_sizes[: self.rank])
+
+        # Read the string lengths. e.g. P0 will get [4,2], and P1 will get [3,1]
+        local_string_lengths = f.read(lengths_varname, [local_offset], [local_size])
+
+        # Now we will read the smiles strings as uint8 arrays
+        data_varname = f"{label}/smiles_data"
+        local_size = sum(local_string_lengths)
+        all_local_sizes = self.comm.allgather(local_size)
+        local_offset = sum(all_local_sizes[: self.rank])
+
+        # Read the smiles strings. e.g. P0 will get "abcdef" and P1 will get "ghij" uint8 arrays
+        local_data = f.read(data_varname, [local_offset], [local_size])
+
+        # Convert uint8 arrays to strings
+        start = 0
+        for l in local_string_lengths:
+            np_str_arr = local_data[start : start + l]
+            start += l
+            string_value = np_str_arr.tobytes().decode("utf-8")
+            self.smiles_strings.append(string_value)
+
     def read0(self, f, vname):
+        ## rank=0 read and bcast
         if self.rank == 0:
             val = f.read(vname)
         else:
@@ -689,6 +855,8 @@ class AdiosDataset(AbstractBaseDataset):
                         dtype = np.int32
                     elif vartype == "int64_t":
                         dtype = np.int64
+                    elif vartype == "uint8_t":
+                        dtype = np.uint8
                     else:
                         raise ValueError(vartype)
 
@@ -708,7 +876,11 @@ class AdiosDataset(AbstractBaseDataset):
                     # log0("getitem out-of-memory:", self.label, k, idx)
                     val = self.f.read("%s/%s" % (self.label, k), start, count)
 
-                v = torch.tensor(val)
+                if val.dtype == np.uint8:
+                    ## Tensors do not support strings. We use strings as they are. No converting to tensors.
+                    v = val.tobytes().decode("utf-8")
+                else:
+                    v = torch.tensor(val)
                 exec("data_object.%s = v" % (k))
             if self.enable_cache:
                 self.cache[idx] = data_object
