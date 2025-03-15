@@ -202,7 +202,9 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    if hasattr(data, "y_loc"):
+    if config["Training"]["compute_grad_energy"]:
+        dims_list = config["Variables_of_interest"]["output_dim"]
+    elif hasattr(data, "y_loc"):
         dims_list = []
         for ihead in range(len(output_type)):
             if output_type[ihead] == "graph":
