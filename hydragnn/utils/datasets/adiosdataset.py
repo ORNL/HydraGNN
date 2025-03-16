@@ -769,7 +769,7 @@ class AdiosDataset(AbstractBaseDataset):
 
     def setkeys(self, keys):
         for k in keys:
-            assert k in self.keys
+            assert k in self.keys, f"Error: no key {k}"
         self.keys = keys
 
     def setsubset(self, subset_istart, subset_iend, preload=False):
@@ -886,6 +886,9 @@ class AdiosDataset(AbstractBaseDataset):
                 self.cache[idx] = data_object
 
         self.update_data_object(data_object)
+        if hasattr(self, "dataset_id"):
+            data_object.dataset_id = torch.tensor([self.dataset_id])
+
         return data_object
 
     def unlink(self):
@@ -958,3 +961,6 @@ class AdiosDataset(AbstractBaseDataset):
             del self._data[k]
 
         self.preflight = False
+    
+    def set_dataset_id(self, id):
+        self.dataset_id = id
