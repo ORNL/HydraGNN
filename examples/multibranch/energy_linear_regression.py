@@ -146,6 +146,10 @@ if __name__ == "__main__":
             if "y_loc" in data:
                 del data.y_loc
 
+            # We need to update the values of the energy in data.y
+            # We assume that the energy is the first entry of data.y
+            data.y[0] = data.energy.detach().clone()
+
     if args.savenpz:
         if comm_size < 400:
             if comm_rank == 0:
