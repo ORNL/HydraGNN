@@ -66,8 +66,25 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
         _, world_rank = get_comm_size_and_rank()
         if hasattr(optimizer, "consolidate_state_dict"):
             optimizer.consolidate_state_dict()
-        if world_rank == 0:
-            path_name = os.path.join(path, name, name + ".pk")
+
+        from hydragnn.models import MultiTaskModelMP
+        if isinstance(model, MultiTaskModelMP):
+            eligible = model.head_pg_rank == 0
+        else:
+            eligible = world_rank == 0
+
+        if eligible:
+            epoch = os.getenv("HYDRAGNN_EPOCH", None) ## str or None
+            if epoch is not None:
+                fname = f"{name}_epoch_{epoch}"
+            else:
+                fname = f"{name}"
+
+            if isinstance(model, MultiTaskModelMP):
+                fname = fname + f"_branch{model.branch_id}"
+
+            fname = fname + ".pk"
+            path_name = os.path.join(path, name, fname)
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
@@ -75,6 +92,13 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 },
                 path_name,
             )
+            if epoch is not None:
+                link = os.path.join(path, name, f"{name}.pk")
+                if isinstance(model, MultiTaskModelMP):
+                    link = os.path.join(path, name, f"{name}_branch{model.branch_id}.pk")
+                if os.path.lexists(link):
+                    os.remove(link)
+                os.symlink(fname, link)
     else:
         model.save_checkpoint(os.path.join(path, name), name)
 
