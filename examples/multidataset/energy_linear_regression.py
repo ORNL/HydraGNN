@@ -18,56 +18,6 @@ except ImportError:
     print("mpi_list requires having installed: https://github.com/frobnitzem/mpi_list")
 
 
-def subset(i):
-    # sz = len(datasets)
-    # chunk = sz // C.procs
-    # left  = sz % C.procs
-    # a = i*chunk     + min(i, left)
-    # b = (i+1)*chunk + min(i+1, left)
-    # print(f"Rank {i}/{C.procs} converting subset [{a},{b})")
-    # return np.array([np.array(x) for x in datasets[a:b]["image"]])
-    return np.random.random((100, 4))
-
-
-# form the correlation matrix
-def covar(x):
-    return np.tensordot(x, x, axes=[(), ()])
-
-
-def summarize(x):
-    N = len(x)
-    m = x.sum(0) / N
-    y = x - m[None, ...]
-    V = np.tensordot(y, y, [0, 0]) / N
-    return {"N": N, "m": m, "V": V}
-
-
-def merge_est(a, b):
-    if not isinstance(b, dict):
-        b = summarize(b)
-
-    x = a["N"] / (a["N"] + b["N"])
-    y = b["N"] / (a["N"] + b["N"])
-
-    m = x * a["m"] + y * b["m"]
-    a["N"] += b["N"]
-    a["V"] = x * (a["V"] + covar(m - a["m"])) + y * (b["V"] + covar(m - b["m"]))
-    a["m"] = m
-    return a
-
-
-def test():
-    C = Context()  # calls MPI_Init via mpi4py
-
-    dfm = C.iterates(C.procs).map(subset)
-
-    ans = {"N": 0, "m": 0, "V": 0}
-    ans = dfm.reduce(merge_est, ans, False)
-    if C.rank == 0:
-        print(ans)
-        print(f"theoretical: m = 0.5, v = {0.25/3}")
-
-
 def solve_least_squares_svd(A, b):
     # Compute the SVD of A
     U, S, Vt = np.linalg.svd(A, full_matrices=False)
@@ -140,13 +90,12 @@ if __name__ == "__main__":
         for data in tqdm(
             dataset, disable=comm_rank != 0, desc="Collecting node feature"
         ):
-            ## Assume: data.energy is already energy per atom
             energy_list.append(data.energy.item())
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            hist = hist / data.num_nodes
+            # hist = hist / data.num_nodes
             feature_list.append(hist)
 
     ## energy
@@ -182,7 +131,7 @@ if __name__ == "__main__":
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            hist = hist / data.num_nodes
+            # hist = hist / data.num_nodes
             if args.verbose:
                 print(
                     comm_rank,
@@ -195,6 +144,10 @@ if __name__ == "__main__":
             energy_list.append((data.energy.item(), -np.dot(hist, x)))
             if "y_loc" in data:
                 del data.y_loc
+
+            # We need to update the values of the energy in data.y
+            # We assume that the energy is the first entry of data.y
+            data.y[0] = data.energy.detach().clone()
 
     if args.savenpz:
         if comm_size < 400:

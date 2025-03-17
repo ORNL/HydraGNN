@@ -79,7 +79,7 @@ if __name__ == "__main__":
     pna_deg = trainset.pna_deg
 
     ## Iterate over local datasets
-    energy_list = list()
+    energy_per_atom_list = list()
     feature_list = list()
     for dataset in [trainset, valset, testset]:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
@@ -90,18 +90,18 @@ if __name__ == "__main__":
         for data in tqdm(
             dataset, disable=comm_rank != 0, desc="Collecting node feature"
         ):
-            energy_list.append(data.energy.item())
+            energy_per_atom_list.append(data.energy_per_atom.item())
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            # hist = hist / data.num_nodes
+            hist = hist / data.num_nodes
             feature_list.append(hist)
 
     ## energy
     if comm_rank == 0:
         print("Collecting energy")
-    _e = np.array(energy_list)
+    _e = np.array(energy_per_atom_list)
     _X = np.array(feature_list)
     _N = len(_e)
     N = comm.allreduce(_N, op=MPI.SUM)
@@ -124,46 +124,49 @@ if __name__ == "__main__":
     x = solve_least_squares_svd(A, b)
 
     ## Re-calculate energy
-    energy_list = list()
+    energy_per_atom_list = list()
     for dataset in [trainset, valset, testset]:
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Update energy"):
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            # hist = hist / data.num_nodes
+            hist = hist / data.num_nodes
             if args.verbose:
                 print(
                     comm_rank,
                     "current,new,diff:",
-                    data.energy.item(),
-                    data.energy.item() - np.dot(hist, x),
+                    data.energy_per_atom.item(),
+                    data.energy_per_atom.item() - np.dot(hist, x),
                     np.dot(hist, x),
                 )
-            data.energy -= np.dot(hist, x)
-            energy_list.append((data.energy.item(), -np.dot(hist, x)))
+            data.energy_per_atom -= np.dot(hist, x)
+            energy_per_atom_list.append((data.energy_per_atom.item(), -np.dot(hist, x)))
             if "y_loc" in data:
                 del data.y_loc
 
             # We need to update the values of the energy in data.y
             # We assume that the energy is the first entry of data.y
-            data.y[0] = data.energy.detach().clone()
+            data.y[0] = data.energy_per_atom.detach().clone()
 
     if args.savenpz:
         if comm_size < 400:
             if comm_rank == 0:
-                energy_list_all = comm.gather(energy_list, root=0)
-                energy_arr = np.concatenate(energy_list_all, axis=0)
-                np.savez(f"{args.modelname}_energy.npz", energy=energy_arr)
+                energy_per_atom_list_all = comm.gather(energy_per_atom_list, root=0)
+                energy_arr = np.concatenate(energy_per_atom_list_all, axis=0)
+                np.savez(f"{args.modelname}_energy_per_atom.npz", energy=energy_arr)
             else:
-                comm.gather(energy_list, root=0)
+                comm.gather(energy_per_atom_list, root=0)
         else:
-            energy_arr = np.concatenate(energy_list, axis=0)
-            np.savez(f"{args.modelname}_energy_rank_{comm_rank}.npz", energy=energy_arr)
+            energy_arr = np.concatenate(energy_per_atom_list, axis=0)
+            np.savez(
+                f"{args.modelname}_energy_per_atom_rank_{comm_rank}.npz",
+                energy=energy_arr,
+            )
 
     ## Writing
     fname = os.path.join(
-        os.path.dirname(__file__), "./datasets/%s-v2.bp" % args.modelname
+        os.path.dirname(__file__), "./datasets/%s-v3.bp" % args.modelname
     )
     if comm_rank == 0:
         print("Saving:", fname)
