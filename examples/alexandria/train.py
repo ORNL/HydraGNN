@@ -248,13 +248,16 @@ class Alexandria(AbstractBaseDataset):
         #    print(f"Structure {entry_id} does not have band_gap_ind")
         #    return data_object
 
-        # formation_energy = None
-        # try:
-        #    formation_energy=computed_entry_dict["data"]["e_form"]
-        # except:
-        #    print(f"Structure {entry_id} does not have formation energy")
-        #    return data_object
-        # formation_energy_per_atom=computed_entry_dict["data"]["e_form"]/len(structure["sites"])
+        formation_energy = None
+        try:
+            formation_energy=computed_entry_dict["data"]["e_form"]
+        except:
+            print(f"Structure {entry_id} does not have formation energy")
+            return data_object
+        formation_energy_tensor = (
+            torch.tensor(formation_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
+        )
+        formation_energy_per_atom_tensor = formation_energy_tensor.detach().clone() / natoms
 
         # energy_above_hull = None
         # try:
@@ -285,8 +288,8 @@ class Alexandria(AbstractBaseDataset):
             smiles_string=None,
             # entry_id=entry_id,
             x=x,
-            energy=total_energy_tensor,
-            energy_per_atom=total_energy_per_atom_tensor,
+            energy=formation_energy_tensor,
+            energy_per_atom=formation_energy_per_atom_tensor,
             forces=forces,
             # formation_energy=torch.tensor(formation_energy).float(),
             # formation_energy_per_atom=torch.tensor(formation_energy_per_atom).float(),
