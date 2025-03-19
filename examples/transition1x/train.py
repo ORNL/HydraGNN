@@ -46,7 +46,7 @@ from hydragnn.utils.descriptors_and_embeddings import xyz2mol
 from rdkit import Chem
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
@@ -65,7 +65,6 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
-
 
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
@@ -124,6 +123,9 @@ class Transition1xDataset(AbstractBaseDataset):
                 )
                 continue
             natoms = torch.IntTensor([pos.shape[0]])
+            
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
             atomic_numbers = None
             try:
@@ -172,6 +174,7 @@ class Transition1xDataset(AbstractBaseDataset):
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
             pos_list = pos.tolist()
             atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+            """
             try:
                 mol = xyz2mol(
                     atomic_number_list_int,
@@ -190,6 +193,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 smiles_string = Chem.MolToSmiles(mol[0])
             except:
                 smiles_string = None
+            """
 
             try:
                 # check forces values
@@ -203,14 +207,13 @@ class Transition1xDataset(AbstractBaseDataset):
                 dataset_name="transition1x",
                 natoms=natoms,
                 pos=pos,
-                cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                edge_index=None,
-                edge_attr=None,
-                edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                #edge_index=None,
+                #edge_attr=None,
                 atomic_numbers=atomic_numbers,
                 chemical_composition=chemical_composition,
-                smiles_string=smiles_string,
+                #smiles_string=smiles_string,
                 x=x,
                 energy=total_energy_tensor,
                 energy_per_atom=total_energy_per_atom_tensor,
@@ -226,6 +229,12 @@ class Transition1xDataset(AbstractBaseDataset):
 
             # Build edge attributes
             data_object = transform_coordinates(data_object)
+            
+            # Default edge_shifts for when radius_graph_pbc is not activated
+            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
+                
+            # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+            data_object.pbc = data_object.pbc.int()
 
             # LPE
             if self.graphgps_transform is not None:
@@ -234,7 +243,6 @@ class Transition1xDataset(AbstractBaseDataset):
             self.dataset.append(data_object)
 
             random.shuffle(self.dataset)
-
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
@@ -325,11 +333,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -361,7 +371,8 @@ if __name__ == "__main__":
         total = Transition1xDataset(
             os.path.join(datadir),
             var_config,
-            graphgps_transform=graphgps_transform,
+            #graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -371,9 +382,14 @@ if __name__ == "__main__":
             perc_train=0.9,
             stratify_splitting=False,
         )
-        print("Local splitting: ", len(total), len(trainset), len(valset), len(testset))
+        print("Local splitting: ", len(total), len(trainset), len(valset), len(testset), flush=True)
+
+        print("Before COMM.Barrier()", flush=True)
+        comm.Barrier()
+        print("After COMM.Barrier()", flush=True)
 
         deg = gather_deg(trainset)
+
         config["pna_deg"] = deg
 
         setnames = ["trainset", "valset", "testset"]

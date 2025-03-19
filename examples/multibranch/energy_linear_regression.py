@@ -90,7 +90,6 @@ if __name__ == "__main__":
         for data in tqdm(
             dataset, disable=comm_rank != 0, desc="Collecting node feature"
         ):
-            ## Assume: data.energy is already energy per atom
             energy_list.append(data.energy.item())
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
@@ -146,6 +145,10 @@ if __name__ == "__main__":
             if "y_loc" in data:
                 del data.y_loc
 
+            # We need to update the values of the energy in data.y
+            # We assume that the energy is the first entry of data.y
+            data.y[0] = data.energy.detach().clone()
+
     if args.savenpz:
         if comm_size < 400:
             if comm_rank == 0:
@@ -170,6 +173,7 @@ if __name__ == "__main__":
     adwriter.add("testset", testset)
     adwriter.add_global("pna_deg", pna_deg)
     adwriter.add_global("energy_linear_regression_coeff", x)
+    adwriter.add_global("dataset_name", args.modelname.lower())
     adwriter.save()
 
     print("Done.")

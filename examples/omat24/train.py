@@ -15,7 +15,7 @@ random_state = 0
 torch.manual_seed(random_state)
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
@@ -28,7 +28,11 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
     gather_deg,
 )
 from hydragnn.preprocess.load_data import split_dataset
@@ -49,6 +53,7 @@ from hydragnn.utils.distributed import nsplit
 torch.backends.cudnn.enabled = False
 
 from fairchem.core.datasets import AseDBDataset
+import glob
 
 
 def info(*args, logtype="info", sep=" "):
@@ -59,6 +64,8 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 dataset_names = [
     "rattled-1000",
@@ -95,8 +102,8 @@ class OMat2024(AbstractBaseDataset):
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(10.0, loop=False, max_num_neighbors=10)
+        self.radius_graph_pbc = RadiusGraphPBC(10.0, loop=False, max_num_neighbors=10)
 
         self.graphgps_transform = graphgps_transform
 
@@ -111,23 +118,51 @@ class OMat2024(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
+        ## Parallelizing over data files for training data. For val set, we parallelize over each molecules.
+        if data_type == "train":
+            total_file_list = glob.glob(
+                os.path.join(dirpath, data_type, "**/*.aselmdb"), recursive=True
+            )
+            rx = list(nsplit(total_file_list, self.world_size))[self.rank]
+            print(self.rank, "total:", len(total_file_list), "local:", len(rx))
+            dataset_list = rx
+        else:
+            dataset_list = dataset_names
+
         torch.distributed.barrier()
 
-        for dataname in dataset_names:
+        for dataset_index, dataname in enumerate(dataset_list):
 
-            print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
+            # print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
 
             dataset = AseDBDataset(
                 config=dict(
                     src=os.path.join(dirpath, data_type, dataname), **config_kwargs
                 )
             )
+            # print(self.rank, "dataname:", dataname, "total:", dataset.num_samples)
 
-            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
-                self.rank
-            ]
+            if data_type == "train":
+                rx = list(range(dataset.num_samples))
+            else:
+                rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
+                    self.rank
+                ]
+                print(
+                    self.rank,
+                    "dataname:",
+                    dataname,
+                    "total:",
+                    dataset.num_samples,
+                    "local:",
+                    len(rx),
+                )
 
-            for index in iterate_tqdm(rx, verbosity_level=2):
+            for index in iterate_tqdm(
+                rx,
+                verbosity_level=2,
+                desc=f"Rank{self.rank} Dataset {dataset_index}/{len(dataset_list)}",
+            ):
                 try:
                     pos = torch.tensor(
                         dataset.get_atoms(index).get_positions(), dtype=torch.float32
@@ -140,7 +175,7 @@ class OMat2024(AbstractBaseDataset):
                     energy = torch.tensor(
                         dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
                     ).unsqueeze(0)
-                    energy_per_atom = energy / natoms
+                    energy_per_atom = energy.detach().clone() / natoms
                     forces = torch.tensor(
                         dataset.get_atoms(index).get_forces(), dtype=torch.float32
                     )
@@ -159,12 +194,17 @@ class OMat2024(AbstractBaseDataset):
 
                     pbc = None
                     try:
-                        pbc = dataset.get_atoms(index).get_pbc()
+                        pbc = pbc_as_tensor(dataset.get_atoms(index).get_pbc())
                     except:
                         print(
                             f"Atomic structure {chemical_formula} does not have pbc",
                             flush=True,
                         )
+
+                    # If either cell or pbc were not read, we set to defaults which are not none.
+                    if cell is None or pbc is None:
+                        cell = torch.eye(3, dtype=torch.float32)
+                        pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
                     x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
@@ -185,7 +225,6 @@ class OMat2024(AbstractBaseDataset):
                         pbc=pbc,
                         edge_index=None,
                         edge_attr=None,
-                        edge_shifts=None,
                         atomic_numbers=atomic_numbers,
                         chemical_composition=chemical_composition,
                         smiles_string=None,
@@ -200,19 +239,29 @@ class OMat2024(AbstractBaseDataset):
                     else:
                         data_object.y = data_object.energy
 
-                    if data_object.pbc is not None and data_object.cell is not None:
+                    if data_object.pbc.any():
                         try:
                             data_object = self.radius_graph_pbc(data_object)
+                            data_object = transform_coordinates_pbc(data_object)
                         except:
                             print(
-                                f"Structure could not successfully apply pbc radius graph",
+                                f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
                                 flush=True,
                             )
                             data_object = self.radius_graph(data_object)
+                            data_object = transform_coordinates(data_object)
                     else:
                         data_object = self.radius_graph(data_object)
+                        data_object = transform_coordinates(data_object)
 
-                    data_object = transform_coordinates(data_object)
+                    # Default edge_shifts for when radius_graph_pbc is not activated
+                    if not hasattr(data_object, "edge_shifts"):
+                        data_object.edge_shifts = torch.zeros(
+                            (data_object.edge_index.size(1), 3), dtype=torch.float32
+                        )
+
+                    # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+                    data_object.pbc = data_object.pbc.int()
 
                     # LPE
                     if self.graphgps_transform is not None:
@@ -229,6 +278,7 @@ class OMat2024(AbstractBaseDataset):
                 except Exception as e:
                     print(f"Rank {self.rank} reading - exception: ", e)
 
+        print(self.rank, "Done. Wait others.", flush=True)
         torch.distributed.barrier()
 
         random.shuffle(self.dataset)
@@ -317,11 +367,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -356,7 +408,8 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type="train",
-            graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -368,11 +421,21 @@ if __name__ == "__main__":
         )
         valset = [*valset1, *valset2]
         testset = OMat2024(
-            os.path.join(datadir), var_config, data_type="val", dist=True
+            os.path.join(datadir),
+            var_config,
+            data_type="val",
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
         )
         ## Need as a list
         testset = testset[:]
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
+
+        print("Before COMM.Barrier()", flush=True)
+        comm.Barrier()
+        print("After COMM.Barrier()", flush=True)
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
@@ -482,7 +545,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
