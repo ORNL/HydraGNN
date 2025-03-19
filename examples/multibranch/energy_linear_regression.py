@@ -173,6 +173,7 @@ if __name__ == "__main__":
     adwriter.add("testset", testset)
     adwriter.add_global("pna_deg", pna_deg)
     adwriter.add_global("energy_linear_regression_coeff", x)
+    adwriter.add_global("dataset_name", args.modelname.lower())
     adwriter.save()
 
     print("Done.")
