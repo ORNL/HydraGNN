@@ -194,10 +194,13 @@ def setup_ddp(use_deepspeed=False):
 
 
 def get_device_list():
-
-    available_gpus = [i for i in range(torch.cuda.device_count())]
-
-    return available_gpus
+    # [MODIFIED for Intel XPU]
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return [i for i in range(torch.xpu.device_count())]
+    elif torch.cuda.is_available():
+        return [i for i in range(torch.cuda.device_count())]
+    else:
+        return []
 
 
 def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix=False):
@@ -211,10 +214,13 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
     if rank_per_model != 1:
         raise ValueError("Exactly 1 rank per device currently supported")
 
-    print_distributed(verbosity_level, "Using GPU")
+    if torch.cuda.is_available():
+        print_distributed(verbosity_level, "Using GPU")
+    elif torch.xpu.is_available():
+        print_distributed(verbosity_level, "Using XPU")
     ## We need to ge a local rank if there are multiple GPUs available.
     localrank = 0
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1 or torch.xpu.device_count() > 1:
         if os.getenv("OMPI_COMM_WORLD_LOCAL_RANK"):
             ## Summit
             localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
@@ -222,10 +228,15 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
             ## CADES
             localrank = int(os.environ["SLURM_LOCALID"])
 
-        if localrank >= torch.cuda.device_count():
+        if localrank >= torch.cuda.device_count() and torch.cuda.is_available():
             print(
                 "WARN: localrank is greater than the available device count - %d %d"
                 % (localrank, torch.cuda.device_count())
+            )
+        elif localrank >= torch.cuda.device_count() and torch.xpu.is_available():
+            print(
+                "WARN: localrank is greater than the available device count - %d %d"
+                % (localrank, torch.xpu.device_count())
             )
 
     if no_prefix:
@@ -258,8 +269,15 @@ def get_local_rank():
 
 
 def get_device_from_name(name: str):
-
-    return torch.device(name)
+    # [MODIFIED for Intel XPU]
+    # If name starts with xpu, return torch.device("xpu", index)
+    if name.startswith("xpu"):
+        # e.g. "xpu:0"
+        return torch.device(name)
+    elif name.startswith("cuda"):
+        return torch.device(name)
+    else:
+        return torch.device("cpu")
 
 
 def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
