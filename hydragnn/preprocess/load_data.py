@@ -230,18 +230,33 @@ def create_dataloaders(
     train_sampler_shuffle=True,
     val_sampler_shuffle=True,
     test_sampler_shuffle=True,
+    group=None,
+    oversampling=False,
+    num_samples=None, ## tuple of number of samples (train, val, test)
 ):
     if dist.is_initialized():
+        if oversampling:
+            assert num_samples is not None
+            train_sampler = torch.utils.data.RandomSampler(trainset, replacement=False, num_samples=num_samples[0])
+            val_sampler = torch.utils.data.RandomSampler(valset, replacement=False, num_samples=num_samples[1])
+            test_sampler = torch.utils.data.RandomSampler(testset, replacement=False, num_samples=num_samples[2])
+        else:
 
-        train_sampler = torch.utils.data.distributed.DistributedSampler(
-            trainset, shuffle=train_sampler_shuffle
-        )
-        val_sampler = torch.utils.data.distributed.DistributedSampler(
-            valset, shuffle=val_sampler_shuffle
-        )
-        test_sampler = torch.utils.data.distributed.DistributedSampler(
-            testset, shuffle=test_sampler_shuffle
-        )
+            if group is None:
+                group = dist.group.WORLD
+            group_size = dist.get_world_size(group=group)
+            group_rank = dist.get_rank(group=group)
+
+            train_sampler = torch.utils.data.distributed.DistributedSampler(
+                trainset, num_replicas=group_size, rank=group_rank, shuffle=train_sampler_shuffle
+            )
+
+            val_sampler = torch.utils.data.distributed.DistributedSampler(
+                valset, num_replicas=group_size, rank=group_rank, shuffle=val_sampler_shuffle
+            )
+            test_sampler = torch.utils.data.distributed.DistributedSampler(
+                testset, num_replicas=group_size, rank=group_rank, shuffle=test_sampler_shuffle
+            )
 
         pin_memory = True
         persistent_workers = False

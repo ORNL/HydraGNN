@@ -35,6 +35,7 @@ import adios2 as ad2
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 from hydragnn.models import MultiTaskModelMP
+from contextlib import nullcontext
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -93,6 +94,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task_parallel", action="store_true", help="enable task parallel"
     )
+    parser.add_argument(
+        "--use_devicemesh", action="store_true", help="use device mesh"
+    )
+    parser.add_argument(
+        "--oversampling", action="store_true", help="use oversampling"
+    )
+    parser.add_argument(
+        "--nosync", action="store_true", help="disable gradient sync"
+    )
+
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -226,7 +237,7 @@ if __name__ == "__main__":
         pna_deg = comm.bcast(pna_deg, root=0)
         assert comm_size == sum(process_list)
 
-        if args.task_parallel:
+        if args.task_parallel and args.use_devicemesh:
             ## task parallel with device mesh
             assert comm_size % len(modellist) == 0
             mesh_2d = init_device_mesh(
@@ -259,6 +270,9 @@ if __name__ == "__main__":
 
             mycolor = dim1_group_rank  ## branch id
             mymodel = modellist[mycolor]
+
+            branch_id = mycolor
+            branch_group = dim2_group
         else:
             colorlist = list()
             color = 0
@@ -268,6 +282,21 @@ if __name__ == "__main__":
                 color += 1
             mycolor = colorlist[rank]
             mymodel = modellist[mycolor]
+
+            if args.task_parallel:
+                ## non-uniform group size (cf. uniform group size using device mesh)
+                subgroup_list = list()
+                irank = 0
+                for n in process_list:
+                    subgroup_ranks = list()
+                    for _ in range(n):
+                        subgroup_ranks.append(irank)
+                        irank += 1
+                    subgroup = dist.new_group(ranks=subgroup_ranks)
+                    subgroup_list.append(subgroup)
+
+                branch_id = mycolor
+                branch_group = subgroup_list[mycolor]    
 
         local_comm = comm.Split(mycolor, rank)
         local_comm_rank = local_comm.Get_rank()
@@ -310,40 +339,52 @@ if __name__ == "__main__":
         )
 
         ## Set local set
+        num_samples_list = list()
         for dataset in [trainset, valset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            rx_limit = len(rx)
             if args.task_parallel:
                 ## Adjust to use the same number of samples
-                rx_min = comm.allreduce(len(rx), op=MPI.MIN)
-                rx = rx[:rx_min]
+                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
 
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx))
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
             if args.num_samples is not None:
-                if args.num_samples > len(rx):
+                if args.num_samples > rx_limit:
                     log(
                         f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
                     )
-                rx = rx[: args.num_samples]
+                else:
+                    rx_limit = args.num_samples
 
+            if rx_limit < len(rx):
+                rx = rx[:rx_limit]
+            print(rank, f"Oversampling ratio: {dataset.label} {len(rx)*local_comm_size/len(trainset)*100:.02f} (%)")
+            num_samples_list.append(rx_limit)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
 
         for dataset in [testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            rx_limit = len(rx)
             if args.task_parallel:
                 ## Adjust to use the same number of samples
-                rx_min = comm.allreduce(len(rx), op=MPI.MIN)
-                rx = rx[:rx_min]
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx))
-            num_samples = len(rx)
+                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
+                
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
+            num_samples = rx_limit
             if args.num_test_samples is not None:
                 num_samples = args.num_test_samples
             elif args.num_samples is not None:
                 num_samples = args.num_samples
-            rx = rx[:num_samples]
+            if num_samples < rx_limit:
+                rx_limit = num_samples
 
+            if rx_limit < len(rx):
+                rx = rx[:rx_limit]
+            num_samples_list.append(rx_limit)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+        print("num_samples_list:", num_samples_list)
         """
         #FIXME: will replace it with Max's new dataset
         datasets=[]
@@ -404,6 +445,9 @@ if __name__ == "__main__":
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
         test_sampler_shuffle=False,
+        group=branch_group if args.task_parallel else None,
+        oversampling=args.oversampling,
+        num_samples=num_samples_list,
     )
 
     # for data in train_loader:
@@ -426,7 +470,7 @@ if __name__ == "__main__":
 
     ## task parallel
     if args.task_parallel:
-        model = MultiTaskModelMP(model, dim1_group_rank, dim2_group)
+        model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
         model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
@@ -445,19 +489,25 @@ if __name__ == "__main__":
 
     ##################################################################################################################
 
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
-        config["NeuralNetwork"],
-        log_name,
-        verbosity,
-        create_plots=False,
-    )
+    if args.nosync:
+        context = model.no_sync()
+    else:
+        context = nullcontext()
+
+    with context:
+        hydragnn.train.train_validate_test(
+            model,
+            optimizer,
+            train_loader,
+            val_loader,
+            test_loader,
+            writer,
+            scheduler,
+            config["NeuralNetwork"],
+            log_name,
+            verbosity,
+            create_plots=False,
+        )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)

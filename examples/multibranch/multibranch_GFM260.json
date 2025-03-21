@@ -232,7 +232,7 @@
             "patience": 10,
             "Checkpoint": true,
             "checkpoint_warmup": 1,
-            "epoch_start": 6
+            "epoch_start": 0
         }
     },
     "Visualization": {

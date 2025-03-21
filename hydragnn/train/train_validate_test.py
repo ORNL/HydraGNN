@@ -149,7 +149,9 @@ def train_validate_test(
     timer = Timer("train_validate_test")
     timer.start()
 
-    for epoch in range(0, num_epoch):
+    epoch_start = config["Training"].get("epoch_start", 0)
+    for epoch in range(epoch_start, num_epoch):
+        os.environ["HYDRAGNN_EPOCH"] = str(epoch)
         ## timer per epoch
         t0 = time.time()
         profiler.set_current_epoch(epoch)

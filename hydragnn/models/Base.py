@@ -23,6 +23,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import GPSConv
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
 
@@ -442,6 +443,7 @@ class Base(Module):
 
     def forward(self, data):
         ### encoder part ####
+        tr.start("enc_forward")
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
 
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
@@ -462,7 +464,8 @@ class Base(Module):
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
 
         x = inv_node_feat
-
+        tr.stop("enc_forward")
+        tr.start("branch_forward")
         #### multi-head decoder part####
         # shared dense layers for graph level output
         if data.batch is None:
@@ -554,6 +557,7 @@ class Base(Module):
                         headvar[mask_nodes] = x_node[:, head_dim:] ** 2
                 outputs.append(head)
                 outputs_var.append(headvar)
+        tr.stop("branch_forward")
         if self.var_output:
             return outputs, outputs_var
         return outputs
