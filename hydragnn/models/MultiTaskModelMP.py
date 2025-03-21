@@ -6,6 +6,7 @@ from collections import OrderedDict
 from torch_geometric.nn import global_mean_pool
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
+from contextlib import contextmanager
 
 def average_gradients(model, group):
     """Averages gradients across all processes using all_reduce."""
@@ -255,3 +256,17 @@ class MultiTaskModelMP(nn.Module):
     def gradient_all_reduce(self):
         average_gradients(self.encoder, self.shared_pg)
         average_gradients(self.decoder, self.head_pg)
+
+    
+    @contextmanager
+    def no_sync(self):
+        old_encoder_require_backward_grad_sync = self.encoder.require_backward_grad_sync
+        old_decoder_require_backward_grad_sync = self.decoder.require_backward_grad_sync
+        self.encoder.require_backward_grad_sync = False
+        self.decoder.require_backward_grad_sync = False
+        try:
+            yield
+        finally:
+            self.encoder.require_backward_grad_sync = old_encoder_require_backward_grad_sync
+            self.decoder.require_backward_grad_sync = old_decoder_require_backward_grad_sync
+              

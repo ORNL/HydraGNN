@@ -35,6 +35,7 @@ import adios2 as ad2
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 from hydragnn.models import MultiTaskModelMP
+from contextlib import nullcontext
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -98,6 +99,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--oversampling", action="store_true", help="use oversampling"
+    )
+    parser.add_argument(
+        "--nosync", action="store_true", help="disable gradient sync"
     )
 
 
@@ -354,6 +358,7 @@ if __name__ == "__main__":
 
             if rx_limit < len(rx):
                 rx = rx[:rx_limit]
+            print(rank, f"Oversampling ratio: {dataset.label} {len(rx)*local_comm_size/len(trainset)*100:.02f} (%)")
             num_samples_list.append(rx_limit)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
@@ -484,19 +489,25 @@ if __name__ == "__main__":
 
     ##################################################################################################################
 
-    hydragnn.train.train_validate_test(
-        model,
-        optimizer,
-        train_loader,
-        val_loader,
-        test_loader,
-        writer,
-        scheduler,
-        config["NeuralNetwork"],
-        log_name,
-        verbosity,
-        create_plots=False,
-    )
+    if args.nosync:
+        context = model.no_sync()
+    else:
+        context = nullcontext()
+
+    with context:
+        hydragnn.train.train_validate_test(
+            model,
+            optimizer,
+            train_loader,
+            val_loader,
+            test_loader,
+            writer,
+            scheduler,
+            config["NeuralNetwork"],
+            log_name,
+            verbosity,
+            create_plots=False,
+        )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
