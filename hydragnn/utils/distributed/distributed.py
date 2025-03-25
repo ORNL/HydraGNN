@@ -206,15 +206,15 @@ def setup_ddp_aurora(use_deepspeed=False):
     # DDP: Set environmental variables used by PyTorch
     SIZE = MPI.COMM_WORLD.Get_size()
     RANK = MPI.COMM_WORLD.Get_rank()
-    LOCAL_RANK = os.environ.get('PALS_LOCAL_RANKID')
-    os.environ['RANK'] = str(RANK)
-    os.environ['WORLD_SIZE'] = str(SIZE)
+    LOCAL_RANK = os.environ.get("PALS_LOCAL_RANKID")
+    os.environ["RANK"] = str(RANK)
+    os.environ["WORLD_SIZE"] = str(SIZE)
     MASTER_ADDR = socket.gethostname() if RANK == 0 else None
     MASTER_ADDR = MPI.COMM_WORLD.bcast(MASTER_ADDR, root=0)
-    os.environ['MASTER_ADDR'] = f"{MASTER_ADDR}.hsn.cm.aurora.alcf.anl.gov"
-    os.environ['MASTER_PORT'] = str(2345)
+    os.environ["MASTER_ADDR"] = f"{MASTER_ADDR}.hsn.cm.aurora.alcf.anl.gov"
+    os.environ["MASTER_PORT"] = str(2345)
     # DDP: initialize distributed communication with nccl backend
-    dist.init_process_group(backend='ccl', init_method='env://')
+    dist.init_process_group(backend="ccl", init_method="env://")
 
     return SIZE, RANK
 
@@ -254,8 +254,8 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
             ## CADES
             localrank = int(os.environ["SLURM_LOCALID"])
         elif os.getenv("PALS_LOCAL_RANKID"):
-             ## Aurora
-            localrank = int(os.environ.get('PALS_LOCAL_RANKID'))
+            ## Aurora
+            localrank = int(os.environ.get("PALS_LOCAL_RANKID"))
 
         if localrank >= torch.cuda.device_count() and torch.cuda.is_available():
             print(
@@ -295,8 +295,8 @@ def get_local_rank():
     elif os.getenv("SLURM_LOCALID"):
         ## CADES
         localrank = int(os.environ["SLURM_LOCALID"])
-    elif os.getenv('PALS_LOCAL_RANKID'):
-        localrank = int(os.environ.get('PALS_LOCAL_RANKID'))
+    elif os.getenv("PALS_LOCAL_RANKID"):
+        localrank = int(os.environ.get("PALS_LOCAL_RANKID"))
 
     return localrank
 
