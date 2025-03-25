@@ -127,7 +127,7 @@ def setup_ddp(use_deepspeed=False):
         backend = os.environ["HYDRAGNN_BACKEND"]
     elif dist.is_nccl_available() and torch.cuda.is_available():
         backend = "nccl"
-    elif torch.xpu.is_available():
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
         backend = "ccl"
     elif torch.distributed.is_gloo_available():
         backend = "gloo"
@@ -242,11 +242,13 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
 
     if torch.cuda.is_available():
         print_distributed(verbosity_level, "Using GPU")
-    elif torch.xpu.is_available():
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
         print_distributed(verbosity_level, "Using XPU")
     ## We need to ge a local rank if there are multiple GPUs available.
     localrank = 0
-    if torch.cuda.device_count() > 1 or torch.xpu.device_count() > 1:
+    if torch.cuda.device_count() > 1 or (
+        hasattr(torch, "xpu") and torch.xpu.device_count() > 1
+    ):
         if os.getenv("OMPI_COMM_WORLD_LOCAL_RANK"):
             ## Summit
             localrank = int(os.environ["OMPI_COMM_WORLD_LOCAL_RANK"])
@@ -262,7 +264,11 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
                 "WARN: localrank is greater than the available device count - %d %d"
                 % (localrank, torch.cuda.device_count())
             )
-        elif localrank >= torch.xpu.device_count() and torch.xpu.is_available():
+        elif (
+            hasattr(torch, "xpu")
+            and localrank >= torch.xpu.device_count()
+            and torch.xpu.is_available()
+        ):
             print(
                 "WARN: localrank is greater than the available device count - %d %d"
                 % (localrank, torch.xpu.device_count())
@@ -272,7 +278,7 @@ def get_device_name(use_gpu=True, rank_per_model=1, verbosity_level=0, no_prefix
         device_name = str(localrank)
     elif torch.cuda.is_available():
         device_name = "cuda:" + str(localrank)
-    elif torch.xpu.is_available():
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
         device_name = "xpu:" + str(localrank)
 
     return device_name
