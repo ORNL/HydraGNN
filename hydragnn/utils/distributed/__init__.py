@@ -7,6 +7,7 @@ from .distributed import (
     is_model_distributed,
     get_distributed_model,
     setup_ddp,
+    setup_ddp_aurora,
     nsplit,
     comm_reduce,
     get_deepspeed_init_args,
