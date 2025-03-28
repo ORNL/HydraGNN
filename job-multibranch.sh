@@ -56,7 +56,19 @@ export datadir4=/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/transition1
 
 #export datadir4=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_catalyst_2020
 #export datadir5=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/omat24
+# (1a) Setup omnistat sampling environment
+ml use /autofs/nccs-svm1_sw/crusher/amdsw/modules
+ml omnistat-wrapper
+export OMNISTAT_VICTORIA_DATADIR=/lustre/orion/${SLURM_JOB_ACCOUNT}/world-shared/omnistat/${SLURM_JOB_ID}
+# (1b) Enable data collectors and polling (1 sec interval)
+${OMNISTAT_WRAPPER} usermode --start --interval 1 | tee omnistat_start.log
 
+# (2) Run the job
 srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py --log=GFM_multibranch \
 --inputfile=multibranch_GFM260.json --num_samples=100000 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4
+
+# (3) Tear-down data collection and summarize results
+${OMNISTAT_WRAPPER} usermode --stopexporters
+${OMNISTAT_WRAPPER} query --job ${SLURM_JOB_ID} --interval 1 --pdf omnistat-${SLURM_JOB_ID}.pdf > omnistat-${SLURM_JOB_ID}.txt
+${OMNISTAT_WRAPPER} usermode --stopserver
 
