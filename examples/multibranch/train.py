@@ -86,12 +86,6 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--num_test_samples",
-        type=int,
-        help="set num test samples per process for weak-scaling test",
-        default=None,
-    )
-    parser.add_argument(
         "--task_parallel", action="store_true", help="enable task parallel"
     )
     parser.add_argument(
@@ -340,50 +334,26 @@ if __name__ == "__main__":
 
         ## Set local set
         num_samples_list = list()
-        for dataset in [trainset, valset]:
+        for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            rx_limit = len(rx)
-            if args.task_parallel:
-                ## Adjust to use the same number of samples
-                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
 
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
             if args.num_samples is not None:
-                if args.num_samples > rx_limit:
-                    log(
-                        f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
-                    )
-                else:
-                    rx_limit = args.num_samples
+                assert args.num_samples < len(rx)
+                rx = rx[:args.num_samples]
 
-            if rx_limit < len(rx):
-                rx = rx[:rx_limit]
-            print(rank, f"Oversampling ratio: {dataset.label} {len(rx)*local_comm_size/len(trainset)*100:.02f} (%)")
-            num_samples_list.append(rx_limit)
-            dataset.setkeys(common_variable_names)
-            dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
-
-        for dataset in [testset]:
-            rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            rx_limit = len(rx)
             if args.task_parallel:
-                ## Adjust to use the same number of samples
-                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
-                
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
-            num_samples = rx_limit
-            if args.num_test_samples is not None:
-                num_samples = args.num_test_samples
-            elif args.num_samples is not None:
-                num_samples = args.num_samples
-            if num_samples < rx_limit:
-                rx_limit = num_samples
+                local_dataset_min = comm.allreduce(len(rx), op=MPI.MIN)
+                rx = rx[:local_dataset_min]
 
-            if rx_limit < len(rx):
-                rx = rx[:rx_limit]
-            num_samples_list.append(rx_limit)
+            if args.oversampling:
+                local_dataset_max = comm.allreduce(len(rx), op=MPI.MAX)
+                num_samples_list.append(local_dataset_max)
+                print(f"Oversampling ratio: {local_dataset_max/len(rx)*100:.2f} (%)", )
+
+            print(rank, "local dataset:", local_comm_rank, local_comm_size, dataset.label, len(dataset), rx[0], rx[-1], len(rx), dataset.dataset_name)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+
         print("num_samples_list:", num_samples_list)
         """
         #FIXME: will replace it with Max's new dataset
