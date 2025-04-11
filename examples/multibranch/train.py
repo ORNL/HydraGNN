@@ -95,6 +95,12 @@ if __name__ == "__main__":
         "--oversampling", action="store_true", help="use oversampling"
     )
     parser.add_argument(
+        "--oversampling_num_samples",
+        type=int,
+        help="set num samples for oversampling",
+        default=None,
+    )
+    parser.add_argument(
         "--nosync", action="store_true", help="disable gradient sync"
     )
 
@@ -336,20 +342,28 @@ if __name__ == "__main__":
         num_samples_list = list()
         for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            print(f"{rank} {dataset.dataset_name} nsplit:", len(dataset), local_comm_size, len(rx))
 
             if args.num_samples is not None:
-                assert args.num_samples < len(rx)
-                rx = rx[:args.num_samples]
+                if args.num_samples > len(rx):
+                    print(f"WARN: Requested num_samples is larger than available in {dataset.dataset_name}: {args.num_samples} {len(rx)}")
+                    # args.oversampling = True
+                    # args.oversampling_num_samples = args.num_samples
+                else:
+                    rx = rx[:args.num_samples]
+
+            local_dataset_len = len(rx)
+            local_dataset_min = comm.allreduce(local_dataset_len, op=MPI.MIN)
+            local_dataset_max = comm.allreduce(local_dataset_len, op=MPI.MAX)
 
             if args.task_parallel:
-                local_dataset_min = comm.allreduce(len(rx), op=MPI.MIN)
                 rx = rx[:local_dataset_min]
 
             if args.oversampling:
-                local_dataset_max = comm.allreduce(len(rx), op=MPI.MAX)
-                num_samples_list.append(local_dataset_max)
-                print(f"Oversampling ratio: {local_dataset_max/len(rx)*100:.2f} (%)", )
-
+                oversampling_num_samples = args.oversampling_num_samples if args.oversampling_num_samples is not None else local_dataset_max
+                num_samples_list.append(oversampling_num_samples)
+                print(f"Oversampling {oversampling_num_samples} samples: {oversampling_num_samples/local_dataset_len*100:.2f} (%)")
+                
             print(rank, "local dataset:", local_comm_rank, local_comm_size, dataset.label, len(dataset), rx[0], rx[-1], len(rx), dataset.dataset_name)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
@@ -419,13 +433,19 @@ if __name__ == "__main__":
         oversampling=args.oversampling,
         num_samples=num_samples_list,
     )
+    ## Good to sync with everyone right after DDStore setup
+    comm.Barrier()
 
     # for data in train_loader:
     #    print("Pei debugging 3", data)
 
+    if args.ddstore:
+        train_loader.dataset.ddstore.epoch_begin()
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
+    if args.ddstore:
+        train_loader.dataset.ddstore.epoch_end()
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
