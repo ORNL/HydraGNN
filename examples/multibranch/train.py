@@ -86,12 +86,6 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--num_test_samples",
-        type=int,
-        help="set num test samples per process for weak-scaling test",
-        default=None,
-    )
-    parser.add_argument(
         "--task_parallel", action="store_true", help="enable task parallel"
     )
     parser.add_argument(
@@ -99,6 +93,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--oversampling", action="store_true", help="use oversampling"
+    )
+    parser.add_argument(
+        "--oversampling_num_samples",
+        type=int,
+        help="set num samples for oversampling",
+        default=None,
     )
     parser.add_argument(
         "--nosync", action="store_true", help="disable gradient sync"
@@ -340,50 +340,34 @@ if __name__ == "__main__":
 
         ## Set local set
         num_samples_list = list()
-        for dataset in [trainset, valset]:
+        for dataset in [trainset, valset, testset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            rx_limit = len(rx)
-            if args.task_parallel:
-                ## Adjust to use the same number of samples
-                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
+            print(f"{rank} {dataset.dataset_name} nsplit:", len(dataset), local_comm_size, len(rx))
 
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
             if args.num_samples is not None:
-                if args.num_samples > rx_limit:
-                    log(
-                        f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
-                    )
+                if args.num_samples > len(rx):
+                    print(f"WARN: Requested num_samples is larger than available in {dataset.dataset_name}: {args.num_samples} {len(rx)}")
+                    # args.oversampling = True
+                    # args.oversampling_num_samples = args.num_samples
                 else:
-                    rx_limit = args.num_samples
+                    rx = rx[:args.num_samples]
 
-            if rx_limit < len(rx):
-                rx = rx[:rx_limit]
-            print(rank, f"Oversampling ratio: {dataset.label} {len(rx)*local_comm_size/len(trainset)*100:.02f} (%)")
-            num_samples_list.append(rx_limit)
-            dataset.setkeys(common_variable_names)
-            dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+            local_dataset_len = len(rx)
+            local_dataset_min = comm.allreduce(local_dataset_len, op=MPI.MIN)
+            local_dataset_max = comm.allreduce(local_dataset_len, op=MPI.MAX)
 
-        for dataset in [testset]:
-            rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            rx_limit = len(rx)
             if args.task_parallel:
-                ## Adjust to use the same number of samples
-                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
-                
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
-            num_samples = rx_limit
-            if args.num_test_samples is not None:
-                num_samples = args.num_test_samples
-            elif args.num_samples is not None:
-                num_samples = args.num_samples
-            if num_samples < rx_limit:
-                rx_limit = num_samples
+                rx = rx[:local_dataset_min]
 
-            if rx_limit < len(rx):
-                rx = rx[:rx_limit]
-            num_samples_list.append(rx_limit)
+            if args.oversampling:
+                oversampling_num_samples = args.oversampling_num_samples if args.oversampling_num_samples is not None else local_dataset_max
+                num_samples_list.append(oversampling_num_samples)
+                print(f"Oversampling {oversampling_num_samples} samples: {oversampling_num_samples/local_dataset_len*100:.2f} (%)")
+                
+            print(rank, "local dataset:", local_comm_rank, local_comm_size, dataset.label, len(dataset), rx[0], rx[-1], len(rx), dataset.dataset_name)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+
         print("num_samples_list:", num_samples_list)
         """
         #FIXME: will replace it with Max's new dataset
@@ -449,13 +433,19 @@ if __name__ == "__main__":
         oversampling=args.oversampling,
         num_samples=num_samples_list,
     )
+    ## Good to sync with everyone right after DDStore setup
+    comm.Barrier()
 
     # for data in train_loader:
     #    print("Pei debugging 3", data)
 
+    if args.ddstore:
+        train_loader.dataset.ddstore.epoch_begin()
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
+    if args.ddstore:
+        train_loader.dataset.ddstore.epoch_end()
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 

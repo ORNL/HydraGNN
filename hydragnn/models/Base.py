@@ -494,6 +494,7 @@ class Base(Module):
                 else:
                     for ID in datasetIDs:
                         mask = data.dataset_name == ID
+                        mask = mask[:,0]
                         branchtype = f"branch-{ID.item()}"
                         #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
