@@ -71,8 +71,9 @@ export datadir4=/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/transition1
 #export datadir5=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/omat24
 
 export HYDRAGNN_TRACE_LEVEL=1
-export HYDRAGNN_MAX_NUM_BATCH=100
-export EFFECTIVE_BATCH_SIZE=$((8*160*8)) ## base; batch size 5 with 160 nodes
+export HYDRAGNN_MAX_NUM_BATCH=5
+[ -z $EFFECTIVE_BATCH_SIZE ] && EFFECTIVE_BATCH_SIZE=$((5*160*8)) ## batch size 10 with 160 nodes (Perlmutter) 5 with 160 nodes (Frontier)
+export EFFECTIVE_BATCH_SIZE=$EFFECTIVE_BATCH_SIZE
 export BATCH_SIZE=$((EFFECTIVE_BATCH_SIZE/SLURM_JOB_NUM_NODES/8))
 
 # # (1a) Setup omnistat sampling environment
@@ -96,7 +97,7 @@ srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 -
 python -u $SCOREP_OPT ./examples/multibranch/train.py --log=GFM_taskparallel_strong-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-BS$BATCH_SIZE-TP1-DD$HYDRAGNN_DDSTORE_METHOD-NW$HYDRAGNN_NUM_WORKERS --everyone \
 --inputfile=multibranch_GFM260.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH)) \
 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4 --batch_size=$BATCH_SIZE --num_epoch=4 \
---task_parallel --oversampling --oversampling_num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH))
+--task_parallel --use_devicemesh --oversampling --oversampling_num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH))
 
 # dosummarize
 # # (3) Summarize data collection results
