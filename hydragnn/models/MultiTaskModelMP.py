@@ -8,6 +8,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
 
+
 def average_gradients(model, group):
     """Averages gradients across all processes using all_reduce."""
     group_size = dist.get_world_size(group=group)
@@ -91,7 +92,7 @@ class DecoderModel(nn.Module):
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
                 )
-                if self.num_branches==1:
+                if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
                     output_head = headloc["branch-0"](x_graph_head)
                     head = output_head[:, :head_dim]
@@ -99,9 +100,9 @@ class DecoderModel(nn.Module):
                 else:
                     for ID in datasetIDs:
                         mask = data.dataset_name == ID
-                        mask = mask[:,0]
+                        mask = mask[:, 0]
                         branchtype = f"branch-{ID.item()}"
-                        #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
@@ -115,8 +116,8 @@ class DecoderModel(nn.Module):
                 headvar = torch.zeros(
                     (x.shape[0], head_dim * self.var_output), device=x.device
                 )
-                if self.num_branches==1:
-                    branchtype="branch-0"
+                if self.num_branches == 1:
+                    branchtype = "branch-0"
                     if node_NN_type == "conv":
                         inv_node_feat = x
                         equiv_node_feat_ = equiv_node_feat
@@ -140,7 +141,7 @@ class DecoderModel(nn.Module):
                         mask = data.dataset_name == ID
                         mask_nodes = torch.repeat_interleave(mask, node_counts)
                         branchtype = f"branch-{ID.item()}"
-                        #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         if node_NN_type == "conv":
                             inv_node_feat = x[mask_nodes, :]
                             equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
@@ -258,7 +259,6 @@ class MultiTaskModelMP(nn.Module):
         average_gradients(self.encoder, self.shared_pg)
         average_gradients(self.decoder, self.head_pg)
 
-    
     @contextmanager
     def no_sync(self):
         old_encoder_require_backward_grad_sync = self.encoder.require_backward_grad_sync
@@ -268,6 +268,9 @@ class MultiTaskModelMP(nn.Module):
         try:
             yield
         finally:
-            self.encoder.require_backward_grad_sync = old_encoder_require_backward_grad_sync
-            self.decoder.require_backward_grad_sync = old_decoder_require_backward_grad_sync
-              
+            self.encoder.require_backward_grad_sync = (
+                old_encoder_require_backward_grad_sync
+            )
+            self.decoder.require_backward_grad_sync = (
+                old_decoder_require_backward_grad_sync
+            )

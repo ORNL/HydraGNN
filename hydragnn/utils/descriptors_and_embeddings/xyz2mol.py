@@ -827,9 +827,9 @@ def xyz2AC_huckel(atomicNumList, xyz, charge):
     passed, result = rdEHTTools.RunMol(mol_huckel)
     opop = result.GetReducedOverlapPopulationMatrix()
     tri = np.zeros((num_atoms, num_atoms))
-    tri[
-        np.tril(np.ones((num_atoms, num_atoms), dtype=bool))
-    ] = opop  # lower triangular to square matrix
+    tri[np.tril(np.ones((num_atoms, num_atoms), dtype=bool))] = (
+        opop  # lower triangular to square matrix
+    )
     for i in range(num_atoms):
         for j in range(i + 1, num_atoms):
             pair_pop = abs(tri[j, i])

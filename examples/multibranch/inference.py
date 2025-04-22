@@ -24,6 +24,7 @@ from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.distributed import get_device
 from hydragnn.train.train_validate_test import test
+
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosDataset
 except ImportError:
@@ -70,8 +71,10 @@ def getcolordensity(xdata, ydata):
     )  # np.nan)
     return hist2d_norm
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -105,16 +108,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--task_parallel", action="store_true", help="enable task parallel"
     )
-    parser.add_argument(
-        "--use_devicemesh", action="store_true", help="use device mesh"
-    )
-    parser.add_argument(
-        "--oversampling", action="store_true", help="use oversampling"
-    )
-    parser.add_argument(
-        "--nosync", action="store_true", help="disable gradient sync"
-    )
-
+    parser.add_argument("--use_devicemesh", action="store_true", help="use device mesh")
+    parser.add_argument("--oversampling", action="store_true", help="use oversampling")
+    parser.add_argument("--nosync", action="store_true", help="disable gradient sync")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -148,8 +144,8 @@ if __name__ == "__main__":
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
-    log_name =  os.path.basename(args.log) 
-    #modeldir = os.path.join(dirpwd,f"../../logs/{log_name}")
+    log_name = os.path.basename(args.log)
+    # modeldir = os.path.join(dirpwd,f"../../logs/{log_name}")
     modeldir = args.log
     ##################################################################################################################
 
@@ -292,7 +288,7 @@ if __name__ == "__main__":
                     subgroup_list.append(subgroup)
 
                 branch_id = mycolor
-                branch_group = subgroup_list[mycolor]    
+                branch_group = subgroup_list[mycolor]
 
         local_comm = comm.Split(mycolor, rank)
         local_comm_rank = local_comm.Get_rank()
@@ -307,12 +303,12 @@ if __name__ == "__main__":
             "energy",
             "forces",
             "y",
-            #"dataset_name",
+            # "dataset_name",
         ]
         # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
         fname = mymodel
         print("mymodel:", rank, mycolor, mymodel)
-        #comment it out for fast inference
+        # comment it out for fast inference
         """
         trainset = AdiosDataset(
             fname,
@@ -368,9 +364,20 @@ if __name__ == "__main__":
             rx_limit = len(rx)
             if args.task_parallel:
                 ## Adjust to use the same number of samples
-                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
-                
-            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
+                rx_limit = (
+                    comm.allreduce(len(rx), op=MPI.MAX)
+                    if args.oversampling
+                    else comm.allreduce(len(rx), op=MPI.MIN)
+                )
+
+            print(
+                "local dataset:",
+                local_comm_rank,
+                local_comm_size,
+                dataset.label,
+                len(rx),
+                rx_limit,
+            )
             num_samples = rx_limit
             if args.num_test_samples is not None:
                 num_samples = args.num_test_samples
@@ -390,33 +397,37 @@ if __name__ == "__main__":
         if args.ddstore:
             opt = {"ddstore_width": args.ddstore_width, "local": True}
             if args.task_parallel:
-                #trainset = DistDataset(trainset, "trainset", local_comm, **opt)
-                #valset = DistDataset(valset, "valset", local_comm, **opt)
+                # trainset = DistDataset(trainset, "trainset", local_comm, **opt)
+                # valset = DistDataset(valset, "valset", local_comm, **opt)
                 testset = DistDataset(testset, "testset", local_comm, **opt)
-                #trainset.pna_deg = pna_deg
-                #valset.pna_deg = pna_deg
+                # trainset.pna_deg = pna_deg
+                # valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
             else:
-                #trainset = DistDataset(trainset, "trainset", comm, **opt)
-                #valset = DistDataset(valset, "valset", comm, **opt)
+                # trainset = DistDataset(trainset, "trainset", comm, **opt)
+                # valset = DistDataset(valset, "valset", comm, **opt)
                 testset = DistDataset(testset, "testset", comm, **opt)
-                #trainset.pna_deg = pna_deg
-                #valset.pna_deg = pna_deg
+                # trainset.pna_deg = pna_deg
+                # valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
-    #log0(
+    # log0(
     #    "trainset,valset,testset size: %d %d %d"
     #    % (len(trainset), len(valset), len(testset))
-    #)
-    log0("testset size: %d"% (len(testset)))
+    # )
+    log0("testset size: %d" % (len(testset)))
 
     if args.ddstore:
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         testset,
         testset,
         testset,
@@ -441,7 +452,7 @@ if __name__ == "__main__":
     # Print details of neural network architecture
     print_model(model)
     hydragnn.utils.model.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"],path=os.path.dirname(modeldir)
+        model, config["NeuralNetwork"]["Training"], path=os.path.dirname(modeldir)
     )
 
     ##################################################################################################################
@@ -451,19 +462,28 @@ if __name__ == "__main__":
     nheads = len(config["NeuralNetwork"]["Variables_of_interest"]["output_names"])
     fig, axs = plt.subplots(1, nheads, figsize=(14, 6))
     for icol, (loader, setname) in enumerate(zip([test_loader], ["test"])):
-        total_error, tasks_error, true_values, predicted_values = test(loader, model, verbosity, reduce_ranks=True, return_samples=True) #, num_samples=1024)
-        print(rank, "number of heads %d"%len(true_values))
-        print(rank, "number of samples %d"%len(true_values[0]))
-        if rank==0:
-            print(log_name, datasetname,setname, "loss=", total_error, tasks_error)
-            assert len(true_values)==len(predicted_values), "inconsistent number of heads, %d!=%d"%(len(true_values),len(len(predicted_values)))
-            for  ihead, (output_name, output_type, output_dim) in enumerate(zip(
-            config["NeuralNetwork"]["Variables_of_interest"]["output_names"],
-            config["NeuralNetwork"]["Variables_of_interest"]["type"],
-            config["NeuralNetwork"]["Variables_of_interest"]["output_dim"],
-            )): 
-                head_true = true_values[ihead].cpu().squeeze().numpy() 
-                head_pred = predicted_values[ihead].cpu().squeeze().numpy() 
+        total_error, tasks_error, true_values, predicted_values = test(
+            loader, model, verbosity, reduce_ranks=True, return_samples=True
+        )  # , num_samples=1024)
+        print(rank, "number of heads %d" % len(true_values))
+        print(rank, "number of samples %d" % len(true_values[0]))
+        if rank == 0:
+            print(log_name, datasetname, setname, "loss=", total_error, tasks_error)
+            assert len(true_values) == len(
+                predicted_values
+            ), "inconsistent number of heads, %d!=%d" % (
+                len(true_values),
+                len(len(predicted_values)),
+            )
+            for ihead, (output_name, output_type, output_dim) in enumerate(
+                zip(
+                    config["NeuralNetwork"]["Variables_of_interest"]["output_names"],
+                    config["NeuralNetwork"]["Variables_of_interest"]["type"],
+                    config["NeuralNetwork"]["Variables_of_interest"]["output_dim"],
+                )
+            ):
+                head_true = true_values[ihead].cpu().squeeze().numpy()
+                head_pred = predicted_values[ihead].cpu().squeeze().numpy()
                 ifeat = var_config["output_index"][ihead]
                 outtype = var_config["type"][ihead]
                 varname = var_config["output_names"][ihead]
@@ -471,10 +491,26 @@ if __name__ == "__main__":
                 ax = axs[ihead]
                 error_mae = np.mean(np.abs(head_pred - head_true))
                 error_rmse = np.sqrt(np.mean(np.abs(head_pred - head_true) ** 2))
-                print(log_name, datasetname, setname, varname, ": mae=", error_mae, ", rmse= ", error_rmse)
+                print(
+                    log_name,
+                    datasetname,
+                    setname,
+                    varname,
+                    ": mae=",
+                    error_mae,
+                    ", rmse= ",
+                    error_rmse,
+                )
                 print(rank, head_true.size, head_pred.size)
                 hist2d_norm = getcolordensity(head_true, head_pred)
-                sc=ax.scatter(head_true[::100], head_pred[::100], s=12, c=hist2d_norm[::100], vmin=0, vmax=1)
+                sc = ax.scatter(
+                    head_true[::100],
+                    head_pred[::100],
+                    s=12,
+                    c=hist2d_norm[::100],
+                    vmin=0,
+                    vmax=1,
+                )
                 minv = np.minimum(np.amin(head_pred), np.amin(head_true))
                 maxv = np.maximum(np.amax(head_pred), np.amax(head_true))
                 ax.plot([minv, maxv], [minv, maxv], "r--")
@@ -484,20 +520,21 @@ if __name__ == "__main__":
                     maxv - 0.1 * (maxv - minv),
                     "MAE: {:.2e}".format(error_mae),
                 )
-                if icol==0:
+                if icol == 0:
                     ax.set_ylabel("Predicted")
-                if ihead==1:
+                if ihead == 1:
                     ax.set_xlabel("True")
-                #plt.colorbar(sc)
+                # plt.colorbar(sc)
                 divider = make_axes_locatable(ax)
-                cax = divider.append_axes('right', size='5%', pad=0.05)
-                fig.colorbar(sc, cax=cax, orientation='vertical')
-                #cbar=plt.colorbar(sc)
-                #cbar.ax.set_ylabel('Density', rotation=90)
-                #ax.set_aspect('equal', adjustable='box')
-        plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.95, wspace=0.4, hspace=0.3)
-        fig.savefig("./logs/" + f"/parity_plot_{log_name}_{datasetname}.png",dpi=300)
-        #fig.savefig("./logs/" + log_name + f"/parity_plot_{datasetname}.pdf")
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                fig.colorbar(sc, cax=cax, orientation="vertical")
+                # cbar=plt.colorbar(sc)
+                # cbar.ax.set_ylabel('Density', rotation=90)
+                # ax.set_aspect('equal', adjustable='box')
+        plt.subplots_adjust(
+            left=0.1, bottom=0.1, right=0.95, top=0.95, wspace=0.4, hspace=0.3
+        )
+        fig.savefig("./logs/" + f"/parity_plot_{log_name}_{datasetname}.png", dpi=300)
+        # fig.savefig("./logs/" + log_name + f"/parity_plot_{datasetname}.pdf")
         plt.close()
     sys.exit(0)
-

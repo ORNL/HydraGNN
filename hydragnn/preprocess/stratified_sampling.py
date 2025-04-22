@@ -29,7 +29,7 @@ def stratified_sampling(dataset: [Data], subsample_percentage: float, verbosity=
         frequencies = sorted(frequencies[frequencies > 0].tolist())
         category = 0
         for index, frequency in enumerate(frequencies):
-            category += frequency * (100 ** index)
+            category += frequency * (100**index)
         dataset_categories.append(category)
 
     subsample_indices = []

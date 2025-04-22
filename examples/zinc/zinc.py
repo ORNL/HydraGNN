@@ -66,7 +66,11 @@ test = ZINC(
     root="dataset/zinc", subset=True, split="test", pre_transform=zinc_pre_transform
 )
 
-(train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+(
+    train_loader,
+    val_loader,
+    test_loader,
+) = hydragnn.preprocess.create_dataloaders(
     train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 

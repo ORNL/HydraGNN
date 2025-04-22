@@ -232,14 +232,20 @@ def create_dataloaders(
     test_sampler_shuffle=True,
     group=None,
     oversampling=False,
-    num_samples=None, ## tuple of number of samples (train, val, test)
+    num_samples=None,  ## tuple of number of samples (train, val, test)
 ):
     if dist.is_initialized():
         if oversampling:
             assert num_samples is not None
-            train_sampler = torch.utils.data.RandomSampler(trainset, replacement=False, num_samples=num_samples[0])
-            val_sampler = torch.utils.data.RandomSampler(valset, replacement=False, num_samples=num_samples[1])
-            test_sampler = torch.utils.data.RandomSampler(testset, replacement=False, num_samples=num_samples[2])
+            train_sampler = torch.utils.data.RandomSampler(
+                trainset, replacement=False, num_samples=num_samples[0]
+            )
+            val_sampler = torch.utils.data.RandomSampler(
+                valset, replacement=False, num_samples=num_samples[1]
+            )
+            test_sampler = torch.utils.data.RandomSampler(
+                testset, replacement=False, num_samples=num_samples[2]
+            )
         else:
 
             if group is None:
@@ -248,14 +254,23 @@ def create_dataloaders(
             group_rank = dist.get_rank(group=group)
 
             train_sampler = torch.utils.data.distributed.DistributedSampler(
-                trainset, num_replicas=group_size, rank=group_rank, shuffle=train_sampler_shuffle
+                trainset,
+                num_replicas=group_size,
+                rank=group_rank,
+                shuffle=train_sampler_shuffle,
             )
 
             val_sampler = torch.utils.data.distributed.DistributedSampler(
-                valset, num_replicas=group_size, rank=group_rank, shuffle=val_sampler_shuffle
+                valset,
+                num_replicas=group_size,
+                rank=group_rank,
+                shuffle=val_sampler_shuffle,
             )
             test_sampler = torch.utils.data.distributed.DistributedSampler(
-                testset, num_replicas=group_size, rank=group_rank, shuffle=test_sampler_shuffle
+                testset,
+                num_replicas=group_size,
+                rank=group_rank,
+                shuffle=test_sampler_shuffle,
             )
 
         pin_memory = True

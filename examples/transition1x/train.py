@@ -235,7 +235,6 @@ class Transition1xDataset(AbstractBaseDataset):
 
             random.shuffle(self.dataset)
 
-
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
         norms = torch.norm(forces, p=2, dim=1)
@@ -482,7 +481,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

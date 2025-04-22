@@ -95,7 +95,10 @@ class ANI1xDataset(AbstractBaseDataset):
     def convert_trajectories_to_graphs(self):
 
         # Example for extracting DFT/DZ energies and forces
-        for data_trj in iterate_tqdm(self.iter_data_buckets(self.data_path, keys=self.data_keys), verbosity_level=2):
+        for data_trj in iterate_tqdm(
+            self.iter_data_buckets(self.data_path, keys=self.data_keys),
+            verbosity_level=2,
+        ):
 
             X = data_trj["coordinates"]
             Z = data_trj["atomic_numbers"]
@@ -459,7 +462,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

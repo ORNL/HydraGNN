@@ -135,9 +135,9 @@ class Base(Module):
         # if model can handle edge features, enforce use of relative edge encodings
         if self.global_attn_engine:
             self.use_global_attn = True
-            self.embed_dim = (
-                self.edge_embed_dim
-            ) = hidden_dim  # ensure that all input to gps have the same dimensionality
+            self.embed_dim = self.edge_embed_dim = (
+                hidden_dim  # ensure that all input to gps have the same dimensionality
+            )
             if self.is_edge_model:
                 if "edge_attr" not in self.input_args:
                     self.input_args += ", edge_attr"
@@ -263,7 +263,9 @@ class Base(Module):
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
         nodeconfiglist = self.config_heads["node"]
-        assert self.num_branches==len(nodeconfiglist), "asumming node head has the same branches as grah head, if any"
+        assert self.num_branches == len(
+            nodeconfiglist
+        ), "asumming node head has the same branches as grah head, if any"
         for branchdict in nodeconfiglist:
             # only support conv for all node branches
             if branchdict["type"] != "conv":
@@ -348,7 +350,7 @@ class Base(Module):
         dim_sharedlayers = 0
         self.num_branches = 1
         if "graph" in self.config_heads:
-            self.num_branches=len(self.config_heads["graph"])
+            self.num_branches = len(self.config_heads["graph"])
             for branchdict in self.config_heads["graph"]:
                 denselayers = []
                 dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
@@ -486,7 +488,7 @@ class Base(Module):
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
                 )
-                if self.num_branches==1:
+                if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
                     output_head = headloc["branch-0"](x_graph_head)
                     head = output_head[:, :head_dim]
@@ -494,9 +496,9 @@ class Base(Module):
                 else:
                     for ID in datasetIDs:
                         mask = data.dataset_name == ID
-                        mask = mask[:,0]
+                        mask = mask[:, 0]
                         branchtype = f"branch-{ID.item()}"
-                        #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
@@ -510,8 +512,8 @@ class Base(Module):
                 headvar = torch.zeros(
                     (x.shape[0], head_dim * self.var_output), device=x.device
                 )
-                if self.num_branches==1:
-                    branchtype="branch-0"
+                if self.num_branches == 1:
+                    branchtype = "branch-0"
                     if node_NN_type == "conv":
                         inv_node_feat = x
                         equiv_node_feat_ = equiv_node_feat
@@ -535,7 +537,7 @@ class Base(Module):
                         mask = data.dataset_name == ID
                         mask_nodes = torch.repeat_interleave(mask, node_counts)
                         branchtype = f"branch-{ID.item()}"
-                        #print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         if node_NN_type == "conv":
                             inv_node_feat = x[mask_nodes, :]
                             equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
