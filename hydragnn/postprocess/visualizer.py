@@ -178,9 +178,11 @@ class Visualizer:
             vsum_true = []
             vsum_pred = []
             for isamp in range(nshape[0]):
-                vlen_true.append(sqrt(sum([comp**2 for comp in true_values[isamp][:]])))
+                vlen_true.append(
+                    sqrt(sum([comp ** 2 for comp in true_values[isamp][:]]))
+                )
                 vlen_pred.append(
-                    sqrt(sum([comp**2 for comp in predicted_values[isamp][:]]))
+                    sqrt(sum([comp ** 2 for comp in predicted_values[isamp][:]]))
                 )
                 vsum_true.append(sum(true_values[isamp][:]))
                 vsum_pred.append(sum(predicted_values[isamp][:]))

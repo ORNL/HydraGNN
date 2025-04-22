@@ -4,7 +4,7 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "model_type": "EGNN",
+            "mpnn_type": "EGNN",
             "equivariance": true,
             "radius": 5,
             "max_neighbours": 20,
@@ -18,9 +18,10 @@
             "num_radial": 6,
             "num_spherical": 7,
             "num_filters": 126,
-            "edge_features": [
-                "length"
-            ],
+            "pe_dim": 1,
+            "global_attn_heads": 8,
+            "global_attn_engine": "",
+            "global_attn_type": "",
             "hidden_dim": 866,
             "num_conv_layers": 4,
             "output_heads": {

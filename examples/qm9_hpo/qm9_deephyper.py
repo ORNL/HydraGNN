@@ -95,9 +95,9 @@ def run(trial):
     # log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
     if trial.parameters["global_attn_heads"] is not None:
-        trial_config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = (
-            trial.parameters["global_attn_heads"]
-        )
+        trial_config["NeuralNetwork"]["Architecture"][
+            "global_attn_heads"
+        ] = trial.parameters["global_attn_heads"]
         global_attn_heads = trial.parameters["global_attn_heads"]
         hidden_dim = global_attn_heads * trial.parameters["hidden_dim"]
     else:

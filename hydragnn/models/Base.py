@@ -135,9 +135,9 @@ class Base(Module):
         # if model can handle edge features, enforce use of relative edge encodings
         if self.global_attn_engine:
             self.use_global_attn = True
-            self.embed_dim = self.edge_embed_dim = (
-                hidden_dim  # ensure that all input to gps have the same dimensionality
-            )
+            self.embed_dim = (
+                self.edge_embed_dim
+            ) = hidden_dim  # ensure that all input to gps have the same dimensionality
             if self.is_edge_model:
                 if "edge_attr" not in self.input_args:
                     self.input_args += ", edge_attr"

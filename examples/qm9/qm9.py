@@ -96,11 +96,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
 
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
+    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
