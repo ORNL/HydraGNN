@@ -31,7 +31,6 @@ from hydragnn.models.MACEStack import MACEStack
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
-
 def create_model_config(
     config: dict,
     verbosity: int = 0,
@@ -129,7 +128,7 @@ def create_model(
     timer = Timer("create_model")
     timer.start()
     torch.manual_seed(0)
-
+    
     device = get_device(use_gpu, verbosity_level=verbosity)
 
     # Note: model-specific inputs must come first.

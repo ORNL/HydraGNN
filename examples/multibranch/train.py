@@ -462,7 +462,7 @@ if __name__ == "__main__":
     if args.task_parallel:
         model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
-        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity, find_unused_parameters=True)
 
     # Print details of neural network architecture
     print_model(model)

@@ -16,6 +16,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 )
 from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
 import json
 import torch
@@ -34,6 +35,9 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
+
+    #update output_heads with latest config rules
+    config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(config["NeuralNetwork"]["Architecture"]["output_heads"])
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
