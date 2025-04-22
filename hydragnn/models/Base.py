@@ -476,7 +476,9 @@ class Base(Module):
             x_graph = global_mean_pool(x, data.batch.to(x.device))
         outputs = []
         outputs_var = []
-
+        # if no dataset_name, set it to be 0
+        if not hasattr(data, "dataset_name"):
+            setattr(data, "dataset_name", data.batch * 0)
         datasetIDs = data.dataset_name.unique()
         unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
