@@ -37,16 +37,16 @@ export datadir2=/global/cfs/cdirs/m4716/HydraGNN-sc25-comm/MPTrj-v3.bp
 export datadir3=/global/cfs/cdirs/m4716/HydraGNN-sc25-comm/Alexandria-v3.bp
 export datadir4=/global/cfs/cdirs/m4716/HydraGNN-sc25-comm/transition1x-v3.bp
 
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*4)) -c32 --ntasks-per-node=4 --gpus-per-node=4 --gres=gpu:4 \
-select_gpu_device python -u ./examples/multibranch/train.py --log=GFM_taskparallel_strong-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-BS$BATCH_SIZE-TP0-DD$HYDRAGNN_DDSTORE_METHOD-NW$HYDRAGNN_NUM_WORKERS --everyone \
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*4)) -c32 --ntasks-per-node=4 --gpus-per-node=4 --gpus-per-task=1 --gpu-bind=none \
+python -u ./examples/multibranch/train.py --log=GFM_taskparallel_strong-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-BS$BATCH_SIZE-TP0-DD$HYDRAGNN_DDSTORE_METHOD-NW$HYDRAGNN_NUM_WORKERS --everyone \
 --inputfile=multibranch_GFM260.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH)) \
 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4 --batch_size=$BATCH_SIZE --num_epoch=4 \
 --oversampling --oversampling_num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH))
 
 sleep 5
 
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*4)) -c32 --ntasks-per-node=4 --gpus-per-node=4 --gres=gpu:4 \
-select_gpu_device python -u ./examples/multibranch/train.py --log=GFM_taskparallel_strong-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-BS$BATCH_SIZE-TP1-DD$HYDRAGNN_DDSTORE_METHOD-NW$HYDRAGNN_NUM_WORKERS --everyone \
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*4)) -c32 --ntasks-per-node=4 --gpus-per-node=4 --gpus-per-task=1 --gpu-bind=none \
+python -u ./examples/multibranch/train.py --log=GFM_taskparallel_strong-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-BS$BATCH_SIZE-TP1-DD$HYDRAGNN_DDSTORE_METHOD-NW$HYDRAGNN_NUM_WORKERS --everyone \
 --inputfile=multibranch_GFM260.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH)) \
 --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4 --batch_size=$BATCH_SIZE --num_epoch=4 \
 --task_parallel --use_devicemesh --oversampling --oversampling_num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH))
