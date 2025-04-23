@@ -11,29 +11,27 @@
 
 from tqdm import tqdm
 import numpy as np
-
+import pdb
 import torch
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.profile import Profiler
-from hydragnn.utils.distributed import get_device, print_peak_memory, check_remaining
-from hydragnn.preprocess.load_data import HydraDataLoader
-from hydragnn.utils.model import Checkpoint, EarlyStopping
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.profile import Profiler
+from hydragnn.utils.distributed import get_device, check_remaining
+from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 
 import os
 
 from torch.profiler import record_function
-import contextlib
-from unittest.mock import MagicMock
+
 from hydragnn.utils.distributed import get_comm_size_and_rank
 import torch.distributed as dist
 import pickle
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 import time
 from mpi4py import MPI
 
@@ -65,11 +63,19 @@ def train_validate_test(
     plot_init_solution=True,
     plot_hist_solution=False,
     create_plots=False,
+    use_deepspeed=False,
+    compute_grad_energy=False,
 ):
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
         config["Training"]["EarlyStopping"]
         if "EarlyStopping" in config["Training"]
+        else False
+    )
+
+    CheckRemainingTime = (
+        config["Training"]["CheckRemainingTime"]
+        if "CheckRemainingTime" in config["Training"]
         else False
     )
 
@@ -129,11 +135,15 @@ def train_validate_test(
             earlystopper = EarlyStopping(patience=config["Training"]["patience"])
 
     if SaveCheckpoint:
-        checkpoint = Checkpoint(name=model_with_config_name)
+        checkpoint = Checkpoint(
+            name=model_with_config_name,
+            use_deepspeed=use_deepspeed,
+        )
         if "checkpoint_warmup" in config["Training"]:
             checkpoint = Checkpoint(
                 name=model_with_config_name,
                 warmup=config["Training"]["checkpoint_warmup"],
+                use_deepspeed=use_deepspeed,
             )
 
     timer = Timer("train_validate_test")
@@ -151,7 +161,13 @@ def train_validate_test(
             tr.enable()
             tr.start("train")
             train_loss, train_taskserr = train(
-                train_loader, model, optimizer, verbosity, profiler=prof
+                train_loader,
+                model,
+                optimizer,
+                verbosity,
+                profiler=prof,
+                use_deepspeed=use_deepspeed,
+                compute_grad_energy=compute_grad_energy,
             )
             tr.stop("train")
             tr.disable()
@@ -162,7 +178,11 @@ def train_validate_test(
             continue
 
         val_loss, val_taskserr = validate(
-            val_loader, model, verbosity, reduce_ranks=True
+            val_loader,
+            model,
+            verbosity,
+            reduce_ranks=True,
+            compute_grad_energy=compute_grad_energy,
         )
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
@@ -170,6 +190,7 @@ def train_validate_test(
             verbosity,
             reduce_ranks=True,
             return_samples=plot_hist_solution,
+            compute_grad_energy=compute_grad_energy,
         )
         scheduler.step(val_loss)
         if writer is not None:
@@ -186,7 +207,15 @@ def train_validate_test(
             f"Test Loss: {test_loss:.8f}",
         )
         print_distributed(
-            verbosity, "Tasks Loss:", [taskerr.item() for taskerr in train_taskserr]
+            verbosity,
+            "Tasks Train Loss:",
+            [taskerr.item() for taskerr in train_taskserr],
+        )
+        print_distributed(
+            verbosity, "Tasks Val Loss:", [taskerr.item() for taskerr in val_taskserr]
+        )
+        print_distributed(
+            verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
         )
 
         total_loss_train[epoch] = train_loss
@@ -223,13 +252,14 @@ def train_validate_test(
                 )
                 break
 
-        should_stop = check_remaining(t0)
-        if should_stop:
-            print_distributed(
-                verbosity,
-                "No time left. Early stop.",
-            )
-            break
+        if CheckRemainingTime:
+            should_stop = check_remaining(t0)
+            if should_stop:
+                print_distributed(
+                    verbosity,
+                    "No time left. Early stop.",
+                )
+                break
 
     timer.stop()
 
@@ -422,6 +452,8 @@ def train(
     opt,
     verbosity,
     profiler=None,
+    use_deepspeed=False,
+    compute_grad_energy=False,
 ):
     if profiler is None:
         profiler = Profiler()
@@ -464,7 +496,10 @@ def train(
         tr.stop("dataload", **syncopt)
         tr.start("zero_grad")
         with record_function("zero_grad"):
-            opt.zero_grad()
+            if use_deepspeed:
+                pass
+            else:
+                opt.zero_grad()
         tr.stop("zero_grad")
         tr.start("get_head_indices")
         with record_function("get_head_indices"):
@@ -477,8 +512,13 @@ def train(
             data = data.to(get_device())
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
-            pred = model(data)
-            loss, tasks_loss = model.module.loss(pred, data.y, head_index)
+            if compute_grad_energy:  # for force and energy prediction
+                data.pos.requires_grad = True
+                pred = model(data)
+                loss, tasks_loss = model.module.energy_force_loss(pred, data)
+            else:
+                pred = model(data)
+                loss, tasks_loss = model.module.loss(pred, data.y, head_index)
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -486,7 +526,10 @@ def train(
         tr.stop("forward", **syncopt)
         tr.start("backward", **syncopt)
         with record_function("backward"):
-            loss.backward()
+            if use_deepspeed:
+                model.backward(loss)
+            else:
+                loss.backward()
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -494,7 +537,10 @@ def train(
         tr.stop("backward", **syncopt)
         tr.start("opt_step", **syncopt)
         # print_peak_memory(verbosity, "Max memory allocated before optimizer step")
-        opt.step()
+        if use_deepspeed:
+            model.step()
+        else:
+            opt.step()
         # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()
@@ -520,7 +566,7 @@ def train(
 
 
 @torch.no_grad()
-def validate(loader, model, verbosity, reduce_ranks=True):
+def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=False):
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -544,8 +590,14 @@ def validate(loader, model, verbosity, reduce_ranks=True):
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
-        pred = model(data)
-        error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        if compute_grad_energy:  # for force and energy prediction
+            with torch.enable_grad():
+                data.pos.requires_grad = True
+                pred = model(data)
+                error, tasks_loss = model.module.energy_force_loss(pred, data)
+        else:
+            pred = model(data)
+            error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -564,7 +616,14 @@ def validate(loader, model, verbosity, reduce_ranks=True):
 
 
 @torch.no_grad()
-def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
+def test(
+    loader,
+    model,
+    verbosity,
+    reduce_ranks=True,
+    return_samples=True,
+    compute_grad_energy=False,
+):
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -591,10 +650,18 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
             loader.dataset.ddstore.epoch_end()
         head_index = get_head_indices(model, data)
         data = data.to(get_device())
-        pred = model(data)
-        error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        if compute_grad_energy:  # for force and energy prediction
+            with torch.enable_grad():
+                data.pos.requires_grad = True
+                pred = model(data)
+                error, tasks_loss = model.module.energy_force_loss(pred, data)
+        else:
+            pred = model(data)
+            error, tasks_loss = model.module.loss(pred, data.y, head_index)
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
+            if model.module.var_output:
+                pred = pred[0]
             offset = 0
             for i in range(len(data)):
                 n = len(data[i].pos)
@@ -653,6 +720,8 @@ def test(loader, model, verbosity, reduce_ranks=True, return_samples=True):
             data = data.to(get_device())
             ytrue = data.y
             pred = model(data)
+            if model.module.var_output:
+                pred = pred[0]
             for ihead in range(model.module.num_heads):
                 head_pre = pred[ihead].reshape(-1, 1)
                 head_val = ytrue[head_index[ihead]]

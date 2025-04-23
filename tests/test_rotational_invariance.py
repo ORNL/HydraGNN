@@ -9,15 +9,15 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import sys, os, json
+import json
 import pytest
 
 import torch
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, NormalizeRotation
-from hydragnn.preprocess.utils import get_radius_graph_config
+from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_config
 
-from hydragnn.preprocess.utils import (
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
     check_data_samples_equivalence,
 )
 

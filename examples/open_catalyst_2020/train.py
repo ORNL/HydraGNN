@@ -4,38 +4,40 @@ import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
 import random
-import numpy as np
 
 import torch
-from torch import tensor
-from torch_geometric.data import Data
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.load_data import split_dataset
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print_utils import iterate_tqdm, log
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 from utils.atoms_to_graphs import AtomsToGraphs
 from utils.preprocess import write_images_to_adios
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
 import subprocess
-from hydragnn.utils import nsplit
+from hydragnn.utils.distributed import nsplit
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -54,6 +56,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.var_config = var_config
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
+
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
 
         self.dist = dist
         if self.dist:
@@ -84,16 +89,32 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6, r_pbc=False)
+        a2g = AtomsToGraphs(max_neigh=50, radius=6.0)
 
-        self.dataset.extend(
-            write_images_to_adios(
-                a2g,
-                chunked_txt_files,
-                self.data_path,
-                energy_per_atom=self.energy_per_atom,
-            )
+        list_atomistic_structures = write_images_to_adios(
+            a2g,
+            chunked_txt_files,
+            self.data_path,
+            energy_per_atom=self.energy_per_atom,
         )
+
+        for item in list_atomistic_structures:
+            if self.check_forces_values(item.force):
+                self.dataset.append(item)
+            else:
+                print(
+                    f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
+                    flush=True,
+                )
+
+        random.shuffle(self.dataset)
+
+    def check_forces_values(self, forces):
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
@@ -187,7 +208,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -200,8 +221,8 @@ if __name__ == "__main__":
     )
 
     log_name = "OC2020" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -341,11 +362,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
@@ -353,7 +376,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)
@@ -364,7 +387,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -384,8 +407,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

@@ -4,7 +4,7 @@
     },
    "NeuralNetwork": {
         "Architecture": {
-            "model_type": "EGNN",
+            "mpnn_type": "EGNN",
             "equivariance": true,
             "radius": 5.0,
             "max_neighbours": 100000,
@@ -38,7 +38,7 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0, 1, 2, 3],
-            "output_names": ["energy", "forces"],
+            "output_names": ["energy", "force"],
             "output_index": [0, 2],
             "output_dim": [1, 3],
             "type": ["graph", "node"]

@@ -4,41 +4,48 @@ import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
-import random
 import numpy as np
 
+import random
+
 import torch
-from torch import tensor
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 from torch_geometric.data import Data
 
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.load_data import split_dataset
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print_utils import iterate_tqdm, log
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
-from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
-
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 from ase.io import read
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-import subprocess
-from hydragnn.utils import nsplit
+from hydragnn.utils.distributed import nsplit
 
 
 def info(*args, logtype="info", sep=" "):
@@ -58,7 +65,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
         data_type,
         energy_per_atom=True,
         dist=False,
-        r_pbc=False,
     ):
         super().__init__()
 
@@ -66,11 +72,13 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.data_path = dirpath
         self.energy_per_atom = energy_per_atom
 
-        self.r_pbc = r_pbc
-        if self.r_pbc:
-            self.radius_graph = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
-        else:
-            self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
+        # NOTE Open Catalyst 2022 dataset has PBC:
+        #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
+        self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
+
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
 
         self.dist = dist
         if self.dist:
@@ -99,21 +107,43 @@ class OpenCatalystDataset(AbstractBaseDataset):
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            self.dataset.extend(self.traj_to_torch_geom(traj_file))
+            list_atomistic_structures = self.traj_to_torch_geom(traj_file)
+            for item in list_atomistic_structures:
+                if self.check_forces_values(item.force):
+                    self.dataset.append(item)
+                else:
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
+                        flush=True,
+                    )
+
+        random.shuffle(self.dataset)
 
     def ase_to_torch_geom(self, atoms):
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
         positions = torch.Tensor(atoms.get_positions())
-        cell = torch.Tensor(np.array(atoms.get_cell())).view(1, 3, 3)
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
 
+        cell = None
+        try:
+            cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
+        except:
+            print(f"Structure does not have cell", flush=True)
+
+        pbc = None
+        try:
+            pbc = atoms.get_pbc()
+        except:
+            print(f"Structure does not have pbc", flush=True)
+
         # put the minimum data in torch geometric data object
         data = Data(
             cell=cell,
+            pbc=pbc,
             pos=positions,
             atomic_numbers=atomic_numbers,
             natoms=natoms,
@@ -132,7 +162,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         data.x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
-        data = self.radius_graph(data)
+        if data.pbc is not None and data.cell is not None:
+            try:
+                data = self.radius_graph_pbc(data)
+            except:
+                print(
+                    f"Structure could not successfully apply pbc radius graph",
+                    flush=True,
+                )
+                data = self.radius_graph(data)
+        else:
+            data = self.radius_graph(data)
+
         data = transform_coordinates(data)
 
         return data
@@ -146,6 +187,13 @@ class OpenCatalystDataset(AbstractBaseDataset):
         for step in traj:
             data_list.append(self.ase_to_torch_geom(step))
         return data_list
+
+    def check_forces_values(self, forces):
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
@@ -235,7 +283,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -248,8 +296,8 @@ if __name__ == "__main__":
     )
 
     log_name = "OC2022" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -351,7 +399,7 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), ".//%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
@@ -396,11 +444,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
@@ -408,7 +458,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)
@@ -419,7 +469,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -439,8 +489,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

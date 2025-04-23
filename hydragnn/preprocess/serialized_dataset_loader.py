@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -20,11 +20,11 @@ from torch_geometric.transforms import (
     Spherical,
     PointPairFeatures,
 )
-
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 from hydragnn.preprocess import update_predicted_values, update_atom_features
 from hydragnn.utils.distributed import get_device
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
-from hydragnn.preprocess.utils import (
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
     get_radius_graph,
     get_radius_graph_pbc,
 )
@@ -86,6 +86,13 @@ class SerializedDataLoader:
         assert len(self.graph_feature_name) == len(self.graph_feature_dim)
         assert len(self.graph_feature_name) == len(self.graph_feature_col)
 
+        # LPE
+        self.compute_lapPE = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+            attr_name="pe",
+            is_undirected=True,
+        )
+
         self.dist = dist
         if self.dist:
             assert torch.distributed.is_initialized()
@@ -125,6 +132,8 @@ class SerializedDataLoader:
             dataset[:] = [rotational_invariance(data) for data in dataset]
 
         if self.periodic_boundary_conditions:
+            for data in dataset:
+                data.pbc = [True, True, True]
             # edge lengths already added manually if using PBC, so no need to call Distance.
             compute_edges = get_radius_graph_pbc(
                 radius=self.radius,
@@ -165,10 +174,19 @@ class SerializedDataLoader:
 
         # Descriptors about topology of the local environment
         if self.spherical_coordinates:
-            self.dataset[:] = [Spherical(data) for data in self.dataset]
+            dataset[:] = [Spherical(data) for data in dataset]
 
         if self.point_pair_features:
-            self.dataset[:] = [PointPairFeatures(data) for data in self.dataset]
+            dataset[:] = [PointPairFeatures(data) for data in dataset]
+
+        # LPE
+        dataset[:] = [self.compute_lapPE(data) for data in dataset]
+
+        # Relative LPE
+        for data in dataset:
+            source_pe = data.pe[data.edge_index[0]]
+            target_pe = data.pe[data.edge_index[1]]
+            data.rel_pe = torch.abs(source_pe - target_pe)
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)
@@ -194,9 +212,9 @@ class SerializedDataLoader:
         return dataset
 
     def __stratified_sampling(self, dataset: [Data], subsample_percentage: float):
-        """Given the dataset and the percentage of data you want to extract from it, method will
-        apply stratified sampling where X is the dataset and Y is are the category values for each datapoint.
-        In the case of the structures dataset where each structure contains 2 types of atoms, the category will
+        """Given the datasets and the percentage of data you want to extract from it, method will
+        apply stratified sampling where X is the datasets and Y is are the category values for each datapoint.
+        In the case of the structures datasets where each structure contains 2 types of atoms, the category will
         be constructed in a way: number of atoms of type 1 + number of protons of type 2 * 100.
 
         Parameters
@@ -204,16 +222,16 @@ class SerializedDataLoader:
         dataset: [Data]
             A list of Data objects representing a structure that has atoms.
         subsample_percentage: float
-            Percentage of the dataset.
+            Percentage of the datasets.
 
         Returns
         ----------
         [Data]
-            Subsample of the original dataset constructed using stratified sampling.
+            Subsample of the original datasets constructed using stratified sampling.
         """
         dataset_categories = []
         print_distributed(
-            self.verbosity, "Computing the categories for the whole dataset."
+            self.verbosity, "Computing the categories for the whole datasets."
         )
         for data in iterate_tqdm(dataset, self.verbosity):
             frequencies = torch.bincount(data.x[:, 0].int())

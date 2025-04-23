@@ -9,36 +9,39 @@ import pickle, csv
 
 import logging
 import sys
-from tqdm import tqdm
+
 from mpi4py import MPI
-from itertools import chain
+
 import argparse
-import time
 
 import hydragnn
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm, log
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.utils.smiles_utils import (
+from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
-from hydragnn.preprocess.utils import gather_deg
-from hydragnn.utils import nsplit
-import hydragnn.utils.tracer as tr
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.utils.distributed import nsplit
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-import torch_geometric.data
 import torch
-import torch.distributed as dist
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
 
 csce_node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
 
@@ -230,7 +233,7 @@ if __name__ == "__main__":
     ) = get_node_attribute_name(csce_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -245,8 +248,8 @@ if __name__ == "__main__":
     log_name = "csce_" + inputfilesubstr + "_eV_fullx"
     if args.log is not None:
         log_name = args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.print_utils.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -285,6 +288,8 @@ if __name__ == "__main__":
                 data = generate_graphdata_from_smilestr(
                     smilestr, ytarget, csce_node_types, var_config
                 )
+                data.dataset_name = "csce"
+                data.smiles = smilestr
                 dataset_lists[idataset].append(data)
 
         trainset = dataset_lists[0]
@@ -345,9 +350,7 @@ if __name__ == "__main__":
             os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
         opt = {"preload": False, "shmem": shmem, "ddstore": ddstore}
-        fname = fname = os.path.join(
-            os.path.dirname(__file__), "dataset", "csce_gap.bp"
-        )
+        fname = os.path.join(os.path.dirname(__file__), "dataset", "csce_gap.bp")
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm)
         testset = AdiosDataset(fname, "testset", comm)
@@ -387,10 +390,12 @@ if __name__ == "__main__":
     )
     comm.Barrier()
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
     comm.Barrier()
 
     timer.stop()
@@ -399,7 +404,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -407,7 +412,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -427,8 +432,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.time_utils.print_timers(verbosity)
 
     if args.mae:
         import matplotlib.pyplot as plt

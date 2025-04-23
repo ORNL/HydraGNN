@@ -8,33 +8,47 @@ import logging
 import sys
 from tqdm import tqdm
 from mpi4py import MPI
-from itertools import chain
 import argparse
-import time
+import math
 
 import hydragnn
 from hydragnn.preprocess.load_data import split_dataset
-from hydragnn.utils.print_utils import print_distributed, iterate_tqdm
-from hydragnn.utils.time_utils import Timer
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
+from hydragnn.utils.print.print_utils import print_distributed
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.utils.model import print_model
-from hydragnn.utils.smiles_utils import (
+from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
-from hydragnn.utils import nsplit
+from hydragnn.utils.input_config_parsing.config_utils import parse_deepspeed_config
+from hydragnn.utils.distributed import get_deepspeed_init_args
+from hydragnn.utils.distributed import nsplit
 
 import numpy as np
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
 import torch_geometric.data
 import torch
 import torch.distributed as dist
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
+deepspeed_available = True
+try:
+    import deepspeed
+except ImportError:
+    deepspeed_available = False
 
 # import warnings
 
@@ -79,7 +93,7 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets import AbstractBaseDataset
 
 
 def smiles_to_graph(datadir, files_list):
@@ -91,9 +105,12 @@ def smiles_to_graph(datadir, files_list):
         df = pandas.read_csv(os.path.join(datadir, filename))
         rx = list(nsplit(range(len(df)), comm_size))[rank]
 
-        for smile_id in range(len(df))[rx.start : rx.stop]:
+        for smile_id in tqdm(range(len(df))[rx.start : rx.stop]):
             ## get atomic positions and numbers
             dfrow = df.iloc[smile_id]
+
+            if math.isnan(float(dfrow[-1])):
+                continue
 
             smilestr = dfrow[0]
             ytarget = (
@@ -103,20 +120,24 @@ def smiles_to_graph(datadir, files_list):
                 .to(torch.float32)
             )  # HL gap
 
-            data = generate_graphdata_from_smilestr(
-                smilestr,
-                ytarget,
-                ogb_node_types,
-                var_config,
-            )
+            try:
+                data = generate_graphdata_from_smilestr(
+                    smilestr,
+                    ytarget,
+                    ogb_node_types,
+                    var_config,
+                )
 
-            subset.append(data)
+                subset.append(data)
+            except KeyError:
+                print("KeyError: ", smilestr)
+                continue
 
     return subset
 
 
 class OGBDataset(AbstractBaseDataset):
-    """OGBDataset dataset class"""
+    """OGBDataset datasets class"""
 
     def __init__(self, dirpath, var_config, dist=False):
         super().__init__()
@@ -259,6 +280,12 @@ if __name__ == "__main__":
     group.add_argument(
         "--csv", help="CSV dataset", action="store_const", dest="format", const="csv"
     )
+    parser.add_argument(
+        "--use_deepspeed",
+        help="Use Deepspeed",
+        action="store_true",
+        dest="use_deepspeed",
+    )
     parser.set_defaults(format="adios")
     args = parser.parse_args()
 
@@ -288,7 +315,9 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = var_config["input_node_feature_dims"]
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp(
+        use_deepspeed=args.use_deepspeed
+    )
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -301,9 +330,9 @@ if __name__ == "__main__":
     )
 
     log_name = "ogb_" + inputfilesubstr
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     modelname = "ogb_" + inputfilesubstr
     if args.preonly:
@@ -369,6 +398,7 @@ if __name__ == "__main__":
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
+            adwriter.add_global("pna_deg", deg)
             adwriter.save()
 
         sys.exit(0)
@@ -380,9 +410,9 @@ if __name__ == "__main__":
         if args.shmem:
             opt = {"preload": False, "shmem": True}
         fname = os.path.join(os.path.dirname(__file__), "dataset", "ogb_gap.bp")
-        trainset = AdiosDataset(fname, "trainset", comm, opt)
-        valset = AdiosDataset(fname, "valset", comm, opt)
-        testset = AdiosDataset(fname, "testset", comm, opt)
+        trainset = AdiosDataset(fname, "trainset", comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm, **opt)
+        testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "csv":
         fname = os.path.join(os.path.dirname(__file__), "dataset", "pcqm4m_gap.csv")
         fact = OGBRawDatasetFactory(
@@ -418,28 +448,61 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     timer.stop()
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
 
     if rank == 0:
         print_model(model)
     dist.barrier()
 
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
-    )
+    if not args.use_deepspeed:
+        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
-    hydragnn.utils.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
-    )
+        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ]
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+        )
+
+        hydragnn.utils.model.load_existing_model_config(
+            model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+        )
+
+    else:
+        assert deepspeed_available, "deepspeed package not installed"
+        # first, create optimizer and scheduler for deepspeed initialization
+        learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ]
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+        )
+
+        # create temporary deepspeed configuration
+        ds_config = parse_deepspeed_config(config)
+
+        # create deepspeed model
+        model, optimizer, _, _ = deepspeed.initialize(
+            args=get_deepspeed_init_args(),
+            model=model,
+            config=ds_config,
+            dist_init_required=False,
+            optimizer=optimizer,
+        )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
+
+        hydragnn.utils.model.load_existing_model_config(
+            model, config["NeuralNetwork"]["Training"], use_deepspeed=True
+        )
 
     ##################################################################################################################
 
@@ -455,10 +518,11 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        use_deepspeed=args.use_deepspeed,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if args.mae:
         ##################################################################################################################

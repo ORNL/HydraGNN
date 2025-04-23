@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -15,12 +15,15 @@ import torch.nn as nn
 from torch_geometric.nn import Sequential
 from .Base import Base
 
-from ..utils import unsorted_segment_mean
+from hydragnn.utils.model import unsorted_segment_mean
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
 class EGCLStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         edge_attr_dim: int,
         *args,
         max_neighbours: Optional[int] = None,
@@ -30,47 +33,87 @@ class EGCLStack(Base):
         self.edge_dim = (
             0 if edge_attr_dim is None else edge_attr_dim
         )  # Must be named edge_dim to trigger use by Base
-        super().__init__(*args, **kwargs)
+        self.is_edge_model = True  # specify that mpnn can handle edge features
+        super().__init__(input_args, conv_args, *args, **kwargs)
+
+        assert (
+            self.input_args == "inv_node_feat, equiv_node_feat, edge_index, edge_attr"
+        )
         pass
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
         self.graph_convs.append(
-            self.get_conv(self.input_dim, self.hidden_dim, last_layer)
+            self._apply_global_attn(
+                self.get_conv(
+                    self.embed_dim,
+                    self.hidden_dim,
+                    last_layer,
+                    edge_dim=self.edge_embed_dim,
+                )
+            )
         )
         self.feature_layers.append(nn.Identity())
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
-            conv = self.get_conv(self.hidden_dim, self.hidden_dim, last_layer)
-            self.graph_convs.append(conv)
+            self.graph_convs.append(
+                self._apply_global_attn(
+                    self.get_conv(
+                        self.hidden_dim,
+                        self.hidden_dim,
+                        last_layer,
+                        edge_dim=self.edge_embed_dim,
+                    )
+                )
+            )
             self.feature_layers.append(nn.Identity())
 
-    def get_conv(self, input_dim, output_dim, last_layer=False):
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        if not edge_dim:
+            edge_dim = self.edge_dim
         egcl = E_GCL(
             input_channels=input_dim,
             output_channels=output_dim,
             hidden_channels=self.hidden_dim,
-            edge_attr_dim=self.edge_dim,
+            edge_attr_dim=edge_dim,
             equivariant=self.equivariance and not last_layer,
         )
 
         if self.equivariance and not last_layer:
             return Sequential(
-                "x, pos, edge_index, edge_attr",
+                self.input_args,
                 [
-                    (egcl, "x, pos, edge_index, edge_attr -> x, pos"),
+                    (
+                        egcl,
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
         else:
             return Sequential(
-                "x, pos, edge_index, edge_attr",
+                self.input_args,
                 [
-                    (egcl, "x, pos, edge_index, edge_attr -> x"),
-                    (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                    (
+                        egcl,
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat",
+                    ),
+                    (
+                        lambda inv_node_feat, equiv_node_feat: [
+                            inv_node_feat,
+                            equiv_node_feat,
+                        ],
+                        "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                    ),
                 ],
             )
 
-    def _conv_args(self, data):
+    def _embedding(self, data):
+        super()._embedding(data)
+
+        data.edge_shifts = torch.zeros(
+            (data.edge_index.size(1), 3), device=data.edge_index.device
+        )  # Override. pbc edge shifts are currently not supported in positional update models
+
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
@@ -82,7 +125,23 @@ class EGCLStack(Base):
                 "edge_attr": None,
             }
 
-        return conv_args
+        if self.use_global_attn:
+            # encode node positional embeddings
+            x = self.pos_emb(data.pe)
+            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
+            if self.input_dim:
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = self.node_lin(x)
+            # repeat for edge features and relative edge encodings
+            if self.is_edge_model:
+                e = self.rel_pos_emb(data.rel_pe)
+                if self.use_edge_attr:
+                    e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
+                    e = self.edge_lin(e)
+                conv_args.update({"edge_attr": e})
+            return x, data.pos, conv_args
+        else:
+            return data.x, data.pos, conv_args
 
     def __str__(self):
         return "EGCLStack"
@@ -211,20 +270,14 @@ class E_GCL(nn.Module):
         coord = coord + agg * self.coords_weight
         return coord
 
-    def coord2radial(self, edge_index, coord):
-        row, col = edge_index
-        coord_diff = coord[row] - coord[col]
-        radial = torch.sum((coord_diff) ** 2, 1).unsqueeze(1)
-
-        if self.norm_diff:
-            norm = torch.sqrt(radial) + 1
-            coord_diff = coord_diff / (norm)
-
-        return radial, coord_diff
-
     def forward(self, x, coord, edge_index, edge_attr, node_attr=None):
         row, col = edge_index
-        radial, coord_diff = self.coord2radial(edge_index, coord)
+        edge_shifts = torch.zeros(
+            (edge_index.size(1), 3), device=edge_index.device
+        )  # pbc edge shifts are currently not supported in positional update models
+        coord_diff, radial = get_edge_vectors_and_lengths(
+            coord, edge_index, edge_shifts, normalize=self.norm_diff, eps=1.0
+        )
         # Message Passing
         edge_feat = self.edge_model(x[row], x[col], radial, edge_attr)
         if self.equivariant:

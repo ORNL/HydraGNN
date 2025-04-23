@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2021, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -8,7 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-
+import pdb
 import torch
 import torch.nn.functional as F
 from torch.nn import ModuleList
@@ -19,47 +19,65 @@ from .Base import Base
 class CGCNNStack(Base):
     def __init__(
         self,
+        input_args,
+        conv_args,
         edge_dim: int,
         input_dim,
+        hidden_dim,
         output_dim,
         *args,
         **kwargs,
     ):
         self.edge_dim = edge_dim
-
+        self.is_edge_model = True  # specify that mpnn can handle edge features
         # CGCNN does not change embedding dimensions
         # We use input dimension (first argument of base constructor)
-        #    also as hidden dimension (second argument of base constructor)
+        # also as hidden dimension (second argument of base constructor)
         # We therefore pass all required args explicitly.
+        # Unless we use GPS, in which case hidden dimension is user defined and
+        # typically different from input dim.
         super().__init__(
+            input_args,
+            conv_args,
             input_dim,
-            input_dim,
+            hidden_dim,
             output_dim,
             *args,
             **kwargs,
         )
 
-    def get_conv(self, input_dim, _):
+        if self.use_edge_attr or (
+            self.use_global_attn and self.is_edge_model
+        ):  # check if gps is being used and mpnn can handle edge feats
+            assert (
+                self.input_args
+                == "inv_node_feat, equiv_node_feat, edge_index, edge_attr"
+            )
+            assert self.conv_args == "inv_node_feat, edge_index, edge_attr"
+        else:
+            assert self.input_args == "inv_node_feat, equiv_node_feat, edge_index"
+            assert self.conv_args == "inv_node_feat, edge_index"
+
+    def get_conv(self, input_dim, _, edge_dim=None):
         cgcnn = CGConv(
             channels=input_dim,
-            dim=self.edge_dim,
+            dim=edge_dim,
             aggr="add",
             batch_norm=False,
             bias=True,
         )
 
-        input_args = "x, pos, edge_index"
-        conv_args = "x, edge_index"
-
-        if self.use_edge_attr:
-            input_args += ", edge_attr"
-            conv_args += ", edge_attr"
-
         return Sequential(
-            input_args,
+            self.input_args,
             [
-                (cgcnn, conv_args + " -> x"),
-                (lambda x, pos: [x, pos], "x, pos -> x, pos"),
+                (cgcnn, self.conv_args + " -> inv_node_feat"),
+                (
+                    lambda inv_node_feat, equiv_node_feat: [
+                        inv_node_feat,
+                        equiv_node_feat,
+                    ],
+                    "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
+                ),
             ],
         )
 

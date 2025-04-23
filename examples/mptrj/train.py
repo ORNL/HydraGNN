@@ -1,33 +1,40 @@
-import os, re, json
+import os, json
 import logging
 import sys
 from mpi4py import MPI
 import argparse
 
-import glob
-
 import random
-import numpy as np
 
 import torch
-from torch import tensor
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 from torch_geometric.data import Data
 
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
-from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
-import hydragnn.utils.tracer as tr
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print_utils import iterate_tqdm, log
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 from jarvis.db.jsonutils import loadjson, dumpjson
 from pymatgen.core.structure import Structure
@@ -41,8 +48,7 @@ try:
 except ImportError:
     pass
 
-import subprocess
-from hydragnn.utils import nsplit
+from hydragnn.utils.distributed import nsplit
 
 
 def info(*args, logtype="info", sep=" "):
@@ -64,12 +70,16 @@ class MPTrjDataset(AbstractBaseDataset):
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
 
         self.dist = dist
         if self.dist:
             assert torch.distributed.is_initialized()
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
+
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 100.0
 
         d = None
         if tmpfs is None:
@@ -112,9 +122,20 @@ class MPTrjDataset(AbstractBaseDataset):
                 info["magmom"] = k["magmom"]
 
                 # Convert lists to PyTorch tensors
-                lattice_mat = torch.tensor(
-                    info["atoms"]["lattice_mat"], dtype=torch.float32
-                )
+                lattice_mat = None
+                try:
+                    lattice_mat = torch.tensor(
+                        info["atoms"]["lattice_mat"], dtype=torch.float32
+                    )
+                except:
+                    print(f"Structure does not have lattice_mat", flush=True)
+
+                pbc = None
+                try:
+                    pbc = info["atoms"]["pbc"]
+                except:
+                    print(f"Structure does not have pbc", flush=True)
+
                 coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
 
                 # Multiply 'lattice_mat' by the transpose of 'coords'
@@ -141,7 +162,8 @@ class MPTrjDataset(AbstractBaseDataset):
 
                 # Creating the Data object
                 data = Data(
-                    supercell_size=lattice_mat,
+                    cell=lattice_mat,
+                    pbc=pbc,
                     energy=energy,
                     force=forces,
                     # stress=torch.tensor(stresses, dtype=torch.float32),
@@ -152,10 +174,36 @@ class MPTrjDataset(AbstractBaseDataset):
                     y=energy,
                 )
 
-                data = self.radius_graph(data)
-                data = transform_coordinates(data)
+                if data.pbc is not None and data.cell is not None:
+                    try:
+                        data = self.radius_graph_pbc(data)
+                    except:
+                        print(
+                            f"Structure could not successfully apply pbc radius graph",
+                            flush=True,
+                        )
+                        data = self.radius_graph(data)
+                else:
+                    data = self.radius_graph(data)
 
-                self.dataset.append(data)
+                data = transform_coordinates(data)
+                if self.check_forces_values(data.force):
+                    self.dataset.append(data)
+                else:
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
+                        flush=True,
+                    )
+
+        random.shuffle(self.dataset)
+
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
@@ -237,7 +285,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -250,8 +298,8 @@ if __name__ == "__main__":
     )
 
     log_name = "MPTrj" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.print_utils.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -385,11 +433,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
@@ -397,7 +447,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)
@@ -408,7 +458,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -428,8 +478,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

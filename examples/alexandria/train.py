@@ -15,17 +15,23 @@ from torch_geometric.data import Data
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
-from hydragnn.utils.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.distdataset import DistDataset
-from hydragnn.utils.pickledataset import SimplePickleWriter, SimplePickleDataset
-from hydragnn.preprocess.utils import gather_deg
-from hydragnn.preprocess.utils import RadiusGraph, RadiusGraphPBC
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.distdataset import DistDataset
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleWriter,
+    SimplePickleDataset,
+)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+)
 from hydragnn.preprocess.load_data import split_dataset
 
-import hydragnn.utils.tracer as tr
-from hydragnn.utils.print_utils import iterate_tqdm, log
+import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 from generate_dictionaries_pure_elements import (
     generate_dictionary_bulk_energies,
@@ -33,16 +39,26 @@ from generate_dictionaries_pure_elements import (
 )
 
 try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
 import subprocess
-from hydragnn.utils import nsplit
+from hydragnn.utils.distributed import nsplit
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+def list_directories(path):
+    # List all items in the given path
+    items = os.listdir(path)
+
+    # Filter out items that are directories
+    directories = [item for item in items if os.path.isdir(os.path.join(path, item))]
+
+    return directories
 
 
 periodic_table = generate_dictionary_elements()
@@ -68,12 +84,17 @@ class Alexandria(AbstractBaseDataset):
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
 
-        indices = ["pascal", "pbe", "pbe_1d", "pbe_2d", "pbesol", "scan"]
+        list_dirs = list_directories(
+            os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
+        )
 
-        for index in indices:
+        for index in list_dirs:
 
-            subdirpath = os.path.join(dirpath, "compressed_data", index)
+            subdirpath = os.path.join(
+                dirpath, "compressed_data", "alexandria.icams.rub.de", index
+            )
 
             total_file_list = os.listdir(subdirpath)
 
@@ -89,7 +110,7 @@ class Alexandria(AbstractBaseDataset):
                 if filepath.endswith("bz2"):
                     self.process_file_content(os.path.join(subdirpath, filepath))
                 else:
-                    print(f"{filepath} is not a .bz2 file to decompress")
+                    print(f"{filepath} is not a .bz2 file to decompress", flush=True)
 
     def get_data_dict(self, computed_entry_dict):
         """
@@ -118,15 +139,22 @@ class Alexandria(AbstractBaseDataset):
             assert pos.shape[1] == 3, "pos tensor does not have 3 coordinates per atom"
             assert pos.shape[0] > 0, "pos tensor does not have any atoms"
         except:
-            print(f"Structure {entry_id} does not have positional sites")
+            print(f"Structure {entry_id} does not have positional sites", flush=True)
             return data_object
-        natoms = torch.IntTensor([pos.shape[1]])
+        natoms = torch.IntTensor([pos.shape[0]])
 
         cell = None
         try:
             cell = torch.tensor(structure["lattice"]["matrix"]).to(torch.float32)
         except:
-            print(f"Structure {entry_id} does not have cell")
+            print(f"Structure {entry_id} does not have cell", flush=True)
+            return data_object
+
+        pbc = None
+        try:
+            pbc = structure["lattice"]["pbc"]
+        except:
+            print(f"Structure {entry_id} does not have pbc", flush=True)
             return data_object
 
         atomic_numbers = None
@@ -145,14 +173,17 @@ class Alexandria(AbstractBaseDataset):
                 pos.shape[0] == atomic_numbers.shape[0]
             ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
         except:
-            print(f"Structure {entry_id} does not have positional atomic numbers")
+            print(
+                f"Structure {entry_id} does not have positional atomic numbers",
+                flush=True,
+            )
             return data_object
 
         forces_numpy = None
         try:
             forces_numpy = get_forces_array_from_structure(structure)
         except:
-            print(f"Structure {entry_id} does not have forces")
+            print(f"Structure {entry_id} does not have forces", flush=True)
             return data_object
         forces = torch.tensor(forces_numpy).to(torch.float32)
 
@@ -167,7 +198,7 @@ class Alexandria(AbstractBaseDataset):
         try:
             total_energy = computed_entry_dict["data"]["energy_total"]
         except:
-            print(f"Structure {entry_id} does not have total energy")
+            print(f"Structure {entry_id} does not have total energy", flush=True)
             return data_object
         total_energy_tensor = (
             torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
@@ -213,6 +244,7 @@ class Alexandria(AbstractBaseDataset):
         data_object = Data(
             pos=pos,
             cell=cell,
+            pbc=pbc,
             atomic_numbers=atomic_numbers,
             forces=forces,
             # entry_id=entry_id,
@@ -237,7 +269,18 @@ class Alexandria(AbstractBaseDataset):
             [data_object.atomic_numbers, data_object.pos, data_object.forces], dim=1
         )
 
-        data_object = self.radius_graph(data_object)
+        if data_object.pbc is not None and data_object.cell is not None:
+            try:
+                data_object = self.radius_graph_pbc(data_object)
+            except:
+                print(
+                    f"Structure {entry_id} could not successfully apply pbc radius graph",
+                    flush=True,
+                )
+                data_object = self.radius_graph(data_object)
+        else:
+            data_object = self.radius_graph(data_object)
+
         data_object = transform_coordinates(data_object)
 
         return data_object
@@ -282,8 +325,12 @@ class Alexandria(AbstractBaseDataset):
                 self.dataset.extend(filtered_computed_entry_dict)
 
             except OSError as e:
-                print("Failed to decompress data:", e)
+                print("Failed to decompress data:", e, flush=True)
                 decompressed_data = None
+            except json.JSONDecodeError as e:
+                print("Failed to decode JSON:", e, flush=True)
+            except Exception as e:
+                print("An error occurred:", e, flush=True)
 
     def len(self):
         return len(self.dataset)
@@ -360,7 +407,7 @@ if __name__ == "__main__":
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -373,8 +420,8 @@ if __name__ == "__main__":
     )
 
     log_name = "Alexandria" if args.log is None else args.log
-    hydragnn.utils.setup_log(log_name)
-    writer = hydragnn.utils.get_summary_writer(log_name)
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
@@ -507,11 +554,13 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    config = hydragnn.utils.update_config(config, train_loader, val_loader, test_loader)
+    config = hydragnn.utils.input_config_parsing.update_config(
+        config, train_loader, val_loader, test_loader
+    )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
-    hydragnn.utils.save_config(config, log_name)
+    hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
 
@@ -519,7 +568,7 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.get_distributed_model(model, verbosity)
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     # Print details of neural network architecture
     print_model(model)
@@ -530,7 +579,7 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    hydragnn.utils.load_existing_model_config(
+    hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
@@ -550,8 +599,8 @@ if __name__ == "__main__":
         create_plots=False,
     )
 
-    hydragnn.utils.save_model(model, optimizer, log_name)
-    hydragnn.utils.print_timers(verbosity)
+    hydragnn.utils.model.save_model(model, optimizer, log_name)
+    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

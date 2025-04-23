@@ -9,12 +9,11 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import sys, os, json, numpy as np
-import pytest
+import json, numpy as np
 
 import torch
 from torch_geometric.data import Data
-from hydragnn.preprocess.utils import (
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
     get_radius_graph_config,
     get_radius_graph_pbc_config,
 )
@@ -82,9 +81,8 @@ def pytest_periodic_h2():
 
     # Create # Hydrogen molecule (H2) with arbitrary node features
     data = Data()
-    data.supercell_size = torch.tensor(
-        [[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]]
-    )
+    data.cell = torch.tensor([[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]])
+    data.pbc = [True, True, True]
     data.atom_types = [1, 1]
     data.pos = torch.tensor([[1.0, 1.0, 1.0], [1.43, 1.43, 1.43]])
     data.x = torch.tensor([[3, 5, 7], [9, 11, 13]])
@@ -108,7 +106,8 @@ def pytest_periodic_bcc_large():
 
     # Convert to PyG
     data2 = Data()
-    data2.supercell_size = torch.tensor(supercell.cell[:])
+    data2.cell = torch.tensor(supercell.cell[:])
+    data2.pbc = [True, True, True]
     data2.atom_types = np.ones(len(supercell)) * 27
     data2.pos = torch.tensor(supercell.positions)
     data2.x = torch.randn(data2.pos.size(0), 1)

@@ -12,7 +12,8 @@ import os, json
 import torch
 import random
 import hydragnn
-from .test_graphs import unittest_train_model
+from tests.test_graphs import unittest_train_model
+from hydragnn.utils.input_config_parsing.config_utils import update_config
 
 
 def unittest_model_prediction(config):
@@ -23,15 +24,18 @@ def unittest_model_prediction(config):
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.load_data.dataset_loading_and_splitting(config=config)
+    config = update_config(config, train_loader, val_loader, test_loader)
 
     model = hydragnn.models.create.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
     )
 
-    model = hydragnn.utils.get_distributed_model(model, config["Verbosity"]["level"])
+    model = hydragnn.utils.distributed.get_distributed_model(
+        model, config["Verbosity"]["level"]
+    )
 
-    log_name = hydragnn.utils.config_utils.get_log_name_config(config)
+    log_name = hydragnn.utils.input_config_parsing.get_log_name_config(config)
     hydragnn.utils.model.load_existing_model(model, log_name)
 
     model.eval()
@@ -66,9 +70,11 @@ def pytest_model_loadpred():
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
     # get the directory of trained model
-    log_name = hydragnn.utils.config_utils.get_log_name_config(config)
+    log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
+        config
+    )
     modelfile = os.path.join("./logs/", log_name, log_name + ".pk")
-    # check if pretrained model and pkl dataset files exists
+    # check if pretrained model and pkl datasets files exists
     case_exist = True
     config_file = os.path.join("./logs/", log_name, "config.json")
     if not (os.path.isfile(modelfile) and os.path.isfile(config_file)):
@@ -79,7 +85,7 @@ def pytest_model_loadpred():
             config = json.load(f)
         for dataset_name, raw_data_path in config["Dataset"]["path"].items():
             if not os.path.isfile(raw_data_path):
-                print(dataset_name, "dataset not found: ", raw_data_path)
+                print(dataset_name, "datasets not found: ", raw_data_path)
                 case_exist = False
                 break
     if not case_exist:

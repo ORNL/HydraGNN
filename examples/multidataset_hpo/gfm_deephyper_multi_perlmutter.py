@@ -4,6 +4,10 @@ import torch
 
 torch.backends.cudnn.enabled = False
 
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
 # deprecated in torch_geometric 2.0
 try:
     from torch_geometric.loader import DataLoader
@@ -89,9 +93,9 @@ def run(trial, dequed=None):
     )
     print("Command = ", command, flush=True, file=f)
 
-    result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
     output = "F"
     try:
+        result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
         while True:
@@ -163,7 +167,7 @@ if __name__ == "__main__":
         evaluator,
         acq_func="UCB",
         multi_point_strategy="cl_min",  # Constant liar strategy
-        random_state=42,
+        random_state=random_state,
         # Location where to store the results
         log_dir=log_name,
         # Number of threads used to update surrogate model of BO
