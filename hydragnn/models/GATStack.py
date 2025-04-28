@@ -117,41 +117,60 @@ class GATStack(Base):
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
-        if (
-            "node" not in self.config_heads
-            or self.config_heads["node"]["type"] != "conv"
-        ):
-            return
+        nodeconfiglist = self.config_heads["node"]
+        assert self.num_branches == len(
+            nodeconfiglist
+        ), "asumming node head has the same branches as graph head, if any"
+        for branchdict in nodeconfiglist:
+            # only support conv for all node branches
+            if branchdict["type"] != "conv":
+                return
+
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        # In this part, each head has same number of convolutional layers, but can have different output dimension
-        self.convs_node_hidden.append(
-            self.get_conv(self.hidden_dim, self.hidden_dim_node[0], True)
-        )
-        self.batch_norms_node_hidden.append(
-            BatchNorm(self.hidden_dim_node[0] * self.heads)
-        )
-        for ilayer in range(self.num_conv_layers_node - 1):
-            self.convs_node_hidden.append(
-                self.get_conv(
-                    self.hidden_dim_node[ilayer] * self.heads,
-                    self.hidden_dim_node[ilayer + 1],
-                    True,
+
+        for branchdict in nodeconfiglist:
+            branchtype = branchdict["type"]
+            brancharct = branchdict["architecture"]
+            num_conv_layers_node = brancharct["num_headlayers"]
+            hidden_dim_node = brancharct["dim_headlayers"]
+
+            convs_node_hidden = ModuleList()
+            batch_norms_node_hidden = ModuleList()
+            convs_node_output = ModuleList()
+            batch_norms_node_output = ModuleList()
+
+            # In this part, each head has same number of convolutional layers, but can have different output dimension
+            convs_node_hidden.append(
+                self.get_conv(self.hidden_dim, hidden_dim_node[0], True)
+            )
+            batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[0] * self.heads))
+            for ilayer in range(num_conv_layers_node - 1):
+                convs_node_hidden.append(
+                    self.get_conv(
+                        hidden_dim_node[ilayer] * self.heads,
+                        hidden_dim_node[ilayer + 1],
+                        True,
+                    )
                 )
-            )
-            self.batch_norms_node_hidden.append(
-                BatchNorm(self.hidden_dim_node[ilayer + 1] * self.heads)
-            )
-        for ihead in node_feature_ind:
-            self.convs_node_output.append(
-                self.get_conv(
-                    self.hidden_dim_node[-1] * self.heads, self.head_dims[ihead], False
+                batch_norms_node_hidden.append(
+                    BatchNorm(hidden_dim_node[ilayer + 1] * self.heads)
                 )
-            )
-            self.batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
+            for ihead in node_feature_ind:
+                convs_node_output.append(
+                    self.get_conv(
+                        hidden_dim_node[-1] * self.heads, self.head_dims[ihead], False
+                    )
+                )
+                batch_norms_node_output.append(BatchNorm(self.head_dims[ihead]))
+
+            self.convs_node_hidden[branchtype] = convs_node_hidden
+            self.batch_norms_node_hidden[branchtype] = batch_norms_node_hidden
+            self.convs_node_output[branchtype] = convs_node_output
+            self.batch_norms_node_output[branchtype] = batch_norms_node_output
 
     def get_conv(self, input_dim, output_dim, concat, edge_dim=None):
         gat = GATv2Conv(
