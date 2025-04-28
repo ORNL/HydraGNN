@@ -15,7 +15,7 @@ from typing import Callable, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn.functional
-from torch.nn import ModuleList, Sequential, Linear
+from torch.nn import ModuleList, Sequential, Linear, ModuleDict
 from torch_scatter import scatter
 from torch_geometric.nn import global_mean_pool
 from e3nn import nn, o3
@@ -453,42 +453,47 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
 
         for ihead in range(self.num_heads):
             # mlp for each head output
+            head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                denselayers = []
-                denselayers.append(
-                    Linear(
-                        self.input_scalar_dim,
-                        self.head_dims[ihead],
+                for branchdict in self.config_heads["graph"]:
+                    branchtype = branchdict["type"]
+                    denselayers = []
+                    denselayers.append(
+                        Linear(
+                            self.input_scalar_dim,
+                            self.head_dims[ihead],
+                        )
                     )
-                )
-                head_NN = Sequential(*denselayers)
+                    head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                self.node_NN_type = self.config_heads["node"]["type"]
-                head_NN = ModuleList()
-                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
-                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
-                    assert (
-                        self.num_nodes is not None
-                    ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
-                    head_NN = LinearMLPNode(
-                        input_irreps,
-                        self.head_dims[ihead],
-                        self.num_mlp,
-                        self.config_heads["node"]["type"],
-                        self.activation_function,
-                        self.num_nodes,
-                    )
-                elif self.node_NN_type == "conv":
-                    raise ValueError(
-                        "Node-level convolutional layers are not supported in MACE"
-                    )
-                else:
-                    raise ValueError(
-                        "Unknown head NN structure for node features"
-                        + self.node_NN_type
-                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
-                    )
+                for branchdict in self.config_heads["node"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        assert (
+                            self.num_nodes is not None
+                        ), "num_nodes must be positive integer for MLP"
+                        # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                        head_NN[branchtype] = LinearMLPNode(
+                            input_irreps,
+                            self.head_dims[ihead],
+                            self.num_mlp,
+                            node_NN_type,
+                            self.activation_function,
+                            self.num_nodes,
+                        )
+                    elif node_NN_type == "conv":
+                        raise ValueError(
+                            "Node-level convolutional layers are not supported in MACE"
+                        )
+                    else:
+                        raise ValueError(
+                            "Unknown head NN structure for node features"
+                            + node_NN_type
+                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        )
             else:
                 raise ValueError(
                     "Unknown head type"
@@ -562,67 +567,79 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         self.input_scalar_dim = input_irreps.count(o3.Irrep(0, 1))
 
         # Create shared dense layers for graph-level output if applicable
+        dim_sharedlayers = 0
+        self.num_branches = 1
         if "graph" in self.config_heads:
-            denselayers = []
-            dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
-            denselayers.append(
-                Linear(self.input_scalar_dim, dim_sharedlayers)
-            )  # Count scalar irreps for input
-            denselayers.append(self.activation_function)
-            for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
-                denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+            self.num_branches = len(self.config_heads["graph"])
+            for branchdict in self.config_heads["graph"]:
+                denselayers = []
+                dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
+                denselayers.append(
+                    Linear(self.input_scalar_dim, dim_sharedlayers)
+                )  # Count scalar irreps for input
                 denselayers.append(self.activation_function)
-            self.graph_shared = Sequential(*denselayers)
+                for ishare in range(branchdict["architecture"]["num_sharedlayers"] - 1):
+                    denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+                    denselayers.append(self.activation_function)
+                self.graph_shared[branchdict["type"]] = Sequential(*denselayers)
 
         for ihead in range(self.num_heads):
             # mlp for each head output
+            head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                num_head_hidden = self.config_heads["graph"]["num_headlayers"]
-                dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
-                denselayers = []
-                denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
-                denselayers.append(self.activation_function)
-                for ilayer in range(num_head_hidden - 1):
-                    denselayers.append(
-                        Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
-                    )
+                for branchdict in self.config_heads["graph"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    dim_sharedlayers = brancharct["dim_sharedlayers"]
+                    num_head_hidden = brancharct["num_headlayers"]
+                    dim_head_hidden = brancharct["dim_headlayers"]
+                    denselayers = []
+                    denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                     denselayers.append(self.activation_function)
-                denselayers.append(
-                    Linear(
-                        dim_head_hidden[-1],
-                        self.head_dims[ihead],
+                    for ilayer in range(num_head_hidden - 1):
+                        denselayers.append(
+                            Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
+                        )
+                        denselayers.append(self.activation_function)
+                    denselayers.append(
+                        Linear(
+                            dim_head_hidden[-1],
+                            self.head_dims[ihead],
+                        )
                     )
-                )
-                head_NN = Sequential(*denselayers)
+                    head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                self.node_NN_type = self.config_heads["node"]["type"]
-                head_NN = ModuleList()
-                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
-                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
-                    assert (
-                        self.num_nodes is not None
-                    ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
-                    hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
-                    head_NN = NonLinearMLPNode(
-                        input_irreps,
-                        self.head_dims[ihead],
-                        self.num_mlp,
-                        hidden_dim_node,
-                        self.config_heads["node"]["type"],
-                        self.activation_function,
-                        self.num_nodes,
-                    )
-                elif self.node_NN_type == "conv":
-                    raise ValueError(
-                        "Node-level convolutional layers are not supported in MACE"
-                    )
-                else:
-                    raise ValueError(
-                        "Unknown head NN structure for node features"
-                        + self.node_NN_type
-                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
-                    )
+                for branchdict in self.config_heads["node"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    hidden_dim_node = brancharct["dim_headlayers"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        assert (
+                            self.num_nodes is not None
+                        ), "num_nodes must be positive integer for MLP"
+                        # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                        hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+                        head_NN[branchtype] = NonLinearMLPNode(
+                            input_irreps,
+                            self.head_dims[ihead],
+                            self.num_mlp,
+                            hidden_dim_node,
+                            node_NN_type,
+                            self.activation_function,
+                            self.num_nodes,
+                        )
+                    elif node_NN_type == "conv":
+                        raise ValueError(
+                            "Node-level convolutional layers are not supported in MACE"
+                        )
+                    else:
+                        raise ValueError(
+                            "Unknown head NN structure for node features"
+                            + node_NN_type
+                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        )
             else:
                 raise ValueError(
                     "Unknown head type"

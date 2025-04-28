@@ -478,7 +478,10 @@ class Base(Module):
         outputs_var = []
         # if no dataset_name, set it to be 0
         if not hasattr(data, "dataset_name"):
-            setattr(data, "dataset_name", data.batch * 0)
+            if data.batch is None:
+                setattr(data, "dataset_name", [0])
+            else:
+                setattr(data, "dataset_name", data.batch * 0)
         datasetIDs = data.dataset_name.unique()
         unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
