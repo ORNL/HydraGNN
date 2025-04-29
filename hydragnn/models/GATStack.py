@@ -123,7 +123,7 @@ class GATStack(Base):
         ), "asumming node head has the same branches as graph head, if any"
         for branchdict in nodeconfiglist:
             # only support conv for all node branches
-            if branchdict["type"] != "conv":
+            if branchdict["architecture"]["type"] != "conv":
                 return
 
         node_feature_ind = [

@@ -91,19 +91,23 @@ class CGCNNStack(Base):
         ]
         if len(node_feature_ind) == 0:
             return
-        self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-        self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
+        nodeconfiglist = self.config_heads["node"]
+        for branchdict in nodeconfiglist:
+            if branchdict["architecture"]["type"] != "conv":
+                return
+        self.num_conv_layers_node = nodeconfiglist[0]["num_headlayers"]
+        self.hidden_dim_node = nodeconfiglist[0]["dim_headlayers"]
         # fixme: CGConv layer alone will present the same out dimension with the input, instead of having different "in_channels" and "out_channels" as in the other conv layers;
         # so to predict output node features with different dimensions from the input node feature's, CGConv can be
         # combined with, e.g.,mlp
         for ihead in range(self.num_heads):
-            if (
-                self.head_type[ihead] == "node"
-                and self.config_heads["node"]["type"] == "conv"
-            ):
-                raise ValueError(
-                    '"conv" for node features decoder part in CGCNN is not ready yet. Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "mlp_per_node" in input file.'
-                )
+            for branchdict in nodeconfiglist:
+                assert self.num_conv_layers_node == branchdict["num_headlayers"]
+                assert self.hidden_dim_node == branchdict["dim_headlayers"]
+                if self.head_type[ihead] == "node" and branchdict["type"] == "conv":
+                    raise ValueError(
+                        '"conv" for node features decoder part in CGCNN is not ready yet. Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "mlp_per_node" in input file.'
+                    )
 
     def __str__(self):
         return "CGCNNStack"

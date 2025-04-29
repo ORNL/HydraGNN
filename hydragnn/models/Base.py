@@ -263,12 +263,12 @@ class Base(Module):
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
         nodeconfiglist = self.config_heads["node"]
-        assert self.num_branches == len(
-            nodeconfiglist
-        ), "asumming node head has the same branches as grah head, if any"
+        assert (
+            self.num_branches == len(nodeconfiglist) or self.num_branches == 1
+        ), "asumming node head has the same branches as graph head, if any"
         for branchdict in nodeconfiglist:
             # only support conv for all node branches
-            if branchdict["type"] != "conv":
+            if branchdict["architecture"]["type"] != "conv":
                 return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
@@ -428,7 +428,7 @@ class Base(Module):
                     else:
                         raise ValueError(
                             "Unknown head NN structure for node features"
-                            + self.node_NN_type
+                            + node_NN_type
                             + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                         )
             else:
@@ -472,16 +472,15 @@ class Base(Module):
         # shared dense layers for graph level output
         if data.batch is None:
             x_graph = x.mean(dim=0, keepdim=True)
+            # individual samplers
+            data.batch = data.x * 0
         else:
             x_graph = global_mean_pool(x, data.batch.to(x.device))
         outputs = []
         outputs_var = []
         # if no dataset_name, set it to be 0
         if not hasattr(data, "dataset_name"):
-            if data.batch is None:
-                setattr(data, "dataset_name", [0])
-            else:
-                setattr(data, "dataset_name", data.batch * 0)
+            setattr(data, "dataset_name", data.batch.unique() * 0)
         datasetIDs = data.dataset_name.unique()
         unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
