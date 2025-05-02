@@ -2,6 +2,7 @@ from mpi4py import MPI
 import pickle
 import time
 import os
+from io import BytesIO
 
 from hydragnn.utils.print.print_utils import log, log0, iterate_tqdm
 
@@ -391,6 +392,7 @@ class AdiosDataset(AbstractBaseDataset):
         subset_istart=None,
         subset_iend=None,
         keys=None,
+        ddstore_store_per_sample=True,  ## True for per-sample saving. False for feature-first saving
     ):
         """
         Parameters
@@ -448,12 +450,13 @@ class AdiosDataset(AbstractBaseDataset):
 
         self.enable_cache = enable_cache
         self.cache = dict()
+        self.use_ddstore = ddstore
         self.ddstore = None
-        self.ddstore = ddstore
+        self.ddstore_store_per_sample = ddstore_store_per_sample
         self.ddstore_width = (
             ddstore_width if ddstore_width is not None else self.comm_size
         )
-        if self.ddstore:
+        if self.use_ddstore:
             self.ddstore_comm = self.comm.Split(
                 self.rank // self.ddstore_width, self.rank
             )
@@ -626,7 +629,7 @@ class AdiosDataset(AbstractBaseDataset):
 
                         arr = np.ndarray(ishape, dtype=dtype, buffer=self.shm[k].buf)
                         self.data[k] = arr
-                elif self.ddstore:
+                elif self.use_ddstore:
                     ## Calculate local portion
                     shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
                     ishape = [int(x.strip(",")) for x in shape.strip().split()]
@@ -647,29 +650,105 @@ class AdiosDataset(AbstractBaseDataset):
                         self.data[k] = np.moveaxis(self.data[k], vdim, 0)
                         self.data[k] = np.ascontiguousarray(self.data[k])
 
-                    t4 = time.time()
-                    self.ddstore.add(vname, self.data[k])
-                    t5 = time.time()
-                    ddstore_time += t5 - t4
+                    if not self.ddstore_store_per_sample:
+                        t4 = time.time()
+                        self.ddstore.add(vname, self.data[k])
+                        t5 = time.time()
+                        ddstore_time += t5 - t4
 
-                    log0(
-                        "DDStore add:",
-                        (
-                            vname,
-                            start,
-                            count,
-                            vdim,
-                            self.data[k].dtype,
-                            self.data[k].shape,
-                            self.data[k].sum(),
-                        ),
-                    )
+                        log0(
+                            "DDStore add:",
+                            (
+                                vname,
+                                start,
+                                count,
+                                vdim,
+                                self.data[k].dtype,
+                                self.data[k].shape,
+                                self.data[k].sum(),
+                            ),
+                        )
                     nbytes += self.data[k].size * self.data[k].itemsize
+
+            ## per-sample approach
+            if self.use_ddstore and self.ddstore_store_per_sample:
+                t4 = time.time()
+                buf = BytesIO()
+                rx = list(nsplit(list(range(self.ndata)), self.ddstore_comm_size))[
+                    self.ddstore_comm_rank
+                ]
+                local_record_count = list()
+                for idx in rx:
+                    data_object = dict()
+                    for k in self.keys:
+                        shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                        ishape = [int(x.strip(",")) for x in shape.strip().split()]
+                        start = [
+                            0,
+                        ] * len(ishape)
+                        count = ishape
+                        vdim = self.variable_dim[k]
+                        start[vdim] = (
+                            self.variable_offset[k][idx]
+                            - self.variable_offset[k][rx[0]]
+                        )
+                        count[vdim] = self.variable_count[k][idx]
+                        if vdim > 0:
+                            start.insert(0, start.pop(vdim))
+                            count.insert(0, count.pop(vdim))
+                        assert start[0] + count[0] <= (self.data[k].shape)[0], (
+                            start[0],
+                            count[0],
+                            (self.data[k].shape)[0],
+                        )
+
+                        vname = "%s/%s" % (self.label, k)
+                        vartype = self.vars["%s/%s" % (self.label, k)]["Type"]
+                        if vartype == "double":
+                            dtype = np.float64
+                        elif vartype == "float":
+                            dtype = np.float32
+                        elif vartype == "int32_t":
+                            dtype = np.int32
+                        elif vartype == "int64_t":
+                            dtype = np.int64
+                        elif vartype == "uint8_t":
+                            dtype = np.uint8
+                        else:
+                            raise ValueError(vartype)
+
+                        slices = tuple(slice(s, s + c) for s, c in zip(start, count))
+                        data = self.data[k][slices]
+                        ## reset vdim
+                        if vdim > 0:
+                            data = np.moveaxis(data, 0, vdim)
+                        data_object[k] = data
+
+                    dtype = np.dtype(
+                        [(k, v.dtype, v.shape) for k, v in data_object.items()]
+                    )
+                    data_tuples = [
+                        tuple([v.tolist() for v in data_object.values()]),
+                    ]
+                    record_array = np.array(data_tuples, dtype=dtype)
+                    assert dtype.itemsize == record_array.nbytes
+                    local_record_count.append(dtype.itemsize)
+                    buf.write(record_array.tobytes())
+
+                record_count = self.comm.allgather(local_record_count)
+                self.record_count = np.hstack(record_count)
+                self.record_offset = self.record_count.cumsum()
+
+                arr = np.frombuffer(buf.getvalue(), dtype=np.uint8)
+                self.ddstore.add("record_array", arr)
+                nbytes += arr.nbytes
+                t5 = time.time()
+                ddstore_time += t5 - t4
 
             t6 = time.time()
             log0("Overall time (sec): ", t6 - t1)
             log0("DDStore adding time (sec): ", ddstore_time)
-            if self.ddstore:
+            if self.use_ddstore:
                 log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
         t7 = time.time()
@@ -823,6 +902,46 @@ class AdiosDataset(AbstractBaseDataset):
         if idx in self.cache:
             ## Load data from cached buffer
             data_object = self.cache[idx]
+        elif self.use_ddstore and self.ddstore_store_per_sample:
+            data_object = torch_geometric.data.Data()
+            dtype_list = list()
+            for k in self.keys:
+                shape = self.vars["%s/%s" % (self.label, k)]["Shape"]
+                ishape = [int(x.strip(",")) for x in shape.strip().split()]
+                start = [
+                    0,
+                ] * len(ishape)
+                count = ishape
+                vdim = self.variable_dim[k]
+                start[vdim] = self.variable_offset[k][idx]
+                count[vdim] = self.variable_count[k][idx]
+
+                vname = "%s/%s" % (self.label, k)
+                vartype = self.vars["%s/%s" % (self.label, k)]["Type"]
+                if vartype == "double":
+                    dtype = np.float64
+                elif vartype == "float":
+                    dtype = np.float32
+                elif vartype == "int32_t":
+                    dtype = np.int32
+                elif vartype == "int64_t":
+                    dtype = np.int64
+                elif vartype == "uint8_t":
+                    dtype = np.uint8
+                else:
+                    raise ValueError(vartype)
+
+                dtype_tuple = (k, dtype, count)
+                dtype_list.append(dtype_tuple)
+
+            dtype = np.dtype(dtype_list)
+            val = np.zeros(dtype.itemsize, dtype=np.uint8)
+            offset = 0 if idx == 0 else self.record_offset[idx - 1]
+            self.ddstore.get("record_array", val, offset)
+            val = val.view(dtype)[0]
+            for k in val.dtype.names:
+                v = torch.tensor(val[k])
+                exec("data_object.%s = v" % (k))
         else:
             data_object = torch_geometric.data.Data()
             for k in self.keys:
@@ -844,7 +963,7 @@ class AdiosDataset(AbstractBaseDataset):
                     for n0, n1 in zip(start, count):
                         slice_list.append(slice(n0, n0 + n1))
                     val = self.data[k][tuple(slice_list)]
-                elif self.ddstore:
+                elif self.use_ddstore and not self.ddstore_store_per_sample:
                     vname = "%s/%s" % (self.label, k)
                     vartype = self.vars["%s/%s" % (self.label, k)]["Type"]
                     if vartype == "double":
@@ -899,7 +1018,7 @@ class AdiosDataset(AbstractBaseDataset):
                     self.shm[k].unlink()
 
     def __del__(self):
-        if self.ddstore:
+        if self.use_ddstore:
             self.ddstore.free()
         if not self.preload and not self.shmem:
             self.f.close()
