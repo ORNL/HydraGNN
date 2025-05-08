@@ -9,6 +9,7 @@ import numpy as np
 
 try:
     import adios2
+
     adios2_version = [int(x) for x in adios2.__version__.split(".")]
     if adios2_version[0] <= 2 and adios2_version[1] < 10:
         import adios2 as ad2
