@@ -157,7 +157,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cutoff",
         type=int,
-        default=1000,
+        default=10,
         help="configurational_histogram_cutoff",
     )
     parser.add_argument("--seed", type=int, help="seed", default=43)
@@ -273,8 +273,20 @@ if __name__ == "__main__":
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
         attrs = dict()
-        attrs["minmax_node_feature"] = total.minmax_node_feature
-        attrs["minmax_graph_feature"] = total.minmax_graph_feature
+        if (
+            "normalize_features" in config["Dataset"]
+            and config["Dataset"]["normalize_features"]
+        ):
+            attrs["minmax_node_feature"] = total.minmax_node_feature
+        else:
+            attrs["minmax_node_feature"] = None
+        if (
+            "normalize_features" in config["Dataset"]
+            and config["Dataset"]["normalize_features"]
+        ):
+            attrs["minmax_graph_feature"] = total.minmax_graph_feature
+        else:
+            attrs["minmax_graph_feature"] = None
         attrs["pna_deg"] = deg
         SimplePickleWriter(
             trainset,
