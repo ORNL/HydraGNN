@@ -9,4 +9,5 @@ from .model import (
     tensor_divide,
     EarlyStopping,
     print_model,
+    update_multibranch_heads,
 )

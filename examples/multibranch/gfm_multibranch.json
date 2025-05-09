@@ -1,0 +1,170 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+   "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "EGNN",
+            "equivariance": true,
+            "radius": 5.0,
+            "max_neighbours": 100000,
+            "num_gaussians": 50,
+            "envelope_exponent": 5,
+            "int_emb_size": 64,
+            "basis_emb_size": 8,
+            "out_emb_size": 128,
+            "num_after_skip": 2,
+            "num_before_skip": 1,
+            "num_radial": 6,
+            "num_spherical": 7,
+            "num_filters": 126,
+            "pe_dim": 1,
+            "global_attn_heads": 8,
+            "global_attn_engine": "",
+            "global_attn_type": "",
+            "hidden_dim": 50,
+            "num_conv_layers": 3,
+            "output_heads": {
+                "graph": [
+                    {
+                        "type": "branch-0",
+                        "architecture": {
+                            "num_sharedlayers": 2,
+                            "dim_sharedlayers": 50,
+                            "num_headlayers": 2,
+                            "dim_headlayers": [
+                                50,
+                                25
+                            ]
+                        }
+                    },
+                    {
+                        "type": "branch-1",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
+                    },
+                    {
+                        "type": "branch-2",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
+                    },
+                    {
+                        "type": "branch-3",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
+                    },
+                    {
+                        "type": "branch-4",
+                        "architecture": {
+                            "num_sharedlayers": 1,
+                            "dim_sharedlayers": 20,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                50
+                            ]
+                        }
+                    }
+                ],
+                "node": [
+                    {
+                        "type": "branch-0",
+                        "architecture": {
+                            "num_headlayers": 2,
+                            "dim_headlayers": [
+                                200,
+                                200
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-1",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-2",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-3",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    },
+                    {
+                        "type": "branch-4",
+                        "architecture": {
+                            "num_headlayers": 1,
+                            "dim_headlayers": [
+                                100
+                            ],
+                            "type": "mlp"
+                        }
+                    }
+                ]
+            },
+                "task_weights": [
+                    1.0,
+                    1.0
+                ]
+            },
+        "Variables_of_interest": {
+            "input_node_features": [0, 1, 2, 3],
+            "output_names": ["energy", "force"],
+            "output_index": [0, 2],
+            "output_dim": [1, 3],
+            "type": ["graph", "node"]
+        },
+        "Training": {
+            "num_epoch": 250,
+            "EarlyStopping": true,
+            "perc_train": 0.9,
+            "loss_function_type": "mae",
+            "batch_size": 32,
+            "continue": 0,
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
+    }
+}

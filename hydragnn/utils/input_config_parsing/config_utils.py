@@ -16,6 +16,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 )
 from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
 import json
 import torch
@@ -34,6 +35,11 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
+
+    # update output_heads with latest config rules
+    config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
+        config["NeuralNetwork"]["Architecture"]["output_heads"]
+    )
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
@@ -208,9 +214,12 @@ def update_config_NN_outputs(config, data, graph_size_variable):
             if output_type[ihead] == "graph":
                 dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
             elif output_type[ihead] == "node":
+                # FIXME: check the first branch only, assuming all branches have the same type
                 if (
                     graph_size_variable
-                    and config["Architecture"]["output_heads"]["node"]["type"]
+                    and config["Architecture"]["output_heads"]["node"][0][
+                        "architecture"
+                    ]["type"]
                     == "mlp_per_node"
                 ):
                     raise ValueError(

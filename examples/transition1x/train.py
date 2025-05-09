@@ -1,21 +1,25 @@
-import os, re, json
+import mpi4py
+from mpi4py import MPI
+
+mpi4py.rc.thread_level = "serialized"
+mpi4py.rc.threads = False
+
+import os, json
+import random
+
+import h5py
+
 import logging
 import sys
-from mpi4py import MPI
 import argparse
 
 import numpy as np
 
-import random
-
 import torch
-
-# FIX random seed
-random_state = 0
-torch.manual_seed(random_state)
+import torch.distributed as dist
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import RadiusGraph, Distance, Spherical, LocalCartesian
+from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
@@ -27,9 +31,9 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
-    RadiusGraphPBC,
-    gather_deg,
+    RadiusGraph,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -37,73 +41,50 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
+from hydragnn.utils.descriptors_and_embeddings import xyz2mol
+
+from rdkit import Chem
+
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-import subprocess
 from hydragnn.utils.distributed import nsplit
 
-## FIMME
-torch.backends.cudnn.enabled = False
+torch.set_default_dtype(torch.float32)
 
-from fairchem.core.datasets import AseDBDataset
+from utils.create_graph_data import Dataloader
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+# FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
 
-dataset_names = [
-    "rattled-1000",
-    "rattled-1000-subsampled",
-    "rattled-500",
-    "rattled-500-subsampled",
-    "rattled-300",
-    "rattled-300-subsampled",
-    "aimd-from-PBE-1000-npt",
-    "aimd-from-PBE-1000-nvt",
-    "aimd-from-PBE-3000-npt",
-    "aimd-from-PBE-3000-nvt",
-    "rattled-relax",
-]
+class Transition1xDataset(AbstractBaseDataset):
+    """Transition1xDataset dataset class"""
 
-
-class OMat2024(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
         var_config,
-        data_type,
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
     ):
         super().__init__()
 
-        assert (data_type == "train") or (
-            data_type == "val"
-        ), "data_type must be a string either equal to 'train' or to 'val'"
-
-        self.var_config = var_config
-        self.data_path = os.path.join(dirpath, data_type)
+        self.data_path = os.path.join(dirpath, "transition1x-release.h5")
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
-
-        self.graphgps_transform = graphgps_transform
-
-        config_kwargs = {}  # see tutorial on additional configuration
-
-        # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 1000.0
+        self.world_size = 1
+        self.rank = 0
 
         self.dist = dist
         if self.dist:
@@ -111,130 +92,150 @@ class OMat2024(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
 
-        torch.distributed.barrier()
+        self.energy_per_atom = energy_per_atom
 
-        for dataname in dataset_names:
+        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
 
-            print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
+        self.graphgps_transform = graphgps_transform
 
-            dataset = AseDBDataset(
-                config=dict(
-                    src=os.path.join(dirpath, data_type, dataname), **config_kwargs
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 1000.0
+
+        # loop through all configurations in the data set
+        dataloader = Dataloader(
+            self.data_path, comm_rank=self.rank, comm_size=self.world_size
+        )
+
+        for i, configuration in enumerate(dataloader):
+
+            data_object = None
+
+            pos = None
+            try:
+                pos = torch.tensor(configuration["positions"]).to(torch.float32)
+                assert pos.shape[0] > 0, "pos tensor does not have any atoms"
+                assert (
+                    pos.shape[1] == 3
+                ), "pos tensor does not have 3 coordinates per atom"
+            except:
+                print(
+                    f"Structure {configuration} does not have positional sites",
+                    flush=True,
                 )
+                continue
+            natoms = torch.IntTensor([pos.shape[0]])
+
+            atomic_numbers = None
+            try:
+                atomic_numbers = (
+                    torch.tensor([configuration["atomic_numbers"]]).to(torch.float32)
+                ).t()
+                assert (
+                    pos.shape[0] == atomic_numbers.shape[0]
+                ), f"pos.shape[0]:{pos.shape[0]} does not match with atomic_numbers.shape[0]:{atomic_numbers.shape[0]}"
+            except:
+                print(
+                    f"Structure {configuration} does not have positional atomic numbers",
+                    flush=True,
+                )
+                continue
+
+            forces = None
+            try:
+                forces = torch.tensor(configuration["wB97x_6-31G(d).forces"]).to(
+                    torch.float32
+                )
+            except:
+                print(f"Structure {configuration} does not have forces", flush=True)
+                continue
+
+            total_energy = None
+            try:
+                total_energy = configuration["wB97x_6-31G(d).energy"]
+            except:
+                print(
+                    f"Structure {configuration} does not have total energy", flush=True
+                )
+                continue
+            total_energy_tensor = (
+                torch.tensor(total_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
+            )
+            total_energy_per_atom_tensor = total_energy_tensor.detach().clone() / natoms
+
+            x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+            # Calculate chemical composition
+            atomic_number_list = atomic_numbers.tolist()
+            assert len(atomic_number_list) == natoms
+            ## 118: number of atoms in the periodic table
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+            pos_list = pos.tolist()
+            atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+            try:
+                mol = xyz2mol(
+                    atomic_number_list_int,
+                    pos_list,
+                    charge=0,
+                    allow_charged_fragments=True,
+                    use_graph=False,
+                    use_huckel=False,
+                    embed_chiral=True,
+                    use_atom_maps=False,
+                )
+
+                assert (
+                    len(mol) == 1
+                ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
+                smiles_string = Chem.MolToSmiles(mol[0])
+            except:
+                smiles_string = None
+
+            try:
+                # check forces values
+                assert self.check_forces_values(
+                    forces
+                ), f"transition1x dataset - formula:{configuration['formula']} - confid:{configuration['rxn']} - L2-norm of atomic forces exceeds {self.forces_norm_threshold}"
+            except:
+                continue
+
+            data_object = Data(
+                dataset_name="transition1x",
+                natoms=natoms,
+                pos=pos,
+                cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                edge_index=None,
+                edge_attr=None,
+                edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                atomic_numbers=atomic_numbers,
+                chemical_composition=chemical_composition,
+                smiles_string=smiles_string,
+                x=x,
+                energy=total_energy_tensor,
+                energy_per_atom=total_energy_per_atom_tensor,
+                forces=forces,
             )
 
-            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
-                self.rank
-            ]
+            if self.energy_per_atom:
+                data_object.y = data_object.energy_per_atom
+            else:
+                data_object.y = data_object.energy
 
-            for index in iterate_tqdm(rx, verbosity_level=2):
-                try:
-                    pos = torch.tensor(
-                        dataset.get_atoms(index).get_positions(), dtype=torch.float32
-                    )
-                    natoms = torch.IntTensor([pos.shape[0]])
-                    atomic_numbers = torch.tensor(
-                        dataset.get_atoms(index).get_atomic_numbers(),
-                        dtype=torch.float32,
-                    ).unsqueeze(1)
-                    energy = torch.tensor(
-                        dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
-                    ).unsqueeze(0)
-                    energy_per_atom = energy / natoms
-                    forces = torch.tensor(
-                        dataset.get_atoms(index).get_forces(), dtype=torch.float32
-                    )
-                    chemical_formula = dataset.get_atoms(index).get_chemical_formula()
+            data_object = self.radius_graph(data_object)
 
-                    cell = None
-                    try:
-                        cell = torch.tensor(
-                            dataset.get_atoms(index).get_cell(), dtype=torch.float32
-                        ).view(3, 3)
-                    except:
-                        print(
-                            f"Atomic structure {chemical_formula} does not have cell",
-                            flush=True,
-                        )
+            # Build edge attributes
+            data_object = transform_coordinates(data_object)
 
-                    pbc = None
-                    try:
-                        pbc = dataset.get_atoms(index).get_pbc()
-                    except:
-                        print(
-                            f"Atomic structure {chemical_formula} does not have pbc",
-                            flush=True,
-                        )
+            # LPE
+            if self.graphgps_transform is not None:
+                data_object = self.graphgps_transform(data_object)
 
-                    x = torch.cat([atomic_numbers, pos, forces], dim=1)
+            self.dataset.append(data_object)
 
-                    # Calculate chemical composition
-                    atomic_number_list = atomic_numbers.tolist()
-                    assert len(atomic_number_list) == natoms
-                    ## 118: number of atoms in the periodic table
-                    hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-                    chemical_composition = (
-                        torch.tensor(hist).unsqueeze(1).to(torch.float32)
-                    )
-
-                    data_object = Data(
-                        dataset_name="omat24",
-                        natoms=natoms,
-                        pos=pos,
-                        cell=cell,
-                        pbc=pbc,
-                        edge_index=None,
-                        edge_attr=None,
-                        edge_shifts=None,
-                        atomic_numbers=atomic_numbers,
-                        chemical_composition=chemical_composition,
-                        smiles_string=None,
-                        x=x,
-                        energy=energy,
-                        energy_per_atom=energy_per_atom,
-                        forces=forces,
-                    )
-
-                    if self.energy_per_atom:
-                        data_object.y = data_object.energy_per_atom
-                    else:
-                        data_object.y = data_object.energy
-
-                    if data_object.pbc is not None and data_object.cell is not None:
-                        try:
-                            data_object = self.radius_graph_pbc(data_object)
-                        except:
-                            print(
-                                f"Structure could not successfully apply pbc radius graph",
-                                flush=True,
-                            )
-                            data_object = self.radius_graph(data_object)
-                    else:
-                        data_object = self.radius_graph(data_object)
-
-                    data_object = transform_coordinates(data_object)
-
-                    # LPE
-                    if self.graphgps_transform is not None:
-                        data_object = self.graphgps_transform(data_object)
-
-                    if self.check_forces_values(data_object.forces):
-                        self.dataset.append(data_object)
-                    else:
-                        print(
-                            f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                            flush=True,
-                        )
-
-                except Exception as e:
-                    print(f"Rank {self.rank} reading - exception: ", e)
-
-        torch.distributed.barrier()
-
-        random.shuffle(self.dataset)
+            random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
-
         # Calculate the L2 norm for each row
         norms = torch.norm(forces, p=2, dim=1)
         # Check if all norms are less than the threshold
@@ -259,7 +260,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="omat24_energy.json"
+        "--inputfile", help="input file", type=str, default="transition1x_energy.json"
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -267,14 +268,13 @@ if __name__ == "__main__":
         type=bool,
         default=False,
     )
+
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
-    parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
-    parser.add_argument("--modelname", help="model name")
     parser.add_argument(
         "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
     )
@@ -299,7 +299,14 @@ if __name__ == "__main__":
 
     graph_feature_names = ["energy"]
     graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
+    node_feature_names = [
+        "atomic_number",
+        "coordinates",
+        "forces",
+        "hCHG",
+        "hVDIP",
+        "hRAT",
+    ]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
@@ -326,9 +333,6 @@ if __name__ == "__main__":
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
-    if args.num_epoch is not None:
-        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
-
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
@@ -343,36 +347,30 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OMat24" if args.log is None else args.log
+    log_name = "transition1x" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OMat24" if args.modelname is None else args.modelname
+    modelname = "transition1x"
     if args.preonly:
+
         ## local data
-        trainset = OMat2024(
+        total = Transition1xDataset(
             os.path.join(datadir),
             var_config,
-            data_type="train",
             graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
         ## This is a local split
-        trainset, valset1, valset2 = split_dataset(
-            dataset=trainset,
+        trainset, valset, testset = split_dataset(
+            dataset=total,
             perc_train=0.9,
             stratify_splitting=False,
         )
-        valset = [*valset1, *valset2]
-        testset = OMat2024(
-            os.path.join(datadir), var_config, data_type="val", dist=True
-        )
-        ## Need as a list
-        testset = testset[:]
-        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
+        print("Local splitting: ", len(total), len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
@@ -445,6 +443,7 @@ if __name__ == "__main__":
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
+
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
@@ -462,16 +461,16 @@ if __name__ == "__main__":
         # minmax_node_feature = trainset.minmax_node_feature
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
-        if args.ddstore:
-            opt = {"ddstore_width": args.ddstore_width}
-            trainset = DistDataset(trainset, "trainset", comm, **opt)
-            valset = DistDataset(valset, "valset", comm, **opt)
-            testset = DistDataset(testset, "testset", comm, **opt)
-            # trainset.minmax_node_feature = minmax_node_feature
-            # trainset.minmax_graph_feature = minmax_graph_feature
-            trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
+    if args.ddstore:
+        opt = {"ddstore_width": args.ddstore_width}
+        trainset = DistDataset(trainset, "trainset", comm, **opt)
+        valset = DistDataset(valset, "valset", comm, **opt)
+        testset = DistDataset(testset, "testset", comm, **opt)
+        # trainset.minmax_node_feature = minmax_node_feature
+        # trainset.minmax_graph_feature = minmax_graph_feature
+        trainset.pna_deg = pna_deg
 
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -501,9 +500,6 @@ if __name__ == "__main__":
         verbosity=verbosity,
     )
     model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
-    # Print details of neural network architecture
-    print_model(model)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
