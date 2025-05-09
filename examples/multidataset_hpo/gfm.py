@@ -19,12 +19,11 @@ from hydragnn.utils.print.print_utils import log
 from hydragnn.utils.distributed import nsplit
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
 from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -225,7 +224,7 @@ def main():
                 fname = os.path.join(
                     os.path.dirname(__file__), "./dataset/%s.bp" % model
                 )
-                with ad2.open(fname, "r", MPI.COMM_SELF) as f:
+                with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
                     attrs = f.available_attributes()
