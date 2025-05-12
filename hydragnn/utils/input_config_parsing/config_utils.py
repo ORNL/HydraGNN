@@ -40,7 +40,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
-    
+
     if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
 
@@ -145,15 +145,12 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
 
-<<<<<<< Updated upstream
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
 
     if "Optimizer" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
 
-=======
->>>>>>> Stashed changes
     return config
 
 
