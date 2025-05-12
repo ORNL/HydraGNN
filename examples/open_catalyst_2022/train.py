@@ -58,8 +58,10 @@ from hydragnn.utils.distributed import nsplit
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
+
 def bump(g):
     return Data.from_dict(g.__dict__)
+
 
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
@@ -67,6 +69,7 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 
 transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
@@ -104,7 +107,17 @@ class OpenCatalystDataset(AbstractBaseDataset):
         trajectories_files_list = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            trajectories_files_list = [f for f in os.listdir(os.path.join(dirpath, "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/", data_type)) if fnmatch.fnmatch(f, "*.lmdb")]
+            trajectories_files_list = [
+                f
+                for f in os.listdir(
+                    os.path.join(
+                        dirpath,
+                        "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/",
+                        data_type,
+                    )
+                )
+                if fnmatch.fnmatch(f, "*.lmdb")
+            ]
         trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
         if len(trajectories_files_list) == 0:
             raise RuntimeError("No *.lmdb files found. Did you uncompress?")
@@ -116,23 +129,44 @@ class OpenCatalystDataset(AbstractBaseDataset):
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            traj_file_path = os.path.join(dirpath, "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/", self.data_type, traj_file)
+            traj_file_path = os.path.join(
+                dirpath,
+                "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/",
+                self.data_type,
+                traj_file,
+            )
             self.traj_to_torch_geom(traj_file_path)
 
         random.shuffle(self.dataset)
 
     def update_torch_geom(self, data_dict, step):
-       
+
         """
         Convert a trajectory step to PyG Data object and save it as a file.
         """
-        natoms = torch.tensor(data_dict["natoms"], dtype=torch.long)  # Number of atoms in the structure
-        atomic_numbers = torch.tensor(data_dict["atomic_numbers"], dtype=torch.long)  # Node feature: atomic numbers
-        positions = torch.tensor(data_dict["positions"][step], dtype=torch.float32)  # Node positions
-        forces = torch.tensor(data_dict["forces"][step], dtype=torch.float32)  # Force on atoms
-        energy_tensor = torch.tensor([data_dict["energy"][step]], dtype=torch.float32).unsqueeze(0)  # Scalar target: energy
-        cell = torch.tensor([data_dict["cell"][step]], dtype=torch.float32)  # Lattice vectors defining the periodic cell
-        pbc = torch.tensor([data_dict["pbc"][step]], dtype=torch.bool)  # Periodic boundary conditions (True/False) along each axis
+        natoms = torch.tensor(
+            data_dict["natoms"], dtype=torch.long
+        )  # Number of atoms in the structure
+        atomic_numbers = torch.tensor(
+            data_dict["atomic_numbers"], dtype=torch.long
+        )  # Node feature: atomic numbers
+        positions = torch.tensor(
+            data_dict["positions"][step], dtype=torch.float32
+        )  # Node positions
+        forces = torch.tensor(
+            data_dict["forces"][step], dtype=torch.float32
+        )  # Force on atoms
+        energy_tensor = torch.tensor(
+            [data_dict["energy"][step]], dtype=torch.float32
+        ).unsqueeze(
+            0
+        )  # Scalar target: energy
+        cell = torch.tensor(
+            [data_dict["cell"][step]], dtype=torch.float32
+        )  # Lattice vectors defining the periodic cell
+        pbc = torch.tensor(
+            [data_dict["pbc"][step]], dtype=torch.bool
+        )  # Periodic boundary conditions (True/False) along each axis
 
         # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
@@ -157,11 +191,11 @@ class OpenCatalystDataset(AbstractBaseDataset):
             pos=positions,
             cell=cell,
             pbc=pbc,
-            #edge_index=None,
-            #edge_attr=None,
+            # edge_index=None,
+            # edge_attr=None,
             atomic_numbers=atomic_numbers,
-            #chemical_composition=chemical_composition,
-            #smiles_string=None,
+            # chemical_composition=chemical_composition,
+            # smiles_string=None,
             x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
@@ -187,11 +221,13 @@ class OpenCatalystDataset(AbstractBaseDataset):
         else:
             data_object = self.radius_graph(data_object)
             data_object = transform_coordinates(data_object)
-            
+
         # Default edge_shifts for when radius_graph_pbc is not activated
         if not hasattr(data_object, "edge_shifts"):
-            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-            
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
+
         # FIXME: PBC from bool --> int32 to be accepted by ADIOS
         data_object.pbc = data_object.pbc.int()
 
@@ -203,12 +239,21 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
     def traj_to_torch_geom(self, traj_file):
         # Open LMDB
-        env = lmdb.open(traj_file, subdir=False, readonly=True, lock=False, readahead=False, meminit=False)
+        env = lmdb.open(
+            traj_file,
+            subdir=False,
+            readonly=True,
+            lock=False,
+            readahead=False,
+            meminit=False,
+        )
 
         with env.begin() as txn:
             cursor = txn.cursor()
 
-            for key, value in iterate_tqdm(cursor, verbosity_level=2, desc="Processing OC22 LMDB"):
+            for key, value in iterate_tqdm(
+                cursor, verbosity_level=2, desc="Processing OC22 LMDB"
+            ):
                 old_data = pickle.loads(value)  # Load trajectory data
                 print("Old data: ", old_data)
                 data = bump(old_data)
@@ -364,7 +409,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.train_path,
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
@@ -374,7 +419,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.val_path,
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
@@ -386,7 +431,7 @@ if __name__ == "__main__":
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
-            dist=True
+            dist=True,
         )
         ## Need as a list
         trainset = trainset[:]

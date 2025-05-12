@@ -81,7 +81,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         mx = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            #cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            # cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
             cmd = f"find {self.data_path} -maxdepth 1 -type f -name '*.txt' | wc -l"
             print("Check the number of files:", cmd)
             out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -271,7 +271,7 @@ if __name__ == "__main__":
             os.path.join(datadir),
             var_config,
             data_type=args.train_path,
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
@@ -290,7 +290,7 @@ if __name__ == "__main__":
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
-            dist=True
+            dist=True,
         )
         ## Need as a list
         testset = testset[:]

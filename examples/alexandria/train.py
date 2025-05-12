@@ -250,14 +250,16 @@ class Alexandria(AbstractBaseDataset):
 
         formation_energy = None
         try:
-            formation_energy=computed_entry_dict["data"]["e_form"]
+            formation_energy = computed_entry_dict["data"]["e_form"]
         except:
             print(f"Structure {entry_id} does not have formation energy")
             return data_object
         formation_energy_tensor = (
             torch.tensor(formation_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
         )
-        formation_energy_per_atom_tensor = formation_energy_tensor.detach().clone() / natoms
+        formation_energy_per_atom_tensor = (
+            formation_energy_tensor.detach().clone() / natoms
+        )
 
         # energy_above_hull = None
         # try:
@@ -641,11 +643,7 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (
-        train_loader,
-        val_loader,
-        test_loader,
-    ) = hydragnn.preprocess.create_dataloaders(
+    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

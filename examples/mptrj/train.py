@@ -67,6 +67,7 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+
 class MPTrjDataset(AbstractBaseDataset):
     def __init__(
         self,
@@ -144,7 +145,7 @@ class MPTrjDataset(AbstractBaseDataset):
                 try:
                     lattice_mat = torch.tensor(
                         info["atoms"]["lattice_mat"], dtype=torch.float32
-                    ).view(3,3)
+                    ).view(3, 3)
                     pbc = torch.tensor([True, True, True], dtype=torch.bool)
                 except:
                     print(f"Structure does not have lattice_mat", flush=True)
@@ -221,11 +222,13 @@ class MPTrjDataset(AbstractBaseDataset):
                 else:
                     data_object = self.radius_graph(data_object)
                     data_object = transform_coordinates(data_object)
-                    
+
                 # Default edge_shifts for when radius_graph_pbc is not activated
                 if not hasattr(data_object, "edge_shifts"):
-                    data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-                    
+                    data_object.edge_shifts = torch.zeros(
+                        (data_object.edge_index.size(1), 3), dtype=torch.float32
+                    )
+
                 # FIXME: PBC from bool --> int32 to be accepted by ADIOS
                 data_object.pbc = data_object.pbc.int()
 

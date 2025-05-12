@@ -256,7 +256,7 @@ if __name__ == "__main__":
             "edge_index",
             "edge_attr",
             "energy",
-            "energy_per_atom", 
+            "energy_per_atom",
             "forces",
             "pos",
             "y",

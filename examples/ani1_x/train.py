@@ -169,11 +169,11 @@ class ANI1xDataset(AbstractBaseDataset):
                     pos=pos,
                     cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
                     pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    #edge_index=None,
-                    #edge_attr=None,
+                    # edge_index=None,
+                    # edge_attr=None,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
-                    #smiles_string=smiles_string,
+                    # smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
@@ -189,10 +189,12 @@ class ANI1xDataset(AbstractBaseDataset):
 
                 # Build edge attributes
                 data_object = transform_coordinates(data_object)
-                
+
                 # Default edge_shifts for when radius_graph_pbc is not activated
-                data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-                    
+                data_object.edge_shifts = torch.zeros(
+                    (data_object.edge_index.size(1), 3), dtype=torch.float32
+                )
+
                 # FIXME: PBC from bool --> int32 to be accepted by ADIOS
                 data_object.pbc = data_object.pbc.int()
 
@@ -352,7 +354,7 @@ if __name__ == "__main__":
         total = ANI1xDataset(
             os.path.join(datadir),
             var_config,
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,

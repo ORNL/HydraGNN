@@ -280,10 +280,12 @@ class QM7XDataset(AbstractBaseDataset):
                 data_object = self.radius_graph(data_object)
 
                 data_object = transform_coordinates(data_object)
-                
+
                 # Default edge_shifts for when radius_graph_pbc is not activated
-                data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-                    
+                data_object.edge_shifts = torch.zeros(
+                    (data_object.edge_index.size(1), 3), dtype=torch.float32
+                )
+
                 # FIXME: PBC from bool --> int32 to be accepted by ADIOS
                 data_object.pbc = data_object.pbc.int()
 

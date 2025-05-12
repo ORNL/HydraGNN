@@ -30,6 +30,7 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+
 class AtomsToGraphs:
     """A class to help convert periodic atomic structures to graphs.
 
@@ -105,7 +106,7 @@ class AtomsToGraphs:
             pbc = pbc_as_tensor(atoms.get_pbc())
         except:
             print(f"Structure does not have pbc", flush=True)
-        
+
         # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
@@ -155,11 +156,13 @@ class AtomsToGraphs:
         else:
             data_object = self.radius_graph(data_object)
             data_object = transform_coordinates(data_object)
-            
+
         # Default edge_shifts for when radius_graph_pbc is not activated
         if not hasattr(data_object, "edge_shifts"):
-            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-            
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
+
         # FIXME: PBC from bool --> int32 to be accepted by ADIOS
         data_object.pbc = data_object.pbc.int()
 

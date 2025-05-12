@@ -66,6 +66,7 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
+
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
 
@@ -123,7 +124,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 )
                 continue
             natoms = torch.IntTensor([pos.shape[0]])
-            
+
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
@@ -209,11 +210,11 @@ class Transition1xDataset(AbstractBaseDataset):
                 pos=pos,
                 cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
                 pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                #edge_index=None,
-                #edge_attr=None,
+                # edge_index=None,
+                # edge_attr=None,
                 atomic_numbers=atomic_numbers,
                 chemical_composition=chemical_composition,
-                #smiles_string=smiles_string,
+                # smiles_string=smiles_string,
                 x=x,
                 energy=total_energy_tensor,
                 energy_per_atom=total_energy_per_atom_tensor,
@@ -229,10 +230,12 @@ class Transition1xDataset(AbstractBaseDataset):
 
             # Build edge attributes
             data_object = transform_coordinates(data_object)
-            
+
             # Default edge_shifts for when radius_graph_pbc is not activated
-            data_object.edge_shifts = torch.zeros((data_object.edge_index.size(1), 3), dtype=torch.float32)
-                
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
+
             # FIXME: PBC from bool --> int32 to be accepted by ADIOS
             data_object.pbc = data_object.pbc.int()
 
@@ -371,7 +374,7 @@ if __name__ == "__main__":
         total = Transition1xDataset(
             os.path.join(datadir),
             var_config,
-            #graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
@@ -382,7 +385,14 @@ if __name__ == "__main__":
             perc_train=0.9,
             stratify_splitting=False,
         )
-        print("Local splitting: ", len(total), len(trainset), len(valset), len(testset), flush=True)
+        print(
+            "Local splitting: ",
+            len(total),
+            len(trainset),
+            len(valset),
+            len(testset),
+            flush=True,
+        )
 
         print("Before COMM.Barrier()", flush=True)
         comm.Barrier()
