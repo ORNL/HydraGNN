@@ -132,6 +132,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Optimizer" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
 
+    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
+
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
 
