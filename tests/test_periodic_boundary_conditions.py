@@ -70,9 +70,13 @@ def unittest_periodic_boundary_conditions(
 
     # FIXME: check lengths are within expected range
     row, col = data_periodic_no_self_loops.edge_index
-    vec = (data_periodic_no_self_loops.pos[col] - data_periodic_no_self_loops.pos[row] + data_periodic_no_self_loops.edge_shifts)
+    vec = (
+        data_periodic_no_self_loops.pos[col]
+        - data_periodic_no_self_loops.pos[row]
+        + data_periodic_no_self_loops.edge_shifts
+    )
     dist = torch.norm(vec, p=2, dim=-1)
-    assert (((dist <= config["Architecture"]["radius"]) & (dist >= 0.0)).all())
+    assert ((dist <= config["Architecture"]["radius"]) & (dist >= 0.0)).all()
 
 
 def pytest_periodic_h2():
