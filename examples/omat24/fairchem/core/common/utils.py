@@ -263,7 +263,7 @@ def add_edge_distance_to_graph(
     gdf_filter = torch.linspace(dmin, dmax, num_gaussians)
     var = gdf_filter[1] - gdf_filter[0]
     gdf_filter, var = gdf_filter.to(device), var.to(device)
-    gdf_distances = torch.exp(-((distances.view(-1, 1) - gdf_filter) ** 2) / var**2)
+    gdf_distances = torch.exp(-((distances.view(-1, 1) - gdf_filter) ** 2) / var ** 2)
     # Reassign edge attributes.
     batch.edge_weight = distances
     batch.edge_attr = gdf_distances.float()
@@ -644,7 +644,7 @@ def radius_graph_pbc(
 
     # Before computing the pairwise distances between atoms, first create a list of atom indices to compare for the entire batch
     num_atoms_per_image = data.natoms
-    num_atoms_per_image_sqr = (num_atoms_per_image**2).long()
+    num_atoms_per_image_sqr = (num_atoms_per_image ** 2).long()
 
     # index offset between images
     index_offset = torch.cumsum(num_atoms_per_image, dim=0) - num_atoms_per_image
@@ -1259,7 +1259,7 @@ def cg_change_mat(ang_mom: int, device: str = "cpu") -> torch.tensor:
                 [0, 0, 0, 0, 0, 2 ** (-0.5), 0, -(2 ** (-0.5)), 0],
                 [0, 0, -(2 ** (-0.5)), 0, 0, 0, 2 ** (-0.5), 0, 0],
                 [0, 2 ** (-0.5), 0, -(2 ** (-0.5)), 0, 0, 0, 0, 0],
-                [0, 0, 0.5**0.5, 0, 0, 0, 0.5**0.5, 0, 0],
+                [0, 0, 0.5 ** 0.5, 0, 0, 0, 0.5 ** 0.5, 0, 0],
                 [0, 2 ** (-0.5), 0, 2 ** (-0.5), 0, 0, 0, 0, 0],
                 [
                     -(6 ** (-0.5)),

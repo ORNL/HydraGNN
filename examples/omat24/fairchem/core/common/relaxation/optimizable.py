@@ -270,7 +270,9 @@ class OptimizableBatch(Optimizable):
         """Get the maximum forces per structure in batch"""
         if forces is None:
             forces = self.get_forces(apply_constraint=apply_constraint, no_numpy=True)
-        return scatter((forces**2).sum(axis=1).sqrt(), self.batch_indices, reduce="max")
+        return scatter(
+            (forces ** 2).sum(axis=1).sqrt(), self.batch_indices, reduce="max"
+        )
 
     def converged(
         self,
