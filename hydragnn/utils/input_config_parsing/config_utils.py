@@ -41,6 +41,10 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
 
+    # This check is needed for update_config_NN_outputs
+    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
+
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
     )
@@ -137,9 +141,6 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
-
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
 
     if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
