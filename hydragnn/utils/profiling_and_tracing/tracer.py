@@ -87,6 +87,31 @@ except:
 
 
 try:
+    import hydragnn.utils.profiling_and_tracing.timeTracer as tt
+
+    class TIMETracer(Tracer):
+        def __init__(self, **kwargs):
+            tt.initialize()
+
+        def start(self, name):
+            tt.start(name)
+
+        def stop(self, name):
+            tt.stop(name)
+
+        def enable(self):
+            tt.enable()
+
+        def disable(self):
+            tt.disable()
+
+        def reset(self):
+            tt.reset()
+except:
+    print(f"Error importing TIMETracer")
+    pass
+
+try:
     import hydragnn.utils.profiling_and_tracing.nvidiaTracer as et
 
     class NVIDIATracer(Tracer):
@@ -170,7 +195,7 @@ def has(name):
     return name in __tracer_list__
 
 
-def initialize(trlist=["GPTLTracer", "SCOREPTracer", "CRAYPMTracer", "AMDTracer"], verbose=False, **kwargs):
+def initialize(trlist=["GPTLTracer", "SCOREPTracer", "CRAYPMTracer", "AMDTracer", "TIMETracer"], verbose=False, **kwargs):
     for trname in trlist:
         try:
             tr = globals()[trname](**kwargs)

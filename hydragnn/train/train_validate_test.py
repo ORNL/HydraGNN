@@ -23,7 +23,7 @@ from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 
-import os
+import os,subprocess
 
 from torch.profiler import record_function
 
@@ -34,6 +34,19 @@ import pickle
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import time
 from mpi4py import MPI
+
+import subprocess
+
+def set_gpu_power_cap(gpu_index: int, power_watts: int):
+    cmd = ["sudo", "gpu_power_cap", str(gpu_index), str(power_watts)]
+    
+    try:
+        # Capture output and errors
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        print("Command output:", result.stdout.strip())
+    except subprocess.CalledProcessError as e:
+        print("An error occurred:")
+        print(e.stderr.strip())
 
 
 def get_nbatch(loader):
@@ -158,7 +171,7 @@ def train_validate_test(
                 dataloader.sampler.set_epoch(epoch)
 
         with profiler as prof:
-            tr.enable()
+            #tr.enable()
             tr.start("train")
             train_loss, train_taskserr = train(
                 train_loader,
@@ -170,7 +183,7 @@ def train_validate_test(
                 compute_grad_energy=compute_grad_energy,
             )
             tr.stop("train")
-            tr.disable()
+            #tr.disable()
             if epoch == 0:
                 tr.reset()
 
