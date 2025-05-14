@@ -77,6 +77,8 @@ def setup_log(prefix):
 
     os.makedirs("./logs/%s" % prefix, exist_ok=True)
     os.makedirs("./logs/%s/gpuLogs" % prefix, exist_ok=True)
+    os.makedirs("./logs/%s/timeLogs" % prefix, exist_ok=True)
+    os.makedirs("./logs/%s/nvidiaPowerDraw" % prefix, exist_ok=True)
     fname = "./logs/%s/run.log" % (prefix)
     fileHandler = logging.FileHandler(fname)
 
