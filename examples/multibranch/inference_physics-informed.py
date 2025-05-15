@@ -5,6 +5,7 @@ from mpi4py import MPI
 import argparse
 
 import torch
+import torch_scatter
 
 # FIX random seed
 random_state = 0
@@ -23,6 +24,8 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.distributed import get_device
+from tqdm import tqdm
+from hydragnn.train.train_validate_test import test
 
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosDataset
@@ -36,31 +39,45 @@ import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh
 from hydragnn.models import MultiTaskModelMP
 from contextlib import nullcontext
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.interpolate import griddata
 
 import pdb
 
 ## FIMME
 torch.backends.cudnn.enabled = False
 
+plt.rcParams.update({"font.size": 20})
+
+
+def getcolordensity(xdata, ydata):
+    ###############################
+    nbin = 20
+    hist2d, xbins_edge, ybins_edge = np.histogram2d(x=xdata, y=ydata, bins=[nbin, nbin])
+    xbin_cen = 0.5 * (xbins_edge[0:-1] + xbins_edge[1:])
+    ybin_cen = 0.5 * (ybins_edge[0:-1] + ybins_edge[1:])
+    BCTY, BCTX = np.meshgrid(ybin_cen, xbin_cen)
+    hist2d = hist2d / np.amax(hist2d)
+    print(np.amax(hist2d))
+
+    bctx1d = np.reshape(BCTX, len(xbin_cen) * nbin)
+    bcty1d = np.reshape(BCTY, len(xbin_cen) * nbin)
+    loc_pts = np.zeros((len(xbin_cen) * nbin, 2))
+    loc_pts[:, 0] = bctx1d
+    loc_pts[:, 1] = bcty1d
+    hist2d_norm = griddata(
+        loc_pts,
+        hist2d.reshape(len(xbin_cen) * nbin),
+        (xdata, ydata),
+        method="linear",
+        fill_value=0,
+    )  # np.nan)
+    return hist2d_norm
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def check_node_feature_dim(var_config):
-    # NOTE: The following check is made to ensure compatibility with the json parsing of node features
-    # and compute_grad_energy.
-    # NOTE: In short: We need the node feature used to set up data.y to be of dimension 1, since this will dictate our
-    # nodal MLP head output dimension. Since we have node_feature_dims[0] == 1 and output_index == 0, this is already true.
-    # NOTE: In detail: When using Hydra for physics-informed force prediction for the GFM, we have the following structure:
-    # --> Load with ADIOS -->
-    # --> update_predicted_values(): defines y_loc = [0, node_feature_dims[output_index]*num_nodes] -->
-    # --> update_config_NN_outputs(): y_loc exists, so it defines output_dim = [(node_feature_dims[output_index]*num_nodes)/num_nodes]  = [node_feature_dims[output_index]] -->
-    # --> Base() ... MLPNode(): defines node MLP head with output_dim ... This must be equal to 1 as expected for nodal energy predictions
-    # NOTE Since changing json parsing functions requires base-level code changes and the imposed requirement is already being obeyed
-    # in the data setup for GFM, a quick check has been placed here instead.
-    if var_config["node_feature_dims"][var_config["output_index"][0]] != 1:
-        raise ValueError("Your node feature dim at the output index is not equal to 1.")
 
 
 if __name__ == "__main__":
@@ -77,7 +94,6 @@ if __name__ == "__main__":
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
-    parser.add_argument("--modelname", help="model name")
     parser.add_argument(
         "--multi_model_list", help="multidataset list", default="OC2020"
     )
@@ -88,16 +104,16 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
+        "--num_test_samples",
+        type=int,
+        help="set num test samples per process for weak-scaling test",
+        default=None,
+    )
+    parser.add_argument(
         "--task_parallel", action="store_true", help="enable task parallel"
     )
     parser.add_argument("--use_devicemesh", action="store_true", help="use device mesh")
     parser.add_argument("--oversampling", action="store_true", help="use oversampling")
-    parser.add_argument(
-        "--oversampling_num_samples",
-        type=int,
-        help="set num samples for oversampling",
-        default=None,
-    )
     parser.add_argument("--nosync", action="store_true", help="disable gradient sync")
 
     group = parser.add_mutually_exclusive_group()
@@ -132,46 +148,31 @@ if __name__ == "__main__":
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
-    input_filename = os.path.join(dirpwd, args.inputfile)
+    log_name = os.path.basename(args.log)
+    # modeldir = os.path.join(dirpwd,f"../../logs/{log_name}")
+    modeldir = args.log
     ##################################################################################################################
-    # Configurable run choices (JSON file that accompanies this example script).
+
+    input_filename = os.path.join(modeldir, "config.json")
+    if not os.path.exists(input_filename):
+        raise ValueError(f"Cannot find config file {input_filename}")
     with open(input_filename, "r") as f:
         config = json.load(f)
-    verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
-    check_node_feature_dim(var_config)
-
-    if args.batch_size is not None:
-        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-
-    if args.num_epoch is not None:
-        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
-
+    verbosity = config["Verbosity"]["level"]
+    config["NeuralNetwork"]["Training"]["num_epoch"] = 1
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
-    ##################################################################################################################
-
     comm = MPI.COMM_WORLD
-
+    ##################################################################################################################
+    hydragnn.utils.print.setup_log(log_name)
     ## Set up logging
     logging.basicConfig(
         level=logging.INFO,
         format="%%(levelname)s (rank %d): %%(message)s" % (rank),
         datefmt="%H:%M:%S",
     )
-
-    log_name = "GFM" if args.log is None else args.log
-    hydragnn.utils.print.setup_log(log_name)
-    writer = hydragnn.utils.model.get_summary_writer(log_name)
-
-    log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
-
-    modelname = "GFM" if args.modelname is None else args.modelname
 
     tr.initialize()
     tr.disable()
@@ -311,6 +312,8 @@ if __name__ == "__main__":
         # fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % mymodel)
         fname = mymodel
         print("mymodel:", rank, mycolor, mymodel)
+        # comment it out for fast inference
+        """
         trainset = AdiosDataset(
             fname,
             "trainset",
@@ -325,6 +328,7 @@ if __name__ == "__main__":
             var_config=var_config,
             keys=common_variable_names,
         )
+        """
         testset = AdiosDataset(
             fname,
             "testset",
@@ -335,116 +339,97 @@ if __name__ == "__main__":
 
         ## Set local set
         num_samples_list = list()
-        for dataset in [trainset, valset, testset]:
+        """
+        for dataset in [trainset, valset]:
             rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
-            print(
-                f"{rank} {dataset.dataset_name} nsplit:",
-                len(dataset),
-                local_comm_size,
-                len(rx),
-            )
-
-            if args.num_samples is not None:
-                if args.num_samples > len(rx):
-                    print(
-                        f"WARN: Requested num_samples is larger than available in {dataset.dataset_name}: {args.num_samples} {len(rx)}"
-                    )
-                    # args.oversampling = True
-                    # args.oversampling_num_samples = args.num_samples
-                else:
-                    rx = rx[: args.num_samples]
-
-            local_dataset_len = len(rx)
-            local_dataset_min = comm.allreduce(local_dataset_len, op=MPI.MIN)
-            local_dataset_max = comm.allreduce(local_dataset_len, op=MPI.MAX)
-
+            rx_limit = len(rx)
             if args.task_parallel:
-                rx = rx[:local_dataset_min]
+                ## Adjust to use the same number of samples
+                rx_limit = comm.allreduce(len(rx), op=MPI.MAX) if args.oversampling else comm.allreduce(len(rx), op=MPI.MIN)
 
-            if args.oversampling:
-                oversampling_num_samples = (
-                    args.oversampling_num_samples
-                    if args.oversampling_num_samples is not None
-                    else local_dataset_max
-                )
-                num_samples_list.append(oversampling_num_samples)
-                print(
-                    f"Oversampling {oversampling_num_samples} samples: {oversampling_num_samples/local_dataset_len*100:.2f} (%)"
+            print("local dataset:", local_comm_rank, local_comm_size, dataset.label, len(rx), rx_limit)
+            if args.num_samples is not None:
+                if args.num_samples > rx_limit:
+                    log(
+                        f"WARN: requested samples are larger than what is available. Use only {len(rx)}: {dataset.label}"
+                    )
+                else:
+                    rx_limit = args.num_samples
+
+            if rx_limit < len(rx):
+                rx = rx[:rx_limit]
+            print(rank, f"Oversampling ratio: {dataset.label} {len(rx)*local_comm_size/len(trainset)*100:.02f} (%)")
+            num_samples_list.append(rx_limit)
+            dataset.setkeys(common_variable_names)
+            dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
+        """
+        for dataset in [testset]:
+            rx = list(nsplit(range(len(dataset)), local_comm_size))[local_comm_rank]
+            rx_limit = len(rx)
+            if args.task_parallel:
+                ## Adjust to use the same number of samples
+                rx_limit = (
+                    comm.allreduce(len(rx), op=MPI.MAX)
+                    if args.oversampling
+                    else comm.allreduce(len(rx), op=MPI.MIN)
                 )
 
             print(
-                rank,
                 "local dataset:",
                 local_comm_rank,
                 local_comm_size,
                 dataset.label,
-                len(dataset),
-                rx[0],
-                rx[-1],
                 len(rx),
-                dataset.dataset_name,
+                rx_limit,
             )
+            num_samples = rx_limit
+            if args.num_test_samples is not None:
+                num_samples = args.num_test_samples
+            elif args.num_samples is not None:
+                num_samples = args.num_samples
+            if num_samples < rx_limit:
+                rx_limit = num_samples
+
+            if rx_limit < len(rx):
+                rx = rx[:rx_limit]
+            num_samples_list.append(rx_limit)
             dataset.setkeys(common_variable_names)
             dataset.setsubset(rx[0], rx[-1] + 1, preload=True)
-
         print("num_samples_list:", num_samples_list)
-        """
-        #FIXME: will replace it with Max's new dataset
-        datasets=[]
-        for dataset in [trainset, valset, testset]:
-            dataset_=[]
-            for data in dataset:
-                data.branchtype = f"branch-{mycolor}"
-                print("Pei debugging 1", data)
-                dataset_.append(data.to(get_device()))
-            datasets.append(dataset_)
-        trainset, valset, testset = datasets
-        for dataset in [trainset, valset, testset]:
-            for data in dataset:
-                print("Pei debugging 2", data)
-        """
-        # print(
-        #     rank,
-        #     "color, moddelname, local size(trainset,valset,testset):",
-        #     mycolor,
-        #     mymodel,
-        #     len(trainset),
-        #     len(valset),
-        #     len(testset),
-        # )
 
         assert not (args.shmem and args.ddstore), "Cannot use both ddstore and shmem"
         if args.ddstore:
             opt = {"ddstore_width": args.ddstore_width, "local": True}
             if args.task_parallel:
-                trainset = DistDataset(trainset, "trainset", local_comm, **opt)
-                valset = DistDataset(valset, "valset", local_comm, **opt)
+                # trainset = DistDataset(trainset, "trainset", local_comm, **opt)
+                # valset = DistDataset(valset, "valset", local_comm, **opt)
                 testset = DistDataset(testset, "testset", local_comm, **opt)
-                trainset.pna_deg = pna_deg
-                valset.pna_deg = pna_deg
+                # trainset.pna_deg = pna_deg
+                # valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
             else:
-                trainset = DistDataset(trainset, "trainset", comm, **opt)
-                valset = DistDataset(valset, "valset", comm, **opt)
+                # trainset = DistDataset(trainset, "trainset", comm, **opt)
+                # valset = DistDataset(valset, "valset", comm, **opt)
                 testset = DistDataset(testset, "testset", comm, **opt)
-                trainset.pna_deg = pna_deg
-                valset.pna_deg = pna_deg
+                # trainset.pna_deg = pna_deg
+                # valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
-    log0(
-        "trainset,valset,testset size: %d %d %d"
-        % (len(trainset), len(valset), len(testset))
-    )
+    # log0(
+    #    "trainset,valset,testset size: %d %d %d"
+    #    % (len(trainset), len(valset), len(testset))
+    # )
+    log0("testset size: %d" % (len(testset)))
 
     if args.ddstore:
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
-        trainset,
-        valset,
+        testset,
+        testset,
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
         test_sampler_shuffle=False,
@@ -454,84 +439,162 @@ if __name__ == "__main__":
     )
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
-
-    # for data in train_loader:
-    #    print("Pei debugging 3", data)
-
-    if args.ddstore:
-        train_loader.dataset.ddstore.epoch_begin()
-    config = hydragnn.utils.input_config_parsing.update_config(
-        config, train_loader, val_loader, test_loader
-    )
-    if args.ddstore:
-        train_loader.dataset.ddstore.epoch_end()
-    ## Good to sync with everyone right after DDStore setup
-    comm.Barrier()
-
-    hydragnn.utils.input_config_parsing.save_config(config, log_name)
-
     timer.stop()
-
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-
     ## task parallel
     if args.task_parallel:
         model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
-        model = hydragnn.utils.distributed.get_distributed_model(
-            model, verbosity, find_unused_parameters=True
-        )
-
+        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
     # Print details of neural network architecture
     print_model(model)
-
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
-    )
-
     hydragnn.utils.model.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], optimizer=optimizer
+        model, config["NeuralNetwork"]["Training"], path=os.path.dirname(modeldir)
     )
 
     ##################################################################################################################
+    model.eval()
+    datasetname = os.path.basename(mymodel)[:-3]
+    ##################################################################################################################
 
-    if args.nosync:
-        context = model.no_sync()
-    else:
-        context = nullcontext()
+    # Infer for Energy-Forces predictions with compute_grad_energy (one-head and automatic differentiation)
+    for icol, (loader, setname) in enumerate(zip([test_loader], ["test"])):
 
-    with context:
-        hydragnn.train.train_validate_test(
-            model,
-            optimizer,
-            train_loader,
-            val_loader,
-            test_loader,
-            writer,
-            scheduler,
-            config["NeuralNetwork"],
-            log_name,
-            verbosity,
-            create_plots=False,
-            compute_grad_energy=config["NeuralNetwork"]["Training"][
-                "compute_grad_energy"
-            ],
+        # Initialize
+        energy_true_list = []
+        energy_pred_list = []
+        forces_true_list = []
+        forces_pred_list = []
+        total_error = torch.tensor(0.0, device=get_device())
+        tasks_error = torch.zeros(2, device=get_device())
+        energy_loss_weight = config["NeuralNetwork"]["Architecture"]["task_weights"][0]
+        force_loss_weight = 100
+        num_samples = 0
+
+        # Collect for all batches in loader
+        for batch_idx, data in enumerate(loader):
+            data = data.to(get_device())
+            data.pos.requires_grad = True
+
+            # Energy
+            graph_energy_true = data.energy
+            node_energy_pred = model(data)[0].squeeze().float()
+            graph_energy_pred = (
+                torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+                .squeeze()
+                .float()
+            )
+
+            # Forces
+            forces_true = data.forces
+            forces_pred = -torch.autograd.grad(
+                outputs=graph_energy_pred,
+                inputs=data.pos,
+                grad_outputs=torch.ones_like(graph_energy_pred),
+                retain_graph=False,
+                create_graph=False,
+            )[0]
+
+            # Per batch error
+            energy_loss = model.module.loss_function(
+                graph_energy_pred, graph_energy_true
+            )
+            force_loss = model.module.loss_function(forces_pred, forces_true)
+            error = (energy_loss * energy_loss_weight) + (
+                force_loss * force_loss_weight
+            )
+
+            # Total error
+            total_error += error * data.num_graphs
+            num_samples += data.num_graphs
+            tasks_error[0] += energy_loss * data.num_graphs
+            tasks_error[1] += force_loss * data.num_graphs
+
+            # Extend
+            energy_pred_list.append(graph_energy_pred)
+            energy_true_list.append(graph_energy_true)
+            forces_pred_list.append(forces_pred.flatten())
+            forces_true_list.append(forces_true.flatten())
+
+        # Divide by num samples
+        test_error = total_error / num_samples
+        tasks_error = tasks_error / num_samples
+
+        # Collect
+        energy_true = torch.cat(energy_true_list, dim=0)
+        energy_pred = torch.cat(energy_pred_list, dim=0).detach()
+        forces_true = torch.cat(forces_true_list, dim=0)
+        forces_pred = torch.cat(forces_pred_list, dim=0).detach()
+
+        # Back into form for inference with two outputs
+        true_values = [energy_true, forces_true]
+        predicted_values = [energy_pred, forces_pred]
+
+        fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+        if rank == 0:
+            print(log_name, datasetname, setname, "loss=", total_error, tasks_error)
+            assert len(true_values) == len(
+                predicted_values
+            ), "inconsistent number of heads, %d!=%d" % (
+                len(true_values),
+                len(len(predicted_values)),
+            )
+
+            for idx, (output_name) in enumerate(["Energy", "Forces"]):
+                idx_true = true_values[idx].cpu().squeeze().numpy()
+                idx_pred = predicted_values[idx].cpu().squeeze().numpy()
+
+                ax = axs[idx]
+                error_mae = np.mean(np.abs(idx_pred - idx_true))
+                error_rmse = np.sqrt(np.mean(np.abs(idx_pred - idx_true) ** 2))
+                print(
+                    log_name,
+                    datasetname,
+                    setname,
+                    output_name,
+                    ": mae=",
+                    error_mae,
+                    ", rmse= ",
+                    error_rmse,
+                )
+                print(rank, idx_true.size, idx_pred.size)
+                hist2d_norm = getcolordensity(idx_true, idx_pred)
+                sc = ax.scatter(
+                    idx_true[::100],
+                    idx_pred[::100],
+                    s=12,
+                    c=hist2d_norm[::100],
+                    vmin=0,
+                    vmax=1,
+                )
+                minv = np.minimum(np.amin(idx_pred), np.amin(idx_true))
+                maxv = np.maximum(np.amax(idx_pred), np.amax(idx_true))
+                ax.plot([minv, maxv], [minv, maxv], "r--")
+                ax.set_title(setname + "; " + output_name, fontsize=24)
+                ax.text(
+                    minv + 0.1 * (maxv - minv),
+                    maxv - 0.1 * (maxv - minv),
+                    "MAE: {:.2e}".format(error_mae),
+                )
+
+                if icol == 0:
+                    ax.set_ylabel("Predicted")
+                if idx == 1:
+                    ax.set_xlabel("True")
+                # plt.colorbar(sc)
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                fig.colorbar(sc, cax=cax, orientation="vertical")
+                # cbar=plt.colorbar(sc)
+                # cbar.ax.set_ylabel('Density', rotation=90)
+                # ax.set_aspect('equal', adjustable='box')
+        plt.subplots_adjust(
+            left=0.1, bottom=0.1, right=0.95, top=0.95, wspace=0.4, hspace=0.3
         )
-
-    hydragnn.utils.model.save_model(model, optimizer, log_name)
-    hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
-
-    if tr.has("GPTLTracer"):
-        import gptl4py as gp
-
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
-        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
-        gp.finalize()
+        fig.savefig("./logs/" + f"/parity_plot_{log_name}_{datasetname}.png", dpi=300)
+        # fig.savefig("./logs/" + log_name + f"/parity_plot_{datasetname}.pdf")
+        plt.close()
     sys.exit(0)
