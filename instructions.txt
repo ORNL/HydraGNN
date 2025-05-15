@@ -1,6 +1,11 @@
 [Instructions to Reproduce Results Comparing Directly Predicted Forces and Automatically Differentiated Forces]
 
-  - This compares direct vs attograd force predictions for EGNN and DimeNet on the qm7x dataset with 10k samples
+  - This compares direct vs autograd force predictions for EGNN and DimeNet on the qm7x dataset with 10k samples
+
+
+
+[Optional: Clear previous plots]
+(1) rm -r Direct-vs-Autodiff-ForceComp/Hydragnn/logs
 
 
 [Option 1: Run inside of a login node or compute node in debug]
