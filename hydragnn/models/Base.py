@@ -18,7 +18,6 @@ from torch.utils.checkpoint import checkpoint
 import torch_scatter
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 import sys
-import pdb
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
@@ -26,6 +25,8 @@ from hydragnn.globalAtt.gps import GPSConv
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
+
+import pdb
 
 
 class Base(Module):
@@ -601,9 +602,16 @@ class Base(Module):
             .float()
         )
         graph_energy_true = data.energy.squeeze().float()
-        energy_loss_weight = self.loss_weights[
+        naive_energy_loss_weight = self.loss_weights[
             0
         ]  # There should only be one loss-weight for energy
+        naive_force_loss_weight = 100
+        energy_loss_weight = naive_energy_loss_weight / (
+            naive_energy_loss_weight + naive_force_loss_weight
+        )
+        force_loss_weight = naive_force_loss_weight / (
+            naive_energy_loss_weight + naive_force_loss_weight
+        )
         tot_loss += (
             self.loss_function(graph_energy_pred, graph_energy_true)
             * energy_loss_weight
@@ -622,11 +630,11 @@ class Base(Module):
             forces_pred is not None
         ), "No gradients were found for data.pos. Does your model use positions for prediction?"
         forces_pred = -forces_pred
-        force_loss_weight = (
-            energy_loss_weight
-            * torch.mean(torch.abs(graph_energy_true))
-            / (torch.mean(torch.abs(forces_true)) + 1e-8)
-        )  # Weight force loss and graph energy equally
+        # force_loss_weight = (
+        #     energy_loss_weight
+        #     * torch.mean(torch.abs(graph_energy_true))
+        #     / (torch.mean(torch.abs(forces_true)) + 1e-8)
+        # )  # Weight force loss and graph energy equally
         tot_loss += (
             self.loss_function(forces_pred, forces_true) * force_loss_weight
         )  # Have force-weight be the complement to energy-weight

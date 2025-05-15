@@ -771,6 +771,7 @@ class AdiosDataset(AbstractBaseDataset):
         return val
 
     def update_data_object(self, data_object):
+        data_object.energy = data_object.y
         if self.var_config is not None:
             update_predicted_values(
                 self.variables_type,

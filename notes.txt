@@ -1,0 +1,9 @@
+[Notes on Performance]
+
+[qm7x 10k Samples]:
+  - EGNN
+    - Direct: "0: Best Performance Metric: 0.329804"
+    - Grad: "0: Best Performance Metric: 1.183289"
+  - DimeNet
+    - Direct: "0: Best Performance Metric: 1.197737"
+    - Grad: "0: Best Performance Metric: 0.385486"
