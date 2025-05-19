@@ -6,23 +6,27 @@
 #SBATCH -t 02:00:00
 #SBATCH -p batch 
 ##SBATCH -q debug
-#SBATCH -N 1 #16
+#SBATCH -N 16 #1
 ##SBATCH -S 1
 
  
- 
+
 # Load conda environemnt
 module reset
-source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm631.sh
+source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm624.sh
+# source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm631.sh
 conda deactivate
 source /lustre/orion/lrn070/world-shared/mlupopa/max_conda_envs_frontier/bin/activate
 conda deactivate
 conda deactivate
 conda deactivate
-conda activate hydragnn_rocm631
- 
-#export python path to use ADIOS2 v.2.10.2
-export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm631/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
+conda activate hydragnn_rocm624
+# conda activate hydragnn_rocm631
+
+#export python path to use ADIOS2 v.2.9.2
+export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm624/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
+# #export python path to use ADIOS2 v.2.10.2
+# export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm631/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
 
 which python
 python -c "import numpy; print(numpy.__version__)"
@@ -63,6 +67,6 @@ export datadir4=/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/transition1
 #export datadir4=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_catalyst_2020
 #export datadir5=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/omat24
 
-#Direct
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_EGNN \
---inputfile=multibranch_GFM260_SC25_EGNN.json --num_samples=100000 --multi --ddstore --multi_model_list=$datadir1
+
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_DimeNet \
+--inputfile=multibranch_GFM260_SC25_DimeNet.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1

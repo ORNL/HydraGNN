@@ -11,7 +11,7 @@ conda activate hydragnn_rocm624
  
 #export python path to use ADIOS2 v.2.9.2
 export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm624/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
-export PYTHONPATH=/lustre/orion/lrn070/world-shared/rylieweaver/Grad_Forces_Apples2Apples/HydraGNN:$PYTHONPATH
+export PYTHONPATH=/lustre/orion/lrn070/world-shared/rylieweaver/Direct-vs-Autodiff-ForceComp/HydraGNN:$PYTHONPATH
 
 which python
 python -c "import numpy; print(numpy.__version__)"
