@@ -6,22 +6,23 @@
 #SBATCH -t 02:00:00
 #SBATCH -p batch 
 ##SBATCH -q debug
-#SBATCH -N 1 #16 
+#SBATCH -N 1 #16
 ##SBATCH -S 1
 
  
+ 
 # Load conda environemnt
 module reset
-source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm624.sh
+source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm631.sh
 conda deactivate
 source /lustre/orion/lrn070/world-shared/mlupopa/max_conda_envs_frontier/bin/activate
 conda deactivate
 conda deactivate
 conda deactivate
-conda activate hydragnn_rocm624
+conda activate hydragnn_rocm631
  
-#export python path to use ADIOS2 v.2.9.2
-export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm624/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
+#export python path to use ADIOS2 v.2.10.2
+export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm631/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
 
 which python
 python -c "import numpy; print(numpy.__version__)"

@@ -5,7 +5,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "DimeNet",
-            "radius": 10,
+            "radius": 5,
             "max_neighbours": 20,
             "num_gaussians": 50,
             "envelope_exponent": 5,
