@@ -41,10 +41,10 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
 
+    # This default is needed for update_config_NN_outputs
     if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
 
-    # This check is needed for update_config_NN_outputs
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
     )
