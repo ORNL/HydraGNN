@@ -229,16 +229,24 @@ https://github.com/pyg-team/pytorch_geometric/blob/master/torch_geometric/nn/mod
 """
 
 
+# NOTE: SparseTensor gives an error on Frontier when using DDP
 def triplets(
     edge_index: Tensor,
     num_nodes: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
-    row, col = edge_index  # j->i
 
-    value = torch.arange(row.size(0), device=row.device)
+    row, col = edge_index  # j->i
+    device = row.device
+    value = torch.arange(row.size(0), device=device)
+
+    # Transfer to CPU
+    row = row.cpu()
+    col = col.cpu()
+    value = value.cpu()
+
     adj_t = SparseTensor(
         row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes)
-    )
+    ).cpu()  # Put on CPU to avoid 'repeats can not be negative' error
     adj_t_row = adj_t[row]
     num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
 
@@ -252,6 +260,15 @@ def triplets(
     # Edge indices (k-j, j->i) for triplets.
     idx_kj = adj_t_row.storage.value()[mask]
     idx_ji = adj_t_row.storage.row()[mask]
+
+    # Put back on GPU
+    col = col.to(device)
+    row = row.to(device)
+    idx_i = idx_i.to(device)
+    idx_j = idx_j.to(device)
+    idx_k = idx_k.to(device)
+    idx_kj = idx_kj.to(device)
+    idx_ji = idx_ji.to(device)
 
     return col, row, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
