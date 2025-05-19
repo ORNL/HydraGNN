@@ -73,7 +73,7 @@ class Transition1xDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
@@ -81,6 +81,11 @@ class Transition1xDataset(AbstractBaseDataset):
         super().__init__()
 
         self.data_path = os.path.join(dirpath, "transition1x-release.h5")
+
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.energy_per_atom = energy_per_atom
 
         self.world_size = 1
@@ -94,7 +99,9 @@ class Transition1xDataset(AbstractBaseDataset):
 
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
 
         self.graphgps_transform = graphgps_transform
 
@@ -373,7 +380,7 @@ if __name__ == "__main__":
         ## local data
         total = Transition1xDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,

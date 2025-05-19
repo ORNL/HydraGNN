@@ -86,7 +86,7 @@ class OMat2024(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         data_type,
         graphgps_transform=None,
         energy_per_atom=True,
@@ -98,12 +98,19 @@ class OMat2024(AbstractBaseDataset):
             data_type == "val"
         ), "data_type must be a string either equal to 'train' or to 'val'"
 
-        self.var_config = var_config
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(10.0, loop=False, max_num_neighbors=10)
-        self.radius_graph_pbc = RadiusGraphPBC(10.0, loop=False, max_num_neighbors=10)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
+        self.radius_graph_pbc = RadiusGraphPBC(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
 
         self.graphgps_transform = graphgps_transform
 
@@ -406,7 +413,7 @@ if __name__ == "__main__":
         ## local data
         trainset = OMat2024(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type="train",
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
@@ -422,7 +429,7 @@ if __name__ == "__main__":
         valset = [*valset1, *valset2]
         testset = OMat2024(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type="val",
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,

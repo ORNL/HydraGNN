@@ -55,7 +55,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         data_type,
         graphgps_transform=None,
         energy_per_atom=True,
@@ -63,7 +63,10 @@ class OpenCatalystDataset(AbstractBaseDataset):
     ):
         super().__init__()
 
-        self.var_config = var_config
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
 
@@ -102,7 +105,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=10, radius=10.0)
+        a2g = AtomsToGraphs(max_neigh=self.max_neighbours, radius=self.radius)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -269,7 +272,7 @@ if __name__ == "__main__":
         ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type=args.train_path,
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
@@ -285,7 +288,7 @@ if __name__ == "__main__":
         valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type=args.test_path,
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,

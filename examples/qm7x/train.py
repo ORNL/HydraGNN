@@ -87,7 +87,7 @@ class QM7XDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
@@ -95,10 +95,16 @@ class QM7XDataset(AbstractBaseDataset):
         super().__init__()
 
         self.qm7x_node_types = qm7x_node_types
-        self.var_config = var_config
+
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
 
         self.graphgps_transform = graphgps_transform
 
@@ -425,7 +431,7 @@ if __name__ == "__main__":
         ## local data
         total = QM7XDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,

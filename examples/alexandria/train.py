@@ -84,12 +84,16 @@ class Alexandria(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
     ):
         super().__init__()
+
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
 
         self.dist = dist
         if self.dist:
@@ -99,8 +103,12 @@ class Alexandria(AbstractBaseDataset):
 
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(10.0, loop=False, max_num_neighbors=10)
-        self.radius_graph_pbc = RadiusGraphPBC(10.0, loop=False, max_num_neighbors=10)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
+        self.radius_graph_pbc = RadiusGraphPBC(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
 
         self.graphgps_transform = graphgps_transform
 
@@ -517,7 +525,7 @@ if __name__ == "__main__":
         ## local data
         total = Alexandria(
             os.path.join(datadir),
-            var_config,
+            config,
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
