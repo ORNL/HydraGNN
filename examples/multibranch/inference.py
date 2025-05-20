@@ -26,7 +26,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.train.train_validate_test import test
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
@@ -187,7 +187,7 @@ if __name__ == "__main__":
                 #    os.path.dirname(__file__), "./dataset/%s.bp" % model
                 # )
                 fname = model
-                with ad2.open(fname, "r", MPI.COMM_SELF) as f:
+                with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
                     attrs = f.available_attributes()
