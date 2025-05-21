@@ -491,7 +491,7 @@ class AdiosDataset(AbstractBaseDataset):
         adios_read_time = 0.0
         ddstore_time = 0.0
         t0 = time.time()
-        with adios2_open(self.filename, "r", self.comm) as f:
+        with adios2_open(self.filename, "r", MPI.COMM_SELF) as f:
             f.__next__()
 
             t1 = time.time()
@@ -523,6 +523,8 @@ class AdiosDataset(AbstractBaseDataset):
                 _val = f.read_attribute_string("dataset_name")
                 if type(_val) == list and len(_val) > 0:
                     self.dataset_name = _val[0]
+                else:
+                    self.dataset_name = _val
 
             t2 = time.time()
             log0("Read attr time (sec): ", (t2 - t1))
