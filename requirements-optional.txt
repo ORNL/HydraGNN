@@ -5,4 +5,5 @@ deephyper # hyperparameter optimization
 h5py # utils to read hdf5 files
 p7zip # to uncompress .7z file after download - needed for qm7x example
 lmdb # needed to use FAIRChem functionalities released by the Meta Research AI group
+orjson # needed to use FAIRChem functionalities released by the Meta Research AI group
 
