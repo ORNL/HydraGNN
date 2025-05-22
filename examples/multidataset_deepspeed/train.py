@@ -24,7 +24,7 @@ from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.utils.distributed import nsplit
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--log", help="log name")
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
+
     parser.add_argument(
         "--hidden_dim", type=int, help="number of channel per layer", default=None
     )
@@ -89,6 +90,7 @@ if __name__ == "__main__":
         help="enable zero optimizer with stage 1",
         default=False,
     )
+
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
@@ -239,7 +241,7 @@ if __name__ == "__main__":
             pna_deg_list = list()
             for model in modellist:
                 fname = os.path.join(args.dataset_path, "%s.bp" % model)
-                with ad2.open(fname, "r", MPI.COMM_SELF) as f:
+                with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
                     attrs = f.available_attributes()
@@ -468,6 +470,7 @@ if __name__ == "__main__":
     hydragnn.utils.model.save_model(
         model, optimizer, log_name, use_deepspeed=True
     )  # optimizer is managed by deepspeed model
+
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
     if tr.has("GPTLTracer"):
