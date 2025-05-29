@@ -126,7 +126,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
             item.chemical_composition = chemical_composition
             item.smiles_string = None
 
-            item = self.graphgps_transform(item)
+            if self.graphgps_transform is not None:
+                item = self.graphgps_transform(item)
 
             if self.check_forces_values(item.forces):
                 self.dataset.append(item)
