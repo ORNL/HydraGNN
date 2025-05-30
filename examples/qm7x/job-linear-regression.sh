@@ -59,5 +59,9 @@ env | grep ^MPICH
 env | grep ^HYDRA
 
 
-#PreOnly
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./energy_linear_regression.py
+#Andes
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*10)) -c3 python -u ./energy_linear_regression.py
+# srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./energy_linear_regression.py
+
+# #Frontier
+# srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u ./energy_linear_regression.py

@@ -5,7 +5,8 @@
 
 [General Notes:]
 (1) I changed the local batch size from 128 in EGNN to 16 in DimeNet and MACE because I had been seeing out-of-memory issues with the larger batch size on these models.
-(2) There are two version options for ROCM (6.24 and 6.31) and ADIOS2 (2.9.2 and 2.10.2). All developed run scripts currently call ROCM 6.24 and ADIOS2 v.2.9.2 since that was the previous stable, but this can be changed by commenting/uncommenting parts of the '.sh' script.
+(2) There are two version options for ROCM (6.24 and 6.31) and ADIOS2 (2.9.2 and 2.10.2). When choosing between the versions, all developed run scripts currently call ROCM 6.24 and ADIOS2 v.2.9.2 
+since that was the previous stable version, but this can be changed by commenting/uncommenting parts of the '.sh' script.
 
 
 [Optional: Clear previous plots]
