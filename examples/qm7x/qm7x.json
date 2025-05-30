@@ -10,6 +10,7 @@
       "max_neighbours": 20,
       "num_gaussians": 50,
       "num_filters": 50,
+      "pe_dim": 1,
       "envelope_exponent": 5,
       "int_emb_size": 64,
       "basis_emb_size": 8,

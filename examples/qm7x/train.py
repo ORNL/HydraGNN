@@ -248,7 +248,7 @@ class QM7XDataset(AbstractBaseDataset):
                     ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
                     smiles_string = Chem.MolToSmiles(mol[0])
                 except:
-                    smiles_string = None
+                    smiles_string = "None"
 
                 data_object = Data(
                     dataset_name="qm7x",

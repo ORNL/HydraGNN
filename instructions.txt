@@ -3,31 +3,35 @@
   - This compares direct vs autograd force predictions for EGNN and DimeNet on the qm7x dataset with 10k samples
 
 
+[General Notes:]
+(1) I changed the local batch size from 128 in EGNN to 16 in DimeNet and MACE because I had been seeing out-of-memory issues with the larger batch size on these models.
+(2) There are two version options for ROCM (6.24 and 6.31) and ADIOS2 (2.9.2 and 2.10.2). All developed run scripts currently call ROCM 6.24 and ADIOS2 v.2.9.2 since that was the previous stable, but this can be changed by commenting/uncommenting parts of the '.sh' script.
+
 
 [Optional: Clear previous plots]
-(1) rm -r Direct-vs-Autodiff-ForceComp/Hydragnn/logs
+(1) rm -r Direct-vs-Autodiff-ForceComp/HydraGNN/logs
 
 
 [Option 1: Run inside of a login node or compute node in debug]
 (1) Setup:
-  - cd Direct-vs-Autodiff-ForceComp/Hydragnn
+  - cd Direct-vs-Autodiff-ForceComp/HydraGNN
   - source debug-setup.sh
 (2) Run the Scripts and inference
   - (2.1) EGNN
-    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_login_EGNN --inputfile=multibranch_GFM260_SC25_EGNN.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1
+    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_login_EGNN --inputfile=multibranch_GFM260_SC25_EGNN.json --num_samples=1000 --multi --ddstore --multi_model_list=$datadir1
     - python -u ./examples/multibranch/inference.py --log="/lustre/orion/lrn070/world-shared/rylieweaver/Direct-vs-Autodiff-ForceComp/HydraGNN/logs/SC25_GFM_multibranch_login_EGNN" --multi --ddstore --multi_model_list="/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/qm7x-v3.bp" --num_samples=1000
-    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_physics-informed_login_EGNN --inputfile=multibranch_GFM260_SC25_physics-informed_EGNN.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1
+    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_physics-informed_login_EGNN --inputfile=multibranch_GFM260_SC25_physics-informed_EGNN.json --num_samples=1000 --multi --ddstore --multi_model_list=$datadir1
     - python -u ./examples/multibranch/inference_physics-informed.py --log="/lustre/orion/lrn070/world-shared/rylieweaver/Direct-vs-Autodiff-ForceComp/HydraGNN/logs/SC25_GFM_multibranch_physics-informed_login_EGNN" --multi --ddstore --multi_model_list="/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/qm7x-v3.bp" --num_samples=1000
   - (2.2) DimeNet
-    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_login_DimeNet --inputfile=multibranch_GFM260_SC25_DimeNet.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1
+    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_login_DimeNet --inputfile=multibranch_GFM260_SC25_DimeNet.json --num_samples=1000 --multi --ddstore --multi_model_list=$datadir1
     - python -u ./examples/multibranch/inference.py --log="/lustre/orion/lrn070/world-shared/rylieweaver/Direct-vs-Autodiff-ForceComp/HydraGNN/logs/SC25_GFM_multibranch_login_DimeNet" --multi --ddstore --multi_model_list="/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/qm7x-v3.bp" --num_samples=1000
-    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_physics-informed_login_DimeNet --inputfile=multibranch_GFM260_SC25_physics-informed_DimeNet.json --num_samples=10000 --multi --ddstore --multi_model_list=$datadir1
+    - python -u ./examples/multibranch/train.py --log=SC25_GFM_multibranch_physics-informed_login_DimeNet --inputfile=multibranch_GFM260_SC25_physics-informed_DimeNet.json --num_samples=1000 --multi --ddstore --multi_model_list=$datadir1
     - python -u ./examples/multibranch/inference_physics-informed.py --log="/lustre/orion/lrn070/world-shared/rylieweaver/Direct-vs-Autodiff-ForceComp/HydraGNN/logs/SC25_GFM_multibranch_physics-informed_login_DimeNet" --multi --ddstore --multi_model_list="/lustre/orion/world-shared/lrn070/HydraGNN-sc25-comm/qm7x-v3.bp" --num_samples=1000
 
 
-[Option 2: Run via jobs]  (still experimental as I have not been able to get the job to go through successfully yet)
+[Option 2: Run via jobs]  (inference is still experimental as I have not been able to get its job to go through successfully yet)
 (1) Setup:
-  - cd Direct-vs-Autodiff-ForceComp/Hydragnn
+  - cd Direct-vs-Autodiff-ForceComp/HydraGNN
 (2) Run the Scripts and inference
   - (2.1) EGNN
     - sbatch run_scripts/job-multibranch-direct.sh

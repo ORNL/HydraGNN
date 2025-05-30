@@ -500,7 +500,7 @@ if __name__ == "__main__":
 
             # Per batch error
             energy_loss = model.module.loss_function(
-                graph_energy_pred, graph_energy_true
+                graph_energy_pred.squeeze(), graph_energy_true.squeeze()
             )
             force_loss = model.module.loss_function(forces_pred, forces_true)
             error = (energy_loss * energy_loss_weight) + (
