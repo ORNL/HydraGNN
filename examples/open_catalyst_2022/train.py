@@ -116,17 +116,23 @@ class OpenCatalystDataset(AbstractBaseDataset):
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
             """
-            file_path = (
-                os.path.join(dirpath, "oc22/oc22_trajectories/trajectories/oc22/", data_type)
-                + "_t.txt"
-            )
-            # Open the file and read its contents line by line
-            with open(file_path, "r") as file:
-                trajectories_files_list = [line.strip() for line in file.readlines()]
-        if len(trajectories_files_list) == 0:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
+                file_path = (
+                    os.path.join(dirpath, "oc22/oc22_trajectories/trajectories/oc22/", data_type)
+                    + "_t.txt"
+                )
+                # Open the file and read its contents line by line
+                with open(file_path, "r") as file:
+                    trajectories_files_list = [line.strip() for line in file.readlines()]
+            if len(trajectories_files_list) == 0:
+                raise RuntimeError("No *.txt files found. Did you uncompress?")
             """
-            trajectories_files_list = glob.glob(os.path.join(dirpath, 'oc22/oc22_trajectories/trajectories/oc22/raw_trajs/', '*.traj'))
+            trajectories_files_list = glob.glob(
+                os.path.join(
+                    dirpath,
+                    "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
+                    "*.traj",
+                )
+            )
         trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
 
         ## We assume file names are "%d.trj"
@@ -244,7 +250,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
     def traj_to_torch_geom(self, traj_file):
         traj_file_path = os.path.join(
-            self.data_path, "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/", traj_file
+            self.data_path,
+            "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
+            traj_file,
         )
         traj = read(traj_file_path, ":", parallel=False)
         data_list = []
