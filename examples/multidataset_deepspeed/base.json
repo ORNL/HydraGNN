@@ -5,10 +5,6 @@
    "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
-            "pe_dim": 0,
-            "global_attn_engine": "",
-            "global_attn_type": "",
-            "global_attn_heads": 0,
             "equivariance": true,
             "radius": 5.0,
             "max_neighbours": 100000,
