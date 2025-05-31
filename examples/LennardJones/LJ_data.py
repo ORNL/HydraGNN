@@ -20,7 +20,6 @@ numpy.set_printoptions(linewidth=numpy.inf)
 # Torch
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import AddLaplacianEigenvectorPE
 from torch_scatter import scatter
 
 # torch.set_default_tensor_type(torch.DoubleTensor)
@@ -192,13 +191,7 @@ class LJDataset(AbstractBaseDataset):
         # Create pbc edges and lengths
         edge_creation = get_radius_graph_pbc(self.radius, self.max_neighbours)
         data = edge_creation(data)
-        data = self.transform(data)
-        # gps requires relative edge features, introduced rel_lapPe as edge encodings
-        source_pe = data.pe[data.edge_index[0]]
-        target_pe = data.pe[data.edge_index[1]]
-        data.rel_pe = torch.abs(
-            source_pe - target_pe
-        )  # Compute feature-wise difference
+
         return data
 
     def len(self):
