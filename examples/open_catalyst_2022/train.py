@@ -249,15 +249,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
         return data_object
 
     def traj_to_torch_geom(self, traj_file):
+        data_list = []
         traj_file_path = os.path.join(
             self.data_path,
             "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
             traj_file,
         )
-        traj = read(traj_file_path, ":", parallel=False)
-        data_list = []
-        for step in traj:
-            data_list.append(self.ase_to_torch_geom(step))
+        try:
+            traj = read(traj_file_path, ":", parallel=False)
+            for step in traj:
+                data_list.append(self.ase_to_torch_geom(step))
+        except:
+            pass
         return data_list
 
     def check_forces_values(self, forces):
@@ -393,6 +396,7 @@ if __name__ == "__main__":
 
     modelname = "OC2022" if args.modelname is None else args.modelname
     if args.preonly:
+        """
         ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
@@ -421,6 +425,23 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+        )
+        """
+        ## local data
+        dataset = OpenCatalystDataset(
+            os.path.join(datadir),
+            config,
+            data_type=args.train_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
+        )
+        ## This is a local split
+        trainset, valset, testset = split_dataset(
+            dataset=dataset,
+            perc_train=0.9,
+            stratify_splitting=False,
         )
         ## Need as a list
         trainset = trainset[:]
