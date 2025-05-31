@@ -106,13 +106,6 @@ class LJDataset(AbstractBaseDataset):
 
         rx = list(nsplit((dirfiles), self.world_size))[self.rank]
 
-        # LPE
-        self.transform = AddLaplacianEigenvectorPE(
-            k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-            attr_name="pe",
-            is_undirected=True,
-        )
-
         for file in rx:
             filepath = os.path.join(dirpath, file)
             self.dataset.append(self.transform_input_to_data_object_base(filepath))

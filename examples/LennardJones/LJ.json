@@ -36,7 +36,6 @@
       "num_spherical": 2,
       "hidden_dim": 32,
       "num_conv_layers": 4,
-      "pe_dim": 1,
       "output_heads": {
         "node": {
           "num_headlayers": 2,
