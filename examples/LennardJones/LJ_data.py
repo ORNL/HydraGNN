@@ -237,7 +237,7 @@ def deterministic_graph_data(
     torch.manual_seed(comm_rank)
 
     if 0 == comm_rank:
-        os.makedirs(path, exist_ok=False)
+        os.makedirs(path, exist_ok=True)
     comm.Barrier()
 
     # We assume that the unit cell is Simple Center Cubic (SCC)
