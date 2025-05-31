@@ -7,6 +7,8 @@
             "mpnn_type": "MACE",
             "radius": 5,
             "max_neighbours": 20,
+            "max_ell": 1,
+            "node_max_ell": 1,
             "num_gaussians": 50,
             "envelope_exponent": 5,
             "int_emb_size": 64,
