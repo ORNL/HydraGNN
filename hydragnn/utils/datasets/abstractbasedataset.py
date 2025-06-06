@@ -48,6 +48,7 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
             "mptrj": torch.tensor([[2]]),
             "alexandria": torch.tensor([[3]]),
             "transition1x": torch.tensor([[4]]),
+            "omat24": torch.tensor([[5]]),
         }
         if hasattr(self, "dataset_name"):
             if self.dataset_name is not None:

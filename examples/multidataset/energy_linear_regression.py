@@ -50,13 +50,18 @@ if __name__ == "__main__":
         help="save npz",
         action="store_true",
     )
+    parser.add_argument(
+        "--notestset",
+        help="no testset",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     comm = MPI.COMM_WORLD
     comm_rank = comm.Get_rank()
     comm_size = comm.Get_size()
 
-    fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % args.modelname)
+    fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % args.modelname)
     print("fname:", fname)
     trainset = AdiosDataset(
         fname,
@@ -70,18 +75,20 @@ if __name__ == "__main__":
         comm,
         enable_cache=True,
     )
-    testset = AdiosDataset(
-        fname,
-        "testset",
-        comm,
-        enable_cache=True,
-    )
+    if not args.notestset:
+        testset = AdiosDataset(
+            fname,
+            "testset",
+            comm,
+            enable_cache=True,
+        )
     pna_deg = trainset.pna_deg
 
     ## Iterate over local datasets
     energy_list = list()
     feature_list = list()
-    for dataset in [trainset, valset, testset]:
+    dataset_list = [trainset, valset, testset] if not args.notestset else [trainset, valset]
+    for dataset in dataset_list:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
         upper = rx[-1] + 1 if args.nsample_only is None else rx[0] + args.nsample_only
         print(comm_rank, "Loading:", rx[0], upper)
@@ -125,7 +132,7 @@ if __name__ == "__main__":
 
     ## Re-calculate energy
     energy_list = list()
-    for dataset in [trainset, valset, testset]:
+    for dataset in dataset_list:
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Update energy"):
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
@@ -163,14 +170,15 @@ if __name__ == "__main__":
 
     ## Writing
     fname = os.path.join(
-        os.path.dirname(__file__), "./datasets/%s-v2.bp" % args.modelname
+        os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname
     )
     if comm_rank == 0:
         print("Saving:", fname)
     adwriter = AdiosWriter(fname, comm)
     adwriter.add("trainset", trainset)
     adwriter.add("valset", valset)
-    adwriter.add("testset", testset)
+    if not args.notestset:
+        adwriter.add("testset", testset)
     adwriter.add_global("pna_deg", pna_deg)
     adwriter.add_global("energy_linear_regression_coeff", x)
     adwriter.add_global("dataset_name", args.modelname.lower())
