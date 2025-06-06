@@ -1,4 +1,5 @@
 import os, re, json
+import glob
 import logging
 import fnmatch
 import pickle
@@ -114,20 +115,25 @@ class OpenCatalystDataset(AbstractBaseDataset):
         trajectories_files_list = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            trajectories_files_list = [
-                f
-                for f in os.listdir(
-                    os.path.join(
-                        dirpath,
-                        "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/",
-                        data_type,
-                    )
+            """
+                file_path = (
+                    os.path.join(dirpath, "oc22/oc22_trajectories/trajectories/oc22/", data_type)
+                    + "_t.txt"
                 )
-                if fnmatch.fnmatch(f, "*.lmdb")
-            ]
+                # Open the file and read its contents line by line
+                with open(file_path, "r") as file:
+                    trajectories_files_list = [line.strip() for line in file.readlines()]
+            if len(trajectories_files_list) == 0:
+                raise RuntimeError("No *.txt files found. Did you uncompress?")
+            """
+            trajectories_files_list = glob.glob(
+                os.path.join(
+                    dirpath,
+                    "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
+                    "*.traj",
+                )
+            )
         trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
-        if len(trajectories_files_list) == 0:
-            raise RuntimeError("No *.lmdb files found. Did you uncompress?")
 
         ## We assume file names are "%d.trj"
         local_files_list = list(nsplit(trajectories_files_list, self.world_size))[
@@ -136,51 +142,49 @@ class OpenCatalystDataset(AbstractBaseDataset):
         log("local files list", len(local_files_list))
 
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            traj_file_path = os.path.join(
-                dirpath,
-                "s2ef_total_train_val_test_lmdbs/data/oc22/s2ef-total/",
-                self.data_type,
-                traj_file,
-            )
-            self.traj_to_torch_geom(traj_file_path)
+            list_atomistic_structures = self.traj_to_torch_geom(traj_file)
+            for item in list_atomistic_structures:
+                if self.check_forces_values(item.forces):
+                    self.dataset.append(item)
+                else:
+                    print(
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
+                        flush=True,
+                    )
 
         random.shuffle(self.dataset)
 
-    def update_torch_geom(self, data_dict, step):
+    def ase_to_torch_geom(self, atoms):
+        # set the atomic numbers, positions, and cell
+        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
+        positions = torch.Tensor(atoms.get_positions())
+        natoms = torch.IntTensor([positions.shape[0]])
+        # initialized to torch.zeros(natoms) if tags missing.
+        # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
+        tags = torch.Tensor(atoms.get_tags())
 
-        """
-        Convert a trajectory step to PyG Data object and save it as a file.
-        """
-        natoms = torch.tensor(
-            data_dict["natoms"], dtype=torch.long
-        )  # Number of atoms in the structure
-        atomic_numbers = torch.tensor(
-            data_dict["atomic_numbers"], dtype=torch.long
-        )  # Node feature: atomic numbers
-        positions = torch.tensor(
-            data_dict["positions"][step], dtype=torch.float32
-        )  # Node positions
-        forces = torch.tensor(
-            data_dict["forces"][step], dtype=torch.float32
-        )  # Force on atoms
-        energy_tensor = torch.tensor(
-            [data_dict["energy"][step]], dtype=torch.float32
-        ).unsqueeze(
-            0
-        )  # Scalar target: energy
-        cell = torch.tensor(
-            [data_dict["cell"][step]], dtype=torch.float32
-        )  # Lattice vectors defining the periodic cell
-        pbc = torch.tensor(
-            [data_dict["pbc"][step]], dtype=torch.bool
-        )  # Periodic boundary conditions (True/False) along each axis
+        cell = None
+        try:
+            cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
+        except:
+            print(f"Structure does not have cell", flush=True)
+
+        pbc = None
+        try:
+            pbc = pbc_as_tensor(atoms.get_pbc())
+        except:
+            print(f"Structure does not have pbc", flush=True)
 
         # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
+        energy = atoms.get_potential_energy(apply_constraint=False)
+        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
+
+        forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
 
         # Calculate chemical composition
         atomic_number_list = atomic_numbers.tolist()
@@ -189,7 +193,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
         chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
-        x = torch.cat((atomic_numbers, pos, forces), dim=1)
+        x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
         # put the minimum data in torch geometric data object
         data_object = Data(
@@ -245,38 +249,19 @@ class OpenCatalystDataset(AbstractBaseDataset):
         return data_object
 
     def traj_to_torch_geom(self, traj_file):
-        # Open LMDB
-        env = lmdb.open(
+        data_list = []
+        traj_file_path = os.path.join(
+            self.data_path,
+            "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
             traj_file,
-            subdir=False,
-            readonly=True,
-            lock=False,
-            readahead=False,
-            meminit=False,
         )
-
-        with env.begin() as txn:
-            cursor = txn.cursor()
-
-            for key, value in iterate_tqdm(
-                cursor, verbosity_level=2, desc="Processing OC22 LMDB"
-            ):
-                old_data = pickle.loads(value)  # Load trajectory data
-                print("Old data: ", old_data)
-                data = bump(old_data)
-                print("Data: ", data)
-
-                num_steps = data["positions"].shape[0]  # Number of time steps
-
-                for step in range(num_steps):
-                    data_object = self.update_torch_geom(data, step)
-                    if self.check_forces_values(data_object.forces):
-                        self.dataset.append(data_object)
-                    else:
-                        print(
-                            f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                            flush=True,
-                        )
+        try:
+            traj = read(traj_file_path, ":", parallel=False)
+            for step in traj:
+                data_list.append(self.ase_to_torch_geom(step))
+        except:
+            pass
+        return data_list
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
@@ -309,19 +294,19 @@ if __name__ == "__main__":
         "--train_path",
         help="path to training data",
         type=str,
-        default="train",
+        default="train_s2ef",
     )
     parser.add_argument(
         "--val_path",
         help="path to testing data",
         type=str,
-        default="val_id",
+        default="val_id_s2ef",
     )
     parser.add_argument(
         "--test_path",
         help="path to testing data",
         type=str,
-        default="test_id",
+        default="test_id_s2ef",
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -411,6 +396,7 @@ if __name__ == "__main__":
 
     modelname = "OC2022" if args.modelname is None else args.modelname
     if args.preonly:
+        """
         ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
@@ -439,6 +425,23 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+        )
+        """
+        ## local data
+        dataset = OpenCatalystDataset(
+            os.path.join(datadir),
+            config,
+            data_type=args.train_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
+        )
+        ## This is a local split
+        trainset, valset, testset = split_dataset(
+            dataset=dataset,
+            perc_train=0.9,
+            stratify_splitting=False,
         )
         ## Need as a list
         trainset = trainset[:]

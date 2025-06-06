@@ -19,8 +19,6 @@
   "NeuralNetwork": {
     "Architecture": {
       "periodic_boundary_conditions": true,
-      "global_attn_engine": "",
-      "global_attn_type": "",
       "mpnn_type": "DimeNet",
       "radius": 5.0,
       "max_neighbours": 5,
@@ -35,8 +33,6 @@
       "max_ell": 1,
       "node_max_ell": 1,
       "num_radial": 5,
-      "pe_dim": 6,
-      "global_attn_heads": 8,
       "num_spherical": 2,
       "hidden_dim": 32,
       "num_conv_layers": 4,

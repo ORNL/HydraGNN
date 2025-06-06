@@ -20,7 +20,6 @@ numpy.set_printoptions(linewidth=numpy.inf)
 # Torch
 import torch
 from torch_geometric.data import Data
-from torch_geometric.transforms import AddLaplacianEigenvectorPE
 from torch_scatter import scatter
 
 # torch.set_default_tensor_type(torch.DoubleTensor)
@@ -105,13 +104,6 @@ class LJDataset(AbstractBaseDataset):
         dirfiles = sorted(os.listdir(dirpath))
 
         rx = list(nsplit((dirfiles), self.world_size))[self.rank]
-
-        # LPE
-        self.transform = AddLaplacianEigenvectorPE(
-            k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-            attr_name="pe",
-            is_undirected=True,
-        )
 
         for file in rx:
             filepath = os.path.join(dirpath, file)
@@ -199,13 +191,7 @@ class LJDataset(AbstractBaseDataset):
         # Create pbc edges and lengths
         edge_creation = get_radius_graph_pbc(self.radius, self.max_neighbours)
         data = edge_creation(data)
-        data = self.transform(data)
-        # gps requires relative edge features, introduced rel_lapPe as edge encodings
-        source_pe = data.pe[data.edge_index[0]]
-        target_pe = data.pe[data.edge_index[1]]
-        data.rel_pe = torch.abs(
-            source_pe - target_pe
-        )  # Compute feature-wise difference
+
         return data
 
     def len(self):
@@ -237,7 +223,7 @@ def deterministic_graph_data(
     torch.manual_seed(comm_rank)
 
     if 0 == comm_rank:
-        os.makedirs(path, exist_ok=False)
+        os.makedirs(path, exist_ok=True)
     comm.Barrier()
 
     # We assume that the unit cell is Simple Center Cubic (SCC)

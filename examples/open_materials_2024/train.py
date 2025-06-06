@@ -68,17 +68,7 @@ transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 dataset_names = [
-    "rattled-1000",
-    "rattled-1000-subsampled",
-    "rattled-500",
-    "rattled-500-subsampled",
-    "rattled-300",
     "rattled-300-subsampled",
-    "aimd-from-PBE-1000-npt",
-    "aimd-from-PBE-1000-nvt",
-    "aimd-from-PBE-3000-npt",
-    "aimd-from-PBE-3000-nvt",
-    "rattled-relax",
 ]
 
 
