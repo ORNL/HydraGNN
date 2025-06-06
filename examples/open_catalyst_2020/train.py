@@ -115,6 +115,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         for item in list_atomistic_structures:
+            assert item is not None, item
 
             # Calculate chemical composition
             atomic_number_list = item.atomic_numbers.tolist()
