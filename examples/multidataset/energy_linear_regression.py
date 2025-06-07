@@ -87,7 +87,9 @@ if __name__ == "__main__":
     ## Iterate over local datasets
     energy_list = list()
     feature_list = list()
-    dataset_list = [trainset, valset, testset] if not args.notestset else [trainset, valset]
+    dataset_list = (
+        [trainset, valset, testset] if not args.notestset else [trainset, valset]
+    )
     for dataset in dataset_list:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
         upper = rx[-1] + 1 if args.nsample_only is None else rx[0] + args.nsample_only
