@@ -207,8 +207,8 @@ class MaxAtomDistributedBatchSampler(Sampler[list[int]]):
         assert len(indices) == self.num_samples
         # slice of batch indices
         batch_slice = [self.all_batches[i] for i in indices]
-        assert (
-            self.start_iter < len(batch_slice)
+        assert self.start_iter < len(
+            batch_slice
         ), f"starting iteration {self.start_iter} must be less than size of the slice of batches! {len(batch_slice)}"
         return iter(batch_slice[self.start_iter :])
 

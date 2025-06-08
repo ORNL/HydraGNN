@@ -130,9 +130,10 @@ class ConcatDataset(Dataset[T_co]):
         assert attr == "natoms"
         if isinstance(sample_idxs_to_get_metadata_for, list):
             metadata = np.zeros(len(sample_idxs_to_get_metadata_for), dtype=np.int32)
-            dataset_idxs, dataset_internal_sample_idx = (
-                self._get_dataset_and_sample_index_list(sample_idxs_to_get_metadata_for)
-            )
+            (
+                dataset_idxs,
+                dataset_internal_sample_idx,
+            ) = self._get_dataset_and_sample_index_list(sample_idxs_to_get_metadata_for)
             for dataset_idx in range(len(self.cumulative_sizes)):
                 dataset_mask = dataset_idxs == dataset_idx
                 metadata[dataset_mask] = self.datasets[dataset_idx].get_metadata(

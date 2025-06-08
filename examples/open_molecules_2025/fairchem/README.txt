@@ -14,3 +14,5 @@ https://gitlab.com/ase/ase-db-backends.git
 
 The frozen version of the ase-db-backends utilities have been extracted from the original GitLab repository after commit b1e57b2d was merged into the main branch:
 https://gitlab.com/ase/ase-db-backends/-/commit/b1e57b2d1b5ebdf8adf8e76dc3ca9cab2ced2303
+
+After having cloned the repo, rename it from 'ase-db-backends' into 'ase_db_backends'

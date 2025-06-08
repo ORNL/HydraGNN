@@ -14,7 +14,9 @@ local_path = "/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/Hydra
 sys.path.insert(0, local_path)
 
 # Now explicitly load your local ase_db_backends package
-package_init = os.path.join(local_path, "ase_db_backends", "ase_db_backends", "__init__.py")
+package_init = os.path.join(
+    local_path, "ase_db_backends", "ase_db_backends", "__init__.py"
+)
 spec = importlib.util.spec_from_file_location("ase_db_backends", package_init)
 mod = importlib.util.module_from_spec(spec)
 sys.modules["ase_db_backends"] = mod
@@ -88,6 +90,7 @@ transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 dataset_names = [
     "rattled-300-subsampled",
 ]
+
 
 class OMol2025(AbstractBaseDataset):
     def __init__(

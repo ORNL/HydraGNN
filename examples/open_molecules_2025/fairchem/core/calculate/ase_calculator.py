@@ -220,9 +220,9 @@ class FAIRChemCalculator(Calculator):
             if calc_key == "energy":
                 energy = float(pred[calc_key].detach().cpu().numpy()[0])
 
-                self.results["energy"] = self.results["free_energy"] = (
-                    energy  # Free energy is a copy of energy
-                )
+                self.results["energy"] = self.results[
+                    "free_energy"
+                ] = energy  # Free energy is a copy of energy
             if calc_key == "forces":
                 forces = pred[calc_key].detach().cpu().numpy()
                 self.results["forces"] = forces

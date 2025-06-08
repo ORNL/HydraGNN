@@ -143,10 +143,13 @@ class OMCPolymorphReducer(JsonDFReducer):
                     )
 
                     # not clean but call this directly to avoid rematching (rms, max_dist, mask, cost, mapping)
-                    reference_structure, relaxed_structure, _, _ = (
-                        self._structure_matcher._preprocess(
-                            reference_structure, relaxed_structure, niggli=True
-                        )
+                    (
+                        reference_structure,
+                        relaxed_structure,
+                        _,
+                        _,
+                    ) = self._structure_matcher._preprocess(
+                        reference_structure, relaxed_structure, niggli=True
                     )
                     match = self._structure_matcher._match(
                         reference_structure, relaxed_structure, fu=1, use_rms=True

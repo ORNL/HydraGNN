@@ -75,7 +75,7 @@ class LMDBDatabase(Database):
             # Open a new env with write access
             self.env = lmdb.open(
                 str(self.filename),
-                map_size=2**41,  # 2Tb max size, typical for older FS
+                map_size=2 ** 41,  # 2Tb max size, typical for older FS
                 subdir=False,
                 meminit=False,
                 map_async=True,

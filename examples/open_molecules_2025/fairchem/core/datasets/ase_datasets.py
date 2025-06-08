@@ -563,10 +563,10 @@ class AseDBDataset(AseAtomsDataset):
 
         return ase.db.connect(address, **connect_args)
 
-    #def __del__(self):
-        #for db in self.dbs:
-        #    if hasattr(db, "close"):
-        #        db.close()
+    # def __del__(self):
+    # for db in self.dbs:
+    #    if hasattr(db, "close"):
+    #        db.close()
 
     def sample_property_metadata(self, num_samples: int = 100) -> dict:
         logging.warning(
