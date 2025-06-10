@@ -1,6 +1,6 @@
 import os, re, json
 import logging
-import sys, pdb
+import sys
 from mpi4py import MPI
 import argparse
 import torch
@@ -108,8 +108,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    # datadir = os.path.join(dirpwd, "dataset")
-    datadir = "/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_materials_2024/dataset"
+    datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
