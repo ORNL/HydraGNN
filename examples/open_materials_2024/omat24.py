@@ -166,10 +166,6 @@ class OMat2024(AbstractBaseDataset):
 
         # Call workload distributor to assign datasets to processes
         my_datasets = balance_load(all_datasets_info, self.world_size, self.rank)
-
-        # ------------------------------------------------------------------ #
-        # my_datasets = my_datasets[:1]
-        # ------------------------------------------------------------------ #
         return my_datasets
 
     def _create_pytorch_data_object(self, dataset, index):
