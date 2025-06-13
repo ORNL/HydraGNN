@@ -118,7 +118,11 @@ class OMat2024(AbstractBaseDataset):
             for index in rx:
                 self._create_pytorch_data_object(dataset, index)
 
-        print(self.rank, f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.", flush=True)
+        print(
+            self.rank,
+            f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.",
+            flush=True,
+        )
         torch.distributed.barrier()
 
         random.shuffle(self.dataset)

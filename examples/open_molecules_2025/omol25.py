@@ -70,11 +70,13 @@ class OMol2025(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
         self.comm = comm
-        
+
         # get list of data files and distribute them evenly amongst ranks
         # omol25 has the same number of samples in every data file
-        dataset_list = glob.glob(os.path.join(dirpath, data_type, "*.aselmdb"), recursive=True)
-        
+        dataset_list = glob.glob(
+            os.path.join(dirpath, data_type, "*.aselmdb"), recursive=True
+        )
+
         for dataset in dataset_list:
             fullpath = dataset
 
@@ -84,7 +86,9 @@ class OMol2025(AbstractBaseDataset):
                 print(f"{fullpath} not a valid ase lmdb dataset. Ignoring ...")
                 continue
 
-            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[self.rank]
+            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
+                self.rank
+            ]
 
             print(
                 f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {dataset.num_samples}, len(rx): {len(rx)}"
@@ -99,7 +103,11 @@ class OMol2025(AbstractBaseDataset):
             for index in rx:
                 self._create_pytorch_data_object(dataset, index)
 
-        print(self.rank, f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.", flush=True)
+        print(
+            self.rank,
+            f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.",
+            flush=True,
+        )
         torch.distributed.barrier()
 
         random.shuffle(self.dataset)
