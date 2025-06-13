@@ -36,10 +36,24 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
 
+    # Set default values for GPS variables
+    if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = None
+    if "global_attn_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = None
+    if "global_attn_heads" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = 0
+    if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
+
+    # This default is needed for update_config_NN_outputs
+    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
@@ -129,12 +143,6 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["initial_bias"] = None
 
-    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
-
-    if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
-
     if "activation_function" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["activation_function"] = "relu"
 
@@ -144,8 +152,12 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
 
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
+    if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
+
+    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
+
     return config
 
 
@@ -208,7 +220,9 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    if hasattr(data, "y_loc"):
+    if config["Training"]["compute_grad_energy"]:
+        dims_list = config["Variables_of_interest"]["output_dim"]
+    elif hasattr(data, "y_loc"):
         dims_list = []
         for ihead in range(len(output_type)):
             if output_type[ihead] == "graph":

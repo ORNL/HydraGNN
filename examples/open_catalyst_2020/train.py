@@ -55,7 +55,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         data_type,
         graphgps_transform=None,
         energy_per_atom=True,
@@ -63,7 +63,10 @@ class OpenCatalystDataset(AbstractBaseDataset):
     ):
         super().__init__()
 
-        self.var_config = var_config
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
 
@@ -81,11 +84,12 @@ class OpenCatalystDataset(AbstractBaseDataset):
         mx = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            # cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            cmd = f"find {self.data_path} -maxdepth 1 -type f -name '*.txt' | wc -l"
             print("Check the number of files:", cmd)
             out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             mx = int(out.stdout)
-            print("Total the number of files:", mx)
+            print("Total number of files:", mx)
         mx = MPI.COMM_WORLD.bcast(mx, root=0)
         if mx == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
@@ -101,7 +105,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6.0)
+        a2g = AtomsToGraphs(max_neigh=self.max_neighbours, radius=self.radius)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -111,6 +115,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         for item in list_atomistic_structures:
+            assert item is not None, item
 
             # Calculate chemical composition
             atomic_number_list = item.atomic_numbers.tolist()
@@ -122,7 +127,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
             item.chemical_composition = chemical_composition
             item.smiles_string = None
 
-            item = self.graphgps_transform(item)
+            if self.graphgps_transform is not None:
+                item = self.graphgps_transform(item)
 
             if self.check_forces_values(item.forces):
                 self.dataset.append(item)
@@ -229,11 +235,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -266,9 +274,10 @@ if __name__ == "__main__":
         ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type=args.train_path,
-            graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -280,7 +289,13 @@ if __name__ == "__main__":
         )
         valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
+            os.path.join(datadir),
+            config,
+            data_type=args.test_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
         )
         ## Need as a list
         testset = testset[:]

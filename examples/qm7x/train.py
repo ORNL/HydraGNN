@@ -77,6 +77,7 @@ def info(*args, logtype="info", sep=" "):
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
 
+
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
 
@@ -86,7 +87,7 @@ class QM7XDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
@@ -94,10 +95,16 @@ class QM7XDataset(AbstractBaseDataset):
         super().__init__()
 
         self.qm7x_node_types = qm7x_node_types
-        self.var_config = var_config
+
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
 
         self.graphgps_transform = graphgps_transform
 
@@ -169,6 +176,8 @@ class QM7XDataset(AbstractBaseDataset):
             pos = torch.from_numpy(np.array(fMOL[molid][confid]["atXYZ"])).to(
                 torch.float32
             )
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
             atomic_numbers = (
                 torch.Tensor(fMOL[molid][confid]["atNUM"])
                 .unsqueeze(1)
@@ -231,6 +240,7 @@ class QM7XDataset(AbstractBaseDataset):
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
                 pos_list = pos.tolist()
                 atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+                """
                 try:
                     mol = xyz2mol(
                         atomic_number_list_int,
@@ -249,19 +259,19 @@ class QM7XDataset(AbstractBaseDataset):
                     smiles_string = Chem.MolToSmiles(mol[0])
                 except:
                     smiles_string = None
+                """
 
                 data_object = Data(
                     dataset_name="qm7x",
                     natoms=natoms,
                     pos=pos,
-                    cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_index=None,
-                    edge_attr=None,
-                    edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    # edge_index=None,
+                    # edge_attr=None,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
-                    smiles_string=smiles_string,
+                    # smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
@@ -276,6 +286,14 @@ class QM7XDataset(AbstractBaseDataset):
                 data_object = self.radius_graph(data_object)
 
                 data_object = transform_coordinates(data_object)
+
+                # Default edge_shifts for when radius_graph_pbc is not activated
+                data_object.edge_shifts = torch.zeros(
+                    (data_object.edge_index.size(1), 3), dtype=torch.float32
+                )
+
+                # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+                data_object.pbc = data_object.pbc.int()
 
                 # LPE
                 if self.graphgps_transform is not None:
@@ -375,11 +393,14 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
+    graphgps_transform = None
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -410,7 +431,7 @@ if __name__ == "__main__":
         ## local data
         total = QM7XDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             graphgps_transform=graphgps_transform,
             energy_per_atom=args.energy_per_atom,
             dist=True,

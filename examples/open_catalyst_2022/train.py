@@ -1,6 +1,10 @@
 import os, re, json
+import glob
 import logging
+import fnmatch
+import pickle
 import sys
+import lmdb
 from mpi4py import MPI
 import argparse
 
@@ -38,6 +42,9 @@ from hydragnn.utils.print.print_utils import iterate_tqdm, log
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from ase.io import read
 
@@ -53,16 +60,23 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+def bump(g):
+    return Data.from_dict(g.__dict__)
+
+
 # transform_coordinates = Spherical(norm=False, cat=False)
 transform_coordinates = LocalCartesian(norm=False, cat=False)
 # transform_coordinates = Distance(norm=False, cat=False)
+
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         data_type,
         graphgps_transform=None,
         energy_per_atom=True,
@@ -70,19 +84,27 @@ class OpenCatalystDataset(AbstractBaseDataset):
     ):
         super().__init__()
 
-        self.var_config = var_config
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.data_path = dirpath
+        self.data_type = data_type
         self.energy_per_atom = energy_per_atom
 
         # NOTE Open Catalyst 2022 dataset has PBC:
         #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
-        self.radius_graph = RadiusGraph(6.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(6.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
+        self.radius_graph_pbc = RadiusGraphPBC(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
 
         self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 100.0
+        self.forces_norm_threshold = 1000.0
 
         self.dist = dist
         if self.dist:
@@ -93,16 +115,25 @@ class OpenCatalystDataset(AbstractBaseDataset):
         trajectories_files_list = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            file_path = (
-                os.path.join(dirpath, "oc22_trajectories/trajectories/oc22/", data_type)
-                + "_t.txt"
+            """
+                file_path = (
+                    os.path.join(dirpath, "oc22/oc22_trajectories/trajectories/oc22/", data_type)
+                    + "_t.txt"
+                )
+                # Open the file and read its contents line by line
+                with open(file_path, "r") as file:
+                    trajectories_files_list = [line.strip() for line in file.readlines()]
+            if len(trajectories_files_list) == 0:
+                raise RuntimeError("No *.txt files found. Did you uncompress?")
+            """
+            trajectories_files_list = glob.glob(
+                os.path.join(
+                    dirpath,
+                    "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
+                    "*.traj",
+                )
             )
-            # Open the file and read its contents line by line
-            with open(file_path, "r") as file:
-                trajectories_files_list = [line.strip() for line in file.readlines()]
         trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
-        if len(trajectories_files_list) == 0:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
 
         ## We assume file names are "%d.trj"
         local_files_list = list(nsplit(trajectories_files_list, self.world_size))[
@@ -113,16 +144,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
         for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
             list_atomistic_structures = self.traj_to_torch_geom(traj_file)
             for item in list_atomistic_structures:
-
-                # Calculate chemical composition
-                atomic_number_list = item.atomic_numbers.tolist()
-                assert len(atomic_number_list) == item.natoms
-                ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-
-                item.chemical_composition = chemical_composition
-
                 if self.check_forces_values(item.forces):
                     self.dataset.append(item)
                 else:
@@ -136,8 +157,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
     def ase_to_torch_geom(self, atoms):
         # set the atomic numbers, positions, and cell
         atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
-        pos = torch.Tensor(atoms.get_positions())
-        natoms = torch.IntTensor([pos.shape[0]])
+        positions = torch.Tensor(atoms.get_positions())
+        natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.
         # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
         tags = torch.Tensor(atoms.get_tags())
@@ -150,13 +171,19 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         pbc = None
         try:
-            pbc = atoms.get_pbc()
+            pbc = pbc_as_tensor(atoms.get_pbc())
         except:
             print(f"Structure does not have pbc", flush=True)
+
+        # If either cell or pbc were not read, we set to defaults which are not none.
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
+
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
 
         # Calculate chemical composition
@@ -166,26 +193,24 @@ class OpenCatalystDataset(AbstractBaseDataset):
         hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
         chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
-        x = torch.cat((atomic_numbers, pos, forces), dim=1)
+        x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
         # put the minimum data in torch geometric data object
         data_object = Data(
             dataset_name="oc2022",
             natoms=natoms,
-            pos=pos,
+            pos=positions,
             cell=cell,
             pbc=pbc,
-            edge_index=None,
-            edge_attr=None,
-            edge_shifts=None,
+            # edge_index=None,
+            # edge_attr=None,
             atomic_numbers=atomic_numbers,
-            chemical_composition=chemical_composition,
-            smiles_string=None,
+            # chemical_composition=chemical_composition,
+            # smiles_string=None,
             x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
-            tags=tags,
         )
 
         if self.energy_per_atom:
@@ -193,19 +218,29 @@ class OpenCatalystDataset(AbstractBaseDataset):
         else:
             data_object.y = data_object.energy
 
-        if data_object.pbc is not None and data_object.cell is not None:
+        if data_object.pbc.any():
             try:
                 data_object = self.radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure could not successfully apply pbc radius graph",
+                    f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
                     flush=True,
                 )
                 data_object = self.radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
         else:
             data_object = self.radius_graph(data_object)
+            data_object = transform_coordinates(data_object)
 
-        data_object = transform_coordinates(data_object)
+        # Default edge_shifts for when radius_graph_pbc is not activated
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
+
+        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+        data_object.pbc = data_object.pbc.int()
 
         # LPE
         if self.graphgps_transform is not None:
@@ -214,22 +249,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
         return data_object
 
     def traj_to_torch_geom(self, traj_file):
-        traj_file_path = os.path.join(
-            self.data_path, "oc22_trajectories/trajectories/oc22/raw_trajs/", traj_file
-        )
-        traj = read(traj_file_path, ":", parallel=False)
         data_list = []
-        for step in traj:
-            data_object = self.ase_to_torch_geom(step)
-            if self.check_forces_values(data_object.forces):
-                self.dataset.append(data_object)
-            else:
-                print(
-                    f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                    flush=True,
-                )
-            data_list.append(data_object)
-
+        traj_file_path = os.path.join(
+            self.data_path,
+            "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
+            traj_file,
+        )
+        try:
+            traj = read(traj_file_path, ":", parallel=False)
+            for step in traj:
+                data_list.append(self.ase_to_torch_geom(step))
+        except:
+            pass
         return data_list
 
     def check_forces_values(self, forces):
@@ -266,10 +297,16 @@ if __name__ == "__main__":
         default="train_s2ef",
     )
     parser.add_argument(
-        "--test_path",
+        "--val_path",
         help="path to testing data",
         type=str,
         default="val_id_s2ef",
+    )
+    parser.add_argument(
+        "--test_path",
+        help="path to testing data",
+        type=str,
+        default="test_id_s2ef",
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -326,11 +363,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -357,26 +396,56 @@ if __name__ == "__main__":
 
     modelname = "OC2022" if args.modelname is None else args.modelname
     if args.preonly:
+        """
         ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type=args.train_path,
-            graphgps_transform=graphgps_transform,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
+        )
+        ## local data
+        valset = OpenCatalystDataset(
+            os.path.join(datadir),
+            config,
+            data_type=args.val_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
+        )
+        testset = OpenCatalystDataset(
+            os.path.join(datadir),
+            config,
+            data_type=args.test_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
+        )
+        """
+        ## local data
+        dataset = OpenCatalystDataset(
+            os.path.join(datadir),
+            config,
+            data_type=args.train_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
         ## This is a local split
-        trainset, valset1, valset2 = split_dataset(
-            dataset=trainset,
+        trainset, valset, testset = split_dataset(
+            dataset=dataset,
             perc_train=0.9,
             stratify_splitting=False,
         )
-        valset = [*valset1, *valset2]
-        testset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
-        )
         ## Need as a list
+        trainset = trainset[:]
+        valset = valset[:]
         testset = testset[:]
         print(
             rank,

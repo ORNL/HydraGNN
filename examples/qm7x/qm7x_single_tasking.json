@@ -6,7 +6,7 @@
     "Architecture": {
       "mpnn_type": "EGNN",
       "edge_features": ["bond_length"],
-      "max_neighbours": 20,
+      "max_neighbours": 50,
       "num_gaussians": 50,
       "num_filters": 50,
       "envelope_exponent": 5,
@@ -17,7 +17,7 @@
       "num_before_skip": 1,
       "num_radial": 6,
       "num_spherical": 7,
-      "radius": 5,
+      "radius": 5.0,
       "hidden_dim": 200,
       "num_conv_layers": 6,
       "output_heads": {

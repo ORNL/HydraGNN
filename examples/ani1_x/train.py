@@ -30,7 +30,6 @@ from hydragnn.utils.print.print_utils import iterate_tqdm
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
-    RadiusGraphPBC,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -65,19 +64,24 @@ class ANI1xDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
-        var_config,
+        config,
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
     ):
         super().__init__()
 
-        self.var_config = var_config
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.data_path = os.path.join(dirpath, "ani1x-release.h5")
         self.data_keys = ["wb97x_dz.energy", "wb97x_dz.forces"]
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbors
+        )
 
         self.graphgps_transform = graphgps_transform
 
@@ -122,6 +126,8 @@ class ANI1xDataset(AbstractBaseDataset):
             for frame_id in local_trajectories_id:
 
                 pos = torch.from_numpy(X[frame_id]).to(torch.float32)
+                cell = torch.eye(3, dtype=torch.float32)
+                pbc = torch.tensor([False, False, False], dtype=torch.bool)
                 energy = (
                     torch.tensor(E[frame_id])
                     .unsqueeze(0)
@@ -141,6 +147,7 @@ class ANI1xDataset(AbstractBaseDataset):
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
                 pos_list = pos.tolist()
                 atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+                """
                 try:
                     mol = xyz2mol(
                         atomic_number_list_int,
@@ -159,19 +166,19 @@ class ANI1xDataset(AbstractBaseDataset):
                     smiles_string = Chem.MolToSmiles(mol[0])
                 except:
                     smiles_string = None
+                """
 
                 data_object = Data(
                     dataset_name="ani1x",
                     natoms=natoms,
                     pos=pos,
-                    cell=None,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=None,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    edge_index=None,
-                    edge_attr=None,
-                    edge_shifts=None,  # even if not needed, edge_shift needs to be defined because ADIOS requires consistency across datasets
+                    cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    # edge_index=None,
+                    # edge_attr=None,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
-                    smiles_string=smiles_string,
+                    # smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
@@ -187,6 +194,14 @@ class ANI1xDataset(AbstractBaseDataset):
 
                 # Build edge attributes
                 data_object = transform_coordinates(data_object)
+
+                # Default edge_shifts for when radius_graph_pbc is not activated
+                data_object.edge_shifts = torch.zeros(
+                    (data_object.edge_index.size(1), 3), dtype=torch.float32
+                )
+
+                # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+                data_object.pbc = data_object.pbc.int()
 
                 # LPE
                 if self.graphgps_transform is not None:
@@ -307,11 +322,13 @@ if __name__ == "__main__":
     var_config["node_feature_dims"] = node_feature_dims
 
     # Transformation to create positional and structural laplacian encoders
+    """
     graphgps_transform = AddLaplacianEigenvectorPE(
         k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
         attr_name="pe",
         is_undirected=True,
     )
+    """
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -341,8 +358,9 @@ if __name__ == "__main__":
         ## local data
         total = ANI1xDataset(
             os.path.join(datadir),
-            var_config,
-            graphgps_transform=graphgps_transform,
+            config,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
