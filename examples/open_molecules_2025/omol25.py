@@ -1,4 +1,4 @@
-import os, random, torch, glob, sys
+import os, random, torch, glob, sys, shutil, pdb
 import numpy as np
 from fairchem.core.datasets import AseDBDataset
 from mpi4py import MPI
@@ -16,7 +16,6 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     gather_deg,
 )
 from hydragnn.utils.distributed import nsplit
-from utils import balance_load
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
@@ -27,22 +26,7 @@ transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
-dataset_names = [
-    "rattled-1000",
-    "rattled-1000-subsampled",
-    "rattled-500",
-    "rattled-500-subsampled",
-    "rattled-300",
-    "rattled-300-subsampled",
-    "aimd-from-PBE-1000-npt",
-    "aimd-from-PBE-1000-nvt",
-    "aimd-from-PBE-3000-npt",
-    "aimd-from-PBE-3000-nvt",
-    "rattled-relax",
-]
-
-
-class OMat2024(AbstractBaseDataset):
+class OMol2025(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
@@ -86,24 +70,21 @@ class OMat2024(AbstractBaseDataset):
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
         self.comm = comm
+        
+        # get list of data files and distribute them evenly amongst ranks
+        # omol25 has the same number of samples in every data file
+        dataset_list = glob.glob(os.path.join(dirpath, data_type, "*.aselmdb"), recursive=True)
+        
+        for dataset in dataset_list:
+            fullpath = dataset
 
-        # Parallelizing over data files for training data. For val set, we parallelize over each molecules.
-        dataset_list = self._get_datasets_assigned_to_me(dirpath, data_type)
-
-        for dataset_index, dataset_dict in enumerate(dataset_list):
-            fullpath = dataset_dict["dataset_fullpath"]
             try:
                 dataset = AseDBDataset(config=dict(src=fullpath, **config_kwargs))
             except ValueError as e:
                 print(f"{fullpath} not a valid ase lmdb dataset. Ignoring ...")
                 continue
 
-            if data_type == "train":
-                rx = list(range(dataset.num_samples))
-            else:
-                rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
-                    self.rank
-                ]
+            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[self.rank]
 
             print(
                 f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {dataset.num_samples}, len(rx): {len(rx)}"
@@ -122,51 +103,6 @@ class OMat2024(AbstractBaseDataset):
         torch.distributed.barrier()
 
         random.shuffle(self.dataset)
-
-    def _get_datasets_assigned_to_me(self, dirpath, data_type):
-        datasets_info = []
-        if data_type != "train":
-            # For validation, we return all datasets in the directory
-            for d in dataset_names:
-                full_path = os.path.join(dirpath, data_type, d, "val.aselmdb")
-                datasets_info.append({"dataset_fullpath": full_path, "num_samples": 0})
-
-            return datasets_info
-
-        # get the list of ase lmdb files
-        total_file_list = None
-        if self.rank == 0:
-            total_file_list = glob.glob(
-                os.path.join(dirpath, data_type, "**/*.aselmdb"), recursive=True
-            )
-        total_file_list = self.comm.bcast(total_file_list, root=0)
-
-        # evenly distribute amongst all ranks to get num samples
-        rx = list(nsplit(total_file_list, self.world_size))[self.rank]
-        datasets = rx
-
-        # Get num samples for all datasets assigned to this process
-        config_kwargs = {}
-        for d in datasets:
-            fullpath = os.path.join(dirpath, data_type, d)
-            try:
-                dataset = AseDBDataset(config=dict(src=fullpath, **config_kwargs))
-            except ValueError as e:
-                print(f"{fullpath} is not a valid ASE LMDB dataset. Ignoring ...")
-                continue
-
-            num_samples = dataset.num_samples
-            datasets_info.append(
-                {"dataset_fullpath": fullpath, "num_samples": num_samples}
-            )
-
-        # All gather so everyone has all num samples information
-        _all_datasets_info = self.comm.allgather(datasets_info)
-        all_datasets_info = [item for sublist in _all_datasets_info for item in sublist]
-
-        # Call workload distributor to assign datasets to processes
-        my_datasets = balance_load(all_datasets_info, self.world_size, self.rank)
-        return my_datasets
 
     def _create_pytorch_data_object(self, dataset, index):
         try:
@@ -231,7 +167,7 @@ class OMat2024(AbstractBaseDataset):
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
             data_object = Data(
-                dataset_name="omat24",
+                dataset_name="omol25",
                 natoms=natoms,
                 pos=pos,
                 cell=cell,
