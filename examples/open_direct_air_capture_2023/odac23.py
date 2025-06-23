@@ -33,6 +33,8 @@ from ase import Atoms
 import os
 from typing import List
 
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
+
 
 class ExtendedXYZDataset(Dataset):
     def __init__(self, extxyz_filename: str, transform=None, pre_transform=None):
@@ -94,8 +96,6 @@ class ODAC2023(AbstractBaseDataset):
         )
 
         self.graphgps_transform = graphgps_transform
-
-        config_kwargs = {}  # see tutorial on additional configuration
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 1000.0
@@ -163,8 +163,7 @@ class ODAC2023(AbstractBaseDataset):
         datasets = rx
 
         # Get num samples for all datasets assigned to this process
-        config_kwargs = {}
-        for d in datasets:
+        for d in iterate_tqdm(datasets, verbosity_level=2, desc="Data Parsing"):
             fullpath = os.path.join(dirpath, data_type, d)
             try:
                 dataset = ExtendedXYZDataset(extxyz_filename=fullpath)
