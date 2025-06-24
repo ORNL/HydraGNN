@@ -49,7 +49,7 @@ def find_ifname(myaddr):
     return ifname
 
 
-def parse_slurm_nodelist(nodelist):
+def parse_nodelist(nodelist):
     """
     Parse SLURM_NODELIST env string to get list of nodes.
     Usage example:
@@ -150,13 +150,13 @@ def setup_ddp(use_deepspeed=False):
         master_addr = os.environ["LSB_MCPU_HOSTS"].split()[2]
     elif os.getenv("SLURM_STEP_NODELIST") is not None:
         ## The following is CADES/Frontier/Perlmutter specific with job steps
-        master_addr = parse_slurm_nodelist(os.environ["SLURM_STEP_NODELIST"])[0]
+        master_addr = parse_nodelist(os.environ["SLURM_STEP_NODELIST"])[0]
     elif os.getenv("SLURM_NODELIST") is not None:
         ## The following is CADES specific
-        master_addr = parse_slurm_nodelist(os.environ["SLURM_NODELIST"])[0]
+        master_addr = parse_nodelist(os.environ["SLURM_NODELIST"])[0]
     elif os.getenv("PBS_O_HOST") is not None:
         ## The following is CADES specific
-        master_addr = parse_slurm_nodelist(os.environ["PBS_O_HOST"])[0]
+        master_addr = parse_nodelist(os.environ["PBS_O_HOST"])[0]
 
     try:
         if backend in ["nccl", "gloo"]:
