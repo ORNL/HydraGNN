@@ -6,6 +6,7 @@ from .distributed import (
     get_device_from_name,
     is_model_distributed,
     get_distributed_model,
+    distributed_model_wrapper,
     setup_ddp,
     setup_ddp_aurora,
     nsplit,
