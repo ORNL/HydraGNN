@@ -419,7 +419,9 @@ if __name__ == "__main__":
                 config=config["NeuralNetwork"],
                 verbosity=verbosity,
             )
-            model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+            model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+                model, optimizer, verbosity
+            )
 
             # Print details of neural network architecture
             print_model(model)
@@ -438,6 +440,7 @@ if __name__ == "__main__":
         ds_config["zero_optimization"] = {"stage": 1}
 
     # create deepspeed model
+    # FIXME: need to check if it also works on ALCF-Aurora with Intel GPUs
     model, optimizer, _, _ = deepspeed.initialize(
         args=get_deepspeed_init_args(),
         model=model,

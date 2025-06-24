@@ -351,6 +351,30 @@ def get_distributed_model(
     return model
 
 
+def distributed_model_wrapper(
+    model, optimizer, sync_batch_norm=False, find_unused_parameters=False, verbosity=0
+):
+
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        print_distributed(verbosity, "Using ipex.optimize wrapper")
+        import intel_extension_for_pytorch as ipex
+
+        model, optimizer = ipex.optimize(model, optimizer=optimizer)
+    else:
+        print_distributed(
+            verbosity, "CPUs, NVIDIA, and AMD GPUs do not need optimize wrapper"
+        )
+
+    model = get_distributed_model(
+        model,
+        verbosity=verbosity,
+        sync_batch_norm=sync_batch_norm,
+        find_unused_parameters=find_unused_parameters,
+    )
+
+    return model, optimizer
+
+
 def print_peak_memory(verbosity_level, prefix):
     # FIXME: this will have to change when the code can run on AMD gpus
     if torch.cuda.is_available():
