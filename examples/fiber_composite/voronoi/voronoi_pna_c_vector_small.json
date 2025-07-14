@@ -1,0 +1,45 @@
+{
+    "Verbosity": {
+        "level": 1
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "edge_features": ["lengths","x","y"],
+            "hidden_dim": 256,
+            "num_conv_layers": 3,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 64,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [265,128]
+                }
+            },
+            "activation_function": "relu",
+            "task_weights": [1.0,1.0,0.0,1.0,1.0,1.0,1.0]
+        },
+        "Variables_of_interest": {
+            "output_dim": [1,1,1,1,1,1,1],
+            "input_node_features": [0,1,2],
+            "output_index": [0,1,2,3],
+            "type": ["graph","graph","graph","graph","graph","graph","graph"],
+            "output_names": ["Nfstrength","Sfstrength","Beta","C11","C12","C22","C33"]
+        },
+        "Training": {
+            "num_epoch": 60,
+            "perc_train": 0.9,
+            "loss_function_type": "huber",
+            "batch_size": 20,
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-5
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": true,
+        "create_plots": true
+    }
+}

@@ -1,0 +1,45 @@
+{
+    "Verbosity": {
+        "level": 1
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "model_type": "PNA",
+            "hidden_dim": 32,
+            "num_conv_layers": 3,
+            "edge_features": ["lengths","x","y"],
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 32,
+                    "num_headlayers": 4,
+                    "dim_headlayers": [32,32,32,32]
+                }
+            },
+            "activation_function": "tanh",
+            "task_weights": [1.0]
+        },
+        "Variables_of_interest": {
+            "output_dim": [4],
+            "input_node_features": [0,1,2],
+            "output_index": [0],
+            "type": ["graph"],
+            "output_names": ["Cij"]
+        },
+        "Training": {
+            "num_epoch": 100,
+            "perc_train": 0.9,
+            "loss_function_type": "mse",
+            "batch_size": 64,
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-4
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": true,
+        "create_plots": true
+    }
+}
