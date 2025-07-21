@@ -16,6 +16,7 @@ from torch_geometric.data import Data
 from torch_geometric.utils import remove_self_loops, degree
 from torch_geometric.data.datapipes import functional_transform
 from torch_geometric.transforms import LocalCartesian, Distance
+from torch_geometric.nn.models.schnet import RadiusInteractionGraph
 
 import ase
 import ase.neighborlist
@@ -341,6 +342,25 @@ class RadiusGraphPBC(RadiusGraph):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
+
+
+class RadiusInteractionGraphCPU(RadiusInteractionGraph):
+    """
+    A subclass of PyG's RadiusInteractionGraph that executes
+    on the CPU then moves the result back to the original device.
+    (helpful for hardware where PyG GPU operations are unsupported)
+    """
+
+    def forward(self, x, batch):
+        device = x.device
+
+        # Run the original forward method on CPU
+        x_cpu = x.cpu()
+        batch_cpu = None if batch is None else batch.cpu()
+        edge_index, edge_weight = super().forward(x_cpu, batch_cpu)
+
+        # Return on original device
+        return edge_index.to(device), edge_weight.to(device)
 
 
 @functional_transform("pbc_distance")
