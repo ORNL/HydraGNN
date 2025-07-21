@@ -80,7 +80,7 @@ class ANI1xDataset(AbstractBaseDataset):
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(
-            self.radius, loop=False, max_num_neighbors=self.max_neighbors
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
         )
 
         self.graphgps_transform = graphgps_transform
