@@ -1,4 +1,4 @@
-""" 
+"""
 This is a tracer package to act as a wrapper to execute gptl and/or scorep.
 """
 
@@ -9,6 +9,9 @@ from contextlib import contextmanager
 from abc import ABC, abstractmethod
 import torch
 from mpi4py import MPI
+
+from collections import defaultdict
+import numpy as np
 
 
 class Tracer(ABC):
@@ -54,7 +57,6 @@ try:
         def reset(self):
             gp.reset()
 
-
 except:
     pass
 
@@ -81,9 +83,76 @@ try:
         def reset(self):
             pass
 
-
 except:
     pass
+
+try:
+    from pynvml import *
+
+    class NVMLTracer:
+        def __init__(self, **kwargs):
+            nvmlInit()
+
+            deviceCount = nvmlDeviceGetCount()
+            self.d_handle = nvmlDeviceGetHandleByIndex(0)
+            self.device_name = nvmlDeviceGetName(self.d_handle)
+            self.energyCounters = dict()
+            self.energyTracer = defaultdict(list)
+            self.enabled = True
+            self.rank = MPI.COMM_WORLD.Get_rank()
+            print(f"Initialized NVMLpy. Device Name:{self.device_name}")
+
+        def start(self, name):
+            if not self.enabled:
+                return
+            self.energyCounters[name] = nvmlDeviceGetTotalEnergyConsumption(
+                self.d_handle
+            )
+
+        def stop(self, name):
+            if not self.enabled:
+                return
+            self.energyCounters[name] = (
+                nvmlDeviceGetTotalEnergyConsumption(self.d_handle)
+                - self.energyCounters[name]
+            )
+            self.energyTracer[name].append(self.energyCounters[name])
+
+        def enable(self):
+            self.enabled = True
+
+        def disable(self):
+            self.enabled = False
+
+        def reset(self):
+            self.energyCounters = dict()
+            self.energyTracer = defaultdict(list)
+
+        def pr_file(self, file_path):
+            dirname = os.path.dirname(file_path)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname, exist_ok=True)
+            with open(file_path, mode="w", encoding="utf-8") as file:
+                file.write("name, ncalls, mean, total, median, std_dev, max, min\n")
+                for k, v in self.energyTracer.items():
+                    mean_energy = np.mean(v)
+                    total_energy = np.sum(v)
+                    median_energy = np.median(v)
+                    stdDev = np.std(v)
+                    max_energy = np.max(v)
+                    min_energy = np.min(v)
+
+                    file.write(
+                        f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
+                    )
+
+        def disable(self):
+            nvmlShutdown()
+
+except:
+    # print("NVMLTracer not available. Please install pynvml.")
+    pass
+
 
 __tracer_list__ = dict()
 
@@ -92,7 +161,9 @@ def has(name):
     return name in __tracer_list__
 
 
-def initialize(trlist=["GPTLTracer", "SCOREPTracer"], verbose=False, **kwargs):
+def initialize(
+    trlist=["GPTLTracer", "SCOREPTracer", "NVMLTracer"], verbose=False, **kwargs
+):
     for trname in trlist:
         try:
             tr = globals()[trname](**kwargs)
