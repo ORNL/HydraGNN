@@ -13,6 +13,7 @@ except ImportError:
     from torch_geometric.data import DataLoader
 
 import hydragnn
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 num_samples = 1000
 
@@ -157,4 +158,8 @@ if __name__ == "__main__":
         help="Specify the global attention type (default: None).",
     )
     args = parser.parse_args()
+
+    tr.initialize()
+    tr.disable()
     main(mpnn_type=args.mpnn_type)
+    tr.save("qm9_test")

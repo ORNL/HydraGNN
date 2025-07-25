@@ -12,6 +12,7 @@ from mpi4py import MPI
 
 from collections import defaultdict
 import numpy as np
+from hydragnn.utils.distributed import get_comm_size_and_rank
 
 
 class Tracer(ABC):
@@ -150,7 +151,6 @@ try:
             nvmlShutdown()
 
 except:
-    # print("NVMLTracer not available. Please install pynvml.")
     pass
 
 
@@ -211,6 +211,19 @@ def disable():
 def reset():
     for tr in __tracer_list__.values():
         tr.reset()
+
+
+def save(log_name):
+    _, rank = get_comm_size_and_rank()
+    if has("GPTLTracer"):
+        import gptl4py as gp
+
+        gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
+        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
+
+    if has("NVMLTracer"):
+        nv = __tracer_list__["NVMLTracer"]
+        nv.pr_file(os.path.join("logs", log_name, "nv_energy.p%d" % rank))
 
 
 def profile(x_or_func=None, *decorator_args, **decorator_kws):
