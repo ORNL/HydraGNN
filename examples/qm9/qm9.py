@@ -121,6 +121,9 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
+    tr.initialize()
+    tr.disable()
+
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -133,6 +136,8 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         log_name,
         verbosity,
     )
+
+    tr.save(log_name)
 
 
 if __name__ == "__main__":
@@ -159,7 +164,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    tr.initialize()
-    tr.disable()
     main(mpnn_type=args.mpnn_type)
-    tr.save("qm9_test")
