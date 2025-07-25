@@ -58,6 +58,7 @@ try:
         def reset(self):
             gp.reset()
 
+
 except:
     pass
 
@@ -83,6 +84,7 @@ try:
 
         def reset(self):
             pass
+
 
 except:
     pass
@@ -149,6 +151,7 @@ try:
 
         def disable(self):
             nvmlShutdown()
+
 
 except:
     pass
