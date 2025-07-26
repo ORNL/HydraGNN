@@ -320,12 +320,12 @@ def save(log_name):
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
 
     if has("NVMLTracer"):
-        nv = __tracer_list__["NVMLTracer"]
-        nv.pr_file(os.path.join("logs", log_name, "nvml_energy.p%d" % rank))
+        tx = __tracer_list__["NVMLTracer"]
+        tx.pr_file(os.path.join("logs", log_name, "nvml_energy.p%d" % rank))
 
     if has("ROCMTracer"):
-        rc = __tracer_list__["ROCMTracer"]
-        rc.pr_file(os.path.join("logs", log_name, "rocm_energy.p%d" % rank))
+        tx = __tracer_list__["ROCMTracer"]
+        tx.pr_file(os.path.join("logs", log_name, "rocm_energy.p%d" % rank))
 
 
 def profile(x_or_func=None, *decorator_args, **decorator_kws):
