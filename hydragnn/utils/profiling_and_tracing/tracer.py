@@ -185,8 +185,7 @@ try:
                 device, byref(power), byref(counter_resolution), byref(timestamp)
             )
             return power.value * counter_resolution.value
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        except:
             return np.nan
 
     class ROCMTracer:
@@ -249,7 +248,6 @@ try:
 
 
 except:
-    print("ROCMTracer not available, please check ROCM installation.")
     pass
 
 __tracer_list__ = dict()
