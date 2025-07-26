@@ -97,13 +97,17 @@ try:
             nvmlInit()
 
             deviceCount = nvmlDeviceGetCount()
-            self.d_handle = nvmlDeviceGetHandleByIndex(0)
-            self.device_name = nvmlDeviceGetName(self.d_handle)
+            if os.getenv("ROCR_VISIBLE_DEVICES"):
+                self.device = int(os.getenv("ROCR_VISIBLE_DEVICES").split(",")[0])
+            elif os.getenv("CUDA_VISIBLE_DEVICES"):
+                self.device = int(os.getenv("CUDA_VISIBLE_DEVICES").split(",")[0])
+            else:
+                self.device = 0
+            self.d_handle = nvmlDeviceGetHandleByIndex(self.device)
             self.energyCounters = dict()
             self.energyTracer = defaultdict(list)
             self.enabled = True
-            self.rank = MPI.COMM_WORLD.Get_rank()
-            print(f"Initialized NVMLpy. Device Name:{self.device_name}")
+            print(f"NVMLTracer initalized: rank={self.rank}, device={self.device}")
 
         def start(self, name):
             if not self.enabled:
@@ -149,13 +153,104 @@ try:
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
 
-        def disable(self):
-            nvmlShutdown()
-
 
 except:
     pass
 
+try:
+    ## Ref: https://rocm.docs.amd.com/projects/rocm_smi_lib/en/develop/tutorials/python_tutorials.html
+    import os
+    import sys
+
+    ROCM_PATH = os.getenv("ROCM_PATH", "/opt/rocm")
+    sys.path.append(f"{ROCM_PATH}/libexec/rocm_smi/")
+
+    import rocm_smi
+    from rsmiBindings import *
+    from ctypes import *
+
+    def safe_float(s):
+        try:
+            return float(s)
+        except ValueError:
+            return np.nan
+
+    def get_energy(rocmsmi, device):
+        """Accumulated Energy (uJ)"""
+        try:
+            power = c_uint64()
+            timestamp = c_uint64()
+            counter_resolution = c_float()
+            ret = rocmsmi.rsmi_dev_energy_count_get(
+                device, byref(power), byref(counter_resolution), byref(timestamp)
+            )
+            return power.value * counter_resolution.value
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            return np.nan
+
+    class ROCMTracer:
+        def __init__(self, **kwargs):
+            rocm_smi.initializeRsmi()
+            self.rocmsmi = initRsmiBindings()
+            self.energyCounters = dict()
+            self.energyTracer = defaultdict(list)
+            self.enabled = True
+            self.rank = MPI.COMM_WORLD.Get_rank()
+
+            if os.getenv("ROCR_VISIBLE_DEVICES"):
+                self.device = int(os.getenv("ROCR_VISIBLE_DEVICES").split(",")[0])
+            elif os.getenv("CUDA_VISIBLE_DEVICES"):
+                self.device = int(os.getenv("CUDA_VISIBLE_DEVICES").split(",")[0])
+            else:
+                self.device = rocm_smi.listDevices()[0]
+            print(f"ROCMTracer initalized: rank={self.rank}, device={self.device}")
+
+        def start(self, name):
+            if not self.enabled:
+                return
+            self.energyCounters[name] = get_energy(self.rocmsmi, self.device)
+
+        def stop(self, name):
+            if not self.enabled:
+                return
+            self.energyCounters[name] = (
+                get_energy(self.rocmsmi, self.device) - self.energyCounters[name]
+            )
+            self.energyTracer[name].append(self.energyCounters[name])
+
+        def enable(self):
+            self.enabled = True
+
+        def disable(self):
+            self.enabled = False
+
+        def reset(self):
+            self.energyCounters = dict()
+            self.energyTracer = defaultdict(list)
+
+        def pr_file(self, file_path):
+            dirname = os.path.dirname(file_path)
+            if not os.path.exists(dirname):
+                os.makedirs(dirname, exist_ok=True)
+            with open(file_path, mode="w", encoding="utf-8") as file:
+                file.write("name, ncalls, mean, total, median, std_dev, max, min\n")
+                for k, v in self.energyTracer.items():
+                    mean_energy = np.mean(v)
+                    total_energy = np.sum(v)
+                    median_energy = np.median(v)
+                    stdDev = np.std(v)
+                    max_energy = np.max(v)
+                    min_energy = np.min(v)
+
+                    file.write(
+                        f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
+                    )
+
+
+except:
+    print("ROCMTracer not available, please check ROCM installation.")
+    pass
 
 __tracer_list__ = dict()
 
@@ -165,7 +260,9 @@ def has(name):
 
 
 def initialize(
-    trlist=["GPTLTracer", "SCOREPTracer", "NVMLTracer"], verbose=False, **kwargs
+    trlist=["GPTLTracer", "SCOREPTracer", "NVMLTracer", "ROCMTracer"],
+    verbose=False,
+    **kwargs,
 ):
     for trname in trlist:
         try:
@@ -226,7 +323,11 @@ def save(log_name):
 
     if has("NVMLTracer"):
         nv = __tracer_list__["NVMLTracer"]
-        nv.pr_file(os.path.join("logs", log_name, "nv_energy.p%d" % rank))
+        nv.pr_file(os.path.join("logs", log_name, "nvml_energy.p%d" % rank))
+
+    if has("ROCMTracer"):
+        rc = __tracer_list__["ROCMTracer"]
+        rc.pr_file(os.path.join("logs", log_name, "rocm_energy.p%d" % rank))
 
 
 def profile(x_or_func=None, *decorator_args, **decorator_kws):
