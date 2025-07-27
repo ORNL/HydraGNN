@@ -13,6 +13,7 @@ except ImportError:
     from torch_geometric.data import DataLoader
 
 import hydragnn
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 num_samples = 1000
 
@@ -120,6 +121,9 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
+    tr.initialize()
+    tr.disable()
+
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -132,6 +136,8 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         log_name,
         verbosity,
     )
+
+    tr.save(log_name)
 
 
 if __name__ == "__main__":
@@ -157,4 +163,5 @@ if __name__ == "__main__":
         help="Specify the global attention type (default: None).",
     )
     args = parser.parse_args()
+
     main(mpnn_type=args.mpnn_type)
