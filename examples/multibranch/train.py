@@ -6,6 +6,12 @@ import argparse
 
 import torch
 
+try:
+    import intel_extension_for_pytorch as ipex
+    import oneccl_bindings_for_pytorch as torch_ccl
+except:
+    pass
+
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
@@ -467,6 +473,8 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            model, optimizer = ipex.optimize(model, optimizer=optimizer)
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
