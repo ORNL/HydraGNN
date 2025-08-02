@@ -6,6 +6,12 @@ import argparse
 
 import torch
 
+try:
+    import intel_extension_for_pytorch as ipex
+    import oneccl_bindings_for_pytorch as torch_ccl
+except:
+    pass
+
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
@@ -458,22 +464,28 @@ if __name__ == "__main__":
         verbosity=verbosity,
     )
 
+    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
+
     ## task parallel
     if args.task_parallel:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
+            model, optimizer = ipex.optimize(model, optimizer=optimizer)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+        )
         model = MultiTaskModelMP(model, branch_id, branch_group)
     else:
-        model = hydragnn.utils.distributed.get_distributed_model(
-            model, verbosity, find_unused_parameters=True
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+        )
+        model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+            model, optimizer, verbosity
         )
 
     # Print details of neural network architecture
     print_model(model)
-
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
-    )
 
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
