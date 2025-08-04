@@ -20,10 +20,18 @@ from torch_geometric.nn import Sequential as PyGSeq
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.models.schnet import (
     GaussianSmearing,
-    RadiusInteractionGraph,
     ShiftedSoftplus,
 )
 from torch_geometric.typing import OptTensor
+
+if torch.cuda.is_available():
+    from torch_geometric.nn.models.schnet import (
+        RadiusInteractionGraph as RadiusInteractionGraph,
+    )
+else:
+    from hydragnn.preprocess.graph_samples_checks_and_updates import (
+        RadiusInteractionGraphCPU as RadiusInteractionGraph,
+    )
 
 from .Base import Base
 

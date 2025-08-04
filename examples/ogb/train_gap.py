@@ -463,7 +463,6 @@ if __name__ == "__main__":
     dist.barrier()
 
     if not args.use_deepspeed:
-        model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
         learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"][
             "learning_rate"
@@ -472,6 +471,13 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
+
+        model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+            model, optimizer, verbosity
+        )
+
+        # Print details of neural network architecture
+        print_model(model)
 
         hydragnn.utils.model.load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], optimizer=optimizer
@@ -492,6 +498,7 @@ if __name__ == "__main__":
         ds_config = parse_deepspeed_config(config)
 
         # create deepspeed model
+        # FIXME: need to check if it also works on ALCF-Aurora with Intel GPUs
         model, optimizer, _, _ = deepspeed.initialize(
             args=get_deepspeed_init_args(),
             model=model,

@@ -4,6 +4,8 @@ import sys
 from mpi4py import MPI
 import argparse
 
+import numpy as np
+
 import random
 
 import torch
@@ -11,6 +13,8 @@ import torch
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
+
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -49,13 +53,24 @@ def info(*args, logtype="info", sep=" "):
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
-        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
+        self,
+        dirpath,
+        config,
+        data_type,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
     ):
         super().__init__()
 
-        self.var_config = var_config
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
         self.data_path = os.path.join(dirpath, data_type)
         self.energy_per_atom = energy_per_atom
+
+        self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 100.0
@@ -69,11 +84,12 @@ class OpenCatalystDataset(AbstractBaseDataset):
         mx = None
         if self.rank == 0:
             ## Let rank 0 check the number of files and share
-            cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            # cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
+            cmd = f"find {self.data_path} -maxdepth 1 -type f -name '*.txt' | wc -l"
             print("Check the number of files:", cmd)
             out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             mx = int(out.stdout)
-            print("Total the number of files:", mx)
+            print("Total number of files:", mx)
         mx = MPI.COMM_WORLD.bcast(mx, root=0)
         if mx == 0:
             raise RuntimeError("No *.txt files found. Did you uncompress?")
@@ -89,7 +105,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             print(self.rank, "WARN: No files to process. Continue ...")
 
         # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=50, radius=6.0)
+        a2g = AtomsToGraphs(max_neigh=self.max_neighbours, radius=self.radius)
 
         list_atomistic_structures = write_images_to_adios(
             a2g,
@@ -99,7 +115,22 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         for item in list_atomistic_structures:
-            if self.check_forces_values(item.force):
+            assert item is not None, item
+
+            # Calculate chemical composition
+            atomic_number_list = item.atomic_numbers.tolist()
+            assert len(atomic_number_list) == item.natoms
+            ## 118: number of atoms in the periodic table
+            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
+            item.chemical_composition = chemical_composition
+            item.smiles_string = None
+
+            if self.graphgps_transform is not None:
+                item = self.graphgps_transform(item)
+
+            if self.check_forces_values(item.forces):
                 self.dataset.append(item)
             else:
                 print(
@@ -152,7 +183,7 @@ if __name__ == "__main__":
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
         type=bool,
-        default=True,
+        default=False,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -162,6 +193,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -200,6 +234,15 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    """
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+    """
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -231,8 +274,10 @@ if __name__ == "__main__":
         ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
-            var_config,
+            config,
             data_type=args.train_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -244,7 +289,13 @@ if __name__ == "__main__":
         )
         valset = [*valset1, *valset2]
         testset = OpenCatalystDataset(
-            os.path.join(datadir), var_config, data_type=args.test_path, dist=True
+            os.path.join(datadir),
+            config,
+            data_type=args.test_path,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
         )
         ## Need as a list
         testset = testset[:]
@@ -376,16 +427,19 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
-    # Print details of neural network architecture
-    print_model(model)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
+    )
+
+    # Print details of neural network architecture
+    print_model(model)
 
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
@@ -405,6 +459,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        compute_grad_energy=args.compute_grad_energy,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

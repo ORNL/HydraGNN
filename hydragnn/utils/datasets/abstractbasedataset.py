@@ -41,12 +41,18 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
 
     def __getitem__(self, idx):
         obj = self.get(idx)
-
-        # Get the dataset name if it exists
+        ## DDStore needs an explicit dimension: 1-by-1
+        tmp_dict = {
+            "ani1x": torch.tensor([[0]]),
+            "qm7x": torch.tensor([[1]]),
+            "mptrj": torch.tensor([[2]]),
+            "alexandria": torch.tensor([[3]]),
+            "transition1x": torch.tensor([[4]]),
+            "omat24": torch.tensor([[5]]),
+        }
         if hasattr(self, "dataset_name"):
             if self.dataset_name is not None:
-                obj.dataset_name = self.dataset_name
-
+                obj.dataset_name = tmp_dict[self.dataset_name]
         return obj
 
     def __iter__(self):

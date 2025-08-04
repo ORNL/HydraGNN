@@ -18,56 +18,6 @@ except ImportError:
     print("mpi_list requires having installed: https://github.com/frobnitzem/mpi_list")
 
 
-def subset(i):
-    # sz = len(datasets)
-    # chunk = sz // C.procs
-    # left  = sz % C.procs
-    # a = i*chunk     + min(i, left)
-    # b = (i+1)*chunk + min(i+1, left)
-    # print(f"Rank {i}/{C.procs} converting subset [{a},{b})")
-    # return np.array([np.array(x) for x in datasets[a:b]["image"]])
-    return np.random.random((100, 4))
-
-
-# form the correlation matrix
-def covar(x):
-    return np.tensordot(x, x, axes=[(), ()])
-
-
-def summarize(x):
-    N = len(x)
-    m = x.sum(0) / N
-    y = x - m[None, ...]
-    V = np.tensordot(y, y, [0, 0]) / N
-    return {"N": N, "m": m, "V": V}
-
-
-def merge_est(a, b):
-    if not isinstance(b, dict):
-        b = summarize(b)
-
-    x = a["N"] / (a["N"] + b["N"])
-    y = b["N"] / (a["N"] + b["N"])
-
-    m = x * a["m"] + y * b["m"]
-    a["N"] += b["N"]
-    a["V"] = x * (a["V"] + covar(m - a["m"])) + y * (b["V"] + covar(m - b["m"]))
-    a["m"] = m
-    return a
-
-
-def test():
-    C = Context()  # calls MPI_Init via mpi4py
-
-    dfm = C.iterates(C.procs).map(subset)
-
-    ans = {"N": 0, "m": 0, "V": 0}
-    ans = dfm.reduce(merge_est, ans, False)
-    if C.rank == 0:
-        print(ans)
-        print(f"theoretical: m = 0.5, v = {0.25/3}")
-
-
 def solve_least_squares_svd(A, b):
     # Compute the SVD of A
     U, S, Vt = np.linalg.svd(A, full_matrices=False)
@@ -100,13 +50,18 @@ if __name__ == "__main__":
         help="save npz",
         action="store_true",
     )
+    parser.add_argument(
+        "--notestset",
+        help="no testset",
+        action="store_true",
+    )
     args = parser.parse_args()
 
     comm = MPI.COMM_WORLD
     comm_rank = comm.Get_rank()
     comm_size = comm.Get_size()
 
-    fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % args.modelname)
+    fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % args.modelname)
     print("fname:", fname)
     trainset = AdiosDataset(
         fname,
@@ -120,18 +75,22 @@ if __name__ == "__main__":
         comm,
         enable_cache=True,
     )
-    testset = AdiosDataset(
-        fname,
-        "testset",
-        comm,
-        enable_cache=True,
-    )
+    if not args.notestset:
+        testset = AdiosDataset(
+            fname,
+            "testset",
+            comm,
+            enable_cache=True,
+        )
     pna_deg = trainset.pna_deg
 
     ## Iterate over local datasets
     energy_list = list()
     feature_list = list()
-    for dataset in [trainset, valset, testset]:
+    dataset_list = (
+        [trainset, valset, testset] if not args.notestset else [trainset, valset]
+    )
+    for dataset in dataset_list:
         rx = list(nsplit(range(len(dataset)), comm_size))[comm_rank]
         upper = rx[-1] + 1 if args.nsample_only is None else rx[0] + args.nsample_only
         print(comm_rank, "Loading:", rx[0], upper)
@@ -140,13 +99,12 @@ if __name__ == "__main__":
         for data in tqdm(
             dataset, disable=comm_rank != 0, desc="Collecting node feature"
         ):
-            ## Assume: data.energy is already energy per atom
             energy_list.append(data.energy.item())
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            hist = hist / data.num_nodes
+            # hist = hist / data.num_nodes
             feature_list.append(hist)
 
     ## energy
@@ -176,13 +134,13 @@ if __name__ == "__main__":
 
     ## Re-calculate energy
     energy_list = list()
-    for dataset in [trainset, valset, testset]:
+    for dataset in dataset_list:
         for data in tqdm(dataset, disable=comm_rank != 0, desc="Update energy"):
             atomic_number_list = data.x[:, 0].tolist()
             assert len(atomic_number_list) == data.num_nodes
             ## 118: number of atoms in the periodic table
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            hist = hist / data.num_nodes
+            # hist = hist / data.num_nodes
             if args.verbose:
                 print(
                     comm_rank,
@@ -195,6 +153,10 @@ if __name__ == "__main__":
             energy_list.append((data.energy.item(), -np.dot(hist, x)))
             if "y_loc" in data:
                 del data.y_loc
+
+            # We need to update the values of the energy in data.y
+            # We assume that the energy is the first entry of data.y
+            data.y[0] = data.energy.detach().clone()
 
     if args.savenpz:
         if comm_size < 400:
@@ -210,16 +172,18 @@ if __name__ == "__main__":
 
     ## Writing
     fname = os.path.join(
-        os.path.dirname(__file__), "./datasets/%s-v2.bp" % args.modelname
+        os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname
     )
     if comm_rank == 0:
         print("Saving:", fname)
     adwriter = AdiosWriter(fname, comm)
     adwriter.add("trainset", trainset)
     adwriter.add("valset", valset)
-    adwriter.add("testset", testset)
+    if not args.notestset:
+        adwriter.add("testset", testset)
     adwriter.add_global("pna_deg", pna_deg)
     adwriter.add_global("energy_linear_regression_coeff", x)
+    adwriter.add_global("dataset_name", args.modelname.lower())
     adwriter.save()
 
     print("Done.")

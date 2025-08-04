@@ -13,6 +13,7 @@ except ImportError:
     from torch_geometric.data import DataLoader
 
 import hydragnn
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 num_samples = 1000
 
@@ -108,7 +109,6 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -116,9 +116,16 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
+    )
+
     # Run training with the given model and qm9 datasets.
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
+
+    tr.initialize()
+    tr.disable()
 
     hydragnn.train.train_validate_test(
         model,
@@ -132,6 +139,8 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         log_name,
         verbosity,
     )
+
+    tr.save(log_name)
 
 
 if __name__ == "__main__":
@@ -157,4 +166,5 @@ if __name__ == "__main__":
         help="Specify the global attention type (default: None).",
     )
     args = parser.parse_args()
+
     main(mpnn_type=args.mpnn_type)
