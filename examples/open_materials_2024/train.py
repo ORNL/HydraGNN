@@ -10,7 +10,6 @@ random_state = 0
 torch.manual_seed(random_state)
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
