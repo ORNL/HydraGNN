@@ -1,16 +1,18 @@
 import bz2
 
-import os, json
+import os, json, yaml
 import logging
 import sys
 from mpi4py import MPI
 import argparse
 
-import random
 import numpy as np
+
+import random
 
 import torch
 from torch_geometric.data import Data
+from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 
@@ -27,6 +29,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
     RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -45,6 +50,7 @@ except ImportError:
 
 import subprocess
 from hydragnn.utils.distributed import nsplit
+import glob
 
 
 def info(*args, logtype="info", sep=" "):
@@ -67,13 +73,27 @@ periodic_table = generate_dictionary_elements()
 reversed_dict_periodic_table = {value: key for key, value in periodic_table.items()}
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
+
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
 class Alexandria(AbstractBaseDataset):
-    def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
+    def __init__(
+        self,
+        dirpath,
+        config,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+    ):
         super().__init__()
+
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
 
         self.dist = dist
         if self.dist:
@@ -83,34 +103,40 @@ class Alexandria(AbstractBaseDataset):
 
         self.energy_per_atom = energy_per_atom
 
-        self.radius_graph = RadiusGraph(5.0, loop=False, max_num_neighbors=50)
-        self.radius_graph_pbc = RadiusGraphPBC(5.0, loop=False, max_num_neighbors=50)
-
-        list_dirs = list_directories(
-            os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
+        self.radius_graph_pbc = RadiusGraphPBC(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
         )
 
-        for index in list_dirs:
+        self.graphgps_transform = graphgps_transform
 
-            subdirpath = os.path.join(
-                dirpath, "compressed_data", "alexandria.icams.rub.de", index
-            )
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 1000.0
 
-            total_file_list = os.listdir(subdirpath)
+        data_dir = os.path.join(dirpath, "compressed_data", "alexandria.icams.rub.de")
+        # print("glob:", os.path.join(data_dir, "**/*.json.bz2"))
+        total_file_list = glob.glob(
+            os.path.join(data_dir, "**/*.json.bz2"), recursive=True
+        )
+        if self.dist:
+            local_file_list = list(nsplit(total_file_list, self.world_size))[self.rank]
+        else:
+            local_file_list = total_file_list
+        print(
+            self.rank,
+            "Total flies:",
+            len(total_file_list),
+            "Local files:",
+            len(local_file_list),
+        )
 
-            if self.dist:
-                local_file_list = list(nsplit(total_file_list, self.world_size))[
-                    self.rank
-                ]
+        for filepath in iterate_tqdm(local_file_list, verbosity_level=2):
+            if filepath.endswith("bz2"):
+                self.process_file_content(filepath)
             else:
-                local_file_list = total_file_list
-
-            for filepath in local_file_list:
-
-                if filepath.endswith("bz2"):
-                    self.process_file_content(os.path.join(subdirpath, filepath))
-                else:
-                    print(f"{filepath} is not a .bz2 file to decompress", flush=True)
+                print(f"{filepath} is not a .bz2 file to decompress", flush=True)
 
     def get_data_dict(self, computed_entry_dict):
         """
@@ -140,22 +166,26 @@ class Alexandria(AbstractBaseDataset):
             assert pos.shape[0] > 0, "pos tensor does not have any atoms"
         except:
             print(f"Structure {entry_id} does not have positional sites", flush=True)
-            return data_object
         natoms = torch.IntTensor([pos.shape[0]])
 
         cell = None
         try:
-            cell = torch.tensor(structure["lattice"]["matrix"]).to(torch.float32)
+            cell = torch.tensor(
+                structure["lattice"]["matrix"], dtype=torch.float32
+            ).view(3, 3)
         except:
             print(f"Structure {entry_id} does not have cell", flush=True)
-            return data_object
 
         pbc = None
         try:
-            pbc = structure["lattice"]["pbc"]
+            pbc = pbc_as_tensor(structure["lattice"]["pbc"])
         except:
             print(f"Structure {entry_id} does not have pbc", flush=True)
-            return data_object
+
+        # If either cell or pbc were not read, we set to defaults
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         atomic_numbers = None
         try:
@@ -226,13 +256,18 @@ class Alexandria(AbstractBaseDataset):
         #    print(f"Structure {entry_id} does not have band_gap_ind")
         #    return data_object
 
-        # formation_energy = None
-        # try:
-        #    formation_energy=computed_entry_dict["data"]["e_form"]
-        # except:
-        #    print(f"Structure {entry_id} does not have formation energy")
-        #    return data_object
-        # formation_energy_per_atom=computed_entry_dict["data"]["e_form"]/len(structure["sites"])
+        formation_energy = None
+        try:
+            formation_energy = computed_entry_dict["data"]["e_form"]
+        except:
+            print(f"Structure {entry_id} does not have formation energy")
+            return data_object
+        formation_energy_tensor = (
+            torch.tensor(formation_energy).unsqueeze(0).unsqueeze(1).to(torch.float32)
+        )
+        formation_energy_per_atom_tensor = (
+            formation_energy_tensor.detach().clone() / natoms
+        )
 
         # energy_above_hull = None
         # try:
@@ -241,16 +276,31 @@ class Alexandria(AbstractBaseDataset):
         #    print(f"Structure {entry_id} does not have e_above_hull")
         #    return data_object
 
+        x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
         data_object = Data(
+            dataset_name="alexandria",
+            natoms=natoms,
             pos=pos,
             cell=cell,
             pbc=pbc,
+            edge_index=None,
+            edge_attr=None,
             atomic_numbers=atomic_numbers,
-            forces=forces,
+            chemical_composition=chemical_composition,
+            smiles_string=None,
             # entry_id=entry_id,
-            natoms=natoms,
-            total_energy=total_energy_tensor,
-            total_energy_per_atom=total_energy_per_atom_tensor,
+            x=x,
+            energy=formation_energy_tensor,
+            energy_per_atom=formation_energy_per_atom_tensor,
+            forces=forces,
             # formation_energy=torch.tensor(formation_energy).float(),
             # formation_energy_per_atom=torch.tensor(formation_energy_per_atom).float(),
             # energy_above_hull=energy_above_hull,
@@ -261,29 +311,47 @@ class Alexandria(AbstractBaseDataset):
         )
 
         if self.energy_per_atom:
-            data_object.y = data_object.total_energy_per_atom
+            data_object.y = data_object.energy_per_atom
         else:
-            data_object.y = data_object.total_energy
+            data_object.y = data_object.energy
 
-        data_object.x = torch.cat(
-            [data_object.atomic_numbers, data_object.pos, data_object.forces], dim=1
-        )
-
-        if data_object.pbc is not None and data_object.cell is not None:
+        # Apply radius graph and build edge attributes accordingly
+        if data_object.pbc.any():
             try:
                 data_object = self.radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
             except:
                 print(
-                    f"Structure {entry_id} could not successfully apply pbc radius graph",
+                    f"Structure {entry_id} could not successfully apply one or both of the pbc radius graph and positional transform",
                     flush=True,
                 )
                 data_object = self.radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
         else:
             data_object = self.radius_graph(data_object)
+            data_object = transform_coordinates(data_object)
 
-        data_object = transform_coordinates(data_object)
+        # Default edge_shifts for when radius_graph_pbc is not activated
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
 
-        return data_object
+        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
+        data_object.pbc = data_object.pbc.int()
+
+        # LPE
+        if self.graphgps_transform is not None:
+            data_object = self.graphgps_transform(data_object)
+
+        if self.check_forces_values(data_object.forces):
+            return data_object
+        else:
+            print(
+                f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
+                flush=True,
+            )
+            return None
 
     def process_file_content(self, filepath):
         """
@@ -311,7 +379,7 @@ class Alexandria(AbstractBaseDataset):
                     self.get_data_dict(entry)
                     for entry in iterate_tqdm(
                         data["entries"],
-                        desc=f"Processing file {filepath}",
+                        desc=f"Rank {self.rank} - Processing file {os.path.basename(filepath)}",
                         verbosity_level=2,
                     )
                 ]
@@ -325,12 +393,27 @@ class Alexandria(AbstractBaseDataset):
                 self.dataset.extend(filtered_computed_entry_dict)
 
             except OSError as e:
-                print("Failed to decompress data:", e, flush=True)
+                print(
+                    "Failed to decompress data:",
+                    e,
+                    os.path.basename(filepath),
+                    flush=True,
+                )
                 decompressed_data = None
             except json.JSONDecodeError as e:
-                print("Failed to decode JSON:", e, flush=True)
+                print(
+                    "Failed to decode JSON:", e, os.path.basename(filepath), flush=True
+                )
             except Exception as e:
-                print("An error occurred:", e, flush=True)
+                print("An error occurred:", e, os.path.basename(filepath), flush=True)
+
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
         return len(self.dataset)
@@ -356,7 +439,7 @@ if __name__ == "__main__":
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
         type=bool,
-        default=True,
+        default=False,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -365,6 +448,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -402,6 +488,15 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
+    # Transformation to create positional and structural laplacian encoders
+    """
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+    """
+
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -430,7 +525,9 @@ if __name__ == "__main__":
         ## local data
         total = Alexandria(
             os.path.join(datadir),
-            var_config,
+            config,
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -441,6 +538,10 @@ if __name__ == "__main__":
             stratify_splitting=False,
         )
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
+
+        print("Before COMM.Barrier()", flush=True)
+        comm.Barrier()
+        print("After COMM.Barrier()", flush=True)
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
@@ -568,16 +669,19 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
-    # Print details of neural network architecture
-    print_model(model)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
+    )
+
+    # Print details of neural network architecture
+    print_model(model)
 
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
@@ -597,6 +701,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        compute_grad_energy=args.compute_grad_energy,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

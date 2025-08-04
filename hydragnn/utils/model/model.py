@@ -66,8 +66,26 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
         _, world_rank = get_comm_size_and_rank()
         if hasattr(optimizer, "consolidate_state_dict"):
             optimizer.consolidate_state_dict()
-        if world_rank == 0:
-            path_name = os.path.join(path, name, name + ".pk")
+
+        from hydragnn.models import MultiTaskModelMP
+
+        if isinstance(model, MultiTaskModelMP):
+            eligible = model.head_pg_rank == 0
+        else:
+            eligible = world_rank == 0
+
+        if eligible:
+            epoch = os.getenv("HYDRAGNN_EPOCH", None)  ## str or None
+            if epoch is not None:
+                fname = f"{name}_epoch_{epoch}"
+            else:
+                fname = f"{name}"
+
+            if isinstance(model, MultiTaskModelMP):
+                fname = fname + f"_branch{model.branch_id}"
+
+            fname = fname + ".pk"
+            path_name = os.path.join(path, name, fname)
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
@@ -75,6 +93,15 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 },
                 path_name,
             )
+            if epoch is not None:
+                link = os.path.join(path, name, f"{name}.pk")
+                if isinstance(model, MultiTaskModelMP):
+                    link = os.path.join(
+                        path, name, f"{name}_branch{model.branch_id}.pk"
+                    )
+                if os.path.lexists(link):
+                    os.remove(link)
+                os.symlink(fname, link)
     else:
         model.save_checkpoint(os.path.join(path, name), name)
 
@@ -120,6 +147,44 @@ def load_existing_model(
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     else:
         model.load_checkpoint(os.path.join(path, model_name), model_name)
+
+
+def update_multibranch_heads(output_heads):
+    """
+    #convert the config for hydragnn heads from old to new ones with multibranch
+     "output_heads": {
+                "graph": [
+                    {
+                        "type": "branch-0",
+                        "architecture": {
+                            "num_sharedlayers": 2,
+                            "dim_sharedlayers": 50,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [889]
+                        }
+                    }
+                ],
+            },
+    """
+    output_heads_updated = output_heads.copy()
+    for name, val in output_heads.items():
+        if isinstance(val, list):
+            for branch in val:
+                if not (
+                    isinstance(branch, dict)
+                    and "type" in branch
+                    and "architecture" in branch
+                ):
+                    raise ValueError(
+                        f"output_heads['{name}'] does not contain proper branch config, {val}."
+                    )
+        elif isinstance(val, dict):
+            # Legacy case ➜ wrap & inject branch label
+            output_heads_updated[name] = [{"type": "branch-0", "architecture": val}]
+        else:
+            raise ValueError("Unknown output_heads config!")
+
+    return output_heads_updated
 
 
 ## These functions may cause OOM if dataset is too large
