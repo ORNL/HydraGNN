@@ -73,11 +73,11 @@ periodic_table = generate_dictionary_elements()
 reversed_dict_periodic_table = {value: key for key, value in periodic_table.items()}
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
-# transform_coordinates = Distance(norm=False, cat=False)
+# transform_coordinates = LocalCartesian(norm=False, cat=False)
+transform_coordinates = Distance(norm=False, cat=False)
 
-transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
-# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+# transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
 class Alexandria(AbstractBaseDataset):

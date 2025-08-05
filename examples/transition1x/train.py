@@ -63,8 +63,8 @@ def info(*args, logtype="info", sep=" "):
 
 # FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
 # transform_coordinates = Spherical(norm=False, cat=False)
-transform_coordinates = LocalCartesian(norm=False, cat=False)
-# transform_coordinates = Distance(norm=False, cat=False)
+# transform_coordinates = LocalCartesian(norm=False, cat=False)
+transform_coordinates = Distance(norm=False, cat=False)
 
 
 class Transition1xDataset(AbstractBaseDataset):
