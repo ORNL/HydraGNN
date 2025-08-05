@@ -27,8 +27,8 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
-transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
-# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+# transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
 class AtomsToGraphs:
