@@ -49,10 +49,14 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
             "alexandria": torch.tensor([[3]]),
             "transition1x": torch.tensor([[4]]),
             "omat24": torch.tensor([[5]]),
+            "oc2020_all": torch.tensor([[6]]),
+            "oc2022": torch.tensor([[7]]),
+            "omol25": torch.tensor([[8]]),
         }
         if hasattr(self, "dataset_name"):
             if self.dataset_name is not None:
-                obj.dataset_name = tmp_dict[self.dataset_name]
+                obj.dataset_name = tmp_dict.get(self.dataset_name, torch.tensor([[-1]]))
+        }
         return obj
 
     def __iter__(self):
