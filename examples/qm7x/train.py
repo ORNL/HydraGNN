@@ -533,17 +533,17 @@ if __name__ == "__main__":
         # minmax_node_feature = trainset.minmax_node_feature
         # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
+        if args.ddstore:
+            opt = {"ddstore_width": args.ddstore_width}
+            trainset = DistDataset(trainset, "trainset", comm, **opt)
+            valset = DistDataset(valset, "valset", comm, **opt)
+            testset = DistDataset(testset, "testset", comm, **opt)
+            # trainset.minmax_node_feature = minmax_node_feature
+            # trainset.minmax_graph_feature = minmax_graph_feature
+            trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
-    if args.ddstore:
-        opt = {"ddstore_width": args.ddstore_width}
-        trainset = DistDataset(trainset, "trainset", comm, **opt)
-        valset = DistDataset(valset, "valset", comm, **opt)
-        testset = DistDataset(testset, "testset", comm, **opt)
-        # trainset.minmax_node_feature = minmax_node_feature
-        # trainset.minmax_graph_feature = minmax_graph_feature
-        trainset.pna_deg = pna_deg
-
+        
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
