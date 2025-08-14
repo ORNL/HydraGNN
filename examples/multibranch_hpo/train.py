@@ -5,6 +5,7 @@ from mpi4py import MPI
 import argparse
 
 import torch
+
 try:
     import intel_extension_for_pytorch as ipex
     import oneccl_bindings_for_pytorch as torch_ccl
@@ -63,7 +64,9 @@ if __name__ == "__main__":
         "--num_conv_layers", type=int, help="num_conv_layers", default=4
     )
     parser.add_argument("--num_headlayers", type=int, help="num_headlayers", default=3)
-    parser.add_argument("--dim_headlayers", type=int, help="dim_headlayers", default=889)
+    parser.add_argument(
+        "--dim_headlayers", type=int, help="dim_headlayers", default=889
+    )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
@@ -143,9 +146,7 @@ if __name__ == "__main__":
         var_config["input_node_features"] = [0]
 
     # Update the config dictionary with the suggested hyperparameters
-    config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.parameters[
-        "mpnn_type"
-    ]
+    config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.parameters["mpnn_type"]
     config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters[
         "hidden_dim"
     ]
@@ -159,7 +160,9 @@ if __name__ == "__main__":
     ]
 
     for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
-        num_branches = len(config["NeuralNetwork"]["Architecture"]["output_heads"][head_type])
+        num_branches = len(
+            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]
+        )
         for i in range(num_branches):
             config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
                 "num_headlayers"
@@ -184,7 +187,11 @@ if __name__ == "__main__":
 
     if rank == 0:
         for k in os.environ:
-            if k in ["CCL_KVS_MODE", "CCL_KVS_CONNECTION_TIMEOUT", "FI_MR_CACHE_MONITOR"]:
+            if k in [
+                "CCL_KVS_MODE",
+                "CCL_KVS_CONNECTION_TIMEOUT",
+                "FI_MR_CACHE_MONITOR",
+            ]:
                 print(f"env {k}: {os.environ[k]}")
 
     comm = MPI.COMM_WORLD
@@ -222,7 +229,7 @@ if __name__ == "__main__":
             pna_deg_list = list()
             for model in modellist:
                 fname = os.path.join(
-                   os.path.dirname(__file__), "./dataset/%s-v3.bp" % model
+                    os.path.dirname(__file__), "./dataset/%s-v3.bp" % model
                 )
                 with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
@@ -325,7 +332,6 @@ if __name__ == "__main__":
                     subgroup_list.append(subgroup)
                     subgroup = DeviceMesh(device_type=device_type, mesh=subgroup_ranks)
                     subgroup_list.append(subgroup)
-                
 
                 branch_id = mycolor
                 # branch_group = subgroup_list[mycolor]
@@ -340,7 +346,6 @@ if __name__ == "__main__":
                 tensor = torch.tensor([rank], dtype=torch.int32, device=device)
                 dist.all_reduce(tensor, op=dist.ReduceOp.SUM, group=branch_group)
                 logging.info(f"Rank {rank}: subgroup check complete. mycolor={mycolor}")
-
 
         comm.Barrier()
         local_comm = comm.Split(mycolor, rank)
@@ -386,7 +391,7 @@ if __name__ == "__main__":
             ds.tmp_dict = dict()
             for i, name in enumerate(modellist):
                 ds.tmp_dict[name.lower()] = torch.tensor([[i]])
-            
+
         ## Set local set
         num_samples_list = list()
         for i, dataset in enumerate([trainset, valset, testset]):
@@ -399,7 +404,9 @@ if __name__ == "__main__":
             )
 
             if args.num_samples is not None:
-                num_samples = args.num_samples if i == 0 else max(args.num_samples // 10, 1)
+                num_samples = (
+                    args.num_samples if i == 0 else max(args.num_samples // 10, 1)
+                )
                 if num_samples > len(rx):
                     print(
                         f"WARN: Requested num_samples is larger than available in {dataset.dataset_name}: {args.num_samples} {len(rx)}"
@@ -407,7 +414,7 @@ if __name__ == "__main__":
                     # args.oversampling = True
                     # args.oversampling_num_samples = args.num_samples
                 else:
-                    rx = rx[: num_samples]
+                    rx = rx[:num_samples]
 
             local_dataset_len = len(rx)
             local_dataset_min = comm.allreduce(local_dataset_len, op=MPI.MIN)
@@ -422,7 +429,11 @@ if __name__ == "__main__":
                     if args.oversampling_num_samples is not None
                     else local_dataset_max
                 )
-                oversampling_num_samples = oversampling_num_samples if i == 0 else max(oversampling_num_samples // 10, 1)
+                oversampling_num_samples = (
+                    oversampling_num_samples
+                    if i == 0
+                    else max(oversampling_num_samples // 10, 1)
+                )
                 num_samples_list.append(oversampling_num_samples)
                 print(
                     f"Oversampling {oversampling_num_samples} samples: {oversampling_num_samples/local_dataset_len*100:.2f} (%)"
@@ -486,7 +497,7 @@ if __name__ == "__main__":
                 trainset.pna_deg = pna_deg
                 valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
-        
+
         ## FIXME: batch size exception
         if mymodel == "OC2020_all":
             config["NeuralNetwork"]["Training"]["batch_size"] = 40
@@ -552,7 +563,7 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
-        if hasattr(torch, 'xpu') and torch.xpu.is_available():
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
             print("Using ipex.optimize wrapper")
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
     else:
@@ -560,7 +571,7 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
-        if hasattr(torch, 'xpu') and torch.xpu.is_available():
+        if hasattr(torch, "xpu") and torch.xpu.is_available():
             print("Using ipex.optimize wrapper")
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
         ## Wrap the model with DDP
