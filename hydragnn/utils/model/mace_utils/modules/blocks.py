@@ -540,7 +540,7 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                         mask = data.dataset_name == ID
                         mask = mask[:, 0]
                         branchtype = f"branch-{ID.item()}"
-                        output_head = headloc[branchtype](graph_features)
+                        output_head = headloc[branchtype](graph_features[mask, :])
                         head[mask] = output_head[:, :head_dim]
                 outputs.append(head)
             else:  # Node-level output
