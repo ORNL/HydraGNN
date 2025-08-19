@@ -243,13 +243,16 @@ class MPTrjDataset(AbstractBaseDataset):
                 if self.graphgps_transform is not None:
                     data_object = self.graphgps_transform(data_object)
 
-                if self.check_forces_values(data_object.forces):
-                    self.dataset.append(data_object)
+                if not data_object:
+                    continue
                 else:
-                    print(
-                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data_object}",
-                        flush=True,
-                    )
+                    if self.check_forces_values(data_object.forces):
+                        self.dataset.append(data_object)
+                    else:
+                        print(
+                            f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data_object}",
+                            flush=True,
+                        )
 
         random.shuffle(self.dataset)
 
@@ -339,15 +342,6 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -373,12 +367,26 @@ if __name__ == "__main__":
 
     modelname = "MPTrj" if args.modelname is None else args.modelname
     if args.preonly:
+        # Transformation to create positional and structural laplacian encoders
+        lpe_transform = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+            attr_name="lpe",
+            is_undirected=True,
+        )
+
+        def graphgps_transform(data):
+            try:
+                data = lpe_transform(data)  # lapPE
+            except:
+                return
+            return data
+
         ## local data
         total = MPTrjDataset(
             os.path.join(datadir),
             config,
-            # graphgps_transform=graphgps_transform,
-            graphgps_transform=None,
+            graphgps_transform=graphgps_transform,
+            # graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
             tmpfs=args.tmpfs,

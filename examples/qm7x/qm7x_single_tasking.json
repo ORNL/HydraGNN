@@ -20,6 +20,7 @@
       "radius": 5.0,
       "hidden_dim": 200,
       "num_conv_layers": 6,
+      "num_laplacian_eigs": 5,
       "output_heads": {
         "graph": {
           "num_sharedlayers": 2,

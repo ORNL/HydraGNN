@@ -258,7 +258,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
         try:
             traj = read(traj_file_path, ":", parallel=False)
             for step in traj:
-                data_list.append(self.ase_to_torch_geom(step))
+                data_obj = self.ase_to_torch_geom(step)
+                if data_obj:
+                    data_list.append(data_obj)
         except:
             pass
         return data_list
@@ -362,15 +364,6 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -396,6 +389,20 @@ if __name__ == "__main__":
 
     modelname = "OC2022" if args.modelname is None else args.modelname
     if args.preonly:
+        # Transformation to create positional and structural laplacian encoders
+        lpe_transform = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+            attr_name="lpe",
+            is_undirected=True,
+        )
+
+        def graphgps_transform(data):
+            try:
+                data = lpe_transform(data)  # lapPE
+            except:
+                return
+            return data
+
         """
         ## local data
         trainset = OpenCatalystDataset(
@@ -432,8 +439,8 @@ if __name__ == "__main__":
             os.path.join(datadir),
             config,
             data_type=args.train_path,
-            # graphgps_transform=graphgps_transform,
-            graphgps_transform=None,
+            graphgps_transform=graphgps_transform,
+            # graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )

@@ -21,6 +21,7 @@
             "edge_features": ["length"],
             "hidden_dim": 50,
             "num_conv_layers": 3,
+            "num_laplacian_eigs": 5,
             "output_heads": {
                 "graph":{
                     "num_sharedlayers": 2,
