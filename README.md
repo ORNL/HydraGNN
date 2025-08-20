@@ -57,7 +57,9 @@ HydraGNN in your python tree as a static package:
 python setup.py install
 ```
 
-## Running the code
+## Quick Start
+
+For detailed instructions, see the [**Comprehensive User Manual**](USER_MANUAL.md).
 
 Below are the four main functionalities for running the code.
 1. Training a model, including continuing from a previously trained model using configuration options:
@@ -153,3 +155,9 @@ https://doi.org/10.11578/dc.20211019.2
 
 We encourage you to contribute to HydraGNN! Please check the
 [guidelines](CONTRIBUTING.md) on how to do so.
+
+## Documentation
+
+- **Quick Start**: This README provides basic usage examples
+- **[Comprehensive User Manual](USER_MANUAL.md)**: Detailed guide covering data pre-processing, model construction, scalable data management, and training
+- **[Wiki](https://github.com/ORNL/HydraGNN/wiki)**: Additional technical documentation and datasets
