@@ -483,9 +483,6 @@ process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(np.int32
 # Lustre striping for large files
 lfs setstripe -c 4 -S 1M /path/to/datasets/
 
-# ADIOS2 configuration for Lustre
-export ADIOS2_BP4_SUBFILES=4
-export ADIOS2_BP4_THREADS=8
 ```
 
 #### Data Preprocessing at Scale
@@ -993,9 +990,6 @@ opt = {"preload": True, "shmem": True}
 # Optimize file system access
 lfs setstripe -c 4 -S 1M /path/to/data/
 
-# Use ADIOS2 for large datasets
-export ADIOS2_ENGINE=BP4
-export ADIOS2_STREAMING=ON
 ```
 
 #### 4. Convergence Issues
