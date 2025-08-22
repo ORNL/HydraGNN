@@ -442,20 +442,6 @@ writer.add_global("minmax_node_feature", minmax_features)
 writer.save()
 ```
 
-#### Environment Configuration for ADIOS2
-
-```bash
-# Set ADIOS2 engine parameters
-export ADIOS2_ENGINE=BP4
-export ADIOS2_VERBOSE=1
-
-# For large datasets
-export ADIOS2_STREAMING=ON
-export ADIOS2_SUBSTREAMS=4
-```
-
-### Memory-Efficient Data Loading
-
 #### Variable Graph Sizes
 
 ```bash
