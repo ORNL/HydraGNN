@@ -477,14 +477,6 @@ process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(np.int32
 
 ### Distributed Storage Systems
 
-#### Lustre File System Optimization
-
-```bash
-# Lustre striping for large files
-lfs setstripe -c 4 -S 1M /path/to/datasets/
-
-```
-
 #### Data Preprocessing at Scale
 
 ```bash
@@ -986,9 +978,6 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3
 ```bash
 # Use shared memory
 opt = {"preload": True, "shmem": True}
-
-# Optimize file system access
-lfs setstripe -c 4 -S 1M /path/to/data/
 
 ```
 
