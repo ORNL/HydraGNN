@@ -54,10 +54,12 @@ import h5py
 # No authentication necessary
 # ===========================
 # Alternatively, see https://cloud.google.com/docs/authentication/gcloud.
-os.system('gcloud config set auth/disable_credentials True')
+os.system("gcloud config set auth/disable_credentials True")
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
 
 import tensorflow as tf
 import tensorflow_datasets as tfds
@@ -67,9 +69,10 @@ from utils import balanced_block
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
-LOCAL_DATA_DIR = './dataset'
-QCML_DATA_DIR = 'gs://qcml-datasets/tfds'
-GCP_PROJECT = 'deepmind-opensource'
+LOCAL_DATA_DIR = "./dataset"
+QCML_DATA_DIR = "gs://qcml-datasets/tfds"
+GCP_PROJECT = "deepmind-opensource"
+
 
 class QCMLDataset(AbstractBaseDataset):
     def __init__(
@@ -107,7 +110,9 @@ class QCMLDataset(AbstractBaseDataset):
 
     def convert_tensorflow_data_objects_to_graphs(self):
 
-        force_field_ds = tfds.load('qcml/dft_force_field', split='full', data_dir=LOCAL_DATA_DIR)
+        force_field_ds = tfds.load(
+            "qcml/dft_force_field", split="full", data_dir=LOCAL_DATA_DIR
+        )
 
         # Enumerate the dataset to add an index (ID) to each element
         # The elements become tuples of (id, element)
@@ -116,13 +121,13 @@ class QCMLDataset(AbstractBaseDataset):
         N = force_field_ds.cardinality()
         start, end = balanced_block(self.rank, self.world_size, N)
 
-        list_samples_ids = [int(i) for i in range(start,end)]
+        list_samples_ids = [int(i) for i in range(start, end)]
 
         # Convert the list of IDs into a lookup table for efficient filtering
         keys_tensor = tf.constant(list_samples_ids, dtype=tf.int64)
         table = tf.lookup.StaticHashTable(
             tf.lookup.KeyValueTensorInitializer(keys_tensor, keys_tensor),
-            default_value=-1
+            default_value=-1,
         )
 
         # Define the filter function
@@ -136,21 +141,25 @@ class QCMLDataset(AbstractBaseDataset):
         filtered_dataset = force_field_ds_with_ids.filter(filter_by_id)
 
         # Iterate through the filtered dataset and collect the results
-        for index, element in iterate_tqdm(filtered_dataset, verbosity_level=2, desc='Load'):
+        for index, element in iterate_tqdm(
+            filtered_dataset, verbosity_level=2, desc="Load"
+        ):
 
-            tensorflow_atomic_numbers = element['atomic_numbers'].numpy()
-            atomic_numbers = torch.from_numpy(tensorflow_atomic_numbers).to(torch.int32).unsqueeze(1)
+            tensorflow_atomic_numbers = element["atomic_numbers"].numpy()
+            atomic_numbers = (
+                torch.from_numpy(tensorflow_atomic_numbers).to(torch.int32).unsqueeze(1)
+            )
             natoms = torch.IntTensor([atomic_numbers.shape[0]])
 
-            tensorflow_pos = element['positions'].numpy()
+            tensorflow_pos = element["positions"].numpy()
             pos = torch.from_numpy(tensorflow_pos).to(torch.float32)
 
-            tensorflow_energy_float = element['pbe0_energy'].numpy()
+            tensorflow_energy_float = element["pbe0_energy"].numpy()
             tensorflow_energy = np.array([tensorflow_energy_float])
             energy = torch.from_numpy(tensorflow_energy).to(torch.float32)
             energy_per_atom = energy.detach().clone() / natoms
 
-            tensorflow_forces = element['pbe0_forces'].numpy()
+            tensorflow_forces = element["pbe0_forces"].numpy()
             forces = torch.from_numpy(tensorflow_forces).to(torch.float32)
 
             cell = torch.eye(3, dtype=torch.float32)
