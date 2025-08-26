@@ -21,7 +21,30 @@ import os
 import tensorflow as tf
 import tensorflow_datasets as tfds
 
-LOCAL_DATA_DIR = './tmp'
+from sys import argv
+try:
+    from mpi4py import MPI
+except ImportError:
+    raise SystemExit("Please `pip install mpi4py`")
+
+def balanced_block(rank: int, world_size: int, N: int):
+    """
+    Return [start, end) for this rank: consecutive indices start..end-1.
+    Handles any N and world_size, including N < world_size.
+    """
+    base = N // world_size           # minimum chunk size
+    extra = N % world_size           # number of ranks that get one extra item
+
+    if rank < extra:
+        start = rank * (base + 1)
+        end   = start + (base + 1)
+    else:
+        start = extra * (base + 1) + (rank - extra) * base
+        end   = start + base
+
+    return start, end  # half-open interval
+
+LOCAL_DATA_DIR = './dataset'
 QCML_DATA_DIR = 'gs://qcml-datasets/tfds'
 GCP_PROJECT = 'deepmind-opensource'
 
@@ -37,48 +60,58 @@ os.system('gcloud config set auth/disable_credentials True')
 # Example 1: Feature group 'dft_force_field'
 # =============================================
 # TFDS directory structure: <data_dir>/<dataset>/<builder_config>/<version>.
-os.system(f'mkdir -p {LOCAL_DATA_DIR}/qcml/dft_force_field/')
-os.system(
-    f'gcloud storage cp -r {QCML_DATA_DIR}/qcml/dft_force_field/1.0.0'
-    f' {LOCAL_DATA_DIR}/qcml/dft_force_field/ --project={GCP_PROJECT}'
-)
+#os.system(f'mkdir -p {LOCAL_DATA_DIR}/qcml/dft_force_field/')
+#os.system(
+#    f'gcloud storage cp -r {QCML_DATA_DIR}/qcml/dft_force_field/1.0.0'
+#    f' {LOCAL_DATA_DIR}/qcml/dft_force_field/ --project={GCP_PROJECT}'
+#)
 force_field_ds = tfds.load(
     'qcml/dft_force_field', split='full', data_dir=LOCAL_DATA_DIR
 )
 force_field_iter = iter(force_field_ds)
 example = next(force_field_iter)
 print(example)
+print(force_field_ds.cardinality())
 
-# ===================================================================
-# Example 2: Combine 'dft_force_field' with 'dft_d4_correction'
-# ===================================================================
-os.system(f'mkdir -p {LOCAL_DATA_DIR}/qcml/dft_d4_correction/')
-os.system(
-    f'gcloud storage cp -r {QCML_DATA_DIR}/qcml/dft_d4_correction/1.0.0'
-    f' {LOCAL_DATA_DIR}/qcml/dft_d4_correction/ --project={GCP_PROJECT}'
-)
-# Note the read config to keep the same record order in both datasets.
-read_config = tfds.ReadConfig(interleave_cycle_length=1)
-force_field_ds_for_zip = tfds.load(
-    'qcml/dft_force_field',
-    split='full',
-    data_dir=LOCAL_DATA_DIR,
-    read_config=read_config,
-)
-d4_correction_ds_for_zip = tfds.load(
-    'qcml/dft_d4_correction',
-    split='full',
-    data_dir=LOCAL_DATA_DIR,
-    read_config=read_config,
-)
-zipped_ds = tf.data.Dataset.zip(
-    force_field_ds_for_zip, d4_correction_ds_for_zip
-)
-zipped_iter = iter(zipped_ds)
 
-# The example contains one tuple element (feature dict) per input dataset.
-example = next(zipped_iter)
-print('atomic_numbers from first', example[0]['atomic_numbers'])
-print('d4_energy from second', example[1]['d4_energy'])
-# The feature 'key_hash' can be used to verify the correct example order.
-print('Matching key_hashes', [t['key_hash'] for t in example])
+# Enumerate the dataset to add an index (ID) to each element
+# The elements become tuples of (id, element)
+force_field_ds_with_ids = force_field_ds.enumerate()
+
+
+#for i, element in force_field_ds_with_ids:
+#    print(f"ID: {i.numpy()}, Element: {element}")
+
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
+
+N = force_field_ds.cardinality()
+start, end = balanced_block(rank, size, N)
+print(f"rank {rank}/{size-1}: indices [{start}, {end})  (count={end-start})")
+
+list_samples_ids = [int(i) for i in range(start,end)]
+
+# Convert the list of IDs into a lookup table for efficient filtering
+keys_tensor = tf.constant(list_samples_ids, dtype=tf.int64)
+table = tf.lookup.StaticHashTable(
+    tf.lookup.KeyValueTensorInitializer(keys_tensor, keys_tensor),
+    default_value=-1
+)
+
+# Define the filter function
+def filter_by_id(index, element):
+    # Lookup the index in the table; it will return -1 if not found
+    is_in_table = table.lookup(index)
+    # The sample is a match if its index is not -1
+    return is_in_table != -1
+
+
+# Filter the dataset using the lookup table
+filtered_dataset = force_field_ds_with_ids.filter(filter_by_id)
+
+# Iterate through the filtered dataset and collect the results
+for index, element in filtered_dataset:
+    print(f"ID: {index.numpy()}, Element: {element}")
+    print(element['positions'])
+
