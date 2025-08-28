@@ -361,6 +361,8 @@ if __name__ == "__main__":
 
     hydragnn.utils.save_model(model, optimizer, log_name)
     hydragnn.utils.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
     if args.mae:
         import matplotlib.pyplot as plt

@@ -109,3 +109,6 @@ hydragnn.train.train_validate_test(
     log_name,
     verbosity,
 )
+
+if writer is not None:
+    writer.close()
