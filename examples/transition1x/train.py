@@ -250,9 +250,12 @@ class Transition1xDataset(AbstractBaseDataset):
             if self.graphgps_transform is not None:
                 data_object = self.graphgps_transform(data_object)
 
-            self.dataset.append(data_object)
+            if not data_object:
+                continue
+            else:
+                self.dataset.append(data_object)
 
-            random.shuffle(self.dataset)
+        random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
@@ -342,15 +345,6 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -376,13 +370,26 @@ if __name__ == "__main__":
 
     modelname = "transition1x"
     if args.preonly:
+        # Transformation to create positional and structural laplacian encoders
+        lpe_transform = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+            attr_name="lpe",
+            is_undirected=True,
+        )
+
+        def graphgps_transform(data):
+            try:
+                data = lpe_transform(data)  # lapPE
+            except:
+                return
+            return data
 
         ## local data
         total = Transition1xDataset(
             os.path.join(datadir),
             config,
-            # graphgps_transform=graphgps_transform,
-            graphgps_transform=None,
+            graphgps_transform=graphgps_transform,
+            # graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )

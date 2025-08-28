@@ -299,13 +299,16 @@ class QM7XDataset(AbstractBaseDataset):
                 if self.graphgps_transform is not None:
                     data_object = self.graphgps_transform(data_object)
 
-                if self.check_forces_values(data_object.forces):
-                    self.dataset.append(data_object)
+                if not data_object:
+                    continue
                 else:
-                    print(
-                        f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                        flush=True,
-                    )
+                    if self.check_forces_values(data_object.forces):
+                        self.dataset.append(data_object)
+                    else:
+                        print(
+                            f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                            flush=True,
+                        )
 
                 subset.append(data_object)
             except AssertionError as e:
@@ -392,16 +395,6 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-    graphgps_transform = None
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -427,6 +420,19 @@ if __name__ == "__main__":
 
     modelname = "qm7x"
     if args.preonly:
+        # Transformation to create positional and structural laplacian encoders
+        lpe_transform = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+            attr_name="lpe",
+            is_undirected=True,
+        )
+
+        def graphgps_transform(data):
+            try:
+                data = lpe_transform(data)  # lapPE
+            except:
+                return
+            return data
 
         ## local data
         total = QM7XDataset(
