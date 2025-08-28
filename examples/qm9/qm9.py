@@ -141,6 +141,8 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     )
 
     tr.save(log_name)
+    if writer is not None:
+        writer.close()
 
 
 if __name__ == "__main__":
