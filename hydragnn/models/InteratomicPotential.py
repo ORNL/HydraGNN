@@ -347,14 +347,9 @@ class InteratomicPotentialMixin:
         
         x = inv_node_feat
         
-        #### Multi-head decoder part (unchanged from base implementation) ####
-        # Shared dense layers for graph level output
-        if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
-            # Individual samplers
-            data.batch = data.x * 0
-        else:
-            x_graph = global_mean_pool(x, data.batch.to(x.device))
+        #### Multi-head decoder part - Focused on NODE-level predictions for MLIPs ####
+        # For Interatomic Potentials, we primarily need node-level predictions (atomic energies)
+        # Graph-level total energies can be computed by summing atomic energies if needed
         
         outputs = []
         outputs_var = []
@@ -369,30 +364,8 @@ class InteratomicPotentialMixin:
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
         ):
-            if type_head == "graph":
-                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
-                headvar = torch.zeros(
-                    (len(data.dataset_name), head_dim * self.var_output),
-                    device=x.device,
-                )
-                if self.num_branches == 1:
-                    x_graph_head = self.graph_shared["branch-0"](x_graph)
-                    output_head = headloc["branch-0"](x_graph_head)
-                    head = output_head[:, :head_dim]
-                    headvar = output_head[:, head_dim:] ** 2
-                else:
-                    for ID in datasetIDs:
-                        mask = data.dataset_name == ID
-                        mask = mask[:, 0]
-                        branchtype = f"branch-{ID.item()}"
-                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
-                        output_head = headloc[branchtype](x_graph_head)
-                        head[mask] = output_head[:, :head_dim]
-                        headvar[mask] = output_head[:, head_dim:] ** 2
-                outputs.append(head)
-                outputs_var.append(headvar)
-            else:
-                # Node-level predictions (forces, atomic energies, etc.)
+            if type_head == "node":
+                # Node-level predictions (atomic energies, forces, etc.) - PRIMARY for MLIPs
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
                 head = torch.zeros((x.shape[0], head_dim), device=x.device)
                 headvar = torch.zeros(
@@ -445,6 +418,37 @@ class InteratomicPotentialMixin:
                         headvar[mask_nodes] = x_node[:, head_dim:] ** 2
                 outputs.append(head)
                 outputs_var.append(headvar)
+            elif type_head == "graph":
+                # Graph-level predictions (total energy from atomic energies sum)
+                # Note: For MLIPs, this is typically computed by summing node-level atomic energies
+                # rather than being a primary prediction target
+                if data.batch is None:
+                    x_graph = x.mean(dim=0, keepdim=True)
+                    data.batch = data.x * 0
+                else:
+                    x_graph = global_mean_pool(x, data.batch.to(x.device))
+                
+                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                headvar = torch.zeros(
+                    (len(data.dataset_name), head_dim * self.var_output),
+                    device=x.device,
+                )
+                if self.num_branches == 1:
+                    x_graph_head = self.graph_shared["branch-0"](x_graph)
+                    output_head = headloc["branch-0"](x_graph_head)
+                    head = output_head[:, :head_dim]
+                    headvar = output_head[:, head_dim:] ** 2
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask = mask[:, 0]
+                        branchtype = f"branch-{ID.item()}"
+                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
+                        output_head = headloc[branchtype](x_graph_head)
+                        head[mask] = output_head[:, :head_dim]
+                        headvar[mask] = output_head[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
         
         if self.var_output:
             return outputs, outputs_var
@@ -458,6 +462,11 @@ class InteratomicPotentialBase(InteratomicPotentialMixin, Base):
     This class combines the standard HydraGNN Base model with the InteratomicPotentialMixin
     to provide enhanced functionality for machine learning interatomic potentials in 
     molecular simulations.
+    
+    Key for MLIPs:
+    - Primary focus on NODE-level predictions for atomic energies
+    - Forces computed via automatic differentiation of atomic energies w.r.t. positions
+    - Graph-level total energies can be derived by summing atomic energies
     
     Features:
     - Enhanced geometric feature computation (distances, angles, coordination)

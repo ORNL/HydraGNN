@@ -25,21 +25,22 @@
             "envelope_exponent": 5,
             "enable_interatomic_potential": true,
             "output_heads": {
-                "graph": {
+                "node": {
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 32,
                     "num_headlayers": 2,
-                    "dim_headlayers": [32, 16]
+                    "dim_headlayers": [32, 16],
+                    "type": "mlp"
                 }
             },
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
             "input_node_features": [0],
-            "output_names": ["energy"],
+            "output_names": ["atomic_energy"],
             "output_index": [0],
             "output_dim": [1],
-            "type": ["graph"],
+            "type": ["node"],
             "denormalize_output": false
         },
         "Training": {
