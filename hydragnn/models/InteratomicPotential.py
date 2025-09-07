@@ -135,6 +135,13 @@ class InteratomicPotentialMixin:
         self.use_three_body_interactions = True
         self.use_atomic_environment_descriptors = True
         
+        # Store default values for radius and max_neighbours if not already set
+        # These are essential for dynamic graph construction in MLIPs
+        if not hasattr(self, 'radius'):
+            self.radius = 6.0  # Default radius for neighbor finding
+        if not hasattr(self, 'max_neighbours'):
+            self.max_neighbours = 50  # Default max neighbors per atom
+        
         # Initialize enhanced feature layers
         if hasattr(self, 'hidden_dim'):
             self._init_interatomic_layers()
@@ -309,11 +316,44 @@ class InteratomicPotentialMixin:
         Enhanced forward method with interatomic potential capabilities.
         
         This method extends the base forward pass with:
-        1. Enhanced geometric feature computation
-        2. Three-body interaction terms
-        3. Atomic environment descriptors
-        4. Improved force consistency
+        1. Dynamic graph construction from atomic positions (essential for MLIP force calculations)
+        2. Enhanced geometric feature computation
+        3. Three-body interaction terms
+        4. Atomic environment descriptors
+        5. Improved force consistency
+        
+        For MLIPs, the graph connectivity must be constructed from positions within
+        the forward method to ensure proper gradient flow for force calculations.
         """
+        ### Dynamic graph construction for MLIPs ####
+        # For interatomic potentials, graph connectivity must depend on atomic positions
+        # and be constructed within the forward method for proper gradient flow
+        from torch_geometric.transforms import RadiusGraph
+        
+        # Get radius and max_neighbours from model configuration
+        # These should be set during model initialization from config
+        radius = getattr(self, 'radius', 6.0)  # Default fallback
+        max_neighbours = getattr(self, 'max_neighbours', 50)  # Default fallback
+        
+        # Construct graph connectivity based on current atomic positions
+        # This ensures the graph construction is part of the computational graph
+        radius_graph = RadiusGraph(r=radius, loop=False, max_num_neighbors=max_neighbours)
+        
+        # Apply radius graph transform to get edge connectivity
+        # This creates edge_index based on current positions with proper gradients
+        data_with_edges = radius_graph(data)
+        
+        # Update data with the dynamically constructed edges
+        data.edge_index = data_with_edges.edge_index
+        if hasattr(data_with_edges, 'edge_attr'):
+            data.edge_attr = data_with_edges.edge_attr
+        
+        # Ensure edge_shifts exist for periodic boundary conditions
+        if not hasattr(data, "edge_shifts"):
+            data.edge_shifts = torch.zeros(
+                (data.edge_index.size(1), 3), device=data.edge_index.device
+            )
+        
         ### Enhanced encoder part for interatomic potentials ####
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
         
