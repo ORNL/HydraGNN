@@ -27,6 +27,7 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+from hydragnn.models.InteratomicPotential import InteratomicPotentialMixin
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -77,6 +78,7 @@ def create_model_config(
         config["Architecture"]["node_max_ell"],
         config["Architecture"]["avg_num_neighbors"],
         config["Training"]["conv_checkpointing"],
+        config["Architecture"].get("enable_interatomic_potential", False),
         verbosity,
         use_gpu,
     )
@@ -123,6 +125,7 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
+    enable_interatomic_potential: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -510,6 +513,28 @@ def create_model(
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
+
+    # Apply interatomic potential enhancement if requested
+    if enable_interatomic_potential:
+        # Create a new class that inherits from both InteratomicPotentialMixin and the original model class
+        original_class = model.__class__
+        
+        class EnhancedModel(InteratomicPotentialMixin, original_class):
+            def __init__(self, original_model):
+                # Copy all attributes from the original model
+                for attr_name in dir(original_model):
+                    if not attr_name.startswith('_') and not callable(getattr(original_model, attr_name)):
+                        setattr(self, attr_name, getattr(original_model, attr_name))
+                # Copy private attributes that are important
+                for attr_name in ['_modules', '_parameters', '_buffers']:
+                    if hasattr(original_model, attr_name):
+                        setattr(self, attr_name, getattr(original_model, attr_name))
+                # Initialize interatomic potential layers
+                if hasattr(self, 'hidden_dim'):
+                    self._init_interatomic_layers()
+        
+        enhanced_model = EnhancedModel(model)
+        model = enhanced_model
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()
