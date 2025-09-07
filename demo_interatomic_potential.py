@@ -100,6 +100,10 @@ def demonstrate_enhanced_features():
                 self.activation_function = torch.nn.ReLU()
                 self.conv_checkpointing = False
                 
+                # Set radius and max_neighbours for dynamic graph construction
+                self.radius = 6.0  # Cutoff radius for neighbor finding
+                self.max_neighbours = 50  # Maximum neighbors per atom
+                
                 # Initialize model components
                 self.graph_convs = torch.nn.ModuleList([
                     torch.nn.Linear(1, self.hidden_dim) for _ in range(2)
