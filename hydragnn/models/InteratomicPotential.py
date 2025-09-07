@@ -63,7 +63,9 @@ except ImportError:
         for i in range(src.size(0)):
             result[index[i]] += src[i]
             count[index[i]] += 1
-        count = torch.clamp(count, min=1).unsqueeze(-1)
+        count = torch.clamp(count, min=1)
+        if result.dim() > 1:
+            count = count.unsqueeze(-1)
         return result / count
     
     torch_scatter = type('MockModule', (), {
@@ -207,7 +209,6 @@ class InteratomicPotentialMixin:
         coord_numbers = torch_scatter.scatter_add(
             torch.ones_like(edge_lengths.squeeze()), 
             edge_index[1], 
-            dim=0, 
             dim_size=num_nodes
         )
         
@@ -215,7 +216,6 @@ class InteratomicPotentialMixin:
         avg_distances = torch_scatter.scatter_mean(
             edge_lengths.squeeze(), 
             edge_index[1], 
-            dim=0, 
             dim_size=num_nodes
         )
         
