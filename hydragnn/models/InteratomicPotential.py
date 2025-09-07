@@ -73,35 +73,8 @@ except ImportError:
         'scatter_mean': scatter_mean
     })()
 
-# Handle HydraGNN imports with fallbacks
-try:
-    from hydragnn.models.Base import Base
-except ImportError:
-    # Create a minimal Base class for testing
-    class Base(Module):
-        def __init__(self, *args, **kwargs):
-            super().__init__()
-            # Set common attributes that InteratomicPotential expects
-            self.hidden_dim = kwargs.get('hidden_dim', 32)
-            self.activation_function = torch.nn.ReLU()
-            self.graph_convs = ModuleList()
-            self.feature_layers = ModuleList()
-            self.heads_NN = ModuleList()
-            self.head_dims = [1]
-            self.head_type = ['graph']
-            self.num_branches = 1
-            self.graph_shared = torch.nn.ModuleDict({'branch-0': torch.nn.Identity()})
-            self.var_output = 0
-            self.conv_checkpointing = False
-            self.config_heads = {'graph': [{'type': 'branch-0', 'architecture': {'type': 'mlp'}}]}
-        
-        def _embedding(self, data):
-            # Mock embedding
-            x = getattr(data, 'x', torch.randn(10, self.hidden_dim))
-            pos = getattr(data, 'pos', torch.randn(10, 3))
-            edge_index = getattr(data, 'edge_index', torch.tensor([[0, 1], [1, 0]]).long())
-            conv_args = {'edge_index': edge_index}
-            return x, pos, conv_args
+# Import HydraGNN Base class
+from hydragnn.models.Base import Base
 
 try:
     from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
