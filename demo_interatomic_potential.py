@@ -108,14 +108,14 @@ def demonstrate_enhanced_features():
                     torch.nn.BatchNorm1d(self.hidden_dim) for _ in range(2)
                 ])
                 
-                # Mock head configuration
+                # Mock head configuration for node-level atomic energy predictions
                 self.heads_NN = [{'branch-0': torch.nn.Linear(self.hidden_dim, 1)}]
                 self.head_dims = [1]
-                self.head_type = ['graph']
+                self.head_type = ['node']
                 self.num_branches = 1
                 self.graph_shared = {'branch-0': torch.nn.Linear(self.hidden_dim, self.hidden_dim)}
                 self.var_output = 0
-                self.config_heads = {'graph': [{'type': 'branch-0', 'architecture': {'type': 'mlp'}}]}
+                self.config_heads = {'node': [{'type': 'branch-0', 'architecture': {'type': 'mlp'}}]}
                 
                 # Initialize interatomic potential layers
                 self._init_interatomic_layers()
