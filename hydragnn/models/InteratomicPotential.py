@@ -419,36 +419,14 @@ class InteratomicPotentialMixin:
                 outputs.append(head)
                 outputs_var.append(headvar)
             elif type_head == "graph":
-                # Graph-level predictions (total energy from atomic energies sum)
-                # Note: For MLIPs, this is typically computed by summing node-level atomic energies
-                # rather than being a primary prediction target
-                if data.batch is None:
-                    x_graph = x.mean(dim=0, keepdim=True)
-                    data.batch = data.x * 0
-                else:
-                    x_graph = global_mean_pool(x, data.batch.to(x.device))
-                
-                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
-                headvar = torch.zeros(
-                    (len(data.dataset_name), head_dim * self.var_output),
-                    device=x.device,
+                # Graph-level heads are not supported for InteratomicPotential models
+                # For MLIPs, total energy should be computed by summing node-level atomic energies
+                raise ValueError(
+                    "Graph-level heads are not supported for InteratomicPotential models. "
+                    "MLIPs require node-level predictions for atomic energies. "
+                    "Total energy should be computed by summing atomic energies externally. "
+                    "Please configure your model to use 'type': ['node'] instead of 'type': ['graph']."
                 )
-                if self.num_branches == 1:
-                    x_graph_head = self.graph_shared["branch-0"](x_graph)
-                    output_head = headloc["branch-0"](x_graph_head)
-                    head = output_head[:, :head_dim]
-                    headvar = output_head[:, head_dim:] ** 2
-                else:
-                    for ID in datasetIDs:
-                        mask = data.dataset_name == ID
-                        mask = mask[:, 0]
-                        branchtype = f"branch-{ID.item()}"
-                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
-                        output_head = headloc[branchtype](x_graph_head)
-                        head[mask] = output_head[:, :head_dim]
-                        headvar[mask] = output_head[:, head_dim:] ** 2
-                outputs.append(head)
-                outputs_var.append(headvar)
         
         if self.var_output:
             return outputs, outputs_var
