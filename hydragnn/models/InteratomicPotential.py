@@ -233,9 +233,9 @@ class InteratomicPotentialMixin:
         from torch_geometric.transforms import RadiusGraph
         
         # Get radius and max_neighbours from model configuration
-        # These should be set during model initialization from config
-        radius = getattr(self, 'radius', 6.0)  # Default fallback
-        max_neighbours = getattr(self, 'max_neighbours', 50)  # Default fallback
+        # These are set during model initialization with defaults if not configured
+        radius = self.radius
+        max_neighbours = self.max_neighbours
         
         # Construct graph connectivity based on current atomic positions
         # This ensures the graph construction is part of the computational graph
