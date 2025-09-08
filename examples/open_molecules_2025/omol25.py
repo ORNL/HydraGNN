@@ -224,16 +224,16 @@ class OMol2025(AbstractBaseDataset):
             if self.graphgps_transform is not None:
                 data_object = self.graphgps_transform(data_object)
 
-            if not data_object:
-                return
+            # if not data_object:
+            #     return
+            # else:
+            if self.check_forces_values(data_object.forces):
+                self.dataset.append(data_object)
             else:
-                if self.check_forces_values(data_object.forces):
-                    self.dataset.append(data_object)
-                else:
-                    print(
-                        f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                        flush=True,
-                    )
+                print(
+                    f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                    flush=True,
+                )
 
         except Exception as e:
             print(f"Rank {self.rank} reading - exception: ", e)

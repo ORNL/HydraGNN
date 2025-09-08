@@ -23,6 +23,12 @@ from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
+from hydragnn.utils.descriptors_and_embeddings.chemicaldescriptors import (
+    ChemicalFeatureEncoder,
+)
+from hydragnn.utils.descriptors_and_embeddings.topologicaldescriptors import (
+    compute_topo_features,
+)
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
@@ -250,10 +256,10 @@ class Transition1xDataset(AbstractBaseDataset):
             if self.graphgps_transform is not None:
                 data_object = self.graphgps_transform(data_object)
 
-            if not data_object:
-                continue
-            else:
-                self.dataset.append(data_object)
+            # if not data_object:
+            #     continue
+            # else:
+            self.dataset.append(data_object)
 
         random.shuffle(self.dataset)
 
@@ -371,6 +377,10 @@ if __name__ == "__main__":
     modelname = "transition1x"
     if args.preonly:
         # Transformation to create positional and structural laplacian encoders
+        # Chemical encoder
+        ChemEncoder = ChemicalFeatureEncoder()
+
+        # LPE
         lpe_transform = AddLaplacianEigenvectorPE(
             k=config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
             attr_name="lpe",
@@ -381,7 +391,16 @@ if __name__ == "__main__":
             try:
                 data = lpe_transform(data)  # lapPE
             except:
-                return
+                data.lpe = torch.zeros(
+                    [
+                        data.num_nodes,
+                        config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+                    ],
+                    dtype=data.x.dtype,
+                    device=data.x.device,
+                )
+            data = ChemEncoder.compute_chem_features(data)
+            data = compute_topo_features(data)
             return data
 
         ## local data
