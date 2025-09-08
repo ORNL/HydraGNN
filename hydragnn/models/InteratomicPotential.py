@@ -25,17 +25,18 @@ import math
 class InteratomicPotentialMixin:
     """
     Mixin class to enhance HydraGNN models with interatomic potential capabilities.
-    This mixin extends the forward method to include enhanced geometric features,
-    many-body interactions, and improved atomic environment descriptors for 
-    better performance in molecular simulations.
+    
+    This mixin focuses on the core MLIP requirements:
+    1. Dynamic graph construction for proper gradient flow
+    2. Node-level prediction enforcement for atomic energies
+    
+    It does NOT override native message passing features of specialized architectures
+    like MACE, DimeNet++, etc., which already have sophisticated implementations
+    of three-body interactions and geometric features.
     """
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Enhanced geometric feature settings
-        self.use_enhanced_geometry = True
-        self.use_three_body_interactions = True
-        self.use_atomic_environment_descriptors = True
         
         # Store default values for radius and max_neighbours if not already set
         # These are essential for dynamic graph construction in MLIPs
@@ -44,8 +45,15 @@ class InteratomicPotentialMixin:
         if not hasattr(self, 'max_neighbours'):
             self.max_neighbours = 50  # Default max neighbors per atom
         
-        # Initialize enhanced feature layers
-        if hasattr(self, 'hidden_dim'):
+        # Enhanced features are disabled by default to avoid interference
+        # with native message passing architectures (MACE, DimeNet++, etc.)
+        self.use_enhanced_geometry = getattr(kwargs, 'use_enhanced_geometry', False)
+        self.use_three_body_interactions = getattr(kwargs, 'use_three_body_interactions', False) 
+        self.use_atomic_environment_descriptors = getattr(kwargs, 'use_atomic_environment_descriptors', False)
+        
+        # Only initialize enhanced feature layers if explicitly requested
+        if (self.use_enhanced_geometry or self.use_three_body_interactions or 
+            self.use_atomic_environment_descriptors) and hasattr(self, 'hidden_dim'):
             self._init_interatomic_layers()
     
     def _init_interatomic_layers(self):
@@ -215,17 +223,20 @@ class InteratomicPotentialMixin:
     
     def forward(self, data):
         """
-        Enhanced forward method with interatomic potential capabilities.
+        Forward method with essential MLIP capabilities.
         
-        This method extends the base forward pass with:
-        1. Dynamic graph construction from atomic positions (essential for MLIP force calculations)
-        2. Enhanced geometric feature computation
-        3. Three-body interaction terms
-        4. Atomic environment descriptors
-        5. Improved force consistency
+        Core MLIP requirements:
+        1. Dynamic graph construction from atomic positions (essential for proper gradient flow)
+        2. Node-level prediction enforcement for atomic energies
         
-        For MLIPs, the graph connectivity must be constructed from positions within
-        the forward method to ensure proper gradient flow for force calculations.
+        Enhanced features (geometric, three-body, environment descriptors) are disabled
+        by default to avoid interference with native message passing architectures like
+        MACE and DimeNet++ which already implement sophisticated versions of these features.
+        
+        To enable enhanced features for simpler architectures, set:
+        - use_enhanced_geometry=True
+        - use_three_body_interactions=True  
+        - use_atomic_environment_descriptors=True
         """
         ### Dynamic graph construction for MLIPs ####
         # For interatomic potentials, graph connectivity must depend on atomic positions
@@ -256,13 +267,15 @@ class InteratomicPotentialMixin:
                 (data.edge_index.size(1), 3), device=data.edge_index.device
             )
         
-        ### Enhanced encoder part for interatomic potentials ####
+        ### Standard encoder part ####
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
         
-        # Compute enhanced geometric features
-        conv_args = self._compute_enhanced_geometric_features(data, conv_args)
+        # Only compute enhanced geometric features if explicitly enabled
+        # (disabled by default to avoid interference with MACE, DimeNet++, etc.)
+        if self.use_enhanced_geometry:
+            conv_args = self._compute_enhanced_geometric_features(data, conv_args)
         
-        # Standard convolution layers with enhanced features
+        # Standard convolution layers
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
                 inv_node_feat, equiv_node_feat = conv(
@@ -281,11 +294,13 @@ class InteratomicPotentialMixin:
                 )
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
         
-        # Apply three-body interactions
-        inv_node_feat = self._compute_three_body_interactions(inv_node_feat, data, conv_args)
+        # Only apply enhanced features if explicitly enabled
+        # (disabled by default to avoid interference with native message passing)
+        if self.use_three_body_interactions:
+            inv_node_feat = self._compute_three_body_interactions(inv_node_feat, data, conv_args)
         
-        # Apply atomic environment descriptors
-        inv_node_feat = self._apply_atomic_environment_descriptors(inv_node_feat, conv_args)
+        if self.use_atomic_environment_descriptors:
+            inv_node_feat = self._apply_atomic_environment_descriptors(inv_node_feat, conv_args)
         
         x = inv_node_feat
         
@@ -377,22 +392,25 @@ class InteratomicPotentialMixin:
 
 class InteratomicPotentialBase(InteratomicPotentialMixin, Base):
     """
-    Enhanced HydraGNN Base model with interatomic potential capabilities.
+    HydraGNN Base model enhanced for Machine Learning Interatomic Potentials (MLIPs).
     
-    This class combines the standard HydraGNN Base model with the InteratomicPotentialMixin
-    to provide enhanced functionality for machine learning interatomic potentials in 
-    molecular simulations.
+    This class provides the essential MLIP requirements:
+    1. Dynamic graph construction from atomic positions for proper gradient flow
+    2. Node-level prediction enforcement for atomic energies (required for force calculations)
     
-    Key for MLIPs:
-    - Primary focus on NODE-level predictions for atomic energies
-    - Forces computed via automatic differentiation of atomic energies w.r.t. positions
-    - Graph-level total energies can be derived by summing atomic energies
+    IMPORTANT: This class does NOT override native message passing features.
+    Architectures like MACE and DimeNet++ already include sophisticated implementations
+    of three-body interactions, geometric features, and angular dependencies.
     
-    Features:
-    - Enhanced geometric feature computation (distances, angles, coordination)
-    - Three-body interaction terms for better angular dependencies
-    - Atomic environment descriptors for local chemical understanding
-    - Improved force consistency and energy conservation
+    Enhanced features (geometric, three-body, environment descriptors) are disabled
+    by default to avoid interference. They can be enabled for simpler architectures
+    that lack these native capabilities.
+    
+    Key MLIP workflow:
+    1. Positions → Dynamic graph construction (within forward pass)
+    2. Graph + Features → Message passing (architecture-specific)  
+    3. Node features → Atomic energies (node-level predictions)
+    4. Atomic energies → Forces (via automatic differentiation)
     """
     
     def __init__(self, *args, **kwargs):

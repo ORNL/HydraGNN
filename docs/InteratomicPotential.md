@@ -98,21 +98,24 @@ Enhanced force consistency ensures proper energy-force relationships:
 
 ### InteratomicPotentialMixin
 
-The `InteratomicPotentialMixin` class provides the core functionality:
+The `InteratomicPotentialMixin` class provides the core MLIP functionality:
 
 ```python
 class InteratomicPotentialMixin:
+    def forward(self, data):
+        # 1. Dynamic graph construction for proper gradient flow
+        # 2. Standard message passing (respects native architecture features)
+        # 3. Node-level prediction enforcement
+        
+    # Enhanced features (disabled by default to avoid interference):
     def _compute_enhanced_geometric_features(self, data, conv_args):
-        # Enhanced geometric feature computation
+        # Only used if use_enhanced_geometry=True
         
     def _compute_three_body_interactions(self, node_features, data, conv_args):
-        # Three-body interaction computation
+        # Only used if use_three_body_interactions=True
         
     def _apply_atomic_environment_descriptors(self, node_features, conv_args):
-        # Atomic environment descriptor application
-        
-    def forward(self, data):
-        # Enhanced forward pass
+        # Only used if use_atomic_environment_descriptors=True
 ```
 
 ### InteratomicPotentialBase
@@ -121,13 +124,33 @@ The `InteratomicPotentialBase` class combines the mixin with the standard HydraG
 
 ```python
 class InteratomicPotentialBase(InteratomicPotentialMixin, Base):
-    # Enhanced HydraGNN model with interatomic potential capabilities
+    # HydraGNN model with essential MLIP capabilities
+    # Enhanced features disabled by default to avoid interference
+    # with native message passing architectures (MACE, DimeNet++, etc.)
+```
+
+### Compatibility with Message Passing Architectures
+
+**Important**: This implementation does NOT interfere with native message passing features:
+
+- **MACE**: Already includes n-body interactions and equivariant geometric features
+- **DimeNet++**: Already computes three-body interactions and spherical basis functions  
+- **Simple architectures**: Can optionally enable enhanced features if needed
+
+To enable enhanced features for simple architectures:
+```python
+model = InteratomicPotentialBase(
+    use_enhanced_geometry=True,           # For basic architectures only
+    use_three_body_interactions=True,     # For basic architectures only  
+    use_atomic_environment_descriptors=True  # For basic architectures only
+)
 ```
 
 ## Benefits for Molecular Simulations
 
-1. **Improved Accuracy**: Enhanced geometric features and many-body interactions improve prediction accuracy
-2. **Better Force Prediction**: Consistent energy-force relationships for molecular dynamics
+1. **Essential MLIP Requirements**: Dynamic graph construction and node-level predictions
+2. **Architecture Compatibility**: Works with any HydraGNN message passing layer
+3. **Proper Gradient Flow**: Graph construction within forward pass for force calculations
 3. **Chemical Awareness**: Atomic environment descriptors capture local chemical environments
 4. **Computational Efficiency**: Optimized implementations for large-scale simulations
 
