@@ -25,19 +25,8 @@ import os
 # Add HydraGNN to path
 sys.path.insert(0, os.path.abspath('.'))
 
-def load_interatomic_potential_module():
-    """Load the InteratomicPotential module directly for demonstration."""
-    print("Loading HydraGNN Interatomic Potential Enhancements...")
-    
-    # Load the module directly to avoid dependency issues
-    with open('hydragnn/models/InteratomicPotential.py', 'r') as f:
-        code = f.read()
-    
-    # Create a namespace to execute the code
-    namespace = {'torch': torch, '__name__': '__main__'}
-    exec(code, namespace)
-    
-    return namespace['InteratomicPotentialMixin'], namespace['InteratomicPotentialBase']
+# Import InteratomicPotential classes using standard import
+from hydragnn.models.InteratomicPotential import InteratomicPotentialMixin, InteratomicPotentialBase
 
 def create_demo_molecular_data():
     """Create demonstration molecular data for testing."""
@@ -85,8 +74,7 @@ def demonstrate_enhanced_features():
     print("="*60)
     
     try:
-        # Load the interatomic potential classes
-        InteratomicPotentialMixin, InteratomicPotentialBase = load_interatomic_potential_module()
+        # InteratomicPotential classes are imported at the top of the file
         print("✓ InteratomicPotential classes loaded successfully")
         
         # Create a test mixin with enhanced features
