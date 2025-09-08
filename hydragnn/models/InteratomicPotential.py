@@ -13,82 +13,11 @@ import torch
 from torch.nn import ModuleList, Sequential, Linear, Module
 import torch.nn.functional as F
 
-# Handle torch_geometric imports with fallbacks
-try:
-    from torch_geometric.nn import global_mean_pool, BatchNorm
-except ImportError:
-    # Fallback implementations
-    def global_mean_pool(x, batch):
-        """Fallback implementation for global_mean_pool."""
-        if batch is None:
-            return x.mean(dim=0, keepdim=True)
-        unique_batch = torch.unique(batch)
-        result = []
-        for b in unique_batch:
-            mask = batch == b
-            result.append(x[mask].mean(dim=0))
-        return torch.stack(result)
-    
-    class BatchNorm(Module):
-        """Fallback implementation for BatchNorm."""
-        def __init__(self, num_features):
-            super().__init__()
-            self.bn = torch.nn.BatchNorm1d(num_features)
-        
-        def forward(self, x):
-            return self.bn(x)
-
-# Handle torch_scatter imports with fallbacks
-try:
-    import torch_scatter
-    TORCH_SCATTER_AVAILABLE = True
-except ImportError:
-    TORCH_SCATTER_AVAILABLE = False
-    # Define fallback functions
-    def scatter_add(src, index, dim=0, dim_size=None):
-        """Fallback implementation for scatter_add."""
-        if dim_size is None:
-            dim_size = index.max().item() + 1
-        result = torch.zeros(dim_size, *src.shape[1:], device=src.device, dtype=src.dtype)
-        for i in range(src.size(0)):
-            result[index[i]] += src[i]
-        return result
-    
-    def scatter_mean(src, index, dim=0, dim_size=None):
-        """Fallback implementation for scatter_mean."""
-        if dim_size is None:
-            dim_size = index.max().item() + 1
-        result = torch.zeros(dim_size, *src.shape[1:], device=src.device, dtype=src.dtype)
-        count = torch.zeros(dim_size, device=src.device, dtype=torch.long)
-        for i in range(src.size(0)):
-            result[index[i]] += src[i]
-            count[index[i]] += 1
-        count = torch.clamp(count, min=1)
-        if result.dim() > 1:
-            count = count.unsqueeze(-1)
-        return result / count
-    
-    torch_scatter = type('MockModule', (), {
-        'scatter_add': scatter_add,
-        'scatter_mean': scatter_mean
-    })()
-
-# Import HydraGNN Base class
+# Direct imports - torch_geometric and torch_scatter are core dependencies
+from torch_geometric.nn import global_mean_pool, BatchNorm
+import torch_scatter
 from hydragnn.models.Base import Base
-
-try:
-    from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
-except ImportError:
-    def get_edge_vectors_and_lengths(positions, edge_index, shifts, normalize=False, eps=1e-9):
-        """Fallback implementation for get_edge_vectors_and_lengths."""
-        sender = edge_index[0]
-        receiver = edge_index[1]
-        vectors = positions[receiver] - positions[sender] + shifts
-        lengths = torch.linalg.norm(vectors, dim=-1, keepdim=True)
-        if normalize:
-            vectors_normed = vectors / (lengths + eps)
-            return vectors_normed, lengths
-        return vectors, lengths
+from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 import math
 
