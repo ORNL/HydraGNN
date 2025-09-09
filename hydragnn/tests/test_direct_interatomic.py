@@ -15,7 +15,6 @@ This test validates the implementation by importing it directly.
 """
 
 import torch
-import sys
 import os
 import pytest
 

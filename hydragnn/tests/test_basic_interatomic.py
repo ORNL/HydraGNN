@@ -15,7 +15,6 @@ This test validates the basic implementation without full functionality.
 """
 
 import torch
-import sys
 import os
 import pytest
 
