@@ -45,11 +45,16 @@ try:
             gp.initialize()
             self.hist = dict()
             self.last = dict()
+            self.enabled = True
 
         def start(self, name):
+            if not self.enabled:
+                return
             gp.start(name)
 
         def stop(self, name):
+            if not self.enabled:
+                return
             gp.stop(name)
 
             count, wallclock = gp.query_raw(name)
@@ -60,9 +65,11 @@ try:
             self.last[name] = wallclock
 
         def enable(self):
+            self.enabled = True            
             gp.enable()
 
         def disable(self):
+            self.enabled = False
             gp.disable()
 
         def reset(self):
