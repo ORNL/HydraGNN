@@ -17,11 +17,7 @@ This test validates the enhanced forward method functionality for molecular simu
 import torch
 import numpy as np
 from torch_geometric.data import Data
-import sys
 import os
-
-# Add HydraGNN to path
-sys.path.insert(0, '/home/runner/work/HydraGNN/HydraGNN')
 
 def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     """
