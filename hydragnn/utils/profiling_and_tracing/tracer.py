@@ -65,7 +65,7 @@ try:
             self.last[name] = wallclock
 
         def enable(self):
-            self.enabled = True            
+            self.enabled = True
             gp.enable()
 
         def disable(self):
