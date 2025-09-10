@@ -52,9 +52,10 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
 
-    # This default is needed for update_config_NN_outputs
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
+    # Set compute_grad_energy based on enable_interatomic_potential
+    # Remove compute_grad_energy as a direct JSON input - it's now automatically determined
+    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get("enable_interatomic_potential", False)
+    config["NeuralNetwork"]["Training"]["compute_grad_energy"] = enable_interatomic_potential
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable

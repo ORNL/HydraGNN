@@ -107,6 +107,8 @@ if __name__ == "__main__":
         if args.mpnn_type
         else config["NeuralNetwork"]["Architecture"]["mpnn_type"]
     )
+    # Enable interatomic potential for energy and force calculations
+    config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = True
     verbosity = config["Verbosity"]["level"]
     config["NeuralNetwork"]["Variables_of_interest"][
         "graph_feature_names"
@@ -318,7 +320,6 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=True,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
