@@ -103,8 +103,19 @@ def pytest_interatomic_potential_creation():
 def pytest_model_creation_with_enhancement():
     """Test creating a model with interatomic potential enhancement."""
     from hydragnn.models.create import create_model
+    from hydragnn.utils.model.model import update_multibranch_heads
 
     # Basic model configuration
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp"
+        }
+    }
+    
     config_args = {
         "mpnn_type": "GIN",
         "input_dim": 1,
@@ -115,14 +126,7 @@ def pytest_model_creation_with_enhancement():
         "global_attn_type": "",
         "global_attn_heads": 1,
         "output_type": ["node"],
-        "output_heads": {
-            "node": {
-                "num_sharedlayers": 1,
-                "dim_sharedlayers": 16,
-                "num_headlayers": 1,
-                "dim_headlayers": [1],
-            }
-        },
+        "output_heads": update_multibranch_heads(output_heads),
         "activation_function": "relu",
         "loss_function_type": "mse",
         "task_weights": [1.0],
@@ -143,8 +147,19 @@ def pytest_model_creation_with_enhancement():
 def pytest_forward_pass():
     """Test the enhanced forward pass with molecular data."""
     from hydragnn.models.create import create_model
+    from hydragnn.utils.model.model import update_multibranch_heads
 
     # Create model with interatomic potential enhancement
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp"
+        }
+    }
+    
     config_args = {
         "mpnn_type": "GIN",
         "input_dim": 1,
@@ -155,14 +170,7 @@ def pytest_forward_pass():
         "global_attn_type": "",
         "global_attn_heads": 1,
         "output_type": ["node"],
-        "output_heads": {
-            "node": {
-                "num_sharedlayers": 1,
-                "dim_sharedlayers": 16,
-                "num_headlayers": 1,
-                "dim_headlayers": [1],
-            }
-        },
+        "output_heads": update_multibranch_heads(output_heads),
         "activation_function": "relu",
         "loss_function_type": "mse",
         "task_weights": [1.0],
@@ -192,8 +200,19 @@ def pytest_forward_pass():
 def pytest_energy_force_consistency():
     """Test that forces can be computed from energy gradients."""
     from hydragnn.models.create import create_model
+    from hydragnn.utils.model.model import update_multibranch_heads
 
     # Create model for energy prediction
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp"
+        }
+    }
+    
     config_args = {
         "mpnn_type": "GIN",
         "input_dim": 1,
@@ -204,14 +223,7 @@ def pytest_energy_force_consistency():
         "global_attn_type": "",
         "global_attn_heads": 1,
         "output_type": ["node"],
-        "output_heads": {
-            "node": {
-                "num_sharedlayers": 1,
-                "dim_sharedlayers": 16,
-                "num_headlayers": 1,
-                "dim_headlayers": [1],
-            }
-        },
+        "output_heads": update_multibranch_heads(output_heads),
         "activation_function": "relu",
         "loss_function_type": "mse",
         "task_weights": [1.0],
