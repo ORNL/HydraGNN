@@ -518,21 +518,23 @@ def create_model(
     if enable_interatomic_potential:
         # Create a new class that inherits from both InteratomicPotentialMixin and the original model class
         original_class = model.__class__
-        
+
         class EnhancedModel(InteratomicPotentialMixin, original_class):
             def __init__(self, original_model):
                 # Copy all attributes from the original model
                 for attr_name in dir(original_model):
-                    if not attr_name.startswith('_') and not callable(getattr(original_model, attr_name)):
+                    if not attr_name.startswith("_") and not callable(
+                        getattr(original_model, attr_name)
+                    ):
                         setattr(self, attr_name, getattr(original_model, attr_name))
                 # Copy private attributes that are important
-                for attr_name in ['_modules', '_parameters', '_buffers']:
+                for attr_name in ["_modules", "_parameters", "_buffers"]:
                     if hasattr(original_model, attr_name):
                         setattr(self, attr_name, getattr(original_model, attr_name))
                 # Initialize interatomic potential layers
-                if hasattr(self, 'hidden_dim'):
+                if hasattr(self, "hidden_dim"):
                     self._init_interatomic_layers()
-        
+
         enhanced_model = EnhancedModel(model)
         model = enhanced_model
 

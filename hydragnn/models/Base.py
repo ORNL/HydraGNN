@@ -579,8 +579,6 @@ class Base(Module):
         elif self.ilossweights_hyperp == 1:
             return self.loss_hpweighted(pred, value, head_index, var=var)
 
-
-
     def loss_nll(self, pred, value, head_index, var=None):
         # negative log likelihood loss
         # uncertainty to weigh losses in https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf

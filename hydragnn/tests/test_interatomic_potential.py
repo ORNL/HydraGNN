@@ -20,29 +20,30 @@ from torch_geometric.data import Data
 import os
 import pytest
 
+
 def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     """
     Create mock molecular data for testing interatomic potential functionality.
-    
+
     Args:
         num_atoms: Number of atoms per molecule
         num_graphs: Number of molecules in the batch
-    
+
     Returns:
         PyTorch Geometric Data object with molecular structure
     """
     # Create atomic positions (coordinates)
     pos = torch.randn(num_atoms * num_graphs, 3) * 5.0  # Random positions
-    
+
     # Create node features (atomic numbers)
     x = torch.randint(1, 10, (num_atoms * num_graphs, 1)).float()  # Atomic numbers 1-9
-    
+
     # Create edge connectivity (simple nearest neighbor graph)
     edge_index_list = []
     for graph_idx in range(num_graphs):
         start_idx = graph_idx * num_atoms
         end_idx = (graph_idx + 1) * num_atoms
-        
+
         # Connect each atom to its nearest neighbors
         for i in range(start_idx, end_idx):
             for j in range(start_idx, end_idx):
@@ -51,26 +52,26 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
                     dist = torch.norm(pos[i] - pos[j])
                     if dist < 4.0:  # Cutoff distance
                         edge_index_list.extend([[i, j]])
-    
+
     if edge_index_list:
         edge_index = torch.tensor(edge_index_list).t().contiguous()
     else:
         # Fallback: create minimal connectivity
         edge_index = torch.tensor([[0, 1], [1, 0]]).t().contiguous()
-    
+
     # Create batch assignment
     batch = torch.repeat_interleave(torch.arange(num_graphs), num_atoms)
-    
+
     # Create mock energy and forces for training
     energy = torch.randn(num_graphs, 1)  # Energy per molecule
     forces = torch.randn(num_atoms * num_graphs, 3)  # Forces per atom
-    
+
     # Create positional encodings (random for testing)
     pe = torch.randn(num_atoms * num_graphs, 6)  # 6D positional encoding
-    
+
     # Set positions to require gradients for force computation
     pos.requires_grad_(True)
-    
+
     data = Data(
         x=x,
         pos=pos,
@@ -79,145 +80,172 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
         energy=energy,
         forces=forces,
         pe=pe,
-        edge_shifts=torch.zeros(edge_index.size(1), 3)  # No periodic boundary conditions
+        edge_shifts=torch.zeros(
+            edge_index.size(1), 3
+        ),  # No periodic boundary conditions
     )
-    
+
     return data
+
 
 @pytest.mark.mpi_skip()
 def pytest_interatomic_potential_creation():
     """Test that models can be created with interatomic potential enhancements."""
-    from hydragnn.models.InteratomicPotential import InteratomicPotentialMixin, InteratomicPotentialBase
+    from hydragnn.models.InteratomicPotential import (
+        InteratomicPotentialMixin,
+        InteratomicPotentialBase,
+    )
+
     # If we reach this point, the import was successful
+
 
 @pytest.mark.mpi_skip()
 def pytest_model_creation_with_enhancement():
     """Test creating a model with interatomic potential enhancement."""
     from hydragnn.models.create import create_model
-    
+
     # Basic model configuration
     config_args = {
-        'mpnn_type': 'GIN',
-        'input_dim': 1,
-        'hidden_dim': 32,
-        'output_dim': [1],
-        'pe_dim': 6,
-        'global_attn_engine': '',
-        'global_attn_type': '',
-        'global_attn_heads': 1,
-        'output_type': ['node'],
-        'output_heads': {'node': {'num_sharedlayers': 1, 'dim_sharedlayers': 16, 'num_headlayers': 1, 'dim_headlayers': [1]}},
-        'activation_function': 'relu',
-        'loss_function_type': 'mse',
-        'task_weights': [1.0],
-        'num_conv_layers': 2,
-        'enable_interatomic_potential': True,
-        'use_gpu': False
+        "mpnn_type": "GIN",
+        "input_dim": 1,
+        "hidden_dim": 32,
+        "output_dim": [1],
+        "pe_dim": 6,
+        "global_attn_engine": "",
+        "global_attn_type": "",
+        "global_attn_heads": 1,
+        "output_type": ["node"],
+        "output_heads": {
+            "node": {
+                "num_sharedlayers": 1,
+                "dim_sharedlayers": 16,
+                "num_headlayers": 1,
+                "dim_headlayers": [1],
+            }
+        },
+        "activation_function": "relu",
+        "loss_function_type": "mse",
+        "task_weights": [1.0],
+        "num_conv_layers": 2,
+        "enable_interatomic_potential": True,
+        "use_gpu": False,
     }
-    
+
     model = create_model(**config_args)
-    
+
     # Check if the model has interatomic potential methods
-    assert hasattr(model, '_compute_enhanced_geometric_features')
-    assert hasattr(model, '_compute_three_body_interactions')
-    assert hasattr(model, '_apply_atomic_environment_descriptors')
+    assert hasattr(model, "_compute_enhanced_geometric_features")
+    assert hasattr(model, "_compute_three_body_interactions")
+    assert hasattr(model, "_apply_atomic_environment_descriptors")
+
 
 @pytest.mark.mpi_skip()
 def pytest_forward_pass():
     """Test the enhanced forward pass with molecular data."""
     from hydragnn.models.create import create_model
-    
+
     # Create model with interatomic potential enhancement
     config_args = {
-        'mpnn_type': 'GIN',
-        'input_dim': 1,
-        'hidden_dim': 32,
-        'output_dim': [1],
-        'pe_dim': 6,
-        'global_attn_engine': '',
-        'global_attn_type': '',
-        'global_attn_heads': 1,
-        'output_type': ['node'],
-        'output_heads': {'node': {'num_sharedlayers': 1, 'dim_sharedlayers': 16, 'num_headlayers': 1, 'dim_headlayers': [1]}},
-        'activation_function': 'relu',
-        'loss_function_type': 'mse',
-        'task_weights': [1.0],
-        'num_conv_layers': 2,
-        'enable_interatomic_potential': True,
-        'use_gpu': False
+        "mpnn_type": "GIN",
+        "input_dim": 1,
+        "hidden_dim": 32,
+        "output_dim": [1],
+        "pe_dim": 6,
+        "global_attn_engine": "",
+        "global_attn_type": "",
+        "global_attn_heads": 1,
+        "output_type": ["node"],
+        "output_heads": {
+            "node": {
+                "num_sharedlayers": 1,
+                "dim_sharedlayers": 16,
+                "num_headlayers": 1,
+                "dim_headlayers": [1],
+            }
+        },
+        "activation_function": "relu",
+        "loss_function_type": "mse",
+        "task_weights": [1.0],
+        "num_conv_layers": 2,
+        "enable_interatomic_potential": True,
+        "use_gpu": False,
     }
-    
+
     model = create_model(**config_args)
     model.eval()
-    
+
     # Create mock molecular data
     data = create_mock_molecular_data(num_atoms=5, num_graphs=2)
-    
+
     # Test forward pass
     with torch.no_grad():
         output = model(data)
-    
+
     # Basic assertions
     assert output is not None
     if isinstance(output, (list, tuple)):
         assert len(output) > 0
         assert output[0].shape[0] > 0  # Should have some outputs
 
+
 @pytest.mark.mpi_skip()
 def pytest_energy_force_consistency():
     """Test that forces can be computed from energy gradients."""
     from hydragnn.models.create import create_model
-    
+
     # Create model for energy prediction
     config_args = {
-        'mpnn_type': 'GIN',
-        'input_dim': 1,
-        'hidden_dim': 32,
-        'output_dim': [1],
-        'pe_dim': 6,
-        'global_attn_engine': '',
-        'global_attn_type': '',
-        'global_attn_heads': 1,
-        'output_type': ['node'],
-        'output_heads': {'node': {'num_sharedlayers': 1, 'dim_sharedlayers': 16, 'num_headlayers': 1, 'dim_headlayers': [1]}},
-        'activation_function': 'relu',
-        'loss_function_type': 'mse',
-        'task_weights': [1.0],
-        'num_conv_layers': 2,
-        'enable_interatomic_potential': True,
-        'use_gpu': False
+        "mpnn_type": "GIN",
+        "input_dim": 1,
+        "hidden_dim": 32,
+        "output_dim": [1],
+        "pe_dim": 6,
+        "global_attn_engine": "",
+        "global_attn_type": "",
+        "global_attn_heads": 1,
+        "output_type": ["node"],
+        "output_heads": {
+            "node": {
+                "num_sharedlayers": 1,
+                "dim_sharedlayers": 16,
+                "num_headlayers": 1,
+                "dim_headlayers": [1],
+            }
+        },
+        "activation_function": "relu",
+        "loss_function_type": "mse",
+        "task_weights": [1.0],
+        "num_conv_layers": 2,
+        "enable_interatomic_potential": True,
+        "use_gpu": False,
     }
-    
+
     model = create_model(**config_args)
     model.train()  # Need gradients
-    
+
     # Create mock molecular data
     data = create_mock_molecular_data(num_atoms=5, num_graphs=1)
-    
+
     # Ensure positions require gradients
     data.pos.requires_grad_(True)
-    
+
     # Forward pass to get energy
     energy_output = model(data)
-    
+
     if isinstance(energy_output, (list, tuple)):
         energy = energy_output[0].sum()  # Sum over batch
     else:
         energy = energy_output.sum()
-    
+
     # Compute forces as negative gradients of energy w.r.t. positions
     forces = torch.autograd.grad(
-        energy, 
-        data.pos, 
-        create_graph=True, 
-        retain_graph=True
+        energy, data.pos, create_graph=True, retain_graph=True
     )[0]
     forces = -forces  # Force = -gradient of energy
-    
+
     # Basic assertions
     assert energy is not None
     assert forces is not None
     assert forces.shape == data.pos.shape
     assert not torch.isnan(energy).any()
     assert not torch.isnan(forces).any()
-

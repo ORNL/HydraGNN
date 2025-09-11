@@ -160,7 +160,9 @@ def _(config: dict, use_deepspeed=False):
     )
 
     # Get compute_grad_energy value which is now automatically set based on enable_interatomic_potential in config parsing
-    compute_grad_energy = config["NeuralNetwork"]["Training"].get("compute_grad_energy", False)
+    compute_grad_energy = config["NeuralNetwork"]["Training"].get(
+        "compute_grad_energy", False
+    )
 
     train_validate_test(
         model,

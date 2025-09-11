@@ -194,7 +194,10 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
-        "--enable_interatomic_potential", type=bool, help="enable_interatomic_potential", default=False
+        "--enable_interatomic_potential",
+        type=bool,
+        help="enable_interatomic_potential",
+        default=False,
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -247,7 +250,9 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
     if args.enable_interatomic_potential is not None:
-        config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = args.enable_interatomic_potential
+        config["NeuralNetwork"]["Architecture"][
+            "enable_interatomic_potential"
+        ] = args.enable_interatomic_potential
 
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
