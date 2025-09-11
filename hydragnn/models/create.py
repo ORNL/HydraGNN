@@ -531,8 +531,27 @@ def create_model(
                 for attr_name in ["_modules", "_parameters", "_buffers"]:
                     if hasattr(original_model, attr_name):
                         setattr(self, attr_name, getattr(original_model, attr_name))
-                # Initialize interatomic potential layers
-                if hasattr(self, "hidden_dim"):
+                
+                # Initialize InteratomicPotentialMixin attributes manually
+                # Store default values for radius and max_neighbours if not already set
+                if not hasattr(self, "radius"):
+                    self.radius = 6.0  # Default radius for neighbor finding
+                if not hasattr(self, "max_neighbours"):
+                    self.max_neighbours = 50  # Default max neighbors per atom
+
+                # Enhanced features are disabled by default to avoid interference
+                # with native message passing architectures (MACE, DimeNet++, etc.)
+                self.use_enhanced_geometry = False
+                self.use_three_body_interactions = False
+                self.use_atomic_environment_descriptors = False
+
+                # Only initialize enhanced feature layers if explicitly requested
+                # (they are disabled by default)
+                if (
+                    self.use_enhanced_geometry
+                    or self.use_three_body_interactions
+                    or self.use_atomic_environment_descriptors
+                ) and hasattr(self, "hidden_dim"):
                     self._init_interatomic_layers()
 
         enhanced_model = EnhancedModel(model)

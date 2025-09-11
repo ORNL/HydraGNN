@@ -36,6 +36,7 @@
       "num_spherical": 2,
       "hidden_dim": 32,
       "num_conv_layers": 4,
+      "enable_interatomic_potential": true,
       "output_heads": {
         "node": {
           "num_headlayers": 2,

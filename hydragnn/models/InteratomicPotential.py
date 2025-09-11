@@ -47,12 +47,12 @@ class InteratomicPotentialMixin:
 
         # Enhanced features are disabled by default to avoid interference
         # with native message passing architectures (MACE, DimeNet++, etc.)
-        self.use_enhanced_geometry = getattr(kwargs, "use_enhanced_geometry", False)
-        self.use_three_body_interactions = getattr(
-            kwargs, "use_three_body_interactions", False
+        self.use_enhanced_geometry = kwargs.get("use_enhanced_geometry", False)
+        self.use_three_body_interactions = kwargs.get(
+            "use_three_body_interactions", False
         )
-        self.use_atomic_environment_descriptors = getattr(
-            kwargs, "use_atomic_environment_descriptors", False
+        self.use_atomic_environment_descriptors = kwargs.get(
+            "use_atomic_environment_descriptors", False
         )
 
         # Only initialize enhanced feature layers if explicitly requested
