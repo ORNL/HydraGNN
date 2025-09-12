@@ -522,11 +522,11 @@ def create_model(
             def __init__(self, original_model):
                 super().__init__()
                 self.model = original_model
-                
+
                 # Add interatomic potential attributes
-                self.radius = getattr(original_model, 'radius', 6.0)
-                self.max_neighbours = getattr(original_model, 'max_neighbours', 50)
-                
+                self.radius = getattr(original_model, "radius", 6.0)
+                self.max_neighbours = getattr(original_model, "max_neighbours", 50)
+
                 # Enhanced features are disabled by default to avoid interference
                 # with native message passing architectures (MACE, DimeNet++, etc.)
                 self.use_enhanced_geometry = False
@@ -539,26 +539,32 @@ def create_model(
                 try:
                     return getattr(self.model, name)
                 except AttributeError:
-                    raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+                    raise AttributeError(
+                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
+                    )
 
             def forward(self, data):
                 """Enhanced forward method with interatomic potential capabilities."""
                 # Import here to avoid circular imports
                 from torch_geometric.nn import radius_graph
-                
+
                 # For MLIPs, we need to reconstruct the graph from atomic positions
                 # to ensure proper gradient flow for force calculations
-                if hasattr(data, 'pos') and hasattr(data, 'batch'):
+                if hasattr(data, "pos") and hasattr(data, "batch"):
                     # Dynamically construct the graph based on atomic positions and cutoff radius
-                    if not hasattr(data, 'edge_index') or data.edge_index is None or data.edge_index.size(1) == 0:
+                    if (
+                        not hasattr(data, "edge_index")
+                        or data.edge_index is None
+                        or data.edge_index.size(1) == 0
+                    ):
                         edge_index = radius_graph(
-                            data.pos, 
-                            r=self.radius, 
-                            batch=data.batch, 
-                            max_num_neighbors=self.max_neighbours
+                            data.pos,
+                            r=self.radius,
+                            batch=data.batch,
+                            max_num_neighbors=self.max_neighbours,
                         )
                         data.edge_index = edge_index
-                
+
                 # Use the original model's forward method
                 return self.model.forward(data)
 
