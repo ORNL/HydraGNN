@@ -116,8 +116,9 @@ def pytest_model_creation_with_enhancement():
         }
     }
 
+    # The model instantiated here must use data.pos in the message passing to make sure that all the intermediate variable used to compute the energy depend on data.pos
     config_args = {
-        "mpnn_type": "GIN",
+        "mpnn_type": "EGNN",
         "input_dim": 1,
         "hidden_dim": 32,
         "output_dim": [1],
@@ -161,8 +162,9 @@ def pytest_forward_pass():
         }
     }
 
+    # The model instantiated here must use data.pos in the message passing to make sure that all the intermediate variable used to compute the energy depend on data.pos
     config_args = {
-        "mpnn_type": "GIN",
+        "mpnn_type": "EGNN",
         "input_dim": 1,
         "hidden_dim": 32,
         "output_dim": [1],
@@ -215,8 +217,9 @@ def pytest_energy_force_consistency():
         }
     }
 
+    # The model instantiated here must use data.pos in the message passing to make sure that all the intermediate variable used to compute the energy depend on data.pos
     config_args = {
-        "mpnn_type": "GIN",
+        "mpnn_type": "EGNN",
         "input_dim": 1,
         "hidden_dim": 32,
         "output_dim": [1],
