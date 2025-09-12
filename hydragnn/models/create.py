@@ -27,6 +27,7 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+
 # InteratomicPotential functionality is now implemented via wrapper composition
 
 from hydragnn.utils.distributed import get_device
