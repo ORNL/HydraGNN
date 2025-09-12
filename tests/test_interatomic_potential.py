@@ -232,6 +232,12 @@ def pytest_energy_force_consistency():
         "use_gpu": False,
     }
 
+    # Debug the output_heads structure
+    print(f"Original output_heads: {output_heads}")
+    updated_heads = update_multibranch_heads(output_heads)
+    print(f"Updated output_heads: {updated_heads}")
+    config_args["output_heads"] = updated_heads
+
     model = create_model(**config_args)
     model.train()  # Need gradients
 

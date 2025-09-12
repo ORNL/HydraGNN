@@ -521,19 +521,28 @@ def create_model(
 
         class EnhancedModel(InteratomicPotentialMixin, original_class):
             def __init__(self, original_model):
-                # Copy all attributes from the original model
-                for attr_name in dir(original_model):
-                    if not attr_name.startswith("_") and not callable(
-                        getattr(original_model, attr_name)
-                    ):
-                        setattr(self, attr_name, getattr(original_model, attr_name))
-                # Copy private attributes that are important
+                # Don't call parent __init__ - we'll copy everything manually
+                
+                # Copy all modules, parameters and buffers first
                 for attr_name in ["_modules", "_parameters", "_buffers"]:
                     if hasattr(original_model, attr_name):
                         setattr(self, attr_name, getattr(original_model, attr_name))
+                
+                # Copy all public attributes
+                for attr_name in dir(original_model):
+                    if (not attr_name.startswith("_") and 
+                        not callable(getattr(original_model, attr_name)) and
+                        not hasattr(self, attr_name)):
+                        setattr(self, attr_name, getattr(original_model, attr_name))
+                        
+                # Ensure critical configuration attributes are properly set
+                critical_attrs = ["config_heads", "head_type", "output_type", "output_heads",
+                                "hidden_dim", "activation_function", "num_branches", "head_dims", "heads_NN"]
+                for attr_name in critical_attrs:
+                    if hasattr(original_model, attr_name):
+                        setattr(self, attr_name, getattr(original_model, attr_name))
 
-                # Initialize InteratomicPotentialMixin attributes manually
-                # Store default values for radius and max_neighbours if not already set
+                # Initialize InteratomicPotentialMixin attributes manually without calling __init__
                 if not hasattr(self, "radius"):
                     self.radius = 6.0  # Default radius for neighbor finding
                 if not hasattr(self, "max_neighbours"):
