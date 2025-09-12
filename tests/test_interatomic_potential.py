@@ -131,6 +131,7 @@ def pytest_model_creation_with_enhancement():
         "loss_function_type": "mse",
         "task_weights": [1.0],
         "num_conv_layers": 2,
+        "num_nodes": 10,
         "enable_interatomic_potential": True,
         "use_gpu": False,
     }
@@ -175,6 +176,7 @@ def pytest_forward_pass():
         "loss_function_type": "mse",
         "task_weights": [1.0],
         "num_conv_layers": 2,
+        "num_nodes": 10,
         "enable_interatomic_potential": True,
         "use_gpu": False,
     }
@@ -228,6 +230,7 @@ def pytest_energy_force_consistency():
         "loss_function_type": "mse",
         "task_weights": [1.0],
         "num_conv_layers": 2,
+        "num_nodes": 10,
         "enable_interatomic_potential": True,
         "use_gpu": False,
     }
