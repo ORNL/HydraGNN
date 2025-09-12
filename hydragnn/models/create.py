@@ -520,15 +520,14 @@ def create_model(
         original_class = model.__class__
 
         class EnhancedModel(InteratomicPotentialMixin, original_class):
-            def __init__(self, original_model, original_config_heads):
+            def __init__(self, original_model):
                 # Don't call parent __init__ methods - just copy the fully initialized model
 
                 # Copy all state from the original model
                 self.__dict__.update(original_model.__dict__)
 
-                # Ensure config_heads is set correctly for any future operations
-                # that might depend on it
-                self.config_heads = original_config_heads
+                # config_heads is already correctly set from the original model
+                # Don't override it as it has the properly transformed structure
 
                 # Initialize InteratomicPotentialMixin attributes manually without calling __init__
                 if not hasattr(self, "radius"):
@@ -551,7 +550,7 @@ def create_model(
                 ) and hasattr(self, "hidden_dim"):
                     self._init_interatomic_layers()
 
-        enhanced_model = EnhancedModel(model, output_heads)
+        enhanced_model = EnhancedModel(model)
         model = enhanced_model
 
     if conv_checkpointing:
