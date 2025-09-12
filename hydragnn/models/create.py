@@ -30,6 +30,14 @@ from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
 
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
+)
+
 # InteratomicPotential functionality is now implemented via wrapper composition
 
 from hydragnn.utils.distributed import get_device
@@ -525,23 +533,18 @@ def create_model(
             def __init__(self, original_model):
                 super().__init__()
                 self.model = original_model
-
-                # Interatomic potential attributes (defaults if missing)
                 self.radius = getattr(original_model, "radius", 6.0)
                 self.max_neighbours = getattr(original_model, "max_neighbours", 50)
 
-                # Enhanced features off by default
                 self.use_enhanced_geometry = False
                 self.use_three_body_interactions = False
                 self.use_atomic_environment_descriptors = False
 
             def __getattr__(self, name):
-                # Keep nn.Module’s special handling first
                 try:
                     return super().__getattr__(name)
                 except AttributeError:
                     pass
-                # Then delegate to the wrapped model
                 try:
                     return getattr(self.model, name)
                 except AttributeError:
@@ -549,33 +552,157 @@ def create_model(
                         f"'{self.__class__.__name__}' object has no attribute '{name}'"
                     )
 
-            def _compute_enhanced_geometric_features(self, data, conv_args):
-                return conv_args
+            # ---------- helpers ----------
+            @torch.no_grad()
+            def _radius_graph_nonpbc(self, pos, batch):
+                # Prefer PyG version; fallback to torch_cluster.
+                try:
+                    from torch_geometric.nn import radius_graph as pyg_radius_graph
 
-            def _compute_three_body_interactions(self, node_features, data, conv_args):
-                return node_features
+                    edge_index = pyg_radius_graph(
+                        x=pos,
+                        r=float(self.radius),
+                        batch=batch,
+                        loop=False,
+                        max_num_neighbors=int(self.max_neighbours),
+                    )
+                except Exception:
+                    from torch_cluster import radius_graph as tc_radius_graph
 
-            def _apply_atomic_environment_descriptors(self, node_features, conv_args):
-                return node_features
+                    edge_index = tc_radius_graph(
+                        x=pos,
+                        r=float(self.radius),
+                        batch=batch,
+                        loop=False,
+                        max_num_neighbors=int(self.max_neighbours),
+                    )
+                edge_shifts = pos.new_zeros((edge_index.size(1), 3))
+                return edge_index, edge_shifts
 
+            @torch.no_grad()
+            def _radius_graph_pbc(self, pos, batch, cell, pbc):
+                try:
+                    from torch_geometric.nn.models.schnet import (
+                        radius_graph as schnet_radius_graph,
+                    )
+
+                    edge_index, edge_shifts = schnet_radius_graph(
+                        pos=pos,
+                        r=float(self.radius),
+                        batch=batch,
+                        cell=cell,
+                        pbc=pbc,
+                        max_num_neighbors=int(self.max_neighbours),
+                    )
+                    return edge_index, edge_shifts
+                except Exception:
+                    # Graceful degradation: treat as non-PBC
+                    return self._radius_graph_nonpbc(pos, batch)
+
+            @torch.no_grad()
+            def _build_mixed_radius_graph(self, data):
+                """
+                Build edges for a batch where some graphs use PBC and others do not.
+                Expects:
+                  data.pos (N,3), data.batch (N,), and optionally data.cell (G,3,3), data.pbc (G,3).
+                """
+                N = data.pos.size(0)
+                if not hasattr(data, "batch") or data.batch is None:
+                    data.batch = data.pos.new_zeros(N, dtype=torch.long)
+
+                batch = data.batch
+                num_graphs = int(batch.max().item()) + 1 if N > 0 else 0
+
+                has_cell = (
+                    hasattr(data, "cell")
+                    and data.cell is not None
+                    and data.cell.size(0) == num_graphs
+                )
+                has_pbc = (
+                    hasattr(data, "pbc")
+                    and data.pbc is not None
+                    and data.pbc.size(0) == num_graphs
+                )
+
+                if has_cell and has_pbc:
+                    # A graph uses PBC if any axis is periodic
+                    graph_uses_pbc = data.pbc.any(dim=1)  # (G,)
+                else:
+                    graph_uses_pbc = torch.zeros(
+                        num_graphs, dtype=torch.bool, device=data.pos.device
+                    )
+
+                # Node-level masks
+                node_is_pbc = graph_uses_pbc[batch]  # (N,)
+                idx_pbc = torch.nonzero(node_is_pbc, as_tuple=False).squeeze(1)
+                idx_npbc = torch.nonzero(~node_is_pbc, as_tuple=False).squeeze(1)
+
+                # Collect outputs
+                all_edge_index = []
+                all_edge_shifts = []
+
+                # --- PBC subset ---
+                if idx_pbc.numel() > 0:
+                    pos_p = data.pos[idx_pbc]
+                    old_batch_p = batch[idx_pbc]
+                    # Remap graph ids in this subset to 0..(Gp-1)
+                    uniq_g_p, inv_g_p = torch.unique(old_batch_p, return_inverse=True)
+                    batch_p = inv_g_p  # (Np,)
+                    # Gather per-graph cell/pbc for this subset in remapped order
+                    if has_cell and has_pbc:
+                        cell_p = data.cell[uniq_g_p]  # (Gp,3,3)
+                        pbc_p = data.pbc[uniq_g_p]  # (Gp,3)
+                    else:
+                        # Shouldn't happen because idx_pbc would be empty, but keep safe defaults
+                        cell_p = None
+                        pbc_p = None
+
+                    eij_p, shifts_p = self._radius_graph_pbc(
+                        pos_p, batch_p, cell_p, pbc_p
+                    )
+                    # Map subset node indices back to original ids
+                    eij_p = idx_pbc[eij_p]
+                    all_edge_index.append(eij_p)
+                    all_edge_shifts.append(shifts_p)
+
+                # --- non-PBC subset ---
+                if idx_npbc.numel() > 0:
+                    pos_n = data.pos[idx_npbc]
+                    old_batch_n = batch[idx_npbc]
+                    uniq_g_n, inv_g_n = torch.unique(old_batch_n, return_inverse=True)
+                    batch_n = inv_g_n
+
+                    eij_n, shifts_n = self._radius_graph_nonpbc(pos_n, batch_n)
+                    eij_n = idx_npbc[eij_n]
+                    all_edge_index.append(eij_n)
+                    all_edge_shifts.append(shifts_n)
+
+                if len(all_edge_index) == 0:
+                    # No edges (empty batch)
+                    data.edge_index = torch.empty(
+                        (2, 0), dtype=torch.long, device=data.pos.device
+                    )
+                    data.edge_shifts = data.pos.new_zeros((0, 3))
+                    return data
+
+                # Concatenate and set
+                data.edge_index = torch.cat(all_edge_index, dim=1)
+                data.edge_shifts = torch.cat(all_edge_shifts, dim=0)
+                return data
+
+            # ---------- forward ----------
             def forward(self, data):
-                from torch_geometric.nn import radius_graph
+                # Ensure batch exists
+                if not hasattr(data, "batch") or data.batch is None:
+                    data.batch = data.pos.new_zeros(data.pos.size(0), dtype=torch.long)
 
-                # (Optional) reconstruct graph for MLIP force pipelines
-                if hasattr(data, "pos") and hasattr(data, "batch"):
-                    if (
-                        not hasattr(data, "edge_index")
-                        or data.edge_index is None
-                        or data.edge_index.size(1) == 0
-                    ):
-                        data.edge_index = radius_graph(
-                            data.pos,
-                            r=self.radius,
-                            batch=data.batch,
-                            max_num_neighbors=self.max_neighbours,
-                        )
+                # Mixed-mode aware edge build
+                data = self._build_mixed_radius_graph(data)
 
-                # Use call syntax to preserve hooks/jit/etc.
+                # Safety: ensure edge_shifts exists with correct shape
+                if not hasattr(data, "edge_shifts") or data.edge_shifts is None:
+                    data.edge_shifts = data.pos.new_zeros((data.edge_index.size(1), 3))
+
                 return self.model(data)
 
             def energy_force_loss(self, pred, data):
