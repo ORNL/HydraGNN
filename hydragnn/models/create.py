@@ -16,6 +16,7 @@ from typing import List, Union
 
 import torch_scatter
 
+from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.PNAPlusStack import PNAPlusStack
@@ -29,14 +30,6 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
-
-from hydragnn.preprocess.graph_samples_checks_and_updates import (
-    RadiusGraph,
-    RadiusGraphPBC,
-    PBCDistance,
-    PBCLocalCartesian,
-    pbc_as_tensor,
-)
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
