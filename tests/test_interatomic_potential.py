@@ -89,17 +89,6 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
 
 
 @pytest.mark.mpi_skip()
-def pytest_interatomic_potential_creation():
-    """Test that models can be created with interatomic potential enhancements."""
-    from hydragnn.models.InteratomicPotential import (
-        InteratomicPotentialMixin,
-        InteratomicPotentialBase,
-    )
-
-    # If we reach this point, the import was successful
-
-
-@pytest.mark.mpi_skip()
 def pytest_model_creation_with_enhancement():
     """Test creating a model with interatomic potential enhancement."""
     from hydragnn.models.create import create_model
