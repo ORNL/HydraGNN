@@ -112,10 +112,10 @@ def pytest_model_creation_with_enhancement():
             "dim_sharedlayers": 16,
             "num_headlayers": 1,
             "dim_headlayers": [1],
-            "type": "mlp"
+            "type": "mlp",
         }
     }
-    
+
     config_args = {
         "mpnn_type": "GIN",
         "input_dim": 1,
@@ -156,10 +156,10 @@ def pytest_forward_pass():
             "dim_sharedlayers": 16,
             "num_headlayers": 1,
             "dim_headlayers": [1],
-            "type": "mlp"
+            "type": "mlp",
         }
     }
-    
+
     config_args = {
         "mpnn_type": "GIN",
         "input_dim": 1,
@@ -209,10 +209,10 @@ def pytest_energy_force_consistency():
             "dim_sharedlayers": 16,
             "num_headlayers": 1,
             "dim_headlayers": [1],
-            "type": "mlp"
+            "type": "mlp",
         }
     }
-    
+
     config_args = {
         "mpnn_type": "GIN",
         "input_dim": 1,

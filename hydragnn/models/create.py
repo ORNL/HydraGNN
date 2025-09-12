@@ -531,7 +531,7 @@ def create_model(
                 for attr_name in ["_modules", "_parameters", "_buffers"]:
                     if hasattr(original_model, attr_name):
                         setattr(self, attr_name, getattr(original_model, attr_name))
-                
+
                 # Initialize InteratomicPotentialMixin attributes manually
                 # Store default values for radius and max_neighbours if not already set
                 if not hasattr(self, "radius"):
