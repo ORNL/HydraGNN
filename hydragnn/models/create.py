@@ -14,6 +14,9 @@ import torch
 from torch_geometric.data import Data
 from typing import List, Union
 
+import torch_scatter
+
+from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.PNAPlusStack import PNAPlusStack
@@ -27,6 +30,8 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+
+# InteratomicPotential functionality is now implemented via wrapper composition
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -77,6 +82,7 @@ def create_model_config(
         config["Architecture"]["node_max_ell"],
         config["Architecture"]["avg_num_neighbors"],
         config["Training"]["conv_checkpointing"],
+        config["Architecture"].get("enable_interatomic_potential", False),
         verbosity,
         use_gpu,
     )
@@ -123,6 +129,7 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
+    enable_interatomic_potential: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -510,6 +517,259 @@ def create_model(
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
+
+    # Apply interatomic potential enhancement if requested
+    if enable_interatomic_potential:
+        # Instead of complex inheritance, use composition with delegation
+        # This avoids MRO issues and __init__ complications
+        class EnhancedModelWrapper(torch.nn.Module):
+            def __init__(self, original_model):
+                super().__init__()
+                self.model = original_model
+                self.radius = getattr(original_model, "radius", 6.0)
+                self.max_neighbours = getattr(original_model, "max_neighbours", 50)
+
+                self.use_enhanced_geometry = False
+                self.use_three_body_interactions = False
+                self.use_atomic_environment_descriptors = False
+
+            def __getattr__(self, name):
+                try:
+                    return super().__getattr__(name)
+                except AttributeError:
+                    pass
+                try:
+                    return getattr(self.model, name)
+                except AttributeError:
+                    raise AttributeError(
+                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
+                    )
+
+            # ---------- helpers ----------
+            @torch.no_grad()
+            def _radius_graph_nonpbc(self, pos, batch):
+                # Prefer PyG version; fallback to torch_cluster.
+                try:
+                    from torch_geometric.nn import radius_graph as pyg_radius_graph
+
+                    edge_index = pyg_radius_graph(
+                        x=pos,
+                        r=float(self.radius),
+                        batch=batch,
+                        loop=False,
+                        max_num_neighbors=int(self.max_neighbours),
+                    )
+                except Exception:
+                    from torch_cluster import radius_graph as tc_radius_graph
+
+                    edge_index = tc_radius_graph(
+                        x=pos,
+                        r=float(self.radius),
+                        batch=batch,
+                        loop=False,
+                        max_num_neighbors=int(self.max_neighbours),
+                    )
+                edge_shifts = pos.new_zeros((edge_index.size(1), 3))
+                return edge_index, edge_shifts
+
+            @torch.no_grad()
+            def _radius_graph_pbc(self, pos, batch, cell, pbc):
+                try:
+                    from torch_geometric.nn.models.schnet import (
+                        radius_graph as schnet_radius_graph,
+                    )
+
+                    edge_index, edge_shifts = schnet_radius_graph(
+                        pos=pos,
+                        r=float(self.radius),
+                        batch=batch,
+                        cell=cell,
+                        pbc=pbc,
+                        max_num_neighbors=int(self.max_neighbours),
+                    )
+                    return edge_index, edge_shifts
+                except Exception:
+                    # Graceful degradation: treat as non-PBC
+                    return self._radius_graph_nonpbc(pos, batch)
+
+            @torch.no_grad()
+            def _build_mixed_radius_graph(self, data):
+                """
+                Build edges for a batch where some graphs use PBC and others do not.
+                Expects:
+                  data.pos (N,3), data.batch (N,), and optionally data.cell (G,3,3), data.pbc (G,3).
+                """
+                N = data.pos.size(0)
+                if not hasattr(data, "batch") or data.batch is None:
+                    data.batch = data.pos.new_zeros(N, dtype=torch.long)
+
+                batch = data.batch
+                num_graphs = int(batch.max().item()) + 1 if N > 0 else 0
+
+                has_cell = (
+                    hasattr(data, "cell")
+                    and data.cell is not None
+                    and data.cell.size(0) == num_graphs
+                )
+                has_pbc = (
+                    hasattr(data, "pbc")
+                    and data.pbc is not None
+                    and data.pbc.size(0) == num_graphs
+                )
+
+                if has_cell and has_pbc:
+                    # A graph uses PBC if any axis is periodic
+                    graph_uses_pbc = data.pbc.any(dim=1)  # (G,)
+                else:
+                    graph_uses_pbc = torch.zeros(
+                        num_graphs, dtype=torch.bool, device=data.pos.device
+                    )
+
+                # Node-level masks
+                node_is_pbc = graph_uses_pbc[batch]  # (N,)
+                idx_pbc = torch.nonzero(node_is_pbc, as_tuple=False).squeeze(1)
+                idx_npbc = torch.nonzero(~node_is_pbc, as_tuple=False).squeeze(1)
+
+                # Collect outputs
+                all_edge_index = []
+                all_edge_shifts = []
+
+                # --- PBC subset ---
+                if idx_pbc.numel() > 0:
+                    pos_p = data.pos[idx_pbc]
+                    old_batch_p = batch[idx_pbc]
+                    # Remap graph ids in this subset to 0..(Gp-1)
+                    uniq_g_p, inv_g_p = torch.unique(old_batch_p, return_inverse=True)
+                    batch_p = inv_g_p  # (Np,)
+                    # Gather per-graph cell/pbc for this subset in remapped order
+                    if has_cell and has_pbc:
+                        cell_p = data.cell[uniq_g_p]  # (Gp,3,3)
+                        pbc_p = data.pbc[uniq_g_p]  # (Gp,3)
+                    else:
+                        # Shouldn't happen because idx_pbc would be empty, but keep safe defaults
+                        cell_p = None
+                        pbc_p = None
+
+                    eij_p, shifts_p = self._radius_graph_pbc(
+                        pos_p, batch_p, cell_p, pbc_p
+                    )
+                    # Map subset node indices back to original ids
+                    eij_p = idx_pbc[eij_p]
+                    all_edge_index.append(eij_p)
+                    all_edge_shifts.append(shifts_p)
+
+                # --- non-PBC subset ---
+                if idx_npbc.numel() > 0:
+                    pos_n = data.pos[idx_npbc]
+                    old_batch_n = batch[idx_npbc]
+                    uniq_g_n, inv_g_n = torch.unique(old_batch_n, return_inverse=True)
+                    batch_n = inv_g_n
+
+                    eij_n, shifts_n = self._radius_graph_nonpbc(pos_n, batch_n)
+                    eij_n = idx_npbc[eij_n]
+                    all_edge_index.append(eij_n)
+                    all_edge_shifts.append(shifts_n)
+
+                if len(all_edge_index) == 0:
+                    # No edges (empty batch)
+                    data.edge_index = torch.empty(
+                        (2, 0), dtype=torch.long, device=data.pos.device
+                    )
+                    data.edge_shifts = data.pos.new_zeros((0, 3))
+                    return data
+
+                # Concatenate and set
+                data.edge_index = torch.cat(all_edge_index, dim=1)
+                data.edge_shifts = torch.cat(all_edge_shifts, dim=0)
+                return data
+
+            # ---------- forward ----------
+            def forward(self, data):
+                # Ensure batch exists
+                if not hasattr(data, "batch") or data.batch is None:
+                    data.batch = data.pos.new_zeros(data.pos.size(0), dtype=torch.long)
+
+                # Mixed-mode aware edge build
+                data = self._build_mixed_radius_graph(data)
+
+                # Safety: ensure edge_shifts exists with correct shape
+                if not hasattr(data, "edge_shifts") or data.edge_shifts is None:
+                    data.edge_shifts = data.pos.new_zeros((data.edge_index.size(1), 3))
+
+                return self.model(data)
+
+            def energy_force_loss(self, pred, data):
+                """
+                Compute energy and force loss for MLIP training.
+
+                This method is specific to interatomic potentials and computes:
+                1. Energy loss between predicted and true total energies
+                2. Force loss between predicted and true forces (via autograd on positions)
+
+                Forces are computed as negative gradients of total energy with respect to positions.
+                """
+                # Asserts
+                assert (
+                    data.pos is not None
+                    and data.energy is not None
+                    and data.forces is not None
+                ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
+                assert (
+                    data.pos.requires_grad
+                ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
+                assert (
+                    self.num_heads == 1 and self.head_type[0] == "node"
+                ), "Force predictions are only supported for models with one head that predict nodal energy. Check your num_heads and head_types."
+                # Initialize loss
+                tot_loss = 0
+                tasks_loss = []
+                # Energies
+                node_energy_pred = pred[0]
+                graph_energy_pred = (
+                    torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+                    .squeeze()
+                    .float()
+                )
+                graph_energy_true = data.energy.squeeze().float()
+                energy_loss_weight = self.loss_weights[
+                    0
+                ]  # There should only be one loss-weight for energy
+                tot_loss += (
+                    self.loss_function(graph_energy_pred, graph_energy_true)
+                    * energy_loss_weight
+                )
+                tasks_loss.append(
+                    self.loss_function(graph_energy_pred, graph_energy_true)
+                )
+                # Forces
+                forces_true = data.forces.float()
+                forces_pred = torch.autograd.grad(
+                    graph_energy_pred,
+                    data.pos,
+                    grad_outputs=torch.ones_like(graph_energy_pred),
+                    retain_graph=graph_energy_pred.requires_grad,
+                    # Retain graph only if needed (it will be needed during training, but not during validation/testing)
+                    create_graph=True,
+                )[0].float()
+                assert (
+                    forces_pred is not None
+                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                forces_pred = -forces_pred
+                force_loss_weight = (
+                    energy_loss_weight
+                    * torch.mean(torch.abs(graph_energy_true))
+                    / (torch.mean(torch.abs(forces_true)) + 1e-8)
+                )  # Weight force loss and graph energy equally
+                tot_loss += (
+                    self.loss_function(forces_pred, forces_true) * force_loss_weight
+                )  # Have force-weight be the complement to energy-weight
+                ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+                ##        so, we need to do loss calculation manually without calling the other functions.
+
+                return tot_loss, tasks_loss
+
+        enhanced_model = EnhancedModelWrapper(model)
+        model = enhanced_model
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()

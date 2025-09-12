@@ -24,6 +24,7 @@
             "global_attn_type": "",
             "hidden_dim": 50,
             "num_conv_layers": 3,
+            "enable_interatomic_potential": true,
             "output_heads": {
                 "node": [
                     {
@@ -70,8 +71,7 @@
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 1e-3
-            },
-            "compute_grad_energy": true
+            }
         }
     },
     "Visualization": {
