@@ -553,9 +553,9 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"][
-            "enable_interatomic_potential"
-        ],
+        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
+            "enable_interatomic_potential", False
+        ),
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
