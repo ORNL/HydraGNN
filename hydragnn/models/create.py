@@ -27,7 +27,7 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
-from hydragnn.models.InteratomicPotential import InteratomicPotentialMixin
+# InteratomicPotential functionality is now implemented via wrapper composition
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -516,41 +516,53 @@ def create_model(
 
     # Apply interatomic potential enhancement if requested
     if enable_interatomic_potential:
-        # Create a new class that inherits from both InteratomicPotentialMixin and the original model class
-        original_class = model.__class__
-
-        class EnhancedModel(InteratomicPotentialMixin, original_class):
+        # Instead of complex inheritance, use composition with delegation
+        # This avoids MRO issues and __init__ complications
+        class EnhancedModelWrapper(torch.nn.Module):
             def __init__(self, original_model):
-                # Don't call parent __init__ methods - just copy the fully initialized model
-
-                # Copy all state from the original model
-                self.__dict__.update(original_model.__dict__)
-
-                # config_heads is already correctly set from the original model
-                # Don't override it as it has the properly transformed structure
-
-                # Initialize InteratomicPotentialMixin attributes manually without calling __init__
-                if not hasattr(self, "radius"):
-                    self.radius = 6.0  # Default radius for neighbor finding
-                if not hasattr(self, "max_neighbours"):
-                    self.max_neighbours = 50  # Default max neighbors per atom
-
+                super().__init__()
+                self.model = original_model
+                
+                # Add interatomic potential attributes
+                self.radius = getattr(original_model, 'radius', 6.0)
+                self.max_neighbours = getattr(original_model, 'max_neighbours', 50)
+                
                 # Enhanced features are disabled by default to avoid interference
                 # with native message passing architectures (MACE, DimeNet++, etc.)
                 self.use_enhanced_geometry = False
                 self.use_three_body_interactions = False
                 self.use_atomic_environment_descriptors = False
 
-                # Only initialize enhanced feature layers if explicitly requested
-                # (they are disabled by default)
-                if (
-                    self.use_enhanced_geometry
-                    or self.use_three_body_interactions
-                    or self.use_atomic_environment_descriptors
-                ) and hasattr(self, "hidden_dim"):
-                    self._init_interatomic_layers()
+            def __getattr__(self, name):
+                # Delegate all attribute access to the wrapped model
+                # This makes the wrapper transparent for most operations
+                try:
+                    return getattr(self.model, name)
+                except AttributeError:
+                    raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
-        enhanced_model = EnhancedModel(model)
+            def forward(self, data):
+                """Enhanced forward method with interatomic potential capabilities."""
+                # Import here to avoid circular imports
+                from torch_geometric.nn import radius_graph
+                
+                # For MLIPs, we need to reconstruct the graph from atomic positions
+                # to ensure proper gradient flow for force calculations
+                if hasattr(data, 'pos') and hasattr(data, 'batch'):
+                    # Dynamically construct the graph based on atomic positions and cutoff radius
+                    if not hasattr(data, 'edge_index') or data.edge_index is None or data.edge_index.size(1) == 0:
+                        edge_index = radius_graph(
+                            data.pos, 
+                            r=self.radius, 
+                            batch=data.batch, 
+                            max_num_neighbors=self.max_neighbours
+                        )
+                        data.edge_index = edge_index
+                
+                # Use the original model's forward method
+                return self.model.forward(data)
+
+        enhanced_model = EnhancedModelWrapper(model)
         model = enhanced_model
 
     if conv_checkpointing:
