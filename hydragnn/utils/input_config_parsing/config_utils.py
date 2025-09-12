@@ -52,8 +52,6 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
 
-
-
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
     )
