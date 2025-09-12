@@ -521,17 +521,13 @@ def create_model(
 
         class EnhancedModel(InteratomicPotentialMixin, original_class):
             def __init__(self, original_model, original_config_heads):
-                # Copy all modules, parameters and buffers first
-                for attr_name in ["_modules", "_parameters", "_buffers"]:
-                    if hasattr(original_model, attr_name):
-                        setattr(self, attr_name, getattr(original_model, attr_name))
-                
-                # Copy all attributes from the original model
-                for attr_name, attr_value in original_model.__dict__.items():
-                    if not hasattr(self, attr_name):
-                        setattr(self, attr_name, attr_value)
-                
-                # Ensure config_heads is set correctly (this is critical for _multihead to work)
+                # Don't call parent __init__ methods - just copy the fully initialized model
+
+                # Copy all state from the original model
+                self.__dict__.update(original_model.__dict__)
+
+                # Ensure config_heads is set correctly for any future operations
+                # that might depend on it
                 self.config_heads = original_config_heads
 
                 # Initialize InteratomicPotentialMixin attributes manually without calling __init__
