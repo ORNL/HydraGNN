@@ -520,27 +520,19 @@ def create_model(
         original_class = model.__class__
 
         class EnhancedModel(InteratomicPotentialMixin, original_class):
-            def __init__(self, original_model):
-                # Don't call parent __init__ - we'll copy everything manually
-                
+            def __init__(self, original_model, original_config_heads):
                 # Copy all modules, parameters and buffers first
                 for attr_name in ["_modules", "_parameters", "_buffers"]:
                     if hasattr(original_model, attr_name):
                         setattr(self, attr_name, getattr(original_model, attr_name))
                 
-                # Copy all public attributes
-                for attr_name in dir(original_model):
-                    if (not attr_name.startswith("_") and 
-                        not callable(getattr(original_model, attr_name)) and
-                        not hasattr(self, attr_name)):
-                        setattr(self, attr_name, getattr(original_model, attr_name))
-                        
-                # Ensure critical configuration attributes are properly set
-                critical_attrs = ["config_heads", "head_type", "output_type", "output_heads",
-                                "hidden_dim", "activation_function", "num_branches", "head_dims", "heads_NN"]
-                for attr_name in critical_attrs:
-                    if hasattr(original_model, attr_name):
-                        setattr(self, attr_name, getattr(original_model, attr_name))
+                # Copy all attributes from the original model
+                for attr_name, attr_value in original_model.__dict__.items():
+                    if not hasattr(self, attr_name):
+                        setattr(self, attr_name, attr_value)
+                
+                # Ensure config_heads is set correctly (this is critical for _multihead to work)
+                self.config_heads = original_config_heads
 
                 # Initialize InteratomicPotentialMixin attributes manually without calling __init__
                 if not hasattr(self, "radius"):
@@ -563,7 +555,7 @@ def create_model(
                 ) and hasattr(self, "hidden_dim"):
                     self._init_interatomic_layers()
 
-        enhanced_model = EnhancedModel(model)
+        enhanced_model = EnhancedModel(model, output_heads)
         model = enhanced_model
 
     if conv_checkpointing:
