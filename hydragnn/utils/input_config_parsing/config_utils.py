@@ -57,6 +57,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
         "enable_interatomic_potential", False
     )
+    config["NeuralNetwork"]["Training"]["compute_grad_energy"] = enable_interatomic_potential
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
@@ -225,7 +226,7 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    if config["Architecture"]["enable_interatomic_potential"]:
+    if config["Architecture"].get("enable_interatomic_potential", False):
         dims_list = config["Variables_of_interest"]["output_dim"]
     elif hasattr(data, "y_loc"):
         dims_list = []
