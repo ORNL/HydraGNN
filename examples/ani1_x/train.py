@@ -281,12 +281,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
-    parser.add_argument(
-        "--enable_interatomic_potential",
-        type=bool,
-        help="enable_interatomic_potential",
-        default=False,
-    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -335,11 +329,6 @@ if __name__ == "__main__":
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-
-    if args.enable_interatomic_potential is not None:
-        config["NeuralNetwork"]["Architecture"][
-            "enable_interatomic_potential"
-        ] = args.enable_interatomic_potential
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
@@ -538,7 +527,9 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=args.enable_interatomic_potential,
+        compute_grad_energy=config["NeuralNetwork"]["Architecture"][
+            "enable_interatomic_potential"
+        ],
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

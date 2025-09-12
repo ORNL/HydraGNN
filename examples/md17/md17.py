@@ -132,6 +132,10 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config["NeuralNetwork"],
         log_name,
         verbosity,
+        create_plots=False,
+        compute_grad_energy=config["NeuralNetwork"]["Architecture"][
+            "enable_interatomic_potential"
+        ],
     )
     if writer is not None:
         writer.close()
