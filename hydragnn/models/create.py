@@ -543,6 +543,18 @@ def create_model(
                         f"'{self.__class__.__name__}' object has no attribute '{name}'"
                     )
 
+            def _compute_enhanced_geometric_features(self, data, conv_args):
+                """Placeholder method for enhanced geometric features (disabled by default)."""
+                return conv_args
+
+            def _compute_three_body_interactions(self, node_features, data, conv_args):
+                """Placeholder method for three-body interactions (disabled by default)."""
+                return node_features
+
+            def _apply_atomic_environment_descriptors(self, node_features, conv_args):
+                """Placeholder method for atomic environment descriptors (disabled by default)."""
+                return node_features
+
             def forward(self, data):
                 """Enhanced forward method with interatomic potential capabilities."""
                 # Import here to avoid circular imports
