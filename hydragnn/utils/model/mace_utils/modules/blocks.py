@@ -27,6 +27,7 @@ from hydragnn.utils.model.irreps_tools import (
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
+from hydragnn.utils.model.equivariance_compat import TensorProduct as CompatTensorProduct
 
 from .radial import (
     AgnesiTransform,
@@ -295,13 +296,13 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
             internal_weights=True,
             shared_weights=True,
         )
-        # TensorProduct
+        # TensorProduct - Use compatibility wrapper for potential OpenEquivariance acceleration
         irreps_mid, instructions = tp_out_irreps_with_instructions(
             self.node_feats_irreps,
             self.edge_attrs_irreps,
             self.target_irreps,
         )
-        self.conv_tp = o3.TensorProduct(
+        self.conv_tp = CompatTensorProduct(
             self.node_feats_irreps,
             self.edge_attrs_irreps,
             irreps_mid,

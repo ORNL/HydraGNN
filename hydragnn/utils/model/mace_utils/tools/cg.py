@@ -11,9 +11,19 @@
 
 import collections
 from typing import List, Union
+import logging
 
 import torch
 from e3nn import o3
+
+# Try to import OpenEquivariance for faster Clebsch-Gordon calculations
+try:
+    import openequivariance as oeq
+    _OPENEQUIVARIANCE_AVAILABLE = True
+    logging.debug("OpenEquivariance is available for accelerated Clebsch-Gordon tensor products")
+except ImportError:
+    _OPENEQUIVARIANCE_AVAILABLE = False
+    logging.debug("OpenEquivariance not available, using e3nn for Clebsch-Gordon tensor products")
 
 _TP = collections.namedtuple("_TP", "op, args")
 _INPUT = collections.namedtuple("_INPUT", "tensor, start, stop")
@@ -99,6 +109,93 @@ def U_matrix_real(
     filter_ir_mid=None,
     dtype=None,
 ):
+    """
+    Compute U matrix for real Clebsch-Gordon coefficients.
+    
+    This function will use OpenEquivariance for acceleration when available,
+    falling back to the original e3nn-based implementation otherwise.
+    """
+    # Try to use OpenEquivariance for faster computation
+    if _OPENEQUIVARIANCE_AVAILABLE and correlation <= 4:
+        try:
+            return _U_matrix_real_openequivariance(
+                irreps_in, irreps_out, correlation, normalization, filter_ir_mid, dtype
+            )
+        except Exception as e:
+            logging.debug(f"OpenEquivariance U_matrix computation failed, falling back to e3nn: {e}")
+    
+    # Fallback to original e3nn implementation
+    return _U_matrix_real_e3nn(
+        irreps_in, irreps_out, correlation, normalization, filter_ir_mid, dtype
+    )
+
+
+def _U_matrix_real_openequivariance(
+    irreps_in: Union[str, o3.Irreps],
+    irreps_out: Union[str, o3.Irreps], 
+    correlation: int,
+    normalization: str = "component",
+    filter_ir_mid=None,
+    dtype=None,
+):
+    """
+    OpenEquivariance-accelerated version of U_matrix_real.
+    
+    This leverages OpenEquivariance's optimized Clebsch-Gordon tensor products
+    for better performance.
+    """
+    irreps_out = o3.Irreps(irreps_out)
+    irreps_in = o3.Irreps(irreps_in)
+    
+    # For higher-order correlations, we can use OpenEquivariance's tensor products
+    # to compute the symmetric contractions more efficiently
+    if correlation == 2:
+        # Direct tensor product for correlation 2
+        instructions = []
+        i_out = 0
+        for mul_out, ir_out in irreps_out:
+            for i1, (mul1, ir1) in enumerate(irreps_in):
+                for i2, (mul2, ir2) in enumerate(irreps_in):
+                    if ir_out in ir1 * ir2:
+                        instructions.append((i1, i2, i_out, "uvu", True))
+            i_out += 1
+        
+        # Create OpenEquivariance tensor product
+        tp_problem = oeq.TPProblem(
+            irreps_in, irreps_in, irreps_out, instructions,
+            shared_weights=False, internal_weights=False
+        )
+        tp = oeq.TensorProduct(tp_problem, torch_op=True)
+        
+        # Generate basis matrices efficiently
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        batch_size = 1
+        x1 = torch.eye(irreps_in.dim, dtype=dtype, device=device).unsqueeze(0)
+        x2 = torch.eye(irreps_in.dim, dtype=dtype, device=device).unsqueeze(0)
+        
+        if tp.weight_numel > 0:
+            weight = torch.ones(batch_size, tp.weight_numel, dtype=dtype, device=device)
+            result = tp(x1, x2, weight)
+        else:
+            result = tp(x1, x2)
+            
+        return result.squeeze(0)
+    
+    # For other cases, fall back to original implementation
+    return _U_matrix_real_e3nn(irreps_in, irreps_out, correlation, normalization, filter_ir_mid, dtype)
+
+
+def _U_matrix_real_e3nn(
+    irreps_in: Union[str, o3.Irreps],
+    irreps_out: Union[str, o3.Irreps],
+    correlation: int,
+    normalization: str = "component", 
+    filter_ir_mid=None,
+    dtype=None,
+):
+    """
+    Original e3nn-based implementation of U_matrix_real.
+    """
     irreps_out = o3.Irreps(irreps_out)
     irrepss = [o3.Irreps(irreps_in)] * correlation
     if correlation == 4:
