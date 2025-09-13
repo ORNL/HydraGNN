@@ -224,6 +224,9 @@ class OMol2025(AbstractBaseDataset):
             if self.graphgps_transform is not None:
                 data_object = self.graphgps_transform(data_object)
 
+            # if not data_object:
+            #     return
+            # else:
             if self.check_forces_values(data_object.forces):
                 self.dataset.append(data_object)
             else:
