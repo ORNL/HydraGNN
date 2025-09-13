@@ -73,15 +73,29 @@ class TensorProduct(torch.nn.Module):
         
         # Generate instructions if not provided
         if instructions is None:
+            # Use a simple instruction generation compatible with e3nn
             instructions = []
-            irreps_out_list = []
             for i, (mul1, ir1) in enumerate(self.irreps_in1):
                 for j, (mul2, ir2) in enumerate(self.irreps_in2):
-                    for ir_out in ir1 * ir2:
-                        if ir_out in [irrep.ir for irrep in self.irreps_out]:
-                            k = len(irreps_out_list)
+                    for k, (mul_out, ir_out) in enumerate(self.irreps_out):
+                        if ir_out in ir1 * ir2:
+                            # Only create instructions for compatible multiplicity
                             instructions.append((i, j, k, "uvu", True))
-                            irreps_out_list.append((1, ir_out))
+            
+            # If no instructions generated, create a minimal set
+            if not instructions:
+                # Find the first compatible combination
+                for i, (mul1, ir1) in enumerate(self.irreps_in1):
+                    for j, (mul2, ir2) in enumerate(self.irreps_in2):
+                        possible_irs = ir1 * ir2
+                        for k, (mul_out, ir_out) in enumerate(self.irreps_out):
+                            if ir_out in possible_irs:
+                                instructions.append((i, j, k, "uvu", True))
+                                break
+                        if instructions:
+                            break
+                    if instructions:
+                        break
                             
         self.instructions = instructions
         
