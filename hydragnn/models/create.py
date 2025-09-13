@@ -530,13 +530,24 @@ def create_model(
                 self.max_neighbours = getattr(original_model, "max_neighbours", 50)
 
             def __getattr__(self, name):
+                # First try to get from the wrapper itself
                 try:
                     return super().__getattr__(name)
                 except AttributeError:
                     pass
+
+                # Then try to get from the wrapped model
                 try:
                     return getattr(self.model, name)
                 except AttributeError:
+                    # Handle specific method names that may be expected for interatomic potentials
+                    if name in [
+                        "_compute_enhanced_geometric_features",
+                        "_compute_three_body_interactions",
+                        "_apply_atomic_environment_descriptors",
+                    ]:
+                        # Return placeholder methods that don't interfere with existing architectures
+                        return lambda *args, **kwargs: None
                     raise AttributeError(
                         f"'{self.__class__.__name__}' object has no attribute '{name}'"
                     )
@@ -763,6 +774,24 @@ def create_model(
                 ##        so, we need to do loss calculation manually without calling the other functions.
 
                 return tot_loss, tasks_loss
+
+            def _compute_enhanced_geometric_features(self, data):
+                """
+                Placeholder for enhanced geometric feature computation (disabled by default).
+                """
+                return data
+
+            def _compute_three_body_interactions(self, data):
+                """
+                Placeholder for three-body interaction computation (disabled by default).
+                """
+                return data
+
+            def _apply_atomic_environment_descriptors(self, data):
+                """
+                Placeholder for atomic environment descriptor application (disabled by default).
+                """
+                return data
 
         enhanced_model = EnhancedModelWrapper(model)
         model = enhanced_model
