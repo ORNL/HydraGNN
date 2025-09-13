@@ -132,6 +132,7 @@ def pytest_model_creation_with_enhancement():
     except Exception as e:
         print(f"Error creating model: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
