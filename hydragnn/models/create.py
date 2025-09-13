@@ -529,10 +529,6 @@ def create_model(
                 self.radius = getattr(original_model, "radius", 6.0)
                 self.max_neighbours = getattr(original_model, "max_neighbours", 50)
 
-                self.use_enhanced_geometry = False
-                self.use_three_body_interactions = False
-                self.use_atomic_environment_descriptors = False
-
             def __getattr__(self, name):
                 try:
                     return super().__getattr__(name)
