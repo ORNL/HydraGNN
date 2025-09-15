@@ -8,7 +8,7 @@ from tqdm import tqdm
 class ChemicalFeatureEncoder:
     """Encodes chemical features for atomic elements using mendeleev properties."""
 
-    def __init__(self, num_elements: int = 118): #118 elements in periodic table
+    def __init__(self, num_elements: int = 118):  # 118 elements in periodic table
         warnings.filterwarnings("ignore")
         self.block_map = {"s": 0, "p": 1, "d": 2, "f": 3}
         print("Generating element properties for chemical encoder ...")
