@@ -12,7 +12,7 @@ from mpi4py import MPI
 
 from collections import defaultdict
 import numpy as np
-from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
 import os
 
 
@@ -45,11 +45,16 @@ try:
             gp.initialize()
             self.hist = dict()
             self.last = dict()
+            self.enabled = True
 
         def start(self, name):
+            if not self.enabled:
+                return
             gp.start(name)
 
         def stop(self, name):
+            if not self.enabled:
+                return
             gp.stop(name)
 
             count, wallclock = gp.query_raw(name)
@@ -60,9 +65,11 @@ try:
             self.last[name] = wallclock
 
         def enable(self):
+            self.enabled = True
             gp.enable()
 
         def disable(self):
+            self.enabled = False
             gp.disable()
 
         def reset(self):
@@ -110,9 +117,17 @@ try:
 
             deviceCount = nvmlDeviceGetCount()
             if os.getenv("CUDA_VISIBLE_DEVICES"):
-                self.device = int(os.getenv("CUDA_VISIBLE_DEVICES").split(",")[0])
+                device_list = [
+                    int(x) for x in os.getenv("CUDA_VISIBLE_DEVICES").split(",")
+                ]
             else:
-                self.device = 0
+                device_list = [0]
+
+            local_rank = get_local_rank()
+            self.device = (
+                device_list[local_rank] if len(device_list) > 1 else device_list[0]
+            )
+
             self.d_handle = nvmlDeviceGetHandleByIndex(self.device)
             self.energyCounters = dict()
             self.energyTracer = defaultdict(list)
@@ -195,9 +210,16 @@ try:
             self.rank = MPI.COMM_WORLD.Get_rank()
 
             if os.getenv("ROCR_VISIBLE_DEVICES"):
-                self.device = int(os.getenv("ROCR_VISIBLE_DEVICES").split(",")[0])
+                device_list = [
+                    int(x) for x in os.getenv("ROCR_VISIBLE_DEVICES").split(",")
+                ]
             else:
-                self.device = rocm_smi.listDevices()[0]
+                device_list = rocm_smi.listDevices()
+
+            local_rank = get_local_rank()
+            self.device = (
+                device_list[local_rank] if len(device_list) > 1 else device_list[0]
+            )
             print(f"ROCMTracer initalized: rank={self.rank}, device={self.device}")
 
         def get_energy(self):

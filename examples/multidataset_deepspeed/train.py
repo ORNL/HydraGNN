@@ -31,9 +31,11 @@ except ImportError:
 from scipy.interpolate import BSpline, make_interp_spline
 import adios2 as ad2
 
-import deepspeed
-from hydragnn.utils.input_config_parsing import parse_deepspeed_config
-from hydragnn.utils.distributed import get_deepspeed_init_args
+# import deepspeed
+try:
+    import deepspeed
+except:
+    pass
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -65,6 +67,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_conv_layers", type=int, help="number of layers", default=None
+    )
+    parser.add_argument("--num_headlayers", type=int, help="num_headlayers", default=3)
+    parser.add_argument(
+        "--dim_headlayers", type=int, help="dim_headlayers", default=889
     )
     parser.add_argument(
         "--model_debug",
@@ -132,7 +138,22 @@ if __name__ == "__main__":
         const="multi",
     )
     parser.set_defaults(format="adios")
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--deepspeed", dest="deepspeed", action="store_true", help="Enable DeepSpeed"
+    )
+    group.add_argument(
+        "--no-deepspeed",
+        dest="deepspeed",
+        action="store_false",
+        help="Disable DeepSpeed",
+    )
+    parser.set_defaults(deepspeed=True)  # default is True
+
+    parser.add_argument("--bf16", action="store_true", help="use bf16")
     args = parser.parse_args()
+    args.parameters = vars(args)
 
     graph_feature_names = ["energy"]
     graph_feature_dims = [1]
@@ -166,12 +187,26 @@ if __name__ == "__main__":
             "num_conv_layers"
         ] = args.num_conv_layers
 
+    dim_headlayers = [
+        args.parameters["dim_headlayers"]
+        for i in range(args.parameters["num_headlayers"])
+    ]
+
+    for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+            "num_headlayers"
+        ] = args.parameters["num_headlayers"]
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+            "dim_headlayers"
+        ] = dim_headlayers
+
     if args.conv_checkpointing:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = True
 
+    use_deepspeed = args.deepspeed
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = hydragnn.utils.distributed.setup_ddp(use_deepspeed=True)
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp(use_deepspeed=use_deepspeed)
     ##################################################################################################################
 
     comm = MPI.COMM_WORLD
@@ -411,46 +446,24 @@ if __name__ == "__main__":
     # Print details of neural network architecture
     print_model(model)
 
-    if args.model_debug:
-        for num_conv_layers in [4, 5, 6]:
-            print("==== num_conv_layers: ", num_conv_layers)
-            config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = num_conv_layers
-            model = hydragnn.models.create_model_config(
-                config=config["NeuralNetwork"],
-                verbosity=verbosity,
-            )
-            model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-                model, optimizer, verbosity
-            )
-
-            # Print details of neural network architecture
-            print_model(model)
-        exit()
-
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
-    # create temporary deepspeed configuration
-    ds_config = parse_deepspeed_config(config)
-
-    if args.zero_opt:
-        ds_config["zero_optimization"] = {"stage": 1}
-
-    # create deepspeed model
-    # FIXME: need to check if it also works on ALCF-Aurora with Intel GPUs
-    model, optimizer, _, _ = deepspeed.initialize(
-        args=get_deepspeed_init_args(),
-        model=model,
-        config=ds_config,
-        dist_init_required=False,
-        optimizer=optimizer,  # optimizer is managed by deepspeed
-    )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model,
+        optimizer,
+        verbosity,
+        use_deepspeed=use_deepspeed,
+        zero_opt=args.zero_opt,
+        config=config,
+        bf16=args.bf16,
+    )
 
     hydragnn.utils.model.load_existing_model_config(
-        model, config["NeuralNetwork"]["Training"], use_deepspeed=True
+        model, config["NeuralNetwork"]["Training"], use_deepspeed=use_deepspeed
     )
 
     ##################################################################################################################
@@ -467,22 +480,16 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        use_deepspeed=True,
+        use_deepspeed=use_deepspeed,
+        bf16=args.bf16,
     )
 
     hydragnn.utils.model.save_model(
-        model, optimizer, log_name, use_deepspeed=True
+        model, optimizer, log_name, use_deepspeed=use_deepspeed
     )  # optimizer is managed by deepspeed model
 
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
 
-    if tr.has("GPTLTracer"):
-        import gptl4py as gp
-
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
-        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
-        gp.finalize()
+    tr.save(log_name)
 
     os._exit(0)  # force quit
