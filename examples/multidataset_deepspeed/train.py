@@ -489,6 +489,8 @@ if __name__ == "__main__":
     )  # optimizer is managed by deepspeed model
 
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
     tr.save(log_name)
 

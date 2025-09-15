@@ -180,3 +180,6 @@ def _(config: dict, use_deepspeed=False):
     save_model(model, optimizer, log_name, use_deepspeed=use_deepspeed)
 
     print_timers(config["Verbosity"]["level"])
+
+    if writer is not None:
+        writer.close()
