@@ -293,25 +293,3 @@ def pytest_backend_info_summary():
     assert True
 
 
-if __name__ == "__main__":
-    # When run directly, execute all test functions for manual testing
-    print("=== Running OpenEquivariance Comparison Tests (Simple Version) ===")
-    
-    test_functions = [
-        pytest_direct_e3nn_comparison,
-        pytest_openequivariance_comparison,
-        pytest_timing_measurement,
-        pytest_backend_info_summary
-    ]
-    
-    for test_func in test_functions:
-        try:
-            print(f"\n--- Running {test_func.__name__} ---")
-            test_func()
-            print(f"✓ {test_func.__name__} passed")
-        except Exception as e:
-            print(f"✗ {test_func.__name__} failed: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    print("\n=== All tests completed ===")
