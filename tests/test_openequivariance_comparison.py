@@ -267,29 +267,3 @@ def pytest_timing_measurement():
     print("  ✓ Timing measurement completed successfully")
 
 
-@pytest.mark.mpi_skip()
-def pytest_backend_info_summary():
-    """Provide a summary of backend availability and test results."""
-    info = get_backend_info()
-    print(f"\n=== Backend Information Summary ===")
-    print(f"e3nn available: {info['e3nn_available']}")
-    print(f"OpenEquivariance available: {info['openequivariance_available']}")
-    print(f"Default backend: {info['default_backend']}")
-    
-    if info['openequivariance_available']:
-        print(f"OpenEquivariance version: {info.get('openequivariance_version', 'unknown')}")
-        print("✓ OpenEquivariance integration tests completed")
-        print("✓ Direct numerical comparison validated")
-        print("✓ Performance timing measurements completed")
-    else:
-        print("✓ e3nn backend verified working correctly")
-        print("! OpenEquivariance not available for direct comparison")
-        print("  Install OpenEquivariance for full acceleration:")
-        print("  pip install openequivariance")
-    
-    print("✓ All tensor product comparison tests completed successfully")
-    
-    # This test always passes - it's just a summary
-    assert True
-
-
