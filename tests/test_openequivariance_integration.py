@@ -233,5 +233,3 @@ def test_equivariance_preservation():
     torch.testing.assert_close(out1_rot, out2, rtol=1e-4, atol=1e-4)
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
