@@ -8,9 +8,42 @@
 
 import logging
 import warnings
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Any, Dict, Tuple
 from e3nn import o3
 import torch
+
+# Import the instruction generation function
+def tp_out_irreps_with_instructions(
+    irreps1: o3.Irreps, irreps2: o3.Irreps, target_irreps: o3.Irreps
+) -> Tuple[o3.Irreps, List]:
+    """Generate tensor product instructions compatible with e3nn (copied from irreps_tools)."""
+    trainable = True
+
+    # Collect possible irreps and their instructions
+    irreps_out_list = []
+    instructions = []
+    for i, (mul, ir_in) in enumerate(irreps1):
+        for j, (_, ir_edge) in enumerate(irreps2):
+            for ir_out in ir_in * ir_edge:  # | l1 - l2 | <= l <= l1 + l2
+                if ir_out in target_irreps:
+                    k = len(irreps_out_list)  # instruction index
+                    irreps_out_list.append((mul, ir_out))
+                    instructions.append((i, j, k, "uvu", trainable))
+
+    # We sort the output irreps of the tensor product so that we can simplify them
+    # when they are provided to the second o3.Linear
+    irreps_out = o3.Irreps(irreps_out_list)
+    irreps_out, permut, _ = irreps_out.sort()
+
+    # Permute the output indexes of the instructions to match the sorted irreps:
+    instructions = [
+        (i_in1, i_in2, permut[i_out], mode, train)
+        for i_in1, i_in2, i_out, mode, train in instructions
+    ]
+
+    instructions = sorted(instructions, key=lambda x: x[2])
+
+    return irreps_out, instructions
 
 # Global flag to track OpenEquivariance availability
 _OPENEQUIVARIANCE_AVAILABLE = None
@@ -71,32 +104,10 @@ class TensorProduct(torch.nn.Module):
         self.internal_weights = internal_weights
         self.shared_weights = shared_weights
         
-        # Generate instructions if not provided
+        # Generate instructions if not provided - use the proper instruction generation
         if instructions is None:
-            # Use a simple instruction generation compatible with e3nn
-            instructions = []
-            for i, (mul1, ir1) in enumerate(self.irreps_in1):
-                for j, (mul2, ir2) in enumerate(self.irreps_in2):
-                    for k, (mul_out, ir_out) in enumerate(self.irreps_out):
-                        if ir_out in ir1 * ir2:
-                            # Only create instructions for compatible multiplicity
-                            instructions.append((i, j, k, "uvu", True))
-            
-            # If no instructions generated, create a minimal set
-            if not instructions:
-                # Find the first compatible combination
-                for i, (mul1, ir1) in enumerate(self.irreps_in1):
-                    for j, (mul2, ir2) in enumerate(self.irreps_in2):
-                        possible_irs = ir1 * ir2
-                        for k, (mul_out, ir_out) in enumerate(self.irreps_out):
-                            if ir_out in possible_irs:
-                                instructions.append((i, j, k, "uvu", True))
-                                break
-                        if instructions:
-                            break
-                    if instructions:
-                        break
-                            
+            # Use the instruction generation function from irreps_tools
+            instructions = self._generate_instructions()
         self.instructions = instructions
         
         # Determine whether to use OpenEquivariance
@@ -118,6 +129,14 @@ class TensorProduct(torch.nn.Module):
                 gradient_normalization=gradient_normalization,
                 checkname=checkname
             )
+    
+    def _generate_instructions(self):
+        """Generate proper tensor product instructions using MACE-style logic."""
+        return tp_out_irreps_with_instructions(
+            self.irreps_in1, 
+            self.irreps_in2, 
+            self.irreps_out
+        )[1]  # Return just the instructions, not the irreps
     
     def _init_openequivariance(self):
         """Initialize OpenEquivariance tensor product."""
@@ -164,11 +183,12 @@ class TensorProduct(torch.nn.Module):
     ):
         """Initialize e3nn tensor product."""
         # Use the correct parameter names for e3nn 0.5.1
+        # Always use the generated instructions
         self.tp_backend = o3.TensorProduct(
             self.irreps_in1,
             self.irreps_in2,
             self.irreps_out,
-            instructions=self.instructions,  # e3nn will generate default instructions if None
+            instructions=self.instructions,
             irrep_normalization=normalization,  
             path_normalization=path_normalization,
             internal_weights=self.internal_weights,
