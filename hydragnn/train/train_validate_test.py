@@ -504,8 +504,9 @@ def train(
                 opt.zero_grad()
         tr.stop("zero_grad")
         tr.start("get_head_indices")
-        with record_function("get_head_indices"):
-            head_index = get_head_indices(model, data)
+        if not compute_grad_energy:
+            with record_function("get_head_indices"):
+                head_index = get_head_indices(model, data)
         tr.stop("get_head_indices")
         tr.start("forward", **syncopt)
         with record_function("forward"):
