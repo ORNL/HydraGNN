@@ -367,6 +367,17 @@ def distributed_model_wrapper(
             verbosity, "CPUs, NVIDIA, and AMD GPUs do not need optimize wrapper"
         )
 
+    # Auto-detect EnhancedModelWrapper and enable find_unused_parameters to avoid DDP gradient stride warnings
+    if (
+        hasattr(model, "__class__")
+        and "EnhancedModelWrapper" in model.__class__.__name__
+    ):
+        print_distributed(
+            verbosity,
+            "EnhancedModelWrapper detected: enabling find_unused_parameters=True for DDP",
+        )
+        find_unused_parameters = True
+
     model = get_distributed_model(
         model,
         verbosity=verbosity,
