@@ -27,7 +27,9 @@ from hydragnn.utils.model.irreps_tools import (
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
-from hydragnn.utils.model.equivariance_compat import TensorProduct as CompatTensorProduct
+from hydragnn.utils.model.equivariance_compat import (
+    TensorProduct as CompatTensorProduct,
+)
 
 from .radial import (
     AgnesiTransform,
