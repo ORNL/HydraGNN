@@ -19,13 +19,16 @@ def tp_out_irreps_with_instructions(
     """Generate tensor product instructions compatible with e3nn (copied from irreps_tools)."""
     trainable = True
 
+    # Convert target_irreps to a set of Irrep objects for efficient lookup
+    target_irrep_set = set(ir for mul, ir in target_irreps)
+
     # Collect possible irreps and their instructions
     irreps_out_list = []
     instructions = []
     for i, (mul, ir_in) in enumerate(irreps1):
         for j, (_, ir_edge) in enumerate(irreps2):
             for ir_out in ir_in * ir_edge:  # | l1 - l2 | <= l <= l1 + l2
-                if ir_out in target_irreps:
+                if ir_out in target_irrep_set:
                     k = len(irreps_out_list)  # instruction index
                     irreps_out_list.append((mul, ir_out))
                     instructions.append((i, j, k, "uvu", trainable))
@@ -154,10 +157,11 @@ class TensorProduct(torch.nn.Module):
             if self.instructions is None:
                 # Generate default instructions similar to e3nn
                 instructions = []
+                target_irreps = set(irrep.ir for mul, irrep in self.irreps_out)
                 for i, (mul_ir1, ir1) in enumerate(self.irreps_in1):
                     for j, (mul_ir2, ir2) in enumerate(self.irreps_in2):
                         for ir_out in ir1 * ir2:
-                            if ir_out in [irrep.ir for irrep in self.irreps_out]:
+                            if ir_out in target_irreps:
                                 mode = "uvu" if not self.internal_weights else "uvw"
                                 instructions.append((i, j, 0, mode, True))
                 self.instructions = instructions
