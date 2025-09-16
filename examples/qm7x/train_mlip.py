@@ -330,7 +330,9 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--inputfile", help="input file", type=str, default="qm7x_mlip.json")
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="qm7x_mlip.json"
+    )
     parser.add_argument(
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
