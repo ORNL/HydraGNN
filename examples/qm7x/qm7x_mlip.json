@@ -4,7 +4,7 @@
   },
   "NeuralNetwork": {
     "Architecture": {
-      "periodic_boundary_conditions": true,
+      "periodic_boundary_conditions": false,
       "mpnn_type": "DimeNet",
       "radius": 5.0,
       "max_neighbours": 5,
@@ -47,13 +47,16 @@
       "num_epoch": 100,
       "batch_size": 64,
       "perc_train": 0.7,
-      "patience": 20,
+      "patience": 1,
       "early_stopping": true,
       "Optimizer": {
         "type": "Adam",
         "learning_rate": 0.005
       },
-      "conv_checkpointing": false
+      "conv_checkpointing": false,
+      "Checkpoint": true,
+      "checkpoint_warmup": 1,
+      "epoch_start": 0
     }
   },
   "Visualization": {
