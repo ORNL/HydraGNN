@@ -342,21 +342,30 @@ def get_distributed_model(
 
     if dist.is_initialized():
         if device_name == "cpu":
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                find_unused_parameters=find_unused_parameters,
-                gradient_as_bucket_view=not enhanced_model,
-            )
+            ddp_kwargs = {
+                "find_unused_parameters": find_unused_parameters,
+                "gradient_as_bucket_view": not enhanced_model,
+            }
+            # Add static_graph=False for enhanced models with dynamic computation
+            if enhanced_model:
+                ddp_kwargs["static_graph"] = False
+
+            model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
         else:
             if sync_batch_norm:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
             device = get_device_from_name(device_name)
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[device],
-                find_unused_parameters=find_unused_parameters,
-                gradient_as_bucket_view=not enhanced_model,
-            )
+
+            ddp_kwargs = {
+                "device_ids": [device],
+                "find_unused_parameters": find_unused_parameters,
+                "gradient_as_bucket_view": not enhanced_model,
+            }
+            # Add static_graph=False for enhanced models with dynamic computation
+            if enhanced_model:
+                ddp_kwargs["static_graph"] = False
+
+            model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
     return model
 
 
@@ -383,7 +392,11 @@ def distributed_model_wrapper(
     if enhanced_model_detected:
         print_distributed(
             verbosity,
-            "EnhancedModelWrapper detected: enabling find_unused_parameters=True for DDP",
+            f"EnhancedModelWrapper detected: {model.__class__.__name__}",
+        )
+        print_distributed(
+            verbosity,
+            "Applying DDP optimizations: find_unused_parameters=True, gradient_as_bucket_view=False",
         )
         find_unused_parameters = True
 
