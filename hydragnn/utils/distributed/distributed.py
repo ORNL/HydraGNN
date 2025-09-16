@@ -326,7 +326,11 @@ def is_model_distributed(model):
 
 
 def get_distributed_model(
-    model, verbosity=0, sync_batch_norm=False, find_unused_parameters=False
+    model,
+    verbosity=0,
+    sync_batch_norm=False,
+    find_unused_parameters=False,
+    enhanced_model=False,
 ):
     device_name = get_device_name(verbosity_level=verbosity)
     print(
@@ -339,7 +343,9 @@ def get_distributed_model(
     if dist.is_initialized():
         if device_name == "cpu":
             model = torch.nn.parallel.DistributedDataParallel(
-                model, find_unused_parameters=find_unused_parameters
+                model,
+                find_unused_parameters=find_unused_parameters,
+                gradient_as_bucket_view=not enhanced_model,
             )
         else:
             if sync_batch_norm:
@@ -349,6 +355,7 @@ def get_distributed_model(
                 model,
                 device_ids=[device],
                 find_unused_parameters=find_unused_parameters,
+                gradient_as_bucket_view=not enhanced_model,
             )
     return model
 
@@ -368,10 +375,12 @@ def distributed_model_wrapper(
         )
 
     # Auto-detect EnhancedModelWrapper and enable find_unused_parameters to avoid DDP gradient stride warnings
-    if (
+    enhanced_model_detected = (
         hasattr(model, "__class__")
         and "EnhancedModelWrapper" in model.__class__.__name__
-    ):
+    )
+
+    if enhanced_model_detected:
         print_distributed(
             verbosity,
             "EnhancedModelWrapper detected: enabling find_unused_parameters=True for DDP",
@@ -383,6 +392,7 @@ def distributed_model_wrapper(
         verbosity=verbosity,
         sync_batch_norm=sync_batch_norm,
         find_unused_parameters=find_unused_parameters,
+        enhanced_model=enhanced_model_detected,
     )
 
     return model, optimizer
