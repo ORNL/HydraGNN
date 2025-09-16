@@ -591,7 +591,6 @@ def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=Fa
             break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        head_index = get_head_indices(model, data)
         data = data.to(get_device())
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
@@ -599,6 +598,7 @@ def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=Fa
                 pred = model(data)
                 error, tasks_loss = model.module.energy_force_loss(pred, data)
         else:
+            head_index = get_head_indices(model, data)
             pred = model(data)
             error, tasks_loss = model.module.loss(pred, data.y, head_index)
         total_error += error * data.num_graphs
@@ -651,7 +651,6 @@ def test(
             break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        head_index = get_head_indices(model, data)
         data = data.to(get_device())
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
@@ -659,6 +658,7 @@ def test(
                 pred = model(data)
                 error, tasks_loss = model.module.energy_force_loss(pred, data)
         else:
+            head_index = get_head_indices(model, data)
             pred = model(data)
             error, tasks_loss = model.module.loss(pred, data.y, head_index)
         ## FIXME: temporary
