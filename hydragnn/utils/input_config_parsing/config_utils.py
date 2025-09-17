@@ -162,11 +162,11 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
+    equivariant_models = ["DimeNet", "EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
     if "equivariance" in config and config["equivariance"]:
         assert (
             config["mpnn_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for EGNN, SchNet, PNAEq, PAINN, and MACE."
+        ), "E(3) equivariance can only be ensured for DimeNet, EGNN, SchNet, PNAEq, PAINN, and MACE."
     elif "equivariance" not in config:
         config["equivariance"] = False
     return config
