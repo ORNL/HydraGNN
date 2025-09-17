@@ -166,8 +166,10 @@ def update_config_equivariance(config):
     equivariance_toggled_models = ["EGNN"]
     if "equivariance" in config:
         if config["mpnn_type"] not in equivariance_toggled_models:
-            warnings.warn(f"E(3) equivariance can only be toggled for EGNN. Setting it for {config['mpnn_type']} won't break anything,"
-                          "but won't change anything either.")
+            warnings.warn(
+                f"E(3) equivariance can only be toggled for EGNN. Setting it for {config['mpnn_type']} won't break anything,"
+                "but won't change anything either."
+            )
     else:
         config["equivariance"] = None
     return config
