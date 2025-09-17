@@ -18,6 +18,7 @@ from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
+import warnings
 import json
 import torch
 
@@ -162,13 +163,13 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["DimeNet", "EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
-    if "equivariance" in config and config["equivariance"]:
-        assert (
-            config["mpnn_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for DimeNet, EGNN, SchNet, PNAEq, PAINN, and MACE."
-    elif "equivariance" not in config:
-        config["equivariance"] = False
+    equivariance_toggled_models = ["EGNN"]
+    if "equivariance" in config:
+        if config["mpnn_type"] not in equivariance_toggled_models:
+            warnings.warn(f"E(3) equivariance can only be toggled for EGNN. Setting for {config['mpnn_type']} won't break anything,"
+                          "but won't change anything either.")
+    else:
+        config["equivariance"] = None
     return config
 
 
