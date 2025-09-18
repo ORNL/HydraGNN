@@ -126,7 +126,8 @@ class TensorProduct(torch.nn.Module):
 
         if use_openequivariance and not self.use_oeq:
             warnings.warn(
-                "OpenEquivariance was requested but is not available, falling back to e3nn"
+                "OpenEquivariance was requested but is not available, falling back to e3nn",
+                UserWarning,
             )
 
         # Initialize the appropriate backend
@@ -293,7 +294,8 @@ def _should_use_openequivariance(use_openequivariance: Optional[bool] = None) ->
     elif _FORCE_BACKEND == "openequivariance":
         if not _check_openequivariance():
             warnings.warn(
-                "OpenEquivariance forced but not available, falling back to e3nn"
+                "OpenEquivariance forced but not available, falling back to e3nn",
+                UserWarning,
             )
             return False
         return True
