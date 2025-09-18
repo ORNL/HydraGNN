@@ -113,6 +113,7 @@ class AdiosWriter:
         self.attributes = dict()
         self.adios = ad2.ADIOS()
         self.io = self.adios.DeclareIO(self.filename)
+        self.io.Parameters()["StatsLevel"] = "Off"
 
     def add_global(self, vname, arr):
         """
@@ -308,6 +309,11 @@ class AdiosWriter:
 
         self.io.DefineAttribute("total_ndata", np.array(total_ns))
         for vname in self.attributes:
+            if (
+                isinstance(self.attributes[vname], np.ndarray)
+                and not self.attributes[vname].flags["C_CONTIGUOUS"]
+            ):
+                self.attributes[vname] = np.ascontiguousarray(self.attributes[vname])
             self.io.DefineAttribute(vname, self.attributes[vname])
 
         self.writer.Close()
