@@ -23,6 +23,12 @@ from torch_geometric.transforms import Distance, Spherical, LocalCartesian
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
+from hydragnn.utils.descriptors_and_embeddings.chemicaldescriptors import (
+    ChemicalFeatureEncoder,
+)
+from hydragnn.utils.descriptors_and_embeddings.topologicaldescriptors import (
+    compute_topo_features,
+)
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
@@ -250,9 +256,12 @@ class Transition1xDataset(AbstractBaseDataset):
             if self.graphgps_transform is not None:
                 data_object = self.graphgps_transform(data_object)
 
+            # if not data_object:
+            #     continue
+            # else:
             self.dataset.append(data_object)
 
-            random.shuffle(self.dataset)
+        random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
@@ -342,15 +351,6 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -376,13 +376,39 @@ if __name__ == "__main__":
 
     modelname = "transition1x"
     if args.preonly:
+        # Transformation to create positional and structural laplacian encoders
+        # Chemical encoder
+        ChemEncoder = ChemicalFeatureEncoder()
+
+        # LPE
+        lpe_transform = AddLaplacianEigenvectorPE(
+            k=config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+            attr_name="lpe",
+            is_undirected=True,
+        )
+
+        def graphgps_transform(data):
+            try:
+                data = lpe_transform(data)  # lapPE
+            except:
+                data.lpe = torch.zeros(
+                    [
+                        data.num_nodes,
+                        config["NeuralNetwork"]["Architecture"]["num_laplacian_eigs"],
+                    ],
+                    dtype=data.x.dtype,
+                    device=data.x.device,
+                )
+            data = ChemEncoder.compute_chem_features(data)
+            data = compute_topo_features(data)
+            return data
 
         ## local data
         total = Transition1xDataset(
             os.path.join(datadir),
             config,
-            # graphgps_transform=graphgps_transform,
-            graphgps_transform=None,
+            graphgps_transform=graphgps_transform,
+            # graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
