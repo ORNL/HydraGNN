@@ -26,7 +26,7 @@ import subprocess
 deepspeed_available = True
 try:
     import deepspeed
-except ImportError:
+except:
     deepspeed_available = False
 
 
@@ -354,7 +354,15 @@ def get_distributed_model(
 
 
 def distributed_model_wrapper(
-    model, optimizer, verbosity=0, sync_batch_norm=False, find_unused_parameters=False
+    model,
+    optimizer,
+    verbosity=0,
+    sync_batch_norm=False,
+    find_unused_parameters=False,
+    use_deepspeed=False,
+    config=None,
+    zero_opt=False,
+    bf16=False,
 ):
 
     if hasattr(torch, "xpu") and torch.xpu.is_available():
@@ -367,12 +375,43 @@ def distributed_model_wrapper(
             verbosity, "CPUs, NVIDIA, and AMD GPUs do not need optimize wrapper"
         )
 
-    model = get_distributed_model(
-        model,
-        verbosity=verbosity,
-        sync_batch_norm=sync_batch_norm,
-        find_unused_parameters=find_unused_parameters,
-    )
+    if use_deepspeed:
+        assert deepspeed_available, "deepspeed package not available"
+        assert config is not None, "config is required for deepspeed"
+
+        # create temporary deepspeed configuration
+        from hydragnn.utils.input_config_parsing import parse_deepspeed_config
+
+        ds_config = parse_deepspeed_config(config)
+
+        if zero_opt:
+            ds_config["zero_optimization"] = {"stage": 1}
+
+        if bf16:
+            ## We should choose only one of the following two
+            ds_config["bf16"] = {"enabled": False}
+            ds_config["torch_autocast"] = {
+                "enabled": True,
+                "dtype": "bfloat16",
+                "lower_precision_safe_modules": ["torch.nn.Linear", "torch.nn.Conv2d"],
+            }
+
+        # create deepspeed model
+        # FIXME: need to check if it also works on ALCF-Aurora with Intel GPUs
+        model, optimizer, _, _ = deepspeed.initialize(
+            args=get_deepspeed_init_args(),
+            model=model,
+            config=ds_config,
+            dist_init_required=False,
+            optimizer=optimizer,  # optimizer is managed by deepspeed
+        )  # scheduler is not managed by deepspeed because it is per-epoch instead of per-step
+    else:
+        model = get_distributed_model(
+            model,
+            verbosity=verbosity,
+            sync_batch_norm=sync_batch_norm,
+            find_unused_parameters=find_unused_parameters,
+        )
 
     return model, optimizer
 

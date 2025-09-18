@@ -27,7 +27,7 @@ from hydragnn.postprocess.postprocess import output_denormalize
 deepspeed_available = True
 try:
     import deepspeed
-except ImportError:
+except:
     deepspeed_available = False
 
 

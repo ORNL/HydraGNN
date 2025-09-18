@@ -41,7 +41,7 @@ from hydragnn.train.train_validate_test import train_validate_test
 deepspeed_available = True
 try:
     import deepspeed
-except ImportError:
+except:
     deepspeed_available = False
 
 
