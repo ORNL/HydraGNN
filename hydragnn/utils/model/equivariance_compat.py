@@ -112,10 +112,10 @@ class TensorProduct(torch.nn.Module):
         self.internal_weights = internal_weights
         self.shared_weights = shared_weights
 
-        # Generate instructions if not provided - use the proper instruction generation
+        # Generate instructions if not provided - let e3nn handle default case
         if instructions is None:
-            # Use the instruction generation function from irreps_tools
-            instructions = self._generate_instructions()
+            # Don't generate custom instructions, let e3nn handle it
+            instructions = None
         self.instructions = instructions
 
         # Determine whether to use OpenEquivariance
@@ -199,17 +199,28 @@ class TensorProduct(torch.nn.Module):
     ):
         """Initialize e3nn tensor product."""
         # Use the correct parameter names for e3nn 0.5.1
-        # Always use the generated instructions
-        self.tp_backend = o3.TensorProduct(
-            self.irreps_in1,
-            self.irreps_in2,
-            self.irreps_out,
-            instructions=self.instructions,
-            irrep_normalization=normalization,
-            path_normalization=path_normalization,
-            internal_weights=self.internal_weights,
-            shared_weights=self.shared_weights,
-        )
+        # Create the tensor product, letting e3nn generate instructions if None
+        if self.instructions is None:
+            self.tp_backend = o3.TensorProduct(
+                self.irreps_in1,
+                self.irreps_in2,
+                self.irreps_out,
+                irrep_normalization=normalization,
+                path_normalization=path_normalization,
+                internal_weights=self.internal_weights,
+                shared_weights=self.shared_weights,
+            )
+        else:
+            self.tp_backend = o3.TensorProduct(
+                self.irreps_in1,
+                self.irreps_in2,
+                self.irreps_out,
+                instructions=self.instructions,
+                irrep_normalization=normalization,
+                path_normalization=path_normalization,
+                internal_weights=self.internal_weights,
+                shared_weights=self.shared_weights,
+            )
         self.weight_numel = self.tp_backend.weight_numel
 
     def forward(
