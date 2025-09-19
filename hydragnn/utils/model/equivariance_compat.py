@@ -199,6 +199,14 @@ class TensorProduct(torch.nn.Module):
     ):
         """Initialize e3nn tensor product."""
         # Use the correct parameter names for e3nn 0.5.1
+        # Set sensible defaults for None values
+        internal_weights = (
+            self.internal_weights if self.internal_weights is not None else True
+        )
+        shared_weights = (
+            self.shared_weights if self.shared_weights is not None else False
+        )
+
         # Create the tensor product, letting e3nn generate instructions if None
         if self.instructions is None:
             self.tp_backend = o3.TensorProduct(
@@ -207,8 +215,8 @@ class TensorProduct(torch.nn.Module):
                 self.irreps_out,
                 irrep_normalization=normalization,
                 path_normalization=path_normalization,
-                internal_weights=self.internal_weights,
-                shared_weights=self.shared_weights,
+                internal_weights=internal_weights,
+                shared_weights=shared_weights,
             )
         else:
             self.tp_backend = o3.TensorProduct(
@@ -218,8 +226,8 @@ class TensorProduct(torch.nn.Module):
                 instructions=self.instructions,
                 irrep_normalization=normalization,
                 path_normalization=path_normalization,
-                internal_weights=self.internal_weights,
-                shared_weights=self.shared_weights,
+                internal_weights=internal_weights,
+                shared_weights=shared_weights,
             )
         self.weight_numel = self.tp_backend.weight_numel
 
