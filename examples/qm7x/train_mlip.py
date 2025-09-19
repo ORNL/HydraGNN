@@ -451,7 +451,7 @@ if __name__ == "__main__":
         ## adios
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+                os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
             )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
@@ -510,7 +510,7 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
