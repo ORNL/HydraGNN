@@ -114,18 +114,10 @@ class TensorProduct(torch.nn.Module):
 
         # Generate instructions if not provided - e3nn 0.5.1 requires instructions
         if instructions is None:
-            # Generate instructions using proper tensor product rules
-            instructions = []
-            irreps_out_list = []
-
-            for i, (mul_ir1, ir_in1) in enumerate(self.irreps_in1):
-                for j, (mul_ir2, ir_in2) in enumerate(self.irreps_in2):
-                    for ir_out in ir_in1 * ir_in2:
-                        # Check if this irrep appears in the target output
-                        for k, (mul_out, ir_target) in enumerate(self.irreps_out):
-                            if ir_out == ir_target:
-                                instructions.append((i, j, k, "uvu", True))
-                                break
+            # Use the proper instruction generation function
+            _, instructions = tp_out_irreps_with_instructions(
+                self.irreps_in1, self.irreps_in2, self.irreps_out
+            )
         self.instructions = instructions
 
         # Determine whether to use OpenEquivariance
