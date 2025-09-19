@@ -126,6 +126,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_ell"] = None
     if "node_max_ell" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
+    if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -189,6 +191,11 @@ def update_config_edge_dim(config):
         assert (
             config["mpnn_type"] in edge_models
         ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
+        config["edge_dim"] = len(config["edge_features"])
+    if "enable_interatomic_potential" in config:
+        assert not config[
+            "enable_interatomic_potential"
+        ], "Edge features cannot be used when developing machine learning interatomic potentials - the model will build its own customized features for that."
         config["edge_dim"] = len(config["edge_features"])
     elif config["mpnn_type"] == "CGCNN":
         # CG always needs an integer edge_dim
