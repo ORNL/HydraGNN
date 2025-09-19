@@ -131,15 +131,21 @@ class TensorProduct(torch.nn.Module):
             )
 
         # Initialize the appropriate backend
-        if self.use_oeq:
-            self._init_openequivariance()
-        else:
-            self._init_e3nn(
-                normalization=normalization,
-                path_normalization=path_normalization,
-                gradient_normalization=gradient_normalization,
-                checkname=checkname,
-            )
+        try:
+            if self.use_oeq:
+                logging.debug("Initializing OpenEquivariance backend")
+                self._init_openequivariance()
+            else:
+                logging.debug("Initializing e3nn backend")
+                self._init_e3nn(
+                    normalization=normalization,
+                    path_normalization=path_normalization,
+                    gradient_normalization=gradient_normalization,
+                    checkname=checkname,
+                )
+        except Exception as e:
+            logging.error(f"Failed to initialize TensorProduct: {e}")
+            raise
 
     def _generate_instructions(self):
         """Generate proper tensor product instructions using MACE-style logic."""
@@ -198,38 +204,45 @@ class TensorProduct(torch.nn.Module):
         checkname=True,
     ):
         """Initialize e3nn tensor product."""
-        # Use the correct parameter names for e3nn 0.5.1
-        # Set sensible defaults for None values
-        internal_weights = (
-            self.internal_weights if self.internal_weights is not None else True
-        )
-        shared_weights = (
-            self.shared_weights if self.shared_weights is not None else False
-        )
+        try:
+            # Use the correct parameter names for e3nn 0.5.1
+            # Set sensible defaults for None values
+            internal_weights = (
+                self.internal_weights if self.internal_weights is not None else True
+            )
+            shared_weights = (
+                self.shared_weights if self.shared_weights is not None else False
+            )
 
-        # Create the tensor product, letting e3nn generate instructions if None
-        if self.instructions is None:
-            self.tp_backend = o3.TensorProduct(
-                self.irreps_in1,
-                self.irreps_in2,
-                self.irreps_out,
-                irrep_normalization=normalization,
-                path_normalization=path_normalization,
-                internal_weights=internal_weights,
-                shared_weights=shared_weights,
+            # Create the tensor product, letting e3nn generate instructions if None
+            if self.instructions is None:
+                self.tp_backend = o3.TensorProduct(
+                    self.irreps_in1,
+                    self.irreps_in2,
+                    self.irreps_out,
+                    irrep_normalization=normalization,
+                    path_normalization=path_normalization,
+                    internal_weights=internal_weights,
+                    shared_weights=shared_weights,
+                )
+            else:
+                self.tp_backend = o3.TensorProduct(
+                    self.irreps_in1,
+                    self.irreps_in2,
+                    self.irreps_out,
+                    instructions=self.instructions,
+                    irrep_normalization=normalization,
+                    path_normalization=path_normalization,
+                    internal_weights=internal_weights,
+                    shared_weights=shared_weights,
+                )
+            self.weight_numel = self.tp_backend.weight_numel
+            logging.debug(
+                f"e3nn TensorProduct initialized successfully with weight_numel={self.weight_numel}"
             )
-        else:
-            self.tp_backend = o3.TensorProduct(
-                self.irreps_in1,
-                self.irreps_in2,
-                self.irreps_out,
-                instructions=self.instructions,
-                irrep_normalization=normalization,
-                path_normalization=path_normalization,
-                internal_weights=internal_weights,
-                shared_weights=shared_weights,
-            )
-        self.weight_numel = self.tp_backend.weight_numel
+        except Exception as e:
+            logging.error(f"Failed to initialize e3nn TensorProduct: {e}")
+            raise
 
     def forward(
         self, x1: torch.Tensor, x2: torch.Tensor, weight: Optional[torch.Tensor] = None
