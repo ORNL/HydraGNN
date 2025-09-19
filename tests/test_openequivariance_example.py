@@ -52,22 +52,27 @@ def pytest_tensor_product_basic_functionality():
     """Demonstrate basic tensor product functionality."""
     device = torch.device("cpu")  # Use CPU for CI
 
-    # Use the most basic possible irreps configuration
-    irreps_in1 = o3.Irreps("1x0e")  # Scalar features only
-    irreps_in2 = o3.Irreps("1x0e")  # Scalar edge attributes
-    irreps_out = o3.Irreps("1x0e")  # Scalar output
+    # Define irreps for a typical MACE-like tensor product
+    irreps_in1 = o3.Irreps("4x0e + 2x1e + 1x2e")  # Node features
+    irreps_in2 = o3.Irreps("1x1e")  # Edge attributes (spherical harmonics)
+    irreps_out = o3.Irreps("4x0e + 4x1e + 2x2e + 1x3e")  # Output features
 
     try:
-        # Try to create a very basic tensor product
-        # Since OpenEquivariance likely isn't available in CI, this should use e3nn
-        tp = TensorProduct(irreps_in1, irreps_in2, irreps_out).to(device)
+        # Create tensor product with automatic backend selection
+        tp = TensorProduct(
+            irreps_in1,
+            irreps_in2,
+            irreps_out,
+            shared_weights=False,
+            internal_weights=False,
+        ).to(device)
 
         # Basic assertions
         assert tp.weight_numel > 0
         assert hasattr(tp, "tp_backend")
 
-        # Test forward pass with minimal data
-        batch_size = 2
+        # Test forward pass
+        batch_size = 100
         x1 = torch.randn(batch_size, irreps_in1.dim, device=device)
         x2 = torch.randn(batch_size, irreps_in2.dim, device=device)
         weight = torch.randn(batch_size, tp.weight_numel, device=device)

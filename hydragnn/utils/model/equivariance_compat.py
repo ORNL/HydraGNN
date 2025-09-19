@@ -112,10 +112,20 @@ class TensorProduct(torch.nn.Module):
         self.internal_weights = internal_weights
         self.shared_weights = shared_weights
 
-        # Generate instructions if not provided - let e3nn handle default case
+        # Generate instructions if not provided - e3nn 0.5.1 requires instructions
         if instructions is None:
-            # Don't generate custom instructions, let e3nn handle it
-            instructions = None
+            # Generate instructions using proper tensor product rules
+            instructions = []
+            irreps_out_list = []
+
+            for i, (mul_ir1, ir_in1) in enumerate(self.irreps_in1):
+                for j, (mul_ir2, ir_in2) in enumerate(self.irreps_in2):
+                    for ir_out in ir_in1 * ir_in2:
+                        # Check if this irrep appears in the target output
+                        for k, (mul_out, ir_target) in enumerate(self.irreps_out):
+                            if ir_out == ir_target:
+                                instructions.append((i, j, k, "uvu", True))
+                                break
         self.instructions = instructions
 
         # Determine whether to use OpenEquivariance
@@ -214,28 +224,17 @@ class TensorProduct(torch.nn.Module):
                 self.shared_weights if self.shared_weights is not None else False
             )
 
-            # Create the tensor product, letting e3nn generate instructions if None
-            if self.instructions is None:
-                self.tp_backend = o3.TensorProduct(
-                    self.irreps_in1,
-                    self.irreps_in2,
-                    self.irreps_out,
-                    irrep_normalization=normalization,
-                    path_normalization=path_normalization,
-                    internal_weights=internal_weights,
-                    shared_weights=shared_weights,
-                )
-            else:
-                self.tp_backend = o3.TensorProduct(
-                    self.irreps_in1,
-                    self.irreps_in2,
-                    self.irreps_out,
-                    instructions=self.instructions,
-                    irrep_normalization=normalization,
-                    path_normalization=path_normalization,
-                    internal_weights=internal_weights,
-                    shared_weights=shared_weights,
-                )
+            # e3nn 0.5.1 always requires instructions parameter
+            self.tp_backend = o3.TensorProduct(
+                self.irreps_in1,
+                self.irreps_in2,
+                self.irreps_out,
+                instructions=self.instructions,
+                irrep_normalization=normalization,
+                path_normalization=path_normalization,
+                internal_weights=internal_weights,
+                shared_weights=shared_weights,
+            )
             self.weight_numel = self.tp_backend.weight_numel
             logging.debug(
                 f"e3nn TensorProduct initialized successfully with weight_numel={self.weight_numel}"
