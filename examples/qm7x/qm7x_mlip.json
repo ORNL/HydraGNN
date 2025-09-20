@@ -20,11 +20,11 @@
       "num_spherical": 7,
       "radius": 5.0,
       "hidden_dim": 200,
-      "num_conv_layers": 6,
+      "num_conv_layers": 4,
       "output_heads": {
         "node": {
           "num_headlayers": 2,
-          "dim_headlayers": [1000,1000],
+          "dim_headlayers": [100,100],
           "type": "mlp"
         }
       },
