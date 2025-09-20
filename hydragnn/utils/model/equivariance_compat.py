@@ -114,10 +114,13 @@ class TensorProduct(torch.nn.Module):
 
         # Generate instructions if not provided - e3nn 0.5.1 requires instructions
         if instructions is None:
-            # Use the proper instruction generation function
-            _, instructions = tp_out_irreps_with_instructions(
+            # Use the same approach as the original MACE blocks.py
+            # Generate both output irreps and instructions together
+            generated_irreps_out, instructions = tp_out_irreps_with_instructions(
                 self.irreps_in1, self.irreps_in2, self.irreps_out
             )
+            # Update the output irreps to match what was actually generated
+            self.irreps_out = generated_irreps_out
         self.instructions = instructions
 
         # Determine whether to use OpenEquivariance
