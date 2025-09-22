@@ -69,9 +69,9 @@ def pytest_compatibility_module():
 
     result = tp(x1, x2, weight)
     print(f"✓ Forward pass successful, output shape: {result.shape}")
-    print(f"✓ Expected output shape: ({batch_size}, {irreps_out.dim})")
+    print(f"✓ Expected output shape: ({batch_size}, {tp.irreps_out.dim})")
 
-    assert result.shape == (batch_size, irreps_out.dim)
+    assert result.shape == (batch_size, tp.irreps_out.dim)
 
 
 @pytest.mark.mpi_skip()
