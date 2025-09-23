@@ -47,10 +47,8 @@ from sklearn.metrics import r2_score
 
 plt.rcParams.update({"font.size": 16})
 
-
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
 
 def get_log_name_config(config):
     return (
@@ -82,29 +80,30 @@ def get_log_name_config(config):
     )
 
 
-def getcolordensity(xdata, ydata):
-    ###############################
-    nbin = 20
-    hist2d, xbins_edge, ybins_edge = np.histogram2d(x=xdata, y=ydata, bins=[nbin, nbin])
-    xbin_cen = 0.5 * (xbins_edge[0:-1] + xbins_edge[1:])
-    ybin_cen = 0.5 * (ybins_edge[0:-1] + ybins_edge[1:])
-    BCTY, BCTX = np.meshgrid(ybin_cen, xbin_cen)
-    hist2d = hist2d / np.amax(hist2d)
-    print(np.amax(hist2d))
 
-    bctx1d = np.reshape(BCTX, len(xbin_cen) * nbin)
-    bcty1d = np.reshape(BCTY, len(xbin_cen) * nbin)
-    loc_pts = np.zeros((len(xbin_cen) * nbin, 2))
-    loc_pts[:, 0] = bctx1d
-    loc_pts[:, 1] = bcty1d
-    hist2d_norm = griddata(
-        loc_pts,
-        hist2d.reshape(len(xbin_cen) * nbin),
-        (xdata, ydata),
-        method="linear",
-        fill_value=0,
-    )  # np.nan)
-    return hist2d_norm
+def getcolordensity(xdata, ydata, nbin=100):
+    x = np.asarray(xdata, dtype=float).ravel()
+    y = np.asarray(ydata, dtype=float).ravel()
+    n = min(x.size, y.size)
+    x, y = x[:n], y[:n]
+
+    # 2D histogram
+    hist2d, xedges, yedges = np.histogram2d(x=x, y=y, bins=[nbin, nbin])
+
+    # Normalize safely
+    hmax = hist2d.max()
+    hist2d_norm = hist2d / hmax if hmax > 0 else np.zeros_like(hist2d, dtype=float)
+
+    # For each (x,y), find its bin index
+    ix = np.digitize(x, xedges) - 1
+    iy = np.digitize(y, yedges) - 1
+
+    # Clamp to [0, nbin-1] so points on the right/top edge map to the last bin
+    ix = np.clip(ix, 0, nbin - 1)
+    iy = np.clip(iy, 0, nbin - 1)
+
+    # Color density per point = normalized count in that bin
+    return hist2d_norm[ix, iy]
 
 
 if __name__ == "__main__":
@@ -216,8 +215,8 @@ if __name__ == "__main__":
         fname = os.path.join(
             os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
         )
-        # trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
-        # valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
+        #trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
+        #valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
@@ -278,29 +277,16 @@ if __name__ == "__main__":
     if rank == 0:
         # Show R2 Metrics
         print(
-            f"R2 energy: ",
-            r2_score(
-                np.array(energy_true_list_global), np.array(energy_pred_list_global)
-            ),
+            f"R2 energy: ", r2_score(np.array(energy_true_list_global), np.array(energy_pred_list_global))
         )
         print(
-            f"R2 forces: ",
-            r2_score(
-                np.array(forces_true_list_global), np.array(forces_pred_list_global)
-            ),
+            f"R2 forces: ", r2_score(np.array(forces_true_list_global), np.array(forces_pred_list_global))
         )
 
-        hist2d_norm = getcolordensity(energy_true_list, energy_pred_list_global)
+        hist2d_norm = getcolordensity(energy_true_list_global, energy_pred_list_global)
 
         fig, ax = plt.subplots()
-        plt.scatter(
-            energy_true_list_global,
-            energy_pred_list_global,
-            s=8,
-            c=hist2d_norm,
-            vmin=0,
-            vmax=1,
-        )
+        plt.scatter(energy_true_list_global, energy_pred_list_global, s=8, c=hist2d_norm, vmin=0, vmax=1)
         plt.clim(0, 1)
         ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
         plt.colorbar()
@@ -313,14 +299,7 @@ if __name__ == "__main__":
 
         hist2d_norm = getcolordensity(forces_pred_list_global, forces_true_list_global)
         fig, ax = plt.subplots()
-        plt.scatter(
-            forces_pred_list_global,
-            forces_true_list_global,
-            s=8,
-            c=hist2d_norm,
-            vmin=0,
-            vmax=1,
-        )
+        plt.scatter(forces_pred_list_global, forces_true_list_global, s=8, c=hist2d_norm, vmin=0, vmax=1)
         plt.clim(0, 1)
         ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
         plt.colorbar()
