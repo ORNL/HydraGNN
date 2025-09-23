@@ -526,8 +526,6 @@ def create_model(
             def __init__(self, original_model):
                 super().__init__()
                 self.model = original_model
-                self.radius = getattr(original_model, "radius", 6.0)
-                self.max_neighbours = getattr(original_model, "max_neighbours", 50)
 
             def __getattr__(self, name):
                 # First try to get from the wrapper itself
