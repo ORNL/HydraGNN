@@ -194,7 +194,7 @@ def update_config_edge_dim(config):
         config["edge_dim"] = len(config["edge_features"])
         if "enable_interatomic_potential" in config:
             assert not config[
-                "enable_interatomic_potential"
+                "edge_features"
             ], "Edge features cannot be used when developing machine learning interatomic potentials - the model will build its own customized features for that."
         config["edge_dim"] = len(config["edge_features"])
     elif config["mpnn_type"] == "CGCNN":
