@@ -17,13 +17,15 @@ from tqdm import tqdm
 from mpi4py import MPI
 import argparse
 
+from itertools import chain
+
 import torch
 import torch_scatter
 import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.distributed import get_device, setup_ddp
+from hydragnn.utils.distributed import get_device, setup_ddp, nsplit
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
 from hydragnn.utils.input_config_parsing.config_utils import (
@@ -40,12 +42,13 @@ try:
 except ImportError:
     pass
 
-from LJ_data import info
-
 import matplotlib.pyplot as plt
 from sklearn.metrics import r2_score
 
 plt.rcParams.update({"font.size": 16})
+
+def info(*args, logtype="info", sep=" "):
+    getattr(logging, logtype)(sep.join(map(str, args)))
 
 
 def get_log_name_config(config):
@@ -128,22 +131,75 @@ if __name__ == "__main__":
     )
     parser.set_defaults(format="adios")
 
+    parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
+    parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
+    parser.add_argument("--shmem", action="store_true", help="shmem")
+
     args = parser.parse_args()
 
+    graph_feature_names = ["energy"]
+    graph_feature_dims = [1]
+    node_feature_names = [
+        "atomic_number",
+        "coordinates",
+        "forces",
+        "hCHG",
+        "hVDIP",
+        "hRAT",
+    ]
+    node_feature_dims = [1, 3, 3, 1, 1, 1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
+    datadir = os.path.join(dirpwd, "dataset/QM7-X")
+    ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
+    ##################################################################################################################
+    # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
         config = json.load(f)
-    setup_log(get_log_name_config(config))
+    verbosity = config["Verbosity"]["level"]
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config["graph_feature_names"] = graph_feature_names
+    var_config["graph_feature_dims"] = graph_feature_dims
+    var_config["node_feature_names"] = node_feature_names
+    var_config["node_feature_dims"] = node_feature_dims
+
+    # Transformation to create positional and structural laplacian encoders
+    """
+    graphgps_transform = AddLaplacianEigenvectorPE(
+        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
+        attr_name="pe",
+        is_undirected=True,
+    )
+    """
+    graphgps_transform = None
+
     ##################################################################################################################
     # Always initialize for multi-rank training.
-    comm_size, rank = setup_ddp()
+    comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     ##################################################################################################################
+
     comm = MPI.COMM_WORLD
 
-    datasetname = "LJ"
+    ## Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%%(levelname)s (rank %d): %%(message)s" % (rank),
+        datefmt="%H:%M:%S",
+    )
 
-    comm.Barrier()
+    log_name = "qm7x"
+    hydragnn.utils.print.setup_log(log_name)
+    writer = hydragnn.utils.model.get_summary_writer(log_name)
+
+    # Configurable run choices (JSON file that accompanies this example script).
+    with open(input_filename, "r") as f:
+        config = json.load(f)
+    verbosity = config["Verbosity"]["level"]
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config["graph_feature_names"] = graph_feature_names
+    var_config["graph_feature_dims"] = graph_feature_dims
+    var_config["node_feature_names"] = node_feature_names
+    var_config["node_feature_dims"] = node_feature_dims
 
     timer = Timer("load_data")
     timer.start()
@@ -159,9 +215,9 @@ if __name__ == "__main__":
         fname = os.path.join(
             os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
         )
-        trainset = AdiosDataset(fname, "trainset", comm, **opt)
-        valset = AdiosDataset(fname, "valset", comm, **opt)
-        testset = AdiosDataset(fname, "testset", comm, **opt)
+        #trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
+        #valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
+        testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
@@ -169,6 +225,9 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
     )
+
+    rx = list(nsplit(range(len(testset)), comm_size))[rank]
+    testset.setsubset(rx.start, rx.stop)
 
     model = torch.nn.parallel.DistributedDataParallel(model)
 
@@ -199,37 +258,54 @@ if __name__ == "__main__":
         forces_pred_list.extend((-grads_energy).flatten().tolist())
         forces_true_list.extend(data.forces.flatten().tolist())
 
-    # Show R2 Metrics
-    print(
-        f"R2 energy: ", r2_score(np.array(energy_true_list), np.array(energy_pred_list))
-    )
-    print(
-        f"R2 forces: ", r2_score(np.array(forces_true_list), np.array(forces_pred_list))
-    )
+    # `MPI_Gather()` is called by all processes
+    # Gather lists of lists to rank 0
+    all_energy_pred = comm.gather(energy_pred_list, root=0)
+    all_energy_true = comm.gather(energy_true_list, root=0)
+    all_forces_pred = comm.gather(forces_pred_list, root=0)
+    all_forces_true = comm.gather(forces_true_list, root=0)
 
-    hist2d_norm = getcolordensity(energy_true_list, energy_pred_list)
+    if rank == 0:
+        # Flatten if you want one big list
+        energy_pred_list_global = list(chain.from_iterable(all_energy_pred))
+        energy_true_list_global = list(chain.from_iterable(all_energy_true))
+        forces_pred_list_global = list(chain.from_iterable(all_forces_pred))
+        forces_true_list_global = list(chain.from_iterable(all_forces_true))
 
-    fig, ax = plt.subplots()
-    plt.scatter(energy_true_list, energy_pred_list, s=8, c=hist2d_norm, vmin=0, vmax=1)
-    plt.clim(0, 1)
-    ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
-    plt.colorbar()
-    plt.xlabel("True values")
-    plt.ylabel("Predicted values")
-    plt.title(f"energy")
-    plt.draw()
-    plt.tight_layout()
-    plt.savefig(f"./energy_Scatterplot" + ".png", dpi=400)
+    comm.Barrier()
 
-    hist2d_norm = getcolordensity(forces_pred_list, forces_true_list)
-    fig, ax = plt.subplots()
-    plt.scatter(forces_pred_list, forces_true_list, s=8, c=hist2d_norm, vmin=0, vmax=1)
-    plt.clim(0, 1)
-    ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
-    plt.colorbar()
-    plt.xlabel("Predicted Values")
-    plt.ylabel("True Values")
-    plt.title("Forces")
-    plt.draw()
-    plt.tight_layout()
-    plt.savefig(f"./Forces_Scatterplot" + ".png", dpi=400)
+    if rank == 0:
+        # Show R2 Metrics
+        print(
+            f"R2 energy: ", r2_score(np.array(energy_true_list_global), np.array(energy_pred_list_global))
+        )
+        print(
+            f"R2 forces: ", r2_score(np.array(forces_true_list_global), np.array(forces_pred_list_global))
+        )
+
+        hist2d_norm = getcolordensity(energy_true_list, energy_pred_list_global)
+
+        fig, ax = plt.subplots()
+        plt.scatter(energy_true_list_global, energy_pred_list_global, s=8, c=hist2d_norm, vmin=0, vmax=1)
+        plt.clim(0, 1)
+        ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
+        plt.colorbar()
+        plt.xlabel("True values")
+        plt.ylabel("Predicted values")
+        plt.title(f"energy")
+        plt.draw()
+        plt.tight_layout()
+        plt.savefig(f"./energy_Scatterplot" + ".png", dpi=400)
+
+        hist2d_norm = getcolordensity(forces_pred_list_global, forces_true_list_global)
+        fig, ax = plt.subplots()
+        plt.scatter(forces_pred_list_global, forces_true_list_global, s=8, c=hist2d_norm, vmin=0, vmax=1)
+        plt.clim(0, 1)
+        ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
+        plt.colorbar()
+        plt.xlabel("Predicted Values")
+        plt.ylabel("True Values")
+        plt.title("Forces")
+        plt.draw()
+        plt.tight_layout()
+        plt.savefig(f"./Forces_Scatterplot" + ".png", dpi=400)
