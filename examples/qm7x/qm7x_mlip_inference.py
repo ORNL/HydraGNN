@@ -47,8 +47,10 @@ from sklearn.metrics import r2_score
 
 plt.rcParams.update({"font.size": 16})
 
+
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
 
 def get_log_name_config(config):
     return (
@@ -78,7 +80,6 @@ def get_log_name_config(config):
             for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
         )
     )
-
 
 
 def getcolordensity(xdata, ydata, nbin=100):
@@ -215,8 +216,8 @@ if __name__ == "__main__":
         fname = os.path.join(
             os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
         )
-        #trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
-        #valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
+        # trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
+        # valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
@@ -277,16 +278,29 @@ if __name__ == "__main__":
     if rank == 0:
         # Show R2 Metrics
         print(
-            f"R2 energy: ", r2_score(np.array(energy_true_list_global), np.array(energy_pred_list_global))
+            f"R2 energy: ",
+            r2_score(
+                np.array(energy_true_list_global), np.array(energy_pred_list_global)
+            ),
         )
         print(
-            f"R2 forces: ", r2_score(np.array(forces_true_list_global), np.array(forces_pred_list_global))
+            f"R2 forces: ",
+            r2_score(
+                np.array(forces_true_list_global), np.array(forces_pred_list_global)
+            ),
         )
 
         hist2d_norm = getcolordensity(energy_true_list_global, energy_pred_list_global)
 
         fig, ax = plt.subplots()
-        plt.scatter(energy_true_list_global, energy_pred_list_global, s=8, c=hist2d_norm, vmin=0, vmax=1)
+        plt.scatter(
+            energy_true_list_global,
+            energy_pred_list_global,
+            s=8,
+            c=hist2d_norm,
+            vmin=0,
+            vmax=1,
+        )
         plt.clim(0, 1)
         ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
         plt.colorbar()
@@ -299,7 +313,14 @@ if __name__ == "__main__":
 
         hist2d_norm = getcolordensity(forces_pred_list_global, forces_true_list_global)
         fig, ax = plt.subplots()
-        plt.scatter(forces_pred_list_global, forces_true_list_global, s=8, c=hist2d_norm, vmin=0, vmax=1)
+        plt.scatter(
+            forces_pred_list_global,
+            forces_true_list_global,
+            s=8,
+            c=hist2d_norm,
+            vmin=0,
+            vmax=1,
+        )
         plt.clim(0, 1)
         ax.plot(ax.get_xlim(), ax.get_xlim(), ls="--", color="red")
         plt.colorbar()
