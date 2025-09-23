@@ -15,9 +15,8 @@ This test validates the enhanced forward method functionality for molecular simu
 """
 
 import torch
-import numpy as np
+import torch_scatter
 from torch_geometric.data import Data
-import os
 import pytest
 
 
@@ -249,9 +248,17 @@ def pytest_energy_force_consistency():
     energy_output = model(data)
 
     if isinstance(energy_output, (list, tuple)):
-        energy = energy_output[0].sum()  # Sum over batch
+        energy = (
+            torch_scatter.scatter_add(energy_output[0], data.batch, dim=0)
+            .squeeze()
+            .float()
+        )
     else:
-        energy = energy_output.sum()
+        energy = (
+            torch_scatter.scatter_add(energy_output, data.batch, dim=0)
+            .squeeze()
+            .float()
+        )
 
     # Compute forces as negative gradients of energy w.r.t. positions
     forces = torch.autograd.grad(
