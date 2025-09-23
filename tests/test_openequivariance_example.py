@@ -188,9 +188,9 @@ def pytest_equivariance_preservation():
     R_matrix = o3.rand_matrix()
 
     # Get Wigner D matrices for each irrep
-    D1 = irreps_in1.D_from_matrix(R_matrix, dtype=x1.dtype)
-    D2 = irreps_in2.D_from_matrix(R_matrix, dtype=x2.dtype)
-    D_out = irreps_out.D_from_matrix(R_matrix, dtype=x1.dtype)
+    D1 = irreps_in1.D_from_matrix(R_matrix)
+    D2 = irreps_in2.D_from_matrix(R_matrix)
+    D_out = tp.irreps_out.D_from_matrix(R_matrix)
 
     # Apply rotation to inputs
     x1_rot = torch.einsum("bi,ij->bj", x1, D1.T)
