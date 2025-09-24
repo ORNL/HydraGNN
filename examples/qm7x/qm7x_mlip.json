@@ -49,7 +49,7 @@
       "num_epoch": 20,
       "batch_size": 32,
       "continue": 0,
-      "startfrom": "/lustre/orion/lrn070/world-shared/mlupopa/MLIP_HydraGNN/HydraGNN/examples/qm7x/logs/qm7x/qm7x",
+      "startfrom": "./logs/qm7x/qm7x",
       "Optimizer": {
         "learning_rate": 0.001
       }
