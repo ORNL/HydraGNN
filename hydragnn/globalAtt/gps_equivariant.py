@@ -31,17 +31,8 @@ from torch_geometric.utils import to_dense_batch
 
 class GPSConvEquivariant(torch.nn.Module):
     """
-    Equivariant Graph GPS (Global attention-based Pooling + Skip connections) layer.
-    
-    This is an equivariant version of the GraphGPS that verifies the presence of 
-    data.pos and uses positional information to build equivariant graph embeddings.
-    
-    The layer combines:
-    1. Local message passing (optional)
-    2. Global attention mechanism with position-aware features
-    3. Feed-forward network
-    
-    All with skip connections and layer normalization.
+    Equivariant Graph GPS layer that verifies data.pos presence 
+    and uses positional information for equivariant embeddings.
     """
     
     def __init__(
@@ -127,22 +118,13 @@ class GPSConvEquivariant(torch.nn.Module):
     ) -> Tensor:
         """Runs the forward pass of the module."""
         # Verify the presence of position data for equivariance
-        pos_available = (
-            equiv_node_feat is not None 
-            and equiv_node_feat.dim() == 2 
-            and equiv_node_feat.size(1) == 3
-        )
-        
-        if pos_available:
+        if (equiv_node_feat is not None and 
+            equiv_node_feat.dim() == 2 and 
+            equiv_node_feat.size(1) == 3):
             # equiv_node_feat contains position data (data.pos)
-            pos = equiv_node_feat
-            # Create equivariant embedding by incorporating positional information
-            # Use position magnitude (invariant to rotation) and normalized positions
-            pos_norm = torch.norm(pos, dim=1, keepdim=True)
-            pos_features = torch.cat([pos_norm, pos], dim=1)  # [N, 4]
-            pos_encoded = self.pos_proj(pos_features)
-            # Add position encoding to invariant features for equivariant embedding
-            inv_node_feat = inv_node_feat + pos_encoded
+            pos_norm = torch.norm(equiv_node_feat, dim=1, keepdim=True)
+            pos_features = torch.cat([pos_norm, equiv_node_feat], dim=1)  # [N, 4]
+            inv_node_feat = inv_node_feat + self.pos_proj(pos_features)
         
         hs = []
         if self.conv is not None:  # Local MPNN.
