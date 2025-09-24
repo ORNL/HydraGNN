@@ -59,6 +59,7 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
+conversion_constant_from_hartree_to_eV = 27.2114079527
 
 class ANI1xDataset(AbstractBaseDataset):
     def __init__(
@@ -133,10 +134,10 @@ class ANI1xDataset(AbstractBaseDataset):
                     .unsqueeze(0)
                     .unsqueeze(1)
                     .to(torch.float32)
-                )
+                ) * conversion_constant_from_hartree_to_eV
 
                 energy_per_atom = energy.detach().clone() / natoms
-                forces = torch.from_numpy(F[frame_id]).to(torch.float32)
+                forces = torch.from_numpy(F[frame_id]).to(torch.float32) * conversion_constant_from_hartree_to_eV
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
                 # Calculate chemical composition
