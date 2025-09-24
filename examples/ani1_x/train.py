@@ -59,6 +59,9 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
+# Conversion constant from Hartree to electron volt (eV).
+# Source: NIST CODATA 2018, https://physics.nist.gov/cgi-bin/cuu/Value?hrjtoeV
+# Value: 1 Hartree = 27.2114079527 eV (use at least 10 significant digits for scientific accuracy)
 conversion_constant_from_hartree_to_eV = 27.2114079527
 
 
