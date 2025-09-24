@@ -93,7 +93,7 @@ class GPSConvEquivariant(torch.nn.Module):
             self.norm_with_batch = "batch" in signature.parameters
             
         # Position projection layer for equivariant features
-        self.pos_proj = Linear(4, channels)  # pos_norm (1) + pos (3) -> channels
+        self.pos_proj = Linear(1, channels)  # pos_norm (1) -> channels
 
     def reset_parameters(self):
         r"""Resets all learnable parameters of the module."""
@@ -122,9 +122,9 @@ class GPSConvEquivariant(torch.nn.Module):
             equiv_node_feat.dim() == 2 and 
             equiv_node_feat.size(1) == 3):
             # equiv_node_feat contains position data (data.pos)
+            # Use only invariant features: position norm is invariant to rotations
             pos_norm = torch.norm(equiv_node_feat, dim=1, keepdim=True)
-            pos_features = torch.cat([pos_norm, equiv_node_feat], dim=1)  # [N, 4]
-            inv_node_feat = inv_node_feat + self.pos_proj(pos_features)
+            inv_node_feat = inv_node_feat + self.pos_proj(pos_norm)
         
         hs = []
         if self.conv is not None:  # Local MPNN.
