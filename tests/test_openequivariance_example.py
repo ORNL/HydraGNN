@@ -273,7 +273,9 @@ def pytest_comprehensive_integration_summary():
     irreps_out = o3.Irreps("1x0e + 1x1e + 1x2e")
 
     # This should work regardless of OpenEquivariance availability
-    tp = TensorProduct(irreps_in1, irreps_in2, irreps_out, shared_weights=False, internal_weights=False)
+    tp = TensorProduct(
+        irreps_in1, irreps_in2, irreps_out, shared_weights=False, internal_weights=False
+    )
     assert hasattr(tp, "weight_numel")
     assert hasattr(tp, "use_oeq")
 
