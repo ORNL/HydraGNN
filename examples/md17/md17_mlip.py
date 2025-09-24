@@ -169,4 +169,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    main(mpnn_type=args.mpnn_type)
+    main(mpnn_type=args.mpnn_type, global_attn_engine=args.global_attn_engine, global_attn_type=args.global_attn_type)
