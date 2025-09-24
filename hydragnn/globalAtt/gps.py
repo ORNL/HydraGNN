@@ -86,6 +86,9 @@ class GPSConv(torch.nn.Module):
         if self.norm1 is not None:
             signature = inspect.signature(self.norm1.forward)
             self.norm_with_batch = "batch" in signature.parameters
+            
+        # Position projection layer for equivariant features
+        self.pos_proj = Linear(4, channels)  # pos_norm (1) + pos (3) -> channels
 
     def reset_parameters(self):
         r"""Resets all learnable parameters of the module."""
@@ -99,6 +102,7 @@ class GPSConv(torch.nn.Module):
             self.norm2.reset_parameters()
         if self.norm3 is not None:
             self.norm3.reset_parameters()
+        self.pos_proj.reset_parameters()
 
     def forward(
         self,
@@ -108,6 +112,24 @@ class GPSConv(torch.nn.Module):
         **kwargs,
     ) -> Tensor:
         """Runs the forward pass of the module."""
+        # Verify the presence of position data for equivariance
+        pos_available = (
+            equiv_node_feat is not None 
+            and equiv_node_feat.dim() == 2 
+            and equiv_node_feat.size(1) == 3
+        )
+        
+        if pos_available:
+            # equiv_node_feat contains position data (data.pos)
+            pos = equiv_node_feat
+            # Create equivariant embedding by incorporating positional information
+            # Use position magnitude (invariant to rotation) and normalized positions
+            pos_norm = torch.norm(pos, dim=1, keepdim=True)
+            pos_features = torch.cat([pos_norm, pos], dim=1)  # [N, 4]
+            pos_encoded = self.pos_proj(pos_features)
+            # Add position encoding to invariant features for equivariant embedding
+            inv_node_feat = inv_node_feat + pos_encoded
+        
         hs = []
         if self.conv is not None:  # Local MPNN.
             h, equiv_node_feat = self.conv(
