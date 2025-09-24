@@ -196,7 +196,6 @@ def update_config_edge_dim(config):
             assert not config[
                 "enable_interatomic_potential"
             ], "Edge features cannot be used when developing machine learning interatomic potentials - the model will build its own customized features for that."
-        config["edge_dim"] = len(config["edge_features"])
     elif config["mpnn_type"] == "CGCNN":
         # CG always needs an integer edge_dim
         # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
