@@ -303,7 +303,7 @@ class QM7XDataset(AbstractBaseDataset):
                     self.dataset.append(data_object)
                 else:
                     print(
-                        f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                        f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - molecule ID: {molid}",
                         flush=True,
                     )
 
