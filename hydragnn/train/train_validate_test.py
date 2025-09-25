@@ -27,7 +27,7 @@ import os
 
 from torch.profiler import record_function
 
-from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.distributed import get_comm_size_and_rank, print_peak_memory
 import torch.distributed as dist
 import pickle
 
@@ -576,10 +576,6 @@ def train(
                 tr.stop("backward_sync")
         tr.stop("backward", **syncopt)
         tr.start("opt_step", **syncopt)
-        print_distributed(
-            verbosity,
-            f"Memory used {torch.cuda.max_memory_allocated()/1e9} GB, before opt",
-        )
         # print_peak_memory(verbosity, "Max memory allocated before optimizer step")
         if use_deepspeed:
             model.step()
@@ -589,10 +585,6 @@ def train(
                 scaler.update()
             else:
                 opt.step()
-        print_distributed(
-            verbosity,
-            f"Memory used {torch.cuda.max_memory_allocated()/1e9} GB, after opt",
-        )
         # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()

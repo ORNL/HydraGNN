@@ -456,7 +456,8 @@ def print_peak_memory(verbosity_level, prefix):
         device = get_device()
         print_distributed(
             verbosity_level,
-            f"{prefix}: {torch.cuda.max_memory_allocated(device) // 1e6}MB ",
+            f"{prefix}: {torch.cuda.max_memory_allocated(device)/1e9} GB",
+            f"{torch.cuda.max_memory_cached()/1e9} GB",
         )
 
 
