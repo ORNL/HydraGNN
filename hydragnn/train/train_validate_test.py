@@ -36,13 +36,18 @@ import time
 from mpi4py import MPI
 from contextlib import nullcontext
 
+try:
+    from torch.amp import GradScaler
+except (ImportError, ModuleNotFoundError):
+    GradScaler = None
+
 torch.set_float32_matmul_precision("high")
 
 use_tensor_cores = (
     torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7
 )
 
-scaler = torch.amp.GradScaler("cuda", enabled=use_tensor_cores)
+scaler = GradScaler("cuda", enabled=use_tensor_cores) if GradScaler else None
 
 
 def get_autocast(bf16):
@@ -560,8 +565,10 @@ def train(
             if use_deepspeed:
                 model.backward(loss)
             else:
-                scaler.scale(loss).backward()
-                # loss.backward()
+                if GradScaler is not None:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -576,9 +583,11 @@ def train(
         if use_deepspeed:
             model.step()
         else:
-            scaler.step(opt)
-            scaler.update()
-            # opt.step()
+            if GradScaler is not None:
+                scaler.step(opt)
+                scaler.update()
+            else:
+                opt.step()
         print_distributed(
             verbosity,
             f"Memory used {torch.cuda.max_memory_allocated()/1e9} GB, after opt",
