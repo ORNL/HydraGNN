@@ -108,7 +108,7 @@ class OMol2025(AbstractBaseDataset):
             f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.",
             flush=True,
         )
-        torch.distributed.barrier()
+        MPI.COMM_WORLD.Barrier()
 
         random.shuffle(self.dataset)
 

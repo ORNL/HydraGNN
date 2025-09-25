@@ -18,6 +18,7 @@ from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
+import warnings
 import json
 import torch
 
@@ -50,10 +51,6 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
-
-    # This default is needed for update_config_NN_outputs
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
@@ -129,6 +126,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_ell"] = None
     if "node_max_ell" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
+    if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -162,13 +161,15 @@ def update_config(config, train_loader, val_loader, test_loader):
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
-    if "equivariance" in config and config["equivariance"]:
-        assert (
-            config["mpnn_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for EGNN, SchNet, PNAEq, PAINN, and MACE."
-    elif "equivariance" not in config:
-        config["equivariance"] = False
+    equivariance_toggled_models = ["EGNN"]
+    if "equivariance" in config:
+        if config["mpnn_type"] not in equivariance_toggled_models:
+            warnings.warn(
+                f"E(3) equivariance can only be toggled for EGNN. Setting it for {config['mpnn_type']} won't break anything,"
+                "but won't change anything either."
+            )
+    else:
+        config["equivariance"] = None
     return config
 
 
@@ -191,6 +192,10 @@ def update_config_edge_dim(config):
             config["mpnn_type"] in edge_models
         ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
         config["edge_dim"] = len(config["edge_features"])
+        if "enable_interatomic_potential" in config:
+            assert not config[
+                "enable_interatomic_potential"
+            ], "Edge features cannot be used with interatomic potentials as the model builds its own specialized features for force computation."
     elif config["mpnn_type"] == "CGCNN":
         # CG always needs an integer edge_dim
         # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
@@ -220,7 +225,7 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    if config["Training"]["compute_grad_energy"]:
+    if config["Architecture"].get("enable_interatomic_potential", False):
         dims_list = config["Variables_of_interest"]["output_dim"]
     elif hasattr(data, "y_loc"):
         dims_list = []

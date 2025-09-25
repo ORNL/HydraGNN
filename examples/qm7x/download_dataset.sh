@@ -8,6 +8,6 @@ unzip 3905361.zip
 
 for file in *.xz; do
     [ -e "$file" ] || continue  # Skip if no .xz files exist
-    xz -d $file
+    tar xvf $file
 done
 

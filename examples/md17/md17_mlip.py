@@ -21,6 +21,8 @@ def md17_pre_transform(data, compute_edges, transform):
     data.x = data.z.float().view(-1, 1)
     # Only predict energy (index 0 of 2 properties) for this run.
     data.y = data.energy / len(data.x)
+    # Store forces for MLIP training
+    data.forces = data.force
     graph_features_dim = [1]
     node_feature_dim = [1]
     data = compute_edges(data)
@@ -46,7 +48,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     os.environ.setdefault("SERIALIZED_DATA_PATH", os.getcwd())
 
     # Configurable run choices (JSON file that accompanies this example script).
-    filename = os.path.join(os.path.dirname(__file__), "md17.json")
+    filename = os.path.join(os.path.dirname(__file__), "md17_mlip.json")
     with open(filename, "r") as f:
         config = json.load(f)
 
@@ -68,7 +70,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
-    log_name = f"md17_test_{mpnn_type}" if mpnn_type else "md17_test"
+    log_name = f"md17_mlip_test_{mpnn_type}" if mpnn_type else "md17_mlip_test"
     # Enable print to log file.
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
@@ -143,7 +145,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Run MD17 example with an optional model type."
+        description="Run MD17 MLIP example with an optional model type."
     )
     parser.add_argument(
         "--mpnn_type",
