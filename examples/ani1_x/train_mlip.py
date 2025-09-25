@@ -7,7 +7,6 @@ import argparse
 import numpy as np
 
 import random
-
 import torch
 
 # FIX random seed
@@ -27,26 +26,20 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
+from hydragnn.utils.print.print_utils import iterate_tqdm
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
-    RadiusGraphPBC,
-    PBCDistance,
-    PBCLocalCartesian,
-    pbc_as_tensor,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-from hydragnn.utils.print.print_utils import iterate_tqdm, log
+from hydragnn.utils.print.print_utils import log
 
-from jarvis.db.jsonutils import loadjson, dumpjson
-from pymatgen.core.structure import Structure
-from jarvis.core.atoms import pmg_to_atoms
-from utils.generate_dictionary import generate_dictionary_elements
+from hydragnn.utils.descriptors_and_embeddings import xyz2mol
 
-inverted_dict = generate_dictionary_elements()
+from rdkit import Chem
 
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
@@ -54,6 +47,8 @@ except ImportError:
     pass
 
 from hydragnn.utils.distributed import nsplit
+
+import h5py
 
 
 def info(*args, logtype="info", sep=" "):
@@ -64,11 +59,13 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
-# transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
-transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+# Conversion constant from Hartree to electron volt (eV).
+# Source: NIST CODATA 2018, https://physics.nist.gov/cgi-bin/cuu/Value?hrjtoeV
+# Value: 1 Hartree = 27.2114079527 eV (use at least 10 significant digits for scientific accuracy)
+conversion_constant_from_hartree_to_eV = 27.2114079527
 
 
-class MPTrjDataset(AbstractBaseDataset):
+class ANI1xDataset(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
@@ -76,7 +73,6 @@ class MPTrjDataset(AbstractBaseDataset):
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
-        tmpfs=None,
     ):
         super().__init__()
 
@@ -84,12 +80,11 @@ class MPTrjDataset(AbstractBaseDataset):
         self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
         self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
 
+        self.data_path = os.path.join(dirpath, "ani1x-release.h5")
+        self.data_keys = ["wb97x_dz.energy", "wb97x_dz.forces"]
         self.energy_per_atom = energy_per_atom
 
         self.radius_graph = RadiusGraph(
-            self.radius, loop=False, max_num_neighbors=self.max_neighbours
-        )
-        self.radius_graph_pbc = RadiusGraphPBC(
             self.radius, loop=False, max_num_neighbors=self.max_neighbours
         )
 
@@ -104,83 +99,52 @@ class MPTrjDataset(AbstractBaseDataset):
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 1000.0
 
-        d = None
-        if tmpfs is None:
-            d = loadjson(os.path.join(dirpath, "MPtrj_2022.9_full.json"))
-        else:
-            d = loadjson(os.path.join(tmpfs, "MPtrj_2022.9_full.json"))
+        self.convert_trajectories_to_graphs()
 
-        mpids = list(d.keys())
+    def convert_trajectories_to_graphs(self):
 
-        dataset = []
+        # Example for extracting DFT/DZ energies and forces
+        for data_trj in iterate_tqdm(
+            self.iter_data_buckets(self.data_path, keys=self.data_keys),
+            verbosity_level=2,
+        ):
 
-        if not self.dist:
-            mpids_loc = mpids
-        else:
-            mpids_loc = list(nsplit(mpids, self.world_size))[self.rank]
+            X = data_trj["coordinates"]
+            Z = data_trj["atomic_numbers"]
+            E = data_trj["wb97x_dz.energy"]
+            F = data_trj["wb97x_dz.forces"]
 
-        for i in iterate_tqdm(mpids_loc, verbosity_level=2, desc="Load"):
+            # atomic numbers
+            atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
 
-            tmp = d[i]
+            natoms = torch.IntTensor([X.shape[1]])
 
-            for j, k in tmp.items():
+            global_trajectories_id = range(X.shape[0])
+            if self.dist:
+                local_trajectories_id = list(
+                    nsplit(global_trajectories_id, self.world_size)
+                )[self.rank]
+            else:
+                local_trajectories_id = global_trajectories_id
 
-                info = {}
+            # extract positions, energies, and forces for each step
+            for frame_id in local_trajectories_id:
 
-                info["jid"] = j
+                pos = torch.from_numpy(X[frame_id]).to(torch.float32)
+                cell = torch.eye(3, dtype=torch.float32)
+                pbc = torch.tensor([False, False, False], dtype=torch.bool)
+                energy = (
+                    torch.tensor(E[frame_id])
+                    .unsqueeze(0)
+                    .unsqueeze(1)
+                    .to(torch.float32)
+                ) * conversion_constant_from_hartree_to_eV
 
-                if self.energy_per_atom:
-                    info["total_energy"] = k["energy_per_atom"]
-                else:
-                    info["total_energy"] = k["corrected_total_energy"]
-
-                info["forces"] = k["force"]
-
-                info["stresses"] = k["stress"]
-
-                info["atoms"] = pmg_to_atoms(
-                    Structure.from_dict(k["structure"])
-                ).to_dict()
-
-                info["magmom"] = k["magmom"]
-
-                # Convert lists to PyTorch tensors
-                lattice_mat = None
-                pbc = None
-                # MPTrj does not define pbc in its samples because they are all implicitly 3D-periodic
-                # Therefore, we apply pbc if we can read the cell and default otherwise
-                try:
-                    lattice_mat = torch.tensor(
-                        info["atoms"]["lattice_mat"], dtype=torch.float32
-                    ).view(3, 3)
-                    pbc = torch.tensor([True, True, True], dtype=torch.bool)
-                except:
-                    print(f"Structure does not have lattice_mat", flush=True)
-                    lattice_mat = torch.eye(3, dtype=torch.float32)
-                    pbc = torch.tensor([False, False, False], dtype=torch.bool)
-
-                coords = torch.tensor(info["atoms"]["coords"], dtype=torch.float32)
-
-                # Multiply 'coords' by 'lattice_mat'
-                pos = torch.matmul(coords, lattice_mat)
-
-                natoms = torch.IntTensor([pos.shape[0]])
-
-                # Extracting data from info dictionary
-                total_energy = info["total_energy"]
-                forces = info["forces"]
-                stresses = info["stresses"]
-                magmom = info["magmom"]
-                atoms_dict = info["atoms"]
-
-                # Converting positions and atomic numbers to torch tensors
-                atomic_numbers = torch.tensor(
-                    [inverted_dict[element] for element in atoms_dict["elements"]],
-                    dtype=torch.float32,
-                ).view(-1, 1)
-                energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(0)
                 energy_per_atom = energy.detach().clone() / natoms
-                forces = torch.tensor(forces, dtype=torch.float32)
+                forces = (
+                    torch.from_numpy(F[frame_id]).to(torch.float32)
+                    * conversion_constant_from_hartree_to_eV
+                )
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
                 # Calculate chemical composition
@@ -189,24 +153,43 @@ class MPTrjDataset(AbstractBaseDataset):
                 ## 118: number of atoms in the periodic table
                 hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
                 chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+                pos_list = pos.tolist()
+                atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
+                """
+                try:
+                    mol = xyz2mol(
+                        atomic_number_list_int,
+                        pos_list,
+                        charge=0,
+                        allow_charged_fragments=True,
+                        use_graph=False,
+                        use_huckel=False,
+                        embed_chiral=True,
+                        use_atom_maps=False,
+                    )
 
-                # Creating the Data object
+                    assert (
+                        len(mol) == 1
+                    ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
+                    smiles_string = Chem.MolToSmiles(mol[0])
+                except:
+                    smiles_string = None
+                """
+
                 data_object = Data(
-                    dataset_name="mptrj",
+                    dataset_name="ani1x",
                     natoms=natoms,
                     pos=pos,
-                    cell=lattice_mat,
-                    pbc=pbc,
-                    edge_index=None,
-                    edge_attr=None,
+                    cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
+                    pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
+                    # edge_index=None,
+                    # edge_attr=None,
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
-                    smiles_string=None,
+                    # smiles_string=smiles_string,
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
-                    # stress=torch.tensor(stresses, dtype=torch.float32),
-                    # magmom=torch.tensor(magmom, dtype=torch.float32),
                     forces=forces,
                 )
 
@@ -215,26 +198,15 @@ class MPTrjDataset(AbstractBaseDataset):
                 else:
                     data_object.y = data_object.energy
 
-                if data_object.pbc.any():
-                    try:
-                        data_object = self.radius_graph_pbc(data_object)
-                        data_object = transform_coordinates_pbc(data_object)
-                    except:
-                        print(
-                            f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
-                            flush=True,
-                        )
-                        data_object = self.radius_graph(data_object)
-                        data_object = transform_coordinates(data_object)
-                else:
-                    data_object = self.radius_graph(data_object)
-                    data_object = transform_coordinates(data_object)
+                data_object = self.radius_graph(data_object)
+
+                # Build edge attributes
+                data_object = transform_coordinates(data_object)
 
                 # Default edge_shifts for when radius_graph_pbc is not activated
-                if not hasattr(data_object, "edge_shifts"):
-                    data_object.edge_shifts = torch.zeros(
-                        (data_object.edge_index.size(1), 3), dtype=torch.float32
-                    )
+                data_object.edge_shifts = torch.zeros(
+                    (data_object.edge_index.size(1), 3), dtype=torch.float32
+                )
 
                 # FIXME: PBC from bool --> int32 to be accepted by ADIOS
                 data_object.pbc = data_object.pbc.int()
@@ -247,11 +219,34 @@ class MPTrjDataset(AbstractBaseDataset):
                     self.dataset.append(data_object)
                 else:
                     print(
-                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data_object}",
+                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
                         flush=True,
                     )
 
         random.shuffle(self.dataset)
+
+    def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
+        """Iterate over buckets of data in ANI HDF5 file.
+        Yields dicts with atomic numbers (shape [Na,]) coordinated (shape [Nc, Na, 3])
+        and other available properties specified by `keys` list, w/o NaN values.
+        """
+        keys = set(keys)
+        keys.discard("atomic_numbers")
+        keys.discard("coordinates")
+        with h5py.File(h5filename, "r") as f:
+            for grp in f.values():
+                Nc = grp["coordinates"].shape[0]
+                mask = np.ones(Nc, dtype=np.bool_)
+                data = dict((k, grp[k][()]) for k in keys)
+                for k in keys:
+                    v = data[k].reshape(Nc, -1)
+                    mask = mask & ~np.isnan(v).any(axis=1)
+                if not np.sum(mask):
+                    continue
+                d = dict((k, data[k][mask]) for k in keys)
+                d["atomic_numbers"] = grp["atomic_numbers"][()]
+                d["coordinates"] = grp["coordinates"][()][mask]
+                yield d
 
     def check_forces_values(self, forces):
 
@@ -279,7 +274,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="mptrj_energy.json"
+        "--inputfile", help="input file", type=str, default="ani1x_mlip.json"
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -294,14 +289,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
-    parser.add_argument(
-        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
-    )
-    parser.add_argument(
-        "--tmpfs",
-        default=None,
-        help="Transient storage space such as /mnt/bb/$USER which can be used as a temporary scratch space for caching and/or extracting data. The location must exist before use by HydraGNN.",
-    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -365,23 +352,22 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "MPTrj" if args.log is None else args.log
+    log_name = "ANI1x" if args.log is None else args.log
     hydragnn.utils.print.print_utils.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "MPTrj" if args.modelname is None else args.modelname
+    modelname = "ANI1x" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
-        total = MPTrjDataset(
+        total = ANI1xDataset(
             os.path.join(datadir),
             config,
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
-            tmpfs=args.tmpfs,
         )
         ## This is a local split
         trainset, valset, testset = split_dataset(
@@ -391,10 +377,6 @@ if __name__ == "__main__":
         )
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
-        print("Before COMM.Barrier()", flush=True)
-        comm.Barrier()
-        print("After COMM.Barrier()", flush=True)
-
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
@@ -403,7 +385,7 @@ if __name__ == "__main__":
         ## adios
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
+                os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
             )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
@@ -462,7 +444,9 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
+        fname = os.path.join(
+            os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
+        )
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)

@@ -159,6 +159,11 @@ def _(config: dict, use_deepspeed=False):
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
 
+    # Get enable_interatomic_potential and pass directly as compute_grad_energy
+    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
+        "enable_interatomic_potential", False
+    )
+
     train_validate_test(
         model,
         optimizer,
@@ -174,7 +179,7 @@ def _(config: dict, use_deepspeed=False):
         plot_hist_solution,
         create_plots,
         use_deepspeed=use_deepspeed,
-        compute_grad_energy=config["NeuralNetwork"]["Training"]["compute_grad_energy"],
+        compute_grad_energy=enable_interatomic_potential,
     )
 
     save_model(model, optimizer, log_name, use_deepspeed=use_deepspeed)

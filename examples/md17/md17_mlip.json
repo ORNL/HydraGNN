@@ -1,0 +1,66 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Profile": {"enable": 1},
+        "Architecture": {
+            "global_attn_engine": "",
+            "global_attn_type": "",
+            "mpnn_type": "EGNN",
+            "radius": 7,
+            "max_neighbours": 5,
+            "periodic_boundary_conditions": false,
+            "pe_dim": 6,
+            "global_attn_heads": 8,
+            "hidden_dim": 64,
+            "num_conv_layers": 3,
+            "int_emb_size": 32,
+            "out_emb_size": 16,
+            "basis_emb_size": 8,
+            "num_gaussians": 10,
+            "num_filters": 8,
+            "num_before_skip": 1,
+            "num_after_skip": 1,
+            "envelope_exponent": 5,
+            "max_ell": 1,
+            "node_max_ell": 1,
+            "num_radial": 5,
+            "num_spherical": 2,
+            "enable_interatomic_potential": true,
+            "output_heads": {
+              "node": {
+                "num_headlayers": 2,
+                "dim_headlayers": [60,20],
+                "type": "mlp"
+              }
+            },
+            "task_weights": [1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_names": ["graph_energy"],
+            "output_index": [0],
+            "output_dim": [1],
+            "type": ["node"],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 10,
+            "perc_train": 0.7,
+            "loss_function_type": "mse",
+            "batch_size": 64,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer":{
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            }
+        }
+     },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
+    }
+}

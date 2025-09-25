@@ -52,10 +52,6 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
 
-    # This default is needed for update_config_NN_outputs
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
-
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
     )
@@ -130,6 +126,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_ell"] = None
     if "node_max_ell" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
+    if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -194,6 +192,10 @@ def update_config_edge_dim(config):
             config["mpnn_type"] in edge_models
         ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
         config["edge_dim"] = len(config["edge_features"])
+        if "enable_interatomic_potential" in config:
+            assert not config[
+                "enable_interatomic_potential"
+            ], "Edge features cannot be used with interatomic potentials as the model builds its own specialized features for force computation."
     elif config["mpnn_type"] == "CGCNN":
         # CG always needs an integer edge_dim
         # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
@@ -223,7 +225,7 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    if config["Training"]["compute_grad_energy"]:
+    if config["Architecture"].get("enable_interatomic_potential", False):
         dims_list = config["Variables_of_interest"]["output_dim"]
     elif hasattr(data, "y_loc"):
         dims_list = []

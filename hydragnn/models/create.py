@@ -14,6 +14,9 @@ import torch
 from torch_geometric.data import Data
 from typing import List, Union
 
+import torch_scatter
+
+from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.PNAPlusStack import PNAPlusStack
@@ -27,6 +30,8 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+
+# InteratomicPotential functionality is now implemented via wrapper composition
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -77,6 +82,7 @@ def create_model_config(
         config["Architecture"]["node_max_ell"],
         config["Architecture"]["avg_num_neighbors"],
         config["Training"]["conv_checkpointing"],
+        config["Architecture"].get("enable_interatomic_potential", False),
         verbosity,
         use_gpu,
     )
@@ -123,6 +129,7 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
+    enable_interatomic_potential: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -510,6 +517,134 @@ def create_model(
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
+
+    # Apply interatomic potential enhancement if requested
+    if enable_interatomic_potential:
+        # Instead of complex inheritance, use composition with delegation
+        # This avoids MRO issues and __init__ complications
+        class EnhancedModelWrapper(torch.nn.Module):
+            def __init__(self, original_model):
+                super().__init__()
+                self.model = original_model
+
+            def __getattr__(self, name):
+                # First try to get from the wrapper itself
+                try:
+                    return super().__getattr__(name)
+                except AttributeError:
+                    pass
+
+                # Then try to get from the wrapped model
+                try:
+                    return getattr(self.model, name)
+                except AttributeError:
+                    # Handle specific method names that may be expected for interatomic potentials
+                    if name in [
+                        "_compute_enhanced_geometric_features",
+                        "_compute_three_body_interactions",
+                        "_apply_atomic_environment_descriptors",
+                    ]:
+                        # Return placeholder methods that don't interfere with existing architectures
+                        return lambda *args, **kwargs: None
+                    raise AttributeError(
+                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
+                    )
+
+            # ---------- forward ----------
+            def forward(self, data):
+
+                return self.model(data)
+
+            def energy_force_loss(self, pred, data):
+                """
+                Compute energy and force loss for MLIP training.
+
+                This method is specific to interatomic potentials and computes:
+                1. Energy loss between predicted and true total energies
+                2. Force loss between predicted and true forces (via autograd on positions)
+
+                Forces are computed as negative gradients of total energy with respect to positions.
+                """
+                # Asserts
+                assert (
+                    data.pos is not None
+                    and data.energy is not None
+                    and data.forces is not None
+                ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
+                assert (
+                    data.pos.requires_grad
+                ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
+                assert (
+                    self.num_heads == 1 and self.head_type[0] == "node"
+                ), "Force predictions are only supported for models with one head that predict nodal energy. Check your num_heads and head_types."
+                # Initialize loss
+                tot_loss = 0
+                tasks_loss = []
+                # Energies
+                node_energy_pred = pred[0]
+                graph_energy_pred = (
+                    torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+                    .squeeze()
+                    .float()
+                )
+                graph_energy_true = data.energy.squeeze().float()
+                energy_loss_weight = self.loss_weights[
+                    0
+                ]  # There should only be one loss-weight for energy
+                tot_loss += (
+                    self.loss_function(graph_energy_pred, graph_energy_true)
+                    * energy_loss_weight
+                )
+                tasks_loss.append(
+                    self.loss_function(graph_energy_pred, graph_energy_true)
+                )
+                # Forces
+                forces_true = data.forces.float()
+                forces_pred = torch.autograd.grad(
+                    graph_energy_pred,
+                    data.pos,
+                    grad_outputs=torch.ones_like(graph_energy_pred),
+                    retain_graph=graph_energy_pred.requires_grad,
+                    # Retain graph only if needed (it will be needed during training, but not during validation/testing)
+                    create_graph=True,
+                )[0].float()
+                assert (
+                    forces_pred is not None
+                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                forces_pred = -forces_pred
+                force_loss_weight = (
+                    energy_loss_weight
+                    * torch.mean(torch.abs(graph_energy_true))
+                    / (torch.mean(torch.abs(forces_true)) + 1e-8)
+                )  # Weight force loss and graph energy equally
+                tot_loss += (
+                    self.loss_function(forces_pred, forces_true) * force_loss_weight
+                )  # Have force-weight be the complement to energy-weight
+                ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+                ##        so, we need to do loss calculation manually without calling the other functions.
+
+                return tot_loss, tasks_loss
+
+            def _compute_enhanced_geometric_features(self, data):
+                """
+                Placeholder for enhanced geometric feature computation (disabled by default).
+                """
+                return data
+
+            def _compute_three_body_interactions(self, data):
+                """
+                Placeholder for three-body interaction computation (disabled by default).
+                """
+                return data
+
+            def _apply_atomic_environment_descriptors(self, data):
+                """
+                Placeholder for atomic environment descriptor application (disabled by default).
+                """
+                return data
+
+        enhanced_model = EnhancedModelWrapper(model)
+        model = enhanced_model
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()

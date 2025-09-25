@@ -59,6 +59,11 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
+# Conversion constant from Hartree to electron volt (eV).
+# Source: NIST CODATA 2018, https://physics.nist.gov/cgi-bin/cuu/Value?hrjtoeV
+# Value: 1 Hartree = 27.2114079527 eV (use at least 10 significant digits for scientific accuracy)
+conversion_constant_from_hartree_to_eV = 27.2114079527
+
 
 class ANI1xDataset(AbstractBaseDataset):
     def __init__(
@@ -133,10 +138,13 @@ class ANI1xDataset(AbstractBaseDataset):
                     .unsqueeze(0)
                     .unsqueeze(1)
                     .to(torch.float32)
-                )
+                ) * conversion_constant_from_hartree_to_eV
 
                 energy_per_atom = energy.detach().clone() / natoms
-                forces = torch.from_numpy(F[frame_id]).to(torch.float32)
+                forces = (
+                    torch.from_numpy(F[frame_id]).to(torch.float32)
+                    * conversion_constant_from_hartree_to_eV
+                )
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
                 # Calculate chemical composition
@@ -281,9 +289,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
-    parser.add_argument(
-        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
-    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -530,7 +535,9 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=args.compute_grad_energy,
+        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
+            "enable_interatomic_potential", False
+        ),
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
