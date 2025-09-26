@@ -49,7 +49,7 @@
       "num_epoch": 20,
       "batch_size": 32,
       "continue": 0,
-      "startfrom": "./logs/ani1x/ani1x",
+      "startfrom": "ANI1x",
       "Optimizer": {
         "learning_rate": 0.001
       }
