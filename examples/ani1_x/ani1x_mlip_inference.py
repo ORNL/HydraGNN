@@ -109,11 +109,11 @@ def getcolordensity(xdata, ydata, nbin=100):
 
 if __name__ == "__main__":
 
-    modelname = "ani1x"
+    modelname = "ANI1x"
 
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="./logs/ani1x/config.json"
+        "--inputfile", help="input file", type=str, default="./logs/ANI1x/config.json"
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -188,7 +188,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "ani1x"
+    log_name = "ANI1x"
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
