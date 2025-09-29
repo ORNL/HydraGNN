@@ -35,6 +35,7 @@ from hydragnn.models.MACEStack import MACEStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.utils.model.equivariance_backend import initialize_equivariance_backend
 
 
 def create_model_config(
@@ -42,6 +43,9 @@ def create_model_config(
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
+    # Initialize equivariance backend based on config
+    initialize_equivariance_backend(config)
+    
     return create_model(
         config["Architecture"]["mpnn_type"],
         config["Architecture"]["input_dim"],
