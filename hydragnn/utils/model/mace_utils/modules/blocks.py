@@ -27,6 +27,9 @@ from hydragnn.utils.model.irreps_tools import (
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
+from hydragnn.utils.model.equivariance_backend import (
+    build_tensor_product as backend_build_tensor_product,
+)
 
 from .radial import (
     AgnesiTransform,
@@ -301,7 +304,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
             self.edge_attrs_irreps,
             self.target_irreps,
         )
-        self.conv_tp = o3.TensorProduct(
+        self.conv_tp, weight_numel, _tp_backend = backend_build_tensor_product(
             self.node_feats_irreps,
             self.edge_attrs_irreps,
             irreps_mid,
@@ -328,7 +331,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         self.conv_tp_weights = nn.FullyConnectedNet(
             [input_dim]
             + 3 * [o3.Irreps(self.hidden_irreps).count(o3.Irrep(0, 1))]
-            + [self.conv_tp.weight_numel],
+            + [weight_numel],
             torch.nn.functional.silu,
         )
 
