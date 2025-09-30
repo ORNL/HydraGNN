@@ -10,6 +10,7 @@ from typing import List, Sequence, Tuple, Any
 
 try:
     import openequivariance as oeq  # type: ignore
+
     _OEQ_AVAILABLE = True
 except Exception:  # pragma: no cover - guarded import
     _OEQ_AVAILABLE = False
@@ -36,7 +37,9 @@ def _normalize_instructions(
             norm.append((int(i1), int(i2), int(iout), str(mode), bool(train), 1.0))
         elif len(inst) == 6:
             i1, i2, iout, mode, train, scale = inst
-            norm.append((int(i1), int(i2), int(iout), str(mode), bool(train), float(scale)))
+            norm.append(
+                (int(i1), int(i2), int(iout), str(mode), bool(train), float(scale))
+            )
         else:
             raise ValueError(
                 f"Instruction {inst} has unsupported length {len(inst)}. Expected 5 or 6 entries."

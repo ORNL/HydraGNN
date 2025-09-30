@@ -45,7 +45,7 @@ def create_model_config(
 ):
     # Initialize equivariance backend based on config
     initialize_equivariance_backend(config)
-    
+
     return create_model(
         config["Architecture"]["mpnn_type"],
         config["Architecture"]["input_dim"],

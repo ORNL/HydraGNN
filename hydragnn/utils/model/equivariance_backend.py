@@ -63,6 +63,7 @@ def select_backend(config: dict | None):
     if requested == "openequivariance":
         try:
             import openequivariance  # noqa: F401
+
             _effective_backend = "openequivariance"
         except Exception:  # pragma: no cover
             _effective_backend = "e3nn"
