@@ -230,6 +230,7 @@ def _U_matrix_real_e3nn(
     current_ir = wigners[0][0]
     out = []
     stack = torch.tensor([])
+    last_ir = None
 
     for ir, _, base_o3 in wigners:
         if ir in irreps_out and ir == current_ir:
@@ -242,5 +243,8 @@ def _U_matrix_real_e3nn(
             current_ir, last_ir = ir, ir
         else:
             current_ir = ir
-    out += [last_ir, stack]
+    
+    # Only add to output if we have valid results
+    if last_ir is not None and len(stack) > 0:
+        out += [last_ir, stack]
     return out
