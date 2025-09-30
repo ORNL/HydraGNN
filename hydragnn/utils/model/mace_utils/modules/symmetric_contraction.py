@@ -106,12 +106,19 @@ class Contraction(torch.nn.Module):
         self.correlation = correlation
         dtype = torch.get_default_dtype()
         for nu in range(1, correlation + 1):
-            U_matrix = U_matrix_real(
+            U_matrix_result = U_matrix_real(
                 irreps_in=self.coupling_irreps,
                 irreps_out=irrep_out,
                 correlation=nu,
                 dtype=dtype,
-            )[-1]
+            )
+            if len(U_matrix_result) == 0:
+                # No valid coupling found for this correlation order
+                # Create a dummy empty tensor with proper dimensions to avoid errors
+                # The tensor should have at least 2 dimensions for indexing with [-1] and [-2]
+                U_matrix = torch.tensor([], dtype=dtype).reshape(0, 0, 0)
+            else:
+                U_matrix = U_matrix_result[-1]
             self.register_buffer(f"U_matrix_{nu}", U_matrix)
 
         # Tensor contraction equations
@@ -120,12 +127,23 @@ class Contraction(torch.nn.Module):
 
         # Create weight for product basis
         self.weights = torch.nn.ParameterList([])
+        valid_correlations_processed = 0
 
         for i in range(correlation, 0, -1):
-            # Shapes definying
-            num_params = self.U_tensors(i).size()[-1]
+            # Shapes defining
+            U_tensor = self.U_tensors(i)
+            if U_tensor.numel() == 0:
+                # Skip this correlation order if no valid coupling exists
+                continue
+            
+            if len(U_tensor.size()) < 2:
+                # Ensure tensor has at least 2 dimensions
+                raise ValueError(f"U_tensor for correlation {i} has invalid dimensions: {U_tensor.size()}")
+            
+            valid_correlations_processed += 1
+            num_params = U_tensor.size()[-1]
             num_equivariance = 2 * irrep_out.lmax + 1
-            num_ell = self.U_tensors(i).size()[-2]
+            num_ell = U_tensor.size()[-2]
 
             if i == correlation:
                 parse_subscript_main = (
@@ -210,6 +228,15 @@ class Contraction(torch.nn.Module):
                     / num_params
                 )
                 self.weights.append(w)
+        
+        # Check if at least one valid correlation was processed
+        if valid_correlations_processed == 0:
+            raise ValueError(
+                f"No valid tensor contractions found for irreps_in={irreps_in} -> irrep_out={irrep_out} "
+                f"with correlation={correlation}. This typically means the input and output irreps are "
+                f"incompatible for the requested correlation order."
+            )
+        
         if not internal_weights:
             self.weights = weights[:-1]
             self.weights_max = weights[-1]
