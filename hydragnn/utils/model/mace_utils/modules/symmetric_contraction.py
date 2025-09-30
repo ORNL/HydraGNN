@@ -135,11 +135,13 @@ class Contraction(torch.nn.Module):
             if U_tensor.numel() == 0:
                 # Skip this correlation order if no valid coupling exists
                 continue
-            
+
             if len(U_tensor.size()) < 2:
                 # Ensure tensor has at least 2 dimensions
-                raise ValueError(f"U_tensor for correlation {i} has invalid dimensions: {U_tensor.size()}")
-            
+                raise ValueError(
+                    f"U_tensor for correlation {i} has invalid dimensions: {U_tensor.size()}"
+                )
+
             valid_correlations_processed += 1
             num_params = U_tensor.size()[-1]
             num_equivariance = 2 * irrep_out.lmax + 1
@@ -228,7 +230,7 @@ class Contraction(torch.nn.Module):
                     / num_params
                 )
                 self.weights.append(w)
-        
+
         # Check if at least one valid correlation was processed
         if valid_correlations_processed == 0:
             raise ValueError(
@@ -236,7 +238,7 @@ class Contraction(torch.nn.Module):
                 f"with correlation={correlation}. This typically means the input and output irreps are "
                 f"incompatible for the requested correlation order."
             )
-        
+
         if not internal_weights:
             self.weights = weights[:-1]
             self.weights_max = weights[-1]

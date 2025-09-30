@@ -243,7 +243,7 @@ def _U_matrix_real_e3nn(
             current_ir, last_ir = ir, ir
         else:
             current_ir = ir
-    
+
     # Only add to output if we have valid results
     if last_ir is not None and len(stack) > 0:
         out += [last_ir, stack]
