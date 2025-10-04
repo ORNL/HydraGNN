@@ -76,7 +76,9 @@ class NonLinearReadoutBlock(torch.nn.Module):
     ):
         super().__init__()
         self.hidden_irreps = MLP_irreps
-        self.linear_1 = OptimizedLinear(irreps_in=irreps_in, irreps_out=self.hidden_irreps)
+        self.linear_1 = OptimizedLinear(
+            irreps_in=irreps_in, irreps_out=self.hidden_irreps
+        )
         self.non_linearity = nn.Activation(
             irreps_in=self.hidden_irreps, acts=[gate]
         )  # Need to adjust this to actually use the gate

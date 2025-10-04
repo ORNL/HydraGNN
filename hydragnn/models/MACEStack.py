@@ -134,10 +134,12 @@ class MACEStack(Base):
         )
         self.correlation = [2] if correlation is None else correlation
         radial_type = "bessel" if radial_type is None else radial_type
-        
+
         # Check and configure OpenEquivariance usage
         enable_openequivariance = kwargs.get("enable_openequivariance", False)
-        self.using_openequivariance = check_openequivariance_availability(enable_openequivariance)
+        self.using_openequivariance = check_openequivariance_availability(
+            enable_openequivariance
+        )
 
         # Making Irreps
         self.edge_feats_irreps = o3.Irreps(f"{num_bessel}x0e")

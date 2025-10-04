@@ -46,7 +46,7 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = 0
     if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
-    
+
     # Set default value for OpenEquivariance usage
     if "enable_openequivariance" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["enable_openequivariance"] = False

@@ -21,6 +21,7 @@ from typing import Optional, Union, List, Tuple, Any
 # Try to import OpenEquivariance
 try:
     import openequivariance
+
     HAS_OPENEQUIVARIANCE = True
 except ImportError as e:
     HAS_OPENEQUIVARIANCE = False
@@ -44,66 +45,67 @@ _USE_OPENEQUIVARIANCE = False
 def check_openequivariance_availability(enable_openequivariance: bool = False) -> bool:
     """
     Check if OpenEquivariance is available and configure its usage.
-    
+
     Args:
         enable_openequivariance: Whether to attempt to enable OpenEquivariance
-        
+
     Returns:
         bool: True if OpenEquivariance is available and will be used, False otherwise
     """
     global _USE_OPENEQUIVARIANCE
-    
+
     if not enable_openequivariance:
         _USE_OPENEQUIVARIANCE = False
         return False
-    
+
     if not HAS_OPENEQUIVARIANCE:
-        if '_IMPORT_ERROR' in globals():
+        if "_IMPORT_ERROR" in globals():
             if "CUDA" in _IMPORT_ERROR:
                 warnings.warn(
                     "OpenEquivariance is installed but CUDA is not properly configured. "
                     "Please ensure CUDA is installed and CUDA_HOME environment variable is set "
                     "to enable OpenEquivariance optimizations. Falling back to e3nn.\n"
                     f"Detailed error: {_IMPORT_ERROR}",
-                    UserWarning
+                    UserWarning,
                 )
             else:
                 warnings.warn(
                     f"OpenEquivariance import failed: {_IMPORT_ERROR}. "
                     "Falling back to e3nn.",
-                    UserWarning
+                    UserWarning,
                 )
         else:
             warnings.warn(
                 "OpenEquivariance is not available in the environment. "
                 "Please install OpenEquivariance from https://github.com/PASSIONLab/OpenEquivariance "
                 "to enable optimized tensor operations. Falling back to e3nn.",
-                UserWarning
+                UserWarning,
             )
         _USE_OPENEQUIVARIANCE = False
         return False
-    
+
     # Check if OpenEquivariance has the required functionality
     try:
         # Verify key components are available
-        if not hasattr(openequivariance, 'TensorProduct'):
+        if not hasattr(openequivariance, "TensorProduct"):
             warnings.warn(
                 "OpenEquivariance installation appears incomplete (missing TensorProduct). "
                 "Falling back to e3nn.",
-                UserWarning
+                UserWarning,
             )
             _USE_OPENEQUIVARIANCE = False
             return False
-            
+
         _USE_OPENEQUIVARIANCE = True
-        print("OpenEquivariance is available and will be used for optimized tensor operations.")
+        print(
+            "OpenEquivariance is available and will be used for optimized tensor operations."
+        )
         return True
-        
+
     except Exception as e:
         warnings.warn(
-            f"OpenEquivariance check failed with error: {e}. "
-            "Falling back to e3nn.",
-            UserWarning
+            f"OpenEquivariance check failed with error: {e}. " "Falling back to e3nn.",
+            UserWarning,
         )
         _USE_OPENEQUIVARIANCE = False
         return False
@@ -119,24 +121,24 @@ class OptimizedTensorProduct(torch.nn.Module):
     Tensor product operation with OpenEquivariance optimization when available.
     Falls back to e3nn when OpenEquivariance is not available.
     """
-    
+
     def __init__(
         self,
         irreps_in1: Union[str, o3.Irreps],
-        irreps_in2: Union[str, o3.Irreps], 
+        irreps_in2: Union[str, o3.Irreps],
         irreps_out: Union[str, o3.Irreps],
         instructions: Optional[List] = None,
         shared_weights: bool = True,
         internal_weights: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
-        
+
         # Convert to e3nn Irreps format
         self.irreps_in1 = o3.Irreps(irreps_in1)
-        self.irreps_in2 = o3.Irreps(irreps_in2)  
+        self.irreps_in2 = o3.Irreps(irreps_in2)
         self.irreps_out = o3.Irreps(irreps_out)
-        
+
         if _USE_OPENEQUIVARIANCE and openequivariance is not None:
             try:
                 # Use OpenEquivariance implementation
@@ -147,26 +149,32 @@ class OptimizedTensorProduct(torch.nn.Module):
                     instructions=instructions,
                     shared_weights=shared_weights,
                     internal_weights=internal_weights,
-                    **kwargs
+                    **kwargs,
                 )
                 self.using_openequivariance = True
             except Exception as e:
                 warnings.warn(
                     f"Failed to create OpenEquivariance TensorProduct: {e}. "
                     "Falling back to e3nn.",
-                    UserWarning
+                    UserWarning,
                 )
-                self._create_e3nn_tensor_product(instructions, shared_weights, internal_weights, kwargs)
+                self._create_e3nn_tensor_product(
+                    instructions, shared_weights, internal_weights, kwargs
+                )
                 self.using_openequivariance = False
         else:
-            self._create_e3nn_tensor_product(instructions, shared_weights, internal_weights, kwargs)
+            self._create_e3nn_tensor_product(
+                instructions, shared_weights, internal_weights, kwargs
+            )
             self.using_openequivariance = False
-    
-    def _create_e3nn_tensor_product(self, instructions, shared_weights, internal_weights, kwargs):
+
+    def _create_e3nn_tensor_product(
+        self, instructions, shared_weights, internal_weights, kwargs
+    ):
         """Create fallback e3nn tensor product."""
         # Filter out None values from kwargs to prevent issues
         filtered_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        
+
         self.tensor_product = o3.TensorProduct(
             self.irreps_in1,
             self.irreps_in2,
@@ -174,10 +182,12 @@ class OptimizedTensorProduct(torch.nn.Module):
             instructions=instructions,
             shared_weights=shared_weights,
             internal_weights=internal_weights,
-            **filtered_kwargs
+            **filtered_kwargs,
         )
-    
-    def forward(self, x1: torch.Tensor, x2: torch.Tensor, weight: Optional[torch.Tensor] = None) -> torch.Tensor:
+
+    def forward(
+        self, x1: torch.Tensor, x2: torch.Tensor, weight: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Forward pass through tensor product."""
         if weight is not None:
             return self.tensor_product(x1, x2, weight)
@@ -190,54 +200,53 @@ class OptimizedSphericalHarmonics(torch.nn.Module):
     Spherical harmonics computation with OpenEquivariance optimization when available.
     Falls back to e3nn when OpenEquivariance is not available.
     """
-    
+
     def __init__(
         self,
         irreps_out: Union[str, o3.Irreps],
         normalize: bool = True,
         normalization: str = "component",
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
-        
+
         self.irreps_out = o3.Irreps(irreps_out)
-        
+
         if _USE_OPENEQUIVARIANCE and openequivariance is not None:
             try:
                 # Use OpenEquivariance implementation if available
-                if hasattr(openequivariance, 'SphericalHarmonics'):
+                if hasattr(openequivariance, "SphericalHarmonics"):
                     self.spherical_harmonics = openequivariance.SphericalHarmonics(
                         irreps_out=str(self.irreps_out),
                         normalize=normalize,
                         normalization=normalization,
-                        **kwargs
+                        **kwargs,
                     )
                     self.using_openequivariance = True
                 else:
                     # Fallback if SphericalHarmonics not available in OpenEquivariance
-                    self._create_e3nn_spherical_harmonics(normalize, normalization, kwargs)
+                    self._create_e3nn_spherical_harmonics(
+                        normalize, normalization, kwargs
+                    )
                     self.using_openequivariance = False
             except Exception as e:
                 warnings.warn(
                     f"Failed to create OpenEquivariance SphericalHarmonics: {e}. "
                     "Falling back to e3nn.",
-                    UserWarning
+                    UserWarning,
                 )
                 self._create_e3nn_spherical_harmonics(normalize, normalization, kwargs)
                 self.using_openequivariance = False
         else:
             self._create_e3nn_spherical_harmonics(normalize, normalization, kwargs)
             self.using_openequivariance = False
-    
+
     def _create_e3nn_spherical_harmonics(self, normalize, normalization, kwargs):
         """Create fallback e3nn spherical harmonics."""
         self.spherical_harmonics = o3.SphericalHarmonics(
-            self.irreps_out,
-            normalize=normalize,
-            normalization=normalization,
-            **kwargs
+            self.irreps_out, normalize=normalize, normalization=normalization, **kwargs
         )
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through spherical harmonics."""
         return self.spherical_harmonics(x)
@@ -248,30 +257,30 @@ class OptimizedLinear(torch.nn.Module):
     Linear layer with OpenEquivariance optimization when available.
     Falls back to e3nn when OpenEquivariance is not available.
     """
-    
+
     def __init__(
         self,
         irreps_in: Union[str, o3.Irreps],
         irreps_out: Union[str, o3.Irreps],
         internal_weights: bool = True,
         shared_weights: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
-        
+
         self.irreps_in = o3.Irreps(irreps_in)
         self.irreps_out = o3.Irreps(irreps_out)
-        
+
         if _USE_OPENEQUIVARIANCE and openequivariance is not None:
             try:
                 # Use OpenEquivariance implementation if available
-                if hasattr(openequivariance, 'Linear'):
+                if hasattr(openequivariance, "Linear"):
                     self.linear = openequivariance.Linear(
                         irreps_in=str(self.irreps_in),
                         irreps_out=str(self.irreps_out),
                         internal_weights=internal_weights,
                         shared_weights=shared_weights,
-                        **kwargs
+                        **kwargs,
                     )
                     self.using_openequivariance = True
                 else:
@@ -282,14 +291,14 @@ class OptimizedLinear(torch.nn.Module):
                 warnings.warn(
                     f"Failed to create OpenEquivariance Linear: {e}. "
                     "Falling back to e3nn.",
-                    UserWarning
+                    UserWarning,
                 )
                 self._create_e3nn_linear(internal_weights, shared_weights, kwargs)
                 self.using_openequivariance = False
         else:
             self._create_e3nn_linear(internal_weights, shared_weights, kwargs)
             self.using_openequivariance = False
-    
+
     def _create_e3nn_linear(self, internal_weights, shared_weights, kwargs):
         """Create fallback e3nn linear layer."""
         self.linear = o3.Linear(
@@ -297,10 +306,12 @@ class OptimizedLinear(torch.nn.Module):
             self.irreps_out,
             internal_weights=internal_weights,
             shared_weights=shared_weights,
-            **kwargs
+            **kwargs,
         )
-    
-    def forward(self, x: torch.Tensor, weight: Optional[torch.Tensor] = None) -> torch.Tensor:
+
+    def forward(
+        self, x: torch.Tensor, weight: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         """Forward pass through linear layer."""
         if weight is not None:
             return self.linear(x, weight)
@@ -312,25 +323,25 @@ def optimized_einsum(equation: str, *operands) -> torch.Tensor:
     """
     Optimized einsum operation using OpenEquivariance when available.
     Falls back to torch.einsum when OpenEquivariance is not available.
-    
+
     Args:
         equation: Einstein summation equation
         *operands: Input tensors
-        
+
     Returns:
         torch.Tensor: Result of einsum operation
     """
     if _USE_OPENEQUIVARIANCE and openequivariance is not None:
         try:
             # Use OpenEquivariance optimized einsum if available
-            if hasattr(openequivariance, 'einsum'):
+            if hasattr(openequivariance, "einsum"):
                 return openequivariance.einsum(equation, *operands)
         except Exception as e:
             warnings.warn(
                 f"Failed to use OpenEquivariance einsum: {e}. "
                 "Falling back to torch.einsum.",
-                UserWarning
+                UserWarning,
             )
-    
+
     # Fallback to standard torch.einsum
     return torch.einsum(equation, *operands)
