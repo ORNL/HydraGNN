@@ -218,6 +218,11 @@ class TensorProduct(torch.nn.Module):
             shared_weights = (
                 self.shared_weights if self.shared_weights is not None else False
             )
+            
+            # e3nn constraint: if internal_weights=True, then shared_weights must be True
+            if internal_weights and not shared_weights:
+                shared_weights = True
+                logging.debug("Adjusted shared_weights=True for e3nn compatibility with internal_weights=True")
 
             # e3nn 0.5.1 always requires instructions parameter
             self.tp_backend = o3.TensorProduct(
