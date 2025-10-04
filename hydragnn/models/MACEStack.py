@@ -65,6 +65,10 @@ from hydragnn.utils.model.mace_utils.modules.blocks import (
     LinearMultiheadDecoderBlock,
 )
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.utils.model.openequivariance_utils import (
+    check_openequivariance_availability,
+    OptimizedSphericalHarmonics,
+)
 
 # Etc
 import numpy as np
@@ -130,6 +134,10 @@ class MACEStack(Base):
         )
         self.correlation = [2] if correlation is None else correlation
         radial_type = "bessel" if radial_type is None else radial_type
+        
+        # Check and configure OpenEquivariance usage
+        enable_openequivariance = kwargs.get("enable_openequivariance", False)
+        self.using_openequivariance = check_openequivariance_availability(enable_openequivariance)
 
         # Making Irreps
         self.edge_feats_irreps = o3.Irreps(f"{num_bessel}x0e")
@@ -143,7 +151,7 @@ class MACEStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         ############################ Post Inheritance ############################
-        self.spherical_harmonics = o3.SphericalHarmonics(
+        self.spherical_harmonics = OptimizedSphericalHarmonics(
             self.sh_irreps,
             normalize=True,
             normalization="component",
