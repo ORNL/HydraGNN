@@ -442,10 +442,11 @@ class MACEStack(Base):
         data.edge_features = edge_features
 
         conv_args = {
-            "node_attrs": data.node_attributes,
-            "edge_attrs": data.edge_attributes,
-            "edge_feats": data.edge_features,
-            "edge_index": data.edge_index,
+            "node_attrs": data.node_attributes,  # For InteractionBlock.forward()
+            "edge_attrs": data.edge_attributes,  # For InteractionBlock.forward()
+            "edge_feats": data.edge_features,  # For InteractionBlock.forward()
+            "edge_index": data.edge_index,  # For InteractionBlock.forward()
+            "node_attributes": data.node_attributes,  # For PyGSequential (EquivariantProductBasisBlock)
         }
 
         if self.use_global_attn:
@@ -461,7 +462,7 @@ class MACEStack(Base):
                 if self.use_edge_attr:
                     e = torch.cat((data.edge_features, e), 1)
                     e = self.edge_lin(e)
-                conv_args.update({"edge_features": e})
+                conv_args.update({"edge_feats": e})
             return (x[:, : self.hidden_dim], x[:, self.hidden_dim :], conv_args)
         else:
             return (

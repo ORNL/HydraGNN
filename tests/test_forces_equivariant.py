@@ -11,7 +11,7 @@
 
 import os
 import pytest
-
+import sys
 import subprocess
 
 
@@ -23,7 +23,7 @@ import subprocess
 def pytest_examples(example, mpnn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")  # Assuming different model scripts
-    return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    return_code = subprocess.call([sys.executable, file_path, "--mpnn_type", mpnn_type])
 
     # Check the file ran without error.
     assert return_code == 0

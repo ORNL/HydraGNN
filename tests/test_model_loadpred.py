@@ -90,9 +90,11 @@ def pytest_model_loadpred():
                 break
     if not case_exist:
         unittest_train_model(
-            config["NeuralNetwork"]["Architecture"]["model_type"],
-            "ci_multihead.json",
-            False,
-            False,
+            config["NeuralNetwork"]["Architecture"]["model_type"],  # mpnn_type
+            None,  # global_attn_engine
+            None,  # global_attn_type
+            "ci_multihead.json",  # ci_input
+            False,  # use_lengths
+            False,  # overwrite_data
         )
     unittest_model_prediction(config)
