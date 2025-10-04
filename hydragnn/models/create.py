@@ -486,7 +486,7 @@ def create_model(
         assert node_max_ell >= 1, "MACE requires node_max_ell >= 1."
         model = MACEStack(
             "node_attributes, equiv_node_feat, inv_node_feat, edge_attributes, edge_features, edge_index",
-            "node_attributes, edge_attributes, edge_features, edge_index",
+            "node_attrs, edge_attrs, edge_feats, edge_index",
             radius,
             radial_type,
             distance_transform,

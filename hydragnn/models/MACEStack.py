@@ -442,9 +442,9 @@ class MACEStack(Base):
         data.edge_features = edge_features
 
         conv_args = {
-            "node_attributes": data.node_attributes,
-            "edge_attributes": data.edge_attributes,
-            "edge_features": data.edge_features,
+            "node_attrs": data.node_attributes,
+            "edge_attrs": data.edge_attributes,
+            "edge_feats": data.edge_features,
             "edge_index": data.edge_index,
         }
 
