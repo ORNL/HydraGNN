@@ -133,6 +133,10 @@ class MACEStack(Base):
             5 if num_polynomial_cutoff is None else num_polynomial_cutoff
         )
         self.correlation = [2] if correlation is None else correlation
+
+        # Convert correlation to list if it's an integer (needed before super().__init__)
+        if isinstance(self.correlation, int):
+            self.correlation = [self.correlation] * num_interactions
         radial_type = "bessel" if radial_type is None else radial_type
 
         # Check and configure OpenEquivariance usage
@@ -169,8 +173,6 @@ class MACEStack(Base):
         self.register_buffer(
             "num_interactions", torch.tensor(num_interactions, dtype=torch.int64)
         )
-        if isinstance(correlation, int):
-            self.correlation = [self.correlation] * self.num_interactions
         self.radial_embedding = RadialEmbeddingBlock(
             r_max=r_max,
             num_bessel=num_bessel,
