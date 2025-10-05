@@ -91,7 +91,6 @@ class MACEStack(Base):
         avg_num_neighbors: float,
         num_polynomial_cutoff,  # The polynomial cutoff function ensures that the function goes to zero at the cutoff radius smoothly. Same as envelope_exponent for DimeNet
         correlation,  # Used in the product basis block and *roughly* determines the richness of interaction in the n-body interaction of layer 'n'.
-        enable_openequivariance: bool = False,  # Whether to use OpenEquivariance optimizations
         *args,
         **kwargs,
     ):
@@ -137,7 +136,7 @@ class MACEStack(Base):
         radial_type = "bessel" if radial_type is None else radial_type
 
         # Check and configure OpenEquivariance usage
-        enable_openequivariance = kwargs.get("enable_openequivariance", False)
+        enable_openequivariance = kwargs.pop("enable_openequivariance", False)
         self.using_openequivariance = check_openequivariance_availability(
             enable_openequivariance
         )
