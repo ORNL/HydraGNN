@@ -412,7 +412,9 @@ def pytest_configuration_consistency(enable_oe):
     irreps_out = o3.Irreps("1x0e")
 
     linear = OptimizedLinear(irreps_in, irreps_out)
-    x = torch.randn(4, irreps_in.dim, dtype=torch.float64)
+    x = torch.randn(
+        4, irreps_in.dim, dtype=torch.float32
+    )  # Use float32 for compatibility
 
     with torch.no_grad():
         y = linear(x)
