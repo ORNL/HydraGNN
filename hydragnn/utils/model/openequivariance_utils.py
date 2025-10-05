@@ -194,6 +194,24 @@ class OptimizedTensorProduct(torch.nn.Module):
         else:
             return self.tensor_product(x1, x2)
 
+    @property
+    def weight_numel(self):
+        """Get the number of weight elements in the tensor product."""
+        if hasattr(self, "tensor_product") and self.tensor_product is not None:
+            return self.tensor_product.weight_numel
+        else:
+            # If tensor_product wasn't created, compute it directly from irreps
+            # This is a fallback for when initialization failed
+            from e3nn.o3._tensor_product import _wigner_nj
+
+            count = 0
+            for i, (mul_in1, ir_in1) in enumerate(self.irreps_in1):
+                for j, (mul_in2, ir_in2) in enumerate(self.irreps_in2):
+                    for ir_out in ir_in1 * ir_in2:
+                        if ir_out in self.irreps_out:
+                            count += 1
+            return count
+
 
 class OptimizedSphericalHarmonics(torch.nn.Module):
     """
