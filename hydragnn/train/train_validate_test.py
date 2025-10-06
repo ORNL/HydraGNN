@@ -43,18 +43,19 @@ except (ImportError, ModuleNotFoundError):
 
 torch.set_float32_matmul_precision("high")
 
-use_tensor_cores = (
+use_bf16 = (
     torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7
-)
+) or (hasattr(torch, "xpu") and torch.xpu.is_available())
 
-scaler = GradScaler("cuda", enabled=use_tensor_cores) if GradScaler else None
+scaler = GradScaler(str(get_device()), enabled=use_bf16) if GradScaler else None
 
 
 def get_autocast(bf16):
-    if not bf16 or not use_tensor_cores:
+    if not bf16 or not use_bf16:
         return nullcontext()
-    if use_tensor_cores:
-        return torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+    elif bf16 and use_bf16:
+        device = str(get_device())
+        return torch.autocast(device_type=device, dtype=torch.bfloat16)
     else:
         raise RuntimeError("bf16 not supported")
 
@@ -585,7 +586,7 @@ def train(
                 scaler.update()
             else:
                 opt.step()
-        # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
+        print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()
         with torch.no_grad():
