@@ -20,6 +20,7 @@ from e3nn.util.codegen import CodeGenMixin
 from e3nn.util.jit import compile_mode
 
 from hydragnn.utils.model.mace_utils.tools.cg import U_matrix_real
+from hydragnn.utils.model.openequivariance_utils import optimized_einsum
 
 BATCH_EXAMPLE = 10
 ALPHABET = ["w", "x", "v", "n", "z", "r", "t", "y", "u", "o", "p", "s"]

@@ -37,6 +37,7 @@
       "hidden_dim": 32,
       "num_conv_layers": 4,
       "enable_interatomic_potential": true,
+      "enable_openequivariance": true,
       "output_heads": {
         "node": {
           "num_headlayers": 2,
@@ -48,31 +49,31 @@
     },
     "Variables_of_interest": {
       "input_node_features": [0],
-      "output_index": [
-        0
-      ],
-      "type": [
-        "node"
-      ],
+      "output_index": [0],
+      "type": ["graph"],
       "output_dim": [1],
-      "output_names": ["graph_energy"]
+      "output_names": ["total_energy"]
     },
     "Training": {
-      "num_epoch": 25,
-      "batch_size": 64,
-      "perc_train": 0.7,
-      "patience": 20,
-      "early_stopping": true,
+      "num_epoch": 100,
+      "batch_size": 32,
       "Optimizer": {
-        "type": "Adam",
-        "learning_rate": 0.005
+        "type": "AdamW",
+        "learning_rate": 0.001
+      },
+      "Scheduler": {
+        "type": "ReduceLROnPlateau",
+        "factor": 0.5,
+        "patience": 5,
+        "min_lr": 1e-7,
+        "mode": "min"
       },
       "conv_checkpointing": false
     }
   },
   "Visualization": {
     "plot_init_solution": true,
-    "plot_hist_solution": true,
-    "create_plots": true
- }
+    "plot_hist_solution": false,
+    "create_plots": false
+  }
 }
