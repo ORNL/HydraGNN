@@ -586,7 +586,7 @@ def train(
                 scaler.update()
             else:
                 opt.step()
-        print_peak_memory(verbosity, "Max memory allocated after optimizer step")
+        # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()
         with torch.no_grad():
