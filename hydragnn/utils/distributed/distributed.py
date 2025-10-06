@@ -457,7 +457,14 @@ def print_peak_memory(verbosity_level, prefix):
         print_distributed(
             verbosity_level,
             f"{prefix}: {torch.cuda.max_memory_allocated(device)/1e9} GB",
-            f"{torch.cuda.max_memory_cached()/1e9} GB",
+            f"{torch.cuda.max_memory_reserved()/1e9} GB",
+        )
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        device = get_device()
+        print_distributed(
+            verbosity_level,
+            f"{prefix}: {torch.xpu.max_memory_allocated(device)/1e9} GB",
+            f"{torch.xpu.max_memory_reserved()/1e9} GB",
         )
 
 

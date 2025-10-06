@@ -378,6 +378,11 @@ def start(name, cudasync=False, sync=False):
             torch.cuda.synchronize()
         except:
             pass
+    elif cudasync and hasattr(torch, "xpu") and torch.xpu.is_available():
+        try:
+            torch.xpu.synchronize()
+        except:
+            pass
     if sync:
         MPI.COMM_WORLD.Barrier()
     for tr in __tracer_list__.values():
@@ -388,6 +393,11 @@ def stop(name, cudasync=False, sync=False):
     if cudasync and torch.cuda.is_available():
         try:
             torch.cuda.synchronize()
+        except:
+            pass
+    elif cudasync and hasattr(torch, "xpu") and torch.xpu.is_available():
+        try:
+            torch.xpu.synchronize()
         except:
             pass
     if sync:
