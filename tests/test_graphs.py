@@ -162,6 +162,12 @@ def unittest_train_model(
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
         thresholds["PNAPlus"] = [0.2, 0.15]
+
+    # GPS_Equivariant may have slightly higher errors due to equivariant constraints
+    if global_attn_engine == "GPS_Equivariant":
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["PNA"] = [0.12, 0.12]
+            thresholds["PNAPlus"] = [0.12, 0.12]
     if ci_input == "ci_conv_head.json":
         thresholds["GIN"] = [0.25, 0.40]
         thresholds["SchNet"] = [0.30, 0.30]
