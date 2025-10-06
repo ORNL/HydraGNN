@@ -234,7 +234,7 @@ def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
 # Test models that allow edge attributes with global attention mechanisms
 @pytest.mark.parametrize(
     "global_attn_engine",
-    ["GPS"],
+    ["GPS", "GPS_Equivariant"],
 )
 @pytest.mark.parametrize("global_attn_type", ["multihead"])
 @pytest.mark.parametrize(
