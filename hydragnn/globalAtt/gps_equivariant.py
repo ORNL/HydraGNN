@@ -33,21 +33,21 @@ class GPSConvEquivariant(torch.nn.Module):
     """
     GPS layer that maintains E(3) equivariance for vector features while performing
     global attention on scalar features.
-    
+
     This layer processes scalar (invariant) and vector (equivariant) features separately
     to preserve geometric consistency while enabling global reasoning:
-    
+
     Why Global Attention Only on Scalars:
     - Standard attention mechanisms (dot products + softmax) are NOT equivariant to rotations
     - When vector features are rotated, attention weights change, violating equivariance
     - Scalar features represent rotation-invariant properties (atom types, charges, energies)
       that can safely undergo global attention without breaking geometric constraints
-    
+
     Information Flow Strategy:
     - Scalar path: Local MPNN → Global Attention → Enhanced scalars (global reasoning)
     - Vector path: Local MPNN → Scalar-gated updates → Updated positions (geometric consistency)
     - Scalars act as a "global information highway" that informs local geometric updates
-    
+
     Architecture:
     - Scalar features undergo normal GPS processing (local MPNN + global attention)
     - Vector features are processed through equivariant operations only (no attention)
@@ -96,7 +96,7 @@ class GPSConvEquivariant(torch.nn.Module):
             raise ValueError(f"Attention type {attn_type} not supported")
 
         self.norm1 = None
-        self.norm2 = None  
+        self.norm2 = None
         self.norm3 = None
         if norm is not None:
             if norm == "batch_norm":
@@ -113,11 +113,15 @@ class GPSConvEquivariant(torch.nn.Module):
             ReLU(),
             Linear(channels * 2, channels),
         )
-        
+
         # Simple equivariant processing components
         # Position update network (scalar features -> position updates)
-        self.pos_update_net = Linear(channels, 3, bias=False)  # No bias to maintain equivariance
-        self.pos_update_scale = torch.nn.Parameter(torch.tensor(0.01))  # Learnable scale
+        self.pos_update_net = Linear(
+            channels, 3, bias=False
+        )  # No bias to maintain equivariance
+        self.pos_update_scale = torch.nn.Parameter(
+            torch.tensor(0.01)
+        )  # Learnable scale
 
     def forward(
         self,
@@ -128,23 +132,23 @@ class GPSConvEquivariant(torch.nn.Module):
     ) -> Tuple[Tensor, Tensor]:
         """
         Runs the forward pass of the equivariant module.
-        
+
         Args:
             inv_node_feat: Scalar (invariant) node features [N, channels]
             equiv_node_feat: Vector (equivariant) node features [N, 3] (positions)
             graph_batch: Batch assignment for nodes
-            
+
         Returns:
             tuple: (updated_scalar_features, updated_positions)
         """
         device = inv_node_feat.device
         num_nodes = inv_node_feat.shape[0]
-        
+
         # Store original scalar features for residual connections
         orig_scalar = inv_node_feat
-        
+
         hs = []
-        
+
         # Local MPNN processing
         if self.conv is not None:
             h, updated_equiv = self.conv(
@@ -152,14 +156,14 @@ class GPSConvEquivariant(torch.nn.Module):
             )
             h = F.dropout(h, p=self.dropout, training=self.training)
             h = h + orig_scalar  # Residual connection for scalars
-            
+
             if self.norm1 is not None:
                 if self.norm_with_batch:
                     h = self.norm1(h, batch=graph_batch)
                 else:
                     h = self.norm1(h)
             hs.append(h)
-            
+
             # Update positions if conv layer provided updates
             if updated_equiv is not None:
                 equiv_node_feat = updated_equiv
@@ -175,7 +179,7 @@ class GPSConvEquivariant(torch.nn.Module):
         h = h[mask]
         h = F.dropout(h, p=self.dropout, training=self.training)
         h = h + inv_node_feat  # Residual connection
-        
+
         if self.norm2 is not None:
             if self.norm_with_batch:
                 h = self.norm2(h, batch=graph_batch)
@@ -198,7 +202,7 @@ class GPSConvEquivariant(torch.nn.Module):
         # This maintains equivariance by using scalar features to generate position deltas
         position_updates = self.pos_update_net(scalar_out)  # [N, 3]
         position_updates = position_updates * self.pos_update_scale
-        
+
         # Handle different input formats for equiv_node_feat
         if equiv_node_feat is not None:
             if equiv_node_feat.dim() == 2 and equiv_node_feat.size(1) == 3:
@@ -207,27 +211,31 @@ class GPSConvEquivariant(torch.nn.Module):
             elif equiv_node_feat.dim() == 3 and equiv_node_feat.size(1) == 3:
                 # Case 2: Vector features [N, 3, channels] - update positions in a compatible way
                 # Extract position-like information from first channel and update
-                positions_like = equiv_node_feat[:, :, 0]  # [N, 3] 
+                positions_like = equiv_node_feat[:, :, 0]  # [N, 3]
                 updated_positions = positions_like + position_updates
-                
+
                 # Create updated vector features by modifying the first channel
                 updated_equiv_node_feat = equiv_node_feat.clone()
                 updated_equiv_node_feat[:, :, 0] = updated_positions
-                
+
                 # Apply small updates to other channels based on position changes
                 for i in range(1, equiv_node_feat.size(2)):
-                    updated_equiv_node_feat[:, :, i] = equiv_node_feat[:, :, i] + position_updates * 0.01
+                    updated_equiv_node_feat[:, :, i] = (
+                        equiv_node_feat[:, :, i] + position_updates * 0.01
+                    )
             else:
                 # Fallback: pass through unchanged
                 updated_equiv_node_feat = equiv_node_feat
         else:
             # If no original features, use position updates as new positions
             updated_equiv_node_feat = position_updates
-            
+
         # Ensure the position updates contribute to the computational graph
         # by adding a small regularization term to scalar features
         pos_magnitude = torch.norm(position_updates, dim=1, keepdim=True)
-        scalar_out = scalar_out + 0.001 * self.pos_update_net.weight.sum() * pos_magnitude.mean()
+        scalar_out = (
+            scalar_out + 0.001 * self.pos_update_net.weight.sum() * pos_magnitude.mean()
+        )
 
         return scalar_out, updated_equiv_node_feat
 
