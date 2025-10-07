@@ -15,6 +15,7 @@ import pdb
 import subprocess
 
 
+# Test examples with GPS global attention
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["GPS"],
@@ -34,11 +35,14 @@ import subprocess
         "EGNN",
         "PNAEq",
         "PAINN",
+        "MACE",
     ],
 )
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+def pytest_examples_energy_gps(
+    example, mpnn_type, global_attn_engine, global_attn_type
+):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
     # Add the --mpnn_type argument for the subprocess call
@@ -54,8 +58,52 @@ def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_t
             global_attn_type,
         ]
     )
+    assert return_code == 0
 
-    # Check the file ran without error.
+
+# Test examples with EquiformerV2 global attention
+@pytest.mark.parametrize(
+    "global_attn_engine",
+    ["EquiformerV2"],
+)
+@pytest.mark.parametrize("global_attn_type", ["Transformer"])
+@pytest.mark.parametrize(
+    "mpnn_type",
+    [
+        "SAGE",
+        "GIN",
+        "GAT",
+        "MFC",
+        "PNA",
+        "PNAPlus",
+        "SchNet",
+        "DimeNet",
+        "EGNN",
+        "PNAEq",
+        "PAINN",
+        "MACE",
+    ],
+)
+@pytest.mark.parametrize("example", ["qm9", "md17"])
+@pytest.mark.mpi_skip()
+def pytest_examples_energy_equiformer(
+    example, mpnn_type, global_attn_engine, global_attn_type
+):
+    path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+    file_path = os.path.join(path, example + ".py")
+    # Add the --mpnn_type argument for the subprocess call
+    return_code = subprocess.call(
+        [
+            "python",
+            file_path,
+            "--mpnn_type",
+            mpnn_type,
+            "--global_attn_engine",
+            global_attn_engine,
+            "--global_attn_type",
+            global_attn_type,
+        ]
+    )
     assert return_code == 0
 
 

@@ -231,7 +231,7 @@ def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
     unittest_train_model(mpnn_type, None, None, "ci.json", True, overwrite_data)
 
 
-# Test models that allow edge attributes with global attention mechanisms
+# Test models that allow edge attributes with GPS global attention
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["GPS"],
@@ -241,7 +241,25 @@ def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
-def pytest_train_model_lengths_global_attention(
+def pytest_train_model_lengths_gps_attention(
+    mpnn_type, global_attn_engine, global_attn_type, overwrite_data=False
+):
+    unittest_train_model(
+        mpnn_type, global_attn_engine, global_attn_type, "ci.json", True, overwrite_data
+    )
+
+
+# Test models that allow edge attributes with EquiformerV2 global attention
+@pytest.mark.parametrize(
+    "global_attn_engine",
+    ["EquiformerV2"],
+)
+@pytest.mark.parametrize("global_attn_type", ["Transformer"])
+@pytest.mark.parametrize(
+    "mpnn_type",
+    ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
+)
+def pytest_train_model_lengths_equiformer_attention(
     mpnn_type, global_attn_engine, global_attn_type, overwrite_data=False
 ):
     unittest_train_model(
