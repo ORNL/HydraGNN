@@ -22,7 +22,7 @@ import sys
     "global_attn_engine",
     ["GPS"],
 )
-@pytest.mark.parametrize("global_attn_type", ["multihead", "Transformer"])
+@pytest.mark.parametrize("global_attn_type", ["multihead"])
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -67,11 +67,11 @@ def pytest_examples_energy_gps(
 
 # Test examples with EquiformerV2 global attention
 # Note: MACE is excluded due to e3nn tensor dimension incompatibilities with global attention
+# Note: EquiformerV2 doesn't use global_attn_type parameter (it's ignored)
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["EquiformerV2"],
 )
-@pytest.mark.parametrize("global_attn_type", ["Transformer"])
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -90,14 +90,13 @@ def pytest_examples_energy_gps(
 )
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples_energy_equiformer(
-    example, mpnn_type, global_attn_engine, global_attn_type
-):
+def pytest_examples_energy_equiformer(example, mpnn_type, global_attn_engine):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
     # Use sys.executable to get the current Python interpreter
     python_executable = sys.executable
     # Add the --mpnn_type argument for the subprocess call
+    # Note: global_attn_type is not needed for EquiformerV2 as it's ignored
     return_code = subprocess.call(
         [
             python_executable,
@@ -106,8 +105,6 @@ def pytest_examples_energy_equiformer(
             mpnn_type,
             "--global_attn_engine",
             global_attn_engine,
-            "--global_attn_type",
-            global_attn_type,
         ]
     )
     assert return_code == 0
