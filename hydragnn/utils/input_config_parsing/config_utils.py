@@ -165,6 +165,18 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Optimizer" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
 
+    # Validate MACE + global attention compatibility
+    mpnn_type = config["NeuralNetwork"]["Architecture"]["mpnn_type"]
+    global_attn_engine = config["NeuralNetwork"]["Architecture"]["global_attn_engine"]
+
+    if mpnn_type == "MACE" and global_attn_engine is not None:
+        raise ValueError(
+            f"MACE cannot be combined with global attention mechanisms ({global_attn_engine}). "
+            "This is due to fundamental tensor dimension incompatibilities in e3nn operations. "
+            "Use MACE without global attention, or choose a different MPNN type. "
+            "See MACE_LIMITATION.md for details."
+        )
+
     return config
 
 

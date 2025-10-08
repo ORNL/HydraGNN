@@ -56,10 +56,14 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config = json.load(f)
 
     # If a model type is provided, update the configuration accordingly.
-    if global_attn_engine:
+    if global_attn_engine is not None:
         config["NeuralNetwork"]["Architecture"][
             "global_attn_engine"
         ] = global_attn_engine
+    # Special case: If no global_attn_engine is provided via CLI but MACE is used,
+    # explicitly disable global attention to avoid config file defaults
+    elif mpnn_type == "MACE" and global_attn_engine is None:
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = None
 
     if global_attn_type:
         config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
