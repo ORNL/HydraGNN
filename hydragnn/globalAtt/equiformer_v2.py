@@ -459,14 +459,17 @@ class EquiformerV2Conv(torch.nn.Module):
             if edge_attr is None:
                 # Get edge vectors for spherical harmonic computation
                 if "pos" in kwargs:
-                    # Create zero shifts tensor for edge computation
-                    num_edges = edge_index.size(1)
-                    shifts = torch.zeros(
-                        num_edges,
-                        3,
-                        device=inv_node_feat.device,
-                        dtype=inv_node_feat.dtype,
-                    )
+                    # Use edge_shifts if available, otherwise create zero shifts tensor
+                    if "edge_shifts" in kwargs and kwargs["edge_shifts"] is not None:
+                        shifts = kwargs["edge_shifts"]
+                    else:
+                        num_edges = edge_index.size(1)
+                        shifts = torch.zeros(
+                            num_edges,
+                            3,
+                            device=inv_node_feat.device,
+                            dtype=inv_node_feat.dtype,
+                        )
 
                     edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
                         kwargs["pos"], edge_index, shifts, normalize=True, eps=1e-12
