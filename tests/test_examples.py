@@ -10,10 +10,11 @@
 ##############################################################################
 
 import os
-import pytest
 import pdb
 import subprocess
 import sys
+
+import pytest
 
 
 # Test examples with GPS global attention
@@ -95,6 +96,12 @@ def pytest_examples_energy_equiformer(example, mpnn_type, global_attn_engine):
     file_path = os.path.join(path, example + ".py")
     # Use sys.executable to get the current Python interpreter
     python_executable = sys.executable
+
+    # Set up environment with PYTHONPATH
+    env = os.environ.copy()
+    hydragnn_root = os.path.join(os.path.dirname(__file__), "..")
+    env["PYTHONPATH"] = os.path.abspath(hydragnn_root)
+
     # Add the --mpnn_type argument for the subprocess call
     # Note: global_attn_type is not needed for EquiformerV2 as it's ignored
     return_code = subprocess.call(
@@ -105,7 +112,8 @@ def pytest_examples_energy_equiformer(example, mpnn_type, global_attn_engine):
             mpnn_type,
             "--global_attn_engine",
             global_attn_engine,
-        ]
+        ],
+        env=env,
     )
     assert return_code == 0
 
