@@ -446,7 +446,7 @@ class EquiformerV2Conv(torch.nn.Module):
         # EquiformerV2 global attention processing
 
         # 1. Embed invariant features into SO(3)-equivariant representation
-        node_features_equivariant = self.so3_embedding(inv_node_feat)
+        node_features = self.so3_embedding(inv_node_feat)
 
         # 2. Apply equivariant attention
         # We need edge information for proper attention - extract from kwargs
@@ -505,10 +505,10 @@ class EquiformerV2Conv(torch.nn.Module):
 
         # Apply attention with residual connection (always executed)
         attn_output = self.equivariant_attention(
-            node_features_equivariant, edge_index, edge_features, graph_batch
+            node_features, edge_index, edge_features, graph_batch
         )
         attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
-        attn_output = attn_output + node_features_equivariant
+        attn_output = attn_output + node_features
         attn_output = self.norm1(attn_output)
 
         # 3. Apply equivariant feedforward network (always executed)
