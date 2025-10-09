@@ -199,6 +199,7 @@ def unittest_train_model(
 
 
 # Test across all models with both single/multihead
+@pytest.mark.basic_models
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -223,6 +224,7 @@ def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
 
 
 # Test models that allow edge attributes
+@pytest.mark.specialized_models
 @pytest.mark.parametrize(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
@@ -232,6 +234,7 @@ def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
 
 
 # Test models that allow edge attributes with GPS global attention
+@pytest.mark.global_attention
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["GPS"],
@@ -250,6 +253,7 @@ def pytest_train_model_lengths_gps_attention(
 
 
 # Test models that allow edge attributes with EquiformerV2 global attention
+@pytest.mark.global_attention
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["EquiformerV2"],
@@ -268,6 +272,7 @@ def pytest_train_model_lengths_equiformer_attention(
 
 
 # Test only models
+@pytest.mark.equivariant_models
 @pytest.mark.parametrize(
     "mpnn_type",
     ["MACE"],
@@ -277,6 +282,7 @@ def pytest_train_mace_model_lengths(mpnn_type, overwrite_data=False):
 
 
 # Test across equivariant models
+@pytest.mark.equivariant_models
 @pytest.mark.parametrize("mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
 def pytest_train_equivariant_model(mpnn_type, overwrite_data=False):
     unittest_train_model(
@@ -285,6 +291,7 @@ def pytest_train_equivariant_model(mpnn_type, overwrite_data=False):
 
 
 # Test vector output
+@pytest.mark.specialized_models
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -303,6 +310,7 @@ def pytest_train_model_vectoroutput(mpnn_type, overwrite_data=False):
     )
 
 
+@pytest.mark.specialized_models
 @pytest.mark.parametrize(
     "mpnn_type",
     [

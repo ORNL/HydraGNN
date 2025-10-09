@@ -10,8 +10,8 @@ on:
     - cron:  '0 3 * * 1'
 
 jobs:
-  build:
-
+  # Basic tests - quick validation
+  basic-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 600
     strategy:
@@ -48,10 +48,106 @@ jobs:
         run: |
           black .
           git diff --exit-code
-      - name: Run pytest
+      - name: Run basic tests (excluding test_graphs.py and test_examples.py)
         run: |
-          # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
-          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
-          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native --ignore=tests/test_graphs.py --ignore=tests/test_examples.py
+          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi --ignore=tests/test_graphs.py --ignore=tests/test_examples.py
+
+  # Model tests split into multiple jobs
+  model-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.11"]
+        test-group: [
+          "basic-models",
+          "global-attention", 
+          "equivariant-models",
+          "specialized-models"
+        ]
+
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Checkout GCNN
+        uses: actions/checkout@v4
+      - name: Install MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenmpi-dev
+          sudo apt-get clean
+      - name: Cache pip
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade -r requirements.txt -r requirements-dev.txt
+          python -m pip install --upgrade -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python -m pip install --upgrade -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
+          python -m pip install --upgrade -r requirements-deepspeed.txt
+      - name: Run model tests
+        run: |
+          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
+          pip list
+          case "${{ matrix.test-group }}" in
+            "basic-models")
+              python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "basic_models" tests/test_graphs.py
+              ;;
+            "global-attention")
+              python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "global_attention" tests/test_graphs.py
+              ;;
+            "equivariant-models")
+              python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "equivariant_models" tests/test_graphs.py
+              ;;
+            "specialized-models")
+              python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "specialized_models" tests/test_graphs.py
+              ;;
+          esac
+
+  # Example tests as separate job
+  example-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.9", "3.11"]
+
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Checkout GCNN
+        uses: actions/checkout@v4
+      - name: Install MPI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libopenmpi-dev
+          sudo apt-get clean
+      - name: Cache pip
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade -r requirements.txt -r requirements-dev.txt
+          python -m pip install --upgrade -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python -m pip install --upgrade -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.0.1+cpu.html
+          python -m pip install --upgrade -r requirements-deepspeed.txt
+      - name: Run example tests
+        run: |
+          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
+          pip list
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native tests/test_examples.py
