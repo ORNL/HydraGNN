@@ -453,58 +453,53 @@ class EquiformerV2Conv(torch.nn.Module):
         edge_index = kwargs.get("edge_index")
         edge_attr = kwargs.get("edge_attr", None)
 
-        # Always apply attention mechanism to ensure all parameters are used
-        if edge_index is not None:
-            # Create edge features using spherical harmonics if not provided
-            if edge_attr is None:
-                # Get edge vectors for spherical harmonic computation
-                if "pos" in kwargs:
-                    # Use edge_shifts if available, otherwise create zero shifts tensor
-                    if "edge_shifts" in kwargs and kwargs["edge_shifts"] is not None:
-                        shifts = kwargs["edge_shifts"]
-                    else:
-                        num_edges = edge_index.size(1)
-                        shifts = torch.zeros(
-                            num_edges,
-                            3,
-                            device=inv_node_feat.device,
-                            dtype=inv_node_feat.dtype,
-                        )
+        # If edge_index is not provided, create all-to-all connections
+        if edge_index is None:
+            num_nodes = inv_node_feat.size(0)
+            # Create all-to-all edge connections
+            row = torch.arange(
+                num_nodes, device=inv_node_feat.device
+            ).repeat_interleave(num_nodes)
+            col = torch.arange(num_nodes, device=inv_node_feat.device).repeat(num_nodes)
+            edge_index = torch.stack([row, col], dim=0)
 
-                    edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
-                        kwargs["pos"], edge_index, shifts, normalize=True, eps=1e-12
-                    )
-                    # Use spherical harmonics of edge vectors as edge features
-                    spherical_harmonics = o3.SphericalHarmonics(
-                        self.irreps_edge, normalize=True, normalization="component"
-                    )
-                    edge_features = spherical_harmonics(edge_vectors)
+        # Always apply attention mechanism to ensure all parameters are used
+        # Create edge features using spherical harmonics if not provided
+        if edge_attr is None:
+            # Get edge vectors for spherical harmonic computation
+            if "pos" in kwargs:
+                # Use edge_shifts if available, otherwise create zero shifts tensor
+                if "edge_shifts" in kwargs and kwargs["edge_shifts"] is not None:
+                    shifts = kwargs["edge_shifts"]
                 else:
-                    # Fallback: create dummy edge features
                     num_edges = edge_index.size(1)
-                    edge_features = torch.zeros(
+                    shifts = torch.zeros(
                         num_edges,
-                        self.irreps_edge.dim,
+                        3,
                         device=inv_node_feat.device,
                         dtype=inv_node_feat.dtype,
                     )
+
+                edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
+                    kwargs["pos"], edge_index, shifts, normalize=True, eps=1e-12
+                )
+                # Use spherical harmonics of edge vectors as edge features
+                spherical_harmonics = o3.SphericalHarmonics(
+                    self.irreps_edge, normalize=True, normalization="component"
+                )
+                edge_features = spherical_harmonics(edge_vectors)
             else:
-                # Use provided edge attributes
-                edge_features = edge_attr
+                # Fallback: create dummy edge features
+                num_edges = edge_index.size(1)
+                edge_features = torch.zeros(
+                    num_edges,
+                    self.irreps_edge.dim,
+                    device=inv_node_feat.device,
+                    dtype=inv_node_feat.dtype,
+                )
         else:
-            # Create minimal edge information for self-attention
-            num_nodes = inv_node_feat.size(0)
-            edge_index = (
-                torch.arange(num_nodes, device=inv_node_feat.device)
-                .unsqueeze(0)
-                .repeat(2, 1)
-            )
-            edge_features = torch.zeros(
-                num_nodes,
-                self.irreps_edge.dim,
-                device=inv_node_feat.device,
-                dtype=inv_node_feat.dtype,
-            )
+            # Use provided edge attributes
+            edge_features = edge_attr
 
         # Apply attention with residual connection (always executed)
         attn_output = self.equivariant_attention(
