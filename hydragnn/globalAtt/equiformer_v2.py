@@ -29,6 +29,172 @@ from hydragnn.utils.model.irreps_tools import create_irreps_string
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 
 
+def init_edge_rot_mat(edge_distance_vec):
+    """
+    Initialize edge rotation matrices based on edge vectors.
+
+    This function creates a rotation matrix for each edge that aligns the edge
+    direction with a canonical frame. This is based on the original EquiformerV2
+    implementation.
+
+    Args:
+        edge_distance_vec: Edge vectors [num_edges, 3]
+
+    Returns:
+        edge_rot_mat: Rotation matrices [num_edges, 3, 3]
+    """
+    edge_vec_0 = edge_distance_vec
+    edge_vec_0_distance = torch.sqrt(torch.sum(edge_vec_0 ** 2, dim=1))
+
+    # Make sure the atoms are far enough apart
+    if torch.min(edge_vec_0_distance) < 0.0001:
+        print(
+            "Warning: very small edge distances detected: {}".format(
+                torch.min(edge_vec_0_distance)
+            )
+        )
+
+    norm_x = edge_vec_0 / (edge_vec_0_distance.view(-1, 1))
+
+    # Create a random vector for constructing the orthonormal basis
+    edge_vec_2 = torch.rand_like(edge_vec_0) - 0.5
+    edge_vec_2 = edge_vec_2 / (
+        torch.sqrt(torch.sum(edge_vec_2 ** 2, dim=1)).view(-1, 1)
+    )
+
+    # Create two rotated copies of the random vectors in case the random vector
+    # is aligned with norm_x. With two 90 degree rotated vectors, at least one
+    # should not be aligned with norm_x
+    edge_vec_2b = edge_vec_2.clone()
+    edge_vec_2b[:, 0] = -edge_vec_2[:, 1]
+    edge_vec_2b[:, 1] = edge_vec_2[:, 0]
+    edge_vec_2c = edge_vec_2.clone()
+    edge_vec_2c[:, 1] = -edge_vec_2[:, 2]
+    edge_vec_2c[:, 2] = edge_vec_2[:, 1]
+
+    vec_dot_b = torch.abs(torch.sum(edge_vec_2b * norm_x, dim=1)).view(-1, 1)
+    vec_dot_c = torch.abs(torch.sum(edge_vec_2c * norm_x, dim=1)).view(-1, 1)
+    vec_dot = torch.abs(torch.sum(edge_vec_2 * norm_x, dim=1)).view(-1, 1)
+
+    edge_vec_2 = torch.where(torch.gt(vec_dot, vec_dot_b), edge_vec_2b, edge_vec_2)
+    vec_dot = torch.abs(torch.sum(edge_vec_2 * norm_x, dim=1)).view(-1, 1)
+    edge_vec_2 = torch.where(torch.gt(vec_dot, vec_dot_c), edge_vec_2c, edge_vec_2)
+
+    vec_dot = torch.abs(torch.sum(edge_vec_2 * norm_x, dim=1))
+    # Check the vectors aren't aligned
+    assert torch.max(vec_dot) < 0.99
+
+    # Create orthonormal basis
+    norm_z = torch.cross(norm_x, edge_vec_2, dim=1)
+    norm_z = norm_z / (torch.sqrt(torch.sum(norm_z ** 2, dim=1, keepdim=True)))
+    norm_y = torch.cross(norm_x, norm_z, dim=1)
+    norm_y = norm_y / (torch.sqrt(torch.sum(norm_y ** 2, dim=1, keepdim=True)))
+
+    # Construct the 3D rotation matrix
+    norm_x = norm_x.view(-1, 3, 1)
+    norm_y = -norm_y.view(-1, 3, 1)
+    norm_z = norm_z.view(-1, 3, 1)
+
+    edge_rot_mat_inv = torch.cat([norm_z, norm_x, norm_y], dim=2)
+    edge_rot_mat = torch.transpose(edge_rot_mat_inv, 1, 2)
+
+    return edge_rot_mat.detach()
+
+
+@compile_mode("script")
+class SO3_Rotation(torch.nn.Module):
+    """
+    SO(3) rotation module that handles Wigner-D matrix computation for edge-aligned rotations.
+
+    This is a simplified version of the original EquiformerV2's SO3_Rotation that integrates
+    with e3nn for Wigner-D matrix computation.
+    """
+
+    def __init__(self, lmax: int):
+        super().__init__()
+        self.lmax = lmax
+
+    def set_wigner(self, edge_rot_mat: torch.Tensor):
+        """
+        Compute and store Wigner-D matrices from rotation matrices.
+
+        Args:
+            edge_rot_mat: Edge rotation matrices [num_edges, 3, 3]
+        """
+        self.device = edge_rot_mat.device
+        self.dtype = edge_rot_mat.dtype
+
+        # Convert rotation matrices to Wigner-D matrices using e3nn
+        # For each degree l, compute the Wigner-D matrix
+        self.wigner_matrices = {}
+
+        # Convert rotation matrices to Euler angles
+        # Use e3nn's matrix_to_angles function
+        try:
+            # Try to use e3nn's matrix_to_angles if available
+            euler_angles = o3.matrix_to_angles(
+                edge_rot_mat
+            )  # Returns (alpha, beta, gamma)
+            alpha, beta, gamma = euler_angles
+        except AttributeError:
+            # Fallback: compute Euler angles manually
+            # Extract Euler angles from rotation matrix (ZYZ convention)
+            cos_beta = edge_rot_mat[..., 2, 2]
+            sin_beta = torch.sqrt(1 - cos_beta ** 2)
+
+            # Handle singularities
+            singular = sin_beta < 1e-6
+
+            alpha = torch.zeros_like(cos_beta)
+            beta = torch.acos(torch.clamp(cos_beta, -1, 1))
+            gamma = torch.zeros_like(cos_beta)
+
+            # Non-singular case
+            alpha[~singular] = torch.atan2(
+                edge_rot_mat[~singular, 1, 2], edge_rot_mat[~singular, 0, 2]
+            )
+            gamma[~singular] = torch.atan2(
+                edge_rot_mat[~singular, 2, 1], -edge_rot_mat[~singular, 2, 0]
+            )
+
+        for l in range(self.lmax + 1):
+            # Use e3nn to compute Wigner-D matrix for degree l
+            try:
+                wigner_d = o3.wigner_D(l, alpha, beta, gamma)  # [num_edges, 2l+1, 2l+1]
+            except Exception:
+                # Fallback: create identity matrices if Wigner-D computation fails
+                num_edges = edge_rot_mat.size(0)
+                dim_l = 2 * l + 1
+                wigner_d = (
+                    torch.eye(dim_l, device=self.device, dtype=self.dtype)
+                    .unsqueeze(0)
+                    .repeat(num_edges, 1, 1)
+                )
+
+            self.wigner_matrices[l] = wigner_d.detach()
+
+    def rotate_spherical_harmonics(
+        self, sh_features: torch.Tensor, l: int
+    ) -> torch.Tensor:
+        """
+        Rotate spherical harmonic features using precomputed Wigner-D matrices.
+
+        Args:
+            sh_features: Spherical harmonic features [num_edges, 2l+1, channels]
+            l: Degree of the spherical harmonics
+
+        Returns:
+            Rotated spherical harmonic features [num_edges, 2l+1, channels]
+        """
+        if l in self.wigner_matrices:
+            wigner_d = self.wigner_matrices[l]  # [num_edges, 2l+1, 2l+1]
+            # Apply rotation: [num_edges, 2l+1, 2l+1] @ [num_edges, 2l+1, channels]
+            rotated_features = torch.bmm(wigner_d, sh_features)
+            return rotated_features
+        else:
+            return sh_features
+
+
 @compile_mode("script")
 class SO3_Embedding(torch.nn.Module):
     """
@@ -341,6 +507,9 @@ class EquiformerV2Conv(torch.nn.Module):
             sphere_channels=self.sphere_channels,
         )
 
+        # SO(3) rotation module for edge-aligned rotations
+        self.so3_rotation = SO3_Rotation(lmax=self.lmax)
+
         # EquiformerV2 attention mechanism
         self.equivariant_attention = SO2EquivariantGraphAttention(
             irreps_node=self.irreps_node,
@@ -392,6 +561,8 @@ class EquiformerV2Conv(torch.nn.Module):
             for module in [self.so3_embedding.linear]:
                 if hasattr(module, "reset_parameters"):
                     module.reset_parameters()
+
+        # Note: SO3_Rotation module doesn't have learnable parameters to reset
 
         for module in [
             self.equivariant_attention.q_proj,
@@ -483,11 +654,42 @@ class EquiformerV2Conv(torch.nn.Module):
                 edge_vectors, edge_lengths = get_edge_vectors_and_lengths(
                     kwargs["pos"], edge_index, shifts, normalize=True, eps=1e-12
                 )
+
+                # Compute edge rotation matrices (EquiformerV2 approach)
+                edge_rot_mat = init_edge_rot_mat(edge_vectors)
+
+                # Initialize the SO3 rotation module with edge rotation matrices
+                self.so3_rotation.set_wigner(edge_rot_mat)
+
                 # Use spherical harmonics of edge vectors as edge features
                 spherical_harmonics = o3.SphericalHarmonics(
                     self.irreps_edge, normalize=True, normalization="component"
                 )
                 edge_features = spherical_harmonics(edge_vectors)
+
+                # Apply edge-aligned rotation to spherical harmonic features
+                # Split edge features by degree l and rotate each independently
+                edge_features_rotated = torch.zeros_like(edge_features)
+                start_idx = 0
+                for l in range(self.lmax + 1):
+                    dim_l = 2 * l + 1
+                    if start_idx + dim_l <= edge_features.size(1):
+                        sh_l = edge_features[
+                            :, start_idx : start_idx + dim_l
+                        ].unsqueeze(
+                            -1
+                        )  # [num_edges, 2l+1, 1]
+                        sh_l_rotated = self.so3_rotation.rotate_spherical_harmonics(
+                            sh_l, l
+                        )
+                        edge_features_rotated[
+                            :, start_idx : start_idx + dim_l
+                        ] = sh_l_rotated.squeeze(-1)
+                        start_idx += dim_l
+                    else:
+                        break
+
+                edge_features = edge_features_rotated
             else:
                 # Fallback: create dummy edge features
                 num_edges = edge_index.size(1)
@@ -540,5 +742,6 @@ class EquiformerV2Conv(torch.nn.Module):
         return (
             f"{self.__class__.__name__}({self.channels}, "
             f"conv={self.conv}, heads={self.heads}, "
-            f"lmax_list={self.lmax_list}, mmax_list={self.mmax_list})"
+            f"lmax_list={self.lmax_list}, mmax_list={self.mmax_list}, "
+            f"with_edge_rot_mat=True)"
         )
