@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 import torch
 import torch.nn.functional as F
+
 # e3nn imports for SO(3) equivariant operations
 from e3nn import nn as e3nn_nn
 from e3nn import o3
