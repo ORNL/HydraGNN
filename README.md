@@ -21,16 +21,46 @@ Distributed PyTorch implementation of multi-headed graph convolutional neural ne
 To install required packages with only basic capability (`torch`,
 `torch_geometric`, and related packages)
 and to serialize+store the processed data for later sessions (`pickle5`):
+
+**Recommended approach - standard installation:**
 ```bash
+# Install all core dependencies (base + PyTorch + PyTorch Geometric)
 pip install -r requirements.txt
+
+# Or use the installation script
+./install_dependencies.sh all
+```
+
+**Alternative approach for reproducible installation:**
+```bash
+# Use the provided installation script with constraints
+./install_dependencies.sh
+
+# Or install manually with consistent settings:
+pip install --no-build-isolation -v -r requirements.txt -c constraints.txt
+```
+
+**Modular installation (choose what you need):**
+```bash
+# Base only (scientific computing, materials science, visualization)
+pip install -r requirements-base.txt
+
+# Add PyTorch
 pip install -r requirements-torch.txt
+
+# Add PyTorch Geometric  
 pip install -r requirements-pyg.txt
+
+# Add optional features (HPO, FAIRChem, etc.)
+pip install -r requirements-optional.txt
 ```
 
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```bash
 pip install -r requirements-dev.txt
+# Or with the script:
+./install_dependencies.sh all dev
 ```
 
 Detailed dependency installation instructions are available on the

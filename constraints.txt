@@ -1,0 +1,31 @@
+# Package constraints to ensure compatibility across different environments
+# Use with: pip install -r requirements-base.txt -c constraints.txt
+
+# Base scientific computing and utilities
+numpy==1.26.4
+scipy==1.14.1
+scikit-learn==1.5.1
+
+# Deep learning frameworks
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+torch-geometric==2.6.1
+
+# Visualization and utilities
+matplotlib==3.10.6
+tensorboard==2.20.0
+
+# System utilities
+psutil==7.1.0
+tqdm==4.67.1
+
+# Development tools
+pytest==8.4.2
+black==21.5b1
+mendeleev==0.16.0
+
+# Optional but commonly used
+pandas==2.3.3
+h5py==3.14.0
+deepspeed==0.17.0

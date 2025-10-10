@@ -102,6 +102,7 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 if os.path.lexists(link):
                     os.remove(link)
                 os.symlink(fname, link)
+        dist.barrier()
     else:
         model.save_checkpoint(os.path.join(path, name), name)
 

@@ -2,8 +2,11 @@ pymatgen
 jarvis-tools # needed for MPTrj dataset
 optuna # hyperparameter optimization
 deephyper # hyperparameter optimization
-h5py # utils to read hdf5 files
+h5py==3.14.0 # utils to read hdf5 files
 p7zip # to uncompress .7z file after download - needed for qm7x example
 lmdb # needed to use FAIRChem functionalities released by the Meta Research AI group
 orjson # needed to use FAIRChem functionalities released by the Meta Research AI group
+pandas==2.3.3 # needed for HPO examples and FAIRChem functionalities
+PyYAML # needed for FAIRChem configuration files
+wandb # needed for FAIRChem logging functionalities
 

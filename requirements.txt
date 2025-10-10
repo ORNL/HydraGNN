@@ -1,8 +1,8 @@
-click==8.0.0
-matplotlib
-ase
-tqdm
-tensorboard
-psutil
-sympy
-matscipy
+# Standard HydraGNN installation
+# This installs all dependencies needed for basic HydraGNN functionality
+# For development tools: pip install -r requirements-dev.txt
+# For optional features: pip install -r requirements-optional.txt
+
+-r requirements-base.txt
+-r requirements-torch.txt
+-r requirements-pyg.txt
