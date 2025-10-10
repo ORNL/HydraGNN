@@ -18,7 +18,7 @@ def pytest_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False
     )
 
 
-# Test vector output with global attention mechanisms
+# Test vector output with GPS global attention
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["GPS"],
@@ -26,7 +26,30 @@ def pytest_train_model_vectoroutput_w_deepspeed(model_type, overwrite_data=False
 @pytest.mark.parametrize("global_attn_type", ["multihead"])
 @pytest.mark.parametrize("model_type", ["PNA"])
 @pytest.mark.mpi
-def pytest_train_model_vectoroutput_w_deepspeed_global_attention(
+def pytest_train_model_vectoroutput_w_deepspeed_gps_attention(
+    model_type, global_attn_engine, global_attn_type, overwrite_data=False
+):
+    unittest_train_model(
+        model_type,
+        global_attn_engine,
+        global_attn_type,
+        "ci_vectoroutput.json",
+        True,
+        overwrite_data,
+        use_deepspeed=True,
+    )
+
+
+# Test vector output with EquiformerV2 global attention
+@pytest.mark.equiformer_v2
+@pytest.mark.parametrize(
+    "global_attn_engine",
+    ["EquiformerV2"],
+)
+@pytest.mark.parametrize("global_attn_type", ["Transformer"])
+@pytest.mark.parametrize("model_type", ["PNA"])
+@pytest.mark.mpi
+def pytest_train_model_vectoroutput_w_deepspeed_equiformer_attention(
     model_type, global_attn_engine, global_attn_type, overwrite_data=False
 ):
     unittest_train_model(

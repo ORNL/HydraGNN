@@ -32,8 +32,11 @@ def md17_pre_transform(data, compute_edges, transform):
     return data
 
 
-# Randomly select ~1000 samples
+# Randomly select ~1000 samples (or fewer in CI mode)
 def md17_pre_filter(data):
+    # In CI mode, use much fewer samples for faster testing
+    if os.environ.get("CI_MODE"):
+        return torch.rand(1) < 0.01  # ~1% of samples (much fewer)
     return torch.rand(1) < 0.25
 
 
@@ -64,6 +67,12 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
 
     if mpnn_type:
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+
+    # Respect environment variables for CI testing
+    if os.environ.get("NUM_EPOCHS"):
+        config["NeuralNetwork"]["Training"]["num_epoch"] = int(
+            os.environ.get("NUM_EPOCHS")
+        )
 
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()

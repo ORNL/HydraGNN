@@ -37,7 +37,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
 
-    # Set default values for GPS variables
+    # Set default values for global attention variables (GPS and EquiformerV2)
     if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = None
     if "global_attn_type" not in config["NeuralNetwork"]["Architecture"]:
@@ -46,6 +46,14 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = 0
     if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
+
+    # Set default values for EquiformerV2-specific parameters
+    if "equiformer_lmax_list" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["equiformer_lmax_list"] = [6]
+    if "equiformer_mmax_list" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["equiformer_mmax_list"] = [2]
+    if "equiformer_sphere_channels" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["equiformer_sphere_channels"] = None
 
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
@@ -156,6 +164,18 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "Optimizer" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
+
+    # Validate MACE + global attention compatibility
+    mpnn_type = config["NeuralNetwork"]["Architecture"]["mpnn_type"]
+    global_attn_engine = config["NeuralNetwork"]["Architecture"]["global_attn_engine"]
+
+    if mpnn_type == "MACE" and global_attn_engine is not None:
+        raise ValueError(
+            f"MACE cannot be combined with global attention mechanisms ({global_attn_engine}). "
+            "This is due to fundamental tensor dimension incompatibilities in e3nn operations. "
+            "Use MACE without global attention, or choose a different MPNN type. "
+            "See MACE_LIMITATION.md for details."
+        )
 
     return config
 

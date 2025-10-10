@@ -23,6 +23,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import GPSConv
+from hydragnn.globalAtt.equiformer_v2 import EquiformerV2Conv
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
@@ -53,6 +54,10 @@ class Base(Module):
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
+        # EquiformerV2-specific parameters
+        equiformer_lmax_list: list = [6],
+        equiformer_mmax_list: list = [2],
+        equiformer_sphere_channels: int = None,
     ):
         super().__init__()
         self.device = get_device()
@@ -67,6 +72,12 @@ class Base(Module):
         self.dropout = dropout
         self.global_attn_dropout = dropout
         self.num_conv_layers = num_conv_layers
+
+        # EquiformerV2 parameters
+        self.equiformer_lmax_list = equiformer_lmax_list
+        self.equiformer_mmax_list = equiformer_mmax_list
+        self.equiformer_sphere_channels = equiformer_sphere_channels or hidden_dim
+
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
         self.num_nodes = num_nodes
@@ -191,6 +202,20 @@ class Base(Module):
                     heads=self.global_attn_heads,
                     dropout=self.global_attn_dropout,
                     attn_type=self.global_attn_type,
+                )
+            elif self.global_attn_engine == "EquiformerV2":
+                return EquiformerV2Conv(
+                    channels=self.hidden_dim,
+                    conv=mpnn,
+                    heads=self.global_attn_heads,
+                    dropout=self.global_attn_dropout,
+                    lmax_list=self.equiformer_lmax_list,
+                    mmax_list=self.equiformer_mmax_list,
+                    sphere_channels=self.equiformer_sphere_channels,
+                )
+            else:
+                raise ValueError(
+                    f"Unsupported global attention engine: {self.global_attn_engine}"
                 )
         else:
             return mpnn

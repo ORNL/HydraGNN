@@ -83,6 +83,9 @@ def create_model_config(
         config["Architecture"]["avg_num_neighbors"],
         config["Training"]["conv_checkpointing"],
         config["Architecture"].get("enable_interatomic_potential", False),
+        config["Architecture"]["equiformer_lmax_list"],
+        config["Architecture"]["equiformer_mmax_list"],
+        config["Architecture"]["equiformer_sphere_channels"],
         verbosity,
         use_gpu,
     )
@@ -130,6 +133,10 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
+    # EquiformerV2 parameters
+    equiformer_lmax_list: list = [6],
+    equiformer_mmax_list: list = [2],
+    equiformer_sphere_channels: int = None,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -161,6 +168,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "PNA":
@@ -187,6 +197,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -221,6 +234,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "GAT":
@@ -250,6 +266,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "MFC":
@@ -275,6 +294,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "CGCNN":
@@ -299,6 +321,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "SAGE":
@@ -321,6 +346,9 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "SchNet":
@@ -352,6 +380,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "DimeNet":
@@ -397,6 +428,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "EGNN":
@@ -422,6 +456,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "PAINN":
@@ -448,6 +485,9 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "PNAEq":
@@ -475,6 +515,9 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
 
     elif mpnn_type == "MACE":
@@ -514,6 +557,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            equiformer_lmax_list=equiformer_lmax_list,
+            equiformer_mmax_list=equiformer_mmax_list,
+            equiformer_sphere_channels=equiformer_sphere_channels,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))

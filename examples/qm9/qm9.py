@@ -15,7 +15,8 @@ except ImportError:
 import hydragnn
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-num_samples = 1000
+# Use fewer samples in CI mode for faster testing
+num_samples = int(os.environ.get("NUM_SAMPLES", 1000))
 
 
 # Update each sample prior to loading.
@@ -56,7 +57,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config = json.load(f)
 
     # If a model type is provided, update the configuration accordingly.
-    if global_attn_engine:
+    if global_attn_engine is not None:
         config["NeuralNetwork"]["Architecture"][
             "global_attn_engine"
         ] = global_attn_engine
@@ -66,6 +67,12 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
 
     if mpnn_type:
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+
+    # Respect environment variables for CI testing
+    if os.environ.get("NUM_EPOCHS"):
+        config["NeuralNetwork"]["Training"]["num_epoch"] = int(
+            os.environ.get("NUM_EPOCHS")
+        )
 
     verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
