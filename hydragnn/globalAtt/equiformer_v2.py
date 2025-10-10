@@ -734,69 +734,6 @@ class S2Activation(torch.nn.Module):
             return x
 
 
-class S2Activation(torch.nn.Module):
-    """
-    Simplified S2 activation function for equivariant neural networks.
-
-    This is a simplified version that applies activation only to scalar features
-    and leaves higher-order features unchanged to avoid S2Grid compatibility issues.
-    """
-
-    def __init__(
-        self,
-        irreps: o3.Irreps,
-        activation: str = "silu",
-        resolution: int = 8,
-    ):
-        super().__init__()
-        self.irreps = o3.Irreps(irreps)
-        self.resolution = resolution
-
-        # Get activation function
-        if activation == "silu":
-            self.activation_fn = torch.nn.SiLU()
-        elif activation == "relu":
-            self.activation_fn = torch.nn.ReLU()
-        elif activation == "gelu":
-            self.activation_fn = torch.nn.GELU()
-        else:
-            self.activation_fn = torch.nn.SiLU()  # Default
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """
-        Apply simplified S2 activation to equivariant features.
-
-        For now, this applies activation only to scalar (l=0) components
-        and leaves vector/tensor components unchanged.
-
-        Args:
-            features: Input features [batch, irreps.dim]
-
-        Returns:
-            Activated features [batch, irreps.dim]
-        """
-        output = torch.zeros_like(features)
-        start_idx = 0
-
-        for mul, (l, _) in self.irreps:
-            dim_l = 2 * l + 1
-            end_idx = start_idx + mul * dim_l
-
-            if l == 0:
-                # Scalar features - apply activation directly
-                output[:, start_idx:end_idx] = self.activation_fn(
-                    features[:, start_idx:end_idx]
-                )
-            else:
-                # Higher-order features - pass through unchanged
-                # In a full implementation, we would apply spherical activation
-                output[:, start_idx:end_idx] = features[:, start_idx:end_idx]
-
-            start_idx = end_idx
-
-        return output
-
-
 class RadialBasisFunction(torch.nn.Module):
     """
     Radial basis function for encoding distances in EquiformerV2.
