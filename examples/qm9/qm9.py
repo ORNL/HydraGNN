@@ -39,7 +39,7 @@ def qm9_pre_filter(data):
     return data.idx < num_samples
 
 
-def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
+def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None, num_epoch=None):
     # FIX random seed
     random_state = 0
     torch.manual_seed(random_state)
@@ -66,6 +66,9 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
 
     if mpnn_type:
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+
+    if num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = num_epoch
 
     verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
@@ -167,10 +170,17 @@ if __name__ == "__main__":
         default=None,
         help="Specify the global attention type (default: None).",
     )
+    parser.add_argument(
+        "--num_epoch",
+        type=int,
+        default=None,
+        help="Specify the number of training epochs (default: None).",
+    )
     args = parser.parse_args()
 
     main(
         mpnn_type=args.mpnn_type,
         global_attn_engine=args.global_attn_engine,
         global_attn_type=args.global_attn_type,
+        num_epoch=args.num_epoch,
     )

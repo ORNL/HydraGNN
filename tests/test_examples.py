@@ -50,7 +50,7 @@ def pytest_examples_energy_gps(
     file_path = os.path.join(path, example + ".py")
     # Use sys.executable to get the current Python interpreter
     python_executable = sys.executable
-    # Add the --mpnn_type argument for the subprocess call
+    # Add the --mpnn_type and --num_epoch arguments for the subprocess call
     return_code = subprocess.call(
         [
             python_executable,
@@ -61,6 +61,8 @@ def pytest_examples_energy_gps(
             global_attn_engine,
             "--global_attn_type",
             global_attn_type,
+            "--num_epoch",
+            "2",
         ]
     )
     assert return_code == 0
@@ -102,7 +104,7 @@ def pytest_examples_energy_equiformer(example, mpnn_type, global_attn_engine):
     hydragnn_root = os.path.join(os.path.dirname(__file__), "..")
     env["PYTHONPATH"] = os.path.abspath(hydragnn_root)
 
-    # Add the --mpnn_type argument for the subprocess call
+    # Add the --mpnn_type and --num_epoch arguments for the subprocess call
     # Note: global_attn_type is not needed for EquiformerV2 as it's ignored
     return_code = subprocess.call(
         [
@@ -112,6 +114,8 @@ def pytest_examples_energy_equiformer(example, mpnn_type, global_attn_engine):
             mpnn_type,
             "--global_attn_engine",
             global_attn_engine,
+            "--num_epoch",
+            "2",
         ],
         env=env,
     )
@@ -139,8 +143,8 @@ def pytest_examples_grad_forces(example, mpnn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
 
-    # Add the --mpnn_type argument for the subprocess call
-    return_code = subprocess.call([sys.executable, file_path, "--mpnn_type", mpnn_type])
+    # Add the --mpnn_type and --num_epoch arguments for the subprocess call
+    return_code = subprocess.call([sys.executable, file_path, "--mpnn_type", mpnn_type, "--num_epoch", "2"])
 
     # Check the file ran without error.
     assert return_code == 0

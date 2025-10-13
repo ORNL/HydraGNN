@@ -71,6 +71,7 @@ if __name__ == "__main__":
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
+    parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
 
     group = parser.add_mutually_exclusive_group()
@@ -123,6 +124,9 @@ if __name__ == "__main__":
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
