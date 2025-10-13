@@ -41,6 +41,7 @@ def pytest_train_model_vectoroutput_w_deepspeed_gps_attention(
 
 
 # Test vector output with EquiformerV2 global attention
+@pytest.mark.equiformer_v2
 @pytest.mark.parametrize(
     "global_attn_engine",
     ["EquiformerV2"],
