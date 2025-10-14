@@ -39,7 +39,9 @@ def qm9_pre_filter(data):
     return data.idx < num_samples
 
 
-def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None, num_epoch=None):
+def main(
+    mpnn_type=None, global_attn_engine=None, global_attn_type=None, num_epoch=None
+):
     # FIX random seed
     random_state = 0
     torch.manual_seed(random_state)
