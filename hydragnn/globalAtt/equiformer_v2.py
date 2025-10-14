@@ -9,6 +9,33 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+##############################################################################
+# IMPLEMENTATION NOTE: Enhanced EquiformerV2 with Directional Edge Features  #
+##############################################################################
+# This implementation is based on the original EquiformerV2 architecture     #
+# (https://github.com/atomicarchitects/equiformer_v2) but includes           #
+# significant enhancements that depart from the original design:             #
+#                                                                            #
+# KEY DIFFERENCES FROM ORIGINAL EQUIFORMERV2:                               #
+# 1. DIRECTIONAL EDGE FEATURES: This implementation computes spherical       #
+#    harmonics directly from edge vectors to create rotation-equivariant     #
+#    directional edge features. The original EquiformerV2 uses only          #
+#    rotationally invariant edge features (distances + atomic embeddings).   #
+#                                                                            #
+# 2. ENHANCED EDGE ENCODING: We explicitly encode angular information        #
+#    through spherical harmonics of edge vectors, providing richer           #
+#    geometric information that was missing from the original implementation.#
+#                                                                            #
+# 3. ARCHITECTURAL MOTIVATION: The original EquiformerV2 handles             #
+#    directionality solely through rotation of node embeddings via Wigner-D  #
+#    matrices. Our enhancement adds explicit directional edge features       #
+#    to capture local geometric structure more effectively.                  #
+#                                                                            #
+# These modifications aim to provide a more complete geometric representation#
+# by combining both invariant edge features (distances, atomic types) and    #
+# equivariant directional features (spherical harmonics of edge vectors).   #
+##############################################################################
+
 import math
 from typing import Any, Dict, Optional
 
