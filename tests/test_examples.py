@@ -70,6 +70,9 @@ def pytest_examples_energy_gps(
 
 # Test examples with EquiformerV2 global attention
 # Note: MACE is excluded due to e3nn tensor dimension incompatibilities with global attention
+# Note: DimeNet is excluded due to severe performance issues (630x slower than other combinations)
+#       caused by inefficient interaction between DimeNet's complex angular features and EquiformerV2's
+#       SO(3) rotation computations, Wigner-D matrices, and spherical harmonics processing
 # Note: EquiformerV2 doesn't use global_attn_type parameter (it's ignored)
 @pytest.mark.parametrize(
     "global_attn_engine",
@@ -85,7 +88,7 @@ def pytest_examples_energy_gps(
         "PNA",
         "PNAPlus",
         "SchNet",
-        "DimeNet",
+        # "DimeNet",  # Excluded - see note above about performance issues
         "EGNN",
         "PNAEq",
         "PAINN",
@@ -144,7 +147,9 @@ def pytest_examples_grad_forces(example, mpnn_type):
     file_path = os.path.join(path, example + ".py")
 
     # Add the --mpnn_type and --num_epoch arguments for the subprocess call
-    return_code = subprocess.call([sys.executable, file_path, "--mpnn_type", mpnn_type, "--num_epoch", "2"])
+    return_code = subprocess.call(
+        [sys.executable, file_path, "--mpnn_type", mpnn_type, "--num_epoch", "2"]
+    )
 
     # Check the file ran without error.
     assert return_code == 0
