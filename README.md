@@ -33,11 +33,11 @@ pip install -r requirements.txt
 
 **Alternative approach for reproducible installation:**
 ```bash
-# Use the provided installation script with constraints
+# Use the provided installation script
 ./install_dependencies.sh
 
 # Or install manually with consistent settings:
-pip install --no-build-isolation -v -r requirements.txt -c constraints.txt
+pip install --no-build-isolation -v -r requirements.txt
 ```
 
 **Modular installation (choose what you need):**
