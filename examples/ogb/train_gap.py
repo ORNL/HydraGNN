@@ -578,4 +578,5 @@ if __name__ == "__main__":
     if args.shmem:
         trainset.unlink()
 
+    dist.destroy_process_group()
     sys.exit(0)

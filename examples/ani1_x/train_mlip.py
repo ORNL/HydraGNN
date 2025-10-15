@@ -8,6 +8,7 @@ import numpy as np
 
 import random
 import torch
+import torch.distributed as dist
 
 # FIX random seed
 random_state = 0
@@ -555,4 +556,6 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
+    dist.destroy_process_group()
     sys.exit(0)

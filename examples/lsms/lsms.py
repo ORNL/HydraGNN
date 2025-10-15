@@ -230,4 +230,5 @@ if __name__ == "__main__":
     if writer is not None:
         writer.close()
 
+    dist.destroy_process_group()
     sys.exit(0)

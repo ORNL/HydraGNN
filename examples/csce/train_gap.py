@@ -14,6 +14,9 @@ from mpi4py import MPI
 
 import argparse
 
+import torch
+import torch.distributed as dist
+
 import hydragnn
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -36,8 +39,6 @@ try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
-
-import torch
 
 # FIX random seed
 random_state = 0
@@ -492,4 +493,6 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
+    dist.destroy_process_group()
     sys.exit(0)
