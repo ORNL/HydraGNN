@@ -3,4 +3,3 @@ pre-commit
 pytest==8.4.2
 pytest-mpi
 mendeleev==0.16.0
-mpi4py==4.1.0
