@@ -13,38 +13,38 @@ def parse_requirements(filename):
     """Parse a requirements file and return a list of dependencies."""
     requirements = []
     filepath = os.path.join(os.path.dirname(__file__), filename)
-    
+
     if not os.path.exists(filepath):
         return requirements
-    
-    with open(filepath, 'r') as f:
+
+    with open(filepath, "r") as f:
         for line in f:
             line = line.strip()
             # Skip empty lines, comments, and -r references
-            if line and not line.startswith('#') and not line.startswith('-r'):
+            if line and not line.startswith("#") and not line.startswith("-r"):
                 requirements.append(line)
-    
+
     return requirements
 
 
 def get_install_requires():
     """Get install requirements from the modular requirements files."""
     requirements = []
-    
+
     # Read base requirements
-    requirements.extend(parse_requirements('requirements-base.txt'))
-    
+    requirements.extend(parse_requirements("requirements-base.txt"))
+
     # Read PyTorch requirements
-    requirements.extend(parse_requirements('requirements-torch.txt'))
-    
+    requirements.extend(parse_requirements("requirements-torch.txt"))
+
     # Read PyTorch Geometric requirements
-    requirements.extend(parse_requirements('requirements-pyg.txt'))
-    
+    requirements.extend(parse_requirements("requirements-pyg.txt"))
+
     return requirements
 
 
 install_requires = get_install_requires()
-test_requires = parse_requirements('requirements-dev.txt')
+test_requires = parse_requirements("requirements-dev.txt")
 
 setup(
     name="HydraGNN",
