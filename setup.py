@@ -53,7 +53,7 @@ setup(
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={"test": test_requires},
-    description="Distributed PyTorch implementation of multi-headed graph convolutional neural networks",
+    description="Distributed PyTorch implementation of multi-headed graph neural networks",
     license="BSD-3",
     long_description_content_type="text/markdown",
     long_description=read("README.md"),
