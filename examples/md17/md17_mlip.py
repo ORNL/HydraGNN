@@ -1,7 +1,9 @@
 import os
+import sys
 import pdb
 import json
 import torch
+import torch.distributed as dist
 import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
@@ -142,6 +144,8 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     if writer is not None:
         writer.close()
 
+    dist.destroy_process_group()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -174,3 +178,5 @@ if __name__ == "__main__":
         global_attn_engine=args.global_attn_engine,
         global_attn_type=args.global_attn_type,
     )
+
+    sys.exit(0)

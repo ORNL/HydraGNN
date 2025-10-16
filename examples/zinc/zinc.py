@@ -2,6 +2,7 @@ import sys
 import os, json
 import pdb
 import torch
+import torch.distributed as dist
 import torch_geometric
 from torch_geometric.datasets import ZINC
 import torch_geometric.transforms as T
@@ -112,3 +113,6 @@ hydragnn.train.train_validate_test(
 
 if writer is not None:
     writer.close()
+
+dist.destroy_process_group()
+sys.exit(0)

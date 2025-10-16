@@ -17,6 +17,7 @@ import argparse
 
 # Torch
 import torch
+import torch.distributed as dist
 
 # torch.set_default_tensor_type(torch.DoubleTensor)
 # torch.set_default_dtype(torch.float64)
@@ -336,4 +337,6 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
+    dist.destroy_process_group()
     sys.exit(0)
