@@ -9,25 +9,51 @@ def read(fname):
     return open(os.path.join(os.path.dirname(__file__), fname)).read()
 
 
-install_requires = [
-    "matplotlib",
-    "tqdm",
-    "tensorboard",
-    "torch>=1.8",
-    "torch-geometric>=1.7.2",
-    "torch-scatter",
-    "torch-sparse",
-]
-test_requires = ["black", "pytest", "pytest-mpi"]
+def parse_requirements(filename):
+    """Parse a requirements file and return a list of dependencies."""
+    requirements = []
+    filepath = os.path.join(os.path.dirname(__file__), filename)
+
+    if not os.path.exists(filepath):
+        return requirements
+
+    with open(filepath, "r") as f:
+        for line in f:
+            line = line.strip()
+            # Skip empty lines, comments, and -r references
+            if line and not line.startswith("#") and not line.startswith("-r"):
+                requirements.append(line)
+
+    return requirements
+
+
+def get_install_requires():
+    """Get install requirements from the modular requirements files."""
+    requirements = []
+
+    # Read base requirements
+    requirements.extend(parse_requirements("requirements-base.txt"))
+
+    # Read PyTorch requirements
+    requirements.extend(parse_requirements("requirements-torch.txt"))
+
+    # Read PyTorch Geometric requirements
+    requirements.extend(parse_requirements("requirements-pyg.txt"))
+
+    return requirements
+
+
+install_requires = get_install_requires()
+test_requires = parse_requirements("requirements-dev.txt")
 
 setup(
     name="HydraGNN",
-    version="3.0-rc1",
+    version="4.0rc1",
     package_dir={"hydragnn": "hydragnn"},
     packages=find_packages(),
     install_requires=install_requires,
     extras_require={"test": test_requires},
-    description="Distributed PyTorch implementation of multi-headed graph convolutional neural networks",
+    description="Distributed PyTorch implementation of multi-headed graph neural networks",
     license="BSD-3",
     long_description_content_type="text/markdown",
     long_description=read("README.md"),
