@@ -121,6 +121,41 @@ pip_retry "numpy==1.26.4"
 assert_numpy_1264
 
 # ============================================================
+# Core scientific Python dependencies
+# ============================================================
+banner "Install Core Python Packages"
+
+pip_retry ninja
+pip_retry astunparse 
+pip_retry expecttest 
+pip_retry hypothesis 
+pip_retry numpy==1.26.4 
+pip_retry psutil 
+pip_retry pyyaml 
+pip_retry requests 
+pip_retry setuptools 
+pip_retry typing-extensions 
+pip_retry sympy 
+pip_retry filelock 
+pip_retry networkx 
+pip_retry jinja2 
+pip_retry tqdm
+pip_retry types-dataclasses
+pip_retry scipy pyparsing build
+pip_retry Cython
+pip_retry tensorboard
+pip_retry scikit-learn
+pip_retry pytest
+pip_retry ase
+pip_retry rdkit
+pip_retry jarvis-tools
+pip_retry pymatgen
+pip_retry sqlite
+pip_retry igraph
+pip_retry mendeleev
+pip_retry lmdb
+
+# ============================================================
 # ROCm detection + ROCm-aware PyTorch
 # ============================================================
 banner "ROCm Detection and ROCm-aware PyTorch Install (Before PyG)"
