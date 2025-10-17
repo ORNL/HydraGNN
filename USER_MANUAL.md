@@ -38,31 +38,40 @@ HydraGNN is a distributed PyTorch implementation of multi-headed graph convoluti
 
 ## Installation and Setup
 
-### Dependencies
+### Dependencies and Installation
 
-HydraGNN requires several core dependencies. Install them in the following order:
+HydraGNN uses a modular requirements system for flexible and reproducible installation. The recommended way to install all necessary dependencies is to use the provided installation script:
 
-#### Basic Requirements
+#### Recommended: Automated Installation
 ```bash
-# Core packages
-pip install -r requirements.txt
-pip install -r requirements-torch.txt
-pip install -r requirements-pyg.txt
+./install_dependencies.sh
+```
+This script installs the following requirements in order:
+- `requirements-base.txt`: Core Python dependencies for HydraGNN
+- `requirements-torch.txt`: PyTorch and related dependencies
+- `requirements-pyg.txt`: PyTorch Geometric and extensions
+
+You can also install development or optional dependencies:
+```bash
+# For development tools (testing, linting, etc.)
+./install_dependencies.sh dev
+
+# For all optional features (including development and extra packages)
+./install_dependencies.sh all optional
 ```
 
-#### Development Tools (Optional)
+#### Manual Installation (Advanced)
+If you prefer, you can install requirements manually:
 ```bash
-# For code development and testing
-pip install -r requirements-dev.txt
-```
-
-#### Optional High-Performance Features
-```bash
-# For DeepSpeed optimization
-pip install -r requirements-deepspeed.txt
-
-# For additional features
-pip install -r requirements-optional.txt
+pip install --no-build-isolation -v -r requirements-base.txt
+pip install --no-build-isolation -v -r requirements-torch.txt
+pip install --no-build-isolation -v -r requirements-pyg.txt
+# For development tools (optional)
+pip install --no-build-isolation -v -r requirements-dev.txt
+# For DeepSpeed support (optional)
+pip install --no-build-isolation -v -r requirements-deepspeed.txt
+# For additional optional features
+pip install --no-build-isolation -v -r requirements-optional.txt
 ```
 
 ### Installation Methods
