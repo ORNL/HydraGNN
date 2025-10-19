@@ -38,6 +38,7 @@ else
   ml craype-accel-amd-gfx90a
   ml PrgEnv-gnu
   ml miniforge3/23.11.0-0
+  ml git-lfs
   module unload darshan-runtime
 fi
 
