@@ -58,7 +58,7 @@ banner "Create and Activate Conda Environment"
 # Andes is not Cray; no CRAY_LD_LIBRARY_PATH reference here
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 
-VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/.hydragnn_venv}"
+VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 echo "Virtual environment path: $VENV_PATH"
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"

@@ -57,7 +57,7 @@ cd "$INSTALL_ROOT"
 banner "Create and Activate Conda Environment"
 export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
 
-VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/.hydragnn_venv}"
+VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 echo "Virtual environment path: $VENV_PATH"
 
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
