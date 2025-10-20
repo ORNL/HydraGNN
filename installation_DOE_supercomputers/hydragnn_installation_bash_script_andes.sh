@@ -178,10 +178,10 @@ PY
 # ============================================================
 banner "PyTorch-Geometric Stack (CPU)"
 PYG_DIR_NAME="PyTorch-Geometric-CPU"
-PYG_FRONTIER="${INSTALL_ROOT}/${PYG_DIR_NAME}"
-export PYG_FRONTIER
-mkdir -p "$PYG_FRONTIER"
-cd "$PYG_FRONTIER"
+PYG_ANDES="${INSTALL_ROOT}/${PYG_DIR_NAME}"
+export PYG_ANDES
+mkdir -p "$PYG_ANDES"
+cd "$PYG_ANDES"
 
 subbanner "pytorch_geometric (official)"
 if [[ ! -d pytorch_geometric/.git ]]; then
@@ -282,11 +282,10 @@ if [[ ! -d ADIOS2/.git ]]; then
   git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
 fi
 
-mkdir -p adios2-build adios2-install
-export ADIOS2_INSTALL_DIR="${ADIOS2_ANDES}/adios2-install"
+mkdir -p adios2-build
 
 CC=mpicc CXX=mpicxx FC=mpifort \
-cmake -DCMAKE_INSTALL_PREFIX=$ADIOS2_INSTALL_DIR \
+cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_TESTING=OFF \
       -DADIOS2_USE_MPI=ON \
@@ -344,17 +343,32 @@ Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 
 PyTorch (CPU-only):  from ${PYTORCH_CPU_INDEX_URL}
-PyTorch-Geometric:   $PYG_FRONTIER
+PyTorch-Geometric:   $PYG_ANDES
   - pytorch_scatter:     2.1.2-9-g7cabb53 (official)
   - pytorch_sparse:      0.6.18-8-gcdbf561 (official)
   - pytorch_cluster:     1.6.3-11-g4126a52 (official)
   - pytorch_spline_conv: 1.2.2-9-ga6d1020 (official)
 
 MPI4PY:              $MPI4PY_ANDES
-ADIOS2:              $ADIOS2_INSTALL_DIR
+ADIOS2:              $ADIOS2_ANDES
 DDStore:             $DDSTORE_ANDES
 DeepHyper:           $DEEPHYPER_ANDES
 EOF
 
 echo "✅ HydraGNN-Installation-Andes environment setup complete!"
+
+echo ""
+echo "Use the following commands to activate the new HydraGNN python environment:"
+echo "  module reset"
+echo "  ml hsi/5.0.2.p5"
+echo "  ml gcc/9.3.0"
+echo "  ml openmpi/4.0.4"
+echo "  ml DefApps"
+echo "  ml cmake/3.22.2"
+echo "  ml git-lfs/2.11.0"
+echo "  ml miniforge3/23.11.0-0"
+echo "  ml libfabric/1.14.0"
+echo ""
+echo "  source activate ${VENV_PATH}"
+
 
