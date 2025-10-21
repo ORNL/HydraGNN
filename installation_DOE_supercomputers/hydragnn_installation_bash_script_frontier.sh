@@ -316,11 +316,10 @@ if [[ ! -d ADIOS2/.git ]]; then
   git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
 fi
 
-mkdir -p adios2-build adios2-install
-export ADIOS2_INSTALL_DIR="${ADIOS2_FRONTIER}/adios2-install"
+mkdir -p adios2-build
 
 CC=cc CXX=CC FC=ftn \
-cmake -DCMAKE_INSTALL_PREFIX=$ADIOS2_INSTALL_DIR \
+cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTING=OFF \
     -DADIOS2_USE_MPI=ON \
@@ -382,9 +381,23 @@ PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_cluster:      1.6.3-11-g4126a52
   - pytorch_spline_conv:  1.2.2-9-ga6d1020
 MPI4PY:              $MPI4PY_FRONTIER
-ADIOS2:              $ADIOS2_INSTALL_DIR
+ADIOS2:              $ADIOS2_FRONTIER
 DDStore:             $DDSTORE_FRONTIER
 DeepHyper:           $DEEPHYPER_FRONTIER
 EOF
 
 echo "✅ HydraGNN-Installation-Frontier environment setup complete!"
+echo ""
+echo "Use the following commands to activate the new HydraGNN python environment:"
+echo "  module reset"
+echo "  ml cpe/24.07"
+echo "  ml cce/18.0.0"
+echo "  ml rocm/6.4.0"
+echo "  ml amd-mixed/6.4.0"
+echo "  ml craype-accel-amd-gfx90a"
+echo "  ml PrgEnv-gnu"
+echo "  ml miniforge3/23.11.0-0"
+echo "  module unload darshan-runtime"
+echo ""
+echo "  source activate ${VENV_PATH}"
+
