@@ -29,50 +29,50 @@
       "num_filters": 8,
       "num_before_skip": 1,
       "num_after_skip": 1,
+      "num_radial": 16,
+      "radial_type": "bessel",
+      "distance_transform": "None", 
       "envelope_exponent": 5,
-      "max_ell": 1,
+      "hidden_dim": 64,
+      "num_conv_layers": 2,
+      "task_weights": [1.0],
+      "max_ell": 2,
       "node_max_ell": 1,
-      "num_radial": 5,
-      "num_spherical": 2,
-      "hidden_dim": 32,
-      "num_conv_layers": 4,
-      "enable_interatomic_potential": true,
+      "correlation": 3,
+      "avg_num_neighbors": 4.0,
+      "enable_openequivariance": true,
       "output_heads": {
-        "node": {
+        "graph": {
+          "num_sharedlayers": 0,
+          "dim_sharedlayers": 0,
           "num_headlayers": 2,
-          "dim_headlayers": [60,20],
-          "type": "mlp"
+          "dim_headlayers": [64, 32],
+          "type": "graph"
         }
+      }
+    },
+    "Training": {
+      "num_epoch": 5,
+      "batch_size": 32,
+      "Checkpoint": true,
+      "checkpoint_warmstart": "restart",
+      "Optimizer": {
+        "type": "AdamW",
+        "learning_rate": 0.001
       },
-      "task_weights": [1]
+      "conv_checkpointing": false
     },
     "Variables_of_interest": {
       "input_node_features": [0],
-      "output_index": [
-        0
-      ],
-      "type": [
-        "node"
-      ],
-      "output_dim": [1],
-      "output_names": ["graph_energy"]
-    },
-    "Training": {
-      "num_epoch": 25,
-      "batch_size": 64,
-      "perc_train": 0.7,
-      "patience": 20,
-      "early_stopping": true,
-      "Optimizer": {
-        "type": "Adam",
-        "learning_rate": 0.005
-      },
-      "conv_checkpointing": false
+      "output_names": ["total_energy"],
+      "type": ["graph"],
+      "size": [1],
+      "output_index": [0]
     }
   },
   "Visualization": {
-    "plot_init_solution": true,
-    "plot_hist_solution": true,
-    "create_plots": true
- }
+    "plot_init_solution": false,
+    "plot_hist_solution": false,
+    "create_plots": false
+  }
 }

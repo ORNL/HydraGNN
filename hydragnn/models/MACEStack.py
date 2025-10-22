@@ -65,6 +65,10 @@ from hydragnn.utils.model.mace_utils.modules.blocks import (
     LinearMultiheadDecoderBlock,
 )
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+from hydragnn.utils.model.openequivariance_utils import (
+    check_openequivariance_availability,
+    OptimizedSphericalHarmonics,
+)
 
 # Etc
 import numpy as np
@@ -129,7 +133,17 @@ class MACEStack(Base):
             5 if num_polynomial_cutoff is None else num_polynomial_cutoff
         )
         self.correlation = [2] if correlation is None else correlation
+
+        # Convert correlation to list if it's an integer (needed before super().__init__)
+        if isinstance(self.correlation, int):
+            self.correlation = [self.correlation] * num_interactions
         radial_type = "bessel" if radial_type is None else radial_type
+
+        # Check and configure OpenEquivariance usage
+        enable_openequivariance = kwargs.pop("enable_openequivariance", False)
+        self.using_openequivariance = check_openequivariance_availability(
+            enable_openequivariance
+        )
 
         # Making Irreps
         self.edge_feats_irreps = o3.Irreps(f"{num_bessel}x0e")
@@ -143,7 +157,7 @@ class MACEStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         ############################ Post Inheritance ############################
-        self.spherical_harmonics = o3.SphericalHarmonics(
+        self.spherical_harmonics = OptimizedSphericalHarmonics(
             self.sh_irreps,
             normalize=True,
             normalization="component",
@@ -159,8 +173,6 @@ class MACEStack(Base):
         self.register_buffer(
             "num_interactions", torch.tensor(num_interactions, dtype=torch.int64)
         )
-        if isinstance(correlation, int):
-            self.correlation = [self.correlation] * self.num_interactions
         self.radial_embedding = RadialEmbeddingBlock(
             r_max=r_max,
             num_bessel=num_bessel,

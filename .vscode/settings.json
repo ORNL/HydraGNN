@@ -1,0 +1,15 @@
+{
+    "python.defaultInterpreterPath": "python",
+    "python.terminal.activateEnvironment": true,
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}"
+    ],
+    "python.analysis.autoSearchPaths": true,
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+    },
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "${workspaceFolder}:${env:PYTHONPATH}"
+    }
+}

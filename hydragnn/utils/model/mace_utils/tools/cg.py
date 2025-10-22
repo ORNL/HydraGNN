@@ -14,6 +14,7 @@ from typing import List, Union
 
 import torch
 from e3nn import o3
+from hydragnn.utils.model.openequivariance_utils import optimized_einsum
 
 _TP = collections.namedtuple("_TP", "op, args")
 _INPUT = collections.namedtuple("_INPUT", "tensor, start, stop")
@@ -61,7 +62,7 @@ def _wigner_nj(
                 if normalization == "norm":
                     C *= ir_left.dim ** 0.5 * ir.dim ** 0.5
 
-                C = torch.einsum("jk,ijl->ikl", C_left.flatten(1), C)
+                C = optimized_einsum("jk,ijl->ikl", C_left.flatten(1), C)
                 C = C.reshape(
                     ir_out.dim, *(irreps.dim for irreps in irrepss_left), ir.dim
                 )
