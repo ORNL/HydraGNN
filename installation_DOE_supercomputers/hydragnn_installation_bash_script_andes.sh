@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# setup_env.sh
-# Complete automated setup for HydraGNN environment and dependencies on Frontier.
+# setup_env_andes.sh
+# Complete automated setup for HydraGNN environment and dependencies on Andes (CPU-only).
 
 set -Eeuo pipefail
 
@@ -11,12 +11,12 @@ hr() { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '='; }
 banner() { hr; echo ">>> $1"; hr; }
 subbanner() { echo "-- $1"; }
 
-banner "Starting HydraGNN environment setup ($(date))"
+banner "Starting HydraGNN environment setup on ANDES ($(date))"
 
 # ============================================================
-# Module initialization & Frontier stack
+# Module initialization & Andes stack
 # ============================================================
-banner "Configure Frontier Modules"
+banner "Configure Andes Modules"
 if ! command -v module >/dev/null 2>&1; then
   if [[ -f /etc/profile.d/modules.sh ]]; then
     source /etc/profile.d/modules.sh
@@ -28,25 +28,25 @@ if ! command -v module >/dev/null 2>&1; then
 fi
 
 if ! command -v module >/dev/null 2>&1; then
-  echo "⚠️  'module' command not found. Ensure you're running on the target HPC system."
+  echo "⚠️  'module' command not found. Ensure you're running on Andes."
 else
   module reset
-  ml cpe/24.07
-  ml cce/18.0.0
-  ml rocm/6.4.0
-  ml amd-mixed/6.4.0
-  ml craype-accel-amd-gfx90a
-  ml PrgEnv-gnu
+  ml hsi/5.0.2.p5
+  ml gcc/9.3.0
+  ml openmpi/4.0.4
+  ml DefApps
+  ml cmake/3.22.2
+  ml git-lfs/2.11.0
   ml miniforge3/23.11.0-0
+  ml libfabric/1.14.0
   ml git-lfs
-  module unload darshan-runtime
 fi
 
 # ============================================================
 # Installation root
 # ============================================================
 banner "Set Base Installation Directory"
-INSTALL_ROOT="${PWD}/HydraGNN-Installation-Frontier"
+INSTALL_ROOT="${PWD}/HydraGNN-Installation-Andes"
 mkdir -p "$INSTALL_ROOT"
 echo "All installation components will be contained in: $INSTALL_ROOT"
 cd "$INSTALL_ROOT"
@@ -55,7 +55,8 @@ cd "$INSTALL_ROOT"
 # Env vars & Conda env creation
 # ============================================================
 banner "Create and Activate Conda Environment"
-export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH:-}:${LD_LIBRARY_PATH:-}"
+# Andes is not Cray; no CRAY_LD_LIBRARY_PATH reference here
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
 
 VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 echo "Virtual environment path: $VENV_PATH"
@@ -159,54 +160,28 @@ pip_retry mendeleev==0.16.0
 pip_retry lmdb
 
 # ============================================================
-# ROCm detection + ROCm-aware PyTorch
+# PyTorch (CPU-only) + torchvision
 # ============================================================
-banner "ROCm Detection and ROCm-aware PyTorch Install (Before PyG)"
-detect_rocm_mm() {
-  local v=""
-  if command -v module >/dev/null 2>&1; then
-    local mlist
-    mlist="$(module -t list 2>&1 || true)"
-    v="$(grep -Eo 'rocm/[0-9]+\.[0-9]+' <<<"$mlist" | head -n1 | sed 's#rocm/##')"
-  fi
-  if [[ -z "$v" ]] && command -v hipcc >/dev/null 2>&1; then
-    v="$(hipcc --version 2>&1 | grep -Eo 'HIP version:\s*[0-9]+\.[0-9]+' | grep -Eo '[0-9]+\.[0-9]+' | head -n1 || true)"
-  fi
-  echo "$v"
-}
-
-EXPECTED_ROCM_MM="6.4"
-ROCM_MM="${ROCM_MM:-$(detect_rocm_mm)}"
-if [[ -z "$ROCM_MM" ]]; then
-  echo "❌ Could not detect ROCm version. Ensure the rocm module is loaded."
-  exit 1
-fi
-echo "Detected ROCm: $ROCM_MM"
-if [[ "$ROCM_MM" != "$EXPECTED_ROCM_MM" ]]; then
-  echo "❌ ROCm version mismatch. Detected $ROCM_MM but expecting rocm${EXPECTED_ROCM_MM}."
-  exit 1
-fi
-
-PYTORCH_ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm${EXPECTED_ROCM_MM}"
-subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
-pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" torch torchvision
+banner "Install CPU-only PyTorch"
+PYTORCH_CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"
+pip_retry --index-url "${PYTORCH_CPU_INDEX_URL}" torch torchvision
 assert_numpy_1264
 
-python - <<PY
+python - <<'PY'
 import torch
 print("torch.__version__ =", torch.__version__)
-print("torch.version.hip =", torch.version.hip)
+print("CUDA available?    =", torch.cuda.is_available())
 PY
 
 # ============================================================
-# PyTorch-Geometric stack
+# PyTorch-Geometric stack (CPU build)
 # ============================================================
-banner "PyTorch-Geometric Stack (ROCm ${ROCM_MM})"
-PYG_DIR_NAME="PyTorch-Geometric-${ROCM_MM}"
-PYG_FRONTIER="${INSTALL_ROOT}/${PYG_DIR_NAME}"
-export PYG_FRONTIER
-mkdir -p "$PYG_FRONTIER"
-cd "$PYG_FRONTIER"
+banner "PyTorch-Geometric Stack (CPU)"
+PYG_DIR_NAME="PyTorch-Geometric-CPU"
+PYG_ANDES="${INSTALL_ROOT}/${PYG_DIR_NAME}"
+export PYG_ANDES
+mkdir -p "$PYG_ANDES"
+cd "$PYG_ANDES"
 
 subbanner "pytorch_geometric (official)"
 if [[ ! -d pytorch_geometric/.git ]]; then
@@ -218,42 +193,33 @@ pip_retry . --verbose
 assert_numpy_1264
 popd >/dev/null
 
-# --- pytorch_scatter (ROCm fork pinned) ---
-subbanner "pytorch_scatter (ROCm fork pinned to 9799c51; temporary until upstream merges)"
+# --- pytorch_scatter (official repo & stable ref for CPU) ---
+subbanner "pytorch_scatter (official @ 2.1.2-9-g7cabb53)"
 if [[ ! -d pytorch_scatter/.git ]]; then
-  # Official upstream (kept for reference; will switch back after merge):
-  # git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
-  # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive https://github.com/Looong01/pytorch_scatter-rocm.git pytorch_scatter
+  git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
 fi
 pushd pytorch_scatter >/dev/null
 git fetch --all
-git checkout 9799c51
+git checkout 2.1.2-9-g7cabb53
 git submodule update --init --recursive
 rm -rf build
-# If needed: export PYTORCH_ROCM_ARCH=gfx90a
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
 assert_numpy_1264
-echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
 # --- pytorch_sparse (official pinned) ---
 subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
 if [[ ! -d pytorch_sparse/.git ]]; then
-  # Official upstream (kept for reference; will switch back after merge):
-  # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
-  # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive https://github.com/Looong01/pytorch_sparse-rocm.git pytorch_sparse
+  git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
 fi
 pushd pytorch_sparse >/dev/null
 git fetch --all
-git checkout 2340737
+git checkout 0.6.18-8-gcdbf561
 rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
 assert_numpy_1264
-echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
 # --- pytorch_cluster (official pinned) ---
@@ -265,8 +231,8 @@ pushd pytorch_cluster >/dev/null
 git fetch --all
 git checkout 1.6.3-11-g4126a52
 rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
 assert_numpy_1264
 popd >/dev/null
 
@@ -279,8 +245,8 @@ pushd pytorch_spline_conv >/dev/null
 git fetch --all
 git checkout 1.2.2-9-ga6d1020
 rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
 assert_numpy_1264
 popd >/dev/null
 
@@ -292,25 +258,25 @@ assert_numpy_1264
 # mpi4py
 # ============================================================
 banner "mpi4py (v3.1.5)"
-MPI4PY_FRONTIER="${INSTALL_ROOT}/MPI4PY-Frontier"
-export MPI4PY_FRONTIER
-mkdir -p "$MPI4PY_FRONTIER"
-cd "$MPI4PY_FRONTIER"
+MPI4PY_ANDES="${INSTALL_ROOT}/MPI4PY-Andes"
+export MPI4PY_ANDES
+mkdir -p "$MPI4PY_ANDES"
+cd "$MPI4PY_ANDES"
 
 git clone -b 3.1.5 https://github.com/mpi4py/mpi4py.git || true
 pushd mpi4py >/dev/null
 rm -rf build
-CC=cc MPICC=cc pip_retry . --verbose
+CC=mpicc MPICC=mpicc pip_retry . --verbose
 popd >/dev/null
 
 # ============================================================
 # ADIOS2
 # ============================================================
 banner "ADIOS2 (v2.10.2)"
-ADIOS2_FRONTIER="${INSTALL_ROOT}/ADIOS2-Frontier"
-export ADIOS2_FRONTIER
-mkdir -p "$ADIOS2_FRONTIER"
-cd "$ADIOS2_FRONTIER"
+ADIOS2_ANDES="${INSTALL_ROOT}/ADIOS2-Andes"
+export ADIOS2_ANDES
+mkdir -p "$ADIOS2_ANDES"
+cd "$ADIOS2_ANDES"
 
 if [[ ! -d ADIOS2/.git ]]; then
   git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
@@ -318,48 +284,48 @@ fi
 
 mkdir -p adios2-build
 
-CC=cc CXX=CC FC=ftn \
+CC=mpicc CXX=mpicxx FC=mpifort \
 cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTING=OFF \
-    -DADIOS2_USE_MPI=ON \
-    -DADIOS2_USE_Fortran=OFF \
-    -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
-    -DADIOS2_BUILD_TESTING=OFF \
-    -DADIOS2_USE_HDF5=OFF \
-    -DADIOS2_USE_SST=OFF \
-    -DADIOS2_USE_BZip2=OFF \
-    -DADIOS2_USE_PNG=OFF \
-    -DADIOS2_USE_DataSpaces=OFF \
-    -DADIOS2_USE_Python=ON \
-    -DPython_EXECUTABLE=$(which python) \
-    -B adios2-build -S ADIOS2
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_TESTING=OFF \
+      -DADIOS2_USE_MPI=ON \
+      -DADIOS2_USE_Fortran=OFF \
+      -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
+      -DADIOS2_BUILD_TESTING=OFF \
+      -DADIOS2_USE_HDF5=OFF \
+      -DADIOS2_USE_SST=OFF \
+      -DADIOS2_USE_BZip2=OFF \
+      -DADIOS2_USE_PNG=OFF \
+      -DADIOS2_USE_DataSpaces=OFF \
+      -DADIOS2_USE_Python=ON \
+      -DPython_EXECUTABLE=$(which python) \
+      -B adios2-build -S ADIOS2
 
-cmake --build adios2-build -j32
-cmake --install adios2_build 2>/dev/null || cmake --install adios2-build
+cmake --build adios2-build -j$(nproc || echo 16)
+cmake --install adios2-build
 
 # ============================================================
 # DDStore
 # ============================================================
 banner "DDStore"
-DDSTORE_FRONTIER="${INSTALL_ROOT}/DDStore-Frontier"
-export DDSTORE_FRONTIER
-mkdir -p "$DDSTORE_FRONTIER"
-cd "$DDSTORE_FRONTIER"
+DDSTORE_ANDES="${INSTALL_ROOT}/DDStore-Andes"
+export DDSTORE_ANDES
+mkdir -p "$DDSTORE_ANDES"
+cd "$DDSTORE_ANDES"
 
 git clone git@github.com:ORNL/DDStore.git || true
 pushd DDStore >/dev/null
-CC=cc CXX=CC pip_retry . --verbose
+CC=mpicc CXX=mpicxx pip_retry . --verbose
 popd >/dev/null
 
 # ============================================================
 # DeepHyper
 # ============================================================
 banner "DeepHyper (develop branch)"
-DEEPHYPER_FRONTIER="${INSTALL_ROOT}/DeepHyperFrontier"
-export DEEPHYPER_FRONTIER
-mkdir -p "$DEEPHYPER_FRONTIER"
-cd "$DEEPHYPER_FRONTIER"
+DEEPHYPER_ANDES="${INSTALL_ROOT}/DeepHyper-Andes"
+export DEEPHYPER_ANDES
+mkdir -p "$DEEPHYPER_ANDES"
+cd "$DEEPHYPER_ANDES"
 
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
@@ -371,33 +337,38 @@ assert_numpy_1264
 # ============================================================
 # Final Summary
 # ============================================================
-banner "Final Summary"
+banner "Final Summary (Andes)"
 cat <<EOF
 Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
-PyTorch-Geometric:   $PYG_FRONTIER
-  - pytorch_scatter fork: https://github.com/Looong01/pytorch_scatter-rocm.git @ 9799c51 (temporary)
-  - pytorch_sparse:       0.6.18-8-gcdbf561
-  - pytorch_cluster:      1.6.3-11-g4126a52
-  - pytorch_spline_conv:  1.2.2-9-ga6d1020
-MPI4PY:              $MPI4PY_FRONTIER
-ADIOS2:              $ADIOS2_FRONTIER
-DDStore:             $DDSTORE_FRONTIER
-DeepHyper:           $DEEPHYPER_FRONTIER
+
+PyTorch (CPU-only):  from ${PYTORCH_CPU_INDEX_URL}
+PyTorch-Geometric:   $PYG_ANDES
+  - pytorch_scatter:     2.1.2-9-g7cabb53 (official)
+  - pytorch_sparse:      0.6.18-8-gcdbf561 (official)
+  - pytorch_cluster:     1.6.3-11-g4126a52 (official)
+  - pytorch_spline_conv: 1.2.2-9-ga6d1020 (official)
+
+MPI4PY:              $MPI4PY_ANDES
+ADIOS2:              $ADIOS2_ANDES
+DDStore:             $DDSTORE_ANDES
+DeepHyper:           $DEEPHYPER_ANDES
 EOF
 
-echo "✅ HydraGNN-Installation-Frontier environment setup complete!"
+echo "✅ HydraGNN-Installation-Andes environment setup complete!"
+
 echo ""
 echo "Use the following commands to activate the new HydraGNN python environment:"
 echo "  module reset"
-echo "  ml cpe/24.07"
-echo "  ml cce/18.0.0"
-echo "  ml rocm/6.4.0"
-echo "  ml amd-mixed/6.4.0"
-echo "  ml craype-accel-amd-gfx90a"
-echo "  ml PrgEnv-gnu"
+echo "  ml hsi/5.0.2.p5"
+echo "  ml gcc/9.3.0"
+echo "  ml openmpi/4.0.4"
+echo "  ml DefApps"
+echo "  ml cmake/3.22.2"
+echo "  ml git-lfs/2.11.0"
 echo "  ml miniforge3/23.11.0-0"
-echo "  module unload darshan-runtime"
+echo "  ml libfabric/1.14.0"
 echo ""
 echo "  source activate ${VENV_PATH}"
+
 
