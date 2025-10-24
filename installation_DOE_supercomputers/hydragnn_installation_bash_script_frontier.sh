@@ -11,6 +11,37 @@ hr() { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '='; }
 banner() { hr; echo ">>> $1"; hr; }
 subbanner() { echo "-- $1"; }
 
+timeit() {
+  SECONDS=0
+  local start_time=$(date +"%T")
+  echo "[$start_time] Starting: $*" >&2
+  "$@"
+  local status=$?
+  local end_time=$(date +"%T")
+  echo "[$end_time] Finished: $* (Elapsed: ${SECONDS}s, Status: $status)" >&2
+  return $status
+}
+
+# Spinner function
+progress() {
+  local pid=$1
+  local delay=0.1
+
+  spinstr[0]="-"
+  spinstr[1]="\\"
+  spinstr[2]="|"
+  spinstr[3]="/"
+
+  echo -n "${spinstr[0]}"
+  while kill -0 $pid 2>/dev/null; do
+    for c in "${spinstr[@]}"; do
+      echo -ne "\b$c"
+      sleep $delay
+    done
+  done
+  echo -ne "\b"
+}
+
 banner "Starting HydraGNN environment setup ($(date))"
 
 # ============================================================
@@ -159,6 +190,28 @@ pip_retry mendeleev==0.16.0
 pip_retry lmdb
 
 # ============================================================
+# e3nn and openequivariance
+# ============================================================
+banner "Install e3nn and openequivariance"
+pip_retry e3nn openequivariance --verbose
+assert_numpy_1264
+
+# ============================================================
+# mpi4py
+# ============================================================
+banner "mpi4py (v3.1.5)"
+MPI4PY_FRONTIER="${INSTALL_ROOT}/MPI4PY-Frontier"
+export MPI4PY_FRONTIER
+mkdir -p "$MPI4PY_FRONTIER"
+cd "$MPI4PY_FRONTIER"
+
+git clone -b 3.1.5 https://github.com/mpi4py/mpi4py.git || true
+pushd mpi4py >/dev/null
+rm -rf build
+CC=cc MPICC=cc pip_retry . --verbose
+popd >/dev/null
+
+# ============================================================
 # ROCm detection + ROCm-aware PyTorch
 # ============================================================
 banner "ROCm Detection and ROCm-aware PyTorch Install (Before PyG)"
@@ -219,154 +272,173 @@ assert_numpy_1264
 popd >/dev/null
 
 # --- pytorch_scatter (ROCm fork pinned) ---
-subbanner "pytorch_scatter (ROCm fork pinned to 9799c51; temporary until upstream merges)"
-if [[ ! -d pytorch_scatter/.git ]]; then
-  # Official upstream (kept for reference; will switch back after merge):
-  # git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
-  # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive https://github.com/Looong01/pytorch_scatter-rocm.git pytorch_scatter
-fi
-pushd pytorch_scatter >/dev/null
-git fetch --all
-git checkout 9799c51
-git submodule update --init --recursive
-rm -rf build
-# If needed: export PYTORCH_ROCM_ARCH=gfx90a
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
-popd >/dev/null
+build_pytorch_scatter() {
+  subbanner "pytorch_scatter (ROCm fork pinned to 9799c51; temporary until upstream merges)"
+  if [[ ! -d pytorch_scatter/.git ]]; then
+    # Official upstream (kept for reference; will switch back after merge):
+    # git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
+    # Temporary ROCm fork (use until fixes merge upstream):
+    git clone --recursive https://github.com/Looong01/pytorch_scatter-rocm.git pytorch_scatter
+  fi
+  pushd pytorch_scatter >/dev/null
+  git fetch --all
+  git checkout 9799c51
+  git submodule update --init --recursive
+  rm -rf build
+  # If needed: export PYTORCH_ROCM_ARCH=gfx90a
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
+  popd >/dev/null
+}
 
 # --- pytorch_sparse (official pinned) ---
-subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
-if [[ ! -d pytorch_sparse/.git ]]; then
-  # Official upstream (kept for reference; will switch back after merge):
-  # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
-  # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive https://github.com/Looong01/pytorch_sparse-rocm.git pytorch_sparse
-fi
-pushd pytorch_sparse >/dev/null
-git fetch --all
-git checkout 2340737
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
-popd >/dev/null
+build_pytorch_sparse() {
+  subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
+  if [[ ! -d pytorch_sparse/.git ]]; then
+    # Official upstream (kept for reference; will switch back after merge):
+    # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
+    # Temporary ROCm fork (use until fixes merge upstream):
+    git clone --recursive https://github.com/Looong01/pytorch_sparse-rocm.git pytorch_sparse
+  fi
+  pushd pytorch_sparse >/dev/null
+  git fetch --all
+  git checkout 2340737
+  rm -rf build
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
+  popd >/dev/null
+}
 
 # --- pytorch_cluster (official pinned) ---
-subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
-if [[ ! -d pytorch_cluster/.git ]]; then
-  git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
-fi
-pushd pytorch_cluster >/dev/null
-git fetch --all
-git checkout 1.6.3-11-g4126a52
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-popd >/dev/null
+build_pytorch_cluster() {
+  subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
+  if [[ ! -d pytorch_cluster/.git ]]; then
+    git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
+  fi
+  pushd pytorch_cluster >/dev/null
+  git fetch --all
+  git checkout 1.6.3-11-g4126a52
+  rm -rf build
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  popd >/dev/null
+}
 
 # --- pytorch_spline_conv (official pinned) ---
-subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
-if [[ ! -d pytorch_spline_conv/.git ]]; then
-  git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
-fi
-pushd pytorch_spline_conv >/dev/null
-git fetch --all
-git checkout 1.2.2-9-ga6d1020
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-popd >/dev/null
+build_pytorch_spline_conv() {
+  subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
+  if [[ ! -d pytorch_spline_conv/.git ]]; then
+    git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
+  fi
+  pushd pytorch_spline_conv >/dev/null
+  git fetch --all
+  git checkout 1.2.2-9-ga6d1020
+  rm -rf build
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  popd >/dev/null
+}
 
-subbanner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
+## parallel build
+banner "pytorch geometric dependencies build (in parallel)"
+timeit build_pytorch_scatter > build_pytorch_scatter.log & pid1=$!
+timeit build_pytorch_sparse > build_pytorch_sparse.log & pid2=$!
+timeit build_pytorch_cluster > build_pytorch_cluster.log & pid3=$!
+timeit build_pytorch_spline_conv > build_pytorch_spline_conv.log & pid4=$!
 
-# ============================================================
-# mpi4py
-# ============================================================
-banner "mpi4py (v3.1.5)"
-MPI4PY_FRONTIER="${INSTALL_ROOT}/MPI4PY-Frontier"
-export MPI4PY_FRONTIER
-mkdir -p "$MPI4PY_FRONTIER"
-cd "$MPI4PY_FRONTIER"
-
-git clone -b 3.1.5 https://github.com/mpi4py/mpi4py.git || true
-pushd mpi4py >/dev/null
-rm -rf build
-CC=cc MPICC=cc pip_retry . --verbose
-popd >/dev/null
+for pid in $pid1 $pid2 $pid3 $pid4; do
+    progress $pid &
+done
+wait
 
 # ============================================================
 # ADIOS2
 # ============================================================
-banner "ADIOS2 (v2.10.2)"
 ADIOS2_FRONTIER="${INSTALL_ROOT}/ADIOS2-Frontier"
 export ADIOS2_FRONTIER
-mkdir -p "$ADIOS2_FRONTIER"
-cd "$ADIOS2_FRONTIER"
+build_adios() {
+  banner "ADIOS2 (v2.10.2)"
+  mkdir -p "$ADIOS2_FRONTIER"
+  cd "$ADIOS2_FRONTIER"
 
-if [[ ! -d ADIOS2/.git ]]; then
-  git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
-fi
+  if [[ ! -d ADIOS2/.git ]]; then
+    git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
+  fi
 
-mkdir -p adios2-build
+  mkdir -p adios2-build
 
-CC=cc CXX=CC FC=ftn \
-cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTING=OFF \
-    -DADIOS2_USE_MPI=ON \
-    -DADIOS2_USE_Fortran=OFF \
-    -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
-    -DADIOS2_BUILD_TESTING=OFF \
-    -DADIOS2_USE_HDF5=OFF \
-    -DADIOS2_USE_SST=OFF \
-    -DADIOS2_USE_BZip2=OFF \
-    -DADIOS2_USE_PNG=OFF \
-    -DADIOS2_USE_DataSpaces=OFF \
-    -DADIOS2_USE_Python=ON \
-    -DPython_EXECUTABLE=$(which python) \
-    -B adios2-build -S ADIOS2
+  CC=cc CXX=CC FC=ftn \
+  cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_TESTING=OFF \
+      -DADIOS2_USE_MPI=ON \
+      -DADIOS2_USE_Fortran=OFF \
+      -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
+      -DADIOS2_BUILD_TESTING=OFF \
+      -DADIOS2_USE_HDF5=OFF \
+      -DADIOS2_USE_SST=OFF \
+      -DADIOS2_USE_BZip2=OFF \
+      -DADIOS2_USE_PNG=OFF \
+      -DADIOS2_USE_DataSpaces=OFF \
+      -DADIOS2_USE_Python=ON \
+      -DPython_EXECUTABLE=$(which python) \
+      -B adios2-build -S ADIOS2
 
-cmake --build adios2-build -j32
-cmake --install adios2_build 2>/dev/null || cmake --install adios2-build
+  cmake --build adios2-build -j32
+  cmake --install adios2_build 2>/dev/null || cmake --install adios2-build
+}
 
 # ============================================================
 # DDStore
 # ============================================================
-banner "DDStore"
 DDSTORE_FRONTIER="${INSTALL_ROOT}/DDStore-Frontier"
 export DDSTORE_FRONTIER
-mkdir -p "$DDSTORE_FRONTIER"
-cd "$DDSTORE_FRONTIER"
+build_ddstore() {
+  banner "DDStore"
+  mkdir -p "$DDSTORE_FRONTIER"
+  cd "$DDSTORE_FRONTIER"
 
-git clone git@github.com:ORNL/DDStore.git || true
-pushd DDStore >/dev/null
-CC=cc CXX=CC pip_retry . --verbose
-popd >/dev/null
+  git clone git@github.com:ORNL/DDStore.git || true
+  pushd DDStore >/dev/null
+  CC=cc CXX=CC pip_retry . --verbose
+  popd >/dev/null
+}
 
 # ============================================================
 # DeepHyper
 # ============================================================
-banner "DeepHyper (develop branch)"
 DEEPHYPER_FRONTIER="${INSTALL_ROOT}/DeepHyperFrontier"
 export DEEPHYPER_FRONTIER
-mkdir -p "$DEEPHYPER_FRONTIER"
-cd "$DEEPHYPER_FRONTIER"
+build_deephyper() {
+  banner "DeepHyper (develop branch)"
+  mkdir -p "$DEEPHYPER_FRONTIER"
+  cd "$DEEPHYPER_FRONTIER"
 
-git clone https://github.com/deephyper/deephyper.git || true
-cd deephyper
-git fetch origin develop
-git checkout develop
-pip_retry -e ".[hps,hps-tl]" --verbose
-assert_numpy_1264
+  git clone https://github.com/deephyper/deephyper.git || true
+  cd deephyper
+  git fetch origin develop
+  git checkout develop
+  pip_retry -e ".[hps,hps-tl]" --verbose
+  assert_numpy_1264
+}
+
+## parallel build
+cd "$INSTALL_ROOT"
+banner "Adios, DDStore and DeepHyper build (in parallel)"
+timeit build_adios > build_adios.log & pid1=$!
+timeit build_ddstore > build_ddstore.log & pid2=$!
+timeit build_deephyper > build_deephyper.log & pid3=$!
+
+for pid in $pid1 $pid2 $pid3; do
+    progress $pid &
+done
+wait
 
 # ============================================================
 # Final Summary
