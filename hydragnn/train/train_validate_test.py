@@ -607,6 +607,10 @@ def train(
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
+
+    train_error = reduce_values_ranks(train_error)
+    tasks_error = reduce_values_ranks(tasks_error)
+
     return train_error, tasks_error
 
 
