@@ -349,7 +349,7 @@ cd "$DDSTORE_FRONTIER"
 
 git clone git@github.com:ORNL/DDStore.git || true
 pushd DDStore >/dev/null
-CC=cc CXX=CC pip_retry . --verbose
+CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
 popd >/dev/null
 
 # ============================================================
