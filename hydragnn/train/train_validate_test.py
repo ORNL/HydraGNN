@@ -41,23 +41,29 @@ try:
 except (ImportError, ModuleNotFoundError):
     GradScaler = None
 
-torch.set_float32_matmul_precision("high")
 
-use_bf16 = (
-    torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7
-) or (hasattr(torch, "xpu") and torch.xpu.is_available())
+def get_autocast_and_scaler(bf16):
+    use_bf16 = bf16 and (
+        (torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7)
+        or (hasattr(torch, "xpu") and torch.xpu.is_available())
+    )
+    print("get_autocast_and_scaler use_bf16: ", use_bf16)
 
-scaler = GradScaler(str(get_device()), enabled=use_bf16) if GradScaler else None
+    ## No need to use GradScaler for bf16
+    scaler = (
+        GradScaler(str(get_device()), enabled=use_bf16)
+        if GradScaler and False
+        else None
+    )
 
+    device = str(get_device())
+    autocast = (
+        torch.autocast(device_type=device, dtype=torch.bfloat16)
+        if use_bf16
+        else nullcontext()
+    )
 
-def get_autocast(bf16):
-    if not bf16 or not use_bf16:
-        return nullcontext()
-    elif bf16 and use_bf16:
-        device = str(get_device())
-        return torch.autocast(device_type=device, dtype=torch.bfloat16)
-    else:
-        raise RuntimeError("bf16 not supported")
+    return autocast, scaler
 
 
 def get_nbatch(loader):
@@ -174,8 +180,6 @@ def train_validate_test(
     timer = Timer("train_validate_test")
     timer.start()
 
-    autocast_context = get_autocast(bf16=bf16)
-
     epoch_start = config["Training"].get("epoch_start", 0)
     for epoch in range(epoch_start, num_epoch):
         os.environ["HYDRAGNN_EPOCH"] = str(epoch)
@@ -197,7 +201,7 @@ def train_validate_test(
                 profiler=prof,
                 use_deepspeed=use_deepspeed,
                 compute_grad_energy=compute_grad_energy,
-                autocast_context=autocast_context,
+                bf16=bf16,
             )
             tr.stop("train")
             tr.disable()
@@ -213,7 +217,7 @@ def train_validate_test(
             verbosity,
             reduce_ranks=True,
             compute_grad_energy=compute_grad_energy,
-            autocast_context=autocast_context,
+            bf16=bf16,
         )
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
@@ -222,7 +226,7 @@ def train_validate_test(
             reduce_ranks=True,
             return_samples=plot_hist_solution,
             compute_grad_energy=compute_grad_energy,
-            autocast_context=autocast_context,
+            bf16=bf16,
         )
         scheduler.step(val_loss)
         if writer is not None:
@@ -486,10 +490,12 @@ def train(
     profiler=None,
     use_deepspeed=False,
     compute_grad_energy=False,
-    autocast_context=nullcontext(),
+    bf16=False,
 ):
     if profiler is None:
         profiler = Profiler()
+
+    autocast_context, scaler = get_autocast_and_scaler(bf16)
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -567,7 +573,7 @@ def train(
             if use_deepspeed:
                 model.backward(loss)
             else:
-                if GradScaler is not None:
+                if scaler is not None:
                     scaler.scale(loss).backward()
                 else:
                     loss.backward()
@@ -581,12 +587,12 @@ def train(
         if use_deepspeed:
             model.step()
         else:
-            if GradScaler is not None:
+            if scaler is not None:
                 scaler.step(opt)
                 scaler.update()
             else:
                 opt.step()
-        # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
+        print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()
         with torch.no_grad():
@@ -621,8 +627,10 @@ def validate(
     verbosity,
     reduce_ranks=True,
     compute_grad_energy=False,
-    autocast_context=nullcontext(),
+    bf16=False,
 ):
+    autocast_context, scaler = get_autocast_and_scaler(bf16)
+
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
     num_samples_local = 0
@@ -680,8 +688,9 @@ def test(
     reduce_ranks=True,
     return_samples=True,
     compute_grad_energy=False,
-    autocast_context=nullcontext(),
+    bf16=False,
 ):
+    autocast_context, scaler = get_autocast_and_scaler(bf16)
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())

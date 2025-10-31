@@ -14,6 +14,9 @@ import re
 
 import torch
 import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
+from torch.distributed.fsdp import ShardingStrategy
 
 from hydragnn.utils.print.print_utils import print_distributed
 
@@ -349,8 +352,6 @@ def get_distributed_model(
             # Add static_graph=False for enhanced models with dynamic computation
             if enhanced_model:
                 ddp_kwargs["static_graph"] = False
-
-            model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
         else:
             if sync_batch_norm:
                 model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -365,7 +366,18 @@ def get_distributed_model(
             if enhanced_model:
                 ddp_kwargs["static_graph"] = False
 
-            model = torch.nn.parallel.DistributedDataParallel(model, **ddp_kwargs)
+        ## check if FSDP is to be used
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
+        fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
+        sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
+        print("Using FSDP:", use_fsdp, "Sharding:", sharding_strategy)
+
+        if use_fsdp:
+            model = FSDP(model, sharding_strategy=sharding_strategy)
+        else:
+            model = DDP(model, **ddp_kwargs)
+
     return model
 
 
