@@ -1,0 +1,8 @@
+click==8.0.0
+matplotlib
+ase
+tqdm
+tensorboard
+psutil
+sympy
+matscipy

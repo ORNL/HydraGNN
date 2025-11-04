@@ -139,7 +139,9 @@ def test_validate_config_invalid_indices():
     parsed = parse_feature_config(var_config)
     parsed["input_node_features"] = [0, 5]  # 5 is out of range
 
-    is_valid, errors = validate_feature_config({"node_features": var_config["node_features"]})
+    is_valid, errors = validate_feature_config(
+        {"node_features": var_config["node_features"]}
+    )
     # This should be valid initially
     assert is_valid
 

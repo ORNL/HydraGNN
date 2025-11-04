@@ -1,0 +1,59 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "PNA",
+            "equivariance": false,
+            "radius": 5.0,
+            "max_neighbours": 100000,
+            "num_gaussians": 50,
+            "envelope_exponent": 5,
+            "int_emb_size": 64,
+            "basis_emb_size": 8,
+            "out_emb_size": 128,
+            "num_after_skip": 2,
+            "num_before_skip": 1,
+            "num_radial": 6,
+            "num_spherical": 7,
+            "num_filters": 126,
+            "hidden_dim": 128,
+            "num_conv_layers": 3,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [128,128],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0, 1, 2, 3, 4, 5, 6],
+            "output_names": ["vmax", "vang"],
+            "output_index": [7, 8],
+            "output_dim": [2],
+            "type": ["node"]
+        },
+        "Training": {
+            "num_epoch": 300,
+            "EarlyStopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "perc_train": 0.8,
+            "loss_function_type": "mse",
+            "batch_size": 16,
+            "continue": 0,
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-4
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": false,
+        "create_plots": true
+    }
+}
