@@ -33,16 +33,19 @@
       ]
     },
     "Variables_of_interest": {
-      "input_node_features": [0],
-      "output_index": [
-        1
-      ],
-      "type": [
-        "node"
-      ],
-      "output_dim": [1],
-      "output_names": ["graph_energy"],
-      "denormalize_output": false
+      "node_features": {
+        "atomic_number": {
+          "dim": 1,
+          "role": "input"
+        }
+      },
+      "graph_features": {
+        "graph_energy": {
+          "dim": 1,
+          "role": "output",
+          "denormalize": false
+        }
+      }
     },
     "Training": {
       "Checkpoint" : true,

@@ -31,11 +31,27 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
-            "output_names": ["forces"],
-            "output_index": [2],
-            "output_dim": [3],
-            "type": ["node"]
+            "node_features": {
+                "atomic_number": {
+                    "dim": 1,
+                    "role": "input"
+                },
+                "cartesian_coordinates": {
+                    "dim": 3,
+                    "role": "input"
+                },
+                "forces": {
+                    "dim": 3,
+                    "role": "output",
+                    "output_type": "node"
+                }
+            },
+            "graph_features": {
+                "energy": {
+                    "dim": 1,
+                    "role": "both"
+                }
+            }
         },
         "Training": {
             "num_epoch": 50,

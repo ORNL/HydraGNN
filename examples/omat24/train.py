@@ -3,15 +3,17 @@ import logging
 import sys
 from mpi4py import MPI
 import argparse
+
+import random
+
 import torch
-import torch.distributed as dist
 
 # FIX random seed
 random_state = 0
 torch.manual_seed(random_state)
 
 from torch_geometric.data import Data
-from torch_geometric.transforms import AddLaplacianEigenvectorPE
+from torch_geometric.transforms import RadiusGraph, Distance
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -22,16 +24,11 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.preprocess.graph_samples_checks_and_updates import (
-    RadiusGraph,
-    RadiusGraphPBC,
-    PBCDistance,
-    PBCLocalCartesian,
-    pbc_as_tensor,
-    gather_deg,
-)
+from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.load_data import split_dataset
+
 import hydragnn.utils.profiling_and_tracing.tracer as tr
+
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 try:
@@ -41,17 +38,134 @@ except ImportError:
 
 import subprocess
 from hydragnn.utils.distributed import nsplit
-from omat24 import OMat2024
 
 ## FIMME
 torch.backends.cudnn.enabled = False
 
 from fairchem.core.datasets import AseDBDataset
-import glob
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+# FIXME: this radis cutoff overwrites the radius cutoff currently written in the JSON file
+create_graph_fromXYZ = RadiusGraph(r=5.0)  # radius cutoff in angstrom
+compute_edge_lengths = Distance(norm=False, cat=True)
+
+
+dataset_names = [
+    "rattled-1000",
+    "rattled-1000-subsampled",
+    "rattled-500",
+    "rattled-500-subsampled",
+    "rattled-300",
+    "rattled-300-subsampled",
+    "aimd-from-PBE-1000-npt",
+    "aimd-from-PBE-1000-nvt",
+    "aimd-from-PBE-3000-npt",
+    "aimd-from-PBE-3000-nvt",
+    "rattled-relax",
+]
+
+
+class OMat2024(AbstractBaseDataset):
+    def __init__(
+        self, dirpath, var_config, data_type, energy_per_atom=True, dist=False
+    ):
+        super().__init__()
+
+        assert (data_type == "train") or (
+            data_type == "val"
+        ), "data_type must be a string either equal to 'train' or to 'val'"
+
+        self.var_config = var_config
+        self.data_path = os.path.join(dirpath, data_type)
+        self.energy_per_atom = energy_per_atom
+
+        config_kwargs = {}  # see tutorial on additional configuration
+
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 1000.0
+
+        self.dist = dist
+        if self.dist:
+            assert torch.distributed.is_initialized()
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+
+        torch.distributed.barrier()
+
+        for dataname in dataset_names:
+
+            print(f"Rank {self.rank} reading {data_type}/{dataname} ... ", flush=True)
+
+            dataset = AseDBDataset(
+                config=dict(
+                    src=os.path.join(dirpath, data_type, dataname), **config_kwargs
+                )
+            )
+
+            rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
+                self.rank
+            ]
+
+            for index in iterate_tqdm(rx, verbosity_level=2):
+                try:
+                    xyz = torch.tensor(
+                        dataset.get_atoms(index).get_positions(), dtype=torch.float32
+                    )
+                    natoms = torch.IntTensor([xyz.shape[0]])
+                    Z = torch.tensor(
+                        dataset.get_atoms(index).get_atomic_numbers(),
+                        dtype=torch.float32,
+                    ).unsqueeze(1)
+                    energy = torch.tensor(
+                        dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
+                    ).unsqueeze(0)
+                    forces = torch.tensor(
+                        dataset.get_atoms(index).get_forces(), dtype=torch.float32
+                    )
+                    chemical_formula = dataset.get_atoms(index).get_chemical_formula()
+
+                    if self.energy_per_atom:
+                        energy /= natoms.item()
+
+                    data = Data(pos=xyz, x=Z, force=forces, energy=energy, y=energy)
+                    data.x = torch.cat((data.x, xyz, forces), dim=1)
+                    data = create_graph_fromXYZ(data)
+
+                    # Add edge length as edge feature
+                    data = compute_edge_lengths(data)
+                    data.edge_attr = data.edge_attr.to(torch.float32)
+                    if self.check_forces_values(data.force):
+                        self.dataset.append(data)
+                    else:
+                        print(
+                            f"L2-norm of force tensor is {data.force.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                            flush=True,
+                        )
+
+                except Exception as e:
+                    print(f"Rank {self.rank} reading - exception: ", e)
+
+        torch.distributed.barrier()
+
+        random.shuffle(self.dataset)
+
+    def check_forces_values(self, forces):
+
+        # Calculate the L2 norm for each row
+        norms = torch.norm(forces, p=2, dim=1)
+        # Check if all norms are less than the threshold
+
+        return torch.all(norms < self.forces_norm_threshold).item()
+
+    def len(self):
+        return len(self.dataset)
+
+    def get(self, idx):
+        return self.dataset[idx]
 
 
 if __name__ == "__main__":
@@ -71,7 +185,7 @@ if __name__ == "__main__":
         "--energy_per_atom",
         help="option to normalize energy by number of atoms",
         type=bool,
-        default=False,
+        default=True,
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -118,15 +232,6 @@ if __name__ == "__main__":
     # var_config["node_feature_names"] = ["atomic_number", "cartesian_coordinates", "forces"]
     # var_config["node_feature_dims"] = [1, 3, 3]
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -158,10 +263,8 @@ if __name__ == "__main__":
         ## local data
         trainset = OMat2024(
             os.path.join(datadir),
-            config,
+            var_config,
             data_type="train",
-            # graphgps_transform=graphgps_transform,
-            graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
@@ -173,26 +276,16 @@ if __name__ == "__main__":
         )
         valset = [*valset1, *valset2]
         testset = OMat2024(
-            os.path.join(datadir),
-            config,
-            data_type="val",
-            # graphgps_transform=graphgps_transform,
-            graphgps_transform=None,
-            energy_per_atom=args.energy_per_atom,
-            dist=True,
+            os.path.join(datadir), var_config, data_type="val", dist=True
         )
         ## Need as a list
         testset = testset[:]
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
-        comm.Barrier()
-
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
         setnames = ["trainset", "valset", "testset"]
-
-        comm.Barrier()
 
         ## adios
         if args.format == "adios":
@@ -260,7 +353,6 @@ if __name__ == "__main__":
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
-
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
@@ -316,19 +408,16 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+
+    # Print details of neural network architecture
+    print_model(model)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
-
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity
-    )
-
-    # Print details of neural network architecture
-    print_model(model)
 
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
@@ -348,15 +437,10 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
-    if writer is not None:
-        writer.close()
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp
@@ -366,6 +450,4 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
-
-    dist.destroy_process_group()
     sys.exit(0)

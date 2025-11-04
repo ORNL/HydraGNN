@@ -32,25 +32,31 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
+            "comment": "NEW FORMAT: Feature definitions using structured dictionaries",
             "node_features": {
                 "atomic_number": {
                     "dim": 1,
-                    "role": "input"
+                    "role": "input",
+                    "description": "Atomic number (element type)"
                 },
                 "cartesian_coordinates": {
                     "dim": 3,
-                    "role": "input"
+                    "role": "input",
+                    "description": "3D atomic positions"
                 },
                 "forces": {
                     "dim": 3,
                     "role": "both",
-                    "output_type": "node"
+                    "output_type": "node",
+                    "description": "Atomic forces (used as both input and output)"
                 }
             },
             "graph_features": {
                 "energy": {
                     "dim": 1,
-                    "role": "output"
+                    "role": "output",
+                    "output_type": "graph",
+                    "description": "Total energy of the system"
                 }
             }
         },

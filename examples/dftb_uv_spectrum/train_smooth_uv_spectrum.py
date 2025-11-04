@@ -160,8 +160,6 @@ if __name__ == "__main__":
     parser.set_defaults(format="adios")
     args = parser.parse_args()
 
-    graph_feature_names = ["spectrum"]
-    graph_feature_dim = [37500]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/dftb_aisd_electronic_excitation_spectrum")
     ##################################################################################################################
@@ -172,16 +170,20 @@ if __name__ == "__main__":
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["output_names"] = [
-        graph_feature_names[item]
-        for ihead, item in enumerate(var_config["output_index"])
-    ]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dim
-    (
-        var_config["input_node_feature_names"],
-        var_config["input_node_feature_dims"],
-    ) = get_node_attribute_name(dftb_node_types)
+
+    # Note: Feature configuration now handled automatically in update_config()
+    # Extract feature names/dims from config for use in post-processing
+    # Node features are dynamically determined from dftb_node_types
+    if "graph_features" in var_config:
+        # New format
+        graph_feature_names = list(var_config["graph_features"].keys())
+        graph_feature_dim = [
+            var_config["graph_features"][k]["dim"] for k in graph_feature_names
+        ]
+    else:
+        # Legacy format fallback
+        graph_feature_names = var_config.get("graph_feature_names", ["spectrum"])
+        graph_feature_dim = var_config.get("graph_feature_dims", [37500])
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
     ##################################################################################################################

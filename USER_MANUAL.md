@@ -332,17 +332,94 @@ HydraGNN provides extensive configuration options for building graph neural netw
 
 #### Variables of Interest
 
+HydraGNN supports two configuration formats for defining features: a **new self-documenting format** (recommended) and a **legacy index-based format** (for backward compatibility).
+
+##### New Format (Recommended)
+
+The new format uses named features with explicit roles, making configurations self-documenting and less error-prone:
+
 ```json
 {
     "Variables_of_interest": {
-        "input_node_features": [0, 1, 2],     // Input feature indices
-        "output_names": ["energy", "forces"], // Output property names
-        "output_index": [0, 1],               // Output target indices
-        "type": ["graph", "node"],            // Prediction types
-        "output_dim": [1, 3],                 // Output dimensions
-        "denormalize_output": true            // Whether to denormalize predictions
+        "node_features": {
+            "atomic_number": {
+                "dim": 1,
+                "role": "input"
+            },
+            "cartesian_coordinates": {
+                "dim": 3,
+                "role": "input"
+            },
+            "forces": {
+                "dim": 3,
+                "role": "output",
+                "output_type": "node"
+            }
+        },
+        "graph_features": {
+            "energy": {
+                "dim": 1,
+                "role": "output",
+                "output_type": "graph"
+            }
+        },
+        "denormalize_output": true
     }
 }
+```
+
+**Feature Properties:**
+- `dim` (required): Integer dimension of the feature
+- `role` (required): One of:
+  - `"input"`: Feature used as model input
+  - `"output"`: Feature used as prediction target
+  - `"both"`: Feature used as both input and output
+- `output_type` (required for outputs): Either `"node"` or `"graph"`
+
+**Benefits:**
+- ✅ Self-documenting: Feature names visible in config
+- ✅ No manual index management
+- ✅ Automatic validation on load
+- ✅ Less prone to synchronization errors
+- ✅ Easier to modify and maintain
+
+##### Legacy Format (Backward Compatible)
+
+The legacy format uses separate lists for names, dimensions, and indices:
+
+```json
+{
+    "Variables_of_interest": {
+        "node_feature_names": ["atomic_number", "cartesian_coordinates", "forces"],
+        "node_feature_dims": [1, 3, 3],
+        "graph_feature_names": ["energy"],
+        "graph_feature_dims": [1],
+        "input_node_features": [0, 1],        // Input feature indices
+        "output_names": ["forces", "energy"], // Output property names
+        "output_index": [2, 0],               // Output target indices
+        "type": ["node", "graph"],            // Prediction types
+        "output_dim": [3, 1],                 // Output dimensions
+        "denormalize_output": true
+    }
+}
+```
+
+**Note:** Both formats are fully supported. The new format is recommended for new projects, while existing configurations using the legacy format will continue to work without modification.
+
+##### Automatic Feature Processing
+
+Feature configuration is now handled automatically in `update_config()`. You no longer need to manually set feature names and dimensions in your training script:
+
+```python
+# Old approach (no longer needed):
+# config["NeuralNetwork"]["Variables_of_interest"]["graph_feature_names"] = ["energy"]
+# config["NeuralNetwork"]["Variables_of_interest"]["node_feature_names"] = [...]
+
+# New approach (automatic):
+config = hydragnn.utils.input_config_parsing.update_config(
+    config, train_loader, val_loader, test_loader
+)
+# Features are parsed and validated automatically from JSON config
 ```
 
 ### Global Attention Mechanisms
@@ -397,6 +474,72 @@ model = create_model_config(
 # Print model architecture
 from hydragnn.utils.model import print_model
 print_model(model)
+```
+
+### Feature Configuration Utilities
+
+HydraGNN provides utilities for validating and working with feature configurations.
+
+#### Validating Feature Configuration
+
+```python
+from hydragnn.utils.input_config_parsing import validate_feature_config
+
+var_config = config["NeuralNetwork"]["Variables_of_interest"]
+is_valid, errors = validate_feature_config(var_config)
+
+if not is_valid:
+    print("Configuration errors:")
+    for error in errors:
+        print(f"  - {error}")
+```
+
+#### Printing Feature Summary
+
+```python
+from hydragnn.utils.input_config_parsing import print_feature_summary
+
+var_config = config["NeuralNetwork"]["Variables_of_interest"]
+summary = print_feature_summary(var_config)
+print(summary)
+```
+
+**Example Output:**
+```
+============================================================
+Feature Configuration Summary
+============================================================
+
+Node Features:
+------------------------------------------------------------
+  [0] atomic_number                dim= 1  role=input
+  [1] cartesian_coordinates        dim= 3  role=input
+  [2] forces                       dim= 3  role=internal
+
+Graph Features:
+------------------------------------------------------------
+  [0] energy                       dim= 1
+
+Output Configuration:
+------------------------------------------------------------
+  forces                         index= 2  dim= 3  type=node
+  energy                         index= 0  dim= 1  type=graph
+============================================================
+```
+
+#### Programmatic Feature Parsing
+
+```python
+from hydragnn.utils.input_config_parsing import parse_feature_config
+
+var_config = config["NeuralNetwork"]["Variables_of_interest"]
+parsed = parse_feature_config(var_config)
+
+# Access parsed information
+print(f"Input features: {parsed['input_node_features']}")
+print(f"Output names: {parsed['output_names']}")
+print(f"Node feature dims: {parsed['node_feature_dims']}")
+print(f"Graph feature dims: {parsed['graph_feature_dims']}")
 ```
 
 ---
@@ -1147,7 +1290,101 @@ export NCCL_DEBUG=INFO
 }
 ```
 
-### 5. Production Deployment
+### 5. Configuration Migration Guide
+
+#### Migrating from Legacy to New Feature Format
+
+If you have existing configurations using the legacy format, you can easily migrate to the new self-documenting format.
+
+**Before (Legacy Format):**
+```json
+{
+    "Variables_of_interest": {
+        "node_feature_names": ["atomic_number", "coordinates", "forces"],
+        "node_feature_dims": [1, 3, 3],
+        "graph_feature_names": ["energy"],
+        "graph_feature_dims": [1],
+        "input_node_features": [0, 1],
+        "output_names": ["forces", "energy"],
+        "output_index": [2, 0],
+        "type": ["node", "graph"],
+        "output_dim": [3, 1]
+    }
+}
+```
+
+**After (New Format):**
+```json
+{
+    "Variables_of_interest": {
+        "node_features": {
+            "atomic_number": {
+                "dim": 1,
+                "role": "input"
+            },
+            "coordinates": {
+                "dim": 3,
+                "role": "input"
+            },
+            "forces": {
+                "dim": 3,
+                "role": "output",
+                "output_type": "node"
+            }
+        },
+        "graph_features": {
+            "energy": {
+                "dim": 1,
+                "role": "output",
+                "output_type": "graph"
+            }
+        }
+    }
+}
+```
+
+**Migration Steps:**
+
+1. **Remove hardcoded feature assignments from train.py:**
+   ```python
+   # Delete these lines:
+   # config["NeuralNetwork"]["Variables_of_interest"]["graph_feature_names"] = [...]
+   # config["NeuralNetwork"]["Variables_of_interest"]["node_feature_names"] = [...]
+   # config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"] = [...]
+   # etc.
+   ```
+
+2. **Update JSON configuration to use new format:**
+   - Create `node_features` and `graph_features` dictionaries
+   - For each feature, specify `dim`, `role`, and `output_type` (if output)
+   - Feature names become dictionary keys (order preserved)
+
+3. **Let update_config() handle the rest:**
+   ```python
+   # This now automatically parses and validates features
+   config = hydragnn.utils.input_config_parsing.update_config(
+       config, train_loader, val_loader, test_loader
+   )
+   ```
+
+**Backward Compatibility:**
+- Legacy format continues to work without modification
+- Both formats can coexist in the same codebase
+- No breaking changes to existing workflows
+
+**Validation:**
+```python
+from hydragnn.utils.input_config_parsing import validate_feature_config
+
+# Validate your configuration
+is_valid, errors = validate_feature_config(config["NeuralNetwork"]["Variables_of_interest"])
+if not is_valid:
+    print("Configuration issues found:")
+    for error in errors:
+        print(f"  - {error}")
+```
+
+### 6. Production Deployment
 
 #### Model Checkpointing
 ```json
