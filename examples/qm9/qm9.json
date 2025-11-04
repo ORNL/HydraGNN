@@ -39,6 +39,10 @@
         },
         "Variables_of_interest": {
             "input_node_features": [0],
+            "node_feature_names": ["atomic_number"],
+            "node_feature_dims": [1],
+            "graph_feature_names": ["free_energy"],
+            "graph_feature_dims": [1],
             "output_names": ["free_energy"],
             "output_index": [0],
             "output_dim": [1],

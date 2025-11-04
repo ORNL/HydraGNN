@@ -69,7 +69,6 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
 
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
