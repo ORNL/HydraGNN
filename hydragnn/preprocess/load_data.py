@@ -26,6 +26,9 @@ except:
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
 from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
+from hydragnn.utils.input_config_parsing.feature_config import (
+    update_var_config_with_features,
+)
 from hydragnn.utils.datasets.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
@@ -204,6 +207,12 @@ class HydraDataLoader(DataLoader):
 
 
 def dataset_loading_and_splitting(config: {}):
+    # Parse and populate var_config with legacy keys if using new format
+    # This must happen before SerializedDataLoader is instantiated
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = update_var_config_with_features(var_config)
+    config["NeuralNetwork"]["Variables_of_interest"] = var_config
+    
     ##check if serialized pickle files or folders for raw files provided
     if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
         transform_raw_data_to_serialized(config["Dataset"])

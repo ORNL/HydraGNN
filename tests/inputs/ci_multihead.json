@@ -69,12 +69,12 @@
                 },
                 "x2": {
                     "dim": 1,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node"
                 },
                 "x3": {
                     "dim": 1,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node"
                 }
             },
