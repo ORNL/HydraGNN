@@ -212,7 +212,7 @@ def dataset_loading_and_splitting(config: {}):
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
     var_config = update_var_config_with_features(var_config)
     config["NeuralNetwork"]["Variables_of_interest"] = var_config
-    
+
     ##check if serialized pickle files or folders for raw files provided
     if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
         transform_raw_data_to_serialized(config["Dataset"])
