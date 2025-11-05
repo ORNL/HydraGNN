@@ -374,7 +374,7 @@ The new format uses named features with explicit roles, making configurations se
   - `"input"`: Feature used as model input
   - `"output"`: Feature used as prediction target
   - `"both"`: Feature used as both input and output
-- `output_type` (required for outputs): Either `"node"` or `"graph"`
+- `output_type` (optional): Either `"node"` or `"graph"`
 
 **Benefits:**
 - ✅ Self-documenting: Feature names visible in config
@@ -514,7 +514,7 @@ Node Features:
 ------------------------------------------------------------
   [0] atomic_number                dim= 1  role=input
   [1] cartesian_coordinates        dim= 3  role=input
-  [2] forces                       dim= 3  role=internal
+  [2] forces                       dim= 3  role=output
 
 Graph Features:
 ------------------------------------------------------------

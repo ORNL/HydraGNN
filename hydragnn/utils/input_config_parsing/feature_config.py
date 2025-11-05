@@ -17,6 +17,12 @@ from the Variables_of_interest section in config files. It supports both:
 1. Legacy format: Using separate lists for feature names and dimensions
 2. New format: Using structured dictionaries with explicit feature roles
 
+
+IMPORTANT: The order of node_features and graph_features in the config
+must match the order of columns/features in the actual dataset files.
+The code assumes that the config order corresponds exactly to the data order
+when mapping feature names and indices.
+
 Example new format:
 {
     "node_features": {
