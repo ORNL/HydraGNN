@@ -478,6 +478,73 @@ print_model(model)
 
 ### Feature Configuration Utilities
 
+
+### Important Note on Node Feature Dimensions
+
+
+**If you do not specify `column_index` for each feature, the number of columns in `data.x` must exactly match the sum of the dimensions of the node features specified in your configuration JSON, and the columns must be contiguous and in the order given. If you do specify `column_index` for each feature, `data.x` can have extra columns, and only the specified columns will be used for each feature.**
+
+For example, if your node features are defined as:
+
+```json
+"node_features": {
+    "atomic_number": {"dim": 1, "role": "input"},
+    "cartesian_coordinates": {"dim": 3, "role": "input"},
+    "forces": {"dim": 3, "role": "output"}
+}
+```
+
+then your data.x must have exactly 7 columns (1 + 3 + 3 = 7).
+
+If your data.x has more columns than this, you must specify the correct column indices for each feature in the config. Otherwise, HydraGNN will raise a validation error and refuse to run.
+
+**Example: Using column_index to select specific columns**
+
+Suppose your `data.x` has 10 columns, but you only want to use columns 0, 5, and 6 as node features. You can specify this in your config as follows:
+
+```json
+"node_features": {
+    "atomic_number": {"dim": 1, "role": "input", "column_index": 0},
+    "charge_density": {"dim": 1, "role": "input", "column_index": 5},
+    "magnetic_moment": {"dim": 1, "role": "input", "column_index": 6},
+    "cartesian_coordinates": {"dim": 3, "role": "input", "column_index": 1}
+}
+
+For features with `dim > 1`, `column_index` specifies the starting column, and HydraGNN will use a range of columns: `[column_index, column_index + dim)`. For example, with `cartesian_coordinates` above, HydraGNN will use columns 1, 2, and 3 from `data.x`.
+
+**Explicit JSON example:**
+
+Suppose your `data.x` has 10 columns, and you want to extract:
+- column 0 for atomic_number (dim=1)
+- columns 1, 2, 3 for cartesian_coordinates (dim=3)
+- column 5 for charge_density (dim=1)
+- column 6 for magnetic_moment (dim=1)
+
+Your JSON config would look like:
+
+```json
+{
+    "Variables_of_interest": {
+        "node_features": {
+            "atomic_number": {"dim": 1, "role": "input", "column_index": 0},
+            "cartesian_coordinates": {"dim": 3, "role": "input", "column_index": 1},
+            "charge_density": {"dim": 1, "role": "input", "column_index": 5},
+            "magnetic_moment": {"dim": 1, "role": "input", "column_index": 6}
+        }
+    }
+}
+```
+```
+
+This tells HydraGNN to extract only the specified columns from `data.x` for each feature, even if there are extra columns present. If you do not specify `column_index`, HydraGNN expects the columns to be contiguous and to match the sum of the feature dimensions exactly.
+
+**Consequences of Strict Column Matching:**
+
+- If you want to reduce the number of node features extracted (for example, by removing a feature from your config), you must re-preprocess your dataset so that `data.x` matches the new sum of feature dimensions. HydraGNN does not support skipping columns or ignoring extra features unless you explicitly specify column indices for each feature in the config.
+- This strict design choice ensures that your feature configuration and dataset are always synchronized, preventing subtle bugs and training errors, but it also means that any change to the node features in your config requires regenerating your dataset to match.
+
+---
+
 HydraGNN provides utilities for validating and working with feature configurations.
 
 #### Validating Feature Configuration
