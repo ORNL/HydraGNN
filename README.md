@@ -126,6 +126,39 @@ Detailed instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Datasets)
 
 ### Configurable settings
+### Node Feature Extraction: Strict Column Matching and `column_index`
+
+HydraGNN enforces strict rules for extracting node features from `data.x`:
+
+- **Default behavior (no `column_index`):**
+  - The number of columns in `data.x` must exactly match the sum of the dimensions of the node features specified in your configuration JSON.
+  - The columns must be contiguous and in the order given in the config.
+- **Advanced behavior (with `column_index`):**
+  - If you specify `column_index` for each feature, `data.x` can have extra columns, and only the specified columns will be used for each feature.
+  - For features with `dim > 1`, `column_index` specifies the starting column, and HydraGNN will use a range of columns: `[column_index, column_index + dim)`.
+
+**Example (no `column_index`):**
+```json
+"node_features": {
+    "atomic_number": {"dim": 1, "role": "input"},
+    "cartesian_coordinates": {"dim": 3, "role": "input"},
+    "forces": {"dim": 3, "role": "output"}
+}
+```
+`data.x` must have exactly 7 columns (1 + 3 + 3).
+
+**Example (with `column_index`):**
+```json
+"node_features": {
+    "atomic_number": {"dim": 1, "role": "input", "column_index": 0},
+    "cartesian_coordinates": {"dim": 3, "role": "input", "column_index": 1},
+    "charge_density": {"dim": 1, "role": "input", "column_index": 5},
+    "magnetic_moment": {"dim": 1, "role": "input", "column_index": 6}
+}
+```
+This extracts only the specified columns from `data.x`, even if there are extra columns present.
+
+If you change the node features in your config, you must ensure your dataset matches the new requirements, or specify `column_index` for each feature.
 
 HydraGNN uses a JSON configuration file (examples in `examples/`):
 
