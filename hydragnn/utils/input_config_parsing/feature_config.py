@@ -332,6 +332,29 @@ def _validate_against_data(parsed: dict, data_object) -> List[str]:
     return errors
 
 
+def validate_node_feature_columns(data_x, node_feature_dims, column_indices=None):
+    """
+    Validate that the columns in data.x match the expected node features from config.
+    If column_indices is None, checks that data.x.shape[1] == sum(node_feature_dims).
+    If data.x has more columns than needed and column_indices is not set, raises ValueError.
+    If column_indices is set, checks that all indices and their ranges are valid for the dims.
+    """
+    expected_total_dim = sum(node_feature_dims)
+    if column_indices is None:
+        if data_x.shape[1] != expected_total_dim:
+            raise ValueError(
+                f"Mismatch between data.x columns ({data_x.shape[1]}) and total node feature dims ({expected_total_dim}). "
+                "If your data.x has extra columns, specify 'column_index' for each feature in the config."
+            )
+    else:
+        # If column_indices is set, check that all indices and their ranges are valid
+        for idx, dim in zip(column_indices, node_feature_dims):
+            if idx + dim > data_x.shape[1]:
+                raise ValueError(
+                    f"data.x does not have enough columns for feature starting at index {idx} with dim {dim} (shape {data_x.shape[1]})."
+                )
+
+
 def update_var_config_with_features(var_config: dict) -> dict:
     """
     Update var_config dict with parsed feature information.
