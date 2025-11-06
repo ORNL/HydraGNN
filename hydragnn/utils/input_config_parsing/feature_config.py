@@ -445,7 +445,7 @@ def print_feature_summary(var_config: dict) -> str:
         ):
             is_input = i in parsed["input_node_features"]
             role = "input" if is_input else "internal"
-            lines.append(f"  [{i}] {name:30s} dim={dim:2d}  role={role}")
+            lines.append(f"  [{i}] {name:30s} dim={dim}  role={role}")
 
     # Graph features
     if parsed["graph_feature_names"]:
@@ -454,7 +454,7 @@ def print_feature_summary(var_config: dict) -> str:
         for i, (name, dim) in enumerate(
             zip(parsed["graph_feature_names"], parsed["graph_feature_dims"])
         ):
-            lines.append(f"  [{i}] {name:30s} dim={dim:2d}")
+            lines.append(f"  [{i}] {name:30s} dim={dim}")
 
     # Outputs
     if parsed["output_names"]:
@@ -466,7 +466,7 @@ def print_feature_summary(var_config: dict) -> str:
             parsed["output_dim"],
             parsed["type"],
         ):
-            lines.append(f"  {name:30s} index={idx:2d}  dim={dim:2d}  type={otype}")
+            lines.append(f"  {name:30s} index={idx}  dim={dim}  type={otype}")
 
     lines.append("=" * 60)
     return "\n".join(lines)
