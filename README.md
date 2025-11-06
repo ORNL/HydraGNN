@@ -69,7 +69,7 @@ Detailed dependency installation instructions are available on the
 
 ## Installation
 
-After checking out HydgraGNN, we recommend to install HydraGNN in a
+After checking out HydraGNN, we recommend installing HydraGNN in
 developer mode so that you can use the files in your current location
 and update them if needed:
 ```bash
@@ -81,7 +81,7 @@ Or, simply type the following in the HydraGNN directory:
 export PYTHONPATH=$PWD:$PYTHONPATH
 ```
 
-Alternatively, if you have no plane to update, you can install
+Alternatively, if you have no plans to update, you can install
 HydraGNN in your python tree as a static package:
 ```bash
 python setup.py install
@@ -89,7 +89,7 @@ python setup.py install
 
 ## Quick Start
 
-For detailed instructions, see the [**Comprehensive User Manual**](USER_MANUAL.md).
+**For detailed instructions, configuration options, and advanced features, please refer to the [Comprehensive User Manual](USER_MANUAL.md).**
 
 Below are the four main functionalities for running the code.
 1. Training a model, including continuing from a previously trained model using configuration options:
@@ -114,113 +114,136 @@ hydragnn.load_existing_model(model, model_name, path="./logs/")
 import hydragnn
 hydragnn.run_prediction("examples/configuration.json", model)
 ```
-The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference) on toy problems, which are included in the CI test workflows. Both `run_training` and `run_predictions` require a JSON input file for configurable options. The `save_model` and `load_model` functions store and retrieve model checkpoints for continued training and subsequent inference. Ad-hoc example scripts where data pre-processing, training, and inference are done for specific datasets are provided in the `examples` folder.
+The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference). Both `run_training` and `run_predictions` require a JSON input file for configurable options. The `save_model` and `load_model` functions store and retrieve model checkpoints for continued training and subsequent inference. 
+
+Example scripts showing data pre-processing, training, and inference for specific datasets are provided in the `examples/` folder. See the [User Manual](USER_MANUAL.md) for comprehensive documentation.
 
 ### Datasets
 
-Built in examples are provided for testing purposes only. One source of data to
-create HydraGNN surrogate predictions is DFT output on the OLCF Constellation:
-https://doi.ccs.ornl.gov/
+Built-in examples are provided in the `examples/` directory, covering various domains:
+- **Molecular datasets**: QM9, ANI-1x, QM7x, ZINC
+- **Materials datasets**: Alexandria, Open Catalyst (2020/2022), Open Materials 2024, Open Molecules 2025
+- **Physics simulations**: Lennard-Jones, Ising Model, Power Grid
 
-Detailed instructions are available on the
-[Wiki](https://github.com/ORNL/HydraGNN/wiki/Datasets)
+One source of data to create HydraGNN surrogate predictions is DFT output on the OLCF Constellation: https://doi.ccs.ornl.gov/
 
-### Configurable settings
-### Node Feature Extraction: Strict Column Matching and `column_index`
+Detailed instructions are available on the [Wiki](https://github.com/ORNL/HydraGNN/wiki/Datasets).
 
-HydraGNN enforces strict rules for extracting node features from `data.x`:
+### Configuration
 
-- **Default behavior (no `column_index`):**
-  - The number of columns in `data.x` must exactly match the sum of the dimensions of the node features specified in your configuration JSON.
-  - The columns must be contiguous and in the order given in the config.
-- **Advanced behavior (with `column_index`):**
-  - If you specify `column_index` for each feature, `data.x` can have extra columns, and only the specified columns will be used for each feature.
-  - For features with `dim > 1`, `column_index` specifies the starting column, and HydraGNN will use a range of columns: `[column_index, column_index + dim)`.
+**For complete configuration documentation, see the [User Manual](USER_MANUAL.md).**
 
-**Example (no `column_index`):**
+HydraGNN uses a JSON configuration file to specify all aspects of model architecture, training, and data processing. Modern HydraGNN configurations use a feature-based approach for defining inputs and outputs.
+
+#### Key Configuration Sections
+
+**Dataset Configuration:**
 ```json
-"node_features": {
-    "atomic_number": {"dim": 1, "role": "input"},
-    "cartesian_coordinates": {"dim": 3, "role": "input"},
-    "forces": {"dim": 3, "role": "output"}
+{
+    "Dataset": {
+        "name": "my_dataset",
+        "format": "XYZ",  // or "LSMS", "Pickle", "ADIOS2"
+        "node_features": {
+            "name": ["atomic_number", "coordinates"],
+            "dim": [1, 3],
+            "column_index": [0, 1]
+        },
+        "graph_features": {
+            "name": ["energy"],
+            "dim": [1],
+            "column_index": [0]
+        }
+    }
 }
 ```
-`data.x` must have exactly 7 columns (1 + 3 + 3).
 
-**Example (with `column_index`):**
+**Neural Network Architecture:**
 ```json
-"node_features": {
-    "atomic_number": {"dim": 1, "role": "input", "column_index": 0},
-    "cartesian_coordinates": {"dim": 3, "role": "input", "column_index": 1},
-    "charge_density": {"dim": 1, "role": "input", "column_index": 5},
-    "magnetic_moment": {"dim": 1, "role": "input", "column_index": 6}
+{
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "EGNN",  // See supported architectures below
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "output_heads": {
+                "graph": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [50, 25]
+                }
+            }
+        }
+    }
 }
 ```
-This extracts only the specified columns from `data.x`, even if there are extra columns present.
 
-If you change the node features in your config, you must ensure your dataset matches the new requirements, or specify `column_index` for each feature.
+**Supported MPNN Architectures:**
+- `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNA`, `PNAPlus`, `PNAEq`, `SAGE`, `SchNet`
 
-HydraGNN uses a JSON configuration file (examples in `examples/`):
+**Training Configuration:**
+```json
+{
+    "NeuralNetwork": {
+        "Training": {
+            "num_epoch": 100,
+            "batch_size": 32,
+            "Optimizer": {
+                "type": "Adam",
+                "learning_rate": 0.001
+            }
+        }
+    }
+}
+```
 
-There are many options for HydraGNN; the dataset and model type are particularly
-important:
- - `["Verbosity"]["level"]`: `0`, `1`, `2`, `3`, `4` (int)
- - `["Dataset"]["name"]`: `CuAu_32atoms`, `FePt_32atoms`, `FeSi_1024atoms` (str)
+**Variables of Interest (Modern Approach):**
 
-Additionally, many important arguments fall within the `["NeuralNetwork"]` section:
+HydraGNN now uses a declarative feature configuration with `node_features` and `graph_features` in the `Dataset` section. Each feature specifies:
+- `name`: Descriptive name(s) 
+- `dim`: Dimensionality of each feature
+- `column_index`: Which columns in `data.x` or `data.y` to extract (optional but recommended)
+- `role`: `"input"` or `"output"` (specified in `Variables_of_interest` section)
 
-- `["NeuralNetwork"]`
-  - `["Architecture"]`
-    - `["mpnn_type"]`  
-      Accepted types: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
-    - `["num_conv_layers"]`  
-      Examples: `1`, `2`, `3`, `4` ... (int)
-    - `["output_heads"]`  
-      Task types: `node`, `graph` (int)
-    - `["global_attn_engine"]`
-      Accepted types: `GPS`, `None`
-    - `["global_attn_type"]`
-      Accepted types: `multihead`
-    - `["pe_dim"]`
-      Dimension of positional encodings (int)
-    - `["global_attn_heads"]`
-      Examples: `1`, `2`, `3`, `4` ... (int)
-    - `["hidden_dim"]`  
-      Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None" 
-            
+Example in `Variables_of_interest` section:
+```json
+{
+    "NeuralNetwork": {
+        "Variables_of_interest": {
+            "node_features": {
+                "atomic_number": {"dim": 1, "role": "input"},
+                "forces": {"dim": 3, "role": "output"}
+            },
+            "graph_features": {
+                "energy": {"dim": 1, "role": "output"}
+            }
+        }
+    }
+}
+```
 
-  - `["Variables of Interest"]`
-    - `["input_node_features"]`  
-      Indices from nodal data used as inputs (int)
-    - `["output_index"]`  
-      Indices from data used as targets (int)
-    - `["type"]`  
-      Either `node` or `graph` (string)
-    - `["output_dim"]`  
-      Dimensions of prediction tasks (list)
+**Note:** Legacy configurations using `input_node_features` and `output_index` are still supported but not recommended for new projects.
 
-  - `["Training"]`
-    - `["num_epoch"]`  
-      Examples: `75`, `100`, `250` (int)
-    - `["batch_size"]`  
-      Examples: `16`, `32`, `64` (int)
-    - `["Optimizer"]["learning_rate"]`  
-      Examples: `2e-3`, `0.005` (float)
-    - `["compute_grad_energy"]`  
-      Use the gradient of energy to predict forces (bool)
+For comprehensive configuration details including:
+- Node feature extraction rules and `column_index` usage
+- Multi-dataset training
+- DeepSpeed integration
+- Global attention mechanisms
+- Hyperparameter optimization
 
+Please refer to the [User Manual](USER_MANUAL.md).
 
-### Citations
-"HydraGNN: Distributed PyTorch implementation of multi-headed graph convolutional neural networks", Copyright ID#: 81929619
-https://doi.org/10.11578/dc.20211019.2
 
 ## Contributing
 
-We encourage you to contribute to HydraGNN! Please check the
-[guidelines](CONTRIBUTING.md) on how to do so.
+We encourage you to contribute to HydraGNN! Please check the [guidelines](CONTRIBUTING.md) on how to do so.
+
+## Citations
+
+"HydraGNN: Distributed PyTorch implementation of multi-headed graph convolutional neural networks", Copyright ID#: 81929619  
+https://doi.org/10.11578/dc.20211019.2
 
 ## Documentation
 
-- **Quick Start**: This README provides basic usage examples
-- **[Comprehensive User Manual](USER_MANUAL.md)**: Detailed guide covering data pre-processing, model construction, scalable data management, and training
+- **Quick Start**: This README provides basic usage and installation
+- **[Comprehensive User Manual](USER_MANUAL.md)**: Detailed guide covering all features, data pre-processing, model construction, scalable data management, and training
 - **[Wiki](https://github.com/ORNL/HydraGNN/wiki)**: Additional technical documentation and datasets
+- **Examples**: The `examples/` directory contains working configurations for various datasets and use cases
