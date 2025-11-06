@@ -14,4 +14,5 @@ from .feature_config import (
     update_var_config_with_features,
     print_feature_summary,
     get_feature_schema_example,
+    validate_node_feature_columns,
 )
