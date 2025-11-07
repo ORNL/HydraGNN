@@ -522,6 +522,15 @@ def update_predicted_values(
     data: Data
         A Data object representing a structure that has atoms.
     """
+    # Validate that data.x has the expected number of columns before processing
+    # This is done here because at this point data.x still contains all original columns
+    # before any are extracted to data.y
+    from hydragnn.utils.input_config_parsing.feature_config import (
+        validate_node_feature_columns,
+    )
+
+    validate_node_feature_columns(data.x, node_feature_dim)
+
     output_feature = []
     data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
     for item in range(len(type)):
