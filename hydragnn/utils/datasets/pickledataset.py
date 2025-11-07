@@ -88,16 +88,17 @@ class SimplePickleDataset(AbstractBaseDataset):
             self.update_data_object(data_object)
         return data_object
 
-    def update_data_object(self, data_object):
+    def update_data_object(self, data):
         if self.var_config is not None:
             update_predicted_values(
                 self.variables_type,
                 self.output_index,
                 self.graph_feature_dim,
                 self.node_feature_dim,
-                data_object,
+                data,
+                validate=True,
             )
-            update_atom_features(self.input_node_features, data_object)
+            update_atom_features(self.input_node_features, self.node_feature_dim, data)
 
 
 class SimplePickleWriter:

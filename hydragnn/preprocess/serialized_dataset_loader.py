@@ -199,9 +199,10 @@ class SerializedDataLoader:
                 self.graph_feature_dim,
                 self.node_feature_dim,
                 data,
+                validate=False,  # Skip validation - data is already processed from serialized file
             )
 
-            update_atom_features(self.input_node_features, data)
+            update_atom_features(self.input_node_features, self.node_feature_dim, data)
 
         if "subsample_percentage" in self.variables.keys():
             self.subsample_percentage = self.variables["subsample_percentage"]
