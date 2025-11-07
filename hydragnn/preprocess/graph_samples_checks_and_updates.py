@@ -511,7 +511,12 @@ def gather_deg_mpi(dataset):
 
 
 def update_predicted_values(
-    type: list, index: list, graph_feature_dim: list, node_feature_dim: list, data: Data
+    type: list,
+    index: list,
+    graph_feature_dim: list,
+    node_feature_dim: list,
+    data: Data,
+    validate: bool = True,
 ):
     """Updates values of the structure we want to predict. Predicted value is represented by integer value.
     Parameters
@@ -519,9 +524,22 @@ def update_predicted_values(
     type: "graph" level or "node" level
     index: index/location in data.y for graph level and in data.x for node level
     graph_feature_dim: list of integers to trak the dimension of each graph level feature
+    node_feature_dim: list of integers for each node feature dimension
     data: Data
         A Data object representing a structure that has atoms.
+    validate: bool
+        If True, validate that data.x columns match node_feature_dim.
+        Should be True for raw data, False for serialized data that's already been processed.
     """
+    # Validate that data.x has the expected number of columns before processing
+    # Only validate for raw data (not serialized data that's already been processed)
+    if validate:
+        from hydragnn.utils.input_config_parsing.feature_config import (
+            validate_node_feature_columns,
+        )
+
+        validate_node_feature_columns(data.x, node_feature_dim)
+
     output_feature = []
     data.y_loc = torch.zeros(1, len(type) + 1, dtype=torch.int64, device=data.x.device)
     for item in range(len(type)):

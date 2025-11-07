@@ -229,6 +229,7 @@ class DistDataset(AbstractBaseDataset):
                 self.graph_feature_dim,
                 self.node_feature_dim,
                 data_object,
+                validate=False,  # Skip validation - data is already processed from distributed store
             )
             update_atom_features(
                 self.input_node_features, self.node_feature_dim, data_object
