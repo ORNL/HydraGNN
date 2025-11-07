@@ -151,7 +151,7 @@ def _parse_new_format(var_config: dict) -> dict:
             result["graph_feature_names"].append(feat_name)
             result["graph_feature_dims"].append(feat_config["dim"])
 
-            # Graph features are outputs 
+            # Graph features are outputs
             role = feat_config.get("role", "output")
             if role == "output":
                 result["output_names"].append(feat_name)
