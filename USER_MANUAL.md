@@ -371,10 +371,9 @@ The new format uses named features with explicit roles, making configurations se
 **Feature Properties:**
 - `dim` (required): Integer dimension of the feature
 - `role` (required): One of:
-  - `"input"`: Feature used as model input
-  - `"output"`: Feature used as prediction target
-  - `"both"`: Feature used as both input and output
-- `output_type` (optional): Either `"node"` or `"graph"`
+  - `"input"`: Feature used as model input (kept in data.x)
+  - `"output"`: Feature used as prediction target (extracted to data.y)
+- `output_type` (optional): Either `"node"` or `"graph"` (required for output features)
 
 **Benefits:**
 - ✅ Self-documenting: Feature names visible in config

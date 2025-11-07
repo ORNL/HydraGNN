@@ -40,8 +40,7 @@
                 },
                 "cartesian_coordinates": {
                     "dim": 3,
-                    "role": "input",
-                    "description": "3D atomic positions"
+                    "role": "input"
                 },
                 "forces": {
                     "dim": 3,

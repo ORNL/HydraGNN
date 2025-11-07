@@ -75,22 +75,6 @@ def test_parse_legacy_format():
     assert parsed["output_names"] == ["energy"]
 
 
-def test_parse_both_role():
-    """Test parsing features with 'both' role (input and output)."""
-    var_config = {
-        "node_features": {
-            "atomic_number": {"dim": 1, "role": "input"},
-            "forces": {"dim": 3, "role": "both", "output_type": "node"},
-        }
-    }
-
-    parsed = parse_feature_config(var_config)
-
-    assert parsed["node_feature_names"] == ["atomic_number", "forces"]
-    assert parsed["input_node_features"] == [0, 1]  # Both are inputs
-    assert "forces" in parsed["output_names"]  # Forces is also output
-
-
 def test_validate_config_valid():
     """Test validation of valid configuration."""
     var_config = {
