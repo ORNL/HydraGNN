@@ -188,6 +188,7 @@ pip_retry pymatgen
 pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
+pip_retry h5py==3.14.0 
 
 # ============================================================
 # e3nn and openequivariance
