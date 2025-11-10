@@ -372,7 +372,7 @@ build_ddstore() {
 
   git clone git@github.com:ORNL/DDStore.git || true
   pushd DDStore >/dev/null
-  CC=mpicc CXX=mpicxx pip_retry . --verbose
+  CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
   popd >/dev/null
 }
 
