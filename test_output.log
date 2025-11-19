@@ -1,0 +1,4430 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-8.4.2, pluggy-1.6.0 -- /Users/7ml/Documents/Codes/HydraGNN/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/7ml/Documents/Codes/HydraGNN
+configfile: pytest.ini
+collecting ... collected 68 items
+
+tests/test_graphs.py::pytest_train_model[ci.json-SAGE] PASSED            [  1%]
+tests/test_graphs.py::pytest_train_model[ci.json-GIN] PASSED             [  2%]
+tests/test_graphs.py::pytest_train_model[ci.json-GAT] PASSED             [  4%]
+tests/test_graphs.py::pytest_train_model[ci.json-MFC] PASSED             [  5%]
+tests/test_graphs.py::pytest_train_model[ci.json-PNA] PASSED             [  7%]
+tests/test_graphs.py::pytest_train_model[ci.json-PNAPlus] PASSED         [  8%]
+tests/test_graphs.py::pytest_train_model[ci.json-CGCNN] PASSED           [ 10%]
+tests/test_graphs.py::pytest_train_model[ci.json-SchNet] PASSED          [ 11%]
+tests/test_graphs.py::pytest_train_model[ci.json-DimeNet] PASSED         [ 13%]
+tests/test_graphs.py::pytest_train_model[ci.json-EGNN] PASSED            [ 14%]
+tests/test_graphs.py::pytest_train_model[ci.json-PNAEq] PASSED           [ 16%]
+tests/test_graphs.py::pytest_train_model[ci.json-PAINN] PASSED           [ 17%]
+tests/test_graphs.py::pytest_train_model[ci.json-MACE] PASSED            [ 19%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-SAGE] FAILED  [ 20%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-GIN] FAILED   [ 22%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-GAT] FAILED   [ 23%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-MFC] FAILED   [ 25%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-PNA] FAILED   [ 26%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-PNAPlus] FAILED [ 27%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-CGCNN] FAILED [ 29%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-SchNet] FAILED [ 30%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-DimeNet] FAILED [ 32%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-EGNN] FAILED  [ 33%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-PNAEq] FAILED [ 35%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-PAINN] FAILED [ 36%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-MACE] FAILED  [ 38%]
+tests/test_graphs.py::pytest_train_model_lengths[GAT] PASSED             [ 39%]
+tests/test_graphs.py::pytest_train_model_lengths[PNA] PASSED             [ 41%]
+tests/test_graphs.py::pytest_train_model_lengths[PNAPlus] PASSED         [ 42%]
+tests/test_graphs.py::pytest_train_model_lengths[CGCNN] PASSED           [ 44%]
+tests/test_graphs.py::pytest_train_model_lengths[SchNet] PASSED          [ 45%]
+tests/test_graphs.py::pytest_train_model_lengths[DimeNet] PASSED         [ 47%]
+tests/test_graphs.py::pytest_train_model_lengths[EGNN] PASSED            [ 48%]
+tests/test_graphs.py::pytest_train_model_lengths[PNAEq] PASSED           [ 50%]
+tests/test_graphs.py::pytest_train_model_lengths[PAINN] PASSED           [ 51%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[GAT-multihead-GPS] PASSED [ 52%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[PNA-multihead-GPS] PASSED [ 54%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[PNAPlus-multihead-GPS] PASSED [ 55%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[CGCNN-multihead-GPS] PASSED [ 57%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[SchNet-multihead-GPS] PASSED [ 58%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[DimeNet-multihead-GPS] PASSED [ 60%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[EGNN-multihead-GPS] PASSED [ 61%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[PNAEq-multihead-GPS] PASSED [ 63%]
+tests/test_graphs.py::pytest_train_model_lengths_global_attention[PAINN-multihead-GPS] PASSED [ 64%]
+tests/test_graphs.py::pytest_train_mace_model_lengths[MACE] PASSED       [ 66%]
+tests/test_graphs.py::pytest_train_equivariant_model[EGNN] PASSED        [ 67%]
+tests/test_graphs.py::pytest_train_equivariant_model[SchNet] PASSED      [ 69%]
+tests/test_graphs.py::pytest_train_equivariant_model[PNAEq] PASSED       [ 70%]
+tests/test_graphs.py::pytest_train_equivariant_model[PAINN] PASSED       [ 72%]
+tests/test_graphs.py::pytest_train_equivariant_model[MACE] PASSED        [ 73%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[GAT] PASSED        [ 75%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[PNA] FAILED        [ 76%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[PNAPlus] PASSED    [ 77%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[SchNet] PASSED     [ 79%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[DimeNet] PASSED    [ 80%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[EGNN] PASSED       [ 82%]
+tests/test_graphs.py::pytest_train_model_vectoroutput[PNAEq] PASSED      [ 83%]
+tests/test_graphs.py::pytest_train_model_conv_head[SAGE] FAILED          [ 85%]
+tests/test_graphs.py::pytest_train_model_conv_head[GIN] PASSED           [ 86%]
+tests/test_graphs.py::pytest_train_model_conv_head[GAT] FAILED           [ 88%]
+tests/test_graphs.py::pytest_train_model_conv_head[MFC] FAILED           [ 89%]
+tests/test_graphs.py::pytest_train_model_conv_head[PNA] FAILED           [ 91%]
+tests/test_graphs.py::pytest_train_model_conv_head[PNAPlus] FAILED       [ 92%]
+tests/test_graphs.py::pytest_train_model_conv_head[SchNet] FAILED        [ 94%]
+tests/test_graphs.py::pytest_train_model_conv_head[DimeNet] FAILED       [ 95%]
+tests/test_graphs.py::pytest_train_model_conv_head[EGNN] FAILED          [ 97%]
+tests/test_graphs.py::pytest_train_model_conv_head[PNAEq] FAILED         [ 98%]
+tests/test_graphs.py::pytest_train_model_conv_head[PAINN] FAILED         [100%]
+
+=================================== FAILURES ===================================
+__________________ pytest_train_model[ci_multihead.json-SAGE] __________________
+
+mpnn_type = 'SAGE', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): SAGEStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - SA...    (1): ReLU()
+        (2): Linear(in_features=10, out_features=10, bias=True)
+        (3): ReLU()
+      )
+    )
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+__________________ pytest_train_model[ci_multihead.json-GIN] ___________________
+
+mpnn_type = 'GIN', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mpnn_type = 'GIN', global_attn_engine = None, global_attn_type = None
+ci_input = 'ci_multihead.json', use_lengths = False, overwrite_data = False
+use_deepspeed = False, overwrite_config = None
+
+    def unittest_train_model(
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        ci_input,
+        use_lengths,
+        overwrite_data=False,
+        use_deepspeed=False,
+        overwrite_config=None,
+    ):
+        world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    
+        # Read in config settings and override model type.
+        config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+    
+        # Overwrite config settings if provided
+        if overwrite_config:
+            config = merge_config(config, overwrite_config)
+    
+        """
+        to test this locally, set ci.json as
+        "Dataset": {
+           ...
+           "path": {
+                   "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                   "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                   "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+           ...
+        """
+        # use pkl files if exist by default
+        for dataset_name in config["Dataset"]["path"].keys():
+            if dataset_name == "total":
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + ".pkl"
+                )
+            else:
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + "_"
+                    + dataset_name
+                    + ".pkl"
+                )
+            if os.path.exists(pkl_file):
+                config["Dataset"]["path"][dataset_name] = pkl_file
+    
+        # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+        # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+        if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
+            config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
+    
+        # Only run with edge lengths for models that support them.
+        if use_lengths:
+            config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+    
+        if rank == 0:
+            num_samples_tot = 500
+            # check if serialized pickle files or folders for raw files provided
+            pkl_input = False
+            if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+                pkl_input = True
+            # only generate new datasets, if not pkl
+            if not pkl_input:
+                for dataset_name, data_path in config["Dataset"]["path"].items():
+                    if overwrite_data:
+                        shutil.rmtree(data_path)
+                    if not os.path.exists(data_path):
+                        os.makedirs(data_path)
+                    if dataset_name == "total":
+                        num_samples = num_samples_tot
+                    elif dataset_name == "train":
+                        num_samples = int(
+                            num_samples_tot
+                            * config["NeuralNetwork"]["Training"]["perc_train"]
+                        )
+                    elif dataset_name == "test":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    elif dataset_name == "validate":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    if not os.listdir(data_path):
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
+        MPI.COMM_WORLD.Barrier()
+    
+        # Since the config file uses PNA already, test the file overload here.
+        # All the other models need to use the locally modified dictionary.
+        if mpnn_type == "PNA" and not use_lengths:
+            hydragnn.run_training(config_file, use_deepspeed)
+        else:
+            hydragnn.run_training(config, use_deepspeed)
+    
+        (
+            error,
+            error_mse_task,
+            true_values,
+            predicted_values,
+        ) = hydragnn.run_prediction(config, use_deepspeed)
+    
+        # Set RMSE and sample MAE error thresholds
+        thresholds = {
+            "SAGE": [0.20, 0.20],
+            "PNA": [0.20, 0.20],
+            "PNAPlus": [0.20, 0.20],
+            "MFC": [0.20, 0.30],
+            "GIN": [0.25, 0.20],
+            "GAT": [0.60, 0.70],
+            "CGCNN": [0.50, 0.40],
+            "SchNet": [0.20, 0.20],
+            "DimeNet": [0.50, 0.50],
+            "EGNN": [0.20, 0.20],
+            "PNAEq": [0.60, 0.60],
+            "PAINN": [0.60, 0.60],
+            "MACE": [0.60, 0.70],
+        }
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["CGCNN"] = [0.175, 0.175]
+            thresholds["PNA"] = [0.10, 0.10]
+            thresholds["PNAPlus"] = [0.10, 0.10]
+        if use_lengths and "vector" in ci_input:
+            thresholds["PNA"] = [0.2, 0.15]
+            thresholds["PNAPlus"] = [0.2, 0.15]
+        if ci_input == "ci_conv_head.json":
+            thresholds["GIN"] = [0.26, 0.51]
+            thresholds["SchNet"] = [0.30, 0.30]
+    
+        verbosity = 2
+    
+        for ihead in range(len(true_values)):
+            error_head_mse = error_mse_task[ihead]
+            error_str = (
+                str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
+            )
+            hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
+            assert (
+                error_head_mse < thresholds[mpnn_type][0]
+            ), "Head RMSE checking failed for " + str(ihead)
+    
+            head_true = true_values[ihead]
+            head_pred = predicted_values[ihead]
+            # Check individual samples
+            mae = torch.nn.L1Loss()
+            sample_mean_abs_error = mae(head_true, head_pred)
+            error_str = (
+                "{:.6f}".format(sample_mean_abs_error)
+                + " < "
+                + str(thresholds[mpnn_type][1])
+            )
+>           assert (
+                sample_mean_abs_error < thresholds[mpnn_type][1]
+            ), f"MAE sample checking failed! MAE: {sample_mean_abs_error:.6f} >= threshold: {thresholds[mpnn_type][1]} for model: {mpnn_type}"
+E           AssertionError: MAE sample checking failed! MAE: 0.389315 >= threshold: 0.2 for model: GIN
+E           assert tensor(0.3893) < 0.2
+
+tests/test_graphs.py:192: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+0: Load existing model: ./logs/GIN-r-2.0-ncl-2-hd-8-ne-100-lr-0.01-bs-16-data-unit_test-node_ft--task_weights-20.0-1.0-1.0-1.0-/GIN-r-2.0-ncl-2-hd-8-ne-100-lr-0.01-bs-16-data-unit_test-node_ft--task_weights-20.0-1.0-1.0-1.0-.pk
+0: head: 0.194092 < 0.25
+__________________ pytest_train_model[ci_multihead.json-GAT] ___________________
+
+mpnn_type = 'GAT', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): GATStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - GAT...    (1): ReLU()
+        (2): Linear(in_features=10, out_features=10, bias=True)
+        (3): ReLU()
+      )
+    )
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+__________________ pytest_train_model[ci_multihead.json-MFC] ___________________
+
+mpnn_type = 'MFC', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): MFCStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - MFC...    (1): ReLU()
+        (2): Linear(in_features=10, out_features=10, bias=True)
+        (3): ReLU()
+      )
+    )
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+__________________ pytest_train_model[ci_multihead.json-PNA] ___________________
+
+mpnn_type = 'PNA', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:132: in unittest_train_model
+    hydragnn.run_training(config_file, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:62: in _
+    run_training(config)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): PNAStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - PNA...    (1): ReLU()
+        (2): Linear(in_features=10, out_features=10, bias=True)
+        (3): ReLU()
+      )
+    )
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/354 [00:00<?, ?it/s]Degree max: 100%|██████████| 354/354 [00:00<00:00, 117337.10it/s]
+Degree bincount:   0%|          | 0/354 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 354/354 [00:00<00:00, 101788.14it/s]
+________________ pytest_train_model[ci_multihead.json-PNAPlus] _________________
+
+mpnn_type = 'PNAPlus', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): PNAPlusStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) -...=10, bias=True)
+        (3): ReLU()
+      )
+    )
+    (rbf): BesselBasisLayer(
+      (envelope): Envelope()
+    )
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/354 [00:00<?, ?it/s]Degree max: 100%|██████████| 354/354 [00:00<00:00, 118944.45it/s]
+Degree bincount:   0%|          | 0/354 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 354/354 [00:00<00:00, 102166.35it/s]
+_________________ pytest_train_model[ci_multihead.json-CGCNN] __________________
+
+mpnn_type = 'CGCNN', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:176: in _
+    train_validate_test(
+hydragnn/train/train_validate_test.py:151: in train_validate_test
+    _, _, true_values, predicted_values = test(test_loader, model, verbosity)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/utils/_contextlib.py:120: in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+hydragnn/train/train_validate_test.py:728: in test
+    pred = model(data)
+           ^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1773: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1784: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1648: in forward
+    else self._run_ddp_forward(*inputs, **kwargs)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1474: in _run_ddp_forward
+    return self.module(*inputs, **kwargs)  # type: ignore[index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1773: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1784: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/models/Base.py:466: in forward
+    inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
+                                             ^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1773: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1784: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch_geometric/nn/norm/batch_norm.py:88: in forward
+    return self.module(x)
+           ^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1773: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1784: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/batchnorm.py:193: in forward
+    return F.batch_norm(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = tensor([], size=(76, 0)), running_mean = tensor([])
+running_var = tensor([])
+weight = Parameter containing:
+tensor([], requires_grad=True)
+bias = Parameter containing:
+tensor([], requires_grad=True), training = False
+momentum = 0.1, eps = 1e-05
+
+    def batch_norm(
+        input: Tensor,
+        running_mean: Optional[Tensor],
+        running_var: Optional[Tensor],
+        weight: Optional[Tensor] = None,
+        bias: Optional[Tensor] = None,
+        training: bool = False,
+        momentum: float = 0.1,
+        eps: float = 1e-5,
+    ) -> Tensor:
+        r"""Apply Batch Normalization for each channel across a batch of data.
+    
+        See :class:`~torch.nn.BatchNorm1d`, :class:`~torch.nn.BatchNorm2d`,
+        :class:`~torch.nn.BatchNorm3d` for details.
+        """
+        if has_torch_function_variadic(input, running_mean, running_var, weight, bias):
+            return handle_torch_function(
+                batch_norm,
+                (input, running_mean, running_var, weight, bias),
+                input,
+                running_mean,
+                running_var,
+                weight=weight,
+                bias=bias,
+                training=training,
+                momentum=momentum,
+                eps=eps,
+            )
+        if training:
+            _verify_batch_size(input.size())
+    
+>       return torch.batch_norm(
+            input,
+            weight,
+            bias,
+            running_mean,
+            running_var,
+            training,
+            momentum,
+            eps,
+            torch.backends.cudnn.enabled,
+        )
+E       IndexError: select(): index 0 out of range for tensor of size [0] at dimension 0
+
+.venv/lib/python3.13/site-packages/torch/nn/functional.py:2817: IndexError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+_________________ pytest_train_model[ci_multihead.json-SchNet] _________________
+
+mpnn_type = 'SchNet', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mpnn_type = 'SchNet', global_attn_engine = None, global_attn_type = None
+ci_input = 'ci_multihead.json', use_lengths = False, overwrite_data = False
+use_deepspeed = False, overwrite_config = None
+
+    def unittest_train_model(
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        ci_input,
+        use_lengths,
+        overwrite_data=False,
+        use_deepspeed=False,
+        overwrite_config=None,
+    ):
+        world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    
+        # Read in config settings and override model type.
+        config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+    
+        # Overwrite config settings if provided
+        if overwrite_config:
+            config = merge_config(config, overwrite_config)
+    
+        """
+        to test this locally, set ci.json as
+        "Dataset": {
+           ...
+           "path": {
+                   "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                   "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                   "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+           ...
+        """
+        # use pkl files if exist by default
+        for dataset_name in config["Dataset"]["path"].keys():
+            if dataset_name == "total":
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + ".pkl"
+                )
+            else:
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + "_"
+                    + dataset_name
+                    + ".pkl"
+                )
+            if os.path.exists(pkl_file):
+                config["Dataset"]["path"][dataset_name] = pkl_file
+    
+        # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+        # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+        if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
+            config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
+    
+        # Only run with edge lengths for models that support them.
+        if use_lengths:
+            config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+    
+        if rank == 0:
+            num_samples_tot = 500
+            # check if serialized pickle files or folders for raw files provided
+            pkl_input = False
+            if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+                pkl_input = True
+            # only generate new datasets, if not pkl
+            if not pkl_input:
+                for dataset_name, data_path in config["Dataset"]["path"].items():
+                    if overwrite_data:
+                        shutil.rmtree(data_path)
+                    if not os.path.exists(data_path):
+                        os.makedirs(data_path)
+                    if dataset_name == "total":
+                        num_samples = num_samples_tot
+                    elif dataset_name == "train":
+                        num_samples = int(
+                            num_samples_tot
+                            * config["NeuralNetwork"]["Training"]["perc_train"]
+                        )
+                    elif dataset_name == "test":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    elif dataset_name == "validate":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    if not os.listdir(data_path):
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
+        MPI.COMM_WORLD.Barrier()
+    
+        # Since the config file uses PNA already, test the file overload here.
+        # All the other models need to use the locally modified dictionary.
+        if mpnn_type == "PNA" and not use_lengths:
+            hydragnn.run_training(config_file, use_deepspeed)
+        else:
+            hydragnn.run_training(config, use_deepspeed)
+    
+        (
+            error,
+            error_mse_task,
+            true_values,
+            predicted_values,
+        ) = hydragnn.run_prediction(config, use_deepspeed)
+    
+        # Set RMSE and sample MAE error thresholds
+        thresholds = {
+            "SAGE": [0.20, 0.20],
+            "PNA": [0.20, 0.20],
+            "PNAPlus": [0.20, 0.20],
+            "MFC": [0.20, 0.30],
+            "GIN": [0.25, 0.20],
+            "GAT": [0.60, 0.70],
+            "CGCNN": [0.50, 0.40],
+            "SchNet": [0.20, 0.20],
+            "DimeNet": [0.50, 0.50],
+            "EGNN": [0.20, 0.20],
+            "PNAEq": [0.60, 0.60],
+            "PAINN": [0.60, 0.60],
+            "MACE": [0.60, 0.70],
+        }
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["CGCNN"] = [0.175, 0.175]
+            thresholds["PNA"] = [0.10, 0.10]
+            thresholds["PNAPlus"] = [0.10, 0.10]
+        if use_lengths and "vector" in ci_input:
+            thresholds["PNA"] = [0.2, 0.15]
+            thresholds["PNAPlus"] = [0.2, 0.15]
+        if ci_input == "ci_conv_head.json":
+            thresholds["GIN"] = [0.26, 0.51]
+            thresholds["SchNet"] = [0.30, 0.30]
+    
+        verbosity = 2
+    
+        for ihead in range(len(true_values)):
+            error_head_mse = error_mse_task[ihead]
+            error_str = (
+                str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
+            )
+            hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
+            assert (
+                error_head_mse < thresholds[mpnn_type][0]
+            ), "Head RMSE checking failed for " + str(ihead)
+    
+            head_true = true_values[ihead]
+            head_pred = predicted_values[ihead]
+            # Check individual samples
+            mae = torch.nn.L1Loss()
+            sample_mean_abs_error = mae(head_true, head_pred)
+            error_str = (
+                "{:.6f}".format(sample_mean_abs_error)
+                + " < "
+                + str(thresholds[mpnn_type][1])
+            )
+>           assert (
+                sample_mean_abs_error < thresholds[mpnn_type][1]
+            ), f"MAE sample checking failed! MAE: {sample_mean_abs_error:.6f} >= threshold: {thresholds[mpnn_type][1]} for model: {mpnn_type}"
+E           AssertionError: MAE sample checking failed! MAE: 0.339667 >= threshold: 0.2 for model: SchNet
+E           assert tensor(0.3397) < 0.2
+
+tests/test_graphs.py:192: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+0: Load existing model: ./logs/SchNet-r-2.0-ncl-2-hd-8-ne-100-lr-0.01-bs-16-data-unit_test-node_ft--task_weights-20.0-1.0-1.0-1.0-/SchNet-r-2.0-ncl-2-hd-8-ne-100-lr-0.01-bs-16-data-unit_test-node_ft--task_weights-20.0-1.0-1.0-1.0-.pk
+0: head: 0.169193 < 0.2
+________________ pytest_train_model[ci_multihead.json-DimeNet] _________________
+
+mpnn_type = 'DimeNet', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:89: in _
+    model = create_model_config(
+hydragnn/models/create.py:45: in create_model_config
+    return create_model(
+hydragnn/models/create.py:369: in create_model
+    model = DIMEStack(
+hydragnn/models/DIMEStack.py:68: in __init__
+    super().__init__(input_args, conv_args, *args, **kwargs)
+hydragnn/models/Base.py:174: in __init__
+    self._init_conv()
+hydragnn/models/DIMEStack.py:80: in _init_conv
+    self.get_conv(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DIMEStack(
+  (graph_convs): ModuleList()
+  (feature_layers): ModuleList()
+  (heads_NN): ModuleList()
+  (convs_node_hid...eDict()
+  (convs_node_output): ModuleDict()
+  (batch_norms_node_output): ModuleDict()
+  (activation_function): ReLU()
+)
+input_dim = 0, output_dim = 8, edge_dim = None
+
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
+        hidden_dim = output_dim if input_dim == 1 else input_dim
+        assert (
+>           hidden_dim > 1
+        ), "DimeNet requires more than one hidden dimension between input_dim and output_dim."
+E       AssertionError: DimeNet requires more than one hidden dimension between input_dim and output_dim.
+
+hydragnn/models/DIMEStack.py:99: AssertionError
+__________________ pytest_train_model[ci_multihead.json-EGNN] __________________
+
+mpnn_type = 'EGNN', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mpnn_type = 'EGNN', global_attn_engine = None, global_attn_type = None
+ci_input = 'ci_multihead.json', use_lengths = False, overwrite_data = False
+use_deepspeed = False, overwrite_config = None
+
+    def unittest_train_model(
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        ci_input,
+        use_lengths,
+        overwrite_data=False,
+        use_deepspeed=False,
+        overwrite_config=None,
+    ):
+        world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    
+        # Read in config settings and override model type.
+        config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+    
+        # Overwrite config settings if provided
+        if overwrite_config:
+            config = merge_config(config, overwrite_config)
+    
+        """
+        to test this locally, set ci.json as
+        "Dataset": {
+           ...
+           "path": {
+                   "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                   "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                   "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+           ...
+        """
+        # use pkl files if exist by default
+        for dataset_name in config["Dataset"]["path"].keys():
+            if dataset_name == "total":
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + ".pkl"
+                )
+            else:
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + "_"
+                    + dataset_name
+                    + ".pkl"
+                )
+            if os.path.exists(pkl_file):
+                config["Dataset"]["path"][dataset_name] = pkl_file
+    
+        # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+        # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+        if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
+            config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
+    
+        # Only run with edge lengths for models that support them.
+        if use_lengths:
+            config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+    
+        if rank == 0:
+            num_samples_tot = 500
+            # check if serialized pickle files or folders for raw files provided
+            pkl_input = False
+            if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+                pkl_input = True
+            # only generate new datasets, if not pkl
+            if not pkl_input:
+                for dataset_name, data_path in config["Dataset"]["path"].items():
+                    if overwrite_data:
+                        shutil.rmtree(data_path)
+                    if not os.path.exists(data_path):
+                        os.makedirs(data_path)
+                    if dataset_name == "total":
+                        num_samples = num_samples_tot
+                    elif dataset_name == "train":
+                        num_samples = int(
+                            num_samples_tot
+                            * config["NeuralNetwork"]["Training"]["perc_train"]
+                        )
+                    elif dataset_name == "test":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    elif dataset_name == "validate":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    if not os.listdir(data_path):
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
+        MPI.COMM_WORLD.Barrier()
+    
+        # Since the config file uses PNA already, test the file overload here.
+        # All the other models need to use the locally modified dictionary.
+        if mpnn_type == "PNA" and not use_lengths:
+            hydragnn.run_training(config_file, use_deepspeed)
+        else:
+            hydragnn.run_training(config, use_deepspeed)
+    
+        (
+            error,
+            error_mse_task,
+            true_values,
+            predicted_values,
+        ) = hydragnn.run_prediction(config, use_deepspeed)
+    
+        # Set RMSE and sample MAE error thresholds
+        thresholds = {
+            "SAGE": [0.20, 0.20],
+            "PNA": [0.20, 0.20],
+            "PNAPlus": [0.20, 0.20],
+            "MFC": [0.20, 0.30],
+            "GIN": [0.25, 0.20],
+            "GAT": [0.60, 0.70],
+            "CGCNN": [0.50, 0.40],
+            "SchNet": [0.20, 0.20],
+            "DimeNet": [0.50, 0.50],
+            "EGNN": [0.20, 0.20],
+            "PNAEq": [0.60, 0.60],
+            "PAINN": [0.60, 0.60],
+            "MACE": [0.60, 0.70],
+        }
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["CGCNN"] = [0.175, 0.175]
+            thresholds["PNA"] = [0.10, 0.10]
+            thresholds["PNAPlus"] = [0.10, 0.10]
+        if use_lengths and "vector" in ci_input:
+            thresholds["PNA"] = [0.2, 0.15]
+            thresholds["PNAPlus"] = [0.2, 0.15]
+        if ci_input == "ci_conv_head.json":
+            thresholds["GIN"] = [0.26, 0.51]
+            thresholds["SchNet"] = [0.30, 0.30]
+    
+        verbosity = 2
+    
+        for ihead in range(len(true_values)):
+            error_head_mse = error_mse_task[ihead]
+            error_str = (
+                str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
+            )
+            hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
+            assert (
+                error_head_mse < thresholds[mpnn_type][0]
+            ), "Head RMSE checking failed for " + str(ihead)
+    
+            head_true = true_values[ihead]
+            head_pred = predicted_values[ihead]
+            # Check individual samples
+            mae = torch.nn.L1Loss()
+            sample_mean_abs_error = mae(head_true, head_pred)
+            error_str = (
+                "{:.6f}".format(sample_mean_abs_error)
+                + " < "
+                + str(thresholds[mpnn_type][1])
+            )
+>           assert (
+                sample_mean_abs_error < thresholds[mpnn_type][1]
+            ), f"MAE sample checking failed! MAE: {sample_mean_abs_error:.6f} >= threshold: {thresholds[mpnn_type][1]} for model: {mpnn_type}"
+E           AssertionError: MAE sample checking failed! MAE: 0.339692 >= threshold: 0.2 for model: EGNN
+E           assert tensor(0.3397) < 0.2
+
+tests/test_graphs.py:192: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+0: Load existing model: ./logs/EGNN-r-2.0-ncl-2-hd-8-ne-100-lr-0.01-bs-16-data-unit_test-node_ft--task_weights-20.0-1.0-1.0-1.0-/EGNN-r-2.0-ncl-2-hd-8-ne-100-lr-0.01-bs-16-data-unit_test-node_ft--task_weights-20.0-1.0-1.0-1.0-.pk
+0: head: 0.169195 < 0.2
+_________________ pytest_train_model[ci_multihead.json-PNAEq] __________________
+
+mpnn_type = 'PNAEq', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:89: in _
+    model = create_model_config(
+hydragnn/models/create.py:45: in create_model_config
+    return create_model(
+hydragnn/models/create.py:455: in create_model
+    model = PNAEqStack(
+hydragnn/models/PNAEqStack.py:72: in __init__
+    super().__init__(input_args, conv_args, *args, **kwargs)
+hydragnn/models/Base.py:174: in __init__
+    self._init_conv()
+hydragnn/models/PNAEqStack.py:80: in _init_conv
+    self.get_conv(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PNAEqStack(
+  (graph_convs): ModuleList()
+  (feature_layers): ModuleList()
+  (heads_NN): ModuleList()
+  (convs_node_hi...eDict()
+  (convs_node_output): ModuleDict()
+  (batch_norms_node_output): ModuleDict()
+  (activation_function): ReLU()
+)
+input_dim = 0, output_dim = 8, last_layer = False, edge_dim = None
+
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        hidden_dim = output_dim if input_dim == 1 else input_dim
+        assert (
+>           hidden_dim > 1
+        ), "PNAEq requires more than one hidden dimension between input_dim and output_dim."
+E       AssertionError: PNAEq requires more than one hidden dimension between input_dim and output_dim.
+
+hydragnn/models/PNAEqStack.py:106: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/354 [00:00<?, ?it/s]Degree max: 100%|██████████| 354/354 [00:00<00:00, 124656.50it/s]
+Degree bincount:   0%|          | 0/354 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 354/354 [00:00<00:00, 99549.69it/s]
+_________________ pytest_train_model[ci_multihead.json-PAINN] __________________
+
+mpnn_type = 'PAINN', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:89: in _
+    model = create_model_config(
+hydragnn/models/create.py:45: in create_model_config
+    return create_model(
+hydragnn/models/create.py:428: in create_model
+    model = PAINNStack(
+hydragnn/models/PAINNStack.py:47: in __init__
+    super().__init__(input_args, conv_args, *args, **kwargs)
+hydragnn/models/Base.py:174: in __init__
+    self._init_conv()
+hydragnn/models/PAINNStack.py:53: in _init_conv
+    self.get_conv(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PAINNStack(
+  (graph_convs): ModuleList()
+  (feature_layers): ModuleList()
+  (heads_NN): ModuleList()
+  (convs_node_hi...eDict()
+  (convs_node_output): ModuleDict()
+  (batch_norms_node_output): ModuleDict()
+  (activation_function): ReLU()
+)
+input_dim = 0, output_dim = 8, last_layer = False, edge_dim = None
+
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        hidden_dim = output_dim if input_dim == 1 else input_dim
+        assert (
+>           hidden_dim > 1
+        ), "PainnNet requires more than one hidden dimension between input_dim and output_dim."
+E       AssertionError: PainnNet requires more than one hidden dimension between input_dim and output_dim.
+
+hydragnn/models/PAINNStack.py:79: AssertionError
+__________________ pytest_train_model[ci_multihead.json-MACE] __________________
+
+mpnn_type = 'MACE', ci_input = 'ci_multihead.json', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "CGCNN",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
+    def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+>       unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
+
+tests/test_graphs.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:176: in _
+    train_validate_test(
+hydragnn/train/train_validate_test.py:151: in train_validate_test
+    _, _, true_values, predicted_values = test(test_loader, model, verbosity)
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/utils/_contextlib.py:120: in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+hydragnn/train/train_validate_test.py:728: in test
+    pred = model(data)
+           ^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1773: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1784: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1648: in forward
+    else self._run_ddp_forward(*inputs, **kwargs)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1474: in _run_ddp_forward
+    return self.module(*inputs, **kwargs)  # type: ignore[index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1773: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/modules/module.py:1784: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/models/MACEStack.py:366: in forward
+    inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
+                                                ^^^^^^^^^^^^^^^^^^^^^
+hydragnn/models/MACEStack.py:428: in _embedding
+    data.node_attributes = process_node_attributes(data["x"], self.num_elements)
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+node_attributes = tensor([], size=(76, 0)), num_elements = 118
+
+    def process_node_attributes(node_attributes, num_elements):
+        # Check that node attributes are atomic numbers and process accordingly
+        node_attributes = node_attributes.squeeze()  # Squeeze all unnecessary dimensions
+        assert (
+>           node_attributes.dim() == 1
+        ), "MACE only supports raw atomic numbers as node_attributes. Your data.x \
+            isn't a 1D tensor after squeezing, are you using vector features?"
+E       AssertionError: MACE only supports raw atomic numbers as node_attributes. Your data.x         isn't a 1D tensor after squeezing, are you using vector features?
+
+hydragnn/models/MACEStack.py:487: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+Calculate avg degree:   0%|          | 0/354 [00:00<?, ?it/s]Calculate avg degree: 100%|██████████| 354/354 [00:00<00:00, 98473.51it/s]
+_____________________ pytest_train_model_vectoroutput[PNA] _____________________
+
+mpnn_type = 'PNA', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "GAT",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+        ],
+    )
+    def pytest_train_model_vectoroutput(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_vectoroutput.json", True, overwrite_data
+        )
+
+tests/test_graphs.py:284: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mpnn_type = 'PNA', global_attn_engine = None, global_attn_type = None
+ci_input = 'ci_vectoroutput.json', use_lengths = True, overwrite_data = False
+use_deepspeed = False, overwrite_config = None
+
+    def unittest_train_model(
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        ci_input,
+        use_lengths,
+        overwrite_data=False,
+        use_deepspeed=False,
+        overwrite_config=None,
+    ):
+        world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    
+        # Read in config settings and override model type.
+        config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+    
+        # Overwrite config settings if provided
+        if overwrite_config:
+            config = merge_config(config, overwrite_config)
+    
+        """
+        to test this locally, set ci.json as
+        "Dataset": {
+           ...
+           "path": {
+                   "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                   "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                   "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+           ...
+        """
+        # use pkl files if exist by default
+        for dataset_name in config["Dataset"]["path"].keys():
+            if dataset_name == "total":
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + ".pkl"
+                )
+            else:
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + "_"
+                    + dataset_name
+                    + ".pkl"
+                )
+            if os.path.exists(pkl_file):
+                config["Dataset"]["path"][dataset_name] = pkl_file
+    
+        # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+        # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+        if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
+            config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
+    
+        # Only run with edge lengths for models that support them.
+        if use_lengths:
+            config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+    
+        if rank == 0:
+            num_samples_tot = 500
+            # check if serialized pickle files or folders for raw files provided
+            pkl_input = False
+            if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+                pkl_input = True
+            # only generate new datasets, if not pkl
+            if not pkl_input:
+                for dataset_name, data_path in config["Dataset"]["path"].items():
+                    if overwrite_data:
+                        shutil.rmtree(data_path)
+                    if not os.path.exists(data_path):
+                        os.makedirs(data_path)
+                    if dataset_name == "total":
+                        num_samples = num_samples_tot
+                    elif dataset_name == "train":
+                        num_samples = int(
+                            num_samples_tot
+                            * config["NeuralNetwork"]["Training"]["perc_train"]
+                        )
+                    elif dataset_name == "test":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    elif dataset_name == "validate":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    if not os.listdir(data_path):
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
+        MPI.COMM_WORLD.Barrier()
+    
+        # Since the config file uses PNA already, test the file overload here.
+        # All the other models need to use the locally modified dictionary.
+        if mpnn_type == "PNA" and not use_lengths:
+            hydragnn.run_training(config_file, use_deepspeed)
+        else:
+            hydragnn.run_training(config, use_deepspeed)
+    
+        (
+            error,
+            error_mse_task,
+            true_values,
+            predicted_values,
+        ) = hydragnn.run_prediction(config, use_deepspeed)
+    
+        # Set RMSE and sample MAE error thresholds
+        thresholds = {
+            "SAGE": [0.20, 0.20],
+            "PNA": [0.20, 0.20],
+            "PNAPlus": [0.20, 0.20],
+            "MFC": [0.20, 0.30],
+            "GIN": [0.25, 0.20],
+            "GAT": [0.60, 0.70],
+            "CGCNN": [0.50, 0.40],
+            "SchNet": [0.20, 0.20],
+            "DimeNet": [0.50, 0.50],
+            "EGNN": [0.20, 0.20],
+            "PNAEq": [0.60, 0.60],
+            "PAINN": [0.60, 0.60],
+            "MACE": [0.60, 0.70],
+        }
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["CGCNN"] = [0.175, 0.175]
+            thresholds["PNA"] = [0.10, 0.10]
+            thresholds["PNAPlus"] = [0.10, 0.10]
+        if use_lengths and "vector" in ci_input:
+            thresholds["PNA"] = [0.2, 0.15]
+            thresholds["PNAPlus"] = [0.2, 0.15]
+        if ci_input == "ci_conv_head.json":
+            thresholds["GIN"] = [0.26, 0.51]
+            thresholds["SchNet"] = [0.30, 0.30]
+    
+        verbosity = 2
+    
+        for ihead in range(len(true_values)):
+            error_head_mse = error_mse_task[ihead]
+            error_str = (
+                str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
+            )
+            hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
+            assert (
+                error_head_mse < thresholds[mpnn_type][0]
+            ), "Head RMSE checking failed for " + str(ihead)
+    
+            head_true = true_values[ihead]
+            head_pred = predicted_values[ihead]
+            # Check individual samples
+            mae = torch.nn.L1Loss()
+            sample_mean_abs_error = mae(head_true, head_pred)
+            error_str = (
+                "{:.6f}".format(sample_mean_abs_error)
+                + " < "
+                + str(thresholds[mpnn_type][1])
+            )
+>           assert (
+                sample_mean_abs_error < thresholds[mpnn_type][1]
+            ), f"MAE sample checking failed! MAE: {sample_mean_abs_error:.6f} >= threshold: {thresholds[mpnn_type][1]} for model: {mpnn_type}"
+E           AssertionError: MAE sample checking failed! MAE: 0.152753 >= threshold: 0.15 for model: PNA
+E           assert tensor(0.1528) < 0.15
+
+tests/test_graphs.py:192: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/354 [00:00<?, ?it/s]Degree max: 100%|██████████| 354/354 [00:00<00:00, 121107.96it/s]
+Degree bincount:   0%|          | 0/354 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 354/354 [00:00<00:00, 98584.66it/s]
+Degree max:   0%|          | 0/354 [00:00<?, ?it/s]Degree max: 100%|██████████| 354/354 [00:00<00:00, 125404.02it/s]
+Degree bincount:   0%|          | 0/354 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 354/354 [00:00<00:00, 98499.64it/s]
+0: Load existing model: ./logs/PNA-r-2.0-ncl-2-hd-8-ne-80-lr-0.01-bs-16-data-unit_test_multihead-node_ft-1-task_weights-1.0-1.0-1.0-1.0-1.0-/PNA-r-2.0-ncl-2-hd-8-ne-80-lr-0.01-bs-16-data-unit_test_multihead-node_ft-1-task_weights-1.0-1.0-1.0-1.0-1.0-.pk
+0: head: 0.001288 < 0.2
+0: head: 0.008708 < 0.2
+0: head: 0.040381 < 0.2
+______________________ pytest_train_model_conv_head[SAGE] ______________________
+
+mpnn_type = 'SAGE', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): SAGEStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - SA...=True, track_running_stats=True)
+      )
+    )
+    (activation_function): ReLU()
+    (graph_shared): ModuleDict()
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+______________________ pytest_train_model_conv_head[GAT] _______________________
+
+mpnn_type = 'GAT', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): GATStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - GAT...=True)
+      )
+    )
+    (activation_function): ReLU()
+    (out_lin): Identity()
+    (graph_shared): ModuleDict()
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+______________________ pytest_train_model_conv_head[MFC] _______________________
+
+mpnn_type = 'MFC', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): MFCStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - MFC...=True, track_running_stats=True)
+      )
+    )
+    (activation_function): ReLU()
+    (graph_shared): ModuleDict()
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+______________________ pytest_train_model_conv_head[PNA] _______________________
+
+mpnn_type = 'PNA', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:132: in unittest_train_model
+    hydragnn.run_training(config_file, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:62: in _
+    run_training(config)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): PNAStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) - PNA...=True, track_running_stats=True)
+      )
+    )
+    (activation_function): ReLU()
+    (graph_shared): ModuleDict()
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/350 [00:00<?, ?it/s]Degree max: 100%|██████████| 350/350 [00:00<00:00, 116972.62it/s]
+Degree bincount:   0%|          | 0/350 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 350/350 [00:00<00:00, 103951.73it/s]
+____________________ pytest_train_model_conv_head[PNAPlus] _____________________
+
+mpnn_type = 'PNAPlus', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:97: in _
+    model = get_distributed_model(
+hydragnn/utils/distributed/distributed.py:379: in get_distributed_model
+    model = DDP(model, **ddp_kwargs)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:802: in __init__
+    self._log_and_throw(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DistributedDataParallel(
+  (module): PNAPlusStack(
+    (graph_convs): ModuleList(
+      (0): Sequential(
+        (0) -...unction): ReLU()
+    (graph_shared): ModuleDict()
+    (rbf): BesselBasisLayer(
+      (envelope): Envelope()
+    )
+  )
+)
+err_type = <class 'RuntimeError'>
+err_msg = "Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules"
+
+    def _log_and_throw(self, err_type, err_msg):
+        if self.logger is not None:
+            self.logger.set_error_and_log(f"{str(err_type)}: {err_msg}")
+>       raise err_type(err_msg)
+E       RuntimeError: Modules with uninitialized parameters can't be used with `DistributedDataParallel`. Run a dummy forward pass to correctly initialize the modules
+
+.venv/lib/python3.13/site-packages/torch/nn/parallel/distributed.py:1143: RuntimeError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/350 [00:00<?, ?it/s]Degree max: 100%|██████████| 350/350 [00:00<00:00, 121102.66it/s]
+Degree bincount:   0%|          | 0/350 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 350/350 [00:00<00:00, 95579.56it/s]
+_____________________ pytest_train_model_conv_head[SchNet] _____________________
+
+mpnn_type = 'SchNet', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mpnn_type = 'SchNet', global_attn_engine = None, global_attn_type = None
+ci_input = 'ci_conv_head.json', use_lengths = False, overwrite_data = False
+use_deepspeed = False, overwrite_config = None
+
+    def unittest_train_model(
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        ci_input,
+        use_lengths,
+        overwrite_data=False,
+        use_deepspeed=False,
+        overwrite_config=None,
+    ):
+        world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    
+        # Read in config settings and override model type.
+        config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+    
+        # Overwrite config settings if provided
+        if overwrite_config:
+            config = merge_config(config, overwrite_config)
+    
+        """
+        to test this locally, set ci.json as
+        "Dataset": {
+           ...
+           "path": {
+                   "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                   "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                   "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+           ...
+        """
+        # use pkl files if exist by default
+        for dataset_name in config["Dataset"]["path"].keys():
+            if dataset_name == "total":
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + ".pkl"
+                )
+            else:
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + "_"
+                    + dataset_name
+                    + ".pkl"
+                )
+            if os.path.exists(pkl_file):
+                config["Dataset"]["path"][dataset_name] = pkl_file
+    
+        # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+        # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+        if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
+            config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
+    
+        # Only run with edge lengths for models that support them.
+        if use_lengths:
+            config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+    
+        if rank == 0:
+            num_samples_tot = 500
+            # check if serialized pickle files or folders for raw files provided
+            pkl_input = False
+            if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+                pkl_input = True
+            # only generate new datasets, if not pkl
+            if not pkl_input:
+                for dataset_name, data_path in config["Dataset"]["path"].items():
+                    if overwrite_data:
+                        shutil.rmtree(data_path)
+                    if not os.path.exists(data_path):
+                        os.makedirs(data_path)
+                    if dataset_name == "total":
+                        num_samples = num_samples_tot
+                    elif dataset_name == "train":
+                        num_samples = int(
+                            num_samples_tot
+                            * config["NeuralNetwork"]["Training"]["perc_train"]
+                        )
+                    elif dataset_name == "test":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    elif dataset_name == "validate":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    if not os.listdir(data_path):
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
+        MPI.COMM_WORLD.Barrier()
+    
+        # Since the config file uses PNA already, test the file overload here.
+        # All the other models need to use the locally modified dictionary.
+        if mpnn_type == "PNA" and not use_lengths:
+            hydragnn.run_training(config_file, use_deepspeed)
+        else:
+            hydragnn.run_training(config, use_deepspeed)
+    
+        (
+            error,
+            error_mse_task,
+            true_values,
+            predicted_values,
+        ) = hydragnn.run_prediction(config, use_deepspeed)
+    
+        # Set RMSE and sample MAE error thresholds
+        thresholds = {
+            "SAGE": [0.20, 0.20],
+            "PNA": [0.20, 0.20],
+            "PNAPlus": [0.20, 0.20],
+            "MFC": [0.20, 0.30],
+            "GIN": [0.25, 0.20],
+            "GAT": [0.60, 0.70],
+            "CGCNN": [0.50, 0.40],
+            "SchNet": [0.20, 0.20],
+            "DimeNet": [0.50, 0.50],
+            "EGNN": [0.20, 0.20],
+            "PNAEq": [0.60, 0.60],
+            "PAINN": [0.60, 0.60],
+            "MACE": [0.60, 0.70],
+        }
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["CGCNN"] = [0.175, 0.175]
+            thresholds["PNA"] = [0.10, 0.10]
+            thresholds["PNAPlus"] = [0.10, 0.10]
+        if use_lengths and "vector" in ci_input:
+            thresholds["PNA"] = [0.2, 0.15]
+            thresholds["PNAPlus"] = [0.2, 0.15]
+        if ci_input == "ci_conv_head.json":
+            thresholds["GIN"] = [0.26, 0.51]
+            thresholds["SchNet"] = [0.30, 0.30]
+    
+        verbosity = 2
+    
+        for ihead in range(len(true_values)):
+            error_head_mse = error_mse_task[ihead]
+            error_str = (
+                str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
+            )
+            hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
+>           assert (
+                error_head_mse < thresholds[mpnn_type][0]
+            ), "Head RMSE checking failed for " + str(ihead)
+E           AssertionError: Head RMSE checking failed for 0
+E           assert tensor(0.4173) < 0.3
+
+tests/test_graphs.py:178: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+0: Load existing model: ./logs/SchNet-r-2.0-ncl-2-hd-20-ne-100-lr-0.02-bs-32-data-unit_test-node_ft--task_weights-1.0-/SchNet-r-2.0-ncl-2-hd-20-ne-100-lr-0.02-bs-32-data-unit_test-node_ft--task_weights-1.0-.pk
+0: head: 0.417273 < 0.3
+____________________ pytest_train_model_conv_head[DimeNet] _____________________
+
+mpnn_type = 'DimeNet', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:89: in _
+    model = create_model_config(
+hydragnn/models/create.py:45: in create_model_config
+    return create_model(
+hydragnn/models/create.py:369: in create_model
+    model = DIMEStack(
+hydragnn/models/DIMEStack.py:68: in __init__
+    super().__init__(input_args, conv_args, *args, **kwargs)
+hydragnn/models/Base.py:174: in __init__
+    self._init_conv()
+hydragnn/models/DIMEStack.py:80: in _init_conv
+    self.get_conv(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = DIMEStack(
+  (graph_convs): ModuleList()
+  (feature_layers): ModuleList()
+  (heads_NN): ModuleList()
+  (convs_node_hid...eDict()
+  (convs_node_output): ModuleDict()
+  (batch_norms_node_output): ModuleDict()
+  (activation_function): ReLU()
+)
+input_dim = 0, output_dim = 20, edge_dim = None
+
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
+        hidden_dim = output_dim if input_dim == 1 else input_dim
+        assert (
+>           hidden_dim > 1
+        ), "DimeNet requires more than one hidden dimension between input_dim and output_dim."
+E       AssertionError: DimeNet requires more than one hidden dimension between input_dim and output_dim.
+
+hydragnn/models/DIMEStack.py:99: AssertionError
+______________________ pytest_train_model_conv_head[EGNN] ______________________
+
+mpnn_type = 'EGNN', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+mpnn_type = 'EGNN', global_attn_engine = None, global_attn_type = None
+ci_input = 'ci_conv_head.json', use_lengths = False, overwrite_data = False
+use_deepspeed = False, overwrite_config = None
+
+    def unittest_train_model(
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        ci_input,
+        use_lengths,
+        overwrite_data=False,
+        use_deepspeed=False,
+        overwrite_config=None,
+    ):
+        world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
+    
+        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
+    
+        # Read in config settings and override model type.
+        config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = global_attn_engine
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
+    
+        # Overwrite config settings if provided
+        if overwrite_config:
+            config = merge_config(config, overwrite_config)
+    
+        """
+        to test this locally, set ci.json as
+        "Dataset": {
+           ...
+           "path": {
+                   "train": "serialized_dataset/unit_test_singlehead_train.pkl",
+                   "test": "serialized_dataset/unit_test_singlehead_test.pkl",
+                   "validate": "serialized_dataset/unit_test_singlehead_validate.pkl"}
+           ...
+        """
+        # use pkl files if exist by default
+        for dataset_name in config["Dataset"]["path"].keys():
+            if dataset_name == "total":
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + ".pkl"
+                )
+            else:
+                pkl_file = (
+                    os.environ["SERIALIZED_DATA_PATH"]
+                    + "/serialized_dataset/"
+                    + config["Dataset"]["name"]
+                    + "_"
+                    + dataset_name
+                    + ".pkl"
+                )
+            if os.path.exists(pkl_file):
+                config["Dataset"]["path"][dataset_name] = pkl_file
+    
+        # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
+        # hence here we decrease the loss weight coefficient for graph-level head in MFC.
+        if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
+            config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
+    
+        # Only run with edge lengths for models that support them.
+        if use_lengths:
+            config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+    
+        if rank == 0:
+            num_samples_tot = 500
+            # check if serialized pickle files or folders for raw files provided
+            pkl_input = False
+            if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
+                pkl_input = True
+            # only generate new datasets, if not pkl
+            if not pkl_input:
+                for dataset_name, data_path in config["Dataset"]["path"].items():
+                    if overwrite_data:
+                        shutil.rmtree(data_path)
+                    if not os.path.exists(data_path):
+                        os.makedirs(data_path)
+                    if dataset_name == "total":
+                        num_samples = num_samples_tot
+                    elif dataset_name == "train":
+                        num_samples = int(
+                            num_samples_tot
+                            * config["NeuralNetwork"]["Training"]["perc_train"]
+                        )
+                    elif dataset_name == "test":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    elif dataset_name == "validate":
+                        num_samples = int(
+                            num_samples_tot
+                            * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
+                            * 0.5
+                        )
+                    if not os.listdir(data_path):
+                        tests.deterministic_graph_data(
+                            data_path, number_configurations=num_samples
+                        )
+        MPI.COMM_WORLD.Barrier()
+    
+        # Since the config file uses PNA already, test the file overload here.
+        # All the other models need to use the locally modified dictionary.
+        if mpnn_type == "PNA" and not use_lengths:
+            hydragnn.run_training(config_file, use_deepspeed)
+        else:
+            hydragnn.run_training(config, use_deepspeed)
+    
+        (
+            error,
+            error_mse_task,
+            true_values,
+            predicted_values,
+        ) = hydragnn.run_prediction(config, use_deepspeed)
+    
+        # Set RMSE and sample MAE error thresholds
+        thresholds = {
+            "SAGE": [0.20, 0.20],
+            "PNA": [0.20, 0.20],
+            "PNAPlus": [0.20, 0.20],
+            "MFC": [0.20, 0.30],
+            "GIN": [0.25, 0.20],
+            "GAT": [0.60, 0.70],
+            "CGCNN": [0.50, 0.40],
+            "SchNet": [0.20, 0.20],
+            "DimeNet": [0.50, 0.50],
+            "EGNN": [0.20, 0.20],
+            "PNAEq": [0.60, 0.60],
+            "PAINN": [0.60, 0.60],
+            "MACE": [0.60, 0.70],
+        }
+        if use_lengths and ("vector" not in ci_input):
+            thresholds["CGCNN"] = [0.175, 0.175]
+            thresholds["PNA"] = [0.10, 0.10]
+            thresholds["PNAPlus"] = [0.10, 0.10]
+        if use_lengths and "vector" in ci_input:
+            thresholds["PNA"] = [0.2, 0.15]
+            thresholds["PNAPlus"] = [0.2, 0.15]
+        if ci_input == "ci_conv_head.json":
+            thresholds["GIN"] = [0.26, 0.51]
+            thresholds["SchNet"] = [0.30, 0.30]
+    
+        verbosity = 2
+    
+        for ihead in range(len(true_values)):
+            error_head_mse = error_mse_task[ihead]
+            error_str = (
+                str("{:.6f}".format(error_head_mse)) + " < " + str(thresholds[mpnn_type][0])
+            )
+            hydragnn.utils.print.print_distributed(verbosity, "head: " + error_str)
+>           assert (
+                error_head_mse < thresholds[mpnn_type][0]
+            ), "Head RMSE checking failed for " + str(ihead)
+E           AssertionError: Head RMSE checking failed for 0
+E           assert tensor(0.2124) < 0.2
+
+tests/test_graphs.py:178: AssertionError
+----------------------------- Captured stdout call -----------------------------
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+get_autocast_and_scaler use_bf16:  False
+dist.is_initialized(),sync_batch_norm,device_name: True False cpu
+Using FSDP: False Sharding: ShardingStrategy.FULL_SHARD
+get_autocast_and_scaler use_bf16:  False
+----------------------------- Captured stderr call -----------------------------
+0: Load existing model: ./logs/EGNN-r-2.0-ncl-2-hd-20-ne-100-lr-0.02-bs-32-data-unit_test-node_ft--task_weights-1.0-/EGNN-r-2.0-ncl-2-hd-20-ne-100-lr-0.02-bs-32-data-unit_test-node_ft--task_weights-1.0-.pk
+0: head: 0.212449 < 0.2
+_____________________ pytest_train_model_conv_head[PNAEq] ______________________
+
+mpnn_type = 'PNAEq', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:89: in _
+    model = create_model_config(
+hydragnn/models/create.py:45: in create_model_config
+    return create_model(
+hydragnn/models/create.py:455: in create_model
+    model = PNAEqStack(
+hydragnn/models/PNAEqStack.py:72: in __init__
+    super().__init__(input_args, conv_args, *args, **kwargs)
+hydragnn/models/Base.py:174: in __init__
+    self._init_conv()
+hydragnn/models/PNAEqStack.py:80: in _init_conv
+    self.get_conv(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PNAEqStack(
+  (graph_convs): ModuleList()
+  (feature_layers): ModuleList()
+  (heads_NN): ModuleList()
+  (convs_node_hi...eDict()
+  (convs_node_output): ModuleDict()
+  (batch_norms_node_output): ModuleDict()
+  (activation_function): ReLU()
+)
+input_dim = 0, output_dim = 20, last_layer = False, edge_dim = None
+
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        hidden_dim = output_dim if input_dim == 1 else input_dim
+        assert (
+>           hidden_dim > 1
+        ), "PNAEq requires more than one hidden dimension between input_dim and output_dim."
+E       AssertionError: PNAEq requires more than one hidden dimension between input_dim and output_dim.
+
+hydragnn/models/PNAEqStack.py:106: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Degree max:   0%|          | 0/350 [00:00<?, ?it/s]Degree max: 100%|██████████| 350/350 [00:00<00:00, 124386.24it/s]
+Degree bincount:   0%|          | 0/350 [00:00<?, ?it/s]Degree bincount: 100%|██████████| 350/350 [00:00<00:00, 102250.22it/s]
+_____________________ pytest_train_model_conv_head[PAINN] ______________________
+
+mpnn_type = 'PAINN', overwrite_data = False
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+>       unittest_train_model(
+            mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        )
+
+tests/test_graphs.py:306: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_graphs.py:134: in unittest_train_model
+    hydragnn.run_training(config, use_deepspeed)
+/opt/homebrew/Cellar/python@3.13/3.13.7/Frameworks/Python.framework/Versions/3.13/lib/python3.13/functools.py:934: in wrapper
+    return dispatch(args[0].__class__)(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+hydragnn/run_training.py:89: in _
+    model = create_model_config(
+hydragnn/models/create.py:45: in create_model_config
+    return create_model(
+hydragnn/models/create.py:428: in create_model
+    model = PAINNStack(
+hydragnn/models/PAINNStack.py:47: in __init__
+    super().__init__(input_args, conv_args, *args, **kwargs)
+hydragnn/models/Base.py:174: in __init__
+    self._init_conv()
+hydragnn/models/PAINNStack.py:53: in _init_conv
+    self.get_conv(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PAINNStack(
+  (graph_convs): ModuleList()
+  (feature_layers): ModuleList()
+  (heads_NN): ModuleList()
+  (convs_node_hi...eDict()
+  (convs_node_output): ModuleDict()
+  (batch_norms_node_output): ModuleDict()
+  (activation_function): ReLU()
+)
+input_dim = 0, output_dim = 20, last_layer = False, edge_dim = None
+
+    def get_conv(self, input_dim, output_dim, last_layer=False, edge_dim=None):
+        hidden_dim = output_dim if input_dim == 1 else input_dim
+        assert (
+>           hidden_dim > 1
+        ), "PainnNet requires more than one hidden dimension between input_dim and output_dim."
+E       AssertionError: PainnNet requires more than one hidden dimension between input_dim and output_dim.
+
+hydragnn/models/PAINNStack.py:79: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-SAGE] - Run...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-GIN] - Asse...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-GAT] - Runt...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-MFC] - Runt...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-PNA] - Runt...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-PNAPlus] - ...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-CGCNN] - In...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-SchNet] - A...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-DimeNet] - ...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-EGNN] - Ass...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-PNAEq] - As...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-PAINN] - As...
+FAILED tests/test_graphs.py::pytest_train_model[ci_multihead.json-MACE] - Ass...
+FAILED tests/test_graphs.py::pytest_train_model_vectoroutput[PNA] - Assertion...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[SAGE] - RuntimeErro...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[GAT] - RuntimeError...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[MFC] - RuntimeError...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[PNA] - RuntimeError...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[PNAPlus] - RuntimeE...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[SchNet] - Assertion...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[DimeNet] - Assertio...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[EGNN] - AssertionEr...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[PNAEq] - AssertionE...
+FAILED tests/test_graphs.py::pytest_train_model_conv_head[PAINN] - AssertionE...
+================== 24 failed, 44 passed in 371.28s (0:06:11) ===================

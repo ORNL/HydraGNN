@@ -58,6 +58,10 @@
             "node_features": {
                 "x": {
                     "dim": 1,
+                    "role": "input"
+                },
+                "x2": {
+                    "dim": 1,
                     "role": "output",
                     "output_type": "node"
                 }

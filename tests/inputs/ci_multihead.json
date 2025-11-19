@@ -58,14 +58,13 @@
                     "type": "mlp"
                 }
             },
-            "task_weights": [20.0, 1.0, 1.0, 1.0]
+            "task_weights": [20.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
             "node_features": {
                 "x": {
                     "dim": 1,
-                    "role": "output",
-                    "output_type": "node"
+                    "role": "input"
                 },
                 "x2": {
                     "dim": 1,
