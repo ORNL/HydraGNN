@@ -64,17 +64,17 @@
             "node_features": {
                 "xx2_vec": {
                     "dim": 2,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node"
                 },
                 "x": {
                     "dim": 1,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node"
                 },
                 "x2x3_vec": {
                     "dim": 2,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node"
                 }
             },

@@ -101,7 +101,7 @@ def _parse_new_format(var_config: dict) -> dict:
     Parse new feature configuration format.
 
     The new format uses dictionaries with explicit feature roles:
-    - role: 'input', 'output', or 'both'
+    - role: 'input' or 'output'
     - dim: integer dimension
     - output_type: 'graph' or 'node' (for output features)
 
@@ -132,11 +132,11 @@ def _parse_new_format(var_config: dict) -> dict:
 
             # Track input features
             role = feat_config.get("role", "input")
-            if role in ["input", "both"]:
+            if role == "input":
                 result["input_node_features"].append(node_idx)
 
             # Track output features
-            if role in ["output", "both"]:
+            if role == "output":
                 result["output_names"].append(feat_name)
                 result["output_index"].append(node_idx)
                 result["output_dim"].append(feat_config["dim"])
@@ -151,9 +151,9 @@ def _parse_new_format(var_config: dict) -> dict:
             result["graph_feature_names"].append(feat_name)
             result["graph_feature_dims"].append(feat_config["dim"])
 
-            # Graph features are typically outputs (unless role explicitly set)
+            # Graph features are outputs
             role = feat_config.get("role", "output")
-            if role in ["output", "both"]:
+            if role == "output":
                 result["output_names"].append(feat_name)
                 result["output_index"].append(graph_idx)
                 result["output_dim"].append(feat_config["dim"])

@@ -49,7 +49,7 @@
             "graph_features": {
                 "energy": {
                     "dim": 1,
-                    "role": "both"
+                    "role": "output"
                 }
             }
         },

@@ -45,7 +45,7 @@
                 },
                 "forces": {
                     "dim": 3,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node",
                     "description": "Atomic forces"
                 }

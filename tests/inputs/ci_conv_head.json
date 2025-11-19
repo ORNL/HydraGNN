@@ -58,7 +58,7 @@
             "node_features": {
                 "x": {
                     "dim": 1,
-                    "role": "both",
+                    "role": "output",
                     "output_type": "node"
                 }
             },
