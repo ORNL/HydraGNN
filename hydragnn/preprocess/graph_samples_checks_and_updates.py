@@ -554,7 +554,9 @@ def update_predicted_values(
     data.y = torch.cat(output_feature, 0)
 
 
-def update_atom_features(atom_features: [AtomFeatures], node_feature_dim: list, data: Data):
+def update_atom_features(
+    atom_features: [AtomFeatures], node_feature_dim: list, data: Data
+):
     """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
 
     Parameters
@@ -573,5 +575,5 @@ def update_atom_features(atom_features: [AtomFeatures], node_feature_dim: list, 
         col_start = sum(node_feature_dim[:feat_idx])
         col_end = col_start + node_feature_dim[feat_idx]
         input_columns.extend(range(col_start, col_end))
-    
+
     data.x = data.x[:, input_columns]

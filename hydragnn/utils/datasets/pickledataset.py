@@ -97,7 +97,9 @@ class SimplePickleDataset(AbstractBaseDataset):
                 self.node_feature_dim,
                 data_object,
             )
-            update_atom_features(self.input_node_features, self.node_feature_dim, data_object)
+            update_atom_features(
+                self.input_node_features, self.node_feature_dim, data_object
+            )
 
 
 class SimplePickleWriter:
