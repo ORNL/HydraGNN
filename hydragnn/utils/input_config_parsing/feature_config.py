@@ -126,27 +126,23 @@ def _parse_new_format(var_config: dict) -> dict:
     # Parse node features
     if "node_features" in var_config:
         node_idx = 0
-        col_idx = 0  # Track actual column index in data.x
         for feat_name, feat_config in var_config["node_features"].items():
             result["node_feature_names"].append(feat_name)
-            feat_dim = feat_config["dim"]
-            result["node_feature_dims"].append(feat_dim)
+            result["node_feature_dims"].append(feat_config["dim"])
 
-            # Track input features - append all column indices for multi-dimensional features
+            # Track input features
             role = feat_config.get("role", "input")
             if role == "input":
-                for i in range(feat_dim):
-                    result["input_node_features"].append(col_idx + i)
+                result["input_node_features"].append(node_idx)
 
             # Track output features
             if role == "output":
                 result["output_names"].append(feat_name)
                 result["output_index"].append(node_idx)
-                result["output_dim"].append(feat_dim)
+                result["output_dim"].append(feat_config["dim"])
                 result["type"].append(feat_config.get("output_type", "node"))
 
             node_idx += 1
-            col_idx += feat_dim  # Advance column index by feature dimension
 
     # Parse graph features
     if "graph_features" in var_config:
