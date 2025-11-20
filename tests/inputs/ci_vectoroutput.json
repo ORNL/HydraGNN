@@ -64,8 +64,7 @@
             "node_features": {
                 "xx2_vec": {
                     "dim": 2,
-                    "role": "output",
-                    "output_type": "node"
+                    "role": "output"
                 },
                 "x": {
                     "dim": 1,
@@ -73,8 +72,7 @@
                 },
                 "x2x3_vec": {
                     "dim": 2,
-                    "role": "output",
-                    "output_type": "node"
+                    "role": "output"
                 }
             },
             "graph_features": {

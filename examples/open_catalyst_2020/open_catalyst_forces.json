@@ -42,8 +42,7 @@
                 },
                 "forces": {
                     "dim": 3,
-                    "role": "output",
-                    "output_type": "node"
+                    "role": "output"
                 }
             },
             "graph_features": {

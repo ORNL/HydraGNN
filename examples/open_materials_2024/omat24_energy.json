@@ -45,7 +45,6 @@
                 "forces": {
                     "dim": 3,
                     "role": "both",
-                    "output_type": "node",
                     "description": "Atomic forces"
                 }
             },
@@ -53,7 +52,6 @@
                 "energy": {
                     "dim": 1,
                     "role": "output",
-                    "output_type": "graph",
                     "description": "Total energy of the system"
                 }
             }
