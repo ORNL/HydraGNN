@@ -45,7 +45,7 @@ def test_parse_new_format():
     assert parsed["node_feature_dims"] == [1, 3, 3]
     assert parsed["graph_feature_names"] == ["energy"]
     assert parsed["graph_feature_dims"] == [1]
-    assert parsed["input_node_features"] == [0, 1]  # atomic_number, coordinates
+    assert parsed["input_node_features"] == [0, 1, 2, 3]  # atomic_number, coordinates
     assert parsed["output_names"] == ["forces", "energy"]
     assert parsed["output_dim"] == [3, 1]
     assert parsed["type"] == ["node", "graph"]
@@ -58,7 +58,7 @@ def test_parse_legacy_format():
         "node_feature_dims": [1, 3, 3],
         "graph_feature_names": ["energy"],
         "graph_feature_dims": [1],
-        "input_node_features": [0, 1],
+        "input_node_features": [0, 1, 2, 3],
         "output_names": ["energy"],
         "output_index": [0],
         "output_dim": [1],
@@ -71,7 +71,7 @@ def test_parse_legacy_format():
     assert parsed["node_feature_dims"] == [1, 3, 3]
     assert parsed["graph_feature_names"] == ["energy"]
     assert parsed["graph_feature_dims"] == [1]
-    assert parsed["input_node_features"] == [0, 1]
+    assert parsed["input_node_features"] == [0, 1, 2, 3]
     assert parsed["output_names"] == ["energy"]
 
 
