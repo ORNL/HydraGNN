@@ -18,6 +18,7 @@ from hydragnn.preprocess import update_predicted_values, update_atom_features
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from tqdm import tqdm
 from io import BytesIO
+import os
 
 
 class DistDataset(AbstractBaseDataset):
@@ -42,10 +43,31 @@ class DistDataset(AbstractBaseDataset):
         self.ddstore_width = (
             ddstore_width if ddstore_width is not None else self.comm_size
         )
+
+        ## FIXME
+        ddstore_method = int(os.getenv("HYDRAGNN_DDSTORE_METHOD", "0"))
+        print("DDStore method:", ddstore_method)
+        if ddstore_method == 1:
+            # Using libfabric. Need a map each rank to a network interface
+            iface = system = os.getenv("FABRIC_IFACE", None)
+            if iface is None:
+                system = os.getenv("LMOD_SYSTEM_NAME", "none")
+                if system == "frontier":
+                    gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
+                    os.environ["FABRIC_IFACE"] = f"hsn{gpu_id//2}"
+                elif system == "perlmutter":
+                    gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
+                    os.environ["FABRIC_IFACE"] = f"hsn{gpu_id}"
+                elif system == "aurora":
+                    ## FIMXE
+                    pass
+
+            print("FABRIC_IFACE:", os.environ["FABRIC_IFACE"])
+
         self.ddstore_comm = self.comm.Split(self.rank // self.ddstore_width, self.rank)
         self.ddstore_comm_rank = self.ddstore_comm.Get_rank()
         self.ddstore_comm_size = self.ddstore_comm.Get_size()
-        self.ddstore = dds.PyDDStore(self.ddstore_comm)
+        self.ddstore = dds.PyDDStore(self.ddstore_comm, method=ddstore_method)
         self.ddstore_store_per_sample = ddstore_store_per_sample
 
         ## set total before set subset
