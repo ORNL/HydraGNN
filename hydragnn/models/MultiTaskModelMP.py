@@ -8,6 +8,9 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
 
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.api import ShardingStrategy
+
 
 def average_gradients(model, group):
     """Averages gradients across all processes using all_reduce."""
@@ -87,7 +90,9 @@ class DecoderModel(nn.Module):
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim), device=x.device, dtype=x.dtype
+                )
                 headvar = torch.zeros(
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
@@ -112,7 +117,9 @@ class DecoderModel(nn.Module):
             else:
                 # assuming all node types are the same
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
-                head = torch.zeros((x.shape[0], head_dim), device=x.device)
+                head = torch.zeros(
+                    (x.shape[0], head_dim), device=x.device, dtype=x.dtype
+                )
                 headvar = torch.zeros(
                     (x.shape[0], head_dim * self.var_output), device=x.device
                 )
@@ -216,8 +223,27 @@ class MultiTaskModelMP(nn.Module):
             for k in delete_list:
                 del layer[k]
 
-        self.encoder = DDP(self.encoder, process_group=self.shared_pg)
-        self.decoder = DDP(self.decoder, process_group=self.head_pg)
+        ## check if FSDP is to be used
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
+        fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
+        sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
+        print("MultiTaskModelMP FSDP:", use_fsdp, "Sharding:", sharding_strategy)
+
+        if use_fsdp:
+            self.encoder = FSDP(
+                self.encoder,
+                process_group=self.shared_pg,
+                sharding_strategy=sharding_strategy,
+            )
+            self.decoder = FSDP(
+                self.decoder,
+                process_group=self.head_pg,
+                sharding_strategy=sharding_strategy,
+            )
+        else:
+            self.encoder = DDP(self.encoder, process_group=self.shared_pg)
+            self.decoder = DDP(self.decoder, process_group=self.head_pg)
         self.module = base_model
 
     def forward(self, data):
