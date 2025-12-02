@@ -192,13 +192,6 @@ pip_retry lmdb
 pip_retry h5py==3.14.0 
 
 # ============================================================
-# e3nn and openequivariance
-# ============================================================
-banner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
-
-# ============================================================
 # mpi4py
 # ============================================================
 banner "mpi4py (v3.1.5)"
@@ -323,6 +316,13 @@ for pid in $pid1 $pid2 $pid3 $pid4; do
     progress $pid &
 done
 wait
+
+# ============================================================
+# e3nn and openequivariance
+# ============================================================
+banner "Install e3nn and openequivariance"
+pip_retry e3nn openequivariance --verbose
+assert_numpy_1264
 
 # ============================================================
 # ADIOS2
