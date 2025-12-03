@@ -201,7 +201,7 @@ class SerializedDataLoader:
                 data,
             )
 
-            update_atom_features(self.input_node_features, self.node_feature_dim, data)
+            update_atom_features(self.input_node_features, data)
 
         if "subsample_percentage" in self.variables.keys():
             self.subsample_percentage = self.variables["subsample_percentage"]

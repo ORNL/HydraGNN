@@ -41,7 +41,7 @@ Example legacy format:
     "node_feature_dims": [1, 3, 3],
     "graph_feature_names": ["energy"],
     "graph_feature_dims": [1],
-    "input_node_features": [0, 1],
+    "input_node_features": [0, 1, 2, 3],
     "output_names": ["energy"],
     "output_index": [0],
     "output_dim": [1],
@@ -128,12 +128,14 @@ def _parse_new_format(var_config: dict) -> dict:
         node_idx = 0
         for feat_name, feat_config in var_config["node_features"].items():
             result["node_feature_names"].append(feat_name)
-            result["node_feature_dims"].append(feat_config["dim"])
+            dim = feat_config["dim"]
+            result["node_feature_dims"].append(dim)
 
             # Track input features
             role = feat_config.get("role", "input")
             if role == "input":
-                result["input_node_features"].append(node_idx)
+                start_idx = sum(result["node_feature_dims"][:node_idx])
+                result["input_node_features"].extend(range(start_idx, start_idx + dim))
 
             # Track output features
             if role == "output":
@@ -250,13 +252,13 @@ def validate_feature_config(
         )
 
     # Check that input_node_features indices are valid
-    max_node_idx = len(parsed["node_feature_names"]) - 1
+    max_node_idx = sum(parsed["node_feature_dims"]) - 1
     if max_node_idx >= 0:  # Only check if we have node features
         for idx in parsed["input_node_features"]:
             if idx > max_node_idx:
                 errors.append(
                     f"input_node_features contains index {idx}, "
-                    f"but only {len(parsed['node_feature_names'])} node features defined"
+                    f"but only {max_node_idx + 1} node features defined"
                 )
 
     # Check that output_index values are valid
@@ -313,19 +315,14 @@ def _validate_against_data(parsed: dict, data_object) -> List[str]:
     if hasattr(data_object, "x") and parsed["input_node_features"]:
         # Verify we can extract the features
         try:
-            start_idx = 0
             for feat_idx in parsed["input_node_features"]:
-                feat_dim = parsed["node_feature_dims"][feat_idx]
-                end_idx = start_idx + feat_dim
                 # Just checking we can slice - don't need the actual data
                 if hasattr(data_object.x, "shape"):
-                    if end_idx > data_object.x.shape[1]:
+                    if feat_idx >= data_object.x.shape[1]:
                         errors.append(
-                            f"Feature {feat_idx} ({parsed['node_feature_names'][feat_idx]}) "
-                            f"would require columns up to {end_idx}, "
+                            f"Feature idx {feat_idx} in input_node_features "
                             f"but x only has {data_object.x.shape[1]} columns"
                         )
-                start_idx = end_idx
         except Exception as e:
             errors.append(f"Error validating input features against data: {str(e)}")
 
@@ -443,9 +440,7 @@ def print_feature_summary(var_config: dict) -> str:
         for i, (name, dim) in enumerate(
             zip(parsed["node_feature_names"], parsed["node_feature_dims"])
         ):
-            is_input = i in parsed["input_node_features"]
-            role = "input" if is_input else "internal"
-            lines.append(f"  [{i}] {name:30s} dim={dim}  role={role}")
+            lines.append(f"  [{i}] {name:30s} dim={dim}")
 
     # Graph features
     if parsed["graph_feature_names"]:

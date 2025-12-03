@@ -554,26 +554,15 @@ def update_predicted_values(
     data.y = torch.cat(output_feature, 0)
 
 
-def update_atom_features(
-    atom_features: [AtomFeatures], node_feature_dim: list, data: Data
-):
+def update_atom_features(atom_features: [AtomFeatures], data: Data):
     """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
-
     Parameters
     ----------
     atom_features: [AtomFeatures]
+        List of features to update. Each feature is instance of Enum AtomFeatures.
         List of feature indices to keep as inputs.
-    node_feature_dim: list
-        List of dimensions for each node feature.
     data: Data
         A Data object representing a structure that has atoms.
     """
-    # Compute column indices for the input features
-    # Similar to update_predicted_values logic
-    input_columns = []
-    for feat_idx in atom_features:
-        col_start = sum(node_feature_dim[:feat_idx])
-        col_end = col_start + node_feature_dim[feat_idx]
-        input_columns.extend(range(col_start, col_end))
-
-    data.x = data.x[:, input_columns]
+    feature_indices = [i for i in atom_features]
+    data.x = data.x[:, feature_indices]
