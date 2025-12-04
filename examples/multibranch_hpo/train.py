@@ -624,5 +624,3 @@ if __name__ == "__main__":
 
     if dist.is_initialized():
         dist.destroy_process_group()
-
-    os._exit(0)  # force quit
