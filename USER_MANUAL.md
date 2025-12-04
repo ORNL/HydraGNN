@@ -566,7 +566,7 @@ export NCCL_PROTO=Simple
 export NCCL_P2P_LEVEL=NVL
 export NCCL_P2P_DISABLE=1
 
-# GPU binding
+# AMD GPU setting
 export MIOPEN_DISABLE_CACHE=1
 ```
 
@@ -708,6 +708,28 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 ```python
 # Enable DeepSpeed during training
 hydragnn.run_training(config, use_deepspeed=True)
+```
+
+### FSDP (Fully Sharded Data Parallel) Integration
+
+Pytorch's FSDP (Fully Sharded Data Parallel) provides functionality similar to DeepSpeed ZeRO. 
+
+FSDP can be turned on or off using the `HYDRAGNN_USE_FSDP` env:
+
+```bash
+# Disable FSDP (default)
+export HYDRAGNN_USE_FSDP=0
+# Enable FSDP
+export HYDRAGNN_USE_FSDP=1
+```
+
+The level of ZeRO optimization can be chosen by `HYDRAGNN_FSDP_STRATEGY` env:
+
+```bash
+# Choose one of them. FULL_SHARD is default.
+export HYDRAGNN_FSDP_STRATEGY=FULL_SHARD
+export HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP
+export HYDRAGNN_FSDP_STRATEGY=NO_SHARD
 ```
 
 ### Multi-Branch Training
