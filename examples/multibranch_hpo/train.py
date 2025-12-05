@@ -96,6 +96,7 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument("--nosync", action="store_true", help="disable gradient sync")
+    parser.add_argument("--bf16", action="store_true", help="use bf16")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -277,6 +278,10 @@ if __name__ == "__main__":
         if args.task_parallel and args.use_devicemesh:
             ## task parallel with device mesh
             assert comm_size % len(modellist) == 0
+            if torch.cuda.device_count() == 1:
+                print(
+                    "WARN: use --gres=gpu:<N> with srun to correctly call torch.distributed.device_mesh.init_device_mesh"
+                )
             mesh_2d = init_device_mesh(
                 device_type,
                 (len(modellist), comm_size // len(modellist)),
@@ -607,6 +612,7 @@ if __name__ == "__main__":
             log_name,
             verbosity,
             create_plots=False,
+            bf16=args.bf16,
         )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
@@ -614,21 +620,7 @@ if __name__ == "__main__":
     if writer is not None:
         writer.close()
 
-    if tr.has("GPTLTracer"):
-        import gptl4py as gp
-
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
-        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
-
-        with open(os.path.join("logs", log_name, f"gp_full.p{rank}"), "w") as f:
-            f.write("rank,label,count,wallclock\n")
-            for key, value_list in tr.__tracer_list__["GPTLTracer"].hist.items():
-                for count, wallclock in value_list:
-                    f.write(f"{rank},{key},{count},{wallclock}\n")
-
-        gp.finalize()
+    tr.save(log_name)
 
     if dist.is_initialized():
         dist.destroy_process_group()
