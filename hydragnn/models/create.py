@@ -611,17 +611,18 @@ def create_model(
                 assert (
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                
+
                 # Gradient flow diagnostics
                 if forces_pred.abs().max() < 1e-10:
                     import warnings
+
                     warnings.warn(
                         "WARNING: Force predictions have very small magnitudes (max < 1e-10). "
                         "This may indicate weak gradient flow from energy predictions to positions. "
                         "Consider using conv head architecture or checking if equivariant features "
                         "are properly influencing final predictions."
                     )
-                
+
                 forces_pred = -forces_pred
                 force_loss_weight = (
                     energy_loss_weight
