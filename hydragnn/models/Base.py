@@ -349,12 +349,14 @@ class Base(Module):
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
         self.num_branches = 1
+        # Effective hidden dimension accounts for equivariant norm when applicable
+        effective_hidden_dim = self.hidden_dim + (1 if self.equivariance else 0)
         if "graph" in self.config_heads:
             self.num_branches = len(self.config_heads["graph"])
             for branchdict in self.config_heads["graph"]:
                 denselayers = []
                 dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
-                denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
+                denselayers.append(Linear(effective_hidden_dim, dim_sharedlayers))
                 denselayers.append(self.activation_function)
                 for ishare in range(branchdict["architecture"]["num_sharedlayers"] - 1):
                     denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
@@ -403,11 +405,36 @@ class Base(Module):
                         ), "num_nodes must be positive integer for MLP"
                         # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
                         head_NN[branchtype] = MLPNode(
-                            self.hidden_dim,
+                            effective_hidden_dim,
                             self.head_dims[ihead] * (1 + self.var_output),
                             self.num_mlp,
                             hidden_dim_node,
                             node_NN_type,
+                            self.activation_function,
+                        )
+                    elif (
+                        node_NN_type == "equivariant_mlp"
+                        or node_NN_type == "equivariant_mlp_per_node"
+                    ):
+                        self.num_mlp = (
+                            1 if node_NN_type == "equivariant_mlp" else self.num_nodes
+                        )
+                        assert (
+                            self.num_nodes is not None
+                        ), "num_nodes must be positive integer for equivariant MLP"
+                        assert (
+                            self.equivariance
+                        ), "equivariant_mlp head type requires equivariance=True in model"
+                        # Equivariant MLP uses inv_node_feat directly (no concatenated norm)
+                        head_NN[branchtype] = EquivariantMLPNode(
+                            self.hidden_dim,  # Use original hidden_dim, not effective_hidden_dim
+                            3,  # equiv_dim for 3D positions
+                            self.head_dims[ihead] * (1 + self.var_output),
+                            self.num_mlp,
+                            hidden_dim_node,
+                            node_NN_type.replace(
+                                "equivariant_", ""
+                            ),  # 'mlp' or 'mlp_per_node'
                             self.activation_function,
                         )
                     elif node_NN_type == "conv":
@@ -427,9 +454,9 @@ class Base(Module):
                         inode_feature += 1
                     else:
                         raise ValueError(
-                            "Unknown head NN structure for node features"
+                            "Unknown head NN structure for node features: "
                             + node_NN_type
-                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                            + "; currently only support 'mlp', 'mlp_per_node', 'equivariant_mlp', 'equivariant_mlp_per_node', or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                         )
             else:
                 raise ValueError(
@@ -465,7 +492,26 @@ class Base(Module):
                 )
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
 
-        x = inv_node_feat
+        # Incorporate positional information for stronger gradient flow in MLIP applications
+        # For equivariant models, use both invariant and equivariant features
+        if self.equivariance and equiv_node_feat is not None:
+            # Use norm of positional features to maintain rotational invariance
+            # while strengthening gradient connection to positions
+            # Handle both 2D [num_nodes, 3] and 3D [num_nodes, hidden_dim, 3] shapes
+            if equiv_node_feat.dim() == 3:
+                # For PAINN-style vectorial features: [num_nodes, hidden_dim, 3]
+                # Compute norm over spatial dimension and take mean over feature dimension
+                equiv_norm = torch.norm(equiv_node_feat, dim=-1).mean(
+                    dim=-1, keepdim=True
+                )  # [num_nodes, 1]
+            else:
+                # For EGNN/SchNet-style position features: [num_nodes, 3]
+                equiv_norm = torch.norm(
+                    equiv_node_feat, dim=-1, keepdim=True
+                )  # [num_nodes, 1]
+            x = torch.cat([inv_node_feat, equiv_norm], dim=-1)
+        else:
+            x = inv_node_feat
         tr.stop("enc_forward")
         tr.start("branch_forward")
         #### multi-head decoder part####
@@ -519,19 +565,29 @@ class Base(Module):
                 if self.num_branches == 1:
                     branchtype = "branch-0"
                     if node_NN_type == "conv":
-                        inv_node_feat = x
+                        # Conv heads use invariant and equivariant features separately
+                        inv_node_feat_head = inv_node_feat
                         equiv_node_feat_ = equiv_node_feat
                         for conv, batch_norm in zip(
                             headloc[branchtype][0::2], headloc[branchtype][1::2]
                         ):
-                            inv_node_feat, equiv_node_feat_ = conv(
-                                inv_node_feat=inv_node_feat,
+                            inv_node_feat_head, equiv_node_feat_ = conv(
+                                inv_node_feat=inv_node_feat_head,
                                 equiv_node_feat=equiv_node_feat_,
                                 **conv_args,
                             )
-                            inv_node_feat = batch_norm(inv_node_feat)
-                            inv_node_feat = self.activation_function(inv_node_feat)
-                        x_node = inv_node_feat
+                            inv_node_feat_head = batch_norm(inv_node_feat_head)
+                            inv_node_feat_head = self.activation_function(
+                                inv_node_feat_head
+                            )
+                        x_node = inv_node_feat_head
+                    elif node_NN_type.startswith("equivariant_mlp"):
+                        # Equivariant MLP heads use both inv and equiv features
+                        x_node = headloc[branchtype](
+                            inv_feat=inv_node_feat,
+                            equiv_feat=equiv_node_feat,
+                            batch=data.batch,
+                        )
                     else:
                         x_node = headloc[branchtype](x=x, batch=data.batch)
                     head = x_node[:, :head_dim]
@@ -543,19 +599,29 @@ class Base(Module):
                         branchtype = f"branch-{ID.item()}"
                         # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
                         if node_NN_type == "conv":
-                            inv_node_feat = x[mask_nodes, :]
+                            # Conv heads use invariant and equivariant features separately
+                            inv_node_feat_head = inv_node_feat[mask_nodes, :]
                             equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
                             for conv, batch_norm in zip(
                                 headloc[branchtype][0::2], headloc[branchtype][1::2]
                             ):
-                                inv_node_feat, equiv_node_feat_ = conv(
-                                    inv_node_feat=inv_node_feat,
+                                inv_node_feat_head, equiv_node_feat_ = conv(
+                                    inv_node_feat=inv_node_feat_head,
                                     equiv_node_feat=equiv_node_feat_,
                                     **conv_args,
                                 )
-                                inv_node_feat = batch_norm(inv_node_feat)
-                                inv_node_feat = self.activation_function(inv_node_feat)
-                            x_node = inv_node_feat
+                                inv_node_feat_head = batch_norm(inv_node_feat_head)
+                                inv_node_feat_head = self.activation_function(
+                                    inv_node_feat_head
+                                )
+                            x_node = inv_node_feat_head
+                        elif node_NN_type.startswith("equivariant_mlp"):
+                            # Equivariant MLP heads use both inv and equiv features
+                            x_node = headloc[branchtype](
+                                inv_feat=inv_node_feat[mask_nodes, :],
+                                equiv_feat=equiv_node_feat[mask_nodes, :],
+                                batch=data.batch[mask_nodes],
+                            )
                         else:
                             x_node = headloc[branchtype](
                                 x=x[mask_nodes, :], batch=data.batch[mask_nodes]
@@ -694,3 +760,143 @@ class MLPNode(Module):
 
     def __str__(self):
         return "MLPNode"
+
+
+class EquivariantMLPNode(Module):
+    """
+    Equivariant MLP head for node-level predictions in MLIP applications.
+    Processes invariant (scalar) and equivariant (vector) features separately
+    while maintaining rotational invariance for final predictions.
+
+    At each layer, equivariant features contribute via their norm (rotation-invariant),
+    creating strong gradient paths to positions for force prediction via autograd.
+    """
+
+    def __init__(
+        self,
+        inv_dim,
+        equiv_dim,
+        output_dim,
+        num_mlp,
+        hidden_dim_node,
+        node_type,
+        activation_function,
+    ):
+        super().__init__()
+        self.inv_dim = inv_dim
+        self.equiv_dim = equiv_dim
+        self.output_dim = output_dim
+        self.node_type = node_type
+        self.num_mlp = num_mlp
+        self.activation_function = activation_function
+
+        self.mlp = ModuleList()
+        for _ in range(self.num_mlp):
+            layers = ModuleList()
+
+            # First layer: takes invariant features + equivariant norm
+            layers.append(Linear(self.inv_dim + 1, hidden_dim_node[0]))
+
+            # Hidden layers: each also incorporates equivariant norm
+            for ilayer in range(len(hidden_dim_node) - 1):
+                layers.append(
+                    Linear(hidden_dim_node[ilayer] + 1, hidden_dim_node[ilayer + 1])
+                )
+
+            # Output layer
+            layers.append(Linear(hidden_dim_node[-1], output_dim))
+
+            self.mlp.append(layers)
+
+    def node_features_reshape(self, x, batch, num_nodes):
+        """Reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
+        num_features = x.shape[1]
+        batch_size = batch.max() + 1
+        out = torch.zeros(
+            (batch_size, num_features, num_nodes),
+            dtype=x.dtype,
+            device=x.device,
+        )
+        for inode in range(num_nodes):
+            inode_index = [i for i in range(inode, batch.shape[0], num_nodes)]
+            out[:, :, inode] = x[inode_index, :]
+        return out
+
+    def forward(
+        self, inv_feat: torch.Tensor, equiv_feat: torch.Tensor, batch: torch.Tensor
+    ):
+        """
+        Forward pass with equivariant features.
+
+        Args:
+            inv_feat: [num_nodes, inv_dim] - invariant node features
+            equiv_feat: [num_nodes, equiv_dim] - equivariant features (positions)
+            batch: [num_nodes] - batch assignment
+
+        Returns:
+            outs: [num_nodes, output_dim] - scalar predictions
+        """
+        if self.node_type == "mlp":
+            # Single MLP shared across all nodes
+            x = inv_feat
+            for ilayer, layer in enumerate(self.mlp[0]):
+                if ilayer < len(self.mlp[0]) - 1:  # Not the output layer
+                    # Compute rotation-invariant norm of equivariant features
+                    # Handle both 2D [num_nodes, 3] and 3D [num_nodes, hidden_dim, 3] shapes
+                    if equiv_feat.dim() == 3:
+                        # For PAINN-style vectorial features: [num_nodes, hidden_dim, 3]
+                        equiv_norm = torch.norm(equiv_feat, dim=-1).mean(
+                            dim=-1, keepdim=True
+                        )  # [num_nodes, 1]
+                    else:
+                        # For EGNN/SchNet-style position features: [num_nodes, 3]
+                        equiv_norm = torch.norm(
+                            equiv_feat, dim=-1, keepdim=True
+                        )  # [num_nodes, 1]
+                    # Concatenate with current features
+                    x = torch.cat([x, equiv_norm], dim=-1)
+                    x = self.activation_function(layer(x))
+                else:
+                    # Output layer
+                    x = layer(x)
+            outs = x
+        else:
+            # Per-node MLPs
+            num_nodes = self.num_mlp
+            outs = torch.zeros(
+                (inv_feat.shape[0], self.output_dim),
+                dtype=inv_feat.dtype,
+                device=inv_feat.device,
+            )
+            inv_feat_nodes = self.node_features_reshape(inv_feat, batch, num_nodes)
+            equiv_feat_nodes = self.node_features_reshape(equiv_feat, batch, num_nodes)
+
+            for inode in range(num_nodes):
+                inode_index = [i for i in range(inode, batch.shape[0], num_nodes)]
+                x = inv_feat_nodes[:, :, inode]
+                equiv_node = equiv_feat_nodes[:, :, inode]
+
+                for ilayer, layer in enumerate(self.mlp[inode]):
+                    if ilayer < len(self.mlp[inode]) - 1:  # Not the output layer
+                        # Handle both 2D and 3D equiv_feat shapes
+                        if equiv_node.dim() == 3:
+                            # For PAINN-style: [batch_size, hidden_dim, 3]
+                            equiv_norm = torch.norm(equiv_node, dim=-1).mean(
+                                dim=-1, keepdim=True
+                            )  # [batch_size, 1]
+                        else:
+                            # For EGNN/SchNet-style: [batch_size, 3]
+                            equiv_norm = torch.norm(
+                                equiv_node, dim=-1, keepdim=True
+                            )  # [batch_size, 1]
+                        x = torch.cat([x, equiv_norm], dim=-1)
+                        x = self.activation_function(layer(x))
+                    else:
+                        x = layer(x)
+
+                outs[inode_index, :] = x
+
+        return outs
+
+    def __str__(self):
+        return "EquivariantMLPNode"

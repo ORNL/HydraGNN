@@ -137,6 +137,27 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]
     )
 
+    # Validate that equivariant_mlp head types require equivariance=True
+    output_heads = config["NeuralNetwork"]["Architecture"].get("output_heads", {})
+    equivariance = config["NeuralNetwork"]["Architecture"].get("equivariance", None)
+    for head_category in ["node", "edge", "graph"]:
+        if head_category in output_heads:
+            heads = output_heads[head_category]
+            # Handle both single head dict and list of head dicts
+            if isinstance(heads, dict):
+                heads = [heads]
+            for head in heads:
+                # After update_multibranch_heads, the type is in head['architecture']['type']
+                if "architecture" in head:
+                    head_type = head["architecture"].get("type", "mlp")
+                else:
+                    head_type = head.get("type", "mlp")
+                if head_type in ["equivariant_mlp", "equivariant_mlp_per_node"]:
+                    assert equivariance is True, (
+                        f"equivariant_mlp head type requires equivariance=True in model configuration. "
+                        f"Please set config['NeuralNetwork']['Architecture']['equivariance'] = true in your JSON file."
+                    )
+
     if "freeze_conv_layers" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["freeze_conv_layers"] = False
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:
