@@ -14,6 +14,9 @@ import random
 import hydragnn
 from tests.test_graphs import unittest_train_model
 from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.utils.input_config_parsing.feature_config import (
+    update_var_config_with_features,
+)
 
 
 def unittest_model_prediction(config):
@@ -69,6 +72,10 @@ def pytest_model_loadpred():
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    # Update var_config with features before accessing input_node_features
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = update_var_config_with_features(var_config)
+    config["NeuralNetwork"]["Variables_of_interest"] = var_config
     # get the directory of trained model
     log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
         config
@@ -83,6 +90,10 @@ def pytest_model_loadpred():
     else:
         with open(config_file, "r") as f:
             config = json.load(f)
+        # Update var_config after loading saved config
+        var_config = config["NeuralNetwork"]["Variables_of_interest"]
+        var_config = update_var_config_with_features(var_config)
+        config["NeuralNetwork"]["Variables_of_interest"] = var_config
         for dataset_name, raw_data_path in config["Dataset"]["path"].items():
             if not os.path.isfile(raw_data_path):
                 print(dataset_name, "datasets not found: ", raw_data_path)
