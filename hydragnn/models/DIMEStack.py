@@ -183,7 +183,7 @@ class DIMEStack(Base):
             pos_kj + pos_ji
         )  # It's important to calculate the vectors separately and then add in case of periodic boundary conditions
         a = (pos_ji * pos_ki).sum(dim=-1)
-        b = torch.cross(pos_ji, pos_ki).norm(dim=-1)
+        b = torch.linalg.cross(pos_ji, pos_ki).norm(dim=-1)
         angle = torch.atan2(b, a)
 
         rbf = self.rbf(edge_dist.squeeze())
@@ -267,7 +267,7 @@ def triplets(
     if selected_rows:
         new_row = torch.cat(selected_rows)
         new_col = torch.cat(selected_cols)
-        new_val = torch.cat(selected_vals) if values is not None else None
+        new_val = torch.cat(selected_vals) if (values is not None and selected_vals) else None
     else:
         # Empty result
         new_row = torch.tensor([], dtype=torch.long, device=row.device)
