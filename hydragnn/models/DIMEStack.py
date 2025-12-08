@@ -238,39 +238,41 @@ def triplets(
     # Workaround for torch_sparse bug on AMD GPUs (OLCF Frontier with ROCm):
     # The SparseTensor operations produce severe memory corruption and negative values.
     # Use vectorized PyTorch implementation that avoids torch_sparse indexing.
-    
+
     num_edges = row.size(0)
-    
+
     # For each edge j->i, find all edges k->j to form triplets k->j->i
     # Vectorized approach: create a matrix where entry [e1, e2] indicates if they can form a triplet
-    
+
     # Expand dimensions for broadcasting: row is [num_edges], col is [num_edges]
     # Check where col[e2] == row[e1] (edge e2 ends where edge e1 starts)
     # This gives us potential triplets where e2=(k->j) and e1=(j->i)
     row_expanded = row.unsqueeze(1)  # [num_edges, 1]
     col_expanded = col.unsqueeze(0)  # [1, num_edges]
-    
+
     # Find pairs where col[e2] == row[e1], meaning edge e2 ends at the start of edge e1
-    triplet_mask = (col_expanded == row_expanded)  # [num_edges, num_edges]
-    
+    triplet_mask = col_expanded == row_expanded  # [num_edges, num_edges]
+
     # Filter out self-loops: exclude triplets where k == i (row[e2] == col[e1])
     row_e2 = row.unsqueeze(0)  # [1, num_edges] - these are the k nodes
     col_e1 = col.unsqueeze(1)  # [num_edges, 1] - these are the i nodes
-    self_loop_mask = (row_e2 == col_e1)  # [num_edges, num_edges]
-    
+    self_loop_mask = row_e2 == col_e1  # [num_edges, num_edges]
+
     # Valid triplets are those where edges connect AND k != i
     valid_triplets = triplet_mask & (~self_loop_mask)
-    
+
     # Get indices of valid triplets
     ji_indices, kj_indices = valid_triplets.nonzero(as_tuple=True)
-    
+
     if ji_indices.numel() > 0:
         # Extract the actual node indices for the triplets
         idx_i = col[ji_indices]  # i nodes (targets of j->i edges)
-        idx_j = row[ji_indices]  # j nodes (sources of j->i edges, targets of k->j edges)
+        idx_j = row[
+            ji_indices
+        ]  # j nodes (sources of j->i edges, targets of k->j edges)
         idx_k = row[kj_indices]  # k nodes (sources of k->j edges)
-        idx_kj = kj_indices      # Edge indices for k->j
-        idx_ji = ji_indices      # Edge indices for j->i
+        idx_kj = kj_indices  # Edge indices for k->j
+        idx_ji = ji_indices  # Edge indices for j->i
     else:
         # No triplets found
         idx_i = torch.tensor([], dtype=torch.long, device=row.device)
@@ -278,7 +280,7 @@ def triplets(
         idx_k = torch.tensor([], dtype=torch.long, device=row.device)
         idx_kj = torch.tensor([], dtype=torch.long, device=row.device)
         idx_ji = torch.tensor([], dtype=torch.long, device=row.device)
-    
+
     return col, row, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
 
