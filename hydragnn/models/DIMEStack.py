@@ -239,13 +239,47 @@ def triplets(
     adj_t = SparseTensor(
         row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes)
     )
-    adj_t_row = adj_t[row]
+    
+    # Workaround for torch_sparse bug on AMD GPUs (OLCF Frontier with ROCm):
+    # The operation `adj_t[row]` internally calls torch_sparse.index_select, which
+    # produces negative rowcount values in repeat_interleave on AMD hardware.
+    # This appears to be a hardware-specific issue in the CSR sparse tensor indexing.
+    # To avoid the crash, we manually extract rows from the CSR storage instead of
+    # using the buggy index_select path. This is slower but ensures correctness.
+    storage = adj_t.storage
+    rowptr, col_indices, values = storage.rowptr(), storage.col(), storage.value()
+    
+    # Manually select rows - build list of (row_idx, col_idx, value) tuples
+    selected_rows = []
+    selected_cols = []
+    selected_vals = []
+    
+    for idx, r in enumerate(row.tolist()):
+        start, end = rowptr[r].item(), rowptr[r + 1].item()
+        n_elements = end - start
+        if n_elements > 0:
+            selected_rows.append(torch.full((n_elements,), idx, dtype=torch.long, device=row.device))
+            selected_cols.append(col_indices[start:end])
+            if values is not None:
+                selected_vals.append(values[start:end])
+    
+    # Concatenate results
+    if selected_rows:
+        new_row = torch.cat(selected_rows)
+        new_col = torch.cat(selected_cols)
+        new_val = torch.cat(selected_vals) if values is not None else None
+    else:
+        # Empty result
+        new_row = torch.tensor([], dtype=torch.long, device=row.device)
+        new_col = torch.tensor([], dtype=torch.long, device=row.device)
+        new_val = torch.tensor([], dtype=values.dtype, device=row.device) if values is not None else None
+    
+    adj_t_row = SparseTensor(
+        row=new_row, col=new_col, value=new_val,
+        sparse_sizes=(row.size(0), num_nodes)
+    )
+    
     num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
-
-    # Fix for torch_sparse bug on AMD GPUs (Frontier): In batched graphs with sparse
-    # connectivity patterns, the sparse tensor indexing can produce negative rowcounts
-    # in the underlying index_select operation. Clamping ensures non-negative values.
-    num_triplets = torch.clamp(num_triplets, min=0)
 
     # Node indices (k->j->i) for triplets.
     idx_i = col.repeat_interleave(num_triplets)
