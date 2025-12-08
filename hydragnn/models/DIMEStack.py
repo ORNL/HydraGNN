@@ -242,6 +242,11 @@ def triplets(
     adj_t_row = adj_t[row]
     num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
 
+    # Fix for torch_sparse bug on AMD GPUs (Frontier): In batched graphs with sparse
+    # connectivity patterns, the sparse tensor indexing can produce negative rowcounts
+    # in the underlying index_select operation. Clamping ensures non-negative values.
+    num_triplets = torch.clamp(num_triplets, min=0)
+
     # Node indices (k->j->i) for triplets.
     idx_i = col.repeat_interleave(num_triplets)
     idx_j = row.repeat_interleave(num_triplets)
