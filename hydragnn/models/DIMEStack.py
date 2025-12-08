@@ -235,69 +235,61 @@ def triplets(
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     row, col = edge_index  # j->i
 
-    value = torch.arange(row.size(0), device=row.device)
-    adj_t = SparseTensor(
-        row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes)
-    )
-    
     # Workaround for torch_sparse bug on AMD GPUs (OLCF Frontier with ROCm):
-    # The operation `adj_t[row]` internally calls torch_sparse.index_select, which
-    # produces negative rowcount values in repeat_interleave on AMD hardware.
-    # This appears to be a hardware-specific issue in the CSR sparse tensor indexing.
-    # To avoid the crash, we manually extract rows from the CSR storage instead of
-    # using the buggy index_select path. This is slower but ensures correctness.
+    # The SparseTensor operations produce severe memory corruption and negative values.
+    # Use pure PyTorch implementation that completely avoids torch_sparse indexing.
     
-    # Try the normal path first, fall back to manual extraction if it fails
-    try:
-        adj_t_row = adj_t[row]
-    except (RuntimeError, AssertionError) as e:
-        # Fallback: manually extract rows from CSR storage
-        storage = adj_t.storage
-        rowptr, col_indices, values = storage.rowptr(), storage.col(), storage.value()
-        
-        # Build COO format tensors for selected rows
-        selected_rows = []
-        selected_cols = []
-        selected_vals = []
-        
-        for idx, r in enumerate(row.tolist()):
-            start, end = rowptr[r].item(), rowptr[r + 1].item()
-            n_elements = end - start
-            if n_elements > 0:
-                selected_rows.append(torch.full((n_elements,), idx, dtype=torch.long, device=row.device))
-                selected_cols.append(col_indices[start:end])
-                if values is not None:
-                    selected_vals.append(values[start:end])
-        
-        # Concatenate results
-        if selected_rows:
-            new_row = torch.cat(selected_rows)
-            new_col = torch.cat(selected_cols)
-            new_val = torch.cat(selected_vals) if (values is not None and selected_vals) else None
-        else:
-            # Empty result
-            new_row = torch.tensor([], dtype=torch.long, device=row.device)
-            new_col = torch.tensor([], dtype=torch.long, device=row.device)
-            new_val = None
-        
-        adj_t_row = SparseTensor(
-            row=new_row, col=new_col, value=new_val,
-            sparse_sizes=(row.size(0), num_nodes)
-        )
+    value = torch.arange(row.size(0), device=row.device)
     
-    num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
-
-    # Node indices (k->j->i) for triplets.
-    idx_i = col.repeat_interleave(num_triplets)
-    idx_j = row.repeat_interleave(num_triplets)
-    idx_k = adj_t_row.storage.col()
-    mask = idx_i != idx_k  # Remove i == k triplets.
-    idx_i, idx_j, idx_k = idx_i[mask], idx_j[mask], idx_k[mask]
-
-    # Edge indices (k-j, j->i) for triplets.
-    idx_kj = adj_t_row.storage.value()[mask]
-    idx_ji = adj_t_row.storage.row()[mask]
-
+    # Build triplets manually: for each edge j->i, find all edges k->j
+    # This gives us triplets k->j->i
+    result_i = []
+    result_j = []
+    result_k = []
+    result_kj = []
+    result_ji = []
+    
+    # For each edge (indexed by edge_id)
+    for edge_id in range(row.size(0)):
+        j_node = row[edge_id].item()  # Source node of this edge
+        i_node = col[edge_id].item()  # Target node of this edge
+        
+        # Find all edges where col == j_node (edges ending at j)
+        # These give us the k nodes: k->j
+        mask = (col == j_node)
+        kj_edge_ids = mask.nonzero(as_tuple=True)[0]
+        
+        if kj_edge_ids.numel() > 0:
+            k_nodes = row[kj_edge_ids]  # Source nodes of edges to j
+            
+            # Filter out cases where k == i (no self-loops in triplets)
+            valid_mask = (k_nodes != i_node)
+            valid_kj_ids = kj_edge_ids[valid_mask]
+            valid_k_nodes = k_nodes[valid_mask]
+            
+            if valid_kj_ids.numel() > 0:
+                n = valid_kj_ids.numel()
+                result_i.append(torch.full((n,), i_node, dtype=torch.long, device=row.device))
+                result_j.append(torch.full((n,), j_node, dtype=torch.long, device=row.device))
+                result_k.append(valid_k_nodes)
+                result_kj.append(valid_kj_ids)
+                result_ji.append(torch.full((n,), edge_id, dtype=torch.long, device=row.device))
+    
+    # Concatenate results
+    if result_i:
+        idx_i = torch.cat(result_i)
+        idx_j = torch.cat(result_j)
+        idx_k = torch.cat(result_k)
+        idx_kj = torch.cat(result_kj)
+        idx_ji = torch.cat(result_ji)
+    else:
+        # No triplets found
+        idx_i = torch.tensor([], dtype=torch.long, device=row.device)
+        idx_j = torch.tensor([], dtype=torch.long, device=row.device)
+        idx_k = torch.tensor([], dtype=torch.long, device=row.device)
+        idx_kj = torch.tensor([], dtype=torch.long, device=row.device)
+        idx_ji = torch.tensor([], dtype=torch.long, device=row.device)
+    
     return col, row, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
 
