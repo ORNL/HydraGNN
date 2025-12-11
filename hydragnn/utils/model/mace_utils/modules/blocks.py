@@ -17,7 +17,7 @@ import torch
 import torch.nn.functional
 from torch.nn import ModuleList, Sequential, Linear, ModuleDict
 from torch_scatter import scatter
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
@@ -27,6 +27,20 @@ from hydragnn.utils.model.irreps_tools import (
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
+
+
+def _resolve_graph_pooling(graph_pooling: str):
+    mode = graph_pooling.lower()
+    if mode == "sum":
+        mode = "add"
+    pool_map = {
+        "mean": (global_mean_pool, "mean"),
+        "add": (global_add_pool, "sum"),
+        "max": (global_max_pool, "max"),
+    }
+    if mode not in pool_map:
+        raise ValueError("Unsupported graph_pooling: " + graph_pooling)
+    return mode, pool_map[mode]
 
 from .radial import (
     AgnesiTransform,
@@ -424,6 +438,7 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
         num_heads,
         activation_function,
         num_nodes,
+        graph_pooling: str = "mean",
     ):
         # NOTE The readouts of MACE take in irreps of higher order than just scalars. This is fed through o3.Linear
         #      to reduce to scalars. To implement this in HYDRAGNN, the first layer of the node output head
@@ -444,6 +459,9 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
+        self.graph_pooling, (self.graph_pool_fn, self.graph_pool_reduction) = _resolve_graph_pooling(
+            graph_pooling
+        )
 
         self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
@@ -507,17 +525,26 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                 )
             self.heads_NN.append(head_NN)
 
+    def _pool_graph_features(self, x_tensor, batch_tensor):
+        if batch_tensor is None:
+            if self.graph_pool_reduction == "mean":
+                return x_tensor.mean(dim=0, keepdim=True)
+            if self.graph_pool_reduction == "max":
+                return x_tensor.max(dim=0, keepdim=True).values
+            return x_tensor.sum(dim=0, keepdim=True)
+        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+
     def forward(self, data, node_features):
         # Take only the type-0 irreps for graph aggregation
         if data.batch is None:
-            graph_features = node_features[:, : self.input_scalar_dim].mean(
-                dim=0, keepdim=True
+            graph_features = self._pool_graph_features(
+                node_features[:, : self.input_scalar_dim], None
             )
             data.batch = data.x * 0
         else:
-            graph_features = global_mean_pool(
+            graph_features = self._pool_graph_features(
                 node_features[:, : self.input_scalar_dim],
-                data.batch.to(node_features.device),
+                data.batch,
             )
         # if no dataset_name, set it to be 0
         if not hasattr(data, "dataset_name"):
@@ -586,6 +613,7 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         num_heads,
         activation_function,
         num_nodes,
+        graph_pooling: str = "mean",
     ):
         # NOTE The readouts of MACE take in irreps of higher order than just scalars. This is fed through o3.Linear
         #      to reduce to scalars. To implement this in HYDRAGNN, the first layer of the node output head
@@ -606,6 +634,9 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
+        self.graph_pooling, (self.graph_pool_fn, self.graph_pool_reduction) = _resolve_graph_pooling(
+            graph_pooling
+        )
 
         self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
@@ -693,17 +724,26 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
                 )
             self.heads_NN.append(head_NN)
 
+    def _pool_graph_features(self, x_tensor, batch_tensor):
+        if batch_tensor is None:
+            if self.graph_pool_reduction == "mean":
+                return x_tensor.mean(dim=0, keepdim=True)
+            if self.graph_pool_reduction == "max":
+                return x_tensor.max(dim=0, keepdim=True).values
+            return x_tensor.sum(dim=0, keepdim=True)
+        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+
     def forward(self, data, node_features):
         # Take only the type-0 irreps for graph aggregation
         if data.batch is None:
-            graph_features = node_features[:, : self.input_scalar_dim].mean(
-                dim=0, keepdim=True
+            graph_features = self._pool_graph_features(
+                node_features[:, : self.input_scalar_dim], None
             )
             data.batch = data.x * 0
         else:
-            graph_features = global_mean_pool(
+            graph_features = self._pool_graph_features(
                 node_features[:, : self.input_scalar_dim],
-                data.batch.to(node_features.device),
+                data.batch,
             )
         # if no dataset_name, set it to be 0
         if not hasattr(data, "dataset_name"):

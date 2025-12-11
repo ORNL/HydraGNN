@@ -85,6 +85,7 @@ def create_model_config(
         config["Architecture"].get("enable_interatomic_potential", False),
         verbosity,
         use_gpu,
+        config["Architecture"].get("graph_pooling", "mean"),
     )
 
 
@@ -132,6 +133,7 @@ def create_model(
     enable_interatomic_potential: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
+    graph_pooling: str = "mean",
 ):
     timer = Timer("create_model")
     timer.start()
@@ -161,6 +163,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PNA":
@@ -187,6 +190,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -221,6 +225,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "GAT":
@@ -250,6 +255,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "MFC":
@@ -275,6 +281,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "CGCNN":
@@ -299,6 +306,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "SAGE":
@@ -321,6 +329,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "SchNet":
@@ -352,6 +361,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "DimeNet":
@@ -397,6 +407,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "EGNN":
@@ -422,6 +433,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PAINN":
@@ -448,6 +460,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PNAEq":
@@ -475,6 +488,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "MACE":
@@ -514,6 +528,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))

@@ -12,7 +12,12 @@
 import torch
 from torch.nn import ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool, BatchNorm
+from torch_geometric.nn import (
+    BatchNorm,
+    global_add_pool,
+    global_max_pool,
+    global_mean_pool,
+)
 from torch_geometric.nn import Sequential as PyGSequential
 from torch.utils.checkpoint import checkpoint
 import torch_scatter
@@ -53,6 +58,7 @@ class Base(Module):
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
+        graph_pooling: str = "mean",
     ):
         super().__init__()
         self.device = get_device()
@@ -125,6 +131,31 @@ class Base(Module):
                 self.input_args += ", edge_attr"
             if "edge_attr" not in self.conv_args:
                 self.conv_args += ", edge_attr"
+
+        # Graph pooling policy
+        pool_mode = graph_pooling.lower()
+        if pool_mode == "sum":
+            pool_mode = "add"
+        pool_map = {
+            "mean": (global_mean_pool, "mean"),
+            "add": (global_add_pool, "sum"),
+            "max": (global_max_pool, "max"),
+        }
+        if pool_mode not in pool_map:
+            raise ValueError("Unsupported graph_pooling: " + graph_pooling)
+        self.graph_pooling = pool_mode
+        self.graph_pool_fn, self.graph_pool_reduction = pool_map[pool_mode]
+
+        def _pool_graph_features(x_tensor, batch_tensor):
+            if batch_tensor is None:
+                if self.graph_pool_reduction == "mean":
+                    return x_tensor.mean(dim=0, keepdim=True)
+                if self.graph_pool_reduction == "max":
+                    return x_tensor.max(dim=0, keepdim=True).values
+                return x_tensor.sum(dim=0, keepdim=True)
+            return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+
+        self._pool_graph_features = _pool_graph_features
 
         # Option to only train final property layers.
         self.freeze_conv = freeze_conv
@@ -398,10 +429,10 @@ class Base(Module):
                     node_NN_type = brancharct["type"]
                     if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
                         self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
-                        assert (
-                            self.num_nodes is not None
-                        ), "num_nodes must be positive integer for MLP"
-                        # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                        if node_NN_type == "mlp_per_node":
+                            assert (
+                                self.num_nodes is not None
+                            ), "num_nodes must be provided for mlp_per_node; use 'mlp' for variable-size graphs"
                         head_NN[branchtype] = MLPNode(
                             self.hidden_dim,
                             self.head_dims[ihead] * (1 + self.var_output),
@@ -409,6 +440,7 @@ class Base(Module):
                             hidden_dim_node,
                             node_NN_type,
                             self.activation_function,
+                            num_nodes=self.num_nodes if node_NN_type == "mlp_per_node" else None,
                         )
                     elif node_NN_type == "conv":
                         head_NN[branchtype] = ModuleList()
@@ -471,11 +503,11 @@ class Base(Module):
         #### multi-head decoder part####
         # shared dense layers for graph level output
         if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
+            x_graph = self._pool_graph_features(x, None)
             # individual samplers
             data.batch = data.x * 0
         else:
-            x_graph = global_mean_pool(x, data.batch.to(x.device))
+            x_graph = self._pool_graph_features(x, data.batch)
         outputs = []
         outputs_var = []
         # if no dataset_name, set it to be 0
@@ -642,12 +674,14 @@ class MLPNode(Module):
         hidden_dim_node,
         node_type,
         activation_function,
+        num_nodes=None,
     ):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.node_type = node_type
         self.num_mlp = num_mlp
+        self.num_nodes = num_nodes
         self.activation_function = activation_function
 
         self.mlp = ModuleList()
@@ -665,6 +699,8 @@ class MLPNode(Module):
 
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
+        if self.num_nodes is None:
+            raise ValueError("num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs")
         num_features = x.shape[1]
         batch_size = batch.max() + 1
         out = torch.zeros(
@@ -681,6 +717,8 @@ class MLPNode(Module):
         if self.node_type == "mlp":
             outs = self.mlp[0](x)
         else:
+            if self.num_nodes is None:
+                raise ValueError("num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs")
             outs = torch.zeros(
                 (x.shape[0], self.output_dim),
                 dtype=x.dtype,
