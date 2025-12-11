@@ -183,7 +183,7 @@ class DIMEStack(Base):
             pos_kj + pos_ji
         )  # It's important to calculate the vectors separately and then add in case of periodic boundary conditions
         a = (pos_ji * pos_ki).sum(dim=-1)
-        b = torch.cross(pos_ji, pos_ki).norm(dim=-1)
+        b = torch.linalg.cross(pos_ji, pos_ki).norm(dim=-1)
         angle = torch.atan2(b, a)
 
         rbf = self.rbf(edge_dist.squeeze())
@@ -233,27 +233,41 @@ def triplets(
     edge_index: Tensor,
     num_nodes: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
-    row, col = edge_index  # j->i
+    src, dst = edge_index  # j -> i
 
-    value = torch.arange(row.size(0), device=row.device)
-    adj_t = SparseTensor(
-        row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes)
-    )
-    adj_t_row = adj_t[row]
-    num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
+    # Workaround for torch_sparse bug on AMD GPUs (OLCF Frontier with ROCm):
+    # The SparseTensor operations produce severe memory corruption and negative values.
+    # Use vectorized PyTorch implementation that avoids torch_sparse indexing.
 
-    # Node indices (k->j->i) for triplets.
-    idx_i = col.repeat_interleave(num_triplets)
-    idx_j = row.repeat_interleave(num_triplets)
-    idx_k = adj_t_row.storage.col()
-    mask = idx_i != idx_k  # Remove i == k triplets.
-    idx_i, idx_j, idx_k = idx_i[mask], idx_j[mask], idx_k[mask]
+    num_edges = src.size(0)
 
-    # Edge indices (k-j, j->i) for triplets.
-    idx_kj = adj_t_row.storage.value()[mask]
-    idx_ji = adj_t_row.storage.row()[mask]
+    # For each edge j->i, find all edges k->j to form triplets k->j->i with the constraint that k != i (no self-loops)
+    # Vectorized approach: create a matrix [e1, e2] where 'True' indicates if they form a valid triplet
+    e2_src = src.unsqueeze(0)  # k
+    e2_dst = dst.unsqueeze(0)  # j
+    e1_src = src.unsqueeze(1)  # j
+    e1_dst = dst.unsqueeze(1)  # i
 
-    return col, row, idx_i, idx_j, idx_k, idx_kj, idx_ji
+    # Find where the second edge's destination (j) is the first edge's source (j) (i.e. both edges connect on j)
+    triplet_mask = e2_dst == e1_src
+
+    # Find where the second edge's source (k) is the first edge's destination (i) (i.e. k == i)
+    self_loop_mask = e2_src == e1_dst
+
+    # Valid triplets are those where edges connect AND k != i
+    valid_triplets = triplet_mask & (~self_loop_mask)
+
+    # Get indices of valid triplets
+    ji_indices, kj_indices = valid_triplets.nonzero(as_tuple=True)
+
+    # Extract the actual node indices for the triplets
+    idx_i = dst[ji_indices]  # i nodes (targets of j->i edges)
+    idx_j = src[ji_indices]  # j nodes (sources of j->i edges, targets of k->j edges)
+    idx_k = src[kj_indices]  # k nodes (sources of k->j edges)
+    idx_kj = kj_indices  # Edge indices for k->j
+    idx_ji = ji_indices  # Edge indices for j->i
+
+    return dst, src, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
 
 class HydraEmbeddingBlock(torch.nn.Module):
