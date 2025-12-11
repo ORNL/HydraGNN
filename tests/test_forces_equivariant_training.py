@@ -27,7 +27,10 @@ import subprocess
 def pytest_examples(example, mpnn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")  # Assuming different model scripts
-    return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    python_exec = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), ".venv", "bin", "python"
+    )
+    return_code = subprocess.call([python_exec, file_path, "--mpnn_type", mpnn_type])
 
     # Check the file ran without error.
     assert return_code == 0
@@ -77,7 +80,12 @@ def pytest_equivariant_heads(example, mpnn_type, head_level, head_type, graph_po
             graph_pooling or "add"
         )
         config["NeuralNetwork"]["Architecture"]["output_heads"] = {
-            "graph": {"num_headlayers": 2, "dim_headlayers": [60, 20]}
+            "graph": {
+                "num_headlayers": 2,
+                "dim_headlayers": [60, 20],
+                "num_sharedlayers": 2,
+                "dim_sharedlayers": 20,
+            }
         }
         config["NeuralNetwork"]["Architecture"]["task_weights"] = [1]
         var_cfg = config["NeuralNetwork"]["Variables_of_interest"]
@@ -92,9 +100,12 @@ def pytest_equivariant_heads(example, mpnn_type, head_level, head_type, graph_po
         with open(temp_config_path, "w") as f:
             json.dump(config, f, indent=2)
 
+        python_exec = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), ".venv", "bin", "python"
+        )
         return_code = subprocess.call(
             [
-                sys.executable,
+                python_exec,
                 file_path,
                 "--mpnn_type",
                 mpnn_type,
@@ -139,9 +150,12 @@ def pytest_expanded_x_features(example, mpnn_type, head_type):
         with open(temp_config_path, "w") as f:
             json.dump(config, f, indent=2)
 
+        python_exec = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), ".venv", "bin", "python"
+        )
         return_code = subprocess.call(
             [
-                sys.executable,
+                python_exec,
                 file_path,
                 "--mpnn_type",
                 mpnn_type,
