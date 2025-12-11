@@ -152,7 +152,10 @@ def update_config(config, train_loader, val_loader, test_loader):
                     head_type = head["architecture"].get("type", "mlp")
                 else:
                     head_type = head.get("type", "mlp")
-                if head_type in ["rotation_invariant_mlp", "rotation_invariant_mlp_per_node"]:
+                if head_type in [
+                    "rotation_invariant_mlp",
+                    "rotation_invariant_mlp_per_node",
+                ]:
                     assert equivariance is True, (
                         f"rotation_invariant_mlp head type requires equivariance=True in model configuration. "
                         f"Please set config['NeuralNetwork']['Architecture']['equivariance'] = true in your JSON file."

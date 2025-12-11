@@ -500,7 +500,9 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                         # higher-order irreps (vectors, tensors) to scalar outputs for predictions.
                         # Therefore, no explicit norm computation or feature concatenation is needed.
                         self.num_mlp = (
-                            1 if node_NN_type == "rotation_invariant_mlp" else self.num_nodes
+                            1
+                            if node_NN_type == "rotation_invariant_mlp"
+                            else self.num_nodes
                         )
                         assert (
                             self.num_nodes is not None
@@ -712,7 +714,9 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
                         # higher-order irreps (vectors, tensors) to scalar outputs for predictions.
                         # Therefore, no explicit norm computation or feature concatenation is needed.
                         self.num_mlp = (
-                            1 if node_NN_type == "rotation_invariant_mlp" else self.num_nodes
+                            1
+                            if node_NN_type == "rotation_invariant_mlp"
+                            else self.num_nodes
                         )
                         assert (
                             self.num_nodes is not None
