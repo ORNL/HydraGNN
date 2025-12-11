@@ -59,7 +59,10 @@ def _retune_pnaeq_aggregation(model):
 
             # Rebuild post_nns to match the reduced (aggr, scaler) config.
             module.post_nns = torch.nn.ModuleList(
-                [geom_Linear(2 * module.F_in, module.F_out) for _ in range(module.towers)]
+                [
+                    geom_Linear(2 * module.F_in, module.F_out)
+                    for _ in range(module.towers)
+                ]
             )
 
             dtype = next(module.parameters()).dtype
@@ -109,6 +112,8 @@ def _retune_painn_dtype(model, dtype):
                 return (x, v, edge_index, edge_attr, diff, dist)
 
             module.register_forward_pre_hook(_pre_hook)
+
+
 from hydragnn.utils.model.model import update_multibranch_heads
 
 
@@ -483,12 +488,12 @@ def compare_mlp_vs_conv_heads():
 
     for mpnn_type, head_types in mpnn_configs.items():
         print(f"\n{mpnn_type}:")
-        
+
         # Only show conv head error if it was tested
         if "conv" in head_types:
             conv_error = results[mpnn_type]["conv"]["max_error"]
             print(f"  Convolutional head error:           {conv_error:.2e}")
-        
+
         mlp_error = results[mpnn_type]["mlp"]["max_error"]
 
         print(f"  Regular MLP head error:             {mlp_error:.2e}")
@@ -558,7 +563,6 @@ def compare_mlp_vs_conv_heads_precision(precisions=("bf16", "fp32", "fp64")):
         except Exception as exc:
             print(f"  Error under {tag}: {str(exc)[:160]}")
     print("\n" + "=" * 70)
-
 
 
 def test_energy_only_equivariance(

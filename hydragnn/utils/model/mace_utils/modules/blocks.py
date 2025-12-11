@@ -42,6 +42,7 @@ def _resolve_graph_pooling(graph_pooling: str):
         raise ValueError("Unsupported graph_pooling: " + graph_pooling)
     return mode, pool_map[mode]
 
+
 from .radial import (
     AgnesiTransform,
     BesselBasis,
@@ -459,9 +460,10 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
-        self.graph_pooling, (self.graph_pool_fn, self.graph_pool_reduction) = _resolve_graph_pooling(
-            graph_pooling
-        )
+        self.graph_pooling, (
+            self.graph_pool_fn,
+            self.graph_pool_reduction,
+        ) = _resolve_graph_pooling(graph_pooling)
 
         self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
@@ -634,9 +636,10 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
-        self.graph_pooling, (self.graph_pool_fn, self.graph_pool_reduction) = _resolve_graph_pooling(
-            graph_pooling
-        )
+        self.graph_pooling, (
+            self.graph_pool_fn,
+            self.graph_pool_reduction,
+        ) = _resolve_graph_pooling(graph_pooling)
 
         self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()

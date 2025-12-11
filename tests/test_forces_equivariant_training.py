@@ -35,21 +35,29 @@ def pytest_examples(example, mpnn_type):
 
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.parametrize(
-    "mpnn_type,head_type",
+    "mpnn_type,head_level,head_type,graph_pooling",
     [
-        ("SchNet", "conv"),
-        ("EGNN", "conv"),
-        ("DimeNet", "conv"),
-        ("PAINN", "conv"),
-        ("SchNet", "rotation_invariant_mlp"),
-        ("EGNN", "rotation_invariant_mlp"),
-        ("PAINN", "rotation_invariant_mlp"),
-        ("MACE", "rotation_invariant_mlp"),
+        # Node heads: conv only where supported by equivariance tests
+        ("SchNet", "node", "conv", None),
+        ("EGNN", "node", "conv", None),
+        ("PAINN", "node", "conv", None),
+        # Node heads: shared MLP for all equivariant stacks under test
+        ("SchNet", "node", "mlp", None),
+        ("EGNN", "node", "mlp", None),
+        ("DimeNet", "node", "mlp", None),
+        ("PAINN", "node", "mlp", None),
+        ("MACE", "node", "mlp", None),
+        # Graph-level head + sum pooling to exercise EnhancedModelWrapper graph branch
+        ("SchNet", "graph", None, "add"),
+        ("EGNN", "graph", None, "add"),
+        ("DimeNet", "graph", None, "add"),
+        ("PAINN", "graph", None, "add"),
+        ("MACE", "graph", None, "add"),
     ],
 )
 @pytest.mark.mpi_skip()
-def pytest_equivariant_heads(example, mpnn_type, head_type):
-    """Test equivariant models with different head types (conv vs rotation_invariant_mlp)."""
+def pytest_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pooling):
+    """Test equivariant models with different head placements (node vs graph) and pooling choices."""
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
     config_path = os.path.join(path, "LJ.json")
@@ -58,12 +66,24 @@ def pytest_equivariant_heads(example, mpnn_type, head_type):
     with open(config_path, "r") as f:
         config = json.load(f)
 
-    # Modify config to use the specified head type
-    config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] = head_type
-
-    # Set equivariance=True for rotation_invariant_mlp head types
-    if head_type in ["rotation_invariant_mlp", "rotation_invariant_mlp_per_node"]:
-        config["NeuralNetwork"]["Architecture"]["equivariance"] = True
+    if head_level == "node":
+        # Modify config to use the specified node head type
+        config["NeuralNetwork"]["Architecture"]["output_heads"]["node"][
+            "type"
+        ] = head_type
+    else:
+        # Switch to graph-level head and enforce sum pooling for force loss compatibility
+        config["NeuralNetwork"]["Architecture"]["graph_pooling"] = (
+            graph_pooling or "add"
+        )
+        config["NeuralNetwork"]["Architecture"]["output_heads"] = {
+            "graph": {"num_headlayers": 2, "dim_headlayers": [60, 20]}
+        }
+        config["NeuralNetwork"]["Architecture"]["task_weights"] = [1]
+        var_cfg = config["NeuralNetwork"]["Variables_of_interest"]
+        var_cfg["type"] = ["graph"]
+        var_cfg["output_dim"] = [1]
+        var_cfg["output_index"] = [0]
 
     # Create temporary config file
     temp_dir = tempfile.mkdtemp()

@@ -440,7 +440,9 @@ class Base(Module):
                             hidden_dim_node,
                             node_NN_type,
                             self.activation_function,
-                            num_nodes=self.num_nodes if node_NN_type == "mlp_per_node" else None,
+                            num_nodes=self.num_nodes
+                            if node_NN_type == "mlp_per_node"
+                            else None,
                         )
                     elif node_NN_type == "conv":
                         head_NN[branchtype] = ModuleList()
@@ -700,7 +702,9 @@ class MLPNode(Module):
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
         if self.num_nodes is None:
-            raise ValueError("num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs")
+            raise ValueError(
+                "num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs"
+            )
         num_features = x.shape[1]
         batch_size = batch.max() + 1
         out = torch.zeros(
@@ -718,7 +722,9 @@ class MLPNode(Module):
             outs = self.mlp[0](x)
         else:
             if self.num_nodes is None:
-                raise ValueError("num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs")
+                raise ValueError(
+                    "num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs"
+                )
             outs = torch.zeros(
                 (x.shape[0], self.output_dim),
                 dtype=x.dtype,
