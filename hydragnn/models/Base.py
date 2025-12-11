@@ -408,19 +408,22 @@ class Base(Module):
                             effective_hidden_dim,
                             self.head_dims[ihead] * (1 + self.var_output),
                             self.num_mlp,
+                            self.num_nodes,
                             hidden_dim_node,
                             node_NN_type,
                             self.activation_function,
                         )
-                    if (
+                    elif (
                         node_NN_type == "rotation_invariant_mlp"
                         or node_NN_type == "rotation_invariant_mlp_per_node"
                     ):
-                        num_mlp = (
-                            1 if node_NN_type == "rotation_invariant_mlp" else self.num_nodes
+                        self.num_mlp = (
+                            1
+                            if node_NN_type == "rotation_invariant_mlp"
+                            else self.num_nodes
                         )
                         assert (
-                            num_mlp > 0
+                            self.num_mlp > 0
                         ), "num_nodes must be positive integer for rotation invariant MLP"
                         assert (
                             self.equivariance
@@ -433,7 +436,7 @@ class Base(Module):
                             self.num_mlp,
                             hidden_dim_node,
                             node_NN_type.replace(
-                                "equivariant_", ""
+                                "rotation_invariant_", ""
                             ),  # 'mlp' or 'mlp_per_node'
                             self.activation_function,
                         )
@@ -705,6 +708,7 @@ class MLPNode(Module):
         input_dim,
         output_dim,
         num_mlp,
+        num_nodes,
         hidden_dim_node,
         node_type,
         activation_function,
@@ -714,6 +718,7 @@ class MLPNode(Module):
         self.output_dim = output_dim
         self.node_type = node_type
         self.num_mlp = num_mlp
+        self.num_nodes = num_nodes
         self.activation_function = activation_function
 
         self.mlp = ModuleList()
