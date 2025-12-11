@@ -41,15 +41,15 @@ def pytest_examples(example, mpnn_type):
         ("EGNN", "conv"),
         ("DimeNet", "conv"),
         ("PAINN", "conv"),
-        ("SchNet", "equivariant_mlp"),
-        ("EGNN", "equivariant_mlp"),
-        ("PAINN", "equivariant_mlp"),
-        ("MACE", "equivariant_mlp"),
+        ("SchNet", "rotation_invariant_mlp"),
+        ("EGNN", "rotation_invariant_mlp"),
+        ("PAINN", "rotation_invariant_mlp"),
+        ("MACE", "rotation_invariant_mlp"),
     ],
 )
 @pytest.mark.mpi_skip()
 def pytest_equivariant_heads(example, mpnn_type, head_type):
-    """Test equivariant models with different head types (conv vs equivariant_mlp)."""
+    """Test equivariant models with different head types (conv vs rotation_invariant_mlp)."""
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
     config_path = os.path.join(path, "LJ.json")
@@ -61,8 +61,8 @@ def pytest_equivariant_heads(example, mpnn_type, head_type):
     # Modify config to use the specified head type
     config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] = head_type
 
-    # Set equivariance=True for equivariant_mlp head types
-    if head_type in ["equivariant_mlp", "equivariant_mlp_per_node"]:
+    # Set equivariance=True for rotation_invariant_mlp head types
+    if head_type in ["rotation_invariant_mlp", "rotation_invariant_mlp_per_node"]:
         config["NeuralNetwork"]["Architecture"]["equivariance"] = True
 
     # Create temporary config file

@@ -412,21 +412,21 @@ class Base(Module):
                             node_NN_type,
                             self.activation_function,
                         )
-                    elif (
-                        node_NN_type == "equivariant_mlp"
-                        or node_NN_type == "equivariant_mlp_per_node"
+                    if (
+                        node_NN_type == "rotation_invariant_mlp"
+                        or node_NN_type == "rotation_invariant_mlp_per_node"
                     ):
-                        self.num_mlp = (
-                            1 if node_NN_type == "equivariant_mlp" else self.num_nodes
+                        num_mlp = (
+                            1 if node_NN_type == "rotation_invariant_mlp" else self.num_nodes
                         )
                         assert (
-                            self.num_nodes is not None
-                        ), "num_nodes must be positive integer for equivariant MLP"
+                            num_mlp > 0
+                        ), "num_nodes must be positive integer for rotation invariant MLP"
                         assert (
                             self.equivariance
-                        ), "equivariant_mlp head type requires equivariance=True in model"
-                        # Equivariant MLP uses inv_node_feat directly (no concatenated norm)
-                        head_NN[branchtype] = EquivariantMLPNode(
+                        ), "rotation_invariant_mlp head type requires equivariance=True in model"
+                        # Rotation-invariant MLP uses inv_node_feat directly (no concatenated norm)
+                        head_NN[branchtype] = RotationInvariantMLPNode(
                             self.hidden_dim,  # Use original hidden_dim, not effective_hidden_dim
                             3,  # equiv_dim for 3D positions
                             self.head_dims[ihead] * (1 + self.var_output),
@@ -456,7 +456,7 @@ class Base(Module):
                         raise ValueError(
                             "Unknown head NN structure for node features: "
                             + node_NN_type
-                            + "; currently only support 'mlp', 'mlp_per_node', 'equivariant_mlp', 'equivariant_mlp_per_node', or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                            + "; currently only support 'mlp', 'mlp_per_node', 'rotation_invariant_mlp', 'rotation_invariant_mlp_per_node', or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                         )
             else:
                 raise ValueError(
@@ -581,8 +581,8 @@ class Base(Module):
                                 inv_node_feat_head
                             )
                         x_node = inv_node_feat_head
-                    elif node_NN_type.startswith("equivariant_mlp"):
-                        # Equivariant MLP heads use both inv and equiv features
+                    elif node_NN_type.startswith("rotation_invariant_mlp"):
+                        # Rotation-invariant MLP heads use both inv and equiv features
                         x_node = headloc[branchtype](
                             inv_feat=inv_node_feat,
                             equiv_feat=equiv_node_feat,
@@ -615,8 +615,8 @@ class Base(Module):
                                     inv_node_feat_head
                                 )
                             x_node = inv_node_feat_head
-                        elif node_NN_type.startswith("equivariant_mlp"):
-                            # Equivariant MLP heads use both inv and equiv features
+                        elif node_NN_type.startswith("rotation_invariant_mlp"):
+                            # Rotation-invariant MLP heads use both inv and equiv features
                             x_node = headloc[branchtype](
                                 inv_feat=inv_node_feat[mask_nodes, :],
                                 equiv_feat=equiv_node_feat[mask_nodes, :],
@@ -762,14 +762,16 @@ class MLPNode(Module):
         return "MLPNode"
 
 
-class EquivariantMLPNode(Module):
+class RotationInvariantMLPNode(Module):
     """
-    Equivariant MLP head for node-level predictions in MLIP applications.
+    Rotation-invariant MLP head for node-level predictions in MLIP applications.
     Processes invariant (scalar) and equivariant (vector) features separately
     while maintaining rotational invariance for final predictions.
 
     At each layer, equivariant features contribute via their norm (rotation-invariant),
     creating strong gradient paths to positions for force prediction via autograd.
+    Note: Despite taking equivariant inputs, this head produces rotation-invariant
+    (scalar) outputs only. It is not truly equivariant.
     """
 
     def __init__(
@@ -899,4 +901,4 @@ class EquivariantMLPNode(Module):
         return outs
 
     def __str__(self):
-        return "EquivariantMLPNode"
+        return "RotationInvariantMLPNode"

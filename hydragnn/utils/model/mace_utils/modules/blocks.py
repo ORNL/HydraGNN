@@ -489,28 +489,28 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                             self.activation_function,
                             self.num_nodes,
                         )
-                    elif node_NN_type in [
-                        "equivariant_mlp",
-                        "equivariant_mlp_per_node",
+                    if node_NN_type in [
+                        "rotation_invariant_mlp",
+                        "rotation_invariant_mlp_per_node",
                     ]:
-                        # MACE handles equivariant_mlp by reusing the standard MLP implementation.
+                        # MACE handles rotation_invariant_mlp by reusing the standard MLP implementation.
                         # Unlike other models (SchNet, EGNN, PAINN) that separate invariant and equivariant features,
                         # MACE encodes all features in e3nn irreps, which automatically preserve E(3) equivariance.
                         # The LinearMLPNode uses o3.Linear layers that maintain equivariance when projecting
                         # higher-order irreps (vectors, tensors) to scalar outputs for predictions.
                         # Therefore, no explicit norm computation or feature concatenation is needed.
                         self.num_mlp = (
-                            1 if node_NN_type == "equivariant_mlp" else self.num_nodes
+                            1 if node_NN_type == "rotation_invariant_mlp" else self.num_nodes
                         )
                         assert (
                             self.num_nodes is not None
-                        ), "num_nodes must be positive integer for equivariant MLP"
+                        ), "num_nodes must be positive integer for rotation invariant MLP"
                         head_NN[branchtype] = LinearMLPNode(
                             input_irreps,
                             self.head_dims[ihead],
                             self.num_mlp,
                             node_NN_type.replace(
-                                "equivariant_", ""
+                                "rotation_invariant_", ""
                             ),  # Use mlp or mlp_per_node
                             self.activation_function,
                             self.num_nodes,
@@ -523,7 +523,7 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                         raise ValueError(
                             "Unknown head NN structure for node features"
                             + node_NN_type
-                            + "; currently only support 'mlp', 'mlp_per_node', 'equivariant_mlp', 'equivariant_mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                            + "; currently only support 'mlp', 'mlp_per_node', 'rotation_invariant_mlp', 'rotation_invariant_mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                         )
             else:
                 raise ValueError(
@@ -702,28 +702,28 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
                             self.num_nodes,
                         )
                     elif node_NN_type in [
-                        "equivariant_mlp",
-                        "equivariant_mlp_per_node",
+                        "rotation_invariant_mlp",
+                        "rotation_invariant_mlp_per_node",
                     ]:
-                        # MACE handles equivariant_mlp by reusing the standard MLP implementation.
+                        # MACE handles rotation_invariant_mlp by reusing the standard MLP implementation.
                         # Unlike other models (SchNet, EGNN, PAINN) that separate invariant and equivariant features,
                         # MACE encodes all features in e3nn irreps, which automatically preserve E(3) equivariance.
                         # The NonLinearMLPNode uses o3.Linear layers that maintain equivariance when projecting
                         # higher-order irreps (vectors, tensors) to scalar outputs for predictions.
                         # Therefore, no explicit norm computation or feature concatenation is needed.
                         self.num_mlp = (
-                            1 if node_NN_type == "equivariant_mlp" else self.num_nodes
+                            1 if node_NN_type == "rotation_invariant_mlp" else self.num_nodes
                         )
                         assert (
                             self.num_nodes is not None
-                        ), "num_nodes must be positive integer for equivariant MLP"
+                        ), "num_nodes must be positive integer for rotation invariant MLP"
                         head_NN[branchtype] = NonLinearMLPNode(
                             input_irreps,
                             self.head_dims[ihead],
                             self.num_mlp,
                             hidden_dim_node,
                             node_NN_type.replace(
-                                "equivariant_", ""
+                                "rotation_invariant_", ""
                             ),  # Use mlp or mlp_per_node
                             self.activation_function,
                             self.num_nodes,
@@ -736,7 +736,7 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
                         raise ValueError(
                             "Unknown head NN structure for node features"
                             + node_NN_type
-                            + "; currently only support 'mlp', 'mlp_per_node', 'equivariant_mlp', 'equivariant_mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                            + "; currently only support 'mlp', 'mlp_per_node', 'rotation_invariant_mlp', 'rotation_invariant_mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
                         )
             else:
                 raise ValueError(
