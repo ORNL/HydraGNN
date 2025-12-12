@@ -40,7 +40,6 @@ from torch_scatter import scatter
 from torch_geometric.nn import (
     Sequential as PyGSequential,
 )  # This naming is because there is torch.nn.Sequential and torch_geometric.nn.Sequential
-from torch_geometric.nn import global_mean_pool
 
 # MACE
 from hydragnn.utils.model.mace_utils.modules.blocks import (
@@ -128,7 +127,17 @@ class MACEStack(Base):
         num_polynomial_cutoff = (
             5 if num_polynomial_cutoff is None else num_polynomial_cutoff
         )
-        self.correlation = [2] if correlation is None else correlation
+        # Normalize correlation so downstream indexing is always safe
+        if correlation is None:
+            self.correlation = [2] * num_interactions
+        elif isinstance(correlation, int):
+            self.correlation = [correlation] * num_interactions
+        elif isinstance(correlation, (list, tuple)):
+            self.correlation = list(correlation)
+            if len(self.correlation) == 1:
+                self.correlation = self.correlation * num_interactions
+        else:
+            raise TypeError("correlation must be int, list, tuple, or None")
         radial_type = "bessel" if radial_type is None else radial_type
 
         # Making Irreps
@@ -159,8 +168,6 @@ class MACEStack(Base):
         self.register_buffer(
             "num_interactions", torch.tensor(num_interactions, dtype=torch.int64)
         )
-        if isinstance(correlation, int):
-            self.correlation = [self.correlation] * self.num_interactions
         self.radial_embedding = RadialEmbeddingBlock(
             r_max=r_max,
             num_bessel=num_bessel,
@@ -215,6 +222,7 @@ class MACEStack(Base):
                 num_heads=self.num_heads,
                 activation_function=self.activation_function,
                 num_nodes=self.num_nodes,
+                graph_pooling=self.graph_pooling,
             )
         )
 
@@ -240,6 +248,7 @@ class MACEStack(Base):
                 num_heads=self.num_heads,
                 activation_function=self.activation_function,
                 num_nodes=self.num_nodes,
+                graph_pooling=self.graph_pooling,
             )
         )
 
@@ -264,6 +273,7 @@ class MACEStack(Base):
                     num_heads=self.num_heads,
                     activation_function=self.activation_function,
                     num_nodes=self.num_nodes,
+                    graph_pooling=self.graph_pooling,
                 )
             )  # Last layer will be nonlinear node decoding
 
@@ -402,6 +412,10 @@ class MACEStack(Base):
     def _embedding(self, data):
         super()._embedding(data)
 
+        # Keep runtime inputs aligned with the model parameter dtype (important for bf16 runs).
+        param_dtype = next(self.parameters()).dtype
+        param_device = next(self.parameters()).device
+
         assert (
             data.pos is not None
         ), "MACE requires node positions (data.pos) to be set."
@@ -425,7 +439,9 @@ class MACEStack(Base):
         # Create node_attrs from atomic numbers. Later on it may contain more information
         ## Node attrs are intrinsic properties of the atoms. Currently, MACE only supports atomic number node attributes
         ## data.node_attrs is already used in another place, so has been renamed to data.node_attributes from MACE and same with other data variable names
-        data.node_attributes = process_node_attributes(data["x"], self.num_elements)
+        data.node_attributes = process_node_attributes(data["x"], self.num_elements).to(
+            device=param_device, dtype=param_dtype
+        )
 
         # Embeddings
         node_feats = self.node_embedding(data["node_attributes"])
@@ -523,6 +539,7 @@ def get_multihead_decoder(
     num_heads,
     activation_function,
     num_nodes,
+    graph_pooling: str,
 ):
     if nonlinear:
         return NonLinearMultiheadDecoderBlock(
@@ -533,6 +550,7 @@ def get_multihead_decoder(
             num_heads,
             activation_function,
             num_nodes,
+            graph_pooling,
         )
     else:
         return LinearMultiheadDecoderBlock(
@@ -543,4 +561,5 @@ def get_multihead_decoder(
             num_heads,
             activation_function,
             num_nodes,
+            graph_pooling,
         )

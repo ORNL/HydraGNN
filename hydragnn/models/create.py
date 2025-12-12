@@ -85,6 +85,7 @@ def create_model_config(
         config["Architecture"].get("enable_interatomic_potential", False),
         verbosity,
         use_gpu,
+        config["Architecture"].get("graph_pooling", "mean"),
     )
 
 
@@ -132,6 +133,7 @@ def create_model(
     enable_interatomic_potential: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
+    graph_pooling: str = "mean",
 ):
     timer = Timer("create_model")
     timer.start()
@@ -161,6 +163,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PNA":
@@ -187,6 +190,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -221,6 +225,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "GAT":
@@ -250,6 +255,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "MFC":
@@ -275,6 +281,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "CGCNN":
@@ -299,6 +306,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "SAGE":
@@ -321,6 +329,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "SchNet":
@@ -352,6 +361,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "DimeNet":
@@ -397,6 +407,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "EGNN":
@@ -422,6 +433,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PAINN":
@@ -448,6 +460,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "PNAEq":
@@ -475,6 +488,7 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
 
     elif mpnn_type == "MACE":
@@ -514,6 +528,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
@@ -574,30 +589,43 @@ def create_model(
                 assert (
                     data.pos.requires_grad
                 ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
+
                 assert (
-                    self.num_heads == 1 and self.head_type[0] == "node"
-                ), "Force predictions are only supported for models with one head that predict nodal energy. Check your num_heads and head_types."
-                # Initialize loss
-                tot_loss = 0
-                tasks_loss = []
-                # Energies
-                node_energy_pred = pred[0]
-                graph_energy_pred = (
-                    torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
-                    .squeeze()
-                    .float()
-                )
+                    self.num_heads == 1
+                ), "Force predictions require exactly one head."
+
+                # Support both node and graph heads; enforce sum pooling for graph heads
+                if self.head_type[0] == "node":
+                    node_energy_pred = pred[0]
+                    graph_energy_pred = (
+                        torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+                        .squeeze()
+                        .float()
+                    )
+                elif self.head_type[0] == "graph":
+                    if getattr(self.model, "graph_pooling", "mean") not in ["add"]:
+                        raise ValueError(
+                            "Graph head force loss requires sum pooling (graph_pooling='add')."
+                        )
+                    if isinstance(pred, dict) and "graph" in pred:
+                        graph_energy_pred = pred["graph"][0].squeeze().float()
+                    elif isinstance(pred, (list, tuple)):
+                        graph_energy_pred = pred[0].squeeze().float()
+                    else:
+                        graph_energy_pred = pred.squeeze().float()
+                else:
+                    raise ValueError(
+                        "Force predictions are only supported for node or graph energy heads."
+                    )
+
                 graph_energy_true = data.energy.squeeze().float()
-                energy_loss_weight = self.loss_weights[
-                    0
-                ]  # There should only be one loss-weight for energy
-                tot_loss += (
+                energy_loss_weight = self.loss_weights[0]
+                tot_loss = (
                     self.loss_function(graph_energy_pred, graph_energy_true)
                     * energy_loss_weight
                 )
-                tasks_loss.append(
-                    self.loss_function(graph_energy_pred, graph_energy_true)
-                )
+                tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
+
                 # Forces
                 forces_true = data.forces.float()
                 forces_pred = torch.autograd.grad(

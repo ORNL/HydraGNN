@@ -3,7 +3,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn as nn
 from collections import OrderedDict
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
@@ -68,6 +68,18 @@ class DecoderModel(nn.Module):
         self.var_output = base_model.var_output
         self.activation_function = base_model.activation_function
         self.num_branches = base_model.num_branches
+        self.graph_pool_fn = base_model.graph_pool_fn
+        self.graph_pool_reduction = base_model.graph_pool_reduction
+        self.graph_pooling = base_model.graph_pooling
+
+    def _pool_graph_features(self, x_tensor, batch_tensor):
+        if batch_tensor is None:
+            if self.graph_pool_reduction == "mean":
+                return x_tensor.mean(dim=0, keepdim=True)
+            if self.graph_pool_reduction == "max":
+                return x_tensor.max(dim=0, keepdim=True).values
+            return x_tensor.sum(dim=0, keepdim=True)
+        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
 
     def forward(self, data, encoded_feats):
         ## Take encoded features as input
@@ -77,9 +89,10 @@ class DecoderModel(nn.Module):
         #### multi-head decoder part####
         # shared dense layers for graph level output
         if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
+            x_graph = self._pool_graph_features(x, None)
+            data.batch = data.x * 0
         else:
-            x_graph = global_mean_pool(x, data.batch.to(x.device))
+            x_graph = self._pool_graph_features(x, data.batch)
 
         outputs = []
         outputs_var = []
