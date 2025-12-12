@@ -96,7 +96,13 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument("--nosync", action="store_true", help="disable gradient sync")
-    parser.add_argument("--bf16", action="store_true", help="use bf16")
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "fp64", "bf16"],
+        default="fp32",
+        help="Override precision; defaults to fp32 when not set",
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -599,6 +605,8 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
+    precision = args.precision.lower()
+
     with context:
         hydragnn.train.train_validate_test(
             model,
@@ -612,7 +620,7 @@ if __name__ == "__main__":
             log_name,
             verbosity,
             create_plots=False,
-            bf16=args.bf16,
+            precision=precision,
         )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

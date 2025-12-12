@@ -41,29 +41,63 @@ try:
 except (ImportError, ModuleNotFoundError):
     GradScaler = None
 
+PRECISION_MAP = {
+    "bf16": {"param_dtype": torch.float32, "autocast_dtype": torch.bfloat16},
+    "fp32": {"param_dtype": torch.float32, "autocast_dtype": None},
+    "fp64": {"param_dtype": torch.float64, "autocast_dtype": None},
+}
 
-def get_autocast_and_scaler(bf16):
-    use_bf16 = bf16 and (
-        (torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7)
-        or (hasattr(torch, "xpu") and torch.xpu.is_available())
-    )
-    print("get_autocast_and_scaler use_bf16: ", use_bf16)
 
-    ## No need to use GradScaler for bf16
-    scaler = (
-        GradScaler(str(get_device()), enabled=use_bf16)
-        if GradScaler and False
-        else None
-    )
+def resolve_precision(precision: str):
+    """Normalize precision string and return parameter/autocast dtypes."""
 
-    device = str(get_device())
-    autocast = (
-        torch.autocast(device_type=device, dtype=torch.bfloat16)
-        if use_bf16
-        else nullcontext()
-    )
+    if precision is None:
+        precision = "fp32"
+    prec = str(precision).lower()
+    aliases = {
+        "bfloat16": "bf16",
+        "float32": "fp32",
+        "float": "fp32",
+        "float64": "fp64",
+        "double": "fp64",
+    }
+    prec = aliases.get(prec, prec)
+    if prec not in PRECISION_MAP:
+        raise ValueError(
+            f"Unsupported precision {precision}. Choose from {list(PRECISION_MAP.keys())}."
+        )
+    info = PRECISION_MAP[prec]
+    return prec, info["param_dtype"], info["autocast_dtype"]
 
-    return autocast, scaler
+
+def move_batch_to_device(data, param_dtype):
+    device = get_device()
+    if param_dtype == torch.float64:
+        return data.to(device, dtype=param_dtype)
+    return data.to(device)
+
+
+def get_autocast_and_scaler(precision):
+    precision, _, autocast_dtype = resolve_precision(precision)
+
+    if precision == "bf16":
+        device_type = str(get_device())
+        cpu_bf16 = bool(getattr(torch.backends.cpu, "has_bf16", False))
+        use_bf16 = (torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7) or (
+            hasattr(torch, "xpu") and torch.xpu.is_available()
+        )
+        use_bf16 = use_bf16 or (device_type == "cpu" and cpu_bf16)
+        if not use_bf16:
+            print(f"Requested bf16 but unsupported on {device_type}; falling back to full precision.")
+
+        autocast = (
+            torch.autocast(device_type=device_type, dtype=autocast_dtype)
+            if use_bf16
+            else nullcontext()
+        )
+        return autocast, None
+
+    return nullcontext(), None
 
 
 def get_nbatch(loader):
@@ -95,7 +129,7 @@ def train_validate_test(
     create_plots=False,
     use_deepspeed=False,
     compute_grad_energy=False,
-    bf16=False,
+    precision="fp32",
 ):
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
@@ -115,6 +149,8 @@ def train_validate_test(
         if "Checkpoint" in config["Training"]
         else False
     )
+
+    precision, _, _ = resolve_precision(precision)
 
     device = get_device()
     # total loss tracking for train/vali/test
@@ -201,7 +237,7 @@ def train_validate_test(
                 profiler=prof,
                 use_deepspeed=use_deepspeed,
                 compute_grad_energy=compute_grad_energy,
-                bf16=bf16,
+                precision=precision,
             )
             tr.stop("train")
             tr.disable()
@@ -217,7 +253,7 @@ def train_validate_test(
             verbosity,
             reduce_ranks=True,
             compute_grad_energy=compute_grad_energy,
-            bf16=bf16,
+            precision=precision,
         )
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
@@ -226,7 +262,7 @@ def train_validate_test(
             reduce_ranks=True,
             return_samples=plot_hist_solution,
             compute_grad_energy=compute_grad_energy,
-            bf16=bf16,
+            precision=precision,
         )
         scheduler.step(val_loss)
         if writer is not None:
@@ -310,7 +346,7 @@ def train_validate_test(
 
         # At the end of training phase, do the one test run for visualizer to get latest predictions
         test_loss, test_taskserr, true_values, predicted_values = test(
-            test_loader, model, verbosity
+            test_loader, model, verbosity, precision=precision
         )
 
         ##output predictions with unit/not normalized
@@ -490,12 +526,13 @@ def train(
     profiler=None,
     use_deepspeed=False,
     compute_grad_energy=False,
-    bf16=False,
+    precision="fp32",
 ):
     if profiler is None:
         profiler = Profiler()
 
-    autocast_context, scaler = get_autocast_and_scaler(bf16)
+    precision, param_dtype, _ = resolve_precision(precision)
+    autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -549,7 +586,7 @@ def train(
         with record_function("forward"):
             if trace_level > 0:
                 tr.start("h2d", **syncopt)
-            data = data.to(get_device())
+            data = move_batch_to_device(data, param_dtype)
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
             if compute_grad_energy:  # for force and energy prediction
@@ -627,9 +664,10 @@ def validate(
     verbosity,
     reduce_ranks=True,
     compute_grad_energy=False,
-    bf16=False,
+    precision="fp32",
 ):
-    autocast_context, scaler = get_autocast_and_scaler(bf16)
+    precision, param_dtype, _ = resolve_precision(precision)
+    autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -651,7 +689,7 @@ def validate(
             break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        data = data.to(get_device())
+        data = move_batch_to_device(data, param_dtype)
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
                 data.pos.requires_grad = True
@@ -688,9 +726,10 @@ def test(
     reduce_ranks=True,
     return_samples=True,
     compute_grad_energy=False,
-    bf16=False,
+    precision="fp32",
 ):
-    autocast_context, scaler = get_autocast_and_scaler(bf16)
+    precision, param_dtype, _ = resolve_precision(precision)
+    autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(model.module.num_heads, device=get_device())
@@ -715,7 +754,7 @@ def test(
             break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        data = data.to(get_device())
+        data = move_batch_to_device(data, param_dtype)
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
                 data.pos.requires_grad = True
@@ -786,7 +825,7 @@ def test(
             if use_ddstore:
                 loader.dataset.ddstore.epoch_end()
             head_index = get_head_indices(model, data)
-            data = data.to(get_device())
+            data = move_batch_to_device(data, param_dtype)
             ytrue = data.y
             pred = model(data)
             if model.module.var_output:

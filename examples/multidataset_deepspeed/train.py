@@ -96,6 +96,13 @@ if __name__ == "__main__":
         help="enable zero optimizer with stage 1",
         default=False,
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "fp64", "bf16"],
+        default="fp32",
+        help="Override precision; defaults to fp32 when not set",
+    )
 
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
@@ -151,7 +158,6 @@ if __name__ == "__main__":
     )
     parser.set_defaults(deepspeed=True)  # default is True
 
-    parser.add_argument("--bf16", action="store_true", help="use bf16")
     args = parser.parse_args()
     args.parameters = vars(args)
 
@@ -452,6 +458,8 @@ if __name__ == "__main__":
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    bf16_flag = args.precision.lower() == "bf16"
+
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
         model,
         optimizer,
@@ -459,7 +467,7 @@ if __name__ == "__main__":
         use_deepspeed=use_deepspeed,
         zero_opt=args.zero_opt,
         config=config,
-        bf16=args.bf16,
+        bf16=bf16_flag,
     )
 
     hydragnn.utils.model.load_existing_model_config(
@@ -467,6 +475,8 @@ if __name__ == "__main__":
     )
 
     ##################################################################################################################
+
+    precision = args.precision.lower()
 
     hydragnn.train.train_validate_test(
         model,
@@ -481,7 +491,7 @@ if __name__ == "__main__":
         verbosity,
         create_plots=False,
         use_deepspeed=use_deepspeed,
-        bf16=args.bf16,
+        precision=precision,
     )
 
     hydragnn.utils.model.save_model(

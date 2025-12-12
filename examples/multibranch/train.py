@@ -86,6 +86,13 @@ if __name__ == "__main__":
         help="set num samples for oversampling",
         default=None,
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "fp64", "bf16"],
+        default=None,
+        help="Override precision; defaults to fp32 when not set",
+    )
     parser.add_argument("--nosync", action="store_true", help="disable gradient sync")
 
     group = parser.add_mutually_exclusive_group()
@@ -493,6 +500,8 @@ if __name__ == "__main__":
 
     ##################################################################################################################
 
+    precision = args.precision.lower() if args.precision is not None else "fp32"
+
     if args.nosync:
         context = model.no_sync()
     else:
@@ -511,6 +520,7 @@ if __name__ == "__main__":
             log_name,
             verbosity,
             create_plots=False,
+            precision=precision,
         )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
