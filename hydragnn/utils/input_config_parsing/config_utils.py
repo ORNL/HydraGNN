@@ -157,6 +157,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Optimizer" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
 
+    if "precision" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["precision"] = "fp32"
+
     return config
 
 

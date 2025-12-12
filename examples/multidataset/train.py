@@ -68,6 +68,13 @@ if __name__ == "__main__":
         help="set num test samples per process for weak-scaling test",
         default=None,
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "fp64", "bf16"],
+        default=None,
+        help="Override precision; defaults to fp32 when not set",
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -379,6 +386,8 @@ if __name__ == "__main__":
 
     ##################################################################################################################
 
+    precision = args.precision.lower() if args.precision is not None else "fp32"
+
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -391,6 +400,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        precision=precision,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

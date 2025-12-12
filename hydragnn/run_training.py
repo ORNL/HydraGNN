@@ -12,6 +12,8 @@
 import os, json
 from functools import singledispatch
 
+import torch
+
 import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -36,13 +38,22 @@ from hydragnn.utils.input_config_parsing.config_utils import (
 )
 from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import train_validate_test
+from hydragnn.train.train_validate_test import train_validate_test, resolve_precision
 
 deepspeed_available = True
 try:
     import deepspeed
 except:
     deepspeed_available = False
+
+
+def _cast_optimizer_state(optimizer, dtype):
+    if optimizer is None:
+        return
+    for state in optimizer.state.values():
+        for key, value in state.items():
+            if torch.is_tensor(value) and torch.is_floating_point(value):
+                state[key] = value.to(dtype=dtype)
 
 
 @singledispatch
@@ -68,6 +79,12 @@ def _(config: dict, use_deepspeed=False):
         os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
 
     setup_log(get_log_name_config(config))
+
+    training_cfg = config["NeuralNetwork"]["Training"]
+    precision, param_dtype, _ = resolve_precision(training_cfg.get("precision", "fp32"))
+    training_cfg["precision"] = precision
+    torch.set_default_dtype(param_dtype)
+
     world_size, world_rank = setup_ddp(use_deepspeed=use_deepspeed)
 
     train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
@@ -80,6 +97,7 @@ def _(config: dict, use_deepspeed=False):
     model = create_model_config(
         config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
+    model = model.to(dtype=param_dtype)
     print_peak_memory(
         config["Verbosity"]["level"], "Max memory allocated after creating local model"
     )
@@ -114,6 +132,9 @@ def _(config: dict, use_deepspeed=False):
         load_existing_model_config(
             model, config["NeuralNetwork"]["Training"], optimizer=optimizer
         )
+
+        model = model.to(dtype=param_dtype)
+        _cast_optimizer_state(optimizer, param_dtype)
 
     else:
         assert deepspeed_available, "deepspeed package not installed"
@@ -180,6 +201,7 @@ def _(config: dict, use_deepspeed=False):
         create_plots,
         use_deepspeed=use_deepspeed,
         compute_grad_energy=enable_interatomic_potential,
+        precision=precision,
     )
 
     save_model(model, optimizer, log_name, use_deepspeed=use_deepspeed)

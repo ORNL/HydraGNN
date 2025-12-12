@@ -322,6 +322,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "fp64", "bf16"],
+        default=None,
+        help="Override precision; defaults to fp32 when not set",
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -600,6 +607,8 @@ if __name__ == "__main__":
 
     ##################################################################################################################
 
+    precision = args.precision.lower() if args.precision is not None else "fp32"
+
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -615,6 +624,7 @@ if __name__ == "__main__":
         compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
             "enable_interatomic_potential", False
         ),
+        precision=precision,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
