@@ -83,12 +83,14 @@ def get_autocast_and_scaler(precision):
     if precision == "bf16":
         device_type = str(get_device())
         cpu_bf16 = bool(getattr(torch.backends.cpu, "has_bf16", False))
-        use_bf16 = (torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7) or (
-            hasattr(torch, "xpu") and torch.xpu.is_available()
-        )
+        use_bf16 = (
+            torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7
+        ) or (hasattr(torch, "xpu") and torch.xpu.is_available())
         use_bf16 = use_bf16 or (device_type == "cpu" and cpu_bf16)
         if not use_bf16:
-            print(f"Requested bf16 but unsupported on {device_type}; falling back to full precision.")
+            print(
+                f"Requested bf16 but unsupported on {device_type}; falling back to full precision."
+            )
 
         autocast = (
             torch.autocast(device_type=device_type, dtype=autocast_dtype)
