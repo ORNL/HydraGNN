@@ -47,6 +47,10 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
 
+    # Set default value for OpenEquivariance usage
+    if "enable_openequivariance" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["enable_openequivariance"] = False
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]

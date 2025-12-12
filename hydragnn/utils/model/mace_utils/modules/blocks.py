@@ -27,6 +27,12 @@ from hydragnn.utils.model.irreps_tools import (
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
+from hydragnn.utils.model.openequivariance_utils import (
+    OptimizedTensorProduct,
+    OptimizedLinear,
+    optimized_einsum,
+    is_openequivariance_enabled,
+)
 
 from .radial import (
     AgnesiTransform,
@@ -43,7 +49,7 @@ from .symmetric_contraction import SymmetricContraction
 class LinearNodeEmbeddingBlock(torch.nn.Module):
     def __init__(self, irreps_in: o3.Irreps, irreps_out: o3.Irreps):
         super().__init__()
-        self.linear = o3.Linear(irreps_in=irreps_in, irreps_out=irreps_out)
+        self.linear = OptimizedLinear(irreps_in=irreps_in, irreps_out=irreps_out)
 
     def forward(
         self,
@@ -56,7 +62,7 @@ class LinearNodeEmbeddingBlock(torch.nn.Module):
 class LinearReadoutBlock(torch.nn.Module):
     def __init__(self, irreps_in: o3.Irreps):
         super().__init__()
-        self.linear = o3.Linear(irreps_in=irreps_in, irreps_out=o3.Irreps("0e"))
+        self.linear = OptimizedLinear(irreps_in=irreps_in, irreps_out=o3.Irreps("0e"))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         return self.linear(x)  # [n_nodes, 1]
@@ -70,11 +76,13 @@ class NonLinearReadoutBlock(torch.nn.Module):
     ):
         super().__init__()
         self.hidden_irreps = MLP_irreps
-        self.linear_1 = o3.Linear(irreps_in=irreps_in, irreps_out=self.hidden_irreps)
+        self.linear_1 = OptimizedLinear(
+            irreps_in=irreps_in, irreps_out=self.hidden_irreps
+        )
         self.non_linearity = nn.Activation(
             irreps_in=self.hidden_irreps, acts=[gate]
         )  # Need to adjust this to actually use the gate
-        self.linear_2 = o3.Linear(
+        self.linear_2 = OptimizedLinear(
             irreps_in=self.hidden_irreps, irreps_out=o3.Irreps("0e")
         )
 
@@ -182,7 +190,7 @@ class EquivariantProductBasisBlock(torch.nn.Module):
             num_elements=num_elements,
         )
         # Update linear
-        self.linear = o3.Linear(
+        self.linear = OptimizedLinear(
             target_irreps,
             target_irreps,
             internal_weights=True,
@@ -264,7 +272,7 @@ class TensorProductWeightsBlock(torch.nn.Module):
         sender_or_receiver_node_attrs: torch.Tensor,  # assumes that the node attributes are one-hot encoded
         edge_feats: torch.Tensor,
     ):
-        return torch.einsum(
+        return optimized_einsum(
             "be, ba, aek -> bk", edge_feats, sender_or_receiver_node_attrs, self.weights
         )
 
@@ -289,7 +297,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
             [(o3.Irreps(self.hidden_irreps).count(o3.Irrep(0, 1)), (0, 1))]
         )
         # First linear
-        self.linear_up = o3.Linear(
+        self.linear_up = OptimizedLinear(
             self.node_feats_irreps,
             self.node_feats_irreps,
             internal_weights=True,
@@ -301,7 +309,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
             self.edge_attrs_irreps,
             self.target_irreps,
         )
-        self.conv_tp = o3.TensorProduct(
+        self.conv_tp = OptimizedTensorProduct(
             self.node_feats_irreps,
             self.edge_attrs_irreps,
             irreps_mid,
@@ -311,7 +319,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         )
 
         # Convolution weights
-        self.linear_down = o3.Linear(
+        self.linear_down = OptimizedLinear(
             self.node_feats_irreps,
             self.node_feats_down_irreps,
             internal_weights=True,
@@ -337,7 +345,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
             irreps_mid.simplify()
         )  # .simplify() essentially combines irreps of the same type so that normalization is done across them all. The site has an in-depth explanation
         self.irreps_out = self.target_irreps
-        self.linear = o3.Linear(
+        self.linear = OptimizedLinear(
             irreps_mid,
             self.irreps_out,
             internal_weights=True,
@@ -347,7 +355,7 @@ class RealAgnosticAttResidualInteractionBlock(InteractionBlock):
         self.reshape = reshape_irreps(self.irreps_out)
 
         # Skip connection.
-        self.skip_linear = o3.Linear(
+        self.skip_linear = OptimizedLinear(
             self.node_feats_irreps, self.hidden_irreps
         )  # This will be size (num_nodes, 64*9) when there are 64 channels and irreps, 0, 1, 2 (1+3+5=9)  ## This becomes sc
 
@@ -791,8 +799,8 @@ class LinearMLPNode(torch.nn.Module):
             denselayers = []
             output_irreps = o3.Irreps(create_irreps_string(output_dim, 0))
             denselayers.append(
-                o3.Linear(input_irreps, output_irreps)
-            )  # First layer is o3.Linear and takes all irreps down to scalars
+                OptimizedLinear(input_irreps, output_irreps)
+            )  # First layer is OptimizedLinear and takes all irreps down to scalars
             self.mlp.append(Sequential(*denselayers))
 
     def node_features_reshape(self, x, batch):
@@ -853,8 +861,8 @@ class NonLinearMLPNode(torch.nn.Module):
             denselayers = []
             hidden_irreps = o3.Irreps(create_irreps_string(hidden_dim_node[0], 0))
             denselayers.append(
-                o3.Linear(input_irreps, hidden_irreps)
-            )  # First layer is o3.Linear and takes all irreps down to scalars
+                OptimizedLinear(input_irreps, hidden_irreps)
+            )  # First layer is OptimizedLinear and takes all irreps down to scalars
             denselayers.append(self.activation_function)
             for ilayer in range(len(hidden_dim_node) - 1):
                 denselayers.append(

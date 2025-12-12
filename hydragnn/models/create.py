@@ -83,6 +83,7 @@ def create_model_config(
         config["Architecture"]["avg_num_neighbors"],
         config["Training"]["conv_checkpointing"],
         config["Architecture"].get("enable_interatomic_potential", False),
+        config["Architecture"].get("enable_openequivariance", False),
         verbosity,
         use_gpu,
     )
@@ -130,6 +131,7 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
+    enable_openequivariance: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -514,6 +516,7 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            enable_openequivariance=enable_openequivariance,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
