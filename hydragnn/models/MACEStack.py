@@ -375,6 +375,15 @@ class MACEStack(Base):
     def forward(self, data):
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
 
+        batch_for_cond = (
+            data.batch
+            if hasattr(data, "batch") and data.batch is not None
+            else None
+        )
+        inv_node_feat = self._apply_graph_conditioning(
+            inv_node_feat, batch_for_cond, data
+        )
+
         ### MACE has a readout block before convolutions ###
         output = self.multihead_decoders[0](
             data, data.node_attributes
@@ -403,6 +412,10 @@ class MACEStack(Base):
                 output = readout(
                     data, torch.cat([inv_node_feat, equiv_node_feat], dim=1)
                 )  # output is a list of tensors with [index][n_output, size_output]
+
+            inv_node_feat = self._apply_graph_conditioning(
+                inv_node_feat, batch_for_cond, data
+            )
             # Sum predictions for each index, taking care of size differences
             for idx, prediction in enumerate(output):
                 outputs[idx] = outputs[idx] + prediction

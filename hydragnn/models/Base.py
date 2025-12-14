@@ -59,6 +59,7 @@ class Base(Module):
         num_conv_layers: int = 16,
         num_nodes: int = None,
         graph_pooling: str = "mean",
+        use_graph_attr_conditioning: bool = False,
     ):
         super().__init__()
         self.device = get_device()
@@ -92,6 +93,7 @@ class Base(Module):
         self.activation_function = activation_function_selection(
             activation_function_type
         )
+        self.use_graph_attr_conditioning = use_graph_attr_conditioning
 
         # output variance for Gaussian negative log likelihood loss
         self.var_output = 0
@@ -202,6 +204,10 @@ class Base(Module):
                         2 * self.hidden_dim, self.hidden_dim, bias=False
                     )
 
+        # Optional FiLM-like conditioning with graph-level features (data.graph_attr).
+        # Lazily initialized on first use to avoid extra config wiring; only scalar (invariant) node channels are modulated.
+        self.graph_conditioner = None
+
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
@@ -225,6 +231,58 @@ class Base(Module):
                 )
         else:
             return mpnn
+
+    def _ensure_graph_conditioner(self, graph_attr_dim: int):
+        """Instantiate graph conditioner the first time we see graph_attr."""
+        if self.graph_conditioner is None:
+            hidden = max(self.hidden_dim, graph_attr_dim)
+            self.graph_conditioner = Sequential(
+                Linear(graph_attr_dim, hidden),
+                self.activation_function,
+                Linear(hidden, 2 * self.hidden_dim),
+            )
+
+    def _apply_graph_conditioning(self, inv_node_feat, batch, data):
+        """Apply FiLM (scale/shift) to invariant node channels using graph_attr if provided."""
+        if not self.use_graph_attr_conditioning:
+            return inv_node_feat
+
+        if not hasattr(data, "graph_attr") or data.graph_attr is None:
+            raise ValueError(
+                "use_graph_attr_conditioning=True but data.graph_attr is missing."
+            )
+
+        graph_attr = data.graph_attr
+        if graph_attr.dim() == 1:
+            graph_attr = graph_attr.unsqueeze(-1)
+        graph_attr = graph_attr.to(inv_node_feat.device).float()
+
+        self._ensure_graph_conditioner(graph_attr.size(-1))
+
+        # FiLM: inv = (1 + scale) * inv + shift, scale/shift are per-graph then broadcast by batch.
+        scale_shift = self.graph_conditioner(graph_attr)
+        scale, shift = scale_shift.split(self.hidden_dim, dim=-1)
+        scale = torch.tanh(scale)  # keep modulation bounded
+
+        # Batch can be None for single-graph inputs; create a dummy batch in that case.
+        if batch is None:
+            batch = torch.zeros(
+                inv_node_feat.size(0), device=inv_node_feat.device, dtype=torch.long
+            )
+
+        channel_dim = inv_node_feat.size(-1)
+        scale_b = scale[batch]
+        shift_b = shift[batch]
+        if channel_dim != self.hidden_dim:
+            if channel_dim % self.hidden_dim != 0:
+                raise ValueError(
+                    f"Graph conditioning expects channels divisible by hidden_dim (got {channel_dim} vs {self.hidden_dim})."
+                )
+            factor = channel_dim // self.hidden_dim
+            scale_b = scale_b.repeat_interleave(factor, dim=-1)
+            shift_b = shift_b.repeat_interleave(factor, dim=-1)
+
+        return inv_node_feat * (1 + scale_b) + shift_b
 
     def _init_conv(self):
         self.graph_convs.append(
@@ -482,6 +540,13 @@ class Base(Module):
         tr.start("enc_forward")
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
 
+        # Prepare batch indexing for graph conditioning (handles single-graph case gracefully).
+        batch_for_cond = (
+            data.batch
+            if hasattr(data, "batch") and data.batch is not None
+            else None
+        )
+
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
                 inv_node_feat, equiv_node_feat = conv(
@@ -497,6 +562,10 @@ class Base(Module):
                     equiv_node_feat=equiv_node_feat,
                     **conv_args,
                 )
+
+            inv_node_feat = self._apply_graph_conditioning(
+                inv_node_feat, batch_for_cond, data
+            )
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
 
         x = inv_node_feat

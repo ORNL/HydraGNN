@@ -143,6 +143,19 @@ def load_existing_model(
                 k = "module." + k
                 ddp_state_dict[k] = v
             state_dict = ddp_state_dict
+        # Ensure optional graph conditioner modules exist before strict load.
+        target_model = model.module if hasattr(model, "module") else model
+        graph_cond_key = None
+        for key in state_dict.keys():
+            if key.endswith("graph_conditioner.0.weight"):
+                graph_cond_key = key
+                break
+        if graph_cond_key and hasattr(target_model, "_ensure_graph_conditioner"):
+            if getattr(target_model, "graph_conditioner", None) is None:
+                graph_attr_dim = state_dict[graph_cond_key].shape[1]
+                # Toggle conditioning on to align with checkpoint contents.
+                target_model.use_graph_attr_conditioning = True
+                target_model._ensure_graph_conditioner(graph_attr_dim)
         model.load_state_dict(state_dict)
         if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

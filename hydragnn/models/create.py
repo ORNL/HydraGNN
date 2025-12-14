@@ -43,52 +43,54 @@ def create_model_config(
     use_gpu: bool = True,
 ):
     return create_model(
-        config["Architecture"]["mpnn_type"],
-        config["Architecture"]["input_dim"],
-        config["Architecture"]["hidden_dim"],
-        config["Architecture"]["output_dim"],
-        config["Architecture"]["pe_dim"],
-        config["Architecture"]["global_attn_engine"],
-        config["Architecture"]["global_attn_type"],
-        config["Architecture"]["global_attn_heads"],
-        config["Architecture"]["output_type"],
-        config["Architecture"]["output_heads"],
-        config["Architecture"]["activation_function"],
-        config["Training"]["loss_function_type"],
-        config["Architecture"].get("task_weights", [1.0]),
-        config["Architecture"]["num_conv_layers"],
-        config["Architecture"]["freeze_conv_layers"],
-        config["Architecture"]["initial_bias"],
-        config["Architecture"]["num_nodes"],
-        config["Architecture"]["max_neighbours"],
-        config["Architecture"]["edge_dim"],
-        config["Architecture"]["pna_deg"],
-        config["Architecture"]["num_before_skip"],
-        config["Architecture"]["num_after_skip"],
-        config["Architecture"]["num_radial"],
-        config["Architecture"]["radial_type"],
-        config["Architecture"]["distance_transform"],
-        config["Architecture"]["basis_emb_size"],
-        config["Architecture"]["int_emb_size"],
-        config["Architecture"]["out_emb_size"],
-        config["Architecture"]["envelope_exponent"],
-        config["Architecture"]["num_spherical"],
-        config["Architecture"]["num_gaussians"],
-        config["Architecture"]["num_filters"],
-        config["Architecture"]["radius"],
-        config["Architecture"]["equivariance"],
-        config["Architecture"]["correlation"],
-        config["Architecture"]["max_ell"],
-        config["Architecture"]["node_max_ell"],
-        config["Architecture"]["avg_num_neighbors"],
-        config["Training"]["conv_checkpointing"],
-        config["Architecture"].get("enable_interatomic_potential", False),
-        verbosity,
-        use_gpu,
-        config["Architecture"].get("graph_pooling", "mean"),
-        config["Architecture"].get("energy_weight", 0.0),
-        config["Architecture"].get("energy_peratom_weight", 0.0),
-        config["Architecture"].get("force_weight", 0.0),
+        mpnn_type=config["Architecture"]["mpnn_type"],
+        input_dim=config["Architecture"]["input_dim"],
+        hidden_dim=config["Architecture"]["hidden_dim"],
+        output_dim=config["Architecture"]["output_dim"],
+        pe_dim=config["Architecture"]["pe_dim"],
+        global_attn_engine=config["Architecture"]["global_attn_engine"],
+        global_attn_type=config["Architecture"]["global_attn_type"],
+        global_attn_heads=config["Architecture"]["global_attn_heads"],
+        output_type=config["Architecture"]["output_type"],
+        output_heads=config["Architecture"]["output_heads"],
+        activation_function=config["Architecture"]["activation_function"],
+        loss_function_type=config["Training"]["loss_function_type"],
+        task_weights=config["Architecture"]["task_weights"],
+        num_conv_layers=config["Architecture"]["num_conv_layers"],
+        freeze_conv=config["Architecture"]["freeze_conv_layers"],
+        initial_bias=config["Architecture"]["initial_bias"],
+        num_nodes=config["Architecture"]["num_nodes"],
+        max_neighbours=config["Architecture"]["max_neighbours"],
+        edge_dim=config["Architecture"]["edge_dim"],
+        pna_deg=config["Architecture"]["pna_deg"],
+        num_before_skip=config["Architecture"]["num_before_skip"],
+        num_after_skip=config["Architecture"]["num_after_skip"],
+        num_radial=config["Architecture"]["num_radial"],
+        radial_type=config["Architecture"]["radial_type"],
+        distance_transform=config["Architecture"]["distance_transform"],
+        basis_emb_size=config["Architecture"]["basis_emb_size"],
+        int_emb_size=config["Architecture"]["int_emb_size"],
+        out_emb_size=config["Architecture"]["out_emb_size"],
+        envelope_exponent=config["Architecture"]["envelope_exponent"],
+        num_spherical=config["Architecture"]["num_spherical"],
+        num_gaussians=config["Architecture"]["num_gaussians"],
+        num_filters=config["Architecture"]["num_filters"],
+        radius=config["Architecture"]["radius"],
+        equivariance=config["Architecture"]["equivariance"],
+        correlation=config["Architecture"]["correlation"],
+        max_ell=config["Architecture"]["max_ell"],
+        node_max_ell=config["Architecture"]["node_max_ell"],
+        avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
+        conv_checkpointing=config["Training"]["conv_checkpointing"],
+        enable_interatomic_potential=config["Architecture"].get(
+            "enable_interatomic_potential", False
+        ),
+        use_graph_attr_conditioning=config["Architecture"].get(
+            "use_graph_attr_conditioning", False
+        ),
+        graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        verbosity=verbosity,
+        use_gpu=use_gpu,
     )
 
 
@@ -134,6 +136,8 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
+    use_graph_attr_conditioning: bool = False,
+    graph_pooling: str = "mean",
     verbosity: int = 0,
     use_gpu: bool = True,
     graph_pooling: str = "mean",
@@ -170,6 +174,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "PNA":
@@ -197,6 +202,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -232,6 +238,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "GAT":
@@ -262,6 +269,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "MFC":
@@ -288,6 +296,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "CGCNN":
@@ -313,6 +322,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "SAGE":
@@ -336,6 +346,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "SchNet":
@@ -368,6 +379,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "DimeNet":
@@ -414,6 +426,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "EGNN":
@@ -440,6 +453,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "PAINN":
@@ -467,6 +481,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
 
     elif mpnn_type == "PNAEq":
@@ -535,6 +550,7 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
