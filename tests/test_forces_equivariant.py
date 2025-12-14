@@ -388,12 +388,10 @@ def test_head_type_equivariance(
                 forces_rotated = compute_forces(model, data_rotated)
                 forces_original_rotated = torch.matmul(forces_original, R.t())
 
-                max_error = torch.max(
-                    torch.abs(forces_rotated - forces_original_rotated)
-                ).item()
-                relative_error = max_error / (
-                    torch.max(torch.abs(forces_rotated)).item() + 1e-10
-                )
+                diff_norm = torch.norm(forces_rotated - forces_original_rotated, dim=1)
+                max_error = diff_norm.max().item()
+                denom = torch.norm(forces_rotated, dim=1).max().item() + 1e-10
+                relative_error = max_error / denom
 
                 max_errors.append(max_error)
                 relative_errors.append(relative_error)
@@ -701,12 +699,10 @@ def test_energy_only_equivariance(
                 forces_rotated = compute_forces(model, data_rotated)
                 forces_original_rotated = torch.matmul(forces_original, R.t())
 
-                max_error = torch.max(
-                    torch.abs(forces_rotated - forces_original_rotated)
-                ).item()
-                relative_error = max_error / (
-                    torch.max(torch.abs(forces_rotated)).item() + 1e-10
-                )
+                diff_norm = torch.norm(forces_rotated - forces_original_rotated, dim=1)
+                max_error = diff_norm.max().item()
+                denom = torch.norm(forces_rotated, dim=1).max().item() + 1e-10
+                relative_error = max_error / denom
 
                 max_errors.append(max_error)
                 relative_errors.append(relative_error)
