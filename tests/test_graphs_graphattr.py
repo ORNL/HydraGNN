@@ -46,9 +46,15 @@ def add_graph_attr(monkeypatch):
     yield
     monkeypatch.setattr(gscu, "update_predicted_values", orig_update)
     monkeypatch.setattr(sdl, "update_predicted_values", orig_update, raising=False)
-    monkeypatch.setattr(pickledataset, "update_predicted_values", orig_update, raising=False)
-    monkeypatch.setattr(distdataset, "update_predicted_values", orig_update, raising=False)
-    monkeypatch.setattr(adiosdataset, "update_predicted_values", orig_update, raising=False)
+    monkeypatch.setattr(
+        pickledataset, "update_predicted_values", orig_update, raising=False
+    )
+    monkeypatch.setattr(
+        distdataset, "update_predicted_values", orig_update, raising=False
+    )
+    monkeypatch.setattr(
+        adiosdataset, "update_predicted_values", orig_update, raising=False
+    )
 
 
 def unittest_train_model_graphattr(
@@ -212,7 +218,9 @@ def unittest_train_model_graphattr(
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
 def pytest_train_model_graphattr(mpnn_type, ci_input, overwrite_data=False):
-    unittest_train_model_graphattr(mpnn_type, None, None, ci_input, False, overwrite_data)
+    unittest_train_model_graphattr(
+        mpnn_type, None, None, ci_input, False, overwrite_data
+    )
 
 
 @pytest.mark.parametrize(
@@ -220,7 +228,9 @@ def pytest_train_model_graphattr(mpnn_type, ci_input, overwrite_data=False):
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
 def pytest_train_model_graphattr_lengths(mpnn_type, overwrite_data=False):
-    unittest_train_model_graphattr(mpnn_type, None, None, "ci.json", True, overwrite_data)
+    unittest_train_model_graphattr(
+        mpnn_type, None, None, "ci.json", True, overwrite_data
+    )
 
 
 @pytest.mark.parametrize(
@@ -245,7 +255,9 @@ def pytest_train_model_graphattr_lengths_global_attention(
     ["MACE"],
 )
 def pytest_train_mace_model_graphattr_lengths(mpnn_type, overwrite_data=False):
-    unittest_train_model_graphattr(mpnn_type, None, None, "ci.json", True, overwrite_data)
+    unittest_train_model_graphattr(
+        mpnn_type, None, None, "ci.json", True, overwrite_data
+    )
 
 
 @pytest.mark.parametrize("mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])

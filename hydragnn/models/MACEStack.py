@@ -376,9 +376,7 @@ class MACEStack(Base):
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
 
         batch_for_cond = (
-            data.batch
-            if hasattr(data, "batch") and data.batch is not None
-            else None
+            data.batch if hasattr(data, "batch") and data.batch is not None else None
         )
         inv_node_feat = self._apply_graph_conditioning(
             inv_node_feat, batch_for_cond, data

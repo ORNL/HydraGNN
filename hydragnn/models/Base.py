@@ -542,9 +542,7 @@ class Base(Module):
 
         # Prepare batch indexing for graph conditioning (handles single-graph case gracefully).
         batch_for_cond = (
-            data.batch
-            if hasattr(data, "batch") and data.batch is not None
-            else None
+            data.batch if hasattr(data, "batch") and data.batch is not None else None
         )
 
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
