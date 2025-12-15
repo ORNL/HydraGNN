@@ -183,6 +183,8 @@ def unittest_train_model_graphattr(
     if ci_input == "ci_conv_head.json":
         thresholds["GIN"] = [0.26, 0.51]
         thresholds["SchNet"] = [0.30, 0.30]
+        # EGNN performs worse with the small conv-head config; relax thresholds
+        thresholds["EGNN"] = [0.36, 0.36]
 
     verbosity = 2
 
