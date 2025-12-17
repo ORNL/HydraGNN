@@ -178,7 +178,7 @@ def train_validate_test(
 
         if compute_grad_energy:
             num_heads = 2
-            head_dims = [1,1] #data.forces.shape[0]*data.forces.shape[1]]
+            head_dims = [1,1]
         else:
             num_heads=model.module.num_heads
             head_dims=model.module.head_dims
@@ -909,7 +909,7 @@ def test(
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for ihead in range(len(predicted_values)): ###More general than range(model.module.num_heads)
+        for ihead in range(len(predicted_values)): ###More general for both MLIP and non-conservative model
             predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
             true_values[ihead] = torch.cat(true_values[ihead], dim=0)
 
