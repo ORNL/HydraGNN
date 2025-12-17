@@ -23,6 +23,8 @@ from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
 
 torch.manual_seed(97)
 
+CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]
+
 
 @pytest.fixture(autouse=True)
 def add_graph_attr(monkeypatch):
@@ -66,6 +68,7 @@ def unittest_train_model_graphattr(
     overwrite_data=False,
     use_deepspeed=False,
     overwrite_config=None,
+    graph_attr_conditioning_mode="concat_node",
 ):
     """Replicates test_graphs flow while relying on graph_attr conditioning."""
     world_size, rank = hydragnn.utils.distributed.get_comm_size_and_rank()
@@ -80,6 +83,9 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
     config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
+    config["NeuralNetwork"]["Architecture"][
+        "graph_attr_conditioning_mode"
+    ] = graph_attr_conditioning_mode
 
     # Overwrite config settings if provided
     if overwrite_config:
@@ -200,6 +206,7 @@ def unittest_train_model_graphattr(
     assert error < thresholds[mpnn_type][0]
 
 
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -219,19 +226,36 @@ def unittest_train_model_graphattr(
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model_graphattr(mpnn_type, ci_input, overwrite_data=False):
+def pytest_train_model_graphattr(
+    mpnn_type, ci_input, graph_attr_conditioning_mode, overwrite_data=False
+):
     unittest_train_model_graphattr(
-        mpnn_type, None, None, ci_input, False, overwrite_data
+        mpnn_type,
+        None,
+        None,
+        ci_input,
+        False,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )
 
 
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
-def pytest_train_model_graphattr_lengths(mpnn_type, overwrite_data=False):
+def pytest_train_model_graphattr_lengths(
+    mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
+):
     unittest_train_model_graphattr(
-        mpnn_type, None, None, "ci.json", True, overwrite_data
+        mpnn_type,
+        None,
+        None,
+        "ci.json",
+        True,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )
 
 
@@ -240,45 +264,84 @@ def pytest_train_model_graphattr_lengths(mpnn_type, overwrite_data=False):
     ["GPS"],
 )
 @pytest.mark.parametrize("global_attn_type", ["multihead"])
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
 def pytest_train_model_graphattr_lengths_global_attention(
-    mpnn_type, global_attn_engine, global_attn_type, overwrite_data=False
+    mpnn_type,
+    global_attn_engine,
+    global_attn_type,
+    graph_attr_conditioning_mode,
+    overwrite_data=False,
 ):
     unittest_train_model_graphattr(
-        mpnn_type, global_attn_engine, global_attn_type, "ci.json", True, overwrite_data
+        mpnn_type,
+        global_attn_engine,
+        global_attn_type,
+        "ci.json",
+        True,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )
 
 
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize(
     "mpnn_type",
     ["MACE"],
 )
-def pytest_train_mace_model_graphattr_lengths(mpnn_type, overwrite_data=False):
+def pytest_train_mace_model_graphattr_lengths(
+    mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
+):
     unittest_train_model_graphattr(
-        mpnn_type, None, None, "ci.json", True, overwrite_data
+        mpnn_type,
+        None,
+        None,
+        "ci.json",
+        True,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )
 
 
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize("mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
-def pytest_train_equivariant_model_graphattr(mpnn_type, overwrite_data=False):
+def pytest_train_equivariant_model_graphattr(
+    mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
+):
     unittest_train_model_graphattr(
-        mpnn_type, None, None, "ci_equivariant.json", False, overwrite_data
+        mpnn_type,
+        None,
+        None,
+        "ci_equivariant.json",
+        False,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )
 
 
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN", "PNAEq"],
 )
-def pytest_train_model_graphattr_vectoroutput(mpnn_type, overwrite_data=False):
+def pytest_train_model_graphattr_vectoroutput(
+    mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
+):
     unittest_train_model_graphattr(
-        mpnn_type, None, None, "ci_vectoroutput.json", True, overwrite_data
+        mpnn_type,
+        None,
+        None,
+        "ci_vectoroutput.json",
+        True,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )
 
 
+@pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize(
     "mpnn_type",
     [
@@ -295,7 +358,15 @@ def pytest_train_model_graphattr_vectoroutput(mpnn_type, overwrite_data=False):
         "PAINN",
     ],
 )
-def pytest_train_model_graphattr_conv_head(mpnn_type, overwrite_data=False):
+def pytest_train_model_graphattr_conv_head(
+    mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
+):
     unittest_train_model_graphattr(
-        mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
+        mpnn_type,
+        None,
+        None,
+        "ci_conv_head.json",
+        False,
+        overwrite_data,
+        graph_attr_conditioning_mode=graph_attr_conditioning_mode,
     )

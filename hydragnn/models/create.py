@@ -88,6 +88,9 @@ def create_model_config(
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
+        graph_attr_conditioning_mode=config["Architecture"].get(
+            "graph_attr_conditioning_mode", "concat_node"
+        ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
         verbosity=verbosity,
         use_gpu=use_gpu,
@@ -137,6 +140,7 @@ def create_model(
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
     use_graph_attr_conditioning: bool = False,
+    graph_attr_conditioning_mode: str = "film",
     graph_pooling: str = "mean",
     verbosity: int = 0,
     use_gpu: bool = True,
@@ -175,6 +179,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNA":
@@ -203,6 +208,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -239,6 +245,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "GAT":
@@ -270,6 +277,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "MFC":
@@ -297,6 +305,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "CGCNN":
@@ -323,6 +332,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "SAGE":
@@ -347,6 +357,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "SchNet":
@@ -380,6 +391,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "DimeNet":
@@ -427,6 +439,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "EGNN":
@@ -454,6 +467,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PAINN":
@@ -482,6 +496,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNAEq":
@@ -510,6 +525,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "MACE":
@@ -551,6 +568,7 @@ def create_model(
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
