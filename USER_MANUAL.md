@@ -364,9 +364,9 @@ HydraGNN provides extensive configuration options for building graph neural netw
 ### Graph-level conditioning (concat_node default)
 
 - Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning: true` and select `graph_attr_conditioning_mode`:
-    - `"concat_node"` (default, `"concat"` alias accepted): concatenate `graph_attr` onto node embeddings and project back to `hidden_dim`.
+    - `"concat_node"` (default): concatenate `graph_attr` onto node embeddings and project back to `hidden_dim`.
     - `"film"`: per-graph FiLM scale/shift on invariant node channels.
-    - `"fuse_pool"` (`"pool"` alias accepted): fuse `graph_attr` with the pooled graph embedding before prediction heads.
+    - `"fuse_pool"`: fuse `graph_attr` with the pooled graph embedding before prediction heads.
 - Conditioning does not touch equivariant channels, so equivariance is preserved only if `graph_attr` is itself invariant.
 - Provide `graph_attr` tensors during data loading; a missing attribute raises an error when conditioning is enabled.
 - Orientation-dependent attributes will intentionally break rotation/translation equivariance—use only when that is desired.

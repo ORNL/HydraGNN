@@ -96,12 +96,6 @@ class Base(Module):
         )
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_conditioning_mode = graph_attr_conditioning_mode.lower()
-        if self.graph_attr_conditioning_mode == "concat":
-            # Backward-compat alias
-            self.graph_attr_conditioning_mode = "concat_node"
-        if self.graph_attr_conditioning_mode == "pool":
-            # Backward-compat alias
-            self.graph_attr_conditioning_mode = "fuse_pool"
         if self.graph_attr_conditioning_mode not in (
             "film",
             "concat_node",
@@ -267,7 +261,7 @@ class Base(Module):
     def _ensure_graph_concat_projector(
         self, graph_attr_dim: int, channel_dim: int, device
     ):
-        """Instantiate (or move) concat projector used when conditioning_mode='concat'."""
+        """Instantiate (or move) concat projector used when conditioning_mode='concat_node'."""
         in_dim = channel_dim + graph_attr_dim
         if (self.graph_concat_projector is None) or (
             self.graph_concat_projector_in_dim != in_dim
@@ -280,7 +274,7 @@ class Base(Module):
     def _ensure_graph_pool_projector(
         self, graph_attr_dim: int, channel_dim: int, device
     ):
-        """Instantiate (or move) projector used when conditioning_mode='pool'."""
+        """Instantiate (or move) projector used when conditioning_mode='fuse_pool'."""
         in_dim = channel_dim + graph_attr_dim
         if (self.graph_pool_projector is None) or (
             self.graph_pool_projector_in_dim != in_dim
