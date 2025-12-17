@@ -177,8 +177,8 @@ def train_validate_test(
             nodes_num_list.append(data.num_nodes)
 
         if compute_grad_energy:
-            num_heads = 2
-            head_dims = [1,1]
+            num_heads = 3
+            head_dims = [1,1,1]
         else:
             num_heads=model.module.num_heads
             head_dims=model.module.head_dims
@@ -195,7 +195,7 @@ def train_validate_test(
     if create_plots and plot_init_solution:  # visualizing of initial conditions
         _, _, true_values, predicted_values = test(test_loader, model, verbosity,compute_grad_energy=compute_grad_energy)
         if compute_grad_energy:
-            output_names = [config["Variables_of_interest"]["output_names"][0], "forces"]
+            output_names = [config["Variables_of_interest"]["output_names"][0],"forces","energy_peratom"]
         else:
             output_names=config["Variables_of_interest"]["output_names"]
 
@@ -828,8 +828,8 @@ def test(
     tasks_error = tasks_error / num_samples_local
     if compute_grad_energy:
         import torch_scatter
-        true_values = [[] for _ in range(2)]
-        predicted_values = [[] for _ in range(2)]
+        true_values = [[] for _ in range(3)]
+        predicted_values = [[] for _ in range(3)]
     else:
         true_values = [[] for _ in range(model.module.num_heads)]
         predicted_values = [[] for _ in range(model.module.num_heads)]
@@ -875,6 +875,11 @@ def test(
                             )
 
                         graph_energy_true = data.energy.squeeze().float()
+
+                        ncount = torch.bincount(data.batch)
+                        graph_energy_peratom_pred = graph_energy_pred / ncount
+                        graph_energy_peratom_true = graph_energy_true / ncount
+
                         forces_true = data.forces.float()
                         forces_pred = torch.autograd.grad(
                             graph_energy_pred,
@@ -892,8 +897,10 @@ def test(
                         forces_pred = forces_pred.flatten()
                         true_values[0].append(graph_energy_true.reshape(-1,1))
                         true_values[1].append(forces_true.reshape(-1,1))
+                        true_values[2].append(graph_energy_peratom_true.reshape(-1,1))
                         predicted_values[0].append(graph_energy_pred.reshape(-1,1))
                         predicted_values[1].append(forces_pred.reshape(-1,1))
+                        predicted_values[2].append(graph_energy_peratom_pred.reshape(-1,1))
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y
