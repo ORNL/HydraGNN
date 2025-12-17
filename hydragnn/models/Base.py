@@ -232,8 +232,8 @@ class Base(Module):
         else:
             return mpnn
 
-    def _ensure_graph_conditioner(self, graph_attr_dim: int):
-        """Instantiate graph conditioner the first time we see graph_attr."""
+    def _ensure_graph_conditioner(self, graph_attr_dim: int, device):
+        """Instantiate (or move) graph conditioner to the active device."""
         if self.graph_conditioner is None:
             hidden = max(self.hidden_dim, graph_attr_dim)
             self.graph_conditioner = Sequential(
@@ -241,6 +241,8 @@ class Base(Module):
                 self.activation_function,
                 Linear(hidden, 2 * self.hidden_dim),
             )
+        if self.graph_conditioner[0].weight.device != device:
+            self.graph_conditioner = self.graph_conditioner.to(device)
 
     def _apply_graph_conditioning(self, inv_node_feat, batch, data):
         """Apply FiLM (scale/shift) to invariant node channels using graph_attr if provided."""
@@ -257,7 +259,7 @@ class Base(Module):
             graph_attr = graph_attr.unsqueeze(-1)
         graph_attr = graph_attr.to(inv_node_feat.device).float()
 
-        self._ensure_graph_conditioner(graph_attr.size(-1))
+        self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
 
         # FiLM: inv = (1 + scale) * inv + shift, scale/shift are per-graph then broadcast by batch.
         scale_shift = self.graph_conditioner(graph_attr)
