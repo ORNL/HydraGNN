@@ -308,6 +308,27 @@ class Base(Module):
                 inv_node_feat.size(0), device=inv_node_feat.device, dtype=torch.long
             )
 
+        num_graphs = int(batch.max().item() + 1)
+
+        # Normalize graph_attr to [num_graphs, feat_dim] for downstream broadcasting.
+        if graph_attr.dim() == 1:
+            if graph_attr.numel() % num_graphs == 0:
+                feat_dim = graph_attr.numel() // num_graphs
+                graph_attr = graph_attr.view(num_graphs, feat_dim)
+            else:
+                raise ValueError(
+                    f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
+                )
+        elif graph_attr.dim() == 2:
+            if graph_attr.size(0) != num_graphs:
+                raise ValueError(
+                    f"graph_attr first dim {graph_attr.size(0)} does not match num_graphs={num_graphs}."
+                )
+        else:
+            raise ValueError(
+                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
+            )
+
         if self.graph_attr_conditioning_mode == "film":
             self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
 
@@ -369,11 +390,14 @@ class Base(Module):
                 feat_dim = graph_attr.numel() // num_graphs
                 graph_attr = graph_attr.view(num_graphs, feat_dim)
             else:
-                ValueError(
+                raise ValueError(
                     f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
                 )
         elif graph_attr.dim() == 2:
-            pass
+            if graph_attr.size(0) != num_graphs:
+                raise ValueError(
+                    f"graph_attr batch size does not match pooled graph embeddings: graph_attr={tuple(graph_attr.size())}, num_graphs={num_graphs}"
+                )
         else:
             raise ValueError(
                 f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
