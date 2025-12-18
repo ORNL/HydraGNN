@@ -55,7 +55,7 @@ def create_model_config(
         config["Architecture"]["output_heads"],
         config["Architecture"]["activation_function"],
         config["Training"]["loss_function_type"],
-        config["Architecture"].get(["task_weights"],[1.0]),
+        config["Architecture"].get("task_weights",[1.0]),
         config["Architecture"]["num_conv_layers"],
         config["Architecture"]["freeze_conv_layers"],
         config["Architecture"]["initial_bias"],
