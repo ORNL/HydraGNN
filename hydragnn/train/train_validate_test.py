@@ -832,8 +832,8 @@ def test(
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    true_values = [[] for _ in range(num_tasks)]
-    predicted_values = [[] for _ in range(num_tasks)]
+    true_values = [[] for _ in range(model.module.num_heads)]
+    predicted_values = [[] for _ in range(model.module.num_heads)]
     if return_samples:
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
@@ -859,16 +859,16 @@ def test(
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for itask in range(num_tasks):
-            predicted_values[itask] = torch.cat(predicted_values[itask], dim=0)
-            true_values[itask] = torch.cat(true_values[itask], dim=0)
+        for ihead in range(model.module.num_heads):
+            predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
+            true_values[ihead] = torch.cat(true_values[ihead], dim=0)
 
     if reduce_ranks:
         test_error = reduce_values_ranks(test_error)
         tasks_error = reduce_values_ranks(tasks_error)
         if len(true_values[0]) > 0:
-            for itask in range(num_tasks):
-                true_values[itask] = gather_tensor_ranks(true_values[itask])
-                predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
+            for ihead in range(model.module.num_heads):
+                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
+                predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
 
     return test_error, tasks_error, true_values, predicted_values
