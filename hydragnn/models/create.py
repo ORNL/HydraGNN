@@ -619,37 +619,47 @@ def create_model(
                     )
 
                 graph_energy_true = data.energy.squeeze().float()
-                energy_loss_weight = self.loss_weights[0]
-                tot_loss = (
-                    self.loss_function(graph_energy_pred, graph_energy_true)
-                    * energy_loss_weight
-                )
                 tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
 
+                tot_loss = 0
+                energy_loss_weight = 0 #self.loss_weights[0] ###FixMe: Need to make this user specified hyperparameter
+                if energy_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(graph_energy_pred, graph_energy_true)
+                        * energy_loss_weight
+                    )
+
+                energy_peratom_loss_weight = 1.0 ###FixMe: Need to make this user specified hyperparameter
+                if energy_peratom_loss_weight > 0:
+                    ncount = torch.bincount(data.batch)
+                    graph_energy_peratom_pred = graph_energy_pred / ncount
+                    graph_energy_peratom_true = graph_energy_true / ncount
+                    tot_loss += (
+                        self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true)
+                        * energy_peratom_loss_weight
+                    )
+
                 # Forces
-                forces_true = data.forces.float()
-                forces_pred = torch.autograd.grad(
-                    graph_energy_pred,
-                    data.pos,
-                    grad_outputs=torch.ones_like(graph_energy_pred),
-                    retain_graph=graph_energy_pred.requires_grad,
-                    # Retain graph only if needed (it will be needed during training, but not during validation/testing)
-                    create_graph=True,
-                )[0].float()
-                assert (
-                    forces_pred is not None
-                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                forces_pred = -forces_pred
-                force_loss_weight = (
-                    energy_loss_weight
-                    * torch.mean(torch.abs(graph_energy_true))
-                    / (torch.mean(torch.abs(forces_true)) + 1e-8)
-                )  # Weight force loss and graph energy equally
-                tot_loss += (
-                    self.loss_function(forces_pred, forces_true) * force_loss_weight
-                )  # Have force-weight be the complement to energy-weight
-                ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-                ##        so, we need to do loss calculation manually without calling the other functions.
+                force_loss_weight = 1.0 ###FixMe: Need to make this user specified hyperparameter
+                if force_loss_weight > 0:
+                    forces_true = data.forces.float()
+                    forces_pred = torch.autograd.grad(
+                        graph_energy_pred,
+                        data.pos,
+                        grad_outputs=torch.ones_like(graph_energy_pred),
+                        retain_graph=graph_energy_pred.requires_grad,
+                        # Retain graph only if needed (it will be needed during training, but not during validation/testing)
+                        create_graph=True,
+                    )[0].float()
+                    assert (
+                        forces_pred is not None
+                    ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                    forces_pred = -forces_pred
+                    tot_loss += (
+                        self.loss_function(forces_pred, forces_true) * force_loss_weight
+                    )  # Have force-weight be the complement to energy-weight
+                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+                    ##        so, we need to do loss calculation manually without calling the other functions.
 
                 return tot_loss, tasks_loss
 
