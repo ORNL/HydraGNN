@@ -362,7 +362,7 @@ class Base(Module):
 
         graph_attr = data.graph_attr
         num_graphs = x_graph.size(0)
-        
+
         if graph_attr.dim() == 1:
             # If length matches num_graphs * feat_dim, reshape to [num_graphs, feat_dim].
             if graph_attr.numel() % num_graphs == 0:
@@ -370,8 +370,8 @@ class Base(Module):
                 graph_attr = graph_attr.view(num_graphs, feat_dim)
             else:
                 ValueError(
-                f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
-            )
+                    f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
+                )
         elif graph_attr.dim() == 2:
             pass
         else:
