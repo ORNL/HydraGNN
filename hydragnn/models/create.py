@@ -55,7 +55,7 @@ def create_model_config(
         config["Architecture"]["output_heads"],
         config["Architecture"]["activation_function"],
         config["Training"]["loss_function_type"],
-        config["Architecture"]["task_weights"],
+        config["Architecture"].get(["task_weights"],[1.0]),
         config["Architecture"]["num_conv_layers"],
         config["Architecture"]["freeze_conv_layers"],
         config["Architecture"]["initial_bias"],
@@ -86,6 +86,9 @@ def create_model_config(
         verbosity,
         use_gpu,
         config["Architecture"].get("graph_pooling", "mean"),
+        config["Architecture"].get("energy_weight", 0.0),
+        config["Architecture"].get("energy_peratom_weight", 0.0),
+        config["Architecture"].get("force_weight", 0.0),
     )
 
 
@@ -134,6 +137,9 @@ def create_model(
     verbosity: int = 0,
     use_gpu: bool = True,
     graph_pooling: str = "mean",
+    energy_weight: float = 0.0,
+    energy_peratom_weight: float = 0.0,
+    force_weight: float = 0.0,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -541,6 +547,9 @@ def create_model(
             def __init__(self, original_model):
                 super().__init__()
                 self.model = original_model
+                self.energy_weight = energy_weight
+                self.energy_peratom_weight = energy_peratom_weight
+                self.force_weight = force_weight
 
             def __getattr__(self, name):
                 # First try to get from the wrapper itself
@@ -622,39 +631,44 @@ def create_model(
                 tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
 
                 tot_loss = 0
-                energy_loss_weight = 0 #self.loss_weights[0] ###FixMe: Need to make this user specified hyperparameter
+                energy_loss_weight = self.energy_weight 
                 if energy_loss_weight > 0:
                     tot_loss += (
                         self.loss_function(graph_energy_pred, graph_energy_true)
                         * energy_loss_weight
                     )
 
-                energy_peratom_loss_weight = 1.0 ###FixMe: Need to make this user specified hyperparameter
+                # Energy per atom
+                natoms = torch.bincount(data.batch)
+                graph_energy_peratom_pred = graph_energy_pred / natoms
+                graph_energy_peratom_true = graph_energy_true / natoms                    
+                #tasks_loss.append(self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true))
+
+                energy_peratom_loss_weight = self.energy_peratom_weight
                 if energy_peratom_loss_weight > 0:
-                    ncount = torch.bincount(data.batch)
-                    graph_energy_peratom_pred = graph_energy_pred / ncount
-                    graph_energy_peratom_true = graph_energy_true / ncount
                     tot_loss += (
                         self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true)
                         * energy_peratom_loss_weight
                     )
 
                 # Forces
-                force_loss_weight = 1.0 ###FixMe: Need to make this user specified hyperparameter
+                forces_true = data.forces.float()
+                forces_pred = torch.autograd.grad(
+                    graph_energy_pred,
+                    data.pos,
+                    grad_outputs=torch.ones_like(graph_energy_pred),
+                    retain_graph=graph_energy_pred.requires_grad,
+                    # Retain graph only if needed (it will be needed during training, but not during validation/testing)
+                    create_graph=True,
+                )[0].float()
+                assert (
+                    forces_pred is not None
+                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                forces_pred = -forces_pred
+                #tasks_loss.append(self.loss_function(forces_pred, forces_true))
+
+                force_loss_weight = self.force_weight 
                 if force_loss_weight > 0:
-                    forces_true = data.forces.float()
-                    forces_pred = torch.autograd.grad(
-                        graph_energy_pred,
-                        data.pos,
-                        grad_outputs=torch.ones_like(graph_energy_pred),
-                        retain_graph=graph_energy_pred.requires_grad,
-                        # Retain graph only if needed (it will be needed during training, but not during validation/testing)
-                        create_graph=True,
-                    )[0].float()
-                    assert (
-                        forces_pred is not None
-                    ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                    forces_pred = -forces_pred
                     tot_loss += (
                         self.loss_function(forces_pred, forces_true) * force_loss_weight
                     )  # Have force-weight be the complement to energy-weight
