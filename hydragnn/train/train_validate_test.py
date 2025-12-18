@@ -177,25 +177,27 @@ def train_validate_test(
             nodes_num_list.append(data.num_nodes)
 
         if compute_grad_energy:
-            num_heads = 3
-            head_dims = [1,1,1]
+            visualizer = Visualizer(
+                model_with_config_name,
+                node_feature=node_feature,
+                num_heads=3,
+                head_dims=[1,1,1],
+                num_nodes_list=nodes_num_list,
+            )
         else:
-            num_heads=model.module.num_heads
-            head_dims=model.module.head_dims
-
-        visualizer = Visualizer(
-            model_with_config_name,
-            node_feature=node_feature,
-            num_heads=num_heads,
-            head_dims=head_dims,
-            num_nodes_list=nodes_num_list,
-        )
+            visualizer = Visualizer(
+                model_with_config_name,
+                node_feature=node_feature,
+                num_heads=model.module.num_heads,
+                head_dims=model.module.head_dims,
+                num_nodes_list=nodes_num_list,
+            )
         visualizer.num_nodes_plot()
 
     if create_plots and plot_init_solution:  # visualizing of initial conditions
         _, _, true_values, predicted_values = test(test_loader, model, verbosity,compute_grad_energy=compute_grad_energy)
         if compute_grad_energy:
-            output_names = [config["Variables_of_interest"]["output_names"][0],"forces","energy_peratom"]
+            output_names = [config["Variables_of_interest"]["output_names"][0],"energy_peratom","forces"]
         else:
             output_names=config["Variables_of_interest"]["output_names"]
 
@@ -896,11 +898,11 @@ def test(
                         forces_true = forces_true.flatten()
                         forces_pred = forces_pred.flatten()
                         true_values[0].append(graph_energy_true.reshape(-1,1))
-                        true_values[1].append(forces_true.reshape(-1,1))
-                        true_values[2].append(graph_energy_peratom_true.reshape(-1,1))
+                        true_values[1].append(graph_energy_peratom_true.reshape(-1,1))
+                        true_values[2].append(forces_true.reshape(-1,1))
                         predicted_values[0].append(graph_energy_pred.reshape(-1,1))
-                        predicted_values[1].append(forces_pred.reshape(-1,1))
-                        predicted_values[2].append(graph_energy_peratom_pred.reshape(-1,1))
+                        predicted_values[1].append(graph_energy_peratom_pred.reshape(-1,1))
+                        predicted_values[2].append(forces_pred.reshape(-1,1))
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y
