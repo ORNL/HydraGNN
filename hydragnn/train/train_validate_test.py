@@ -155,14 +155,25 @@ def train_validate_test(
     precision, _, _ = resolve_precision(precision)
 
     device = get_device()
+    if compute_grad_energy:
+        num_tasks = 3 # [energy, energy per atom, forces]
+        task_dims = [1,1,1]
+        task_weights = [model.module.energy_weight,model.module.energy_peratom_weight,model.module.force_weight]
+        output_names = [config["Variables_of_interest"]["output_names"][0],"energy_peratom","forces"]
+    else:
+        num_tasks = model.module.num_heads
+        task_dims = model.module.head_dims
+        task_weights = model.module.loss_weights
+        output_names=config["Variables_of_interest"]["output_names"]
+
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
     total_loss_val = torch.zeros(num_epoch, device=device)
     total_loss_test = torch.zeros(num_epoch, device=device)
     # loss tracking for each head/task
-    task_loss_train = torch.zeros((num_epoch, model.module.num_heads), device=device)
-    task_loss_test = torch.zeros((num_epoch, model.module.num_heads), device=device)
-    task_loss_val = torch.zeros((num_epoch, model.module.num_heads), device=device)
+    task_loss_train = torch.zeros((num_epoch, num_tasks), device=device)
+    task_loss_test = torch.zeros((num_epoch, num_tasks), device=device)
+    task_loss_val = torch.zeros((num_epoch, num_tasks), device=device)
 
     # preparing for results visualization
     ## collecting node feature
@@ -179,18 +190,19 @@ def train_validate_test(
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
-            num_heads=model.module.num_heads,
-            head_dims=model.module.head_dims,
+            num_heads=num_tasks,
+            head_dims=task_dims,
             num_nodes_list=nodes_num_list,
         )
         visualizer.num_nodes_plot()
 
     if create_plots and plot_init_solution:  # visualizing of initial conditions
-        _, _, true_values, predicted_values = test(test_loader, model, verbosity)
+        _, _, true_values, predicted_values = test(test_loader, model, verbosity,compute_grad_energy=compute_grad_energy,num_tasks=num_tasks)
+
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
             iepoch=-1,
         )
 
@@ -236,6 +248,7 @@ def train_validate_test(
                 model,
                 optimizer,
                 verbosity,
+                num_tasks=num_tasks,
                 profiler=prof,
                 use_deepspeed=use_deepspeed,
                 compute_grad_energy=compute_grad_energy,
@@ -253,6 +266,7 @@ def train_validate_test(
             val_loader,
             model,
             verbosity,
+            num_tasks=num_tasks,
             reduce_ranks=True,
             compute_grad_energy=compute_grad_energy,
             precision=precision,
@@ -261,6 +275,7 @@ def train_validate_test(
             test_loader,
             model,
             verbosity,
+            num_tasks=num_tasks,
             reduce_ranks=True,
             return_samples=plot_hist_solution,
             compute_grad_energy=compute_grad_energy,
@@ -271,7 +286,7 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(model.module.num_heads):
+            for ivar in range(num_tasks):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
                 )
@@ -304,7 +319,7 @@ def train_validate_test(
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
-                output_names=config["Variables_of_interest"]["output_names"],
+                output_names=output_names,
                 iepoch=epoch,
             )
 
@@ -348,7 +363,7 @@ def train_validate_test(
 
         # At the end of training phase, do the one test run for visualizer to get latest predictions
         test_loss, test_taskserr, true_values, predicted_values = test(
-            test_loader, model, verbosity, precision=precision
+            test_loader, model, verbosity, precision=precision, compute_grad_energy=compute_grad_energy, num_tasks=num_tasks
         )
 
         ##output predictions with unit/not normalized
@@ -365,12 +380,12 @@ def train_validate_test(
         visualizer.create_plot_global(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         ######plot loss history#####
         visualizer.plot_history(
@@ -380,8 +395,8 @@ def train_validate_test(
             task_loss_train,
             task_loss_val,
             task_loss_test,
-            model.module.loss_weights,
-            config["Variables_of_interest"]["output_names"],
+            task_weights,
+            output_names,
         )
 
 
@@ -525,6 +540,7 @@ def train(
     model,
     opt,
     verbosity,
+    num_tasks,
     profiler=None,
     use_deepspeed=False,
     compute_grad_energy=False,
@@ -537,7 +553,7 @@ def train(
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.train()
 
@@ -664,6 +680,7 @@ def validate(
     loader,
     model,
     verbosity,
+    num_tasks,
     reduce_ranks=True,
     compute_grad_energy=False,
     precision="fp32",
@@ -672,7 +689,7 @@ def validate(
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
     use_ddstore = (
@@ -725,6 +742,7 @@ def test(
     loader,
     model,
     verbosity,
+    num_tasks,
     reduce_ranks=True,
     return_samples=True,
     compute_grad_energy=False,
@@ -732,9 +750,9 @@ def test(
 ):
     precision, param_dtype, _ = resolve_precision(precision)
     autocast_context, scaler = get_autocast_and_scaler(precision)
-
+    
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
     use_ddstore = (
@@ -814,8 +832,8 @@ def test(
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    true_values = [[] for _ in range(model.module.num_heads)]
-    predicted_values = [[] for _ in range(model.module.num_heads)]
+    true_values = [[] for _ in range(num_tasks)]
+    predicted_values = [[] for _ in range(num_tasks)]
     if return_samples:
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
@@ -841,16 +859,16 @@ def test(
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for ihead in range(model.module.num_heads):
-            predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
-            true_values[ihead] = torch.cat(true_values[ihead], dim=0)
+        for itask in range(num_tasks):
+            predicted_values[itask] = torch.cat(predicted_values[itask], dim=0)
+            true_values[itask] = torch.cat(true_values[itask], dim=0)
 
     if reduce_ranks:
         test_error = reduce_values_ranks(test_error)
         tasks_error = reduce_values_ranks(tasks_error)
         if len(true_values[0]) > 0:
-            for ihead in range(model.module.num_heads):
-                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
-                predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
+            for itask in range(num_tasks):
+                true_values[itask] = gather_tensor_ranks(true_values[itask])
+                predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
 
     return test_error, tasks_error, true_values, predicted_values
