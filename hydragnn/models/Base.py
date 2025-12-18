@@ -266,7 +266,7 @@ class Base(Module):
         if (self.graph_concat_projector is None) or (
             self.graph_concat_projector_in_dim != in_dim
         ):
-            self.graph_concat_projector = Linear(in_dim, self.hidden_dim)
+            self.graph_concat_projector = Linear(in_dim, channel_dim)
             self.graph_concat_projector_in_dim = in_dim
         if self.graph_concat_projector.weight.device != device:
             self.graph_concat_projector = self.graph_concat_projector.to(device)
@@ -299,8 +299,7 @@ class Base(Module):
             )
 
         graph_attr = data.graph_attr
-        if graph_attr.dim() == 1:
-            graph_attr = graph_attr.unsqueeze(-1)
+
         graph_attr = graph_attr.to(inv_node_feat.device).float()
 
         # Batch can be None for single-graph inputs; create a dummy batch in that case.
@@ -362,8 +361,24 @@ class Base(Module):
             )
 
         graph_attr = data.graph_attr
+        num_graphs = x_graph.size(0)
+        
         if graph_attr.dim() == 1:
-            graph_attr = graph_attr.unsqueeze(-1)
+            # If length matches num_graphs * feat_dim, reshape to [num_graphs, feat_dim].
+            if graph_attr.numel() % num_graphs == 0:
+                feat_dim = graph_attr.numel() // num_graphs
+                graph_attr = graph_attr.view(num_graphs, feat_dim)
+            else:
+                ValueError(
+                f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
+            )
+        elif graph_attr.dim() == 2:
+            pass
+        else:
+            raise ValueError(
+                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
+            )
+
         graph_attr = graph_attr.to(x_graph.device).float()
 
         self._ensure_graph_pool_projector(
@@ -373,9 +388,10 @@ class Base(Module):
         )
 
         # graph_attr is per-graph; assume batch aligns with x_graph rows
-        if graph_attr.size(0) != x_graph.size(0):
+        if graph_attr.size(0) != num_graphs:
             raise ValueError(
-                "graph_attr batch size does not match pooled graph embeddings."
+                f"graph_attr batch size does not match pooled graph embeddings: "
+                f"graph_attr={tuple(graph_attr.size())}, x_graph={tuple(x_graph.size())}, num_graphs={num_graphs}"
             )
 
         fused = torch.cat([x_graph, graph_attr], dim=-1)
