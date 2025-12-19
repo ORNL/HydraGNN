@@ -156,15 +156,23 @@ def train_validate_test(
 
     device = get_device()
     if compute_grad_energy:
-        num_tasks = 3 # [energy, energy per atom, forces]
-        task_dims = [1,1,1]
-        task_weights = [model.module.energy_weight,model.module.energy_peratom_weight,model.module.force_weight]
-        output_names = [config["Variables_of_interest"]["output_names"][0],"energy_peratom","forces"]
+        num_tasks = 3  # [energy, energy per atom, forces]
+        task_dims = [1, 1, 1]
+        task_weights = [
+            model.module.energy_weight,
+            model.module.energy_peratom_weight,
+            model.module.force_weight,
+        ]
+        output_names = [
+            config["Variables_of_interest"]["output_names"][0],
+            "energy_peratom",
+            "forces",
+        ]
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
-        output_names=config["Variables_of_interest"]["output_names"]
+        output_names = config["Variables_of_interest"]["output_names"]
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -197,7 +205,13 @@ def train_validate_test(
         visualizer.num_nodes_plot()
 
     if create_plots and plot_init_solution:  # visualizing of initial conditions
-        _, _, true_values, predicted_values = test(test_loader, model, verbosity,compute_grad_energy=compute_grad_energy,num_tasks=num_tasks)
+        _, _, true_values, predicted_values = test(
+            test_loader,
+            model,
+            verbosity,
+            compute_grad_energy=compute_grad_energy,
+            num_tasks=num_tasks,
+        )
 
         visualizer.create_scatter_plots(
             true_values,
@@ -363,7 +377,12 @@ def train_validate_test(
 
         # At the end of training phase, do the one test run for visualizer to get latest predictions
         test_loss, test_taskserr, true_values, predicted_values = test(
-            test_loader, model, verbosity, precision=precision, compute_grad_energy=compute_grad_energy, num_tasks=num_tasks
+            test_loader,
+            model,
+            verbosity,
+            precision=precision,
+            compute_grad_energy=compute_grad_energy,
+            num_tasks=num_tasks,
         )
 
         ##output predictions with unit/not normalized
@@ -750,7 +769,7 @@ def test(
 ):
     precision, param_dtype, _ = resolve_precision(precision)
     autocast_context, scaler = get_autocast_and_scaler(precision)
-    
+
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0

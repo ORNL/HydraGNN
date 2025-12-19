@@ -55,7 +55,7 @@ def create_model_config(
         config["Architecture"]["output_heads"],
         config["Architecture"]["activation_function"],
         config["Training"]["loss_function_type"],
-        config["Architecture"].get("task_weights",[1.0]),
+        config["Architecture"].get("task_weights", [1.0]),
         config["Architecture"]["num_conv_layers"],
         config["Architecture"]["freeze_conv_layers"],
         config["Architecture"]["initial_bias"],
@@ -631,7 +631,7 @@ def create_model(
                 tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
 
                 tot_loss = 0
-                energy_loss_weight = self.energy_weight 
+                energy_loss_weight = self.energy_weight
                 if energy_loss_weight > 0:
                     tot_loss += (
                         self.loss_function(graph_energy_pred, graph_energy_true)
@@ -641,13 +641,15 @@ def create_model(
                 # Energy per atom
                 natoms = torch.bincount(data.batch)
                 graph_energy_peratom_pred = graph_energy_pred / natoms
-                graph_energy_peratom_true = graph_energy_true / natoms                    
-                #tasks_loss.append(self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true))
+                graph_energy_peratom_true = graph_energy_true / natoms
+                # tasks_loss.append(self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true))
 
                 energy_peratom_loss_weight = self.energy_peratom_weight
                 if energy_peratom_loss_weight > 0:
                     tot_loss += (
-                        self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true)
+                        self.loss_function(
+                            graph_energy_peratom_pred, graph_energy_peratom_true
+                        )
                         * energy_peratom_loss_weight
                     )
 
@@ -665,9 +667,9 @@ def create_model(
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
                 forces_pred = -forces_pred
-                #tasks_loss.append(self.loss_function(forces_pred, forces_true))
+                # tasks_loss.append(self.loss_function(forces_pred, forces_true))
 
-                force_loss_weight = self.force_weight 
+                force_loss_weight = self.force_weight
                 if force_loss_weight > 0:
                     tot_loss += (
                         self.loss_function(forces_pred, forces_true) * force_loss_weight
