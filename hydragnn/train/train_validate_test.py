@@ -190,8 +190,8 @@ def train_validate_test(
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
-            num_heads=num_tasks,
-            head_dims=task_dims,
+            num_heads=model.module.num_heads,
+            head_dims=model.module.head_dims,
             num_nodes_list=nodes_num_list,
         )
         visualizer.num_nodes_plot()
@@ -202,7 +202,7 @@ def train_validate_test(
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=output_names,
+            output_names=config["Variables_of_interest"]["output_names"],
             iepoch=-1,
         )
 
@@ -319,7 +319,7 @@ def train_validate_test(
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
-                output_names=output_names,
+                output_names=config["Variables_of_interest"]["output_names"],
                 iepoch=epoch,
             )
 
@@ -380,12 +380,12 @@ def train_validate_test(
         visualizer.create_plot_global(
             true_values,
             predicted_values,
-            output_names=output_names,
+            output_names=config["Variables_of_interest"]["output_names"],
         )
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=output_names,
+            output_names=config["Variables_of_interest"]["output_names"],
         )
         ######plot loss history#####
         visualizer.plot_history(
