@@ -198,8 +198,8 @@ def train_validate_test(
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
-            num_heads=model.module.num_heads,
-            head_dims=model.module.head_dims,
+            num_heads=num_tasks,
+            head_dims=task_dims,
             num_nodes_list=nodes_num_list,
         )
         visualizer.num_nodes_plot()
@@ -216,7 +216,7 @@ def train_validate_test(
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
             iepoch=-1,
         )
 
@@ -333,7 +333,7 @@ def train_validate_test(
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
-                output_names=config["Variables_of_interest"]["output_names"],
+                output_names=output_names,
                 iepoch=epoch,
             )
 
@@ -399,12 +399,12 @@ def train_validate_test(
         visualizer.create_plot_global(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         ######plot loss history#####
         visualizer.plot_history(
@@ -559,7 +559,7 @@ def train(
     model,
     opt,
     verbosity,
-    num_tasks,
+    num_tasks=None,
     profiler=None,
     use_deepspeed=False,
     compute_grad_energy=False,
@@ -699,7 +699,7 @@ def validate(
     loader,
     model,
     verbosity,
-    num_tasks,
+    num_tasks=None,
     reduce_ranks=True,
     compute_grad_energy=False,
     precision="fp32",
@@ -761,7 +761,7 @@ def test(
     loader,
     model,
     verbosity,
-    num_tasks,
+    num_tasks=None,
     reduce_ranks=True,
     return_samples=True,
     compute_grad_energy=False,
@@ -769,6 +769,9 @@ def test(
 ):
     precision, param_dtype, _ = resolve_precision(precision)
     autocast_context, scaler = get_autocast_and_scaler(precision)
+
+    if compute_grad_energy:
+        import torch_scatter
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
@@ -851,8 +854,10 @@ def test(
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    true_values = [[] for _ in range(model.module.num_heads)]
-    predicted_values = [[] for _ in range(model.module.num_heads)]
+
+    true_values = [[] for _ in range(num_tasks)]
+    predicted_values = [[] for _ in range(num_tasks)]
+
     if return_samples:
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
@@ -863,31 +868,96 @@ def test(
                 break
             if use_ddstore:
                 loader.dataset.ddstore.epoch_end()
-            head_index = get_head_indices(model, data)
             data = move_batch_to_device(data, param_dtype)
-            ytrue = data.y
-            pred = model(data)
-            if model.module.var_output:
-                pred = pred[0]
-            for ihead in range(model.module.num_heads):
-                head_pre = pred[ihead].reshape(-1, 1)
-                head_val = ytrue[head_index[ihead]]
-                true_values[ihead].append(head_val)
-                predicted_values[ihead].append(head_pre)
+            if compute_grad_energy:
+                with torch.enable_grad():
+                    data.pos.requires_grad = True
+                    with autocast_context:
+                        pred = model(data)
+                        # Support both node and graph heads; enforce sum pooling for graph heads
+                        if model.module.head_type[0] == "node":
+                            node_energy_pred = pred[0]
+                            graph_energy_pred = (
+                                torch_scatter.scatter_add(
+                                    node_energy_pred, data.batch, dim=0
+                                )
+                                .squeeze()
+                                .float()
+                            )
+                        elif model.module.head_type[0] == "graph":
+                            if getattr(
+                                model.module.model, "graph_pooling", "mean"
+                            ) not in ["add"]:
+                                raise ValueError(
+                                    "Graph head force loss requires sum pooling (graph_pooling='add')."
+                                )
+                            if isinstance(pred, dict) and "graph" in pred:
+                                graph_energy_pred = pred["graph"][0].squeeze().float()
+                            elif isinstance(pred, (list, tuple)):
+                                graph_energy_pred = pred[0].squeeze().float()
+                            else:
+                                graph_energy_pred = pred.squeeze().float()
+                        else:
+                            raise ValueError(
+                                "Force predictions are only supported for node or graph energy heads."
+                            )
+
+                        graph_energy_true = data.energy.squeeze().float()
+
+                        ncount = torch.bincount(data.batch)
+                        graph_energy_peratom_pred = graph_energy_pred / ncount
+                        graph_energy_peratom_true = graph_energy_true / ncount
+
+                        forces_true = data.forces.float()
+                        forces_pred = torch.autograd.grad(
+                            graph_energy_pred,
+                            data.pos,
+                            grad_outputs=torch.ones_like(graph_energy_pred),
+                            retain_graph=graph_energy_pred.requires_grad,
+                            # Retain graph only if needed (it will be needed during training, but not during validation/testing)
+                            create_graph=True,
+                        )[0].float()
+                        assert (
+                            forces_pred is not None
+                        ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                        forces_pred = -forces_pred
+                        forces_true = forces_true.flatten()
+                        forces_pred = forces_pred.flatten()
+                        true_values[0].append(graph_energy_true.reshape(-1, 1))
+                        true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
+                        true_values[2].append(forces_true.reshape(-1, 1))
+                        predicted_values[0].append(graph_energy_pred.reshape(-1, 1))
+                        predicted_values[1].append(
+                            graph_energy_peratom_pred.reshape(-1, 1)
+                        )
+                        predicted_values[2].append(forces_pred.reshape(-1, 1))
+            else:
+                head_index = get_head_indices(model, data)
+                ytrue = data.y
+                pred = model(data)
+                if model.module.var_output:
+                    pred = pred[0]
+                for ihead in range(model.module.num_heads):
+                    head_pre = pred[ihead].reshape(-1, 1)
+                    head_val = ytrue[head_index[ihead]]
+                    true_values[ihead].append(head_val)
+                    predicted_values[ihead].append(head_pre)
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for ihead in range(model.module.num_heads):
-            predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
-            true_values[ihead] = torch.cat(true_values[ihead], dim=0)
+        for itask in range(
+            num_tasks
+        ):  ###More general for both MLIP and non-conservative model
+            predicted_values[itask] = torch.cat(predicted_values[itask], dim=0)
+            true_values[itask] = torch.cat(true_values[itask], dim=0)
 
     if reduce_ranks:
         test_error = reduce_values_ranks(test_error)
         tasks_error = reduce_values_ranks(tasks_error)
         if len(true_values[0]) > 0:
-            for ihead in range(model.module.num_heads):
-                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
-                predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
+            for itask in range(num_tasks):
+                true_values[itask] = gather_tensor_ranks(true_values[itask])
+                predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
 
     return test_error, tasks_error, true_values, predicted_values
