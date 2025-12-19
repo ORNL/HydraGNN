@@ -642,7 +642,7 @@ def create_model(
                 natoms = torch.bincount(data.batch)
                 graph_energy_peratom_pred = graph_energy_pred / natoms
                 graph_energy_peratom_true = graph_energy_true / natoms
-                # tasks_loss.append(self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true))
+                tasks_loss.append(self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true))
 
                 energy_peratom_loss_weight = self.energy_peratom_weight
                 if energy_peratom_loss_weight > 0:
@@ -667,7 +667,7 @@ def create_model(
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
                 forces_pred = -forces_pred
-                # tasks_loss.append(self.loss_function(forces_pred, forces_true))
+                tasks_loss.append(self.loss_function(forces_pred, forces_true))
 
                 force_loss_weight = self.force_weight
                 if force_loss_weight > 0:
