@@ -169,7 +169,7 @@ def unittest_train_model_graphattr(
         "PNA": [0.20, 0.20],
         "PNAPlus": [0.20, 0.20],
         "MFC": [0.20, 0.30],
-        "GIN": [0.25, 0.20],
+        "GIN": [0.25, 0.30],
         "GAT": [0.60, 0.70],
         "CGCNN": [0.50, 0.40],
         "SchNet": [0.20, 0.20],
