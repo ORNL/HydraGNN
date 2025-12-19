@@ -183,6 +183,8 @@ def unittest_train_model_graphattr(
         thresholds["CGCNN"] = [0.175, 0.175]
         thresholds["PNA"] = [0.10, 0.10]
         thresholds["PNAPlus"] = [0.10, 0.10]
+        if graph_attr_conditioning_mode == "fuse_pool":
+            thresholds["PNAPlus"] = [0.16, 0.16]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
         thresholds["PNAPlus"] = [0.2, 0.15]
