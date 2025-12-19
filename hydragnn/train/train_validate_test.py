@@ -181,7 +181,7 @@ def train_validate_test(
                 model_with_config_name,
                 node_feature=node_feature,
                 num_heads=3,
-                head_dims=[1,1,1],
+                head_dims=[1, 1, 1],
                 num_nodes_list=nodes_num_list,
             )
         else:
@@ -195,11 +195,17 @@ def train_validate_test(
         visualizer.num_nodes_plot()
 
     if create_plots and plot_init_solution:  # visualizing of initial conditions
-        _, _, true_values, predicted_values = test(test_loader, model, verbosity,compute_grad_energy=compute_grad_energy)
+        _, _, true_values, predicted_values = test(
+            test_loader, model, verbosity, compute_grad_energy=compute_grad_energy
+        )
         if compute_grad_energy:
-            output_names = [config["Variables_of_interest"]["output_names"][0],"energy_peratom","forces"]
+            output_names = [
+                config["Variables_of_interest"]["output_names"][0],
+                "energy_peratom",
+                "forces",
+            ]
         else:
-            output_names=config["Variables_of_interest"]["output_names"]
+            output_names = config["Variables_of_interest"]["output_names"]
 
         visualizer.create_scatter_plots(
             true_values,
@@ -362,7 +368,11 @@ def train_validate_test(
 
         # At the end of training phase, do the one test run for visualizer to get latest predictions
         test_loss, test_taskserr, true_values, predicted_values = test(
-            test_loader, model, verbosity, precision=precision, compute_grad_energy=compute_grad_energy
+            test_loader,
+            model,
+            verbosity,
+            precision=precision,
+            compute_grad_energy=compute_grad_energy,
         )
 
         ##output predictions with unit/not normalized
@@ -830,6 +840,7 @@ def test(
     tasks_error = tasks_error / num_samples_local
     if compute_grad_energy:
         import torch_scatter
+
         true_values = [[] for _ in range(3)]
         predicted_values = [[] for _ in range(3)]
     else:
@@ -856,12 +867,16 @@ def test(
                         if model.module.head_type[0] == "node":
                             node_energy_pred = pred[0]
                             graph_energy_pred = (
-                                torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+                                torch_scatter.scatter_add(
+                                    node_energy_pred, data.batch, dim=0
+                                )
                                 .squeeze()
                                 .float()
                             )
                         elif model.module.head_type[0] == "graph":
-                            if getattr(model.module.model, "graph_pooling", "mean") not in ["add"]:
+                            if getattr(
+                                model.module.model, "graph_pooling", "mean"
+                            ) not in ["add"]:
                                 raise ValueError(
                                     "Graph head force loss requires sum pooling (graph_pooling='add')."
                                 )
@@ -897,12 +912,14 @@ def test(
                         forces_pred = -forces_pred
                         forces_true = forces_true.flatten()
                         forces_pred = forces_pred.flatten()
-                        true_values[0].append(graph_energy_true.reshape(-1,1))
-                        true_values[1].append(graph_energy_peratom_true.reshape(-1,1))
-                        true_values[2].append(forces_true.reshape(-1,1))
-                        predicted_values[0].append(graph_energy_pred.reshape(-1,1))
-                        predicted_values[1].append(graph_energy_peratom_pred.reshape(-1,1))
-                        predicted_values[2].append(forces_pred.reshape(-1,1))
+                        true_values[0].append(graph_energy_true.reshape(-1, 1))
+                        true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
+                        true_values[2].append(forces_true.reshape(-1, 1))
+                        predicted_values[0].append(graph_energy_pred.reshape(-1, 1))
+                        predicted_values[1].append(
+                            graph_energy_peratom_pred.reshape(-1, 1)
+                        )
+                        predicted_values[2].append(forces_pred.reshape(-1, 1))
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y
@@ -918,7 +935,9 @@ def test(
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for ihead in range(len(predicted_values)): ###More general for both MLIP and non-conservative model
+        for ihead in range(
+            len(predicted_values)
+        ):  ###More general for both MLIP and non-conservative model
             predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
             true_values[ihead] = torch.cat(true_values[ihead], dim=0)
 
