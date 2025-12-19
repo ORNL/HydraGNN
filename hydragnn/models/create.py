@@ -642,7 +642,11 @@ def create_model(
                 natoms = torch.bincount(data.batch)
                 graph_energy_peratom_pred = graph_energy_pred / natoms
                 graph_energy_peratom_true = graph_energy_true / natoms
-                tasks_loss.append(self.loss_function(graph_energy_peratom_pred, graph_energy_peratom_true))
+                tasks_loss.append(
+                    self.loss_function(
+                        graph_energy_peratom_pred, graph_energy_peratom_true
+                    )
+                )
 
                 energy_peratom_loss_weight = self.energy_peratom_weight
                 if energy_peratom_loss_weight > 0:
