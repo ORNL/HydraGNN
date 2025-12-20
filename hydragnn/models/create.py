@@ -630,8 +630,21 @@ def create_model(
                 graph_energy_true = data.energy.squeeze().float()
                 tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
 
-                tot_loss = 0
                 energy_loss_weight = self.energy_weight
+                energy_peratom_loss_weight = self.energy_peratom_weight
+                force_loss_weight = self.force_weight
+
+                # Interatomic potential training requires at least one active loss term
+                if (
+                    energy_loss_weight <= 0
+                    and energy_peratom_loss_weight <= 0
+                    and force_loss_weight <= 0
+                ):
+                    raise ValueError(
+                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
+                    )
+
+                tot_loss = 0
                 if energy_loss_weight > 0:
                     tot_loss += (
                         self.loss_function(graph_energy_pred, graph_energy_true)
@@ -648,7 +661,6 @@ def create_model(
                     )
                 )
 
-                energy_peratom_loss_weight = self.energy_peratom_weight
                 if energy_peratom_loss_weight > 0:
                     tot_loss += (
                         self.loss_function(
@@ -673,7 +685,6 @@ def create_model(
                 forces_pred = -forces_pred
                 tasks_loss.append(self.loss_function(forces_pred, forces_true))
 
-                force_loss_weight = self.force_weight
                 if force_loss_weight > 0:
                     tot_loss += (
                         self.loss_function(forces_pred, forces_true) * force_loss_weight
