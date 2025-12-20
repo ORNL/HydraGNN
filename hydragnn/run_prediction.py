@@ -94,12 +94,7 @@ def _(config: dict, use_deepspeed=False):
     )
     num_tasks = 3 if enable_interatomic_potential else model.module.num_heads
 
-    (
-        error,
-        error_rmse_task,
-        true_values,
-        predicted_values,
-    ) = test(
+    (error, error_rmse_task, true_values, predicted_values,) = test(
         test_loader,
         model,
         config["Verbosity"]["level"],
