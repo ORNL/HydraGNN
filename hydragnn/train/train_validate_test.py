@@ -773,6 +773,9 @@ def test(
     if compute_grad_energy:
         import torch_scatter
 
+    if num_tasks is None:
+        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
