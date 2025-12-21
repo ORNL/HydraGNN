@@ -89,12 +89,19 @@ def _(config: dict, use_deepspeed=False):
     log_name = get_log_name_config(config)
     load_existing_model(model, log_name, use_deepspeed=use_deepspeed)
 
-    (
-        error,
-        error_rmse_task,
-        true_values,
-        predicted_values,
-    ) = test(test_loader, model, config["Verbosity"]["level"])
+    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
+        "enable_interatomic_potential", False
+    )
+    num_tasks = 3 if enable_interatomic_potential else model.module.num_heads
+
+    (error, error_rmse_task, true_values, predicted_values,) = test(
+        test_loader,
+        model,
+        config["Verbosity"]["level"],
+        num_tasks=num_tasks,
+        compute_grad_energy=enable_interatomic_potential,
+        precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
+    )
 
     ##output predictions with unit/not normalized
     if config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]:

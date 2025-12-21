@@ -37,6 +37,9 @@
       "hidden_dim": 32,
       "num_conv_layers": 4,
       "enable_interatomic_potential": true,
+      "energy_weight": 1.0,
+      "energy_peratom_weight": 1.0,
+      "force_weight": 1.0,
       "output_heads": {
         "node": {
           "num_headlayers": 2,

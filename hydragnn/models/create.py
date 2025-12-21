@@ -55,7 +55,7 @@ def create_model_config(
         config["Architecture"]["output_heads"],
         config["Architecture"]["activation_function"],
         config["Training"]["loss_function_type"],
-        config["Architecture"]["task_weights"],
+        config["Architecture"].get("task_weights", [1.0]),
         config["Architecture"]["num_conv_layers"],
         config["Architecture"]["freeze_conv_layers"],
         config["Architecture"]["initial_bias"],
@@ -86,6 +86,9 @@ def create_model_config(
         verbosity,
         use_gpu,
         config["Architecture"].get("graph_pooling", "mean"),
+        config["Architecture"].get("energy_weight", 0.0),
+        config["Architecture"].get("energy_peratom_weight", 0.0),
+        config["Architecture"].get("force_weight", 0.0),
     )
 
 
@@ -134,6 +137,9 @@ def create_model(
     verbosity: int = 0,
     use_gpu: bool = True,
     graph_pooling: str = "mean",
+    energy_weight: float = 0.0,
+    energy_peratom_weight: float = 0.0,
+    force_weight: float = 0.0,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -541,6 +547,9 @@ def create_model(
             def __init__(self, original_model):
                 super().__init__()
                 self.model = original_model
+                self.energy_weight = energy_weight
+                self.energy_peratom_weight = energy_peratom_weight
+                self.force_weight = force_weight
 
             def __getattr__(self, name):
                 # First try to get from the wrapper itself
@@ -619,12 +628,46 @@ def create_model(
                     )
 
                 graph_energy_true = data.energy.squeeze().float()
-                energy_loss_weight = self.loss_weights[0]
-                tot_loss = (
-                    self.loss_function(graph_energy_pred, graph_energy_true)
-                    * energy_loss_weight
-                )
                 tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
+
+                energy_loss_weight = self.energy_weight
+                energy_peratom_loss_weight = self.energy_peratom_weight
+                force_loss_weight = self.force_weight
+
+                # Interatomic potential training requires at least one active loss term
+                if (
+                    energy_loss_weight <= 0
+                    and energy_peratom_loss_weight <= 0
+                    and force_loss_weight <= 0
+                ):
+                    raise ValueError(
+                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
+                    )
+
+                tot_loss = 0
+                if energy_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(graph_energy_pred, graph_energy_true)
+                        * energy_loss_weight
+                    )
+
+                # Energy per atom
+                natoms = torch.bincount(data.batch)
+                graph_energy_peratom_pred = graph_energy_pred / natoms
+                graph_energy_peratom_true = graph_energy_true / natoms
+                tasks_loss.append(
+                    self.loss_function(
+                        graph_energy_peratom_pred, graph_energy_peratom_true
+                    )
+                )
+
+                if energy_peratom_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(
+                            graph_energy_peratom_pred, graph_energy_peratom_true
+                        )
+                        * energy_peratom_loss_weight
+                    )
 
                 # Forces
                 forces_true = data.forces.float()
@@ -640,16 +683,14 @@ def create_model(
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
                 forces_pred = -forces_pred
-                force_loss_weight = (
-                    energy_loss_weight
-                    * torch.mean(torch.abs(graph_energy_true))
-                    / (torch.mean(torch.abs(forces_true)) + 1e-8)
-                )  # Weight force loss and graph energy equally
-                tot_loss += (
-                    self.loss_function(forces_pred, forces_true) * force_loss_weight
-                )  # Have force-weight be the complement to energy-weight
-                ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-                ##        so, we need to do loss calculation manually without calling the other functions.
+                tasks_loss.append(self.loss_function(forces_pred, forces_true))
+
+                if force_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(forces_pred, forces_true) * force_loss_weight
+                    )  # Have force-weight be the complement to energy-weight
+                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+                    ##        so, we need to do loss calculation manually without calling the other functions.
 
                 return tot_loss, tasks_loss
 
