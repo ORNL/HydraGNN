@@ -85,6 +85,9 @@ def create_model_config(
         enable_interatomic_potential=config["Architecture"].get(
             "enable_interatomic_potential", False
         ),
+        energy_weight=config["Architecture"].get("energy_weight", 0.0),
+        energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
+        force_weight=config["Architecture"].get("force_weight", 0.0),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
@@ -139,15 +142,14 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
-    use_graph_attr_conditioning: bool = False,
-    graph_attr_conditioning_mode: str = "film",
-    graph_pooling: str = "mean",
-    verbosity: int = 0,
-    use_gpu: bool = True,
-    graph_pooling: str = "mean",
     energy_weight: float = 0.0,
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
+    use_graph_attr_conditioning: bool = False,
+    graph_attr_conditioning_mode: str = "fuse_pool",
+    graph_pooling: str = "mean",
+    verbosity: int = 0,
+    use_gpu: bool = True,
 ):
     timer = Timer("create_model")
     timer.start()
