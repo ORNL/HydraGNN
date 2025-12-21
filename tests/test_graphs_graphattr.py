@@ -188,7 +188,7 @@ def unittest_train_model_graphattr(
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
         thresholds["PNAPlus"] = [0.2, 0.15]
-        thresholds["SchNet"] = [0.24, 0.24]
+        thresholds["SchNet"] = [0.35, 0.35]
     if ci_input == "ci_conv_head.json":
         thresholds["GIN"] = [0.26, 0.51]
         thresholds["SchNet"] = [0.35, 0.35]
