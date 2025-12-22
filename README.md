@@ -15,6 +15,11 @@ Distributed PyTorch implementation of multi-headed graph convolutional neural ne
 - **Geometric Equivariance** in convolution and prediction  
 - **Global Attention**
 
+### Optional graph-level conditioning
+- Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
+- `concat_node` (default) appends `graph_attr` to node embeddings and projects back to hidden dimension; FiLM scales/shifts invariant channels per graph; `fuse_pool` fuses `graph_attr` with the pooled graph embedding before the heads.
+- Conditioning consumes `data.graph_attr` and requires those global attributes to be rotation/translation invariant; providing orientation-dependent values will break equivariance by design.
+
 
 ## Dependencies
 
