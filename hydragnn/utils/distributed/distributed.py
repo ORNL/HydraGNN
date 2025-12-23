@@ -181,7 +181,8 @@ def setup_ddp(use_deepspeed=False):
             os.environ["MASTER_PORT"] = master_port
             os.environ["WORLD_SIZE"] = str(world_size)
             os.environ["RANK"] = str(world_rank)
-            os.environ["LOCAL_RANK"] = str(get_local_rank())
+            ## Setting LOCAL_RANK complicts with DeviceMesh when using the srun "--gpus-per-task=1" option
+            # os.environ["LOCAL_RANK"] = str(get_local_rank())
 
         if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
             ifname = find_ifname(master_addr)
@@ -374,6 +375,7 @@ def get_distributed_model(
         print("Using FSDP:", use_fsdp, "Sharding:", sharding_strategy)
 
         if use_fsdp:
+            print_distributed(verbosity, "Using FSDP wrapper")
             model = FSDP(model, sharding_strategy=sharding_strategy)
         else:
             model = DDP(model, **ddp_kwargs)
