@@ -43,49 +43,60 @@ def create_model_config(
     use_gpu: bool = True,
 ):
     return create_model(
-        config["Architecture"]["mpnn_type"],
-        config["Architecture"]["input_dim"],
-        config["Architecture"]["hidden_dim"],
-        config["Architecture"]["output_dim"],
-        config["Architecture"]["pe_dim"],
-        config["Architecture"]["global_attn_engine"],
-        config["Architecture"]["global_attn_type"],
-        config["Architecture"]["global_attn_heads"],
-        config["Architecture"]["output_type"],
-        config["Architecture"]["output_heads"],
-        config["Architecture"]["activation_function"],
-        config["Training"]["loss_function_type"],
-        config["Architecture"]["task_weights"],
-        config["Architecture"]["num_conv_layers"],
-        config["Architecture"]["freeze_conv_layers"],
-        config["Architecture"]["initial_bias"],
-        config["Architecture"]["num_nodes"],
-        config["Architecture"]["max_neighbours"],
-        config["Architecture"]["edge_dim"],
-        config["Architecture"]["pna_deg"],
-        config["Architecture"]["num_before_skip"],
-        config["Architecture"]["num_after_skip"],
-        config["Architecture"]["num_radial"],
-        config["Architecture"]["radial_type"],
-        config["Architecture"]["distance_transform"],
-        config["Architecture"]["basis_emb_size"],
-        config["Architecture"]["int_emb_size"],
-        config["Architecture"]["out_emb_size"],
-        config["Architecture"]["envelope_exponent"],
-        config["Architecture"]["num_spherical"],
-        config["Architecture"]["num_gaussians"],
-        config["Architecture"]["num_filters"],
-        config["Architecture"]["radius"],
-        config["Architecture"]["equivariance"],
-        config["Architecture"]["correlation"],
-        config["Architecture"]["max_ell"],
-        config["Architecture"]["node_max_ell"],
-        config["Architecture"]["avg_num_neighbors"],
-        config["Training"]["conv_checkpointing"],
-        config["Architecture"].get("enable_interatomic_potential", False),
-        verbosity,
-        use_gpu,
-        config["Architecture"].get("graph_pooling", "mean"),
+        mpnn_type=config["Architecture"]["mpnn_type"],
+        input_dim=config["Architecture"]["input_dim"],
+        hidden_dim=config["Architecture"]["hidden_dim"],
+        output_dim=config["Architecture"]["output_dim"],
+        pe_dim=config["Architecture"]["pe_dim"],
+        global_attn_engine=config["Architecture"]["global_attn_engine"],
+        global_attn_type=config["Architecture"]["global_attn_type"],
+        global_attn_heads=config["Architecture"]["global_attn_heads"],
+        output_type=config["Architecture"]["output_type"],
+        output_heads=config["Architecture"]["output_heads"],
+        activation_function=config["Architecture"]["activation_function"],
+        loss_function_type=config["Training"]["loss_function_type"],
+        task_weights=config["Architecture"]["task_weights"],
+        num_conv_layers=config["Architecture"]["num_conv_layers"],
+        freeze_conv=config["Architecture"]["freeze_conv_layers"],
+        initial_bias=config["Architecture"]["initial_bias"],
+        num_nodes=config["Architecture"]["num_nodes"],
+        max_neighbours=config["Architecture"]["max_neighbours"],
+        edge_dim=config["Architecture"]["edge_dim"],
+        pna_deg=config["Architecture"]["pna_deg"],
+        num_before_skip=config["Architecture"]["num_before_skip"],
+        num_after_skip=config["Architecture"]["num_after_skip"],
+        num_radial=config["Architecture"]["num_radial"],
+        radial_type=config["Architecture"]["radial_type"],
+        distance_transform=config["Architecture"]["distance_transform"],
+        basis_emb_size=config["Architecture"]["basis_emb_size"],
+        int_emb_size=config["Architecture"]["int_emb_size"],
+        out_emb_size=config["Architecture"]["out_emb_size"],
+        envelope_exponent=config["Architecture"]["envelope_exponent"],
+        num_spherical=config["Architecture"]["num_spherical"],
+        num_gaussians=config["Architecture"]["num_gaussians"],
+        num_filters=config["Architecture"]["num_filters"],
+        radius=config["Architecture"]["radius"],
+        equivariance=config["Architecture"]["equivariance"],
+        correlation=config["Architecture"]["correlation"],
+        max_ell=config["Architecture"]["max_ell"],
+        node_max_ell=config["Architecture"]["node_max_ell"],
+        avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
+        conv_checkpointing=config["Training"]["conv_checkpointing"],
+        enable_interatomic_potential=config["Architecture"].get(
+            "enable_interatomic_potential", False
+        ),
+        energy_weight=config["Architecture"].get("energy_weight", 0.0),
+        energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
+        force_weight=config["Architecture"].get("force_weight", 0.0),
+        use_graph_attr_conditioning=config["Architecture"].get(
+            "use_graph_attr_conditioning", False
+        ),
+        graph_attr_conditioning_mode=config["Architecture"].get(
+            "graph_attr_conditioning_mode", "concat_node"
+        ),
+        graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        verbosity=verbosity,
+        use_gpu=use_gpu,
     )
 
 
@@ -131,9 +142,14 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
+    energy_weight: float = 0.0,
+    energy_peratom_weight: float = 0.0,
+    force_weight: float = 0.0,
+    use_graph_attr_conditioning: bool = False,
+    graph_attr_conditioning_mode: str = "fuse_pool",
+    graph_pooling: str = "mean",
     verbosity: int = 0,
     use_gpu: bool = True,
-    graph_pooling: str = "mean",
 ):
     timer = Timer("create_model")
     timer.start()
@@ -164,6 +180,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNA":
@@ -191,6 +209,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -226,6 +246,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "GAT":
@@ -256,6 +278,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "MFC":
@@ -282,6 +306,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "CGCNN":
@@ -307,6 +333,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "SAGE":
@@ -330,6 +358,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "SchNet":
@@ -362,6 +392,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "DimeNet":
@@ -408,6 +440,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "EGNN":
@@ -434,6 +468,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PAINN":
@@ -461,6 +497,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNAEq":
@@ -489,6 +527,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "MACE":
@@ -529,6 +569,8 @@ def create_model(
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
             graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
@@ -541,6 +583,9 @@ def create_model(
             def __init__(self, original_model):
                 super().__init__()
                 self.model = original_model
+                self.energy_weight = energy_weight
+                self.energy_peratom_weight = energy_peratom_weight
+                self.force_weight = force_weight
 
             def __getattr__(self, name):
                 # First try to get from the wrapper itself
@@ -619,12 +664,46 @@ def create_model(
                     )
 
                 graph_energy_true = data.energy.squeeze().float()
-                energy_loss_weight = self.loss_weights[0]
-                tot_loss = (
-                    self.loss_function(graph_energy_pred, graph_energy_true)
-                    * energy_loss_weight
-                )
                 tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
+
+                energy_loss_weight = self.energy_weight
+                energy_peratom_loss_weight = self.energy_peratom_weight
+                force_loss_weight = self.force_weight
+
+                # Interatomic potential training requires at least one active loss term
+                if (
+                    energy_loss_weight <= 0
+                    and energy_peratom_loss_weight <= 0
+                    and force_loss_weight <= 0
+                ):
+                    raise ValueError(
+                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
+                    )
+
+                tot_loss = 0
+                if energy_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(graph_energy_pred, graph_energy_true)
+                        * energy_loss_weight
+                    )
+
+                # Energy per atom
+                natoms = torch.bincount(data.batch)
+                graph_energy_peratom_pred = graph_energy_pred / natoms
+                graph_energy_peratom_true = graph_energy_true / natoms
+                tasks_loss.append(
+                    self.loss_function(
+                        graph_energy_peratom_pred, graph_energy_peratom_true
+                    )
+                )
+
+                if energy_peratom_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(
+                            graph_energy_peratom_pred, graph_energy_peratom_true
+                        )
+                        * energy_peratom_loss_weight
+                    )
 
                 # Forces
                 forces_true = data.forces.float()
@@ -640,16 +719,14 @@ def create_model(
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
                 forces_pred = -forces_pred
-                force_loss_weight = (
-                    energy_loss_weight
-                    * torch.mean(torch.abs(graph_energy_true))
-                    / (torch.mean(torch.abs(forces_true)) + 1e-8)
-                )  # Weight force loss and graph energy equally
-                tot_loss += (
-                    self.loss_function(forces_pred, forces_true) * force_loss_weight
-                )  # Have force-weight be the complement to energy-weight
-                ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-                ##        so, we need to do loss calculation manually without calling the other functions.
+                tasks_loss.append(self.loss_function(forces_pred, forces_true))
+
+                if force_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(forces_pred, forces_true) * force_loss_weight
+                    )  # Have force-weight be the complement to energy-weight
+                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+                    ##        so, we need to do loss calculation manually without calling the other functions.
 
                 return tot_loss, tasks_loss
 

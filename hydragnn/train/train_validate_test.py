@@ -155,14 +155,33 @@ def train_validate_test(
     precision, _, _ = resolve_precision(precision)
 
     device = get_device()
+    if compute_grad_energy:
+        num_tasks = 3  # [energy, energy per atom, forces]
+        task_dims = [1, 1, 1]
+        task_weights = [
+            model.module.energy_weight,
+            model.module.energy_peratom_weight,
+            model.module.force_weight,
+        ]
+        output_names = [
+            config["Variables_of_interest"]["output_names"][0],
+            "energy_peratom",
+            "forces",
+        ]
+    else:
+        num_tasks = model.module.num_heads
+        task_dims = model.module.head_dims
+        task_weights = model.module.loss_weights
+        output_names = config["Variables_of_interest"]["output_names"]
+
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
     total_loss_val = torch.zeros(num_epoch, device=device)
     total_loss_test = torch.zeros(num_epoch, device=device)
     # loss tracking for each head/task
-    task_loss_train = torch.zeros((num_epoch, model.module.num_heads), device=device)
-    task_loss_test = torch.zeros((num_epoch, model.module.num_heads), device=device)
-    task_loss_val = torch.zeros((num_epoch, model.module.num_heads), device=device)
+    task_loss_train = torch.zeros((num_epoch, num_tasks), device=device)
+    task_loss_test = torch.zeros((num_epoch, num_tasks), device=device)
+    task_loss_val = torch.zeros((num_epoch, num_tasks), device=device)
 
     # preparing for results visualization
     ## collecting node feature
@@ -179,18 +198,25 @@ def train_validate_test(
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
-            num_heads=model.module.num_heads,
-            head_dims=model.module.head_dims,
+            num_heads=num_tasks,
+            head_dims=task_dims,
             num_nodes_list=nodes_num_list,
         )
         visualizer.num_nodes_plot()
 
     if create_plots and plot_init_solution:  # visualizing of initial conditions
-        _, _, true_values, predicted_values = test(test_loader, model, verbosity)
+        _, _, true_values, predicted_values = test(
+            test_loader,
+            model,
+            verbosity,
+            compute_grad_energy=compute_grad_energy,
+            num_tasks=num_tasks,
+        )
+
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
             iepoch=-1,
         )
 
@@ -236,6 +262,7 @@ def train_validate_test(
                 model,
                 optimizer,
                 verbosity,
+                num_tasks=num_tasks,
                 profiler=prof,
                 use_deepspeed=use_deepspeed,
                 compute_grad_energy=compute_grad_energy,
@@ -253,6 +280,7 @@ def train_validate_test(
             val_loader,
             model,
             verbosity,
+            num_tasks=num_tasks,
             reduce_ranks=True,
             compute_grad_energy=compute_grad_energy,
             precision=precision,
@@ -261,6 +289,7 @@ def train_validate_test(
             test_loader,
             model,
             verbosity,
+            num_tasks=num_tasks,
             reduce_ranks=True,
             return_samples=plot_hist_solution,
             compute_grad_energy=compute_grad_energy,
@@ -271,7 +300,7 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(model.module.num_heads):
+            for ivar in range(num_tasks):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
                 )
@@ -304,7 +333,7 @@ def train_validate_test(
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
-                output_names=config["Variables_of_interest"]["output_names"],
+                output_names=output_names,
                 iepoch=epoch,
             )
 
@@ -348,7 +377,12 @@ def train_validate_test(
 
         # At the end of training phase, do the one test run for visualizer to get latest predictions
         test_loss, test_taskserr, true_values, predicted_values = test(
-            test_loader, model, verbosity, precision=precision
+            test_loader,
+            model,
+            verbosity,
+            precision=precision,
+            compute_grad_energy=compute_grad_energy,
+            num_tasks=num_tasks,
         )
 
         ##output predictions with unit/not normalized
@@ -365,12 +399,12 @@ def train_validate_test(
         visualizer.create_plot_global(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         ######plot loss history#####
         visualizer.plot_history(
@@ -380,8 +414,8 @@ def train_validate_test(
             task_loss_train,
             task_loss_val,
             task_loss_test,
-            model.module.loss_weights,
-            config["Variables_of_interest"]["output_names"],
+            task_weights,
+            output_names,
         )
 
 
@@ -525,6 +559,7 @@ def train(
     model,
     opt,
     verbosity,
+    num_tasks=None,
     profiler=None,
     use_deepspeed=False,
     compute_grad_energy=False,
@@ -537,7 +572,7 @@ def train(
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.train()
 
@@ -664,6 +699,7 @@ def validate(
     loader,
     model,
     verbosity,
+    num_tasks=None,
     reduce_ranks=True,
     compute_grad_energy=False,
     precision="fp32",
@@ -672,7 +708,7 @@ def validate(
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
     use_ddstore = (
@@ -725,6 +761,7 @@ def test(
     loader,
     model,
     verbosity,
+    num_tasks=None,
     reduce_ranks=True,
     return_samples=True,
     compute_grad_energy=False,
@@ -733,8 +770,14 @@ def test(
     precision, param_dtype, _ = resolve_precision(precision)
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
+    if compute_grad_energy:
+        import torch_scatter
+
+    if num_tasks is None:
+        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
     use_ddstore = (
@@ -814,8 +857,10 @@ def test(
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    true_values = [[] for _ in range(model.module.num_heads)]
-    predicted_values = [[] for _ in range(model.module.num_heads)]
+
+    true_values = [[] for _ in range(num_tasks)]
+    predicted_values = [[] for _ in range(num_tasks)]
+
     if return_samples:
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
@@ -826,31 +871,96 @@ def test(
                 break
             if use_ddstore:
                 loader.dataset.ddstore.epoch_end()
-            head_index = get_head_indices(model, data)
             data = move_batch_to_device(data, param_dtype)
-            ytrue = data.y
-            pred = model(data)
-            if model.module.var_output:
-                pred = pred[0]
-            for ihead in range(model.module.num_heads):
-                head_pre = pred[ihead].reshape(-1, 1)
-                head_val = ytrue[head_index[ihead]]
-                true_values[ihead].append(head_val)
-                predicted_values[ihead].append(head_pre)
+            if compute_grad_energy:
+                with torch.enable_grad():
+                    data.pos.requires_grad = True
+                    with autocast_context:
+                        pred = model(data)
+                        # Support both node and graph heads; enforce sum pooling for graph heads
+                        if model.module.head_type[0] == "node":
+                            node_energy_pred = pred[0]
+                            graph_energy_pred = (
+                                torch_scatter.scatter_add(
+                                    node_energy_pred, data.batch, dim=0
+                                )
+                                .squeeze()
+                                .float()
+                            )
+                        elif model.module.head_type[0] == "graph":
+                            if getattr(
+                                model.module.model, "graph_pooling", "mean"
+                            ) not in ["add"]:
+                                raise ValueError(
+                                    "Graph head force loss requires sum pooling (graph_pooling='add')."
+                                )
+                            if isinstance(pred, dict) and "graph" in pred:
+                                graph_energy_pred = pred["graph"][0].squeeze().float()
+                            elif isinstance(pred, (list, tuple)):
+                                graph_energy_pred = pred[0].squeeze().float()
+                            else:
+                                graph_energy_pred = pred.squeeze().float()
+                        else:
+                            raise ValueError(
+                                "Force predictions are only supported for node or graph energy heads."
+                            )
+
+                        graph_energy_true = data.energy.squeeze().float()
+
+                        ncount = torch.bincount(data.batch)
+                        graph_energy_peratom_pred = graph_energy_pred / ncount
+                        graph_energy_peratom_true = graph_energy_true / ncount
+
+                        forces_true = data.forces.float()
+                        forces_pred = torch.autograd.grad(
+                            graph_energy_pred,
+                            data.pos,
+                            grad_outputs=torch.ones_like(graph_energy_pred),
+                            retain_graph=graph_energy_pred.requires_grad,
+                            # Retain graph only if needed (it will be needed during training, but not during validation/testing)
+                            create_graph=True,
+                        )[0].float()
+                        assert (
+                            forces_pred is not None
+                        ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                        forces_pred = -forces_pred
+                        forces_true = forces_true.flatten()
+                        forces_pred = forces_pred.flatten()
+                        true_values[0].append(graph_energy_true.reshape(-1, 1))
+                        true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
+                        true_values[2].append(forces_true.reshape(-1, 1))
+                        predicted_values[0].append(graph_energy_pred.reshape(-1, 1))
+                        predicted_values[1].append(
+                            graph_energy_peratom_pred.reshape(-1, 1)
+                        )
+                        predicted_values[2].append(forces_pred.reshape(-1, 1))
+            else:
+                head_index = get_head_indices(model, data)
+                ytrue = data.y
+                pred = model(data)
+                if model.module.var_output:
+                    pred = pred[0]
+                for ihead in range(model.module.num_heads):
+                    head_pre = pred[ihead].reshape(-1, 1)
+                    head_val = ytrue[head_index[ihead]]
+                    true_values[ihead].append(head_val)
+                    predicted_values[ihead].append(head_pre)
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for ihead in range(model.module.num_heads):
-            predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
-            true_values[ihead] = torch.cat(true_values[ihead], dim=0)
+        for itask in range(
+            num_tasks
+        ):  ###More general for both MLIP and non-conservative model
+            predicted_values[itask] = torch.cat(predicted_values[itask], dim=0)
+            true_values[itask] = torch.cat(true_values[itask], dim=0)
 
     if reduce_ranks:
         test_error = reduce_values_ranks(test_error)
         tasks_error = reduce_values_ranks(tasks_error)
         if len(true_values[0]) > 0:
-            for ihead in range(model.module.num_heads):
-                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
-                predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
+            for itask in range(num_tasks):
+                true_values[itask] = gather_tensor_ranks(true_values[itask])
+                predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
 
     return test_error, tasks_error, true_values, predicted_values

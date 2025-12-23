@@ -181,13 +181,61 @@ def load_existing_model(
         print_master("Load existing model:", path_name)
         checkpoint = torch.load(path_name, map_location=map_location)
         state_dict = checkpoint["model_state_dict"]
-        # ## To be compatible with old checkpoint which was not written as a ddp model
-        # if not next(iter(state_dict)).startswith("module"):
-        #     ddp_state_dict = OrderedDict()
-        #     for k, v in state_dict.items():
-        #         k = "module." + k
-        #         ddp_state_dict[k] = v
-        #     state_dict = ddp_state_dict
+        ## To be compatible with old checkpoint which was not written as a ddp model
+        if next(iter(model.state_dict())).startswith("module") and not next(iter(state_dict)).startswith("module"):
+            ddp_state_dict = OrderedDict()
+            for k, v in state_dict.items():
+                k = "module." + k
+                ddp_state_dict[k] = v
+            state_dict = ddp_state_dict
+        # Ensure optional graph conditioner modules exist before strict load.
+        target_model = model.module if hasattr(model, "module") else model
+        graph_cond_key = None
+        concat_cond_key = None
+        pool_cond_key = None
+        for key in state_dict.keys():
+            if key.endswith("graph_conditioner.0.weight"):
+                graph_cond_key = key
+            if key.endswith("graph_concat_projector.weight") or key.endswith(
+                "graph_concat_projector.0.weight"
+            ):
+                concat_cond_key = key
+            if key.endswith("graph_pool_projector.0.weight"):
+                pool_cond_key = key
+        if graph_cond_key and hasattr(target_model, "_ensure_graph_conditioner"):
+            if getattr(target_model, "graph_conditioner", None) is None:
+                graph_attr_dim = state_dict[graph_cond_key].shape[1]
+                # Toggle conditioning on to align with checkpoint contents.
+                target_model.use_graph_attr_conditioning = True
+                target_model._ensure_graph_conditioner(
+                    graph_attr_dim, target_model.device
+                )
+        if concat_cond_key and hasattr(target_model, "_ensure_graph_concat_projector"):
+            if getattr(target_model, "graph_concat_projector", None) is None:
+                in_features = state_dict[concat_cond_key].shape[1]
+                channel_dim = getattr(target_model, "hidden_dim", in_features)
+                graph_attr_dim = max(in_features - channel_dim, 1)
+                target_model.use_graph_attr_conditioning = True
+                target_model.graph_attr_conditioning_mode = "concat_node"
+                target_model._ensure_graph_concat_projector(
+                    graph_attr_dim=graph_attr_dim,
+                    channel_dim=channel_dim,
+                    device=target_model.device,
+                )
+        if pool_cond_key and hasattr(target_model, "_ensure_graph_pool_projector"):
+            if getattr(target_model, "graph_pool_projector", None) is None:
+                in_features = state_dict[pool_cond_key].shape[1]
+                channel_dim = getattr(target_model, "hidden_dim", in_features)
+                graph_attr_dim = max(in_features - channel_dim, 1)
+                target_model.use_graph_attr_conditioning = True
+                target_model.graph_attr_conditioning_mode = "fuse_pool"
+                target_model._ensure_graph_pool_projector(
+                    graph_attr_dim=graph_attr_dim,
+                    channel_dim=channel_dim,
+                    device=target_model.device,
+                )
+
+        ## Load with FSDP
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
         if use_fsdp:
             from torch.distributed.fsdp import (
@@ -206,7 +254,6 @@ def load_existing_model(
                             model, optimizer, checkpoint["optimizer_state_dict"]
                         )
                     optimizer.load_state_dict(optimizer_state_dict)
-
         else:
             model.load_state_dict(state_dict)
             if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
