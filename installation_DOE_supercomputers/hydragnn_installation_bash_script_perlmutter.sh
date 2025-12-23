@@ -397,6 +397,27 @@ pip_retry -e ".[hps,hps-tl]" --verbose
 assert_numpy_1264
 
 # ============================================================
+# GPTL
+# ============================================================
+banner "GPTL"
+GPTL_PERLMUTTER="${INSTALL_ROOT}/GPTLPerlmutter"
+export GPTL_PERLMUTTER
+mkdir -p "$GPTL_PERLMUTTER"
+cd "$GPTL_PERLMUTTER"
+
+wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+tar xvf gptl-8.1.1.tar.gz
+pushd gptl-8.1.1 >/dev/null
+./configure --prefix=$INSTALL_ROOT CC=cc CXX=CC FC=ftn
+make install
+popd >/dev/null
+
+git clone git@github.com:jychoi-hpc/gptl4py.git || true
+pushd gptl4py >/dev/null
+GPTL_DIR=$INSTALL_ROOT CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
+popd >/dev/null
+
+# ============================================================
 # Final Summary
 # ============================================================
 banner "Final Summary"
