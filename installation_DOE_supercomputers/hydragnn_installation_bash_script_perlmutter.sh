@@ -408,7 +408,7 @@ cd "$GPTL_PERLMUTTER"
 wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
 tar xvf gptl-8.1.1.tar.gz
 pushd gptl-8.1.1 >/dev/null
-./configure --prefix=$INSTALL_ROOT CC=cc CXX=CC FC=ftn
+./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=cc CXX=CC FC=ftn
 make install
 popd >/dev/null
 

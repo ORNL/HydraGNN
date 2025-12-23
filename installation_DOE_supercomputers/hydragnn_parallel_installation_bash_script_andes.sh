@@ -408,7 +408,7 @@ build_gptl() {
   wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
   tar xvf gptl-8.1.1.tar.gz
   pushd gptl-8.1.1 >/dev/null
-  ./configure --prefix=$INSTALL_ROOT CC=mpicc CXX=mpicxx FC=mpifort
+  ./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=mpicc CXX=mpicxx FC=mpifort
   make install
   popd >/dev/null
 
