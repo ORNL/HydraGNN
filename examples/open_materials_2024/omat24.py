@@ -26,6 +26,11 @@ transform_coordinates = Distance(norm=False, cat=False)
 # transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+# charge and spin are constant across Open Materials 2024 dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 dataset_names = [
     "rattled-1000",
@@ -249,6 +254,7 @@ class OMat2024(AbstractBaseDataset):
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
+                graph_attr=graph_attr,
             )
 
             if self.energy_per_atom:

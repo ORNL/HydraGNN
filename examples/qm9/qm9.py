@@ -19,6 +19,11 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 num_samples = 1000
 
 
+# charge and spin are constant across QM9 dataset
+charge = 0.0
+spin = 1.0
+data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 # Update each sample prior to loading.
 def qm9_pre_transform(data, transform):
     # LPE

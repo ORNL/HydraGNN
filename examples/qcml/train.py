@@ -75,6 +75,12 @@ QCML_DATA_DIR = "gs://qcml-datasets/tfds"
 GCP_PROJECT = "deepmind-opensource"
 
 
+# charge and spin are constant across QCML dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
+
 class QCMLDataset(AbstractBaseDataset):
     def __init__(
         self,
@@ -192,6 +198,7 @@ class QCMLDataset(AbstractBaseDataset):
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
+                graph_attr=graph_attr,
             )
 
             if self.energy_per_atom:

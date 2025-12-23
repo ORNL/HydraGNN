@@ -80,6 +80,11 @@ transform_coordinates = Distance(norm=False, cat=False)
 # transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+# charge and spin are constant across Alexandria dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 class Alexandria(AbstractBaseDataset):
     def __init__(
@@ -309,6 +314,7 @@ class Alexandria(AbstractBaseDataset):
             # total_mag=total_mag,
             # dos_ef=dos_ef,
             # band_gap_ind=band_gap_ind,
+            graph_attr=graph_attr,
         )
 
         if self.energy_per_atom:

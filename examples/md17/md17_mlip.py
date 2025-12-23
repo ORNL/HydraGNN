@@ -33,6 +33,9 @@ def md17_pre_transform(data, compute_edges, transform):
     source_pe = data.pe[data.edge_index[0]]
     target_pe = data.pe[data.edge_index[1]]
     data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference
+    charge = 0.0
+    spin = 1.0
+    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     return data
 
 
