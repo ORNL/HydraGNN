@@ -182,7 +182,9 @@ def load_existing_model(
         checkpoint = torch.load(path_name, map_location=map_location)
         state_dict = checkpoint["model_state_dict"]
         ## To be compatible with old checkpoint which was not written as a ddp model
-        if next(iter(model.state_dict())).startswith("module") and not next(iter(state_dict)).startswith("module"):
+        if next(iter(model.state_dict())).startswith("module") and not next(
+            iter(state_dict)
+        ).startswith("module"):
             ddp_state_dict = OrderedDict()
             for k, v in state_dict.items():
                 k = "module." + k
