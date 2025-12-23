@@ -73,6 +73,7 @@ charge = 0.0  # neutral
 spin = 1.0  # singlet
 graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
+
 class MPTrjDataset(AbstractBaseDataset):
     def __init__(
         self,
