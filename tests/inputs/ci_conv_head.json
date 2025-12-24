@@ -55,10 +55,17 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["x"],
-            "output_index": [0],
-            "type": ["node"],
+            "node_features": {
+                "x": {
+                    "dim": 1,
+                    "role": "input"
+                },
+                "x2": {
+                    "dim": 1,
+                    "role": "output"
+                }
+            },
+            "graph_features": {},
             "denormalize_output": false
         },
         "Training": {

@@ -17,6 +17,11 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
 from hydragnn.utils.model import update_multibranch_heads
+from hydragnn.utils.input_config_parsing.feature_config import (
+    parse_feature_config,
+    validate_feature_config,
+    update_var_config_with_features,
+)
 from copy import deepcopy
 import warnings
 import json
@@ -25,6 +30,21 @@ import torch
 
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
+
+    # Parse and validate feature configuration (new feature config system)
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+
+    # Update var_config with parsed features (supports both new and legacy formats)
+    var_config = update_var_config_with_features(var_config)
+    config["NeuralNetwork"]["Variables_of_interest"] = var_config
+
+    # Validate feature configuration against actual data
+    is_valid, errors = validate_feature_config(var_config, train_loader.dataset[0])
+    if not is_valid:
+        warnings.warn(
+            f"Feature configuration validation warnings:\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
 
     graph_size_variable = os.getenv("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE")
     if graph_size_variable is None:
