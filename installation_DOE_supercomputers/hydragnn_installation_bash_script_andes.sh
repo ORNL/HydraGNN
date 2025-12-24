@@ -336,6 +336,27 @@ pip_retry -e ".[hps,hps-tl]" --verbose
 assert_numpy_1264
 
 # ============================================================
+# GPTL
+# ============================================================
+banner "GPTL"
+GPTL_ANDES="${INSTALL_ROOT}/GPTL-Andes"
+export GPTL_ANDES
+mkdir -p "$GPTL_ANDES"
+cd "$GPTL_ANDES"
+
+wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+tar xvf gptl-8.1.1.tar.gz
+pushd gptl-8.1.1 >/dev/null
+./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=mpicc CXX=mpicxx FC=mpifort
+make install
+popd >/dev/null
+
+git clone git@github.com:jychoi-hpc/gptl4py.git || true
+pushd gptl4py >/dev/null
+GPTL_DIR=$INSTALL_ROOT CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
+popd >/dev/null
+
+# ============================================================
 # Final Summary
 # ============================================================
 banner "Final Summary (Andes)"
