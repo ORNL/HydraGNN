@@ -72,6 +72,11 @@ transform_coordinates = Distance(norm=False, cat=False)
 # transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+# charge and spin are constant across Open Catalyst 2022 dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 class OpenCatalystDataset(AbstractBaseDataset):
     def __init__(
@@ -212,6 +217,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
+            graph_attr=graph_attr,
         )
 
         if self.energy_per_atom:

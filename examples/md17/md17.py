@@ -16,6 +16,9 @@ except ImportError:
 
 import hydragnn
 
+# charge and spin are constant across MD17 dataset
+charge = 0.0
+spin = 1.0
 
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
@@ -25,6 +28,7 @@ def md17_pre_transform(data, compute_edges, transform):
     data.y = data.energy / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
+    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     data = compute_edges(data)
     data = transform(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings

@@ -66,6 +66,11 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
+# charge and spin are constant across Transition1x dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 class Transition1xDataset(AbstractBaseDataset):
     """Transition1xDataset dataset class"""
@@ -226,6 +231,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 energy=total_energy_tensor,
                 energy_per_atom=total_energy_per_atom_tensor,
                 forces=forces,
+                graph_attr=graph_attr,
             )
 
             if self.energy_per_atom:

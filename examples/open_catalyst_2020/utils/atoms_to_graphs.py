@@ -30,6 +30,11 @@ transform_coordinates = Distance(norm=False, cat=False)
 # transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+# charge and spin are constant across Open Catalyst 2020 dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 class AtomsToGraphs:
     """A class to help convert periodic atomic structures to graphs.
@@ -135,6 +140,7 @@ class AtomsToGraphs:
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
             tags=tags,
+            graph_attr=graph_attr,
         )
 
         if energy_per_atom:

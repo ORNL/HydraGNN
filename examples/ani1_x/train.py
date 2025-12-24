@@ -66,6 +66,11 @@ transform_coordinates = Distance(norm=False, cat=False)
 # Value: 1 Hartree = 27.2114079527 eV (use at least 10 significant digits for scientific accuracy)
 conversion_constant_from_hartree_to_eV = 27.2114079527
 
+# charge and spin are constant across ANI1-x dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 class ANI1xDataset(AbstractBaseDataset):
     def __init__(
@@ -193,6 +198,7 @@ class ANI1xDataset(AbstractBaseDataset):
                     energy=energy,
                     energy_per_atom=energy_per_atom,
                     forces=forces,
+                    graph_attr=graph_attr,
                 )
 
                 if self.energy_per_atom:
