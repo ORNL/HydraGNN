@@ -286,6 +286,21 @@ class MultiTaskModelMP(nn.Module):
             + list(self.decoder.state_dict().items())
         )
 
+    def load_state_dict(self, state_dict):
+        enc_state_dict = OrderedDict()
+        dec_state_dict = OrderedDict()
+        enc_keys = self.encoder.state_dict().keys()
+        dec_keys = self.decoder.state_dict().keys()
+        for k in state_dict.keys():
+            if k in enc_keys:
+                enc_state_dict[k] = state_dict[k]
+            elif k in dec_keys:
+                dec_state_dict[k] = state_dict[k]
+            else:
+                print("Warning: key not found in either encoder or decoder:", k)
+        self.encoder.load_state_dict(enc_state_dict)
+        self.decoder.load_state_dict(dec_state_dict)
+
     def train(self):
         self.encoder.train()
         self.decoder.train()
