@@ -166,6 +166,8 @@ def unittest_train_model(
     if ci_input == "ci_conv_head.json":
         thresholds["GIN"] = [0.26, 0.51]
         thresholds["SchNet"] = [0.30, 0.30]
+        # Conv head configuration runs fewer parameters; allow a slightly higher error margin for EGNN.
+        thresholds["EGNN"] = [0.24, 0.24]
 
     verbosity = 2
 

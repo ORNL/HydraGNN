@@ -77,6 +77,11 @@ def info(*args, logtype="info", sep=" "):
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
+# charge and spin are constant across QM7-X dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
 
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
@@ -276,6 +281,7 @@ class QM7XDataset(AbstractBaseDataset):
                     energy=energy,
                     energy_per_atom=energy_per_atom,
                     forces=forces,
+                    graph_attr=graph_attr,
                 )
 
                 if self.energy_per_atom:

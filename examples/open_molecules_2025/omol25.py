@@ -174,6 +174,11 @@ class OMol2025(AbstractBaseDataset):
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
+            # charge and spinfrom dataset info
+            charge = dataset.get_atoms(index).info.get("charge", 0)
+            spin = dataset.get_atoms(index).info.get("spin", 1)
+            graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
             data_object = Data(
                 dataset_name="omol25",
                 natoms=natoms,
@@ -189,6 +194,7 @@ class OMol2025(AbstractBaseDataset):
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
+                graph_attr=graph_attr,
             )
 
             if self.energy_per_atom:

@@ -19,6 +19,10 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 num_samples = 1000
 
 
+# charge and spin are constant across QM9 dataset
+charge = 0.0
+spin = 1.0
+
 # Update each sample prior to loading.
 def qm9_pre_transform(data, transform):
     # LPE
@@ -29,6 +33,7 @@ def qm9_pre_transform(data, transform):
     data.y = data.y[:, 10] / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
+    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
     target_pe = data.pe[data.edge_index[1]]
