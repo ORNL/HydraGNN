@@ -462,7 +462,12 @@ class rbf_BasisLayer(nn.Module):
 
         sin(n * pi * d / d_cut) / d
         """
-        n = torch.arange(self.num_radial, device=edge_dist.device, dtype=edge_dist.dtype) + 1
+        n = (
+            torch.arange(
+                self.num_radial, device=edge_dist.device, dtype=edge_dist.dtype
+            )
+            + 1
+        )
         scaled = edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff
 
         # Avoid division-by-zero when edges have zero length (e.g., self-loops or overlapping nodes).
