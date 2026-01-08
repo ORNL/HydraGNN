@@ -54,6 +54,10 @@ reversed_dict_periodic_table = {value: key for key, value in periodic_table.item
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)
 
+# charge and spin are constant across MPTrj dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 class JARVIS_DFT(AbstractBaseDataset):
     def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
@@ -225,6 +229,8 @@ class JARVIS_DFT(AbstractBaseDataset):
         #    return data_object
         # energy_above_hull_tensor = torch.tensor(energy_above_hull).unsqueeze(1)
 
+        x = torch.cat([atomic_numbers, pos], dim=1)
+
         data_object = Data(
             pos=pos,
             cell=cell,
@@ -234,6 +240,7 @@ class JARVIS_DFT(AbstractBaseDataset):
             natoms=natoms,
             # total_energy=total_energy_tensor,
             # total_energy_per_atom=total_energy_per_atom_tensor,
+            x=x,
             formation_energy=formation_energy_tensor.float(),
             formation_energy_per_atom=formation_energy_per_atom_tensor.float(),
             energy=formation_energy_tensor.float(),
@@ -243,14 +250,13 @@ class JARVIS_DFT(AbstractBaseDataset):
             # total_mag=total_mag,
             # dos_ef=dos_ef,
             # band_gap_ind=band_gap_ind,
+            graph_attr=graph_attr,
         )
 
         if self.energy_per_atom:
             data_object.y = data_object.formation_energy_per_atom
         else:
             data_object.y = data_object.formation_energy
-
-        data_object.x = torch.cat([data_object.atomic_numbers, data_object.pos], dim=1)
 
         data_object = self.radius_graph(data_object)
         data_object = transform_coordinates(data_object)
