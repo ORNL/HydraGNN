@@ -160,7 +160,7 @@ pip_retry mendeleev==0.16.0
 pip_retry lmdb
 pip_retry h5py==3.14.0 
 pip_retry tensorflow
-pip_retry tensorflow-datasets
+pip_retry tensorflow_datasets
 
 # ============================================================
 # PyTorch (CPU-only) + torchvision
