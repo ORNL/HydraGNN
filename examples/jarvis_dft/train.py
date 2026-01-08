@@ -59,6 +59,7 @@ charge = 0.0  # neutral
 spin = 1.0  # singlet
 graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
+
 class JARVIS_DFT(AbstractBaseDataset):
     def __init__(self, dirpath, var_config, energy_per_atom=True, dist=False):
         super().__init__()
