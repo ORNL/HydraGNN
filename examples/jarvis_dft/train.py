@@ -236,6 +236,8 @@ class JARVIS_DFT(AbstractBaseDataset):
             # total_energy_per_atom=total_energy_per_atom_tensor,
             formation_energy=formation_energy_tensor.float(),
             formation_energy_per_atom=formation_energy_per_atom_tensor.float(),
+            energy=formation_energy_tensor.float(),
+            energy_per_atom=formation_energy_per_atom_tensor.float(),
             # energy_above_hull=energy_above_hull,
             # magmoms=torch.tensor(magmoms_numpy).float(),
             # total_mag=total_mag,
