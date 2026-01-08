@@ -258,7 +258,7 @@ class Transition1xDataset(AbstractBaseDataset):
 
             self.dataset.append(data_object)
 
-            random.shuffle(self.dataset)
+        random.shuffle(self.dataset)
 
     def check_forces_values(self, forces):
         # Calculate the L2 norm for each row
