@@ -113,7 +113,7 @@ class OMat2024(AbstractBaseDataset):
             #     verbosity_level=2,
             #     desc=f"Rank{self.rank} Dataset {dataset_index}/{len(dataset_list)}",
             # ):
-            
+
             for index in rx:
                 self._create_pytorch_data_object(dataset, index)
 
@@ -176,9 +176,7 @@ class OMat2024(AbstractBaseDataset):
         try:
             atoms = dataset.get_atoms(index)
 
-            pos = torch.as_tensor(
-                atoms.get_positions(), dtype=torch.float32
-            )
+            pos = torch.as_tensor(atoms.get_positions(), dtype=torch.float32)
             natoms = torch.IntTensor([pos.shape[0]])
             atomic_numbers = torch.as_tensor(
                 atoms.get_atomic_numbers(),
@@ -190,20 +188,16 @@ class OMat2024(AbstractBaseDataset):
             ).unsqueeze(0)
 
             energy_per_atom = energy.detach().clone() / natoms
-            forces = torch.as_tensor(
-                atoms.get_forces(), dtype=torch.float32
-            )
+            forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
 
             chemical_formula = atoms.get_chemical_formula()
-            
+
             cell = None
             try:
                 # cell = torch.tensor(
                 #     np.asarray(atoms.get_cell()), dtype=torch.float32
                 # ).view(3, 3)
-                cell = torch.from_numpy(
-                    np.asarray(atoms.get_cell())
-                ).to(
+                cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(
                     torch.float32
                 )  # dtype conversion in-place
                 # shape is already (3, 3) so no .view needed
@@ -258,7 +252,7 @@ class OMat2024(AbstractBaseDataset):
                 forces=forces,
                 graph_attr=graph_attr,
             )
-            
+
             if self.energy_per_atom:
                 data_object.y = data_object.energy_per_atom
             else:
@@ -278,7 +272,7 @@ class OMat2024(AbstractBaseDataset):
             else:
                 data_object = self.radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
-            
+
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):
                 data_object.edge_shifts = torch.zeros(
@@ -301,7 +295,9 @@ class OMat2024(AbstractBaseDataset):
                 )
 
         except Exception as e:
-            print(f"Rank {self.rank} reading - exception: {e}\nTraceback: {traceback.format_exc()}")
+            print(
+                f"Rank {self.rank} reading - exception: {e}\nTraceback: {traceback.format_exc()}"
+            )
 
     def check_forces_values(self, forces):
 
