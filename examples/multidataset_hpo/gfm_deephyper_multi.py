@@ -87,7 +87,7 @@ def run(trial, dequed=None):
             f"--batch_size={trial.parameters['batch_size']}",
             f"--multi",
             f"--ddstore",
-            f"--multi_model_list=ANI1x-v2,MPTrj-v2,OC2020-20M-v2,OC2022-v2,qm7x-v2",
+            f"--multi_model_list=ANI1x-v3,MPTrj-v3,OC2020-20M-v3,OC2022-v3,qm7x-v3",
             ## debugging
             # f"--multi_model_list=ANI1x",
             # f"--num_samples=1000",
