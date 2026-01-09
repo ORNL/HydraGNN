@@ -149,9 +149,8 @@ class QCMLDataset(AbstractBaseDataset):
 
         # Iterate through the filtered dataset and collect the results
         for index, element in iterate_tqdm(
-            filtered_dataset, verbosity_level=2, desc="Load"
+            filtered_dataset, verbosity_level=4, desc=f"{self.rank}: Load"
         ):
-
             tensorflow_atomic_numbers = element["atomic_numbers"].numpy()
             atomic_numbers = (
                 torch.from_numpy(tensorflow_atomic_numbers).to(torch.int32).unsqueeze(1)
@@ -227,7 +226,7 @@ class QCMLDataset(AbstractBaseDataset):
                 self.dataset.append(data_object)
             else:
                 print(
-                    f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
+                    f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data_object.forces}",
                     flush=True,
                 )
 
@@ -368,6 +367,7 @@ if __name__ == "__main__":
             perc_train=0.9,
             stratify_splitting=False,
         )
+        comm.Barrier()
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
@@ -421,6 +421,7 @@ if __name__ == "__main__":
                 # minmax_graph_feature=total.minmax_graph_feature,
                 use_subdir=True,
             )
+        print("Done.")
         sys.exit(0)
 
     tr.initialize()
