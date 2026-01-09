@@ -150,7 +150,7 @@ class QCMLDataset(AbstractBaseDataset):
         # Iterate through the filtered dataset and collect the results
         for index, element in iterate_tqdm(
             filtered_dataset, verbosity_level=4, desc=f"{self.rank}: Load"
-        ):            
+        ):
             tensorflow_atomic_numbers = element["atomic_numbers"].numpy()
             atomic_numbers = (
                 torch.from_numpy(tensorflow_atomic_numbers).to(torch.int32).unsqueeze(1)
