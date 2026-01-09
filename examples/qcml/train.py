@@ -367,6 +367,7 @@ if __name__ == "__main__":
             perc_train=0.9,
             stratify_splitting=False,
         )
+        comm.Barrier()
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
