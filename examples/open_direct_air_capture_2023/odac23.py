@@ -51,7 +51,7 @@ class ExtendedXYZDataset(Dataset):
         """Reads all structures from all .extxyz files and stores them in self.structures"""
         if not os.path.isfile(self.extxyz_filename):
             raise FileNotFoundError(f"File not found: {self.extxyz_filename}")
-        frames = read(self.extxyz_filename, index=':')  # Read all structures in file
+        frames = read(self.extxyz_filename, index=":")  # Read all structures in file
         self.structures.extend(frames)
 
     def len(self):
@@ -61,7 +61,6 @@ class ExtendedXYZDataset(Dataset):
         atoms: Atoms = self.structures[idx]
 
         return atoms
-
 
 
 class ODAC2023(AbstractBaseDataset):
@@ -121,9 +120,7 @@ class ODAC2023(AbstractBaseDataset):
             if data_type == "train":
                 rx = list(range(len(dataset)))
             else:
-                rx = list(nsplit(list(range(len(dataset))), self.world_size))[
-                    self.rank
-                ]
+                rx = list(nsplit(list(range(len(dataset))), self.world_size))[self.rank]
 
             print(
                 f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {len(dataset)}, len(rx): {len(rx)}"
@@ -186,9 +183,7 @@ class ODAC2023(AbstractBaseDataset):
 
     def _create_pytorch_data_object(self, dataset, index):
         try:
-            pos = torch.tensor(
-                dataset.get(index).get_positions(), dtype=torch.float32
-            )
+            pos = torch.tensor(dataset.get(index).get_positions(), dtype=torch.float32)
             natoms = torch.IntTensor([pos.shape[0]])
             atomic_numbers = torch.tensor(
                 dataset.get(index).get_atomic_numbers(),
@@ -200,9 +195,7 @@ class ODAC2023(AbstractBaseDataset):
             ).unsqueeze(0)
 
             energy_per_atom = energy.detach().clone() / natoms
-            forces = torch.tensor(
-                dataset.get(index).get_forces(), dtype=torch.float32
-            )
+            forces = torch.tensor(dataset.get(index).get_forces(), dtype=torch.float32)
 
             chemical_formula = dataset.get(index).get_chemical_formula()
 
@@ -211,9 +204,7 @@ class ODAC2023(AbstractBaseDataset):
                 cell = torch.tensor(
                     dataset.get(index).get_cell(), dtype=torch.float32
                 ).view(3, 3)
-                cell = torch.from_numpy(
-                    np.asarray(dataset.get(index).get_cell())
-                ).to(
+                cell = torch.from_numpy(np.asarray(dataset.get(index).get_cell())).to(
                     torch.float32
                 )  # dtype conversion in-place
                 # shape is already (3, 3) so no .view needed

@@ -60,9 +60,12 @@ if __name__ == "__main__":
         action="store_true",
         help="preprocess only (no training)",
     )
-    parser.add_argument("--stagedb", action='store_true',
-                        help="An additional step in pre-processing. Stage samples to db and then separately convert "
-                             "them to ADIOS by running preonly with the stagedb option.")
+    parser.add_argument(
+        "--stagedb",
+        action="store_true",
+        help="An additional step in pre-processing. Stage samples to db and then separately convert "
+        "them to ADIOS by running preonly with the stagedb option.",
+    )
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="odac23_energy.json"
     )
@@ -172,7 +175,7 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
-            stage_db=True
+            stage_db=True,
         )
         ## This is a local split
         trainset, valset1, valset2 = split_dataset(
@@ -189,7 +192,7 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
-            stage_db=True
+            stage_db=True,
         )
         ## Need as a list
         testset = testset[:]
@@ -309,7 +312,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
