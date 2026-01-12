@@ -25,6 +25,10 @@ transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
 # transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
+# charge and spin are constant across MPTrj dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 import torch
 from torch_geometric.data import Data, Dataset
@@ -252,6 +256,7 @@ class ODAC2023(AbstractBaseDataset):
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
+                graph_attr=graph_attr,
             )
 
             if self.energy_per_atom:
