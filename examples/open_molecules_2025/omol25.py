@@ -116,9 +116,7 @@ class OMol2025(AbstractBaseDataset):
         try:
             atoms = dataset.get_atoms(index)
 
-            pos = torch.tensor(
-                atoms.get_positions(), dtype=torch.float32
-            )
+            pos = torch.tensor(atoms.get_positions(), dtype=torch.float32)
             natoms = torch.IntTensor([pos.shape[0]])
             atomic_numbers = torch.tensor(
                 atoms.get_atomic_numbers(),
@@ -130,9 +128,7 @@ class OMol2025(AbstractBaseDataset):
             ).unsqueeze(0)
 
             energy_per_atom = energy.detach().clone() / natoms
-            forces = torch.tensor(
-                atoms.get_forces(), dtype=torch.float32
-            )
+            forces = torch.tensor(atoms.get_forces(), dtype=torch.float32)
 
             chemical_formula = atoms.get_chemical_formula()
 
@@ -141,9 +137,7 @@ class OMol2025(AbstractBaseDataset):
                 # cell = torch.tensor(
                 #     dataset.get_atoms(index).get_cell(), dtype=torch.float32
                 # ).view(3, 3)
-                cell = torch.from_numpy(
-                    np.asarray(atoms.get_cell())
-                ).to(
+                cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(
                     torch.float32
                 )  # dtype conversion in-place
                 # shape is already (3, 3) so no .view needed
