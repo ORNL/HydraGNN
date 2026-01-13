@@ -114,34 +114,30 @@ class OMol2025(AbstractBaseDataset):
 
     def _create_pytorch_data_object(self, dataset, index):
         try:
-            pos = torch.tensor(
-                dataset.get_atoms(index).get_positions(), dtype=torch.float32
-            )
+            atoms = dataset.get_atoms(index)
+
+            pos = torch.tensor(atoms.get_positions(), dtype=torch.float32)
             natoms = torch.IntTensor([pos.shape[0]])
             atomic_numbers = torch.tensor(
-                dataset.get_atoms(index).get_atomic_numbers(),
+                atoms.get_atomic_numbers(),
                 dtype=torch.float32,
             ).unsqueeze(1)
 
             energy = torch.tensor(
-                dataset.get_atoms(index).get_total_energy(), dtype=torch.float32
+                atoms.get_total_energy(), dtype=torch.float32
             ).unsqueeze(0)
 
             energy_per_atom = energy.detach().clone() / natoms
-            forces = torch.tensor(
-                dataset.get_atoms(index).get_forces(), dtype=torch.float32
-            )
+            forces = torch.tensor(atoms.get_forces(), dtype=torch.float32)
 
-            chemical_formula = dataset.get_atoms(index).get_chemical_formula()
+            chemical_formula = atoms.get_chemical_formula()
 
             cell = None
             try:
-                cell = torch.tensor(
-                    dataset.get_atoms(index).get_cell(), dtype=torch.float32
-                ).view(3, 3)
-                cell = torch.from_numpy(
-                    np.asarray(dataset.get_atoms(index).get_cell())
-                ).to(
+                # cell = torch.tensor(
+                #     dataset.get_atoms(index).get_cell(), dtype=torch.float32
+                # ).view(3, 3)
+                cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(
                     torch.float32
                 )  # dtype conversion in-place
                 # shape is already (3, 3) so no .view needed
@@ -153,7 +149,7 @@ class OMol2025(AbstractBaseDataset):
 
             pbc = None
             try:
-                pbc = pbc_as_tensor(dataset.get_atoms(index).get_pbc())
+                pbc = pbc_as_tensor(atoms.get_pbc())
             except:
                 print(
                     f"Atomic structure {chemical_formula} does not have pbc",
@@ -175,8 +171,8 @@ class OMol2025(AbstractBaseDataset):
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
             # charge and spinfrom dataset info
-            charge = dataset.get_atoms(index).info.get("charge", 0)
-            spin = dataset.get_atoms(index).info.get("spin", 1)
+            charge = atoms.info.get("charge", 0)
+            spin = atoms.info.get("spin", 1)
             graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
             data_object = Data(
