@@ -141,7 +141,6 @@ def get_radius_graph_pbc_config(config, loop=False):
     )
 
 
-
 class RadiusGraphPBC(RadiusGraph):
     r"""Creates edges based on node positions :obj:`pos` to all points within a
     given distance, including periodic images. Uses vesin for fast neighbor search.
@@ -161,7 +160,7 @@ class RadiusGraphPBC(RadiusGraph):
         for attempt_num in range(max_attempts):
             # Create ASE Atoms object for vesin
             ase_atoms = ase.Atoms(positions=pos_np, cell=cell_np, pbc=pbc_list)
-            
+
             # Use vesin for fast neighbor list computation
             # Pass to vesin with a= parameter (same as ASE's API)
             edge_src, edge_dst, edge_cell_shifts = vesin.ase_neighbor_list(
@@ -177,13 +176,22 @@ class RadiusGraphPBC(RadiusGraph):
 
             # Remove true self-loops if needed
             if not self.loop:
-                edge_src, edge_dst, edge_length, edge_cell_shifts = self._remove_true_self_loops(
+                (
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
+                ) = self._remove_true_self_loops(
                     edge_src, edge_dst, edge_length, edge_cell_shifts
                 )
 
             # Limit neighbors per node (vectorized)
             edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
-                edge_src, edge_dst, edge_length, edge_cell_shifts, self.max_num_neighbors
+                edge_src,
+                edge_dst,
+                edge_length,
+                edge_cell_shifts,
+                self.max_num_neighbors,
             )
 
             # Check if all nodes have at least one incoming edge
@@ -196,8 +204,18 @@ class RadiusGraphPBC(RadiusGraph):
                 )
                 cutoff *= cutoff_multiplier
             else:
-                edge_src, edge_dst, edge_length, edge_cell_shifts = self._ensure_connected(
-                    data.num_nodes, cutoff, edge_src, edge_dst, edge_length, edge_cell_shifts
+                (
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
+                ) = self._ensure_connected(
+                    data.num_nodes,
+                    cutoff,
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
                 )
 
         # Convert to tensors efficiently
@@ -207,18 +225,24 @@ class RadiusGraphPBC(RadiusGraph):
 
         # Compute edge_shifts: multiply integer cell shifts by cell vectors
         data.edge_shifts = torch.from_numpy(
-            (edge_cell_shifts @ cell_np).astype(np.float32 if dtype == torch.float32 else np.float64)
+            (edge_cell_shifts @ cell_np).astype(
+                np.float32 if dtype == torch.float32 else np.float64
+            )
         ).to(device)
 
         return data
 
-    def _remove_true_self_loops(self, edge_src, edge_dst, edge_length, edge_cell_shifts):
+    def _remove_true_self_loops(
+        self, edge_src, edge_dst, edge_length, edge_cell_shifts
+    ):
         """Remove edges where src == dst and shift == [0,0,0]."""
         true_self_edges = (edge_src == edge_dst) & np.all(edge_cell_shifts == 0, axis=1)
         mask = ~true_self_edges
         return edge_src[mask], edge_dst[mask], edge_length[mask], edge_cell_shifts[mask]
 
-    def _limit_neighbors(self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors):
+    def _limit_neighbors(
+        self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors
+    ):
         """Vectorized neighbor limiting - no Python loops."""
         # Sort by (dst, length) so closest neighbors come first within each dst
         order = np.lexsort((edge_length, edge_dst))
@@ -241,7 +265,7 @@ class RadiusGraphPBC(RadiusGraph):
         cumpos = np.arange(n)
         reset_vals = cumpos[dst_change]
         reset_indices = np.flatnonzero(dst_change)
-        
+
         # Subtract the reset value for each group
         group_ids = np.cumsum(dst_change) - 1
         rank = cumpos - reset_vals[group_ids]
@@ -250,11 +274,13 @@ class RadiusGraphPBC(RadiusGraph):
         mask = rank < max_num_neighbors
         return edge_src[mask], edge_dst[mask], edge_length[mask], edge_cell_shifts[mask]
 
-    def _ensure_connected(self, num_nodes, cutoff, edge_src, edge_dst, edge_length, edge_cell_shifts):
+    def _ensure_connected(
+        self, num_nodes, cutoff, edge_src, edge_dst, edge_length, edge_cell_shifts
+    ):
         """Ensure every node has at least one incoming edge."""
         all_nodes = np.arange(num_nodes)
         missing = np.setdiff1d(all_nodes, np.unique(edge_dst))
-        
+
         if len(missing) > 0:
             print(
                 f"WARNING: {len(missing)} nodes missing in 'edge_dst'. Creating artificial connections.",
@@ -269,7 +295,7 @@ class RadiusGraphPBC(RadiusGraph):
                 edge_dst = np.append(edge_dst, mnode)
                 edge_length = np.append(edge_length, cutoff - 1e-8)
                 edge_cell_shifts = np.vstack([edge_cell_shifts, np.array([[0, 0, 0]])])
-        
+
         return edge_src, edge_dst, edge_length, edge_cell_shifts
 
     def _check_and_standardize_data(self, data):
@@ -287,11 +313,19 @@ class RadiusGraphPBC(RadiusGraph):
         device, dtype = data.pos.device, data.pos.dtype
 
         # Standardize cell
-        if not (isinstance(data.cell, torch.Tensor) and data.cell.dtype == dtype and data.cell.device == device):
+        if not (
+            isinstance(data.cell, torch.Tensor)
+            and data.cell.dtype == dtype
+            and data.cell.device == device
+        ):
             data.cell = torch.tensor(data.cell, dtype=dtype, device=device)
 
         # Standardize pbc
-        if not (isinstance(data.pbc, torch.Tensor) and data.pbc.dtype == torch.bool and data.pbc.device == device):
+        if not (
+            isinstance(data.pbc, torch.Tensor)
+            and data.pbc.dtype == torch.bool
+            and data.pbc.device == device
+        ):
             data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
 
         return data, device, dtype
@@ -522,4 +556,3 @@ def update_atom_features(atom_features: [AtomFeatures], data: Data):
     """
     feature_indices = [i for i in atom_features]
     data.x = data.x[:, feature_indices]
-
