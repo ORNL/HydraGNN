@@ -24,6 +24,7 @@ from hydragnn.utils.distributed import (
     get_device_name,
 )
 from collections import OrderedDict
+from torch.distributed.optim import ZeroRedundancyOptimizer
 
 
 def activation_function_selection(activation_function_string: str):
@@ -110,7 +111,14 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                     )
         else:
             model_state_dict = model.state_dict()
-            optimizer_state_dict = optimizer.state_dict()
+            if isinstance(optimizer, ZeroRedundancyOptimizer):
+                if world_rank == 0:
+                    ## Only rank 0 have the full optimizer state for ZeroRedundancyOptimizer
+                    optimizer_state_dict = optimizer.state_dict()
+                else:
+                    optimizer_state_dict = None
+            else:
+                optimizer_state_dict = optimizer.state_dict()
 
         if eligible:
             epoch = os.getenv("HYDRAGNN_EPOCH", None)  ## str or None
