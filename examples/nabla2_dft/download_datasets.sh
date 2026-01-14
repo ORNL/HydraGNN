@@ -70,7 +70,11 @@ declare -a requested_keys=()
 if [[ $# -eq 0 ]]; then
     requested_keys+=("dataset_train_tiny")
 else
-    requested_keys=("$@")
+    # Accept space- or comma-separated lists, e.g. "dataset_train_small,dataset_test_structures"
+    for arg in "$@"; do
+        IFS=',' read -r -a parts <<< "$arg"
+        requested_keys+=("${parts[@]}")
+    done
 fi
 
 # Confirm overwrite of existing dataset directory
