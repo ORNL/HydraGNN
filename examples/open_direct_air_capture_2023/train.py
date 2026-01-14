@@ -1,14 +1,10 @@
-import os, json
+import os, re, json
 import logging
 import sys
 from mpi4py import MPI
 import argparse
-
-import numpy as np
-
-import random
 import torch
-import torch.distributed as dist
+import socket
 
 # FIX random seed
 random_state = 0
@@ -27,247 +23,31 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.utils.print.print_utils import iterate_tqdm
-from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
+    RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
+    gather_deg,
 )
 from hydragnn.preprocess.load_data import split_dataset
-
 import hydragnn.utils.profiling_and_tracing.tracer as tr
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
+from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 
-from hydragnn.utils.print.print_utils import log
-
-from hydragnn.utils.descriptors_and_embeddings import xyz2mol
-
-from rdkit import Chem
-
-try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
-except ImportError:
-    pass
-
+import subprocess
 from hydragnn.utils.distributed import nsplit
+from odac23 import ODAC2023
 
-import h5py
+## FIMME
+torch.backends.cudnn.enabled = False
+
+import glob
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-# transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
-
-# Conversion constant from Hartree to electron volt (eV).
-# Source: NIST CODATA 2018, https://physics.nist.gov/cgi-bin/cuu/Value?hrjtoeV
-# Value: 1 Hartree = 27.2114079527 eV (use at least 10 significant digits for scientific accuracy)
-conversion_constant_from_hartree_to_eV = 27.2114079527
-
-# charge and spin are constant across ANI1-x dataset
-charge = 0.0  # neutral
-spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-
-
-class ANI1xDataset(AbstractBaseDataset):
-    def __init__(
-        self,
-        dirpath,
-        config,
-        graphgps_transform=None,
-        energy_per_atom=True,
-        dist=False,
-    ):
-        super().__init__()
-
-        self.config = config
-        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
-        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
-
-        self.data_path = os.path.join(dirpath, "ani1x-release.h5")
-        self.data_keys = ["wb97x_dz.energy", "wb97x_dz.forces"]
-        self.energy_per_atom = energy_per_atom
-
-        self.radius_graph = RadiusGraph(
-            self.radius, loop=False, max_num_neighbors=self.max_neighbours
-        )
-
-        self.graphgps_transform = graphgps_transform
-
-        self.dist = dist
-        if self.dist:
-            assert torch.distributed.is_initialized()
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
-
-        # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 1000.0
-
-        self.convert_trajectories_to_graphs()
-
-    def convert_trajectories_to_graphs(self):
-
-        # Example for extracting DFT/DZ energies and forces
-        for data_trj in iterate_tqdm(
-            self.iter_data_buckets(self.data_path, keys=self.data_keys),
-            verbosity_level=2,
-        ):
-
-            X = data_trj["coordinates"]
-            Z = data_trj["atomic_numbers"]
-            E = data_trj["wb97x_dz.energy"]
-            F = data_trj["wb97x_dz.forces"]
-
-            # atomic numbers
-            atomic_numbers = torch.from_numpy(Z).unsqueeze(1).to(torch.float32)
-
-            natoms = torch.IntTensor([X.shape[1]])
-
-            global_trajectories_id = range(X.shape[0])
-            if self.dist:
-                local_trajectories_id = list(
-                    nsplit(global_trajectories_id, self.world_size)
-                )[self.rank]
-            else:
-                local_trajectories_id = global_trajectories_id
-
-            # extract positions, energies, and forces for each step
-            for frame_id in local_trajectories_id:
-
-                pos = torch.from_numpy(X[frame_id]).to(torch.float32)
-                cell = torch.eye(3, dtype=torch.float32)
-                pbc = torch.tensor([False, False, False], dtype=torch.bool)
-                energy = (
-                    torch.tensor(E[frame_id])
-                    .unsqueeze(0)
-                    .unsqueeze(1)
-                    .to(torch.float32)
-                ) * conversion_constant_from_hartree_to_eV
-
-                energy_per_atom = energy.detach().clone() / natoms
-                forces = (
-                    torch.from_numpy(F[frame_id]).to(torch.float32)
-                    * conversion_constant_from_hartree_to_eV
-                )
-                x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
-                # Calculate chemical composition
-                atomic_number_list = atomic_numbers.tolist()
-                assert len(atomic_number_list) == natoms
-                ## 118: number of atoms in the periodic table
-                hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-                chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-                pos_list = pos.tolist()
-                atomic_number_list_int = [int(item[0]) for item in atomic_number_list]
-                """
-                try:
-                    mol = xyz2mol(
-                        atomic_number_list_int,
-                        pos_list,
-                        charge=0,
-                        allow_charged_fragments=True,
-                        use_graph=False,
-                        use_huckel=False,
-                        embed_chiral=True,
-                        use_atom_maps=False,
-                    )
-
-                    assert (
-                        len(mol) == 1
-                    ), f"molecule with atomic numbers {atomic_number_list_int}  and positions {pos_list} does not produce RDKit.mol object"
-                    smiles_string = Chem.MolToSmiles(mol[0])
-                except:
-                    smiles_string = None
-                """
-
-                data_object = Data(
-                    dataset_name="ani1x",
-                    natoms=natoms,
-                    pos=pos,
-                    cell=cell,  # even if not needed, cell needs to be defined because ADIOS requires consistency across datasets
-                    pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
-                    # edge_index=None,
-                    # edge_attr=None,
-                    atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
-                    chemical_composition=chemical_composition,
-                    # smiles_string=smiles_string,
-                    x=x,
-                    energy=energy,
-                    energy_per_atom=energy_per_atom,
-                    forces=forces,
-                    graph_attr=graph_attr,
-                )
-
-                if self.energy_per_atom:
-                    data_object.y = data_object.energy_per_atom
-                else:
-                    data_object.y = data_object.energy
-
-                data_object = self.radius_graph(data_object)
-
-                # Build edge attributes
-                data_object = transform_coordinates(data_object)
-
-                # Default edge_shifts for when radius_graph_pbc is not activated
-                data_object.edge_shifts = torch.zeros(
-                    (data_object.edge_index.size(1), 3), dtype=torch.float32
-                )
-
-                # FIXME: PBC from bool --> int32 to be accepted by ADIOS
-                data_object.pbc = data_object.pbc.int()
-
-                # LPE
-                if self.graphgps_transform is not None:
-                    data_object = self.graphgps_transform(data_object)
-
-                if self.check_forces_values(data_object.forces):
-                    self.dataset.append(data_object)
-                else:
-                    print(
-                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {data}",
-                        flush=True,
-                    )
-
-        random.shuffle(self.dataset)
-
-    def iter_data_buckets(self, h5filename, keys=["wb97x_dz.energy"]):
-        """Iterate over buckets of data in ANI HDF5 file.
-        Yields dicts with atomic numbers (shape [Na,]) coordinated (shape [Nc, Na, 3])
-        and other available properties specified by `keys` list, w/o NaN values.
-        """
-        keys = set(keys)
-        keys.discard("atomic_numbers")
-        keys.discard("coordinates")
-        with h5py.File(h5filename, "r") as f:
-            for grp in f.values():
-                Nc = grp["coordinates"].shape[0]
-                mask = np.ones(Nc, dtype=np.bool_)
-                data = dict((k, grp[k][()]) for k in keys)
-                for k in keys:
-                    v = data[k].reshape(Nc, -1)
-                    mask = mask & ~np.isnan(v).any(axis=1)
-                if not np.sum(mask):
-                    continue
-                d = dict((k, data[k][mask]) for k in keys)
-                d["atomic_numbers"] = grp["atomic_numbers"][()]
-                d["coordinates"] = grp["coordinates"][()][mask]
-                yield d
-
-    def check_forces_values(self, forces):
-
-        # Calculate the L2 norm for each row
-        norms = torch.norm(forces, p=2, dim=1)
-        # Check if all norms are less than the threshold
-
-        return torch.all(norms < self.forces_norm_threshold).item()
-
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
-        return self.dataset[idx]
 
 
 if __name__ == "__main__":
@@ -281,7 +61,13 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="ani1x_mlip.json"
+        "--stagedb",
+        action="store_true",
+        help="An additional step in pre-processing. Stage samples to db and then separately convert "
+        "them to ADIOS by running preonly with the stagedb option.",
+    )
+    parser.add_argument(
+        "--inputfile", help="input file", type=str, default="odac23_energy.json"
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -294,8 +80,13 @@ if __name__ == "__main__":
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
+    parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
+    parser.add_argument(
+        "--compute_grad_energy", type=bool, help="compute_grad_energy", default=False
+    )
+
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--adios",
@@ -319,7 +110,9 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
+    # datadir = os.path.join(dirpwd, "dataset")
+    datadir = "/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_direct_air_capture_2023/dataset"
+    # datadir = "/mnt/bb/kmehta/dataset"
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -345,6 +138,9 @@ if __name__ == "__main__":
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
@@ -359,40 +155,62 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "ANI1x" if args.log is None else args.log
-    hydragnn.utils.print.print_utils.setup_log(log_name)
+    log_name = "ODAC23" if args.log is None else args.log
+    hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "ANI1x" if args.modelname is None else args.modelname
+    print(f"Rank {rank} is on node {socket.gethostname()}", flush=True)
+
+    modelname = "ODAC23" if args.modelname is None else args.modelname
+
     if args.preonly:
         ## local data
-        total = ANI1xDataset(
+        trainset = ODAC2023(
             os.path.join(datadir),
             config,
+            data_type="train",
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+            stage_db=True,
         )
         ## This is a local split
-        trainset, valset, testset = split_dataset(
-            dataset=total,
+        trainset, valset1, valset2 = split_dataset(
+            dataset=trainset,
             perc_train=0.9,
             stratify_splitting=False,
         )
+        valset = [*valset1, *valset2]
+        testset = ODAC2023(
+            os.path.join(datadir),
+            config,
+            data_type="val",
+            # graphgps_transform=graphgps_transform,
+            graphgps_transform=None,
+            energy_per_atom=args.energy_per_atom,
+            dist=True,
+            stage_db=True,
+        )
+        ## Need as a list
+        testset = testset[:]
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
+
+        comm.Barrier()
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
         setnames = ["trainset", "valset", "testset"]
 
+        comm.Barrier()
+
         ## adios
         if args.format == "adios":
             fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
+                os.path.dirname(__file__), "./dataset/%s.bp" % modelname
             )
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
@@ -435,6 +253,7 @@ if __name__ == "__main__":
                 # minmax_graph_feature=total.minmax_graph_feature,
                 use_subdir=True,
             )
+        comm.Barrier()
         sys.exit(0)
 
     tr.initialize()
@@ -451,12 +270,11 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(
-            os.path.dirname(__file__), "./dataset/%s-v2.bp" % modelname
-        )
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
+
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
@@ -512,19 +330,16 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
+    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
+
+    # Print details of neural network architecture
+    print_model(model)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
-
-    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity
-    )
-
-    # Print details of neural network architecture
-    print_model(model)
 
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
@@ -544,15 +359,11 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=args.compute_grad_energy,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
-    if writer is not None:
-        writer.close()
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp
@@ -562,6 +373,4 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
-
-    dist.destroy_process_group()
     sys.exit(0)

@@ -462,10 +462,29 @@ class rbf_BasisLayer(nn.Module):
 
         sin(n * pi * d / d_cut) / d
         """
-        n = torch.arange(self.num_radial, device=edge_dist.device) + 1
-        return torch.sin(
-            edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff
-        ) / edge_dist.unsqueeze(-1)
+        n = (
+            torch.arange(
+                self.num_radial, device=edge_dist.device, dtype=edge_dist.dtype
+            )
+            + 1
+        )
+        scaled = edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff
+
+        # Avoid division-by-zero when edges have zero length (e.g., self-loops or overlapping nodes).
+        eps = 1e-9
+        safe_edge_dist = edge_dist.unsqueeze(-1).clamp_min(eps)
+        sinc = torch.sin(scaled) / safe_edge_dist
+
+        # For very small distances, use the analytic limit sin(x)/x -> 1 so the ratio goes to (n*pi/d_cut).
+        small_mask = edge_dist.unsqueeze(-1).abs() < eps
+        if small_mask.any():
+            sinc = torch.where(
+                small_mask,
+                (n * torch.pi / self.cutoff),
+                sinc,
+            )
+
+        return sinc
 
     def cosine_cutoff(self, edge_dist: torch.Tensor) -> torch.Tensor:
         """

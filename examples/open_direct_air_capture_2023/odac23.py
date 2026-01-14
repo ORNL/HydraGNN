@@ -1,6 +1,5 @@
-import os, random, torch, glob, sys, traceback
+import os, random, torch, glob, sys, pickle, pdb
 import numpy as np
-from fairchem.core.datasets import AseDBDataset
 from mpi4py import MPI
 from yaml import full_load
 
@@ -20,28 +19,55 @@ from utils import balance_load
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
-# transform_coordinates = LocalCartesian(norm=False, cat=False)
-transform_coordinates = Distance(norm=False, cat=False)
+transform_coordinates = LocalCartesian(norm=False, cat=False)
+# transform_coordinates = Distance(norm=False, cat=False)
 
-# transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
-transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
+transform_coordinates_pbc = PBCLocalCartesian(norm=False, cat=False)
+# transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
-dataset_names = [
-    "rattled-1000",
-    "rattled-1000-subsampled",
-    "rattled-500",
-    "rattled-500-subsampled",
-    "rattled-300",
-    "rattled-300-subsampled",
-    "aimd-from-PBE-1000-npt",
-    "aimd-from-PBE-1000-nvt",
-    "aimd-from-PBE-3000-npt",
-    "aimd-from-PBE-3000-nvt",
-    "rattled-relax",
-]
+# charge and spin are constant across MPTrj dataset
+charge = 0.0  # neutral
+spin = 1.0  # singlet
+graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
+import torch
+from torch_geometric.data import Data, Dataset
+from ase.io import read
+from ase import Atoms
+import os
+from typing import List
+
+from hydragnn.utils.print.print_utils import iterate_tqdm, log
 
 
-class OMat2024(AbstractBaseDataset):
+class ExtendedXYZDataset(Dataset):
+    def __init__(self, extxyz_filename: str, transform=None, pre_transform=None):
+        """
+        Args:
+            file_list (List[str]): List of paths to `.extxyz` files.
+        """
+        super().__init__(None, transform, pre_transform)
+        self.extxyz_filename = extxyz_filename
+        self.structures = []
+        self._load_structures()
+
+    def _load_structures(self):
+        """Reads all structures from all .extxyz files and stores them in self.structures"""
+        if not os.path.isfile(self.extxyz_filename):
+            raise FileNotFoundError(f"File not found: {self.extxyz_filename}")
+        frames = read(self.extxyz_filename, index=":")  # Read all structures in file
+        self.structures.extend(frames)
+
+    def len(self):
+        return len(self.structures)
+
+    def get(self, idx):
+        atoms: Atoms = self.structures[idx]
+
+        return atoms
+
+
+class ODAC2023(AbstractBaseDataset):
     def __init__(
         self,
         dirpath,
@@ -74,8 +100,6 @@ class OMat2024(AbstractBaseDataset):
 
         self.graphgps_transform = graphgps_transform
 
-        config_kwargs = {}  # see tutorial on additional configuration
-
         # Threshold for atomic forces in eV/angstrom
         self.forces_norm_threshold = 1000.0
 
@@ -92,20 +116,18 @@ class OMat2024(AbstractBaseDataset):
         for dataset_index, dataset_dict in enumerate(dataset_list):
             fullpath = dataset_dict["dataset_fullpath"]
             try:
-                dataset = AseDBDataset(config=dict(src=fullpath, **config_kwargs))
+                dataset = ExtendedXYZDataset(extxyz_filename=fullpath)
             except ValueError as e:
                 print(f"{fullpath} not a valid ase lmdb dataset. Ignoring ...")
                 continue
 
             if data_type == "train":
-                rx = list(range(dataset.num_samples))
+                rx = list(range(len(dataset)))
             else:
-                rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
-                    self.rank
-                ]
+                rx = list(nsplit(list(range(len(dataset))), self.world_size))[self.rank]
 
             print(
-                f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {dataset.num_samples}, len(rx): {len(rx)}"
+                f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {len(dataset)}, len(rx): {len(rx)}"
             )
 
             # for index in iterate_tqdm(
@@ -122,25 +144,18 @@ class OMat2024(AbstractBaseDataset):
             f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.",
             flush=True,
         )
-        MPI.COMM_WORLD.Barrier()
+        torch.distributed.barrier()
 
         random.shuffle(self.dataset)
 
     def _get_datasets_assigned_to_me(self, dirpath, data_type):
         datasets_info = []
-        if data_type != "train":
-            # For validation, we return all datasets in the directory
-            for d in dataset_names:
-                full_path = os.path.join(dirpath, data_type, d, "val.aselmdb")
-                datasets_info.append({"dataset_fullpath": full_path, "num_samples": 0})
-
-            return datasets_info
 
         # get the list of ase lmdb files
         total_file_list = None
         if self.rank == 0:
             total_file_list = glob.glob(
-                os.path.join(dirpath, data_type, "**/*.aselmdb"), recursive=True
+                os.path.join(dirpath, data_type, "**/*.extxyz"), recursive=True
             )
         total_file_list = self.comm.bcast(total_file_list, root=0)
 
@@ -149,17 +164,15 @@ class OMat2024(AbstractBaseDataset):
         datasets = rx
 
         # Get num samples for all datasets assigned to this process
-        config_kwargs = {}
-        for d in datasets:
+        for d in iterate_tqdm(datasets, verbosity_level=2, desc="Data Parsing"):
             fullpath = os.path.join(dirpath, data_type, d)
             try:
-                print(f"Opening {fullpath} to get num samples")
-                dataset = AseDBDataset(config=dict(src=fullpath, **config_kwargs))
+                dataset = ExtendedXYZDataset(extxyz_filename=fullpath)
             except ValueError as e:
-                print(f"{fullpath} is not a valid ASE LMDB dataset. Ignoring ...")
+                print(f"{fullpath} is not a valid Extended XYZ dataset. Ignoring ...")
                 continue
 
-            num_samples = dataset.num_samples
+            num_samples = len(dataset)
             datasets_info.append(
                 {"dataset_fullpath": fullpath, "num_samples": num_samples}
             )
@@ -174,30 +187,28 @@ class OMat2024(AbstractBaseDataset):
 
     def _create_pytorch_data_object(self, dataset, index):
         try:
-            atoms = dataset.get_atoms(index)
-
-            pos = torch.as_tensor(atoms.get_positions(), dtype=torch.float32)
+            pos = torch.tensor(dataset.get(index).get_positions(), dtype=torch.float32)
             natoms = torch.IntTensor([pos.shape[0]])
-            atomic_numbers = torch.as_tensor(
-                atoms.get_atomic_numbers(),
+            atomic_numbers = torch.tensor(
+                dataset.get(index).get_atomic_numbers(),
                 dtype=torch.float32,
             ).unsqueeze(1)
 
-            energy = torch.as_tensor(
-                atoms.get_total_energy(), dtype=torch.float32
+            energy = torch.tensor(
+                dataset.get(index).get_total_energy(), dtype=torch.float32
             ).unsqueeze(0)
 
             energy_per_atom = energy.detach().clone() / natoms
-            forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
+            forces = torch.tensor(dataset.get(index).get_forces(), dtype=torch.float32)
 
-            chemical_formula = atoms.get_chemical_formula()
+            chemical_formula = dataset.get(index).get_chemical_formula()
 
             cell = None
             try:
-                # cell = torch.tensor(
-                #     np.asarray(atoms.get_cell()), dtype=torch.float32
-                # ).view(3, 3)
-                cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(
+                cell = torch.tensor(
+                    dataset.get(index).get_cell(), dtype=torch.float32
+                ).view(3, 3)
+                cell = torch.from_numpy(np.asarray(dataset.get(index).get_cell())).to(
                     torch.float32
                 )  # dtype conversion in-place
                 # shape is already (3, 3) so no .view needed
@@ -209,7 +220,7 @@ class OMat2024(AbstractBaseDataset):
 
             pbc = None
             try:
-                pbc = pbc_as_tensor(atoms.get_pbc())
+                pbc = pbc_as_tensor(dataset.get(index).get_pbc())
             except:
                 print(
                     f"Atomic structure {chemical_formula} does not have pbc",
@@ -230,13 +241,8 @@ class OMat2024(AbstractBaseDataset):
             hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
             chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
-            # charge and spinfrom dataset info
-            charge = atoms.info.get("charge", 0)
-            spin = atoms.info.get("spin", 1)
-            graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-
             data_object = Data(
-                dataset_name="omat24",
+                dataset_name="odac23",
                 natoms=natoms,
                 pos=pos,
                 cell=cell,
@@ -295,9 +301,7 @@ class OMat2024(AbstractBaseDataset):
                 )
 
         except Exception as e:
-            print(
-                f"Rank {self.rank} reading - exception: {e}\nTraceback: {traceback.format_exc()}"
-            )
+            print(f"Rank {self.rank} reading - exception: ", e)
 
     def check_forces_values(self, forces):
 

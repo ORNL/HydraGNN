@@ -158,6 +158,8 @@ pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
 pip_retry h5py==3.14.0 
+pip_retry tensorflow
+pip_retry tensorflow_datasets
 
 # ============================================================
 # ROCm detection + ROCm-aware PyTorch
@@ -368,6 +370,27 @@ git fetch origin develop
 git checkout develop
 pip_retry -e ".[hps,hps-tl]" --verbose
 assert_numpy_1264
+
+# ============================================================
+# GPTL
+# ============================================================
+banner "GPTL"
+GPTL_FRONTIER="${INSTALL_ROOT}/GPTLFrontier"
+export GPTL_FRONTIER
+mkdir -p "$GPTL_FRONTIER"
+cd "$GPTL_FRONTIER"
+
+wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+tar xvf gptl-8.1.1.tar.gz
+pushd gptl-8.1.1 >/dev/null
+./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=cc CXX=CC FC=ftn
+make install
+popd >/dev/null
+
+git clone git@github.com:jychoi-hpc/gptl4py.git || true
+pushd gptl4py >/dev/null
+GPTL_DIR=$INSTALL_ROOT CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
+popd >/dev/null
 
 # ============================================================
 # Final Summary

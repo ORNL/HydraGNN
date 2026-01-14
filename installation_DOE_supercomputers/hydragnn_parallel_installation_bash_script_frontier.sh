@@ -189,6 +189,8 @@ pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
 pip_retry h5py==3.14.0 
+pip_retry tensorflow
+pip_retry tensorflow_datasets
 
 # ============================================================
 # mpi4py
@@ -429,14 +431,37 @@ build_deephyper() {
   assert_numpy_1264
 }
 
+# ============================================================
+# GPTL
+# ============================================================
+GPTL_FRONTIER="${INSTALL_ROOT}/GPTLFrontier"
+export GPTL_FRONTIER
+build_gptl() {
+  banner "GPTL"
+  mkdir -p "$GPTL_FRONTIER"
+  cd "$GPTL_FRONTIER"
+
+  wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+  tar xvf gptl-8.1.1.tar.gz
+  pushd gptl-8.1.1 >/dev/null
+  ./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=cc CXX=CC FC=ftn
+  make install
+  popd >/dev/null
+
+  git clone git@github.com:jychoi-hpc/gptl4py.git || true
+  pushd gptl4py >/dev/null
+  GPTL_DIR=$INSTALL_ROOT CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
+  popd >/dev/null
+}
+
 ## parallel build
 cd "$INSTALL_ROOT"
-banner "Adios, DDStore and DeepHyper build (in parallel)"
+banner "Adios, DDStore, DeepHyper, and GPTL build (in parallel)"
 timeit build_adios > build_adios.log & pid1=$!
 timeit build_ddstore > build_ddstore.log & pid2=$!
 timeit build_deephyper > build_deephyper.log & pid3=$!
-
-for pid in $pid1 $pid2 $pid3; do
+timeit build_gptl > build_gptl.log & pid4=$!
+for pid in $pid1 $pid2 $pid3 $pid4; do
     progress $pid &
 done
 wait
