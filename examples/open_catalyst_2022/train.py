@@ -449,7 +449,7 @@ if __name__ == "__main__":
             flush=True,
         )
 
-        comm.Barrier(
+        comm.Barrier()
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
