@@ -20,6 +20,12 @@ set -euo pipefail
 #   dataset_train_medium_trajectories
 #   dataset_trajectories_additional
 
+export all_proxy="socks://proxy.ccs.ornl.gov:3128/"
+export ftp_proxy="ftp://proxy.ccs.ornl.gov:3128/"
+export http_proxy="http://proxy.ccs.ornl.gov:3128/"
+export https_proxy="http://proxy.ccs.ornl.gov:3128/"
+export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
+
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 json_file="$script_dir/energy_databases.json"
 target_dir="$script_dir/dataset"
