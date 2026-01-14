@@ -93,7 +93,6 @@ class OpenCatalystDataset(AbstractBaseDataset):
     ):
         super().__init__()
 
-        self.dataset_name = "oc2022"
         self.config = config
         self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
         self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
@@ -450,7 +449,7 @@ if __name__ == "__main__":
             flush=True,
         )
 
-        comm.Barrier()
+        comm.Barrier(
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
