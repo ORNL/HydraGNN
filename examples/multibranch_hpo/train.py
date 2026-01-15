@@ -20,7 +20,7 @@ import numpy as np
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-from hydragnn.utils.model import print_model
+from hydragnn.utils.model import print_model, print_optimizer
 from hydragnn.utils.datasets.distdataset import DistDataset
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
 
@@ -172,11 +172,18 @@ if __name__ == "__main__":
         )
         for i in range(num_branches):
             config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
-                "num_headlayers"
-            ] = args.parameters["num_headlayers"]
+                "architecture"
+            ]["num_headlayers"] = args.parameters["num_headlayers"]
             config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
-                "dim_headlayers"
-            ] = dim_headlayers
+                "architecture"
+            ]["dim_headlayers"] = dim_headlayers
+
+        modellist = args.multi_model_list.split(",")
+        print("modellist:", len(modellist))
+        for i in range(len(modellist), num_branches):
+            del config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
+                len(modellist)
+            ]
 
     if args.parameters["mpnn_type"] not in ["EGNN", "SchNet", "DimeNet"]:
         config["NeuralNetwork"]["Architecture"]["equivariance"] = False
@@ -284,10 +291,6 @@ if __name__ == "__main__":
         if args.task_parallel and args.use_devicemesh:
             ## task parallel with device mesh
             assert comm_size % len(modellist) == 0
-            if torch.cuda.device_count() == 1:
-                print(
-                    "WARN: use --gres=gpu:<N> with srun to correctly call torch.distributed.device_mesh.init_device_mesh"
-                )
             mesh_2d = init_device_mesh(
                 device_type,
                 (len(modellist), comm_size // len(modellist)),
@@ -341,12 +344,18 @@ if __name__ == "__main__":
                         irank += 1
                     subgroup = dist.new_group(ranks=subgroup_ranks)
                     subgroup_list.append(subgroup)
+                    print(
+                        "DeviceMesh",
+                        "device_type:",
+                        device_type,
+                        "subgroup_ranks:",
+                        subgroup_ranks,
+                    )
                     subgroup = DeviceMesh(device_type=device_type, mesh=subgroup_ranks)
                     subgroup_list.append(subgroup)
 
                 branch_id = mycolor
-                # branch_group = subgroup_list[mycolor]
-                branch_group = subgroup_list[mycolor].get_group()
+                branch_group = subgroup_list[mycolor]
 
                 branch_rank = dist.get_rank(group=branch_group)
                 branch_world_size = dist.get_world_size(group=branch_group)
@@ -399,9 +408,9 @@ if __name__ == "__main__":
         )
         ## FIXME
         for ds in [trainset, valset, testset]:
-            ds.tmp_dict = dict()
+            ds.dataset_name_dict = dict()
             for i, name in enumerate(modellist):
-                ds.tmp_dict[name.lower()] = torch.tensor([[i]])
+                ds.dataset_name_dict[name.lower()] = torch.tensor([[i]])
 
         ## Set local set
         num_samples_list = list()
@@ -578,6 +587,10 @@ if __name__ == "__main__":
             print("Using ipex.optimize wrapper")
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
     else:
+        ## Wrap the model with DDP
+        model = hydragnn.utils.distributed.get_distributed_model(
+            model, verbosity, find_unused_parameters=True
+        )
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
@@ -585,10 +598,6 @@ if __name__ == "__main__":
         if hasattr(torch, "xpu") and torch.xpu.is_available():
             print("Using ipex.optimize wrapper")
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
-        ## Wrap the model with DDP
-        model = hydragnn.utils.distributed.get_distributed_model(
-            model, verbosity, find_unused_parameters=True
-        )
 
     # Print details of neural network architecture
     print_model(model)

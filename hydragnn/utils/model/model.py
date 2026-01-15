@@ -24,6 +24,7 @@ from hydragnn.utils.distributed import (
     get_device_name,
 )
 from collections import OrderedDict
+from torch.distributed.optim import ZeroRedundancyOptimizer
 
 
 def activation_function_selection(activation_function_string: str):
@@ -69,10 +70,55 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
 
         from hydragnn.models import MultiTaskModelMP
 
-        if isinstance(model, MultiTaskModelMP):
+        use_multitask = isinstance(model, MultiTaskModelMP)
+        if use_multitask:
             eligible = model.head_pg_rank == 0
         else:
             eligible = world_rank == 0
+
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        if use_fsdp:
+            from torch.distributed.fsdp import (
+                FullyShardedDataParallel as FSDP,
+                StateDictType,
+                FullStateDictConfig,
+                FullOptimStateDictConfig,
+            )
+
+            if use_multitask:
+                model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=False)
+                optim_cfg = FullOptimStateDictConfig(
+                    offload_to_cpu=True, rank0_only=False
+                )
+            else:
+                model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                optim_cfg = FullOptimStateDictConfig(
+                    offload_to_cpu=True, rank0_only=True
+                )
+
+            with FSDP.state_dict_type(
+                model, StateDictType.FULL_STATE_DICT, model_cfg, optim_cfg
+            ):
+                model_state_dict = model.state_dict()
+                if use_multitask:
+                    ## MultiTaskModelMP uses standard optimizer
+                    optimizer_state_dict = optimizer.state_dict()
+                else:
+                    optimizer_state_dict = (
+                        FSDP.optim_state_dict(model, optimizer)
+                        if not use_multitask
+                        else optimizer.state_dict()
+                    )
+        else:
+            model_state_dict = model.state_dict()
+            if isinstance(optimizer, ZeroRedundancyOptimizer):
+                if world_rank == 0:
+                    ## Only rank 0 have the full optimizer state for ZeroRedundancyOptimizer
+                    optimizer_state_dict = optimizer.state_dict()
+                else:
+                    optimizer_state_dict = None
+            else:
+                optimizer_state_dict = optimizer.state_dict()
 
         if eligible:
             epoch = os.getenv("HYDRAGNN_EPOCH", None)  ## str or None
@@ -81,21 +127,21 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
             else:
                 fname = f"{name}"
 
-            if isinstance(model, MultiTaskModelMP):
+            if use_multitask:
                 fname = fname + f"_branch{model.branch_id}"
 
             fname = fname + ".pk"
             path_name = os.path.join(path, name, fname)
             torch.save(
                 {
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
+                    "model_state_dict": model_state_dict,
+                    "optimizer_state_dict": optimizer_state_dict,
                 },
                 path_name,
             )
             if epoch is not None:
                 link = os.path.join(path, name, f"{name}.pk")
-                if isinstance(model, MultiTaskModelMP):
+                if use_multitask:
                     link = os.path.join(
                         path, name, f"{name}_branch{model.branch_id}.pk"
                     )
@@ -131,13 +177,22 @@ def load_existing_model(
 ):
     """Load both model and optimizer state from a single checkpoint file"""
     if not use_deepspeed:
-        path_name = os.path.join(path, model_name, model_name + ".pk")
+        from hydragnn.models import MultiTaskModelMP
+
+        use_multitask = isinstance(model, MultiTaskModelMP)
+        fname = (
+            model_name + f"_branch{model.branch_id}" if use_multitask else model_name
+        )
+        path_name = os.path.join(path, model_name, fname + ".pk")
+
         map_location = {"cuda:%d" % 0: get_device_name()}
         print_master("Load existing model:", path_name)
         checkpoint = torch.load(path_name, map_location=map_location)
         state_dict = checkpoint["model_state_dict"]
         ## To be compatible with old checkpoint which was not written as a ddp model
-        if not next(iter(state_dict)).startswith("module"):
+        if next(iter(model.state_dict())).startswith("module") and not next(
+            iter(state_dict)
+        ).startswith("module"):
             ddp_state_dict = OrderedDict()
             for k, v in state_dict.items():
                 k = "module." + k
@@ -189,9 +244,30 @@ def load_existing_model(
                     channel_dim=channel_dim,
                     device=target_model.device,
                 )
-        model.load_state_dict(state_dict)
-        if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        ## Load with FSDP
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        if use_fsdp:
+            from torch.distributed.fsdp import (
+                FullyShardedDataParallel as FSDP,
+                StateDictType,
+            )
+
+            with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT):
+                model.load_state_dict(state_dict)
+                if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+                    if use_multitask:
+                        ## MultiTaskModelMP uses standard optimizer
+                        optimizer_state_dict = checkpoint["optimizer_state_dict"]
+                    else:
+                        optimizer_state_dict = FSDP.optim_state_dict_to_load(
+                            model, optimizer, checkpoint["optimizer_state_dict"]
+                        )
+                    optimizer.load_state_dict(optimizer_state_dict)
+        else:
+            model.load_state_dict(state_dict)
+            if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     else:
         model.load_checkpoint(os.path.join(path, model_name), model_name)
 
@@ -342,6 +418,28 @@ def print_model(model):
     print_master("-" * 50)
     print_master("%50s\t%20s\t%10d" % ("Total", "", num_params))
     print_master("All (total, MB): %d %g" % (num_params, num_params * 4 / 1024 / 1024))
+
+
+def print_optimizer(optimizer):
+    """print optimizer state size tensor by tensor"""
+    num_elems = 0
+    num_bytes = 0
+
+    for param_id, state in optimizer.state.items():
+        for name, v in state.items():
+            if not torch.is_tensor(v):
+                continue
+            elems = v.numel()
+            bytes_ = elems * v.element_size()
+            print_master("%50s\t%20s\t%10d" % (name, list(v.shape), elems))
+            num_elems += elems
+            num_bytes += bytes_
+
+    print("-" * 50)
+    print("%50s\t%20s\t%10d" % ("Total optimizer state", "", num_elems))
+    print(
+        "All optimizer state (total, MB): %d %g" % (num_elems, num_bytes / 1024 / 1024)
+    )
 
 
 def tensor_divide(x1, x2):
