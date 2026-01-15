@@ -46,6 +46,10 @@ torch.set_default_dtype(torch.float32)
 
 transform_coordinates = Distance(norm=False, cat=False)
 
+# Conversion constant from Hartree to electron volt (eV).
+# Source: NIST CODATA 2018, https://physics.nist.gov/cgi-bin/cuu/Value?hrjtoeV
+# Value: 1 Hartree = 27.2114079527 eV (use at least 10 significant digits for scientific accuracy)
+conversion_constant_from_hartree_to_eV = 27.2114079527
 
 # charge and spin are constant across QM7-X dataset
 charge = 0.0  # neutral
@@ -104,8 +108,14 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         cell = torch.tensor(atoms.cell.array, dtype=torch.float32)
         pbc = torch.tensor(atoms.pbc, dtype=torch.bool)
 
-        energy = torch.tensor([float(row.data["energy"][0])], dtype=torch.float32)
-        forces = torch.tensor(row.data["forces"], dtype=torch.float32)
+        energy = (
+            torch.tensor([float(row.data["energy"][0])], dtype=torch.float32)
+            * conversion_constant_from_hartree_to_eV
+        )
+        forces = (
+            torch.tensor(row.data["forces"], dtype=torch.float32)
+            * conversion_constant_from_hartree_to_eV
+        )
 
         x = torch.cat((atomic_numbers, forces), dim=1)
 
