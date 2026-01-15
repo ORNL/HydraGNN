@@ -74,7 +74,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.graphgps_transform = graphgps_transform
 
         # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 100.0
+        self.forces_norm_threshold = 1000.0
 
         self.dist = dist
         if self.dist:
@@ -304,6 +304,8 @@ if __name__ == "__main__":
         )
         ## Need as a list
         testset = testset[:]
+
+        comm.Barrier()
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)

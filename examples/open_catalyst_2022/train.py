@@ -79,6 +79,8 @@ graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
+    """Dataset loader for OC22 S2EF shards stored as EXTXYZ."""
+
     def __init__(
         self,
         dirpath,
@@ -87,6 +89,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         graphgps_transform=None,
         energy_per_atom=True,
         dist=False,
+        sampling_ratio=None,
     ):
         super().__init__()
 
@@ -97,9 +100,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.data_path = dirpath
         self.data_type = data_type
         self.energy_per_atom = energy_per_atom
+        self.sampling_ratio = sampling_ratio
 
-        # NOTE Open Catalyst 2022 dataset has PBC:
-        #      https://pubs.acs.org/doi/10.1021/acscatal.2c05426 (Section: Tasks, paragraph 3)
         self.radius_graph = RadiusGraph(
             self.radius, loop=False, max_num_neighbors=self.max_neighbours
         )
@@ -113,43 +115,31 @@ class OpenCatalystDataset(AbstractBaseDataset):
         self.forces_norm_threshold = 1000.0
 
         self.dist = dist
-        if self.dist:
-            assert torch.distributed.is_initialized()
+        if self.dist and torch.distributed.is_initialized():
             self.world_size = torch.distributed.get_world_size()
             self.rank = torch.distributed.get_rank()
+        else:
+            self.world_size = 1
+            self.rank = 0
 
-        trajectories_files_list = None
+        extxyz_files = None
         if self.rank == 0:
-            ## Let rank 0 check the number of files and share
-            """
-                file_path = (
-                    os.path.join(dirpath, "oc22/oc22_trajectories/trajectories/oc22/", data_type)
-                    + "_t.txt"
-                )
-                # Open the file and read its contents line by line
-                with open(file_path, "r") as file:
-                    trajectories_files_list = [line.strip() for line in file.readlines()]
-            if len(trajectories_files_list) == 0:
-                raise RuntimeError("No *.txt files found. Did you uncompress?")
-            """
-            trajectories_files_list = glob.glob(
-                os.path.join(
-                    dirpath,
-                    "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
-                    "*.traj",
-                )
-            )
-        trajectories_files_list = MPI.COMM_WORLD.bcast(trajectories_files_list, root=0)
+            data_root = os.path.join(dirpath, data_type)
+            if not os.path.isdir(data_root):
+                raise RuntimeError(f"Data folder not found: {data_root}")
+            search_pattern = os.path.join(data_root, "**", "*.extxyz")
+            extxyz_files = sorted(glob.glob(search_pattern, recursive=True))
+            if len(extxyz_files) == 0:
+                raise RuntimeError(f"No EXTXYZ shards found under: {data_root}")
+        extxyz_files = MPI.COMM_WORLD.bcast(extxyz_files, root=0)
 
-        ## We assume file names are "%d.trj"
-        local_files_list = list(nsplit(trajectories_files_list, self.world_size))[
-            self.rank
-        ]
-        log("local files list", len(local_files_list))
+        local_files_list = list(nsplit(extxyz_files, self.world_size))[self.rank]
+        log("local shard count", f"rank {self.rank} -> {len(local_files_list)} shards")
 
-        for traj_file in iterate_tqdm(local_files_list, verbosity_level=2, desc="Load"):
-            list_atomistic_structures = self.traj_to_torch_geom(traj_file)
-            for item in list_atomistic_structures:
+        for extxyz_file in iterate_tqdm(
+            local_files_list, verbosity_level=2, desc="Load EXTXYZ"
+        ):
+            for item in self.extxyz_to_torch_geom(extxyz_file):
                 if self.check_forces_values(item.forces):
                     self.dataset.append(item)
                 else:
@@ -158,61 +148,64 @@ class OpenCatalystDataset(AbstractBaseDataset):
                         flush=True,
                     )
 
+        if self.sampling_ratio is not None:
+            if not (0 < self.sampling_ratio <= 1):
+                raise ValueError("sampling_ratio must be in (0, 1].")
+            target = max(1, int(len(self.dataset) * self.sampling_ratio))
+            self.dataset = random.sample(self.dataset, target)
+
         random.shuffle(self.dataset)
 
     def ase_to_torch_geom(self, atoms):
-        # set the atomic numbers, positions, and cell
-        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
-        positions = torch.Tensor(atoms.get_positions())
-        natoms = torch.IntTensor([positions.shape[0]])
-        # initialized to torch.zeros(natoms) if tags missing.
-        # https://wiki.fysik.dtu.dk/ase/_modules/ase/atoms.html#Atoms.get_tags
-        tags = torch.Tensor(atoms.get_tags())
+        # Require energies and forces to be present
+        if (
+            atoms.calc is None
+            or "energy" not in atoms.calc.results
+            or "forces" not in atoms.calc.results
+        ):
+            return None
 
-        cell = None
+        atomic_numbers = torch.tensor(
+            atoms.get_atomic_numbers(), dtype=torch.float32
+        ).unsqueeze(1)
+        positions = torch.tensor(atoms.get_positions(), dtype=torch.float32)
+        natoms = torch.tensor([positions.shape[0]], dtype=torch.int32)
+        tags = torch.tensor(atoms.get_tags(), dtype=torch.float32)
+
         try:
-            cell = torch.Tensor(np.array(atoms.get_cell())).view(3, 3)
-        except:
-            print(f"Structure does not have cell", flush=True)
+            cell = torch.tensor(np.array(atoms.get_cell()), dtype=torch.float32).view(
+                3, 3
+            )
+        except Exception:
+            cell = torch.eye(3, dtype=torch.float32)
 
-        pbc = None
         try:
             pbc = pbc_as_tensor(atoms.get_pbc())
-        except:
-            print(f"Structure does not have pbc", flush=True)
+        except Exception:
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-        # If either cell or pbc were not read, we set to defaults which are not none.
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
         energy = atoms.get_potential_energy(apply_constraint=False)
-        energy_tensor = torch.tensor(energy).to(dtype=torch.float32).unsqueeze(0)
+        energy_tensor = torch.tensor(energy, dtype=torch.float32).unsqueeze(0)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
 
-        forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
-
-        # Calculate chemical composition
-        atomic_number_list = atomic_numbers.tolist()
-        assert len(atomic_number_list) == natoms
-        ## 118: number of atoms in the periodic table
-        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+        forces = torch.tensor(
+            atoms.get_forces(apply_constraint=False), dtype=torch.float32
+        )
 
         x = torch.cat((atomic_numbers, positions, forces), dim=1)
 
-        # put the minimum data in torch geometric data object
         data_object = Data(
             dataset_name="oc2022",
             natoms=natoms,
             pos=positions,
             cell=cell,
             pbc=pbc,
-            # edge_index=None,
-            # edge_attr=None,
             atomic_numbers=atomic_numbers,
-            # chemical_composition=chemical_composition,
-            # smiles_string=None,
+            tags=tags,
             x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
@@ -220,61 +213,49 @@ class OpenCatalystDataset(AbstractBaseDataset):
             graph_attr=graph_attr,
         )
 
-        if self.energy_per_atom:
-            data_object.y = data_object.energy_per_atom
-        else:
-            data_object.y = data_object.energy
+        data_object.y = (
+            data_object.energy_per_atom if self.energy_per_atom else data_object.energy
+        )
 
         if data_object.pbc.any():
             try:
                 data_object = self.radius_graph_pbc(data_object)
                 data_object = transform_coordinates_pbc(data_object)
-            except:
-                print(
-                    f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
-                    flush=True,
-                )
+            except Exception:
                 data_object = self.radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
         else:
             data_object = self.radius_graph(data_object)
             data_object = transform_coordinates(data_object)
 
-        # Default edge_shifts for when radius_graph_pbc is not activated
         if not hasattr(data_object, "edge_shifts"):
             data_object.edge_shifts = torch.zeros(
                 (data_object.edge_index.size(1), 3), dtype=torch.float32
             )
 
-        # FIXME: PBC from bool --> int32 to be accepted by ADIOS
         data_object.pbc = data_object.pbc.int()
 
-        # LPE
         if self.graphgps_transform is not None:
             data_object = self.graphgps_transform(data_object)
 
         return data_object
 
-    def traj_to_torch_geom(self, traj_file):
+    def extxyz_to_torch_geom(self, extxyz_file):
         data_list = []
-        traj_file_path = os.path.join(
-            self.data_path,
-            "oc22/oc22_trajectories/trajectories/oc22/raw_trajs/",
-            traj_file,
-        )
         try:
-            traj = read(traj_file_path, ":", parallel=False)
-            for step in traj:
-                data_list.append(self.ase_to_torch_geom(step))
-        except:
-            pass
+            traj = read(extxyz_file, ":", parallel=False)
+        except Exception as exc:
+            print(f"Failed to read {extxyz_file}: {exc}", flush=True)
+            return data_list
+
+        for step in traj:
+            data_object = self.ase_to_torch_geom(step)
+            if data_object is not None:
+                data_list.append(data_object)
         return data_list
 
     def check_forces_values(self, forces):
-        # Calculate the L2 norm for each row
         norms = torch.norm(forces, p=2, dim=1)
-        # Check if all norms are less than the threshold
-
         return torch.all(norms < self.forces_norm_threshold).item()
 
     def len(self):
@@ -447,6 +428,7 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+            sampling_ratio=args.sampling,
         )
         ## This is a local split
         trainset, valset, testset = split_dataset(
@@ -467,6 +449,7 @@ if __name__ == "__main__":
             flush=True,
         )
 
+        comm.Barrier()
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 

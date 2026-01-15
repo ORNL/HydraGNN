@@ -6,7 +6,7 @@
         "Architecture": {
             "mpnn_type": "EGNN",
             "equivariance": true,
-            "radius": 6.0,
+            "radius": 10.0,
             "max_neighbours": 50,
             "num_gaussians": 50,
             "envelope_exponent": 5,
