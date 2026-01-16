@@ -440,6 +440,9 @@ if __name__ == "__main__":
         trainset = trainset[:]
         valset = valset[:]
         testset = testset[:]
+
+        comm.Barrier()
+
         print(
             rank,
             "Local splitting: ",
@@ -449,7 +452,6 @@ if __name__ == "__main__":
             flush=True,
         )
 
-        comm.Barrier()
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
