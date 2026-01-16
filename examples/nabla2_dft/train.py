@@ -163,8 +163,14 @@ if __name__ == "__main__":
         "--inputfile", help="input JSON", type=str, default="nabla2_dft.json"
     )
     parser.add_argument(
-        "--dbpath",
-        help="path to ASE SQLite db",
+        "--dbpath_train",
+        help="path to training ASE SQLite db",
+        type=str,
+        default=None,
+    )
+    parser.add_argument(
+        "--dbpath_test",
+        help="path to testing ASE SQLite db",
         type=str,
         default=None,
     )
@@ -215,10 +221,14 @@ if __name__ == "__main__":
     node_feature_dims = [1, 3]
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    default_db = os.path.join(
+    default_train_db = os.path.join(
         dirpwd, "dataset", "train_2k_v2_formation_energy_w_forces.db"
     )
-    db_path = args.dbpath or default_db
+    default_test_db = os.path.join(
+        dirpwd, "dataset", "test_full_structures_v2_formation_energy_forces.db"
+    )
+    train_db_path = args.dbpath_train or default_train_db
+    test_db_path = args.dbpath_test or default_test_db
 
     input_filename = os.path.join(dirpwd, args.inputfile)
     with open(input_filename, "r") as f:
@@ -252,35 +262,38 @@ if __name__ == "__main__":
     modelname = "nabla2_dft"
 
     if args.preonly:
-        if not os.path.exists(db_path):
-            raise FileNotFoundError(f"Missing dataset db: {db_path}")
+        if not os.path.exists(train_db_path):
+            raise FileNotFoundError(f"Missing training dataset db: {train_db_path}")
+        if not os.path.exists(test_db_path):
+            raise FileNotFoundError(f"Missing testing dataset db: {test_db_path}")
 
-        total = Nabla2RelaxDataset(
-            db_path,
+        train_dataset = Nabla2RelaxDataset(
+            train_db_path,
             config,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
 
         trainset, valset1, valset2 = split_dataset(
-            dataset=total,
+            dataset=train_dataset,
             perc_train=0.9,
             stratify_splitting=False,
         )
         valset = [*valset1, *valset2]
-        testset = Nabla2RelaxDataset(
-            db_path,
+
+        test_dataset = Nabla2RelaxDataset(
+            test_db_path,
             config,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
-        testset = testset[:]
+        testset = test_dataset[:]
 
         comm.Barrier()
 
         log(
             "Local splitting: %d %d %d %d"
-            % (len(total), len(trainset), len(valset), len(testset))
+            % (len(train_dataset), len(trainset), len(valset), len(testset))
         )
 
         deg = gather_deg(trainset)
