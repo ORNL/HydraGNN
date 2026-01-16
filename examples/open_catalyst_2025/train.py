@@ -174,9 +174,10 @@ if __name__ == "__main__":
             dist=True,
         )
         testset = testset[:]
-        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         comm.Barrier()
+
+        print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
