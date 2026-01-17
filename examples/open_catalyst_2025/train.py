@@ -1,12 +1,9 @@
-import os, re, json
+import os
+import json
 import logging
 import sys
 from mpi4py import MPI
 import argparse
-
-import numpy as np
-
-import random
 
 import torch
 import torch.distributed as dist
@@ -15,6 +12,7 @@ import torch.distributed as dist
 random_state = 0
 torch.manual_seed(random_state)
 
+from torch_geometric.data import Data
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 
 import hydragnn
@@ -26,23 +24,32 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
+from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    RadiusGraph,
+    RadiusGraphPBC,
+    PBCDistance,
+    PBCLocalCartesian,
+    pbc_as_tensor,
+    gather_deg,
+)
 from hydragnn.preprocess.load_data import split_dataset
-
 import hydragnn.utils.profiling_and_tracing.tracer as tr
-
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
-
-from utils.atoms_to_graphs import AtomsToGraphs
-from utils.preprocess import write_images_to_adios
 
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
 
-import subprocess
 from hydragnn.utils.distributed import nsplit
+
+# Ensure the bundled fairchem package is importable when not installed system-wide.
+dirpwd = os.path.dirname(os.path.abspath(__file__))
+fairchem_path = os.path.join(dirpwd, "fairchem")
+if fairchem_path not in sys.path:
+    sys.path.insert(0, fairchem_path)
+
+from oc25 import OpenCatalystDataset
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -50,109 +57,6 @@ torch.backends.cudnn.enabled = False
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-class OpenCatalystDataset(AbstractBaseDataset):
-    def __init__(
-        self,
-        dirpath,
-        config,
-        data_type,
-        graphgps_transform=None,
-        energy_per_atom=True,
-        dist=False,
-    ):
-        super().__init__()
-
-        self.config = config
-        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
-        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
-
-        self.data_path = os.path.join(dirpath, data_type)
-        self.energy_per_atom = energy_per_atom
-
-        self.graphgps_transform = graphgps_transform
-
-        # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 1000.0
-
-        self.dist = dist
-        if self.dist:
-            assert torch.distributed.is_initialized()
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
-
-        mx = None
-        if self.rank == 0:
-            ## Let rank 0 check the number of files and share
-            # cmd = f"ls {os.path.join(self.data_path, '*.txt')} | wc -l"
-            cmd = f"find {self.data_path} -maxdepth 1 -type f -name '*.txt' | wc -l"
-            print("Check the number of files:", cmd)
-            out = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            mx = int(out.stdout)
-            print("Total number of files:", mx)
-        mx = MPI.COMM_WORLD.bcast(mx, root=0)
-        if mx == 0:
-            raise RuntimeError("No *.txt files found. Did you uncompress?")
-
-        ## We assume file names are "%d.txt"
-        rx = list(nsplit(range(mx), self.world_size))[self.rank]
-        chunked_txt_files = list()
-        for n in rx:
-            fname = os.path.join(self.data_path, "%d.txt" % n)
-            chunked_txt_files.append(fname)
-
-        if len(chunked_txt_files) == 0:
-            print(self.rank, "WARN: No files to process. Continue ...")
-
-        # Initialize feature extractor.
-        a2g = AtomsToGraphs(max_neigh=self.max_neighbours, radius=self.radius)
-
-        list_atomistic_structures = write_images_to_adios(
-            a2g,
-            chunked_txt_files,
-            self.data_path,
-            energy_per_atom=self.energy_per_atom,
-        )
-
-        for item in list_atomistic_structures:
-            assert item is not None, item
-
-            # Calculate chemical composition
-            atomic_number_list = item.atomic_numbers.tolist()
-            assert len(atomic_number_list) == item.natoms
-            ## 118: number of atoms in the periodic table
-            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-
-            item.chemical_composition = chemical_composition
-            item.smiles_string = None
-
-            if self.graphgps_transform is not None:
-                item = self.graphgps_transform(item)
-
-            if self.check_forces_values(item.forces):
-                self.dataset.append(item)
-            else:
-                print(
-                    f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
-                    flush=True,
-                )
-
-        random.shuffle(self.dataset)
-
-    def check_forces_values(self, forces):
-        # Calculate the L2 norm for each row
-        norms = torch.norm(forces, p=2, dim=1)
-        # Check if all norms are less than the threshold
-
-        return torch.all(norms < self.forces_norm_threshold).item()
-
-    def len(self):
-        return len(self.dataset)
-
-    def get(self, idx):
-        return self.dataset[idx]
 
 
 if __name__ == "__main__":
@@ -166,19 +70,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="open_catalyst_energy.json"
-    )
-    parser.add_argument(
-        "--train_path",
-        help="path to training data",
-        type=str,
-        default="s2ef_train_200K_uncompressed",
-    )
-    parser.add_argument(
-        "--test_path",
-        help="path to testing data",
-        type=str,
-        default="s2ef_val_id_uncompressed",
+        "--inputfile", help="input file", type=str, default="oc25_energy.json"
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -224,12 +116,9 @@ if __name__ == "__main__":
     graph_feature_dims = [1]
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
-    dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
-    ##################################################################################################################
+
     input_filename = os.path.join(dirpwd, args.inputfile)
-    ##################################################################################################################
-    # Configurable run choices (JSON file that accompanies this example script).
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
@@ -239,54 +128,37 @@ if __name__ == "__main__":
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
 
-    # Transformation to create positional and structural laplacian encoders
-    """
-    graphgps_transform = AddLaplacianEigenvectorPE(
-        k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-        attr_name="pe",
-        is_undirected=True,
-    )
-    """
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
-    ##################################################################################################################
-    # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
-    ##################################################################################################################
-
     comm = MPI.COMM_WORLD
 
-    ## Set up logging
     logging.basicConfig(
         level=logging.INFO,
-        format="%%(levelname)s (rank %d): %%(message)s" % (rank),
+        format="%(levelname)s (rank %d): %(message)s" % (rank),
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OC2020" if args.log is None else args.log
+    log_name = "OC25" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OC2020" if args.modelname is None else args.modelname
+    modelname = "OC25" if args.modelname is None else args.modelname
     if args.preonly:
-        ## local data
         trainset = OpenCatalystDataset(
             os.path.join(datadir),
             config,
-            data_type=args.train_path,
-            # graphgps_transform=graphgps_transform,
+            data_type="train",
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
-        ## This is a local split
         trainset, valset1, valset2 = split_dataset(
             dataset=trainset,
             perc_train=0.9,
@@ -296,24 +168,20 @@ if __name__ == "__main__":
         testset = OpenCatalystDataset(
             os.path.join(datadir),
             config,
-            data_type=args.test_path,
-            # graphgps_transform=graphgps_transform,
+            data_type="val",
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
         )
-        ## Need as a list
         testset = testset[:]
 
         comm.Barrier()
+
         print(rank, "Local splitting: ", len(trainset), len(valset), len(testset))
 
         deg = gather_deg(trainset)
         config["pna_deg"] = deg
 
-        setnames = ["trainset", "valset", "testset"]
-
-        ## adios
         if args.format == "adios":
             fname = os.path.join(
                 os.path.dirname(__file__), "./dataset/%s.bp" % modelname
@@ -322,12 +190,9 @@ if __name__ == "__main__":
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
-            # adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
-            # adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
             adwriter.add_global("pna_deg", deg)
             adwriter.save()
 
-        ## pickle
         elif args.format == "pickle":
             basedir = os.path.join(
                 os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
@@ -338,8 +203,6 @@ if __name__ == "__main__":
                 trainset,
                 basedir,
                 "trainset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
                 use_subdir=True,
                 attrs=attrs,
             )
@@ -347,16 +210,12 @@ if __name__ == "__main__":
                 valset,
                 basedir,
                 "valset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
                 use_subdir=True,
             )
             SimplePickleWriter(
                 testset,
                 basedir,
                 "testset",
-                # minmax_node_feature=total.minmax_node_feature,
-                # minmax_graph_feature=total.minmax_graph_feature,
                 use_subdir=True,
             )
         sys.exit(0)
@@ -379,6 +238,7 @@ if __name__ == "__main__":
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
+
     elif args.format == "pickle":
         info("Pickle load")
         basedir = os.path.join(
@@ -393,16 +253,12 @@ if __name__ == "__main__":
         testset = SimplePickleDataset(
             basedir=basedir, label="testset", var_config=var_config
         )
-        # minmax_node_feature = trainset.minmax_node_feature
-        # minmax_graph_feature = trainset.minmax_graph_feature
         pna_deg = trainset.pna_deg
         if args.ddstore:
             opt = {"ddstore_width": args.ddstore_width}
             trainset = DistDataset(trainset, "trainset", comm, **opt)
             valset = DistDataset(valset, "valset", comm, **opt)
             testset = DistDataset(testset, "testset", comm, **opt)
-            # trainset.minmax_node_feature = minmax_node_feature
-            # trainset.minmax_graph_feature = minmax_graph_feature
             trainset.pna_deg = pna_deg
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
@@ -423,15 +279,11 @@ if __name__ == "__main__":
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-    ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
-
-    precision = args.precision.lower() if args.precision is not None else "fp32"
-    config["NeuralNetwork"]["Training"]["precision"] = precision
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
@@ -448,14 +300,13 @@ if __name__ == "__main__":
         model, optimizer, verbosity
     )
 
-    # Print details of neural network architecture
     print_model(model)
 
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
 
-    ##################################################################################################################
+    precision = args.precision.lower() if args.precision is not None else "fp32"
 
     hydragnn.train.train_validate_test(
         model,
