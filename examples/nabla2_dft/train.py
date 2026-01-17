@@ -132,6 +132,7 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
                 missing += 1
                 continue
 
+            row = db.get(id=ids[local_idx])
             data_object = self.row_to_graph(row)
             self.dataset.append(data_object)
 
