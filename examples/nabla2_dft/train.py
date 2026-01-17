@@ -60,7 +60,14 @@ graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 class Nabla2RelaxDataset(AbstractBaseDataset):
     """ASE SQLite trajectory snapshots for HydraGNN."""
 
-    def __init__(self, db_path, config, energy_per_atom=False, dist=False):
+    def __init__(
+        self,
+        db_path,
+        config,
+        energy_per_atom=False,
+        dist=False,
+        dataset_label="dataset",
+    ):
         super().__init__()
 
         self.dataset_name = "nabla2dft"
@@ -68,6 +75,7 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
         self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
         self.energy_per_atom = energy_per_atom
+        self.dataset_label = dataset_label
 
         self.radius_graph = RadiusGraph(
             self.radius, loop=False, max_num_neighbors=self.max_neighbours
@@ -93,7 +101,12 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         else:
             chunk = range(len(ids))
 
-        for local_idx in iterate_tqdm(chunk, 2, desc="Load snapshots"):
+        for local_idx in iterate_tqdm(
+            chunk,
+            2,
+            desc=f"Load {self.dataset_label} snapshots",
+            total=len(chunk),
+        ):
             row = db.get(id=ids[local_idx])
             data_object = self.row_to_graph(row)
             self.dataset.append(data_object)
@@ -282,6 +295,7 @@ if __name__ == "__main__":
             config,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+            dataset_label="train",
         )
 
         trainset, valset1, valset2 = split_dataset(
@@ -296,6 +310,7 @@ if __name__ == "__main__":
             config,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+            dataset_label="test",
         )
         testset = test_dataset[:]
 
