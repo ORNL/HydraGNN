@@ -242,6 +242,7 @@ if __name__ == "__main__":
     default_test_db = os.path.join(
         dataset_dir, "test_full_structures_v2_formation_energy_forces.db"
     )
+
     def resolve_db_path(user_value, default_value):
         # If user passed a relative path or bare filename, look under dataset_dir
         if user_value is None:
