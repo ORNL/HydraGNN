@@ -37,6 +37,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.train_validate_test import resolve_precision
 
+
 def create_model_config(
     config: dict,
     verbosity: int = 0,

@@ -617,7 +617,6 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
-
     with context:
         hydragnn.train.train_validate_test(
             model,

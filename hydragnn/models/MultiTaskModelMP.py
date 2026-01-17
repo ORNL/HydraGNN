@@ -125,7 +125,9 @@ class DecoderModel(nn.Module):
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
-                        headvar[mask] = (output_head[:, head_dim:] ** 2).to(dtype=x.dtype)
+                        headvar[mask] = (output_head[:, head_dim:] ** 2).to(
+                            dtype=x.dtype
+                        )
                 outputs.append(head)
                 outputs_var.append(headvar)
             else:
@@ -135,7 +137,9 @@ class DecoderModel(nn.Module):
                     (x.shape[0], head_dim), device=x.device, dtype=x.dtype
                 )
                 headvar = torch.zeros(
-                    (x.shape[0], head_dim * self.var_output), device=x.device, dtype=x.dtype
+                    (x.shape[0], head_dim * self.var_output),
+                    device=x.device,
+                    dtype=x.dtype,
                 )
                 if self.num_branches == 1:
                     branchtype = "branch-0"
@@ -182,7 +186,9 @@ class DecoderModel(nn.Module):
                                 x=x[mask_nodes, :], batch=data.batch[mask_nodes]
                             )
                         head[mask_nodes] = x_node[:, :head_dim]
-                        headvar[mask_nodes] = (x_node[:, head_dim:] ** 2).to(dtype=x.dtype)
+                        headvar[mask_nodes] = (x_node[:, head_dim:] ** 2).to(
+                            dtype=x.dtype
+                        )
                 outputs.append(head)
                 outputs_var.append(headvar)
         if self.var_output:
