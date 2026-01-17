@@ -221,7 +221,8 @@ if __name__ == "__main__":
     node_feature_dims = [1, 3]
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    dataset_dir = os.path.join(os.path.dirname(os.path.dirname(dirpwd)), "dataset")
+    # Resolve datasets relative to this example's directory
+    dataset_dir = os.path.join(dirpwd, "dataset")
     default_train_db = os.path.join(
         dataset_dir, "train_2k_v2_formation_energy_w_forces.db"
     )
