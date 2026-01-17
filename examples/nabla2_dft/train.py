@@ -221,14 +221,23 @@ if __name__ == "__main__":
     node_feature_dims = [1, 3]
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
+    dataset_dir = os.path.join(os.path.dirname(os.path.dirname(dirpwd)), "dataset")
     default_train_db = os.path.join(
-        dirpwd, "dataset", "train_2k_v2_formation_energy_w_forces.db"
+        dataset_dir, "train_2k_v2_formation_energy_w_forces.db"
     )
     default_test_db = os.path.join(
-        dirpwd, "dataset", "test_full_structures_v2_formation_energy_forces.db"
+        dataset_dir, "test_full_structures_v2_formation_energy_forces.db"
     )
-    train_db_path = args.dbpath_train or default_train_db
-    test_db_path = args.dbpath_test or default_test_db
+    def resolve_db_path(user_value, default_value):
+        # If user passed a relative path or bare filename, look under dataset_dir
+        if user_value is None:
+            return default_value
+        if os.path.isabs(user_value):
+            return user_value
+        return os.path.join(dataset_dir, user_value)
+
+    train_db_path = resolve_db_path(args.dbpath_train, default_train_db)
+    test_db_path = resolve_db_path(args.dbpath_test, default_test_db)
 
     input_filename = os.path.join(dirpwd, args.inputfile)
     with open(input_filename, "r") as f:
@@ -302,7 +311,7 @@ if __name__ == "__main__":
         if args.format == "adios":
             if AdiosWriter is None:
                 raise ImportError("ADIOS support not available")
-            fname = os.path.join(dirpwd, "dataset", "%s.bp" % modelname)
+            fname = os.path.join(dataset_dir, "%s.bp" % modelname)
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
@@ -311,7 +320,7 @@ if __name__ == "__main__":
             adwriter.save()
 
         elif args.format == "pickle":
-            basedir = os.path.join(dirpwd, "dataset", "%s.pickle" % modelname)
+            basedir = os.path.join(dataset_dir, "%s.pickle" % modelname)
             attrs = {"pna_deg": deg}
             SimplePickleWriter(
                 trainset,
@@ -349,14 +358,14 @@ if __name__ == "__main__":
             "ddstore": args.ddstore,
             "ddstore_width": args.ddstore_width,
         }
-        fname = os.path.join(dirpwd, "dataset", "%s.bp" % modelname)
+        fname = os.path.join(dataset_dir, "%s.bp" % modelname)
         trainset = AdiosDataset(fname, "trainset", comm, **opt, var_config=var_config)
         valset = AdiosDataset(fname, "valset", comm, **opt, var_config=var_config)
         testset = AdiosDataset(fname, "testset", comm, **opt, var_config=var_config)
 
     elif args.format == "pickle":
         log("Pickle load")
-        basedir = os.path.join(dirpwd, "dataset", "%s.pickle" % modelname)
+        basedir = os.path.join(dataset_dir, "%s.pickle" % modelname)
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=var_config
         )
