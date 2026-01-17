@@ -109,12 +109,13 @@ class DecoderModel(nn.Module):
                 headvar = torch.zeros(
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
+                    dtype=x.dtype,
                 )
                 if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
                     output_head = headloc["branch-0"](x_graph_head)
                     head = output_head[:, :head_dim]
-                    headvar = output_head[:, head_dim:] ** 2
+                    headvar = (output_head[:, head_dim:] ** 2).to(dtype=x.dtype)
                 else:
                     for ID in datasetIDs:
                         mask = data.dataset_name == ID
@@ -124,7 +125,7 @@ class DecoderModel(nn.Module):
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
-                        headvar[mask] = output_head[:, head_dim:] ** 2
+                        headvar[mask] = (output_head[:, head_dim:] ** 2).to(dtype=x.dtype)
                 outputs.append(head)
                 outputs_var.append(headvar)
             else:
@@ -134,7 +135,7 @@ class DecoderModel(nn.Module):
                     (x.shape[0], head_dim), device=x.device, dtype=x.dtype
                 )
                 headvar = torch.zeros(
-                    (x.shape[0], head_dim * self.var_output), device=x.device
+                    (x.shape[0], head_dim * self.var_output), device=x.device, dtype=x.dtype
                 )
                 if self.num_branches == 1:
                     branchtype = "branch-0"
@@ -155,7 +156,7 @@ class DecoderModel(nn.Module):
                     else:
                         x_node = headloc[branchtype](x=x, batch=data.batch)
                     head = x_node[:, :head_dim]
-                    headvar = x_node[:, head_dim:] ** 2
+                    headvar = (x_node[:, head_dim:] ** 2).to(dtype=x.dtype)
                 else:
                     for ID in datasetIDs:
                         mask = data.dataset_name == ID
@@ -181,7 +182,7 @@ class DecoderModel(nn.Module):
                                 x=x[mask_nodes, :], batch=data.batch[mask_nodes]
                             )
                         head[mask_nodes] = x_node[:, :head_dim]
-                        headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                        headvar[mask_nodes] = (x_node[:, head_dim:] ** 2).to(dtype=x.dtype)
                 outputs.append(head)
                 outputs_var.append(headvar)
         if self.var_output:

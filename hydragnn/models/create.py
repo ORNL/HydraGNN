@@ -35,14 +35,14 @@ from hydragnn.models.MACEStack import MACEStack
 
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
-
+from hydragnn.train.train_validate_test import resolve_precision
 
 def create_model_config(
     config: dict,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
-    return create_model(
+    model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
         input_dim=config["Architecture"]["input_dim"],
         hidden_dim=config["Architecture"]["hidden_dim"],
@@ -98,6 +98,12 @@ def create_model_config(
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
+
+    ## Set precision: bf16, fp32, fp64
+    training_cfg = config["Training"]
+    precision, param_dtype, _ = resolve_precision(training_cfg.get("precision", "fp32"))
+
+    return model.to(dtype=param_dtype)
 
 
 # FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout

@@ -97,7 +97,6 @@ def _(config: dict, use_deepspeed=False):
     model = create_model_config(
         config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]
     )
-    model = model.to(dtype=param_dtype)
     print_peak_memory(
         config["Verbosity"]["level"], "Max memory allocated after creating local model"
     )
