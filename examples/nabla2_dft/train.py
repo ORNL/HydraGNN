@@ -173,6 +173,8 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
 
         x = torch.cat((atomic_numbers, forces), dim=1)
 
+        energy_per_atom = energy.detach().clone() / natoms
+
         data_object = Data(
             dataset_name="nabla2dft",
             natoms=natoms,
@@ -186,7 +188,6 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
             graph_attr=graph_attr,
         )
 
-        energy_per_atom = energy.detach().clone() / natoms
         data_object.energy_per_atom = energy_per_atom
         data_object.y = energy_per_atom if self.energy_per_atom else energy
 
