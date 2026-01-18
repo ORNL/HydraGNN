@@ -117,15 +117,27 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         else:
             chunk = range(len(ids))
 
+        missing = 0
         for local_idx in iterate_tqdm(
             chunk,
             2,
             desc=f"Load {self.dataset_label} snapshots",
             total=len(chunk),
         ):
-            row = db.get(id=ids[local_idx])
+            try:
+                row = db.get(id=ids[local_idx])
+            except KeyError:
+                missing += 1
+                continue
+
             data_object = self.row_to_graph(row)
             self.dataset.append(data_object)
+
+        if missing:
+            log(
+                f"Skipped {missing} missing rows while loading {self.dataset_label}",
+                rank=self.rank,
+            )
 
     def row_to_graph(self, row):
         atoms = row.toatoms()
