@@ -137,9 +137,10 @@ if __name__ == "__main__":
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
 
+    # Inject rank directly into the log format to avoid mixed mapping/positional % formatting.
     logging.basicConfig(
         level=logging.INFO,
-        format="%(levelname)s (rank %d): %(message)s" % (rank),
+        format=f"%(levelname)s (rank {rank}): %(message)s",
         datefmt="%H:%M:%S",
     )
 
