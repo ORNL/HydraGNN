@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-8.4.2, pluggy-1.6.0 -- /Users/7ml/Documents/Codes/HydraGNN/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/7ml/Documents/Codes/HydraGNN
+configfile: pytest.ini
+collecting ... collected 68 items
+
+tests/test_graphs.py::pytest_train_model[ci.json-SAGE] PASSED            [  1%]
+tests/test_graphs.py::pytest_train_model[ci.json-GIN] PASSED             [  2%]
+tests/test_graphs.py::pytest_train_model[ci.json-GAT] PASSED             [  4%]
+tests/test_graphs.py::pytest_train_model[ci.json-MFC] PASSED             [  5%]
+tests/test_graphs.py::pytest_train_model[ci.json-PNA] PASSED             [  7%]
+tests/test_graphs.py::pytest_train_model[ci.json-PNAPlus] PASSED         [  8%]
+tests/test_graphs.py::pytest_train_model[ci.json-CGCNN] PASSED           [ 10%]
+tests/test_graphs.py::pytest_train_model[ci.json-SchNet] PASSED          [ 11%]
+tests/test_graphs.py::pytest_train_model[ci.json-DimeNet] PASSED         [ 13%]
+tests/test_graphs.py::pytest_train_model[ci.json-EGNN] PASSED            [ 14%]
+tests/test_graphs.py::pytest_train_model[ci.json-PNAEq] PASSED           [ 16%]
+tests/test_graphs.py::pytest_train_model[ci.json-PAINN] PASSED           [ 17%]
+tests/test_graphs.py::pytest_train_model[ci.json-MACE] PASSED            [ 19%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-SAGE] PASSED  [ 20%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-GIN] PASSED   [ 22%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-GAT] PASSED   [ 23%]
+tests/test_graphs.py::pytest_train_model[ci_multihead.json-MFC] 
