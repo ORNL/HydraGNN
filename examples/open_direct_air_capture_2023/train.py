@@ -61,10 +61,9 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--stagedb",
-        action="store_true",
-        help="An additional step in pre-processing. Stage samples to db and then separately convert "
-        "them to ADIOS by running preonly with the stagedb option.",
+        "--file_cache",
+        default="/tmp/",
+        help="A temporary, fast disk/memory area that will be used internally to cache input files, Used when --preonly is provided.",
     )
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="odac23_energy.json"
@@ -110,9 +109,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    # datadir = os.path.join(dirpwd, "dataset")
-    datadir = "/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_direct_air_capture_2023/dataset"
-    # datadir = "/mnt/bb/kmehta/dataset"
+    datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -174,8 +171,8 @@ if __name__ == "__main__":
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
+            file_cache=args.file_cache,
             dist=True,
-            stage_db=True,
         )
         ## This is a local split
         trainset, valset1, valset2 = split_dataset(
@@ -191,8 +188,8 @@ if __name__ == "__main__":
             # graphgps_transform=graphgps_transform,
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
+            file_cache=args.file_cache,
             dist=True,
-            stage_db=True,
         )
         ## Need as a list
         testset = testset[:]
