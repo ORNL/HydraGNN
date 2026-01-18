@@ -559,6 +559,25 @@ class AseDBDataset(AseAtomsDataset):
                 return arr
             return value
 
+        def _normalize_numbers(value):
+            if value is None:
+                return value
+            try:
+                arr = np.array(value, dtype=float)
+            except Exception:
+                # Fall back to object conversion; will raise later if still unusable
+                arr = np.array(value, dtype=object)
+
+            if arr.ndim > 1:
+                arr = arr.reshape(-1)
+
+            try:
+                arr = arr.astype(int)
+            except Exception:
+                raise ValueError("atomic numbers field is not convertible to 1D ints")
+
+            return arr
+
         # Figure out which db this should be indexed from.
         db_idx = bisect.bisect(self._idlen_cumulative, idx)
 
@@ -571,7 +590,9 @@ class AseDBDataset(AseAtomsDataset):
         atoms_row = self.dbs[db_idx]._get_row(self.db_ids[db_idx][el_idx])
 
         # Sanitize fields before calling ASE conversion
-        numbers = _decode_ndarray(getattr(atoms_row, "numbers", None))
+        numbers = _normalize_numbers(
+            _decode_ndarray(getattr(atoms_row, "numbers", None))
+        )
         positions = _decode_ndarray(getattr(atoms_row, "positions", None))
         cell = _decode_ndarray(getattr(atoms_row, "cell", None))
         pbc = _decode_ndarray(getattr(atoms_row, "pbc", None))
@@ -596,10 +617,8 @@ class AseDBDataset(AseAtomsDataset):
 
         try:
             atoms = atoms_row.toatoms()
-        except KeyError as err:
-            # Fallback to manual construction when legacy encodings slip through
-            if "__ndarray__" not in str(err):
-                raise
+        except Exception as err:
+            # Fallback to manual construction when legacy encodings or malformed shapes slip through
             atoms = ase.Atoms(numbers=numbers, positions=positions, cell=cell, pbc=pbc)
 
         # put data back into atoms info
