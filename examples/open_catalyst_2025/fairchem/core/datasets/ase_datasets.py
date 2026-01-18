@@ -530,7 +530,26 @@ class AseDBDataset(AseAtomsDataset):
         # and raises KeyError('__ndarray__'). Decode them proactively.
         def _decode_ndarray(value):
             if isinstance(value, dict) and "__ndarray__" in value:
-                arr = np.asarray(value["__ndarray__"])
+                raw = value["__ndarray__"]
+                try:
+                    arr = np.asarray(raw)
+                except (ValueError, TypeError):
+                    # Handle ragged lists: try stacking if shapes match, else keep object array
+                    try:
+                        if isinstance(raw, list) and len(raw) > 0:
+                            if all(hasattr(x, "__len__") for x in raw):
+                                lengths = {len(x) for x in raw if hasattr(x, "__len__")}
+                                if len(lengths) == 1:
+                                    arr = np.stack(raw)
+                                else:
+                                    arr = np.array(raw, dtype=object)
+                            else:
+                                arr = np.array(raw, dtype=object)
+                        else:
+                            arr = raw
+                    except Exception:
+                        arr = raw
+
                 dtype = value.get("dtype")
                 if dtype is not None:
                     try:
