@@ -525,6 +525,21 @@ class AseDBDataset(AseAtomsDataset):
         Returns:
             atoms: ASE atoms corresponding to datapoint idx
         """
+        # Some legacy LMDB shards store numpy arrays as JSON-style dicts
+        # with a "__ndarray__" key. ASE's Row.toatoms cannot consume those
+        # and raises KeyError('__ndarray__'). Decode them proactively.
+        def _decode_ndarray(value):
+            if isinstance(value, dict) and "__ndarray__" in value:
+                arr = np.asarray(value["__ndarray__"])
+                dtype = value.get("dtype")
+                if dtype is not None:
+                    try:
+                        arr = arr.astype(dtype)
+                    except Exception:
+                        pass
+                return arr
+            return value
+
         # Figure out which db this should be indexed from.
         db_idx = bisect.bisect(self._idlen_cumulative, idx)
 
@@ -535,7 +550,38 @@ class AseDBDataset(AseAtomsDataset):
         assert el_idx >= 0
 
         atoms_row = self.dbs[db_idx]._get_row(self.db_ids[db_idx][el_idx])
-        atoms = atoms_row.toatoms()
+
+        # Sanitize fields before calling ASE conversion
+        numbers = _decode_ndarray(getattr(atoms_row, "numbers", None))
+        positions = _decode_ndarray(getattr(atoms_row, "positions", None))
+        cell = _decode_ndarray(getattr(atoms_row, "cell", None))
+        pbc = _decode_ndarray(getattr(atoms_row, "pbc", None))
+
+        # Try to update the underlying row so toatoms sees the decoded arrays
+        for target, value in (
+            ("numbers", numbers),
+            ("positions", positions),
+            ("cell", cell),
+            ("pbc", pbc),
+        ):
+            try:
+                if hasattr(atoms_row, "_row") and isinstance(atoms_row._row, dict):
+                    atoms_row._row[target] = value
+                elif hasattr(atoms_row, "_row") and hasattr(atoms_row._row, target):
+                    setattr(atoms_row._row, target, value)
+                else:
+                    setattr(atoms_row, target, value)
+            except Exception:
+                # If mutation fails, we will still try a manual fallback below
+                pass
+
+        try:
+            atoms = atoms_row.toatoms()
+        except KeyError as err:
+            # Fallback to manual construction when legacy encodings slip through
+            if "__ndarray__" not in str(err):
+                raise
+            atoms = ase.Atoms(numbers=numbers, positions=positions, cell=cell, pbc=pbc)
 
         # put data back into atoms info
         if isinstance(atoms_row.data, dict):
