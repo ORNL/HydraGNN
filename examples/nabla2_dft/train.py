@@ -10,6 +10,7 @@ import random
 import logging
 import sys
 import argparse
+import sqlite3
 
 from ase.db import connect
 
@@ -93,9 +94,25 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
 
     def _load_database(self, db_path):
         db = connect(db_path)
-        ids = [row.id for row in db.select()]
+
+        # Avoid ASE's MPI-aware select helper (which relies on communicator-wide
+        # broadcasts) to prevent MPI_ERR_OTHER when multiple ranks read the DB.
+        # Using sqlite3 keeps the ID fetch local and read-only. For distributed
+        # runs we broadcast the ID list so all ranks partition the same order.
+        ids = None
+        if not self.dist or self.rank == 0:
+            try:
+                with sqlite3.connect(db_path) as con:
+                    ids = [row[0] for row in con.execute("SELECT id FROM systems")]
+            except Exception:
+                ids = [row.id for row in db.select()]
+
         if self.dist:
-            random.shuffle(ids)
+            comm = MPI.COMM_WORLD
+            ids = comm.bcast(ids, root=0)
+            if self.rank == 0:
+                random.shuffle(ids)
+            ids = comm.bcast(ids, root=0)
             chunk = list(nsplit(range(len(ids)), self.world_size))[self.rank]
         else:
             chunk = range(len(ids))
