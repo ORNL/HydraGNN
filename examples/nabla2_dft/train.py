@@ -120,8 +120,19 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         cell = torch.tensor(atoms.cell.array, dtype=torch.float32)
         pbc = torch.tensor(atoms.pbc, dtype=torch.bool)
 
+        energy_raw = row.data["energy"]
+        if isinstance(energy_raw, (list, tuple)):
+            energy_scalar = energy_raw[0]
+        else:
+            try:
+                energy_scalar = energy_raw.item()
+            except Exception:
+                energy_scalar = (
+                    energy_raw[0] if hasattr(energy_raw, "__len__") else energy_raw
+                )
+
         energy = (
-            torch.tensor([float(row.data["energy"][0])], dtype=torch.float32)
+            torch.tensor([float(energy_scalar)], dtype=torch.float32)
             * conversion_constant_from_hartree_to_eV
         )
         forces = (
