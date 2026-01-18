@@ -13,3 +13,4 @@ scikit-learn==1.5.1
 numpy==1.26.4
 scipy==1.14.1
 mpi4py==4.1.0
+vesin==0.4.2
