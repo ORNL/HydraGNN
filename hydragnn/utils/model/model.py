@@ -412,12 +412,36 @@ def unsorted_segment_mean(data, segment_ids, num_segments):
 def print_model(model):
     """print model's parameter size layer by layer"""
     num_params = 0
+    num_bytes = 0
     for k, v in model.state_dict().items():
         print_master("%50s\t%20s\t%10d" % (k, list(v.shape), v.numel()))
         num_params += v.numel()
+        num_bytes += v.numel() * v.element_size()
     print_master("-" * 50)
     print_master("%50s\t%20s\t%10d" % ("Total", "", num_params))
-    print_master("All (total, MB): %d %g" % (num_params, num_params * 4 / 1024 / 1024))
+    print_master("All (total, MB): %d %g" % (num_params, num_bytes / 1024 / 1024))
+
+
+def print_optimizer(optimizer):
+    """print optimizer state size tensor by tensor"""
+    num_elems = 0
+    num_bytes = 0
+
+    for param_id, state in optimizer.state.items():
+        for name, v in state.items():
+            if not torch.is_tensor(v):
+                continue
+            elems = v.numel()
+            bytes_ = elems * v.element_size()
+            print_master("%50s\t%20s\t%10d" % (name, list(v.shape), elems))
+            num_elems += elems
+            num_bytes += bytes_
+
+    print("-" * 50)
+    print("%50s\t%20s\t%10d" % ("Total optimizer state", "", num_elems))
+    print(
+        "All optimizer state (total, MB): %d %g" % (num_elems, num_bytes / 1024 / 1024)
+    )
 
 
 def print_optimizer(optimizer):

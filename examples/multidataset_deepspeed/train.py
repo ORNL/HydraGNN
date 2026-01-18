@@ -444,6 +444,9 @@ if __name__ == "__main__":
 
     timer.stop()
 
+    precision = args.precision.lower()
+    config["NeuralNetwork"]["Training"]["precision"] = precision
+
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
@@ -475,8 +478,6 @@ if __name__ == "__main__":
     )
 
     ##################################################################################################################
-
-    precision = args.precision.lower()
 
     hydragnn.train.train_validate_test(
         model,
