@@ -70,7 +70,6 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
     ):
         super().__init__()
 
-        self.dataset_name = "nabla2dft"
         self.config = config
         self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
         self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
@@ -133,7 +132,7 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         x = torch.cat((atomic_numbers, forces), dim=1)
 
         data_object = Data(
-            dataset_name=self.dataset_name,
+            dataset_name="nabla2dft",
             natoms=natoms,
             pos=pos,
             cell=cell,
