@@ -93,7 +93,9 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
         self._load_database(db_path)
 
     def _load_database(self, db_path):
-        db = connect(db_path)
+        # Force serial DB access so ASE does not try to MPI-broadcast selects
+        # internally (which conflicts with our own MPI logic).
+        db = connect(db_path, serial=True, use_lock_file=False)
 
         # Avoid ASE's MPI-aware select helper (which relies on communicator-wide
         # broadcasts) to prevent MPI_ERR_OTHER when multiple ranks read the DB.
