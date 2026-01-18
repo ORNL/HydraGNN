@@ -590,7 +590,9 @@ class AseDBDataset(AseAtomsDataset):
         atoms_row = self.dbs[db_idx]._get_row(self.db_ids[db_idx][el_idx])
 
         # Sanitize fields before calling ASE conversion
-        numbers = _normalize_numbers(_decode_ndarray(getattr(atoms_row, "numbers", None)))
+        numbers = _normalize_numbers(
+            _decode_ndarray(getattr(atoms_row, "numbers", None))
+        )
         positions = _decode_ndarray(getattr(atoms_row, "positions", None))
         cell = _decode_ndarray(getattr(atoms_row, "cell", None))
         pbc = _decode_ndarray(getattr(atoms_row, "pbc", None))
