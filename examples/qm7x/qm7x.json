@@ -57,8 +57,7 @@
       "Checkpoint" : true,
       "num_epoch": 20,
       "batch_size": 32,
-      "continue": 1,
-      "startfrom": "/gpfs/alpine/lrn026/world-shared/HydraGNN_Max_QM7X/HydraGNN/logs/qm7x_fullx/qm7x_fullx",
+      "continue": 0,
       "Optimizer": {
         "learning_rate": 0.001
       }
