@@ -1,4 +1,5 @@
-import os, random, torch, glob, sys, pickle, pdb
+import os, random, torch, glob, sys, pickle, shutil, traceback
+import queue, threading
 import numpy as np
 from mpi4py import MPI
 from yaml import full_load
@@ -15,7 +16,6 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     gather_deg,
 )
 from hydragnn.utils.distributed import nsplit
-from utils import balance_load
 
 
 # transform_coordinates = Spherical(norm=False, cat=False)
@@ -55,7 +55,9 @@ class ExtendedXYZDataset(Dataset):
         """Reads all structures from all .extxyz files and stores them in self.structures"""
         if not os.path.isfile(self.extxyz_filename):
             raise FileNotFoundError(f"File not found: {self.extxyz_filename}")
-        frames = read(self.extxyz_filename, index=":")  # Read all structures in file
+        frames = read(
+            self.extxyz_filename, index=":", parallel=False
+        )  # Read all structures in file
         self.structures.extend(frames)
 
     def len(self):
@@ -67,6 +69,17 @@ class ExtendedXYZDataset(Dataset):
         return atoms
 
 
+def file_reader(total_file_list, rx, dirpath, file_cache, q):
+    for index in rx:
+        filepath = total_file_list[index]
+        fileid = filepath.replace(dirpath, "")
+        fileid = fileid.replace("/", "_")
+        newpath = os.path.join(file_cache, fileid)
+        shutil.copyfile(filepath, newpath)
+        q.put(newpath)
+    q.put(None)
+
+
 class ODAC2023(AbstractBaseDataset):
     def __init__(
         self,
@@ -75,6 +88,7 @@ class ODAC2023(AbstractBaseDataset):
         data_type,
         graphgps_transform=None,
         energy_per_atom=True,
+        file_cache="/tmp",
         dist=False,
         comm=MPI.COMM_WORLD,
     ):
@@ -110,35 +124,50 @@ class ODAC2023(AbstractBaseDataset):
             self.rank = torch.distributed.get_rank()
         self.comm = comm
 
-        # Parallelizing over data files for training data. For val set, we parallelize over each molecules.
-        dataset_list = self._get_datasets_assigned_to_me(dirpath, data_type)
+        # get the list of all extxyz files
+        total_file_list = self._get_file_list(dirpath, data_type)
 
-        for dataset_index, dataset_dict in enumerate(dataset_list):
-            fullpath = dataset_dict["dataset_fullpath"]
+        # Parallelize amongst all ranks
+        rx = list(nsplit(list(range(len(total_file_list))), self.world_size))[self.rank]
+
+        q = queue.Queue(maxsize=10)
+        t = threading.Thread(
+            target=file_reader,
+            args=(
+                total_file_list,
+                rx,
+                dirpath,
+                file_cache,
+                q,
+            ),
+        )
+        t.start()
+
+        # for index in rx:
+        while True:
+            dataitem = q.get()
+            q.task_done()
+
+            if dataitem == None:
+                print(f"Received terminate signal from file reader thread")
+                break
+
             try:
-                dataset = ExtendedXYZDataset(extxyz_filename=fullpath)
-            except ValueError as e:
-                print(f"{fullpath} not a valid ase lmdb dataset. Ignoring ...")
+                # dataset = ExtendedXYZDataset(total_file_list[index])
+                dataset = ExtendedXYZDataset(dataitem)
+            except Exception as e:
+                print(f"Encountered {e} for {total_file_list[index]}. Ignoring ...")
+                os.remove(dataitem)
                 continue
 
-            if data_type == "train":
-                rx = list(range(len(dataset)))
-            else:
-                rx = list(nsplit(list(range(len(dataset))), self.world_size))[self.rank]
+            print(f"{dataitem} has {len(dataset)} samples")
 
-            print(
-                f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {len(dataset)}, len(rx): {len(rx)}"
-            )
+            for i in range(len(dataset)):
+                self._create_pytorch_data_object(dataset, i)
 
-            # for index in iterate_tqdm(
-            #     rx,
-            #     verbosity_level=2,
-            #     desc=f"Rank{self.rank} Dataset {dataset_index}/{len(dataset_list)}",
-            # ):
+            os.remove(dataitem)
 
-            for index in rx:
-                self._create_pytorch_data_object(dataset, index)
-
+        t.join()
         print(
             self.rank,
             f"Rank {self.rank} done creating pytorch data objects for {data_type}. Waiting on barrier.",
@@ -148,42 +177,18 @@ class ODAC2023(AbstractBaseDataset):
 
         random.shuffle(self.dataset)
 
-    def _get_datasets_assigned_to_me(self, dirpath, data_type):
-        datasets_info = []
-
-        # get the list of ase lmdb files
+    def _get_file_list(self, dirpath, data_type):
+        """Get a list of all input extxyz files"""
         total_file_list = None
         if self.rank == 0:
             total_file_list = glob.glob(
                 os.path.join(dirpath, data_type, "**/*.extxyz"), recursive=True
             )
+            print(f"Found {len(total_file_list)} extxyz files for {data_type}")
+
         total_file_list = self.comm.bcast(total_file_list, root=0)
-
-        # evenly distribute amongst all ranks to get num samples
-        rx = list(nsplit(total_file_list, self.world_size))[self.rank]
-        datasets = rx
-
-        # Get num samples for all datasets assigned to this process
-        for d in iterate_tqdm(datasets, verbosity_level=2, desc="Data Parsing"):
-            fullpath = os.path.join(dirpath, data_type, d)
-            try:
-                dataset = ExtendedXYZDataset(extxyz_filename=fullpath)
-            except ValueError as e:
-                print(f"{fullpath} is not a valid Extended XYZ dataset. Ignoring ...")
-                continue
-
-            num_samples = len(dataset)
-            datasets_info.append(
-                {"dataset_fullpath": fullpath, "num_samples": num_samples}
-            )
-
-        # All gather so everyone has all num samples information
-        _all_datasets_info = self.comm.allgather(datasets_info)
-        all_datasets_info = [item for sublist in _all_datasets_info for item in sublist]
-
-        # Call workload distributor to assign datasets to processes
-        my_datasets = balance_load(all_datasets_info, self.world_size, self.rank)
-        return my_datasets
+        total_file_list.sort()
+        return total_file_list
 
     def _create_pytorch_data_object(self, dataset, index):
         try:
@@ -205,9 +210,9 @@ class ODAC2023(AbstractBaseDataset):
 
             cell = None
             try:
-                cell = torch.tensor(
-                    dataset.get(index).get_cell(), dtype=torch.float32
-                ).view(3, 3)
+                # cell = torch.tensor(
+                #     dataset.get(index).get_cell(), dtype=torch.float32
+                # ).view(3, 3)
                 cell = torch.from_numpy(np.asarray(dataset.get(index).get_cell())).to(
                     torch.float32
                 )  # dtype conversion in-place
@@ -270,8 +275,7 @@ class ODAC2023(AbstractBaseDataset):
                     data_object = transform_coordinates_pbc(data_object)
                 except:
                     print(
-                        f"Structure could not successfully apply one or both of the pbc radius graph and positional transform",
-                        flush=True,
+                        f"Structure could not successfully apply one or both of the pbc radius graph and positional transform.\n{traceback.format_exc()}"
                     )
                     data_object = self.radius_graph(data_object)
                     data_object = transform_coordinates(data_object)
