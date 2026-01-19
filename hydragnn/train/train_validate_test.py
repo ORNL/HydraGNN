@@ -72,8 +72,14 @@ def resolve_precision(precision: str):
 
 def move_batch_to_device(data, param_dtype):
     device = get_device()
-    if param_dtype == torch.float64:
-        return data.to(device, dtype=param_dtype)
+
+    if isinstance(data, torch.Tensor):
+        data = data.to(dtype=param_dtype)
+    else:
+        for key, value in data.items():
+            if isinstance(value, torch.Tensor) and torch.is_floating_point(value):
+                data[key] = value.to(dtype=param_dtype)
+
     return data.to(device)
 
 

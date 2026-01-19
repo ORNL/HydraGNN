@@ -466,6 +466,9 @@ if __name__ == "__main__":
 
     timer.stop()
 
+    precision = args.precision.lower() if args.precision is not None else "fp32"
+    config["NeuralNetwork"]["Training"]["precision"] = precision
+
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
@@ -499,8 +502,6 @@ if __name__ == "__main__":
     )
 
     ##################################################################################################################
-
-    precision = args.precision.lower() if args.precision is not None else "fp32"
 
     if args.nosync:
         context = model.no_sync()

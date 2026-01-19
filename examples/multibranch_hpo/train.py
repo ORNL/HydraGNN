@@ -566,6 +566,9 @@ if __name__ == "__main__":
 
     timer.stop()
 
+    precision = args.precision.lower()
+    config["NeuralNetwork"]["Training"]["precision"] = precision
+
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
@@ -613,8 +616,6 @@ if __name__ == "__main__":
         context = model.no_sync()
     else:
         context = nullcontext()
-
-    precision = args.precision.lower()
 
     with context:
         hydragnn.train.train_validate_test(
