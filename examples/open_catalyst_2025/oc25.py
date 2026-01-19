@@ -8,6 +8,7 @@ import torch
 from mpi4py import MPI
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance
+from hydragnn.utils.print.print_utils import iterate_tqdm
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
@@ -120,7 +121,15 @@ class OpenCatalystDataset(AbstractBaseDataset):
                 f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {dataset.num_samples}, len(rx): {len(rx)}"
             )
 
-            for index in rx:
+            verbosity = 2
+            progress_iter = iterate_tqdm(
+                rx,
+                verbosity_level=verbosity,
+                desc=f"Rank {self.rank} {os.path.basename(fullpath)} [{data_type}]",
+                leave=False,
+            )
+
+            for index in progress_iter:
                 self._create_pytorch_data_object(dataset, index)
 
         print(
