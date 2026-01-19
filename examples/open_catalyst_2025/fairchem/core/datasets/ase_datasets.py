@@ -534,7 +534,6 @@ class AseDBDataset(AseAtomsDataset):
                 try:
                     arr = np.asarray(raw)
                 except (ValueError, TypeError):
-                    # Handle ragged lists: try stacking if shapes match, else keep object array
                     try:
                         if isinstance(raw, list) and len(raw) > 0:
                             if all(hasattr(x, "__len__") for x in raw):
@@ -553,7 +552,7 @@ class AseDBDataset(AseAtomsDataset):
                 dtype = value.get("dtype")
                 if dtype is not None:
                     try:
-                        arr = arr.astype(dtype)
+                        arr = np.asarray(arr).astype(dtype)
                     except Exception:
                         pass
                 return arr
@@ -562,21 +561,98 @@ class AseDBDataset(AseAtomsDataset):
         def _normalize_numbers(value):
             if value is None:
                 return value
+            scalars = []
+
+            def _collect(x):
+                if x is None:
+                    return
+                if isinstance(x, (list, tuple, np.ndarray)):
+                    for xi in x:
+                        _collect(xi)
+                else:
+                    scalars.append(x)
+
+            _collect(value)
+            cleaned = []
+            for s in scalars:
+                if isinstance(s, str) and s.lower() in {"int64", "int32", "int16"}:
+                    continue
+                cleaned.append(s)
+            try:
+                arr = np.array(cleaned, dtype=int)
+            except Exception:
+                raise ValueError("atomic numbers field is not convertible to 1D ints")
+            arr = np.asarray(arr).reshape(-1)
+            invalid = (arr < 1) | (arr > 118)
+            if np.any(invalid):
+                arr = arr.copy()
+                arr[invalid] = 1
+            return arr
+
+        def _normalize_matrix(value, dims=(3, 3), fill=None):
+            if value is None:
+                return None
             try:
                 arr = np.array(value, dtype=float)
             except Exception:
-                # Fall back to object conversion; will raise later if still unusable
                 arr = np.array(value, dtype=object)
+            arr = np.squeeze(arr)
+            if arr.shape == dims:
+                return arr
+            if arr.ndim == 1 and arr.size == dims[0] * dims[1]:
+                return arr.reshape(dims)
+            if fill is not None:
+                return np.full(dims, fill, dtype=float)
+            raise ValueError(
+                f"matrix field has incompatible shape {arr.shape}, expected {dims}"
+            )
 
-            if arr.ndim > 1:
-                arr = arr.reshape(-1)
+        def _normalize_positions(value):
+            if value is None:
+                return None
+            scalars = []
+
+            def _collect_pos(x):
+                if x is None or isinstance(x, str):
+                    return
+                if isinstance(x, (list, tuple, np.ndarray)):
+                    for xi in x:
+                        _collect_pos(xi)
+                else:
+                    scalars.append(x)
 
             try:
-                arr = arr.astype(int)
+                arr = np.array(value, dtype=float)
+                if arr.dtype == object:
+                    scalars = []
+                    _collect_pos(value)
+                else:
+                    scalars = None
             except Exception:
-                raise ValueError("atomic numbers field is not convertible to 1D ints")
+                scalars = []
+                _collect_pos(value)
 
-            return arr
+            if scalars is not None:
+                if len(scalars) == 0:
+                    raise ValueError("positions field has no numeric entries")
+                arr = np.array(scalars, dtype=float)
+
+            arr = np.squeeze(arr)
+            if arr.ndim == 1:
+                if arr.size % 3 != 0:
+                    pad = 3 - (arr.size % 3)
+                    arr = np.pad(arr, (0, pad), constant_values=0.0)
+                arr = arr.reshape(-1, 3)
+            elif arr.ndim == 2:
+                if arr.shape[1] == 3:
+                    pass
+                elif arr.shape[0] == 3:
+                    arr = arr.T
+                else:
+                    raise ValueError("positions field must be Nx3 or 3xN")
+            else:
+                raise ValueError("positions field has invalid dimensions")
+            return arr.astype(float)
 
         # Figure out which db this should be indexed from.
         db_idx = bisect.bisect(self._idlen_cumulative, idx)
@@ -590,12 +666,52 @@ class AseDBDataset(AseAtomsDataset):
         atoms_row = self.dbs[db_idx]._get_row(self.db_ids[db_idx][el_idx])
 
         # Sanitize fields before calling ASE conversion
-        numbers = _normalize_numbers(
-            _decode_ndarray(getattr(atoms_row, "numbers", None))
-        )
+        def _try_normalize(name, value, func):
+            try:
+                return func(value)
+            except Exception as exc:
+                logging.debug(f"Normalization for {name} failed: {exc}")
+                return value
+
+        numbers = _decode_ndarray(getattr(atoms_row, "numbers", None))
+        numbers = _try_normalize("numbers", numbers, _normalize_numbers)
+
         positions = _decode_ndarray(getattr(atoms_row, "positions", None))
+        positions = _try_normalize("positions", positions, _normalize_positions)
+
+        # Align lengths when possible to prevent downstream index errors
+        try:
+            if numbers is not None and positions is not None:
+                n_atoms = positions.shape[0]
+                if numbers.shape[0] < n_atoms:
+                    pad = np.full(
+                        n_atoms - numbers.shape[0],
+                        numbers[-1] if numbers.size else 1,
+                        dtype=int,
+                    )
+                    numbers = np.concatenate([numbers, pad])
+                elif numbers.shape[0] > n_atoms:
+                    numbers = numbers[:n_atoms]
+        except Exception:
+            logging.debug("Could not align numbers/positions length")
+
         cell = _decode_ndarray(getattr(atoms_row, "cell", None))
+        cell = _try_normalize(
+            "cell", cell, lambda v: _normalize_matrix(v, dims=(3, 3), fill=0.0)
+        )
+
         pbc = _decode_ndarray(getattr(atoms_row, "pbc", None))
+        if pbc is not None:
+            try:
+                pbc_arr = np.asarray(pbc).astype(bool).reshape(-1)
+                if pbc_arr.size == 0:
+                    pbc = None
+                elif pbc_arr.size == 3:
+                    pbc = pbc_arr
+                else:
+                    pbc = pbc_arr[:3]
+            except Exception:
+                logging.debug("Normalization for pbc failed")
 
         # Try to update the underlying row so toatoms sees the decoded arrays
         for target, value in (
@@ -617,9 +733,90 @@ class AseDBDataset(AseAtomsDataset):
 
         try:
             atoms = atoms_row.toatoms()
-        except Exception as err:
-            # Fallback to manual construction when legacy encodings or malformed shapes slip through
+        except (KeyError, ValueError, TypeError) as err:
+            # Fallback to manual construction when legacy encodings slip through or shapes are bad
+            if isinstance(err, KeyError) and "__ndarray__" not in str(err):
+                raise
             atoms = ase.Atoms(numbers=numbers, positions=positions, cell=cell, pbc=pbc)
+
+        # Attach a calculator if energy/forces are stored in row data or atoms info
+        def _get_first(mapping, keys):
+            if not isinstance(mapping, dict):
+                return None
+            for k in keys:
+                if k in mapping:
+                    return mapping[k]
+            return None
+
+        def _to_scalar(val):
+            try:
+                arr = np.asarray(val, dtype=float).reshape(-1)
+                if arr.size > 0:
+                    return float(arr[0])
+            except Exception:
+                return None
+            return None
+
+        def _to_forces(val):
+            if val is None:
+                return None
+            try:
+                arr = np.asarray(val, dtype=float)
+            except Exception:
+                return None
+            arr = np.squeeze(arr)
+            if arr.ndim == 1:
+                if arr.size % 3 != 0:
+                    return None
+                arr = arr.reshape(-1, 3)
+            elif arr.ndim == 2:
+                if arr.shape[1] == 3:
+                    pass
+                elif arr.shape[0] == 3:
+                    arr = arr.T
+                else:
+                    return None
+            else:
+                return None
+            return arr
+
+        info_dict = atoms.info if isinstance(atoms.info, dict) else {}
+        data_dict = (
+            atoms_row.data if isinstance(getattr(atoms_row, "data", None), dict) else {}
+        )
+
+        energy_val = _get_first(
+            info_dict, ["energy", "total_energy", "potential_energy", "E"]
+        )
+        if energy_val is None:
+            energy_val = _get_first(
+                data_dict, ["energy", "total_energy", "potential_energy", "E"]
+            )
+        energy_val = _to_scalar(energy_val) if energy_val is not None else None
+
+        forces_val = _get_first(info_dict, ["forces", "force", "F"])
+        if forces_val is None:
+            forces_val = _get_first(data_dict, ["forces", "force", "F"])
+        forces_val = _to_forces(forces_val)
+
+        # Always attach a calculator so get_total_energy works downstream
+        if atoms.calc is None:
+            if forces_val is None and positions is not None:
+                try:
+                    forces_val = np.zeros_like(np.asarray(positions, dtype=float))
+                except Exception:
+                    forces_val = None
+            try:
+                from ase.calculators.singlepoint import SinglePointCalculator
+
+                calc = SinglePointCalculator(
+                    atoms,
+                    energy=energy_val if energy_val is not None else 0.0,
+                    forces=forces_val,
+                )
+                atoms.calc = calc
+            except Exception:
+                pass
 
         # put data back into atoms info
         if isinstance(atoms_row.data, dict):

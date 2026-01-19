@@ -87,11 +87,22 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Limit total samples loaded per split (smoke test). Applies only to ASE loading path.",
+    )
+    parser.add_argument(
         "--precision",
         type=str,
         choices=["fp32", "fp64", "bf16"],
         default=None,
         help="Override precision; defaults to fp32 when not set",
+    )
+    parser.add_argument(
+        "--skip-radius",
+        action="store_true",
+        help="Skip building radius graphs during preprocessing to reduce memory for smoke tests.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -159,6 +170,8 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+            max_samples=args.max_samples,
+            build_radius_graph=not args.skip_radius,
         )
         trainset, valset1, valset2 = split_dataset(
             dataset=trainset,
@@ -173,6 +186,8 @@ if __name__ == "__main__":
             graphgps_transform=None,
             energy_per_atom=args.energy_per_atom,
             dist=True,
+            max_samples=args.max_samples,
+            build_radius_graph=not args.skip_radius,
         )
         testset = testset[:]
 
