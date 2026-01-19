@@ -64,7 +64,7 @@ class PNAEqStack(Base):
             "linear",
             "inverse_linear",
         ]
-        self.deg = torch.Tensor(deg)
+        self.deg = self._sanitize_degree(torch.Tensor(deg))
         self.edge_dim = edge_dim
         self.num_radial = num_radial
         self.radius = radius
@@ -72,6 +72,19 @@ class PNAEqStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = rbf_BasisLayer(self.num_radial, self.radius)
+
+    @staticmethod
+    def _sanitize_degree(deg: torch.Tensor) -> torch.Tensor:
+        """Clamp degree histogram to avoid zeros/NaNs inside DegreeScalerAggregation."""
+        if deg.numel() == 0:
+            return torch.ones(1)
+        deg = deg.to(dtype=torch.float)
+        deg = deg.clamp_min(1e-7)
+        if not torch.isfinite(deg).all():
+            deg = torch.ones_like(deg)
+        if deg.sum() <= 0:
+            deg = torch.ones_like(deg)
+        return deg
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
