@@ -11,7 +11,6 @@
 
 from tqdm import tqdm
 import numpy as np
-import pdb
 import torch
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
@@ -42,7 +41,7 @@ except (ImportError, ModuleNotFoundError):
     GradScaler = None
 
 PRECISION_MAP = {
-    "bf16": {"param_dtype": torch.float32, "autocast_dtype": torch.bfloat16},
+    "bf16": {"param_dtype": torch.bfloat16, "autocast_dtype": torch.bfloat16},
     "fp32": {"param_dtype": torch.float32, "autocast_dtype": None},
     "fp64": {"param_dtype": torch.float64, "autocast_dtype": None},
 }
