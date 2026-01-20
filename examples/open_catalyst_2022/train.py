@@ -162,7 +162,7 @@ def ase_to_torch_geom(atoms_chunk, energy_per_atom, radius_graph, radius_graph_p
 
         data_objects.append(data_object)
         time_taken = round(time.time()-t1, 3)
-        # print(f"Created data object in {time_taken} seconds")
+        # print(f"Worker process {os.getpid()} created data object in {time_taken} seconds")
     return data_objects
 
 
@@ -261,6 +261,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
     def _process_local_files(self, local_file_list):
         data_list = []
+        os.environ["MPI4PY_RC_INITIALIZE"] = "0"
         ctx = multiprocessing.get_context("spawn")
         convertor = partial(ase_to_torch_geom,
                             energy_per_atom=self.energy_per_atom,
@@ -268,7 +269,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
                             radius_graph_pbc=self.radius_graph_pbc,
                             graphgps_transform=self.graphgps_transform)
 
-        with ProcessPoolExecutor(mp_context=ctx) as executor:
+        nw = int(os.environ.get('SLURM_CPUS_PER_TASK', 8)) - 1
+        with ProcessPoolExecutor(mp_context=ctx, max_workers=nw) as executor:
             for filename in local_file_list:
                 try:
                     traj = read(filename, ":", parallel=False)
