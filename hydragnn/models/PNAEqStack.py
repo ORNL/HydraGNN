@@ -75,16 +75,19 @@ class PNAEqStack(Base):
 
     @staticmethod
     def _sanitize_degree(deg: torch.Tensor) -> torch.Tensor:
-        """Clamp degree histogram to avoid zeros/NaNs inside DegreeScalerAggregation."""
         if deg.numel() == 0:
-            return torch.ones(1)
-        deg = deg.to(dtype=torch.float)
-        deg = deg.clamp_min(1e-7)
-        if not torch.isfinite(deg).all():
-            deg = torch.ones_like(deg)
-        if deg.sum() <= 0:
-            deg = torch.ones_like(deg)
-        return deg
+            return deg.new_ones((1,), dtype=torch.float32)
+
+        deg = deg.to(dtype=torch.float32)
+
+        # Compute max over finite values (this is used to replace +inf)
+        finite = torch.isfinite(deg)
+        max_finite = deg[finite].max() if finite.any() else deg.new_tensor(1.0)
+
+        # Replace NaN/-inf with 1, +inf with max_finite
+        deg = torch.nan_to_num(deg, nan=1.0, neginf=1.0, posinf=max_finite.item())
+
+        return deg.clamp_min(1.0)
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
