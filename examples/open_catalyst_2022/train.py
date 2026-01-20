@@ -1,16 +1,15 @@
-import os, re, json
+import os, json, time
 import glob
 import logging
-import fnmatch
-import pickle
 import sys
-import lmdb
 from mpi4py import MPI
 import argparse
-
 import numpy as np
-
 import random
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from functools import partial
+from tqdm import tqdm
 
 import torch
 import torch.distributed as dist
@@ -20,9 +19,7 @@ random_state = 0
 torch.manual_seed(random_state)
 
 from torch_geometric.data import Data
-
-from torch_geometric.transforms import Distance, Spherical, LocalCartesian
-from torch_geometric.transforms import AddLaplacianEigenvectorPE
+from torch_geometric.transforms import Distance
 
 import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -78,92 +75,17 @@ spin = 1.0  # singlet
 graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
-class OpenCatalystDataset(AbstractBaseDataset):
-    """Dataset loader for OC22 S2EF shards stored as EXTXYZ."""
-
-    def __init__(
-        self,
-        dirpath,
-        config,
-        data_type,
-        graphgps_transform=None,
-        energy_per_atom=True,
-        dist=False,
-        sampling_ratio=None,
-    ):
-        super().__init__()
-
-        self.config = config
-        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
-        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
-
-        self.data_path = dirpath
-        self.data_type = data_type
-        self.energy_per_atom = energy_per_atom
-        self.sampling_ratio = sampling_ratio
-
-        self.radius_graph = RadiusGraph(
-            self.radius, loop=False, max_num_neighbors=self.max_neighbours
-        )
-        self.radius_graph_pbc = RadiusGraphPBC(
-            self.radius, loop=False, max_num_neighbors=self.max_neighbours
-        )
-
-        self.graphgps_transform = graphgps_transform
-
-        # Threshold for atomic forces in eV/angstrom
-        self.forces_norm_threshold = 1000.0
-
-        self.dist = dist
-        if self.dist and torch.distributed.is_initialized():
-            self.world_size = torch.distributed.get_world_size()
-            self.rank = torch.distributed.get_rank()
-        else:
-            self.world_size = 1
-            self.rank = 0
-
-        extxyz_files = None
-        if self.rank == 0:
-            data_root = os.path.join(dirpath, data_type)
-            if not os.path.isdir(data_root):
-                raise RuntimeError(f"Data folder not found: {data_root}")
-            search_pattern = os.path.join(data_root, "**", "*.extxyz")
-            extxyz_files = sorted(glob.glob(search_pattern, recursive=True))
-            if len(extxyz_files) == 0:
-                raise RuntimeError(f"No EXTXYZ shards found under: {data_root}")
-        extxyz_files = MPI.COMM_WORLD.bcast(extxyz_files, root=0)
-
-        local_files_list = list(nsplit(extxyz_files, self.world_size))[self.rank]
-        log("local shard count", f"rank {self.rank} -> {len(local_files_list)} shards")
-
-        for extxyz_file in iterate_tqdm(
-            local_files_list, verbosity_level=2, desc="Load EXTXYZ"
-        ):
-            for item in self.extxyz_to_torch_geom(extxyz_file):
-                if self.check_forces_values(item.forces):
-                    self.dataset.append(item)
-                else:
-                    print(
-                        f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold} - atomistic structure: {item}",
-                        flush=True,
-                    )
-
-        if self.sampling_ratio is not None:
-            if not (0 < self.sampling_ratio <= 1):
-                raise ValueError("sampling_ratio must be in (0, 1].")
-            target = max(1, int(len(self.dataset) * self.sampling_ratio))
-            self.dataset = random.sample(self.dataset, target)
-
-        random.shuffle(self.dataset)
-
-    def ase_to_torch_geom(self, atoms):
-        # Require energies and forces to be present
+def ase_to_torch_geom(atoms_chunk, energy_per_atom, radius_graph, radius_graph_pbc, graphgps_transform):
+    # Require energies and forces to be present
+    data_objects = []
+    for atoms in atoms_chunk:
+        t1 = time.time()
         if (
-            atoms.calc is None
-            or "energy" not in atoms.calc.results
-            or "forces" not in atoms.calc.results
+                atoms.calc is None
+                or "energy" not in atoms.calc.results
+                or "forces" not in atoms.calc.results
         ):
-            return None
+            continue
 
         atomic_numbers = torch.tensor(
             atoms.get_atomic_numbers(), dtype=torch.float32
@@ -214,18 +136,18 @@ class OpenCatalystDataset(AbstractBaseDataset):
         )
 
         data_object.y = (
-            data_object.energy_per_atom if self.energy_per_atom else data_object.energy
+            data_object.energy_per_atom if energy_per_atom else data_object.energy
         )
 
         if data_object.pbc.any():
             try:
-                data_object = self.radius_graph_pbc(data_object)
+                data_object = radius_graph_pbc(data_object)
                 data_object = transform_coordinates_pbc(data_object)
             except Exception:
-                data_object = self.radius_graph(data_object)
+                data_object = radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
         else:
-            data_object = self.radius_graph(data_object)
+            data_object = radius_graph(data_object)
             data_object = transform_coordinates(data_object)
 
         if not hasattr(data_object, "edge_shifts"):
@@ -235,23 +157,134 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         data_object.pbc = data_object.pbc.int()
 
-        if self.graphgps_transform is not None:
-            data_object = self.graphgps_transform(data_object)
+        if graphgps_transform is not None:
+            data_object = graphgps_transform(data_object)
 
-        return data_object
+        data_objects.append(data_object)
+        time_taken = round(time.time()-t1, 3)
+        # print(f"Created data object in {time_taken} seconds")
+    return data_objects
 
-    def extxyz_to_torch_geom(self, extxyz_file):
+
+def _distribute_files(dirpath, data_type, rank, world_size):
+    extxyz_files = None
+    if rank == 0:
+        data_root = os.path.join(dirpath, data_type)
+        if not os.path.isdir(data_root):
+            raise RuntimeError(f"Data folder not found: {data_root}")
+        search_pattern = os.path.join(data_root, "**", "*.extxyz")
+        extxyz_files = sorted(glob.glob(search_pattern, recursive=True))
+        if len(extxyz_files) == 0:
+            raise RuntimeError(f"No EXTXYZ shards found under: {data_root}")
+    extxyz_files = MPI.COMM_WORLD.bcast(extxyz_files, root=0)
+
+    local_files_list = list(nsplit(extxyz_files, world_size))[rank]
+    log("local shard count", f"rank {rank} -> {len(local_files_list)} shards")
+    return local_files_list
+
+
+def _chunk_iterable(iterable, chunk_size):
+    """Split iterable into chunks"""
+    chunk = []
+    for item in iterable:
+        chunk.append(item)
+        if len(chunk) == chunk_size:
+            yield chunk
+            chunk = []
+    if chunk:  # remaining items
+        yield chunk
+
+
+class OpenCatalystDataset(AbstractBaseDataset):
+    """Dataset loader for OC22 S2EF shards stored as EXTXYZ."""
+
+    def __init__(
+        self,
+        dirpath,
+        config,
+        data_type,
+        graphgps_transform=None,
+        energy_per_atom=True,
+        dist=False,
+        sampling_ratio=None,
+    ):
+        super().__init__()
+
+        self.config = config
+        self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
+        self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
+
+        self.data_path = dirpath
+        self.data_type = data_type
+        self.energy_per_atom = energy_per_atom
+        self.sampling_ratio = sampling_ratio
+
+        self.radius_graph = RadiusGraph(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
+        self.radius_graph_pbc = RadiusGraphPBC(
+            self.radius, loop=False, max_num_neighbors=self.max_neighbours
+        )
+
+        self.graphgps_transform = graphgps_transform
+
+        # Threshold for atomic forces in eV/angstrom
+        self.forces_norm_threshold = 1000.0
+
+        self.dist = dist
+        if self.dist and torch.distributed.is_initialized():
+            self.world_size = torch.distributed.get_world_size()
+            self.rank = torch.distributed.get_rank()
+        else:
+            self.world_size = 1
+            self.rank = 0
+
+        # distribute files amongst ranks
+        local_files_list = _distribute_files(dirpath, data_type, self.rank, self.world_size)
+
+        data_objects = self._process_local_files(local_files_list)
+        for obj in data_objects:
+            if self.check_forces_values(obj.forces):
+                self.dataset.append(obj)
+            else:
+                print(
+                    f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold}"
+                    f" - atomistic structure: {obj}")
+
+        if self.sampling_ratio is not None:
+            if not (0 < self.sampling_ratio <= 1):
+                raise ValueError("sampling_ratio must be in (0, 1].")
+            target = max(1, int(len(self.dataset) * self.sampling_ratio))
+            self.dataset = random.sample(self.dataset, target)
+
+        random.shuffle(self.dataset)
+
+    def _process_local_files(self, local_file_list):
         data_list = []
-        try:
-            traj = read(extxyz_file, ":", parallel=False)
-        except Exception as exc:
-            print(f"Failed to read {extxyz_file}: {exc}", flush=True)
-            return data_list
+        ctx = multiprocessing.get_context("spawn")
+        convertor = partial(ase_to_torch_geom,
+                            energy_per_atom=self.energy_per_atom,
+                            radius_graph=self.radius_graph,
+                            radius_graph_pbc=self.radius_graph_pbc,
+                            graphgps_transform=self.graphgps_transform)
 
-        for step in traj:
-            data_object = self.ase_to_torch_geom(step)
-            if data_object is not None:
-                data_list.append(data_object)
+        with ProcessPoolExecutor(mp_context=ctx) as executor:
+            for filename in local_file_list:
+                try:
+                    traj = read(filename, ":", parallel=False)
+                except Exception as exc:
+                    print(f"Failed to read {filename}: {exc}. Skipping ..", flush=True)
+                    continue
+
+                futures = [executor.submit(convertor, chunk) for chunk in _chunk_iterable(traj, 1000)]
+                for future in tqdm(as_completed(futures),
+                                   total=len(futures),
+                                   desc=f"Processing {filename}",
+                                   disable=(self.rank != 0)):
+                    data_objects = future.result()
+                    if data_objects is not None:
+                        data_list.extend(data_objects)
+
         return data_list
 
     def check_forces_values(self, forces):
@@ -574,9 +607,6 @@ if __name__ == "__main__":
 
     timer.stop()
 
-    precision = args.precision.lower() if args.precision is not None else "fp32"
-    config["NeuralNetwork"]["Training"]["precision"] = precision
-
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
@@ -600,6 +630,8 @@ if __name__ == "__main__":
     )
 
     ##################################################################################################################
+
+    precision = args.precision.lower() if args.precision is not None else "fp32"
 
     hydragnn.train.train_validate_test(
         model,
