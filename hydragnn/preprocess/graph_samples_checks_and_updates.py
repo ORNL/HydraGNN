@@ -153,16 +153,22 @@ class RadiusGraphPBC(RadiusGraph):
         cell_np = data.cell.cpu().numpy()
         pbc_list = data.pbc.cpu().tolist()
 
+        # vesin doesn't support mixed PBC (e.g., [True, True, False])
+        # Workaround: set non-periodic directions to a large cell size
+        # so no neighbors are found across those boundaries
+        cell_for_vesin, pbc_for_vesin = self._handle_mixed_pbc(
+            cell_np, pbc_list, pos_np, self.r
+        )
+
+        # Create ASE Atoms object for vesin
+        ase_atoms = ase.Atoms(positions=pos_np, cell=cell_for_vesin, pbc=pbc_for_vesin)
+
         cutoff = self.r
         cutoff_multiplier = 1.25
         max_attempts = 3
 
         for attempt_num in range(max_attempts):
-            # Create ASE Atoms object for vesin
-            ase_atoms = ase.Atoms(positions=pos_np, cell=cell_np, pbc=pbc_list)
-
-            # Use vesin for fast neighbor list computation
-            # Pass to vesin with a= parameter (same as ASE's API)
+            # Use vesin for fast neighbor list computation (drop-in replacement for ASE)
             edge_src, edge_dst, edge_cell_shifts = vesin.ase_neighbor_list(
                 "ijS",
                 a=ase_atoms,
@@ -170,8 +176,10 @@ class RadiusGraphPBC(RadiusGraph):
             )
 
             # Compute edge lengths from positions and shifts
-            # vec = pos[dst] - pos[src] + shift @ cell
-            edge_vec = pos_np[edge_dst] - pos_np[edge_src] + edge_cell_shifts @ cell_np
+            # Use cell_for_vesin for consistency with what vesin used
+            edge_vec = (
+                pos_np[edge_dst] - pos_np[edge_src] + edge_cell_shifts @ cell_for_vesin
+            )
             edge_length = np.linalg.norm(edge_vec, axis=1)
 
             # Remove true self-loops if needed
@@ -223,7 +231,8 @@ class RadiusGraphPBC(RadiusGraph):
             np.stack([edge_src, edge_dst], axis=0).astype(np.int64)
         ).to(device)
 
-        # Compute edge_shifts: multiply integer cell shifts by cell vectors
+        # Compute edge_shifts: multiply integer cell shifts by ORIGINAL cell vectors
+        # (not the modified cell used for vesin, which has large values in non-periodic directions)
         data.edge_shifts = torch.from_numpy(
             (edge_cell_shifts @ cell_np).astype(
                 np.float32 if dtype == torch.float32 else np.float64
@@ -329,6 +338,66 @@ class RadiusGraphPBC(RadiusGraph):
             data.pbc = torch.tensor(data.pbc, dtype=torch.bool, device=device)
 
         return data, device, dtype
+
+    def _handle_mixed_pbc(self, cell_np, pbc_list, pos_np, cutoff):
+        """
+        Handle mixed periodic boundary conditions for vesin compatibility.
+
+        vesin doesn't support mixed PBC (e.g., [True, True, False] for 2D slabs).
+        Workaround: For non-periodic directions, set cell vector large enough
+        that no neighbors will be found across that boundary, then use pbc=[True, True, True].
+
+        Note: We use geometry-based expansion values rather than fixed large values
+        (like 1e6) because vesin crashes with floating point exceptions when cell
+        aspect ratios exceed ~2500:1.
+
+        Parameters
+        ----------
+        cell_np : np.ndarray
+            3x3 cell matrix
+        pbc_list : list of bool
+            Original PBC flags [px, py, pz]
+        pos_np : np.ndarray
+            Atomic positions (N, 3)
+        cutoff : float
+            Neighbor search cutoff distance
+
+        Returns
+        -------
+        cell_modified : np.ndarray
+            Modified cell matrix with large values in non-periodic directions
+        pbc_for_vesin : list of bool
+            Always [True, True, True] if any PBC, otherwise original
+        """
+        # If fully periodic or fully non-periodic, no modification needed
+        if all(pbc_list) or not any(pbc_list):
+            return cell_np, pbc_list
+
+        # Mixed PBC case: need to expand non-periodic directions
+        cell_modified = cell_np.copy()
+
+        for i, is_periodic in enumerate(pbc_list):
+            if not is_periodic:
+                # Use a value based on actual geometry to avoid extreme aspect ratios
+                # Value = 2 * (position extent) + 4 * cutoff
+                # This ensures no neighbors are found across this "boundary"
+                pos_min = pos_np[:, i].min() if len(pos_np) > 0 else 0
+                pos_max = pos_np[:, i].max() if len(pos_np) > 0 else 0
+                extent = pos_max - pos_min
+                large_value = max(extent * 2 + cutoff * 4, 100.0)
+
+                # Set this cell vector to be large in its direction
+                # Preserve direction but scale magnitude
+                cell_vec = cell_modified[i]
+                vec_norm = np.linalg.norm(cell_vec)
+                if vec_norm > 1e-10:
+                    cell_modified[i] = cell_vec / vec_norm * large_value
+                else:
+                    # Cell vector is zero/tiny, create orthogonal large vector
+                    cell_modified[i] = np.zeros(3)
+                    cell_modified[i, i] = large_value
+
+        return cell_modified, [True, True, True]
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
