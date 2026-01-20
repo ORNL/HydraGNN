@@ -1034,7 +1034,7 @@ class AdiosDataset(AbstractBaseDataset):
                         log0(f"found matching array for {vname} in cache as {k}")
                         break
 
-        val = bulk_bcast(self.comm, val, root=0)
+        val = self.comm.bcast(val, root=0)
 
         # if val is the search key
         if type(val) == str:
