@@ -64,7 +64,7 @@ class PNAEqStack(Base):
             "linear",
             "inverse_linear",
         ]
-        self.deg = torch.Tensor(deg)
+        self.deg = self._sanitize_degree(torch.Tensor(deg))
         self.edge_dim = edge_dim
         self.num_radial = num_radial
         self.radius = radius
@@ -72,6 +72,22 @@ class PNAEqStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = rbf_BasisLayer(self.num_radial, self.radius)
+
+    @staticmethod
+    def _sanitize_degree(deg: torch.Tensor) -> torch.Tensor:
+        if deg.numel() == 0:
+            return deg.new_ones((1,), dtype=torch.float32)
+
+        deg = deg.to(dtype=torch.float32)
+
+        # Compute max over finite values (this is used to replace +inf)
+        finite = torch.isfinite(deg)
+        max_finite = deg[finite].max() if finite.any() else deg.new_tensor(1.0)
+
+        # Replace NaN/-inf with 1, +inf with max_finite
+        deg = torch.nan_to_num(deg, nan=1.0, neginf=1.0, posinf=max_finite.item())
+
+        return deg.clamp_min(1.0)
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
