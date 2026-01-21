@@ -75,15 +75,17 @@ spin = 1.0  # singlet
 graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
-def ase_to_torch_geom(atoms_chunk, energy_per_atom, radius_graph, radius_graph_pbc, graphgps_transform):
+def ase_to_torch_geom(
+    atoms_chunk, energy_per_atom, radius_graph, radius_graph_pbc, graphgps_transform
+):
     # Require energies and forces to be present
     data_objects = []
     for atoms in atoms_chunk:
         t1 = time.time()
         if (
-                atoms.calc is None
-                or "energy" not in atoms.calc.results
-                or "forces" not in atoms.calc.results
+            atoms.calc is None
+            or "energy" not in atoms.calc.results
+            or "forces" not in atoms.calc.results
         ):
             continue
 
@@ -161,7 +163,7 @@ def ase_to_torch_geom(atoms_chunk, energy_per_atom, radius_graph, radius_graph_p
             data_object = graphgps_transform(data_object)
 
         data_objects.append(data_object)
-        time_taken = round(time.time()-t1, 3)
+        time_taken = round(time.time() - t1, 3)
         # print(f"Worker process {os.getpid()} created data object in {time_taken} seconds")
     return data_objects
 
@@ -240,7 +242,9 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.rank = 0
 
         # distribute files amongst ranks
-        local_files_list = _distribute_files(dirpath, data_type, self.rank, self.world_size)
+        local_files_list = _distribute_files(
+            dirpath, data_type, self.rank, self.world_size
+        )
 
         data_objects = self._process_local_files(local_files_list)
         for obj in data_objects:
@@ -249,7 +253,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
             else:
                 print(
                     f"L2-norm of force tensor exceeds threshold {self.forces_norm_threshold}"
-                    f" - atomistic structure: {obj}")
+                    f" - atomistic structure: {obj}"
+                )
 
         if self.sampling_ratio is not None:
             if not (0 < self.sampling_ratio <= 1):
@@ -263,13 +268,15 @@ class OpenCatalystDataset(AbstractBaseDataset):
         data_list = []
         os.environ["MPI4PY_RC_INITIALIZE"] = "0"
         ctx = multiprocessing.get_context("spawn")
-        convertor = partial(ase_to_torch_geom,
-                            energy_per_atom=self.energy_per_atom,
-                            radius_graph=self.radius_graph,
-                            radius_graph_pbc=self.radius_graph_pbc,
-                            graphgps_transform=self.graphgps_transform)
+        convertor = partial(
+            ase_to_torch_geom,
+            energy_per_atom=self.energy_per_atom,
+            radius_graph=self.radius_graph,
+            radius_graph_pbc=self.radius_graph_pbc,
+            graphgps_transform=self.graphgps_transform,
+        )
 
-        nw = int(os.environ.get('SLURM_CPUS_PER_TASK', 8)) - 1
+        nw = int(os.environ.get("SLURM_CPUS_PER_TASK", 8)) - 1
         # with ThreadPoolExecutor(mp_context=ctx, max_workers=nw) as executor:
         with ThreadPoolExecutor(max_workers=nw) as executor:
             for filename in local_file_list:
@@ -279,11 +286,16 @@ class OpenCatalystDataset(AbstractBaseDataset):
                     print(f"Failed to read {filename}: {exc}. Skipping ..", flush=True)
                     continue
 
-                futures = [executor.submit(convertor, chunk) for chunk in _chunk_iterable(traj, 1000)]
-                for future in tqdm(as_completed(futures),
-                                   total=len(futures),
-                                   desc=f"Processing {filename}",
-                                   disable=(self.rank != 0)):
+                futures = [
+                    executor.submit(convertor, chunk)
+                    for chunk in _chunk_iterable(traj, 1000)
+                ]
+                for future in tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc=f"Processing {filename}",
+                    disable=(self.rank != 0),
+                ):
                     data_objects = future.result()
                     if data_objects is not None:
                         data_list.extend(data_objects)
