@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 import random
 import multiprocessing
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from tqdm import tqdm
 
@@ -270,7 +270,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
                             graphgps_transform=self.graphgps_transform)
 
         nw = int(os.environ.get('SLURM_CPUS_PER_TASK', 8)) - 1
-        with ProcessPoolExecutor(mp_context=ctx, max_workers=nw) as executor:
+        # with ThreadPoolExecutor(mp_context=ctx, max_workers=nw) as executor:
+        with ThreadPoolExecutor(max_workers=nw) as executor:
             for filename in local_file_list:
                 try:
                     traj = read(filename, ":", parallel=False)
