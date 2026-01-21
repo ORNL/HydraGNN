@@ -1,12 +1,13 @@
 #!/bin/bash
-#SBATCH -A CPH161
+#SBATCH -A ABC123
 #SBATCH -J HydraGNN
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
-#SBATCH -t 06:00:00
+#SBATCH -t 01:00:00
 #SBATCH -p batch
-#SBATCH -N 8626
-#SBATCH -C nvme
+#SBATCH -N 10
+##SBATCH -q debug
+##SBATCH -C nvme
 ##SBATCH --signal=SIGUSR1@180
 
 set -euo pipefail
@@ -33,7 +34,6 @@ export PYTHONNOUSERSITE=1
 
 INSTALL_ROOT="/lustre/orion/lrn070/world-shared/AmSC_HydraGNN_GFM"
 
-INSTALL_TARBALL="HydraGNN-Installation-Frontier.tar.gz"
 INSTALL_DIR="HydraGNN-Installation-Frontier"
 
 MODULE_SCRIPT="${INSTALL_ROOT}/module-to-load-frontier-rocm640.sh"
@@ -78,11 +78,9 @@ function check_badnodes()
 
 function setup_install_tree()
 {
-    local TAR="${INSTALL_ROOT}/${INSTALL_TARBALL}"
     local DIR="${INSTALL_ROOT}/${INSTALL_DIR}"
 
     echo "INSTALL_ROOT    = ${INSTALL_ROOT}"
-    echo "INSTALL_TARBALL = ${INSTALL_TARBALL}"
     echo "INSTALL_DIR     = ${INSTALL_DIR}"
     echo "MODULE_SCRIPT   = ${MODULE_SCRIPT}"
     echo "VENV_PATH       = ${VENV_PATH}"
@@ -120,7 +118,7 @@ function run_hpo()
 
     # ---------------- HPO configuration ----------------
     export NNODES="${SLURM_JOB_NUM_NODES}"
-    export NNODES_PER_TRIAL=128
+    export NNODES_PER_TRIAL=1
     export NUM_CONCURRENT_TRIALS=$(( NNODES / NNODES_PER_TRIAL ))
 
     export NTOTGPUS=$(( NNODES * 8 ))
@@ -175,6 +173,9 @@ function run_hpo()
 # Main
 # ============================================================
 
+#export python path to HydragNN
+export PYTHONPATH=$PWD
+
 SRC_DIR="examples/multidataset_hpo"
 WDIR="examples/multidataset_hpo_NN${SLURM_JOB_NUM_NODES}_${SLURM_JOB_ID}"
 
@@ -183,15 +184,15 @@ echo "workdir: ${WDIR}"
 # Create working directory
 mkdir -p "${WDIR}"
 
-# Copy everything except the heavy datasets directory
-rsync -a --exclude 'datasets' "${SRC_DIR}/" "${WDIR}/"
+# Copy everything except the heavy dataset directory
+rsync -a --exclude 'dataset' "${SRC_DIR}/" "${WDIR}/"
 
-# Create a symbolic link for datasets
-ln -s "$(realpath "${SRC_DIR}/datasets")" "${WDIR}/datasets"
+# Create a symbolic link for dataset
+ln -s "$(realpath "${SRC_DIR}/dataset")" "${WDIR}/dataset"
 
 # Sanity check
-if [ ! -L "${WDIR}/datasets" ]; then
-    echo "ERROR: datasets is not a symlink!"
+if [ ! -L "${WDIR}/dataset" ]; then
+    echo "ERROR: dataset is not a symlink!"
     exit 1
 fi
 

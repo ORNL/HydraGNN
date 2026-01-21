@@ -35,7 +35,7 @@ OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
 DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
 DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
 SLURM_JOB_ID = os.environ["SLURM_JOB_ID"]
-OMNISTAT_WRAPPER = os.environ["OMNISTAT_WRAPPER"]
+#OMNISTAT_WRAPPER = os.environ["OMNISTAT_WRAPPER"]
 
 def _parse_results(stdout):
     pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
@@ -75,7 +75,7 @@ def run(trial, dequed=None):
             prefix,
             f"bash -c \"",
             f"touch {DEEPHYPER_LOG_DIR}/trial_map_{trial.id}_\\$SLURM_STEP_ID;",
-            f"{OMNISTAT_WRAPPER} rms;",
+            #f"{OMNISTAT_WRAPPER} rms;",
             python_exe,
             "-u",
             python_script,
@@ -87,13 +87,14 @@ def run(trial, dequed=None):
             f"--batch_size={trial.parameters['batch_size']}",
             f"--multi",
             f"--ddstore",
-            f"--multi_model_list=ANI1x-v3,MPTrj-v3,OC2020-20M-v3,OC2022-v3,qm7x-v3",
+            #f"--multi_model_list=ANI1x-v3,MPTrj-v3,OC2020-20M-v3,OC2022-v3,qm7x-v3",
+            f"--multi_model_list=ANI1x-v3,MPTrj-v3",
             ## debugging
-            # f"--multi_model_list=ANI1x",
+            #f"--multi_model_list=ANI1x-v3",
             # f"--num_samples=1000",
             f"--num_epoch=10",
             f"--log={log_name};",
-            f"{OMNISTAT_WRAPPER} rms --nostep;",
+            #f"{OMNISTAT_WRAPPER} rms --nostep;",
             f"\"",
         ]
     )
@@ -135,10 +136,12 @@ if __name__ == "__main__":
     log_name = "gfm"
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
-    from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
-    from deephyper.problem import HpProblem
-    from deephyper.search.hps import CBO
+    from deephyper.hpo import HpProblem, CBO
     from hydragnn.utils.deephyper import read_node_list
+    from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
+    from hydragnn.utils.deephyper import read_node_list
+
+    problem = HpProblem()
 
     # define the variable you want to optimize
     problem = HpProblem()
@@ -172,19 +175,14 @@ if __name__ == "__main__":
     )
 
     # Define the search method and scalarization
-    # search = CBO(problem, parallel_evaluator, random_state=42, log_dir=log_name)
+    # Note: In newer DeepHyper API, evaluator is passed to search.search(), not CBO constructor
     search = CBO(
         problem,
-        evaluator,
-        acq_func="UCBd", ## UCBd discards aleatoric
+        acq_func="UCB",
         multi_point_strategy="cl_min",  # Constant liar strategy
-        random_state=42,
+        # random_state=42,
         # Location where to store the results
         log_dir=log_name,
-        # Number of threads used to update surrogate model of BO
-        n_jobs=OMP_NUM_THREADS,
-        acq_optimizer="mixedga",
-        acq_optimizer_freq=1,
     )
 
     fname = os.path.join("gfm", "preloaded_results.csv")
@@ -198,7 +196,7 @@ if __name__ == "__main__":
 
     print("Search starts")
     timeout = None
-    results = search.search(max_evals=10000, timeout=timeout)
+    results = search.search(max_evals=200, timeout=timeout, evaluator=evaluator)
     print(results)
 
     sys.exit(0)
