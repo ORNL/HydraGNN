@@ -10,6 +10,7 @@ from contextlib import contextmanager
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.api import ShardingStrategy
+from torch.optim import Optimizer
 
 
 def average_gradients(model, group):
@@ -335,3 +336,45 @@ class MultiTaskModelMP(nn.Module):
             self.decoder.require_backward_grad_sync = (
                 old_decoder_require_backward_grad_sync
             )
+
+
+class DualOptimizer(Optimizer):
+    """
+    A wrapper optimizer that combines two optimizers.
+    """
+
+    def __init__(self, optimizer1: Optimizer, optimizer2: Optimizer):
+        # Optimizer base class requires param_groups,
+        # but we delegate everything to the wrapped optimizers.
+        self.optimizer1 = optimizer1
+        self.optimizer2 = optimizer2
+
+        # Fake param_groups to satisfy base Optimizer API
+        param_groups = optimizer1.param_groups + optimizer2.param_groups
+        defaults = {}
+        super().__init__(param_groups, defaults)
+
+    def zero_grad(self, set_to_none: bool = False):
+        self.optimizer1.zero_grad(set_to_none=set_to_none)
+        self.optimizer2.zero_grad(set_to_none=set_to_none)
+
+    @torch.no_grad()
+    def step(self, closure=None):
+        loss = None
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
+        self.optimizer1.step()
+        self.optimizer2.step()
+        return loss
+
+    def state_dict(self):
+        return {
+            "optimizer1": self.optimizer1.state_dict(),
+            "optimizer2": self.optimizer2.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict):
+        self.optimizer1.load_state_dict(state_dict["optimizer1"])
+        self.optimizer2.load_state_dict(state_dict["optimizer2"])

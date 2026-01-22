@@ -61,6 +61,46 @@ def loss_function_selection(loss_function_string: str):
         ImportError
 
 
+def multitask_optim_state_dict(model, optimizer):
+    """Custom optimizer state dict for MultiTaskModelMP with FSDP"""
+
+    from hydragnn.models import MultiTaskModelMP, DualOptimizer
+
+    assert isinstance(model, MultiTaskModelMP)
+    assert isinstance(optimizer, DualOptimizer)
+
+    ## Need a patch to fix dist.broadcast_object_list
+    import torch.distributed as dist
+
+    _orig = dist.broadcast_object_list
+
+    ## pytorch is not handling correctly with a custom group
+    def _patch_broadcast_object_list(obj_list, src=0, group=None, device=None):
+        # e.g., add debug logging
+        # print(f"[rank {dist.get_rank()}] broadcasting from {src}")
+        return _orig(obj_list, group_src=src, group=group, device=device)
+
+    dist.broadcast_object_list = _patch_broadcast_object_list
+
+    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+    optimizer_state_dict1 = FSDP.full_optim_state_dict(
+        model.encoder, optimizer.optimizer1, rank0_only=False, group=model.shared_pg
+    )
+    optimizer_state_dict2 = FSDP.full_optim_state_dict(
+        model.decoder, optimizer.optimizer2, rank0_only=False, group=model.head_pg
+    )
+    optimizer_state_dict = {
+        "optimizer1": optimizer_state_dict1,
+        "optimizer2": optimizer_state_dict2,
+    }
+
+    ## rollback
+    dist.broadcast_object_list = _orig
+
+    return optimizer_state_dict
+
+
 def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
     """Save both model and optimizer state in a single checkpoint file"""
     if not use_deepspeed:
@@ -100,15 +140,11 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                 model, StateDictType.FULL_STATE_DICT, model_cfg, optim_cfg
             ):
                 model_state_dict = model.state_dict()
-                if use_multitask:
-                    ## MultiTaskModelMP uses standard optimizer
-                    optimizer_state_dict = optimizer.state_dict()
-                else:
-                    optimizer_state_dict = (
-                        FSDP.optim_state_dict(model, optimizer)
-                        if not use_multitask
-                        else optimizer.state_dict()
-                    )
+                optimizer_state_dict = (
+                    multitask_optim_state_dict(model, optimizer)
+                    if not use_multitask
+                    else optimizer.state_dict()
+                )
         else:
             model_state_dict = model.state_dict()
             if isinstance(optimizer, ZeroRedundancyOptimizer):
@@ -259,6 +295,7 @@ def load_existing_model(
                     if use_multitask:
                         ## MultiTaskModelMP uses standard optimizer
                         optimizer_state_dict = checkpoint["optimizer_state_dict"]
+
                     else:
                         optimizer_state_dict = FSDP.optim_state_dict_to_load(
                             model, optimizer, checkpoint["optimizer_state_dict"]

@@ -40,7 +40,7 @@ import adios2 as ad2
 
 import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
-from hydragnn.models import MultiTaskModelMP
+from hydragnn.models import MultiTaskModelMP, DualOptimizer
 from contextlib import nullcontext
 
 ## FIMME
@@ -582,7 +582,9 @@ if __name__ == "__main__":
         ## It initializes encoder and decoder with DDP
         model = MultiTaskModelMP(model, branch_id, branch_group)
         ## creating optimizer and scheduler after creating MultiTaskModelMP
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        optimizer1 = torch.optim.AdamW(model.encoder.parameters(), lr=learning_rate)
+        optimizer2 = torch.optim.AdamW(model.decoder.parameters(), lr=learning_rate)
+        optimizer = DualOptimizer(optimizer1, optimizer2)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
