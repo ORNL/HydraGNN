@@ -8,7 +8,7 @@ import argparse
 import importlib.util
 
 # Path to the outer directory that contains 'ase_db_backends'
-local_path = "/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2025/HydraGNN/examples/open_molecules_2025/fairchem/core/datasets"
+local_path = "/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN/examples/open_polymers_2026/fairchem/core/datasets"
 
 # Ensure this path is searched first
 sys.path.insert(0, local_path)
@@ -62,7 +62,7 @@ except ImportError:
 
 import subprocess
 from hydragnn.utils.distributed import nsplit
-from omol25 import OMol2025
+from opoly26 import OPoly2026
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -86,7 +86,7 @@ if __name__ == "__main__":
         help="preprocess only (no training)",
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="omol25_energy.json"
+        "--inputfile", help="input file", type=str, default="opoly26_energy.json"
     )
     parser.add_argument(
         "--energy_per_atom",
@@ -177,16 +177,16 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OMol25" if args.log is None else args.log
+    log_name = "OPoly26" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OMol25" if args.modelname is None else args.modelname
+    modelname = "OPoly26" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
-        trainset = OMol2025(
+        trainset = OPoly2026(
             os.path.join(datadir),
             config,
             data_type="train",
@@ -202,7 +202,7 @@ if __name__ == "__main__":
             stratify_splitting=False,
         )
         valset = [*valset1, *valset2]
-        testset = OMol2025(
+        testset = OPoly2026(
             os.path.join(datadir),
             config,
             data_type="val",
