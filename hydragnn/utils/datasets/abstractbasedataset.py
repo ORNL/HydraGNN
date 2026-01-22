@@ -58,6 +58,9 @@ class AbstractBaseDataset(torch.utils.data.Dataset, ABC):
                         "omol25": torch.tensor([[8]]),
                         "qcml": torch.tensor([[9]]),
                         "odac23": torch.tensor([[10]]),
+                        "nabla2dft": torch.tensor([[11]]),
+                        "oc2025": torch.tensor([[12]]),
+                        "opoly2026": torch.tensor([[13]]),
                     }
                 obj.dataset_name = self.dataset_name_dict.get(
                     self.dataset_name, torch.tensor([[-1]])
