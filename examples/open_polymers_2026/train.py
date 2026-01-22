@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "OPoly26" if args.modelname is None else args.modelname
+    modelname = "OPoly2026" if args.modelname is None else args.modelname
     if args.preonly:
         ## local data
         trainset = OPoly2026(
