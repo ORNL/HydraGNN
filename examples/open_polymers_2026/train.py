@@ -177,7 +177,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "OPoly26" if args.log is None else args.log
+    log_name = "OPoly2026" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
