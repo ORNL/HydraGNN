@@ -58,13 +58,37 @@
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0, 1.0, 1.0,1.0, 1.0, 1.0]
+            "task_weights": [1.0, 1.0, 1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["x2x3_vec","sum","sums_vec","sum_linear","x","xx2_vec"],
-            "output_index": [ 2, 0, 1, 2, 1, 0],
-            "type": ["node","graph","graph","graph","node","node"],
+            "node_features": {
+                "xx2_vec": {
+                    "dim": 2,
+                    "role": "output"
+                },
+                "x": {
+                    "dim": 1,
+                    "role": "input"
+                },
+                "x2x3_vec": {
+                    "dim": 2,
+                    "role": "output"
+                }
+            },
+            "graph_features": {
+                "sum": {
+                    "dim": 1,
+                    "role": "output"
+                },
+                "sums_vec": {
+                    "dim": 2,
+                    "role": "output"
+                },
+                "sum_linear": {
+                    "dim": 1,
+                    "role": "output"
+                }
+            },
             "denormalize_output": false
         },
         "Training": {
