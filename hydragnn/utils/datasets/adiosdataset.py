@@ -398,6 +398,9 @@ class AdiosDataset(AbstractBaseDataset):
         self.rank = self.comm.Get_rank()
         self.comm_size = self.comm.Get_size()
 
+        # Cache adios variables 'variable_count' and 'variable_offset' to speed up reading
+        self._adios_file_metadata_cache = dict()
+
         self.nrank_per_node = self.comm.Get_size()
         if os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE"):
             ## Summit
@@ -501,6 +504,7 @@ class AdiosDataset(AbstractBaseDataset):
             self.subset_count = dict()
 
             nbytes = 0
+
             t3 = time.time()
             for k in self.keys:
 
@@ -512,22 +516,50 @@ class AdiosDataset(AbstractBaseDataset):
                 #     self._read_smiles_strings(label, f)
                 #     continue
 
-                self.variable_count[k] = self.read0(
-                    f, "%s/%s/variable_count" % (label, k)
-                )
-                log0(
-                    "read and bcast:",
-                    "%s/%s/variable_count" % (label, k),
-                    time.time() - t3,
-                )
-                self.variable_offset[k] = self.read0(
-                    f, "%s/%s/variable_offset" % (label, k)
-                )
-                log0(
-                    "read and bcast:",
-                    "%s/%s/variable_offset" % (label, k),
-                    time.time() - t3,
-                )
+                # If adios variable min and max are available from file, use caching to get the count aod offset
+                varmin = int(self.vars[f"{label}/{k}/variable_count"]["Min"])
+                varmax = int(self.vars[f"{label}/{k}/variable_count"]["Max"])
+                if varmin is not None and varmax is not None:
+                    for vartype in ("count", "offset"):
+                        if vartype == "count":
+                            var = self.variable_count
+                        else:
+                            var = self.variable_offset
+
+                        cache_search_key = f"{vartype}:{varmin}_{varmax}"
+                        adios_var_name = f"{label}/{k}/variable_{vartype}"  # "variable_count" or "variable_offset"
+
+                        var[k] = self._get_from_cache_or_file(
+                            cache_search_key, f, adios_var_name
+                        )
+                        log0(
+                            f"reading {adios_var_name} from cache or file",
+                            time.time() - t3,
+                        )
+
+                # no caching available. read count and offset from file
+                else:
+                    log0(
+                        "adios internal file cache not available. reading count and offset information from file"
+                    )
+                    self.variable_count[k] = self.read0(
+                        f, f"{label}/{k}/variable_count"
+                    )
+                    log0(
+                        "read and bcast:",
+                        f"{label}/{k}/variable_count",
+                        time.time() - t3,
+                    )
+
+                    self.variable_offset[k] = self.read0(
+                        f, f"{label}/{k}/variable_offset"
+                    )
+                    log0(
+                        "read and bcast:",
+                        f"{label}/{k}/variable_offset",
+                        time.time() - t3,
+                    )
+
                 self.variable_dim[k] = self.read_attribute0(
                     f, "%s/%s/variable_dim" % (label, k)
                 ).item()
@@ -536,6 +568,7 @@ class AdiosDataset(AbstractBaseDataset):
                     "%s/%s/variable_dim" % (label, k),
                     time.time() - t3,
                 )
+
                 if self.preload:
                     ##  preload data
                     if self.subset is not None:
@@ -790,10 +823,9 @@ class AdiosDataset(AbstractBaseDataset):
 
     def read0(self, f, vname):
         ## rank=0 read and bcast
+        val = None
         if self.rank == 0:
             val = f.read(vname)
-        else:
-            val = None
         val = self.comm.bcast(val, root=0)
         return val
 
@@ -984,6 +1016,32 @@ class AdiosDataset(AbstractBaseDataset):
 
         self.update_data_object(data_object)
         return data_object
+
+    def _get_from_cache_or_file(self, cache_search_key, f, vname):
+        """
+        Search for the adios variable "variable_count" or "variable_offset" in the cache.
+        If found, return the dictionary key, otherwise read the array from file
+        """
+        # root searches in cache. returns cached array if found, otherwise reads from file and return key string
+        val = 0
+        if self.rank == 0:
+            val = f.read(vname)
+
+            for k, v in self._adios_file_metadata_cache.items():
+                if k == cache_search_key:
+                    if np.array_equal(val, v):
+                        val = cache_search_key
+                        log0(f"found matching array for {vname} in cache as {k}")
+                        break
+
+        val = self.comm.bcast(val, root=0)
+
+        # if val is the search key
+        if type(val) == str:
+            return self._adios_file_metadata_cache[val]
+        else:
+            self._adios_file_metadata_cache[cache_search_key] = val
+            return val
 
     def unlink(self):
         """
