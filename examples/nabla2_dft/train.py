@@ -171,7 +171,14 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
             * conversion_constant_from_hartree_to_eV
         )
 
-        x = torch.cat((atomic_numbers, forces), dim=1)
+        x = torch.cat((atomic_numbers, pos, forces), dim=1)
+
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
 
         energy_per_atom = energy.detach().clone() / natoms
 
@@ -182,8 +189,10 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
             cell=cell,
             pbc=pbc,
             atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
             x=x,
             energy=energy,
+            energy_per_atom=energy_per_atom,
             forces=forces,
             graph_attr=graph_attr,
         )
