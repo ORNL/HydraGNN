@@ -328,13 +328,13 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = "nabla2_dft" if args.log is None else args.log
+    log_name = "Nabla2DFT" if args.log is None else args.log
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
-    modelname = "nabla2_dft"
+    modelname = "Nabla2DFT"
 
     if args.preonly:
         if not os.path.exists(train_db_path):
