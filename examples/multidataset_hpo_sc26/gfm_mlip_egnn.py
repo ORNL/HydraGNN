@@ -4,6 +4,7 @@ import runpy
 
 DEFAULT_MPNN_TYPE = "EGNN"
 
+
 def main():
     if not any(arg.startswith("--mpnn_type") for arg in sys.argv):
         sys.argv.append(f"--mpnn_type={DEFAULT_MPNN_TYPE}")
