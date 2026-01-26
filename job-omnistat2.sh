@@ -77,25 +77,21 @@ export HYDRAGNN_DDSTORE_METHOD=1
 export HYDRAGNN_CUSTOM_DATALOADER=1
 export HYDRAGNN_NUM_WORKERS=2
 
-# "ani1x": torch.tensor([[0]]),
-# "qm7x": torch.tensor([[1]]),
-# "mptrj": torch.tensor([[2]]),
-# "alexandria": torch.tensor([[3]]),
-# "transition1x": torch.tensor([[4]]),
-# "omat24": torch.tensor([[5]]),
-# "oc2020_all": torch.tensor([[6]]),
-# "oc2022": torch.tensor([[7]]),
-# "omol25": torch.tensor([[8]]),
-
-export datadir0=ANI1x
-export datadir1=qm7x
+# Dataset ordering matches gfm_deephyper_multi_all_mpnn.py multi_model_list
+export datadir0=Alexandria
+export datadir1=ANI1x
 export datadir2=MPTrj
-export datadir3=Alexandria
-export datadir4=transition1x
-export datadir5=OC2020_all
-export datadir6=OC2022
-export datadir7=OMat24
-export datadir8=OMol25
+export datadir3=OC2020
+export datadir4=OC2022
+export datadir5=ODAC23
+export datadir6=OMat24
+export datadir7=OMol25
+export datadir8=OC2025
+export datadir9=OPoly2026
+export datadir10=Nabla2DFT
+export datadir11=QCML
+export datadir12=QM7-X
+export datadir13=transition1x
 
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
