@@ -383,7 +383,7 @@ if __name__ == "__main__":
 
         ## FIXME: Hard-coded for now. Need to find common variable names
         common_variable_names = [
-            "natoms", 
+            "natoms",
             "atomic_numbers",
             "chemical_composition",
             "x",

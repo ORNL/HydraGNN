@@ -184,7 +184,7 @@ if __name__ == "__main__":
         preloaded_results = pd.read_csv(fname, header=0)
         search.fit_surrogate(preloaded_results)
         t1 = time.time()
-        print("Fit done:", t1-t0)
+        print("Fit done:", t1 - t0)
 
     timeout = None
     results = search.search(max_evals=200, timeout=timeout)
