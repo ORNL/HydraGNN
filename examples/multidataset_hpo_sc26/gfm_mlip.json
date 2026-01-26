@@ -1,0 +1,91 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "MACE",
+            "enable_interatomic_potential": true,
+            "equivariance": true,
+            "radius": 5,
+            "max_neighbours": 20,
+            "num_gaussians": 50,
+	        "radial_type": "bessel",
+            "envelope_exponent": 5,
+            "int_emb_size": 64,
+            "basis_emb_size": 8,
+            "out_emb_size": 128,
+            "num_after_skip": 2,
+            "num_before_skip": 1,
+            "num_radial": 6,
+            "num_spherical": 7,
+            "num_filters": 126,
+            "max_ell": 1,
+            "node_max_ell": 1,
+            "pe_dim": 1,
+	        "global_attn_heads": 8,
+            "global_attn_engine": "",
+            "global_attn_type": "",
+	        "graph_pooling": "add", 
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "use_graph_attr_conditioning": true,
+            "graph_attr_conditioning_mode": "fuse_pool",
+            "output_heads": {
+                "graph":
+                    {
+                        "type": "mlp",
+			            "num_sharedlayers": 2,
+                    	"dim_sharedlayers": 50,
+                        "num_headlayers": 2,
+                        "dim_headlayers": [
+                                64,
+                                64
+                            ]
+                    }
+            },
+	        "energy_peratom_weight": 1.0,
+            "force_weight": 10.0,
+            "input_dim": 1,
+            "pna_deg": null,
+            "edge_dim": 1,
+            "freeze_conv_layers": false,
+            "initial_bias": null,
+            "activation_function": "relu",
+            "SyncBatchNorm": false
+        }, 
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "output_index": [0],
+            "type": ["graph"],
+            "output_dim": [1],
+            "output_names": ["graph_energy"],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 1,
+            "EarlyStopping": true,
+            "perc_train": 0.9,
+            "loss_function_type": "mae",
+            "batch_size": 128,
+            "continue": 0,
+            "startfrom": "",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            },
+            "conv_checkpointing": false,
+            "patience": 10,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "epoch_start": 0,
+	        "precision": "fp64"
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}
+

@@ -80,7 +80,7 @@ class MPTrjDataset(AbstractBaseDataset):
         dirpath,
         config,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         dist=False,
         tmpfs=None,
     ):

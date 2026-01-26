@@ -33,7 +33,7 @@ class OPoly2026(AbstractBaseDataset):
         config,
         data_type,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         dist=False,
         comm=MPI.COMM_WORLD,
     ):

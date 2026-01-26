@@ -87,7 +87,7 @@ class ODAC2023(AbstractBaseDataset):
         config,
         data_type,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         file_cache="/tmp",
         dist=False,
         comm=MPI.COMM_WORLD,
