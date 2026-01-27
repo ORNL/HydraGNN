@@ -736,10 +736,16 @@ class Base(Module):
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                out_dtype = x_graph.dtype
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim),
+                    device=x.device,
+                    dtype=out_dtype,
+                )
                 headvar = torch.zeros(
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
+                    dtype=out_dtype,
                 )
                 if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
@@ -755,15 +761,22 @@ class Base(Module):
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
-                        headvar[mask] = output_head[:, head_dim:] ** 2
+                        headvar[mask] = (output_head[:, head_dim:] ** 2).to(
+                            dtype=out_dtype
+                        )
                 outputs.append(head)
                 outputs_var.append(headvar)
             else:
                 # assuming all node types are the same
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
-                head = torch.zeros((x.shape[0], head_dim), device=x.device)
+                out_dtype = x.dtype
+                head = torch.zeros(
+                    (x.shape[0], head_dim), device=x.device, dtype=out_dtype
+                )
                 headvar = torch.zeros(
-                    (x.shape[0], head_dim * self.var_output), device=x.device
+                    (x.shape[0], head_dim * self.var_output),
+                    device=x.device,
+                    dtype=out_dtype,
                 )
                 if self.num_branches == 1:
                     branchtype = "branch-0"
