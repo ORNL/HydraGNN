@@ -213,22 +213,16 @@ if __name__ == "__main__":
 
         for i in range(len(head_branches)):
             branch = head_branches[i]
+            branch_type = f"branch-{i}"
 
             # Normalize to the multibranch schema required by update_multibranch_heads:
-            # each branch must have a 'type' label and an 'architecture' dictionary.
+            # each branch must have a 'type' label and an 'architecture' dictionary, and
+            # branch names must follow branch-<index> to match dataset_name IDs.
             if "architecture" not in branch:
                 architecture = {k: v for k, v in branch.items() if k != "type"}
-                branch_type = branch.get(
-                    "type", modellist[i] if i < len(modellist) else f"branch-{i}"
-                )
                 branch.clear()
-                branch["type"] = branch_type
                 branch["architecture"] = architecture
-            else:
-                if "type" not in branch:
-                    branch["type"] = (
-                        modellist[i] if i < len(modellist) else f"branch-{i}"
-                    )
+            branch["type"] = branch_type
 
             branch["architecture"]["num_headlayers"] = args.parameters["num_headlayers"]
             branch["architecture"]["dim_headlayers"] = dim_headlayers
