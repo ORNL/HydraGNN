@@ -272,7 +272,7 @@ class Base(Module):
             self.graph_concat_projector = self.graph_concat_projector.to(device)
 
     def _ensure_graph_pool_projector(
-        self, graph_attr_dim: int, channel_dim: int, device
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
     ):
         """Instantiate (or move) projector used when conditioning_mode='fuse_pool'."""
         in_dim = channel_dim + graph_attr_dim
@@ -285,8 +285,13 @@ class Base(Module):
                 Linear(channel_dim, channel_dim),
             )
             self.graph_pool_projector_in_dim = in_dim
-        if self.graph_pool_projector[0].weight.device != device:
-            self.graph_pool_projector = self.graph_pool_projector.to(device)
+        if (self.graph_pool_projector[0].weight.device != device) or (
+            dtype is not None
+            and self.graph_pool_projector[0].weight.dtype != dtype
+        ):
+            self.graph_pool_projector = self.graph_pool_projector.to(
+                device=device, dtype=dtype
+            )
 
     def _apply_graph_conditioning(self, inv_node_feat, batch, data):
         """Apply graph_attr conditioning (FiLM, concat_node, or defer to fuse_pool) to invariant node channels."""
@@ -300,7 +305,9 @@ class Base(Module):
 
         graph_attr = data.graph_attr
 
-        graph_attr = graph_attr.to(inv_node_feat.device).float()
+        graph_attr = graph_attr.to(
+            device=inv_node_feat.device, dtype=inv_node_feat.dtype
+        )
 
         # Batch can be None for single-graph inputs; create a dummy batch in that case.
         if batch is None:
@@ -330,7 +337,9 @@ class Base(Module):
             )
 
         if self.graph_attr_conditioning_mode == "film":
-            self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
+            self._ensure_graph_conditioner(
+                graph_attr.size(-1), inv_node_feat.device
+            )
 
             # FiLM: inv = (1 + scale) * inv + shift, scale/shift are per-graph then broadcast by batch.
             scale_shift = self.graph_conditioner(graph_attr)
@@ -410,6 +419,7 @@ class Base(Module):
             graph_attr_dim=graph_attr.size(-1),
             channel_dim=x_graph.size(-1),
             device=x_graph.device,
+            dtype=x_graph.dtype,
         )
 
         # graph_attr is per-graph; assume batch aligns with x_graph rows
