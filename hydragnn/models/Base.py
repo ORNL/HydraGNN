@@ -286,8 +286,7 @@ class Base(Module):
             )
             self.graph_pool_projector_in_dim = in_dim
         if (self.graph_pool_projector[0].weight.device != device) or (
-            dtype is not None
-            and self.graph_pool_projector[0].weight.dtype != dtype
+            dtype is not None and self.graph_pool_projector[0].weight.dtype != dtype
         ):
             self.graph_pool_projector = self.graph_pool_projector.to(
                 device=device, dtype=dtype
@@ -337,9 +336,7 @@ class Base(Module):
             )
 
         if self.graph_attr_conditioning_mode == "film":
-            self._ensure_graph_conditioner(
-                graph_attr.size(-1), inv_node_feat.device
-            )
+            self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
 
             # FiLM: inv = (1 + scale) * inv + shift, scale/shift are per-graph then broadcast by batch.
             scale_shift = self.graph_conditioner(graph_attr)
