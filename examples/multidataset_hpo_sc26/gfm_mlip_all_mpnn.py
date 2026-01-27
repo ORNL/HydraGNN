@@ -212,23 +212,23 @@ if __name__ == "__main__":
         head_branches = [copy.deepcopy(template) for _ in range(n_models)]
 
         for i in range(len(head_branches)):
-            # Support both nested and flat head configs; create architecture block if missing.
-            if "architecture" not in head_branches[i]:
-                head_branches[i]["architecture"] = {}
-                # migrate flat fields if present
-                if "num_headlayers" in head_branches[i]:
-                    head_branches[i]["architecture"]["num_headlayers"] = head_branches[
-                        i
-                    ].pop("num_headlayers")
-                if "dim_headlayers" in head_branches[i]:
-                    head_branches[i]["architecture"]["dim_headlayers"] = head_branches[
-                        i
-                    ].pop("dim_headlayers")
+            # Ensure all head fields live under an 'architecture' block. If one is not provided,
+            # move every top-level key into architecture and then clear the outer dict.
+            if "architecture" in head_branches[i]:
+                arch = head_branches[i]["architecture"]
+                # pull any stray top-level keys into architecture as well
+                for k in list(head_branches[i].keys()):
+                    if k == "architecture":
+                        continue
+                    arch[k] = head_branches[i].pop(k)
+            else:
+                arch = dict(head_branches[i])  # copy all existing fields
+                head_branches[i].clear()
+                head_branches[i]["architecture"] = arch
 
-            head_branches[i]["architecture"]["num_headlayers"] = args.parameters[
-                "num_headlayers"
-            ]
-            head_branches[i]["architecture"]["dim_headlayers"] = dim_headlayers
+            # Override headlayer hyperparameters
+            arch["num_headlayers"] = args.parameters["num_headlayers"]
+            arch["dim_headlayers"] = dim_headlayers
 
         # Write back the expanded branch list
         config["NeuralNetwork"]["Architecture"]["output_heads"][
