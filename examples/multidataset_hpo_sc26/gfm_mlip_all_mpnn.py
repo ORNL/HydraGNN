@@ -212,23 +212,16 @@ if __name__ == "__main__":
         head_branches = [copy.deepcopy(template) for _ in range(n_models)]
 
         for i in range(len(head_branches)):
-            # Ensure all head fields live under an 'architecture' block. If one is not provided,
-            # move every top-level key into architecture and then clear the outer dict.
+            # Honor existing structure: if an 'architecture' block exists, override inside it;
+            # otherwise override at the top level. Do not move or drop any fields.
             if "architecture" in head_branches[i]:
-                arch = head_branches[i]["architecture"]
-                # pull any stray top-level keys into architecture as well
-                for k in list(head_branches[i].keys()):
-                    if k == "architecture":
-                        continue
-                    arch[k] = head_branches[i].pop(k)
+                head_branches[i]["architecture"]["num_headlayers"] = args.parameters[
+                    "num_headlayers"
+                ]
+                head_branches[i]["architecture"]["dim_headlayers"] = dim_headlayers
             else:
-                arch = dict(head_branches[i])  # copy all existing fields
-                head_branches[i].clear()
-                head_branches[i]["architecture"] = arch
-
-            # Override headlayer hyperparameters
-            arch["num_headlayers"] = args.parameters["num_headlayers"]
-            arch["dim_headlayers"] = dim_headlayers
+                head_branches[i]["num_headlayers"] = args.parameters["num_headlayers"]
+                head_branches[i]["dim_headlayers"] = dim_headlayers
 
         # Write back the expanded branch list
         config["NeuralNetwork"]["Architecture"]["output_heads"][
