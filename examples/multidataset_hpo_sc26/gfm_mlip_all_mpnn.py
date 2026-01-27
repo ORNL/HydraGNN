@@ -212,16 +212,26 @@ if __name__ == "__main__":
         head_branches = [copy.deepcopy(template) for _ in range(n_models)]
 
         for i in range(len(head_branches)):
-            # Honor existing structure: if an 'architecture' block exists, override inside it;
-            # otherwise override at the top level. Do not move or drop any fields.
-            if "architecture" in head_branches[i]:
-                head_branches[i]["architecture"]["num_headlayers"] = args.parameters[
-                    "num_headlayers"
-                ]
-                head_branches[i]["architecture"]["dim_headlayers"] = dim_headlayers
+            branch = head_branches[i]
+
+            # Normalize to the multibranch schema required by update_multibranch_heads:
+            # each branch must have a 'type' label and an 'architecture' dictionary.
+            if "architecture" not in branch:
+                architecture = {k: v for k, v in branch.items() if k != "type"}
+                branch_type = branch.get(
+                    "type", modellist[i] if i < len(modellist) else f"branch-{i}"
+                )
+                branch.clear()
+                branch["type"] = branch_type
+                branch["architecture"] = architecture
             else:
-                head_branches[i]["num_headlayers"] = args.parameters["num_headlayers"]
-                head_branches[i]["dim_headlayers"] = dim_headlayers
+                if "type" not in branch:
+                    branch["type"] = (
+                        modellist[i] if i < len(modellist) else f"branch-{i}"
+                    )
+
+            branch["architecture"]["num_headlayers"] = args.parameters["num_headlayers"]
+            branch["architecture"]["dim_headlayers"] = dim_headlayers
 
         # Write back the expanded branch list
         config["NeuralNetwork"]["Architecture"]["output_heads"][
@@ -436,7 +446,7 @@ if __name__ == "__main__":
             "energy_per_atom",
             "forces",
             "y",
-            #"dataset_name",
+            # "dataset_name",
             "graph_attr",
         ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
