@@ -443,7 +443,7 @@ if __name__ == "__main__":
             "energy_per_atom",
             "forces",
             "y",
-            "dataset_name",
+            #"dataset_name",
             "graph_attr",
         ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)

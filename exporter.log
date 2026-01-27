@@ -1,0 +1,720 @@
+[frontier00427: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00299: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00427: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00729: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00986: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00096: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00299: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00729: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00986: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00096: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier01117: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier01117: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00427: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00427: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00299: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00729: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00986: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00096: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00299: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00986: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00729: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00096: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier01117: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier01117: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00557: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00172: 12:18:33] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00557: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00172: 12:18:33] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00557: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00172: 12:18:33] SMI library API initialized --> version 7.5.0 loaded
+[frontier00557: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00172: 12:18:33] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00857: 12:18:34] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier00857: 12:18:34] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier01244: 12:18:34] Allowed query IPs = ['127.0.0.1', '0.0.0.0']
+[frontier01244: 12:18:34] Runtime library loaded from /opt/rocm-6.4.1/lib/librocm_smi64.so
+[frontier00857: 12:18:34] SMI library API initialized --> version 7.5.0 loaded
+[frontier00857: 12:18:34] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier01244: 12:18:34] SMI library API initialized --> version 7.5.0 loaded
+[frontier01244: 12:18:34] collector_rms: reading job information from prolog/epilog derived file (/tmp/omni_rmsjobinfo)
+[frontier00427: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00427: 12:18:34]    Number of GPU devices = 8
+[frontier00427: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00427: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00427: 12:18:34]    --> Using primary temperature location at edge
+[frontier00427: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00427: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier00427: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier00427: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier00427: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00427: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00427: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00427: 12:18:34]    Number of GPU devices = 8
+[frontier00427: 12:18:34]    Sampling mode = constant
+[frontier00427: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00427: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00427: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00427: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00427: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00427: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier00427: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00427: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00427: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00427: 12:18:34]    enable_proc_io_stats: False
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00096: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00299: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00096: 12:18:34]    Number of GPU devices = 8
+[frontier00299: 12:18:34]    Number of GPU devices = 8
+[frontier00096: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00299: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00427: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00096: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00986: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00427: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier00729: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00299: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00986: 12:18:34]    Number of GPU devices = 8
+[frontier00096: 12:18:34]    --> Using primary temperature location at edge
+[frontier00729: 12:18:34]    Number of GPU devices = 8
+[frontier01117: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00299: 12:18:34]    --> Using primary temperature location at edge
+[frontier00986: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00096: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00427: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00729: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier01117: 12:18:34]    Number of GPU devices = 8
+[frontier00299: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00986: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00096: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00729: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier01117: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00299: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00986: 12:18:34]    --> Using primary temperature location at edge
+[frontier00096: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00729: 12:18:34]    --> Using primary temperature location at edge
+[frontier00299: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier01117: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00986: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00096: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier00729: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00299: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier01117: 12:18:34]    --> Using primary temperature location at edge
+[frontier00986: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier01117: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00986: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00096: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00299: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier00986: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00096: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier01117: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00299: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier00986: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier00096: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00729: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00299: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00986: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier00729: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier01117: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier00986: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier00729: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier01117: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier00986: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00729: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier01117: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier00096: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier01117: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00096: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00096: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00299: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00096: 12:18:34]    Number of GPU devices = 8
+[frontier00299: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00096: 12:18:34]    Sampling mode = constant
+[frontier00299: 12:18:34]    Number of GPU devices = 8
+[frontier00096: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00986: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00299: 12:18:34]    Sampling mode = constant
+[frontier00729: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00299: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier01117: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00096: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00986: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00299: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00729: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00096: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00986: 12:18:34]    Number of GPU devices = 8
+[frontier00299: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier01117: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00729: 12:18:34]    Number of GPU devices = 8
+[frontier00986: 12:18:34]    Sampling mode = constant
+[frontier00299: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00096: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier01117: 12:18:34]    Number of GPU devices = 8
+[frontier00729: 12:18:34]    Sampling mode = constant
+[frontier00986: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00096: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier01117: 12:18:34]    Sampling mode = constant
+[frontier00299: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00729: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00986: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00096: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier01117: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00299: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00986: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00096: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00299: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00729: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00986: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00096: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier01117: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00299: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00729: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00096: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier01117: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00986: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00986: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00729: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier00986: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00172: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier01117: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00096: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00729: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00557: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00986: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00172: 12:18:34]    Number of GPU devices = 8
+[frontier01117: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00096: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00729: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00557: 12:18:34]    Number of GPU devices = 8
+[frontier00986: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00172: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier01117: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00299: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00096: 12:18:34]    enable_proc_io_stats: False
+[frontier00729: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00557: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00986: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00172: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier01117: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00299: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00557: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00172: 12:18:34]    --> Using primary temperature location at edge
+[frontier01117: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00299: 12:18:34]    enable_proc_io_stats: False
+[frontier00729: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00557: 12:18:34]    --> Using primary temperature location at edge
+[frontier00172: 12:18:34]    --> Using HBM temperature location at vram
+[frontier01117: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00986: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00557: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00172: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00729: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00986: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00557: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier01117: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00729: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00986: 12:18:34]    enable_proc_io_stats: False
+[frontier00557: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier01117: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00729: 12:18:34]    enable_proc_io_stats: False
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier01117: 12:18:34]    enable_proc_io_stats: False
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00096: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00096: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00299: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00172: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00096: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00299: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00172: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00557: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00172: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00557: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00557: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00299: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00986: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00729: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00986: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier00729: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier01117: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00172: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00172: 12:18:34]    Number of GPU devices = 8
+[frontier00172: 12:18:34]    Sampling mode = constant
+[frontier00172: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00172: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier01117: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier00172: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00557: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00172: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00557: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00557: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00557: 12:18:34]    Number of GPU devices = 8
+[frontier00557: 12:18:34]    Sampling mode = constant
+[frontier00557: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00557: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00557: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00557: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00986: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00172: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00729: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00172: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier00557: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier01117: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00172: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00557: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00172: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00557: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00172: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00557: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00172: 12:18:34]    enable_proc_io_stats: False
+[frontier00557: 12:18:34]    enable_proc_io_stats: False
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00427: 12:18:34] Telemetry data will be sampled every 1.000 seconds
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00427: 12:18:34] Cached data will be pushed every 5.0 minute(s)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00427: 12:18:34] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier00172: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00172: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier00557: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00557: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier00172: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00557: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier00299: 12:18:34] Telemetry data will be sampled every 1.000 seconds
+[frontier00299: 12:18:34] Cached data will be pushed every 5.0 minute(s)
+[frontier00299: 12:18:34] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier01117: 12:18:34] Telemetry data will be sampled every 1.000 seconds
+[frontier01117: 12:18:34] Cached data will be pushed every 5.0 minute(s)
+[frontier01117: 12:18:34] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00729: 12:18:34] Telemetry data will be sampled every 1.000 seconds
+[frontier00729: 12:18:34] Cached data will be pushed every 5.0 minute(s)
+[frontier00729: 12:18:34] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00172: 12:18:34] Telemetry data will be sampled every 1.000 seconds
+[frontier00172: 12:18:34] Cached data will be pushed every 5.0 minute(s)
+[frontier00172: 12:18:34] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00857: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00857: 12:18:34]    Number of GPU devices = 8
+[frontier00857: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00857: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00857: 12:18:34]    --> Using primary temperature location at edge
+[frontier00857: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00857: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier00857: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier00857: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier00857: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00857: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier00857: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier00857: 12:18:34]    Number of GPU devices = 8
+[frontier00857: 12:18:34]    Sampling mode = constant
+[frontier00857: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier00857: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier00857: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier00857: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier00857: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier00857: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier01244: 12:18:34] 
+Registering metrics for collector: ROCMSMI
+[frontier00857: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier01244: 12:18:34]    Number of GPU devices = 8
+[frontier00857: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier01244: 12:18:34]    GPU topology indexing: Scanning devices from /sys/class/kfd/kfd/topology/nodes
+[frontier00857: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier01244: 12:18:34]    --> Mapping: {0: '0', 1: '1', 2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7'}
+[frontier00857: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier00857: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier00857: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier00857: 12:18:34]    enable_proc_io_stats: False
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier01244: 12:18:34]    --> Using primary temperature location at edge
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier01244: 12:18:34]    --> Using HBM temperature location at vram
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_temperature_celsius -> Temperature (C) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_temperature_memory_celsius -> Memory Temperature (C) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_average_socket_power_watts -> Average Graphics Package Power (W) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_sclk_clock_mhz -> current sclk clock speed (Mhz) (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_mclk_clock_mhz -> current mclk clock speed (Mhz) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_vram_total_bytes -> VRAM Total Memory (B) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_vram_used_percentage -> VRAM Memory in Use (%) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_vram_busy_percentage -> Memory controller activity (%) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_utilization_percentage -> GPU use (%) (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_num_compute_units -> Number of compute units (gauge)
+[frontier01244: 12:18:34]    --> [registered] rocm_compute_unit_occupancy -> Compute unit occupancy (gauge)
+[frontier01244: 12:18:34] 
+Registering metrics for collector: RMSJob
+[frontier01244: 12:18:34] 
+Registering metrics for collector: NETWORK
+[frontier00857: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier00857: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier01244: 12:18:34]    --> [registered] omnistat_network_rx_bytes -> Network received (bytes) (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_network_tx_bytes -> Network transmitted (bytes) (gauge)
+[frontier01244: 12:18:34] 
+Registering metrics for collector: rocprofiler_sdk
+[frontier01244: 12:18:34]    Number of GPU devices = 8
+[frontier01244: 12:18:34]    Sampling mode = constant
+[frontier01244: 12:18:34]    Counters = ['FETCH_SIZE', 'WRITE_SIZE', 'SQ_INSTS_VALU_ADD_F64', 'SQ_INSTS_VALU_MUL_F64', 'SQ_INSTS_VALU_TRANS_F64', 'SQ_INSTS_VALU_FMA_F64', 'SQ_INSTS_VALU_MFMA_MOPS_F64']
+[frontier01244: 12:18:34]    --> [registered] omnistat_hardware_counter (gauge)
+[frontier01244: 12:18:34] 
+Registering metrics for collector: PM_COUNTERS
+[frontier01244: 12:18:34]    collector_pm_counters: scanning files in /sys/cray/pm_counters
+[frontier01244: 12:18:34]    --> [registered] omnistat_vendor_energy_joules -> Node-level energy_joules (J) (gauge)
+[frontier01244: 12:18:34]    --> [Registered] omnistat_vendor_accel_energy_joules -> GPU energy (J) (gauge)
+[frontier01244: 12:18:34]    --> [Registered] omnistat_vendor_accel_power_watts -> GPU power (W) (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_vendor_power_watts -> Node-level power_watts (W) (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_vendor_memory_energy_joules -> Node-level memory_energy_joules (J) (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_vendor_cpu_energy_joules -> Node-level cpu_energy_joules (J) (gauge)
+[frontier00857: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier01244: 12:18:34]    --> [registered] omnistat_vendor_memory_power_watts -> Node-level memory_power_watts (W) (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_vendor_cpu_power_watts -> Node-level cpu_power_watts (W) (gauge)
+[frontier01244: 12:18:34] 
+Registering metrics for collector: HOST
+[frontier01244: 12:18:34]    cpu_load_sampling_interval: 0.0500 secs
+[frontier01244: 12:18:34]    enable_proc_io_stats: False
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_mem_total_bytes (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_mem_free_bytes (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_mem_available_bytes (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_io_read_local_total_bytes (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_io_write_local_total_bytes (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_cpu_load1 (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_cpu_num_physical_cores (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_cpu_num_logical_cores (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_cpu_aggregate_core_utilization (gauge)
+[frontier01244: 12:18:34]    --> [registered] omnistat_host_boot_time_seconds (gauge)
+[frontier01244: 12:18:34]    --> initiated background CPU load sampling thread (interval: 0.05 sec)
+[frontier01244: 12:18:34] [file-based]: reading /tmp/omni_rmsjobinfo 
+[frontier01244: 12:18:34] Telemetry data will be sampled every 1.000 seconds
+[frontier01244: 12:18:34] Cached data will be pushed every 5.0 minute(s)
+[frontier01244: 12:18:34] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00096: 12:18:35] Telemetry data will be sampled every 1.000 seconds
+[frontier00096: 12:18:35] Cached data will be pushed every 5.0 minute(s)
+[frontier00096: 12:18:35] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00557: 12:18:35] Telemetry data will be sampled every 1.000 seconds
+[frontier00857: 12:18:35] Telemetry data will be sampled every 1.000 seconds
+[frontier00986: 12:18:35] Telemetry data will be sampled every 1.000 seconds
+[frontier00557: 12:18:35] Cached data will be pushed every 5.0 minute(s)
+[frontier00857: 12:18:35] Cached data will be pushed every 5.0 minute(s)
+[frontier00986: 12:18:35] Cached data will be pushed every 5.0 minute(s)
+[frontier00557: 12:18:35] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00857: 12:18:35] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00986: 12:18:35] Figure-of-merit (FOM) data will be checked for every 10 seconds
+[frontier00729: 12:23:34] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00172: 12:23:34] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00299: 12:23:34] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00427: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00729: 12:23:35] Metrics pushed successfully!
+[frontier01244: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00172: 12:23:35] Metrics pushed successfully!
+[frontier01117: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00427: 12:23:35] Metrics pushed successfully!
+[frontier00299: 12:23:35] Metrics pushed successfully!
+[frontier01244: 12:23:35] Metrics pushed successfully!
+[frontier00096: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00557: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00857: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00986: 12:23:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01117: 12:23:35] Metrics pushed successfully!
+[frontier00096: 12:23:35] Metrics pushed successfully!
+[frontier00557: 12:23:35] Metrics pushed successfully!
+[frontier00857: 12:23:35] Metrics pushed successfully!
+[frontier00986: 12:23:35] Metrics pushed successfully!
+[frontier00729: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01244: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00729: 12:28:35] Metrics pushed successfully!
+[frontier00172: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01244: 12:28:35] Metrics pushed successfully!
+[frontier00986: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00427: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01117: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00857: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00096: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00172: 12:28:35] Metrics pushed successfully!
+[frontier00299: 12:28:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00986: 12:28:35] Metrics pushed successfully!
+[frontier00427: 12:28:35] Metrics pushed successfully!
+[frontier01117: 12:28:35] Metrics pushed successfully!
+[frontier00857: 12:28:36] Metrics pushed successfully!
+[frontier00096: 12:28:36] Metrics pushed successfully!
+[frontier00299: 12:28:36] Metrics pushed successfully!
+[frontier00557: 12:28:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00557: 12:28:36] Metrics pushed successfully!
+[frontier00729: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01244: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00729: 12:33:35] Metrics pushed successfully!
+[frontier00172: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00986: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00857: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01117: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00096: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00427: 12:33:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01244: 12:33:35] Metrics pushed successfully!
+[frontier00986: 12:33:35] Metrics pushed successfully!
+[frontier00172: 12:33:35] Metrics pushed successfully!
+[frontier00857: 12:33:35] Metrics pushed successfully!
+[frontier01117: 12:33:35] Metrics pushed successfully!
+[frontier00427: 12:33:36] Metrics pushed successfully!
+[frontier00096: 12:33:36] Metrics pushed successfully!
+[frontier00557: 12:33:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00299: 12:33:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00557: 12:33:37] Metrics pushed successfully!
+[frontier00299: 12:33:37] Metrics pushed successfully!
+[frontier00986: 12:38:35] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00096: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00729: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00986: 12:38:36] Metrics pushed successfully!
+[frontier00096: 12:38:36] Metrics pushed successfully!
+[frontier00729: 12:38:36] Metrics pushed successfully!
+[frontier00857: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01244: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00172: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier01117: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00557: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00857: 12:38:36] Metrics pushed successfully!
+[frontier01244: 12:38:36] Metrics pushed successfully!
+[frontier00427: 12:38:36] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00172: 12:38:36] Metrics pushed successfully!
+[frontier01117: 12:38:37] Metrics pushed successfully!
+[frontier00557: 12:38:37] Metrics pushed successfully!
+[frontier00427: 12:38:37] Metrics pushed successfully!
+[frontier00299: 12:38:37] Pushing local node telemetry to VictoriaMetrics endpoint -> http://omnistat.koomie.org:8440
+[frontier00299: 12:38:37] Metrics pushed successfully!
