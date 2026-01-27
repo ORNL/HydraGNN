@@ -44,7 +44,8 @@
                             ]
                     }
             },
-	        "energy_peratom_weight": 1.0,
+	    "task_weights": [1.0],
+	    "energy_peratom_weight": 1.0,
             "force_weight": 10.0,
             "input_dim": 1,
             "pna_deg": null,
