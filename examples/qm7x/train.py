@@ -388,7 +388,7 @@ if __name__ == "__main__":
     ]
     node_feature_dims = [1, 3, 3, 1, 1, 1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset/QM7-X")
+    datadir = os.path.join(dirpwd, "dataset/QM7X")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################

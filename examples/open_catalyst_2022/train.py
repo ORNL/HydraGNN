@@ -112,6 +112,13 @@ def ase_to_torch_geom(
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy, dtype=torch.float32).unsqueeze(0)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
@@ -129,6 +136,7 @@ def ase_to_torch_geom(
             cell=cell,
             pbc=pbc,
             atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
             tags=tags,
             x=x,
             energy=energy_tensor,
