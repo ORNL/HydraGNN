@@ -1,4 +1,4 @@
-import os, json
+import os, json, copy
 import logging
 import sys
 from mpi4py import MPI
@@ -76,7 +76,9 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
-        "--multi_model_list", help="multidataset list", default="OC2020"
+        "--multi_model_list",
+        help="Comma-separated dataset/model names; required when --format multi",
+        default=None,
     )
     parser.add_argument(
         "--num_samples",
@@ -174,23 +176,53 @@ if __name__ == "__main__":
     ]
 
     for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
-        num_branches = len(
-            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]
-        )
-        for i in range(num_branches):
-            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
-                "architecture"
-            ]["num_headlayers"] = args.parameters["num_headlayers"]
-            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
-                "architecture"
-            ]["dim_headlayers"] = dim_headlayers
+        head_cfg = config["NeuralNetwork"]["Architecture"]["output_heads"][
+            head_type
+        ]
 
-        modellist = args.multi_model_list.split(",")
-        print("modellist:", len(modellist))
-        for i in range(len(modellist), num_branches):
-            del config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
-                len(modellist)
+        # Require one template per head type; replicate for each dataset/model.
+        if isinstance(head_cfg, dict):
+            template = head_cfg
+        elif isinstance(head_cfg, (list, tuple)) and len(head_cfg) >= 1:
+            if len(head_cfg) > 1:
+                logging.warning(
+                    "output_heads.%s provides %d entries; using the first as template and ignoring the rest",
+                    head_type,
+                    len(head_cfg),
+                )
+            template = head_cfg[0]
+        else:
+            raise ValueError(
+                f"output_heads.{head_type} must define at least one branch template"
+            )
+
+        if not args.multi_model_list or args.multi_model_list.strip() == "":
+            logging.warning(
+                "--multi_model_list not provided; defaulting to a single branch named 'default'"
+            )
+            modellist = ["default"]
+        else:
+            modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
+        n_models = len(modellist)
+        if n_models == 0:
+            raise ValueError(
+                "--multi_model_list resulted in zero entries; provide at least one dataset/model name"
+            )
+        print("modellist:", n_models)
+
+        # Replicate the template once per model.
+        head_branches = [copy.deepcopy(template) for _ in range(n_models)]
+
+        for i in range(len(head_branches)):
+            head_branches[i]["architecture"]["num_headlayers"] = args.parameters[
+                "num_headlayers"
             ]
+            head_branches[i]["architecture"]["dim_headlayers"] = dim_headlayers
+
+        # Write back the expanded branch list
+        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type] = (
+            head_branches
+        )
 
     equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
     assert (
@@ -246,7 +278,13 @@ if __name__ == "__main__":
     if args.format == "multi":
         ## Reading multiple datasets, which requires the following arguments:
         ## --multi_model_list: the list dataset/model names
-        modellist = args.multi_model_list.split(",")
+        if not args.multi_model_list or args.multi_model_list.strip() == "":
+            logging.warning(
+                "--multi_model_list not provided; defaulting to a single branch named 'default'"
+            )
+            modellist = ["default"]
+        else:
+            modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
         if rank == 0:
             ndata_list = list()
             pna_deg_list = list()
