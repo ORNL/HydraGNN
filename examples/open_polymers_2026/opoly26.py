@@ -33,7 +33,7 @@ class OPoly2026(AbstractBaseDataset):
         config,
         data_type,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         dist=False,
         comm=MPI.COMM_WORLD,
     ):
@@ -176,7 +176,7 @@ class OPoly2026(AbstractBaseDataset):
             graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
             data_object = Data(
-                dataset_name="opoly2026",
+                dataset_name="opoly26",
                 natoms=natoms,
                 pos=pos,
                 cell=cell,
