@@ -176,9 +176,7 @@ if __name__ == "__main__":
     ]
 
     for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
-        head_cfg = config["NeuralNetwork"]["Architecture"]["output_heads"][
-            head_type
-        ]
+        head_cfg = config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]
 
         # Require one template per head type; replicate for each dataset/model.
         if isinstance(head_cfg, dict):
@@ -214,15 +212,28 @@ if __name__ == "__main__":
         head_branches = [copy.deepcopy(template) for _ in range(n_models)]
 
         for i in range(len(head_branches)):
+            # Support both nested and flat head configs; create architecture block if missing.
+            if "architecture" not in head_branches[i]:
+                head_branches[i]["architecture"] = {}
+                # migrate flat fields if present
+                if "num_headlayers" in head_branches[i]:
+                    head_branches[i]["architecture"]["num_headlayers"] = head_branches[
+                        i
+                    ].pop("num_headlayers")
+                if "dim_headlayers" in head_branches[i]:
+                    head_branches[i]["architecture"]["dim_headlayers"] = head_branches[
+                        i
+                    ].pop("dim_headlayers")
+
             head_branches[i]["architecture"]["num_headlayers"] = args.parameters[
                 "num_headlayers"
             ]
             head_branches[i]["architecture"]["dim_headlayers"] = dim_headlayers
 
         # Write back the expanded branch list
-        config["NeuralNetwork"]["Architecture"]["output_heads"][head_type] = (
-            head_branches
-        )
+        config["NeuralNetwork"]["Architecture"]["output_heads"][
+            head_type
+        ] = head_branches
 
     equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
     assert (
