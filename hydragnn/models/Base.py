@@ -403,7 +403,8 @@ class Base(Module):
                 f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
             )
 
-        graph_attr = graph_attr.to(x_graph.device).float()
+        # Preserve the model/input dtype to avoid mixed precision mismatches under fp64 runs.
+        graph_attr = graph_attr.to(device=x_graph.device, dtype=x_graph.dtype)
 
         self._ensure_graph_pool_projector(
             graph_attr_dim=graph_attr.size(-1),
