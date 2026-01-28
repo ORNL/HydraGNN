@@ -231,6 +231,7 @@ pip_retry lmdb
 pip_retry h5py==3.14.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
+pip_retry vesin==0.4.2
 
 # ============================================================
 # CUDA-aware PyTorch (pip wheels)
