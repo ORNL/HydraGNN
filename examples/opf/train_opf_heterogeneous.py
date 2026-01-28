@@ -201,7 +201,9 @@ if __name__ == "__main__":
         testset = HeteroFromHomogeneousDataset(test_base)
     else:
         basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
-        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=None)
+        trainset = SimplePickleDataset(
+            basedir=basedir, label="trainset", var_config=None
+        )
         valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
         testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
 
