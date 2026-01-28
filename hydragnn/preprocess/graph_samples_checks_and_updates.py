@@ -226,6 +226,20 @@ class RadiusGraphPBC(RadiusGraph):
                     edge_cell_shifts,
                 )
 
+        # vesin never returns true self-loops (i→i with shift=[0,0,0])
+        # If loop=True, we need to add them manually
+        if self.loop:
+            n_atoms = data.num_nodes
+            self_src = np.arange(n_atoms, dtype=edge_src.dtype)
+            self_dst = np.arange(n_atoms, dtype=edge_dst.dtype)
+            self_length = np.zeros(n_atoms, dtype=edge_length.dtype)
+            self_shifts = np.zeros((n_atoms, 3), dtype=edge_cell_shifts.dtype)
+
+            edge_src = np.concatenate([edge_src, self_src])
+            edge_dst = np.concatenate([edge_dst, self_dst])
+            edge_length = np.concatenate([edge_length, self_length])
+            edge_cell_shifts = np.vstack([edge_cell_shifts, self_shifts])
+
         # Convert to tensors efficiently
         data.edge_index = torch.from_numpy(
             np.stack([edge_src, edge_dst], axis=0).astype(np.int64)
