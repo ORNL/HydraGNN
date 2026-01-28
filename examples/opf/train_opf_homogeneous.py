@@ -129,9 +129,15 @@ if __name__ == "__main__":
     )
 
     if args.preonly:
-        trainset = [_prepare_sample(d) for d in _subset_for_rank(train_raw, rank, comm_size)]
-        valset = [_prepare_sample(d) for d in _subset_for_rank(val_raw, rank, comm_size)]
-        testset = [_prepare_sample(d) for d in _subset_for_rank(test_raw, rank, comm_size)]
+        trainset = [
+            _prepare_sample(d) for d in _subset_for_rank(train_raw, rank, comm_size)
+        ]
+        valset = [
+            _prepare_sample(d) for d in _subset_for_rank(val_raw, rank, comm_size)
+        ]
+        testset = [
+            _prepare_sample(d) for d in _subset_for_rank(test_raw, rank, comm_size)
+        ]
 
         if args.format == "adios":
             if AdiosWriter is None:
@@ -168,9 +174,15 @@ if __name__ == "__main__":
         testset = AdiosDataset(fname, "testset", comm, var_config=var_config)
     else:
         basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
-        trainset = SimplePickleDataset(basedir=basedir, label="trainset", var_config=var_config)
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=var_config)
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=var_config)
+        trainset = SimplePickleDataset(
+            basedir=basedir, label="trainset", var_config=var_config
+        )
+        valset = SimplePickleDataset(
+            basedir=basedir, label="valset", var_config=var_config
+        )
+        testset = SimplePickleDataset(
+            basedir=basedir, label="testset", var_config=var_config
+        )
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
