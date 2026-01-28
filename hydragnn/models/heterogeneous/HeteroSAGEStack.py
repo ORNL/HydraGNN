@@ -1,5 +1,5 @@
 ##############################################################################
-# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# Copyright (c) 2024, Oak Ridge National Laboratory                          #
 # All rights reserved.                                                       #
 #                                                                            #
 # This file is part of HydraGNN and is distributed under a BSD 3-clause      #
@@ -8,17 +8,19 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from .Base import Base
-from .GATStack import GATStack
-from .GINStack import GINStack
-from .PNAStack import PNAStack
-from .GINStack import GINStack
-from .heterogeneous import (
-    HeteroBase,
-    HeteroGINStack,
-    HeteroSAGEStack,
-    HeteroGATStack,
-    HeteroPNAStack,
-)
-from .create import create_model, create_model_config
-from .MultiTaskModelMP import MultiTaskModelMP, DualOptimizer
+
+from torch_geometric.nn import SAGEConv
+
+from .HeteroBase import HeteroBase
+
+
+class HeteroSAGEStack(HeteroBase):
+    def __init__(self, *args, **kwargs):
+        self.is_edge_model = False
+        super().__init__(*args, **kwargs)
+
+    def get_conv(self, input_dim, output_dim):
+        return SAGEConv(in_channels=input_dim, out_channels=output_dim)
+
+    def __str__(self):
+        return "HeteroSAGEStack"

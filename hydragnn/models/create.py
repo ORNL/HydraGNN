@@ -32,6 +32,12 @@ from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
 from hydragnn.models.AllScAIPStack import AllScAIPStack
 from hydragnn.models.UMAStack import UMAStack
+from hydragnn.models.heterogeneous import (
+    HeteroGINStack,
+    HeteroSAGEStack,
+    HeteroGATStack,
+    HeteroPNAStack,
+)
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -101,6 +107,11 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
+        node_target_type=config["Architecture"].get("node_target_type"),
+        share_relation_weights=config["Architecture"].get(
+            "share_relation_weights", False
+        ),
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
             "equivariant_attn_num_radial", 16
@@ -232,6 +243,9 @@ def create_model(
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    hetero_pooling_mode: str = "sum",
+    node_target_type: str = None,
+    share_relation_weights: bool = False,
     equivariant_attn_lmax: int = 1,
     equivariant_attn_num_radial: int = 16,
     equivariant_attn_feedforward_multiplier: int = 2,
@@ -872,6 +886,120 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
+    elif mpnn_type == "HeteroGIN":
+        model = HeteroGINStack(
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+        )
+
+    elif mpnn_type == "HeteroSAGE":
+        model = HeteroSAGEStack(
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+        )
+
+    elif mpnn_type == "HeteroGAT":
+        model = HeteroGATStack(
+            6,
+            0.05,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+        )
+
+    elif mpnn_type == "HeteroPNA":
+        assert pna_deg is not None, "HeteroPNA requires degree input."
+        model = HeteroPNAStack(
+            pna_deg,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
         )
 
     else:
