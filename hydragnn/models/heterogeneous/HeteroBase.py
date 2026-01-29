@@ -772,3 +772,39 @@ class HeteroBase(Module):
         if self.var_output:
             return outputs, outputs_var
         return outputs
+
+    def loss(self, pred, value, head_index):
+        var = None
+        if self.var_output:
+            var = pred[1]
+            pred = pred[0]
+        if self.ilossweights_nll == 1:
+            raise ValueError("loss_nll() not ready yet")
+        if self.ilossweights_hyperp == 1:
+            return self.loss_hpweighted(pred, value, head_index, var=var)
+        raise ValueError("Unsupported loss weighting configuration")
+
+    def loss_hpweighted(self, pred, value, head_index, var=None):
+        tot_loss = 0
+        tasks_loss = []
+        for ihead in range(self.num_heads):
+            head_pre = pred[ihead]
+            pred_shape = head_pre.shape
+            head_val = value[head_index[ihead]]
+            value_shape = head_val.shape
+            if pred_shape != value_shape:
+                head_val = torch.reshape(head_val, pred_shape)
+            if var is None:
+                tot_loss += (
+                    self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
+                )
+                tasks_loss.append(self.loss_function(head_pre, head_val))
+            else:
+                head_var = var[ihead]
+                tot_loss += (
+                    self.loss_function(head_pre, head_val, head_var)
+                    * self.loss_weights[ihead]
+                )
+                tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
+
+        return tot_loss, tasks_loss
