@@ -2,11 +2,37 @@ import os
 import json
 import logging
 import argparse
+import shutil
+import subprocess
+import sys
 from mpi4py import MPI
 
 import torch
 import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
+import torch_geometric.datasets.opf as tg_opf
+
+
+def _patch_fast_tar_extraction():
+    tar_path = shutil.which("tar")
+    if tar_path is None:
+        return
+
+    original_extract_tar = tg_opf.extract_tar
+
+    def _fast_extract_tar(path: str, folder: str, mode: str = "r:gz", log: bool = True):
+        if log:
+            print(f"Extracting {path}", file=sys.stderr)
+        try:
+            subprocess.run(
+                [tar_path, "-xzf", path, "-C", folder],
+                check=True,
+            )
+        except Exception:
+            original_extract_tar(path, folder, mode=mode, log=log)
+
+    tg_opf.extract_tar = _fast_extract_tar
+
 
 import hydragnn
 from hydragnn.utils.datasets.pickledataset import (
@@ -96,6 +122,7 @@ class HeteroFromHomogeneousDataset:
 
 
 if __name__ == "__main__":
+    _patch_fast_tar_extraction()
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
