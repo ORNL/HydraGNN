@@ -161,6 +161,15 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "activation_function" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["activation_function"] = "relu"
 
+    if "hetero_attention_heads" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["hetero_attention_heads"] = 4
+    if "hetero_attention_negative_slope" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["hetero_attention_negative_slope"] = 0.2
+    if "hetero_edge_type_emb_dim" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["hetero_edge_type_emb_dim"] = 16
+    if "hetero_edge_attr_emb_dim" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["hetero_edge_attr_emb_dim"] = 16
+
     if "SyncBatchNorm" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"] = False
 
