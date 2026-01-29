@@ -24,10 +24,27 @@ def _patch_fast_tar_extraction():
         if log:
             print(f"Extracting {path}", file=sys.stderr)
         try:
-            subprocess.run(
-                [tar_path, "-xzf", path, "-C", folder],
-                check=True,
-            )
+            try:
+                subprocess.run(
+                    [
+                        tar_path,
+                        "--checkpoint=1000",
+                        "--checkpoint-action=dot",
+                        "-xzf",
+                        path,
+                        "-C",
+                        folder,
+                    ],
+                    check=True,
+                )
+                if log:
+                    print("", file=sys.stderr)
+                return
+            except Exception:
+                subprocess.run(
+                    [tar_path, "-xzf", path, "-C", folder],
+                    check=True,
+                )
         except Exception:
             original_extract_tar(path, folder, mode=mode, log=log)
 
