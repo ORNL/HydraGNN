@@ -94,8 +94,6 @@ def _ensure_opf_downloaded(
             num_groups=num_groups,
             topological_perturbations=topological_perturbations,
         )
-    if dist.is_available() and dist.is_initialized():
-        dist.barrier()
     comm.Barrier()
 
 
