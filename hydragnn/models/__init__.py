@@ -19,6 +19,9 @@ from .heterogeneous import (
     HeteroSAGEStack,
     HeteroGATStack,
     HeteroPNAStack,
+    HeteroHGTStack,
+    HeteroHEATStack,
+    HeteroRGATStack,
 )
 from .create import create_model, create_model_config
 from .MultiTaskModelMP import MultiTaskModelMP, DualOptimizer
