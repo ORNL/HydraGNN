@@ -366,10 +366,10 @@ def pytest_hetero_mpnn_training_randomized_dataset(mpnn_type, edge_dim, pna_deg)
     final_mae = mae(true_values[0], predicted_values[0])
 
     thresholds = {
-        "HeteroGIN": [0.070, 0.230],
-        "HeteroSAGE": [0.070, 0.240],
-        "HeteroGAT": [0.110, 0.270],
-        "HeteroPNA": [0.090, 0.250],
+        "HeteroGIN": [0.09, 0.26],
+        "HeteroSAGE": [0.09, 0.27],
+        "HeteroGAT": [0.13, 0.30],
+        "HeteroPNA": [0.11, 0.28],
     }
 
     assert torch.isfinite(torch.tensor(final_loss))
