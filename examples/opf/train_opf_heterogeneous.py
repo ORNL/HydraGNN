@@ -52,6 +52,27 @@ def _load_split(root, split, case_name, num_groups, topological_perturbations):
     return dataset
 
 
+def _ensure_opf_downloaded(
+    root,
+    case_name,
+    num_groups,
+    topological_perturbations,
+    rank,
+    comm,
+):
+    if rank == 0:
+        OPFDataset(
+            root=root,
+            split="train",
+            case_name=case_name,
+            num_groups=num_groups,
+            topological_perturbations=topological_perturbations,
+        )
+    if dist.is_available() and dist.is_initialized():
+        dist.barrier()
+    comm.Barrier()
+
+
 def _subset_for_rank(dataset, rank, world_size):
     rx = list(nsplit(range(len(dataset)), world_size))[rank]
     return [dataset[i] for i in range(rx.start, rx.stop)]
@@ -123,6 +144,15 @@ if __name__ == "__main__":
     log_name = args.modelname
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
+
+    _ensure_opf_downloaded(
+        datadir,
+        args.case_name,
+        args.num_groups,
+        args.topological_perturbations,
+        rank,
+        comm,
+    )
 
     info("Loading OPF splits...")
     train_raw = _load_split(
