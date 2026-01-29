@@ -34,6 +34,65 @@ def _patch_fast_tar_extraction():
     tg_opf.extract_tar = _fast_extract_tar
 
 
+def _opf_release_name(topological_perturbations: bool) -> str:
+    return (
+        "dataset_release_1_nminusone"
+        if topological_perturbations
+        else "dataset_release_1"
+    )
+
+
+def _opf_raw_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
+    return os.path.join(
+        root, _opf_release_name(topological_perturbations), case_name, "raw"
+    )
+
+
+def _opf_tmp_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
+    return os.path.join(
+        _opf_raw_dir(root, case_name, topological_perturbations), "gridopt-dataset-tmp"
+    )
+
+
+def _find_empty_json(root: str):
+    empty = []
+    for dirpath, _, filenames in os.walk(root):
+        for name in filenames:
+            if not name.endswith(".json"):
+                continue
+            path = os.path.join(dirpath, name)
+            try:
+                if os.path.getsize(path) == 0:
+                    empty.append(path)
+            except OSError:
+                empty.append(path)
+    return empty
+
+
+def _reextract_opf_if_needed(root, case_name, num_groups, topological_perturbations):
+    raw_dir = _opf_raw_dir(root, case_name, topological_perturbations)
+    tmp_dir = _opf_tmp_dir(root, case_name, topological_perturbations)
+    raw_files = [f"{case_name}_{i}.tar.gz" for i in range(num_groups)]
+
+    if not os.path.isdir(raw_dir):
+        return
+
+    missing = [
+        name for name in raw_files if not os.path.isfile(os.path.join(raw_dir, name))
+    ]
+    if missing:
+        return
+
+    if os.path.isdir(tmp_dir):
+        empty = _find_empty_json(tmp_dir)
+        if not empty:
+            return
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    for name in raw_files:
+        tg_opf.extract_tar(os.path.join(raw_dir, name), raw_dir)
+
+
 import hydragnn
 from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
@@ -85,13 +144,36 @@ def _ensure_opf_downloaded(
     comm,
 ):
     if rank == 0:
-        OPFDataset(
-            root=root,
-            split="train",
-            case_name=case_name,
-            num_groups=num_groups,
-            topological_perturbations=topological_perturbations,
+        _reextract_opf_if_needed(
+            root,
+            case_name,
+            num_groups,
+            topological_perturbations,
         )
+        try:
+            OPFDataset(
+                root=root,
+                split="train",
+                case_name=case_name,
+                num_groups=num_groups,
+                topological_perturbations=topological_perturbations,
+            )
+        except json.JSONDecodeError:
+            tmp_dir = _opf_tmp_dir(root, case_name, topological_perturbations)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _reextract_opf_if_needed(
+                root,
+                case_name,
+                num_groups,
+                topological_perturbations,
+            )
+            OPFDataset(
+                root=root,
+                split="train",
+                case_name=case_name,
+                num_groups=num_groups,
+                topological_perturbations=topological_perturbations,
+            )
     comm.Barrier()
 
 
