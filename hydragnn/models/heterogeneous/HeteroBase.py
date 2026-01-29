@@ -663,7 +663,9 @@ class HeteroBase(Module):
                 x = node_norms[node_type](x)
                 x = self.activation_function(x)
                 x_dict[node_type] = x
+        return self._decode_from_x_dict(x_dict, batch_dict, data, edge_attr_dict)
 
+    def _decode_from_x_dict(self, x_dict, batch_dict, data, edge_attr_dict):
         x_graph = self._pool_hetero_graph_features(x_dict, batch_dict)
         x_graph = self._apply_graph_pool_conditioning(x_graph, data)
 
@@ -758,19 +760,23 @@ class HeteroBase(Module):
                         )
                         for ID in datasetIDs:
                             mask = data.dataset_name == ID
-                            mask_nodes = torch.repeat_interleave(mask, node_counts)
+                            mask = mask[:, 0]
                             branchtype = f"branch-{ID.item()}"
+                            node_count = node_counts[unique == ID]
+                            if node_count.numel() == 0:
+                                continue
+                            idx_start = torch.sum(node_counts[unique < ID])
+                            idx_end = idx_start + node_count[0]
                             x_node_out = headloc[branchtype](
-                                x=x_node[mask_nodes, :], batch=batch_node[mask_nodes]
+                                x=x_node[idx_start:idx_end],
+                                batch=batch_node[idx_start:idx_end],
                             )
-                            head[mask_nodes] = x_node_out[:, :head_dim]
-                            headvar[mask_nodes] = x_node_out[:, head_dim:] ** 2
+                            head[idx_start:idx_end] = x_node_out[:, :head_dim]
+                            headvar[idx_start:idx_end] = x_node_out[:, head_dim:] ** 2
 
                 outputs.append(head)
                 outputs_var.append(headvar)
 
-        if self.var_output:
-            return outputs, outputs_var
         return outputs
 
     def loss(self, pred, value, head_index):

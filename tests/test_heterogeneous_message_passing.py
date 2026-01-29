@@ -52,26 +52,48 @@ def _build_random_hetero_graph(
 ):
     data = HeteroData()
 
-    data["a"].x = torch.randn(num_nodes_a, input_dim, generator=rng)
-    data["b"].x = torch.randn(num_nodes_b, input_dim, generator=rng)
+    # Graph-level latent signals for higher statistical quality.
+    z_a = torch.randn(input_dim, generator=rng)
+    z_b = torch.randn(input_dim, generator=rng)
 
-    num_edges_ab = max(2, num_nodes_a)
+    data["a"].x = z_a + 0.2 * torch.randn(num_nodes_a, input_dim, generator=rng)
+    data["b"].x = z_b + 0.2 * torch.randn(num_nodes_b, input_dim, generator=rng)
+
+    num_edges_ab = max(2 * num_nodes_a, 4)
     src_ab = torch.randint(0, num_nodes_a, (num_edges_ab,), generator=rng)
     dst_ab = torch.randint(0, num_nodes_b, (num_edges_ab,), generator=rng)
+    src_ab = torch.cat([src_ab, torch.arange(num_nodes_a)])
+    dst_ab = torch.cat(
+        [dst_ab, torch.randint(0, num_nodes_b, (num_nodes_a,), generator=rng)]
+    )
     data[("a", "to", "b")].edge_index = torch.stack([src_ab, dst_ab], dim=0)
-    if edge_dim is not None:
-        data[("a", "to", "b")].edge_attr = torch.randn(
-            num_edges_ab, edge_dim, generator=rng
-        )
 
-    num_edges_ba = max(2, num_nodes_b)
+    num_edges_ba = max(2 * num_nodes_b, 4)
     src_ba = torch.randint(0, num_nodes_b, (num_edges_ba,), generator=rng)
     dst_ba = torch.randint(0, num_nodes_a, (num_edges_ba,), generator=rng)
+    src_ba = torch.cat([src_ba, torch.arange(num_nodes_b)])
+    dst_ba = torch.cat(
+        [dst_ba, torch.randint(0, num_nodes_a, (num_nodes_b,), generator=rng)]
+    )
     data[("b", "to", "a")].edge_index = torch.stack([src_ba, dst_ba], dim=0)
+
     if edge_dim is not None:
-        data[("b", "to", "a")].edge_attr = torch.randn(
-            num_edges_ba, edge_dim, generator=rng
-        )
+        edge_index_ab = data[("a", "to", "b")].edge_index
+        edge_index_ba = data[("b", "to", "a")].edge_index
+
+        xa = data["a"].x[edge_index_ab[0]]
+        xb = data["b"].x[edge_index_ab[1]]
+        base_ab = 0.5 * (xa + xb).mean(dim=1, keepdim=True)
+        data[("a", "to", "b")].edge_attr = base_ab.repeat(
+            1, edge_dim
+        ) + 0.05 * torch.randn(base_ab.size(0), edge_dim, generator=rng)
+
+        xb = data["b"].x[edge_index_ba[0]]
+        xa = data["a"].x[edge_index_ba[1]]
+        base_ba = 0.5 * (xa + xb).mean(dim=1, keepdim=True)
+        data[("b", "to", "a")].edge_attr = base_ba.repeat(
+            1, edge_dim
+        ) + 0.05 * torch.randn(base_ba.size(0), edge_dim, generator=rng)
 
     edge_index_ab = data[("a", "to", "b")].edge_index
     edge_index_ba = data[("b", "to", "a")].edge_index
@@ -93,11 +115,12 @@ def _build_random_hetero_graph(
         )
 
     graph_value = (
-        data["a"].x.mean()
-        + 0.5 * data["b"].x.mean()
+        0.6 * z_a.mean()
+        + 0.4 * z_b.mean()
         + 0.25 * edge_signal_ab
         + 0.25 * edge_signal_ba
         + 0.1 * edge_attr_signal
+        + 0.02 * torch.randn((), generator=rng)
     )
     data.y = graph_value.view(1, 1)
 
@@ -153,6 +176,9 @@ class _HeteroBatchAdapter:
         ("HeteroGIN", None, None),
         ("HeteroSAGE", None, None),
         ("HeteroGAT", 3, None),
+        ("HeteroRGAT", 3, None),
+        ("HeteroHGT", None, None),
+        ("HeteroHEAT", 3, None),
         ("HeteroPNA", 3, [1, 2, 3, 2]),
     ],
 )
@@ -270,7 +296,7 @@ def pytest_hetero_mpnn_training_randomized_dataset(mpnn_type, edge_dim, pna_deg)
     torch.manual_seed(7)
 
     dataset = _build_random_hetero_dataset(
-        num_graphs=10000,
+        num_graphs=30000,
         input_dim=4,
         edge_dim=edge_dim,
         seed=13,
@@ -366,10 +392,10 @@ def pytest_hetero_mpnn_training_randomized_dataset(mpnn_type, edge_dim, pna_deg)
     final_mae = mae(true_values[0], predicted_values[0])
 
     thresholds = {
-        "HeteroGIN": [0.070, 0.230],
-        "HeteroSAGE": [0.070, 0.240],
-        "HeteroGAT": [0.110, 0.270],
-        "HeteroPNA": [0.090, 0.250],
+        "HeteroGIN": [0.05, 0.20],
+        "HeteroSAGE": [0.05, 0.20],
+        "HeteroGAT": [0.05, 0.20],
+        "HeteroPNA": [0.05, 0.20],
     }
 
     assert torch.isfinite(torch.tensor(final_loss))
