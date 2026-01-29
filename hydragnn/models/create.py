@@ -35,6 +35,9 @@ from hydragnn.models.heterogeneous import (
     HeteroSAGEStack,
     HeteroGATStack,
     HeteroPNAStack,
+    HeteroHGTStack,
+    HeteroHEATStack,
+    HeteroRGATStack,
 )
 
 # InteratomicPotential functionality is now implemented via wrapper composition
@@ -111,6 +114,16 @@ def create_model_config(
         ),
         metadata=metadata,
         node_input_dims=node_input_dims,
+        hetero_attention_heads=config["Architecture"].get("hetero_attention_heads", 4),
+        hetero_attention_negative_slope=config["Architecture"].get(
+            "hetero_attention_negative_slope", 0.2
+        ),
+        hetero_edge_type_emb_dim=config["Architecture"].get(
+            "hetero_edge_type_emb_dim", 16
+        ),
+        hetero_edge_attr_emb_dim=config["Architecture"].get(
+            "hetero_edge_attr_emb_dim", 16
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -176,6 +189,10 @@ def create_model(
     share_relation_weights: bool = False,
     metadata=None,
     node_input_dims=None,
+    hetero_attention_heads: int = 4,
+    hetero_attention_negative_slope: float = 0.2,
+    hetero_edge_type_emb_dim: int = 16,
+    hetero_edge_attr_emb_dim: int = 16,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -723,6 +740,91 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+        )
+    elif mpnn_type == "HeteroRGAT":
+        model = HeteroRGATStack(
+            hetero_attention_heads,
+            hetero_attention_negative_slope,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+        )
+    elif mpnn_type == "HeteroHGT":
+        model = HeteroHGTStack(
+            hetero_attention_heads,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+        )
+    elif mpnn_type == "HeteroHEAT":
+        model = HeteroHEATStack(
+            hetero_attention_heads,
+            hetero_edge_type_emb_dim,
+            hetero_edge_attr_emb_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
