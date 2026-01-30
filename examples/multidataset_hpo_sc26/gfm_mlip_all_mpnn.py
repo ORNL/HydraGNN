@@ -679,6 +679,10 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
+    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
+        "enable_interatomic_potential", False
+    )
+
     with context:
         hydragnn.train.train_validate_test(
             model,
@@ -692,6 +696,7 @@ if __name__ == "__main__":
             log_name,
             verbosity,
             create_plots=False,
+            compute_grad_energy=enable_interatomic_potential,
             precision=precision,
         )
 
