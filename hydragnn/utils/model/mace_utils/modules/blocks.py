@@ -766,7 +766,9 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         ):
             if type_head == "graph":
                 head = torch.zeros(
-                    (len(data.dataset_name), head_dim), device=graph_features.device
+                    (len(data.dataset_name), head_dim),
+                    device=graph_features.device,
+                    dtype=graph_features.dtype,
                 )
                 if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](graph_features)
@@ -786,7 +788,11 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
             else:  # Node-level output
                 # assuming all node types are the same
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
-                head = torch.zeros((data.x.shape[0], head_dim), device=data.x.device)
+                head = torch.zeros(
+                    (data.x.shape[0], head_dim),
+                    device=node_features.device,
+                    dtype=node_features.dtype,
+                )
                 if self.num_branches == 1:
                     branchtype = "branch-0"
                     if node_NN_type == "conv":
