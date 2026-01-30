@@ -38,8 +38,15 @@ transform_coordinates = Distance(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
-def _create_pytorch_data_object(index, dataset, energy_per_atom_bool, radius_graph_pbc, radius_graph,
-                                graphgps_transform, forces_norm_threshold):
+def _create_pytorch_data_object(
+    index,
+    dataset,
+    energy_per_atom_bool,
+    radius_graph_pbc,
+    radius_graph,
+    graphgps_transform,
+    forces_norm_threshold,
+):
     try:
         atoms = dataset.get_atoms(index)
 
@@ -71,9 +78,7 @@ def _create_pytorch_data_object(index, dataset, energy_per_atom_bool, radius_gra
         try:
             pbc = pbc_as_tensor(atoms.get_pbc())
         except Exception:
-            print(
-                f"Atomic structure {chemical_formula} does not have pbc", flush=True
-            )
+            print(f"Atomic structure {chemical_formula} does not have pbc", flush=True)
 
         if cell is None or pbc is None:
             cell = torch.eye(3, dtype=torch.float32)
@@ -109,9 +114,7 @@ def _create_pytorch_data_object(index, dataset, energy_per_atom_bool, radius_gra
         )
 
         data_object.y = (
-            data_object.energy_per_atom
-            if energy_per_atom_bool
-            else data_object.energy
+            data_object.energy_per_atom if energy_per_atom_bool else data_object.energy
         )
 
         if data_object.pbc.any():
@@ -238,22 +241,29 @@ class OpenCatalystDataset(AbstractBaseDataset):
                 print(f"{filename} not a valid ase lmdb dataset. Ignoring ...")
                 continue
 
-            partial_func = partial(_create_pytorch_data_object,
-                                   dataset=dataset,
-                                   energy_per_atom_bool=self.energy_per_atom,
-                                   radius_graph_pbc=self.radius_graph_pbc,
-                                   radius_graph=self.radius_graph,
-                                   graphgps_transform=self.graphgps_transform,
-                                   forces_norm_threshold=self.forces_norm_threshold)
+            partial_func = partial(
+                _create_pytorch_data_object,
+                dataset=dataset,
+                energy_per_atom_bool=self.energy_per_atom,
+                radius_graph_pbc=self.radius_graph_pbc,
+                radius_graph=self.radius_graph,
+                graphgps_transform=self.graphgps_transform,
+                forces_norm_threshold=self.forces_norm_threshold,
+            )
 
             nw = int(os.environ.get("SLURM_CPUS_PER_TASK", 8)) - 1
             with ThreadPoolExecutor(max_workers=nw) as executor:
-                futures = [executor.submit(partial_func, index) for index in range(dataset.num_samples)]
+                futures = [
+                    executor.submit(partial_func, index)
+                    for index in range(dataset.num_samples)
+                ]
 
-                for future in tqdm(as_completed(futures),
-                                   total=len(futures),
-                                   desc=f"Processing {filename}",
-                                   disable=(self.rank!=0)):
+                for future in tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc=f"Processing {filename}",
+                    disable=(self.rank != 0),
+                ):
                     data_obj = future.result()
                     if data_obj is not None:
                         self.dataset.append(data_obj)
