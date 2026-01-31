@@ -858,7 +858,7 @@ class AdiosDataset(AbstractBaseDataset):
 
     def setkeys(self, keys):
         for k in keys:
-            assert k in self.keys
+            assert k in self.keys, f"Error reading ADIOS file. {k} not in {self.keys}"
         self.keys = keys
 
     def setsubset(self, subset_istart, subset_iend, preload=False):
@@ -1056,9 +1056,9 @@ class AdiosDataset(AbstractBaseDataset):
     def __del__(self):
         if self.use_ddstore:
             self.ddstore.free()
-        if not self.preload and not self.shmem:
-            self.f.close()
         try:
+            if not self.preload and not self.shmem:
+                self.f.close()
             self.unlink(self)
         except:
             pass
