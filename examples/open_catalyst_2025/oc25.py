@@ -1,5 +1,5 @@
-import os
 import glob
+import os
 import random
 import sys
 import traceback
@@ -16,15 +16,16 @@ from torch_geometric.data import Data
 from torch_geometric.transforms import Distance
 from tqdm import tqdm
 
-from hydragnn.utils.print.print_utils import iterate_tqdm
-from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
+    PBCDistance,
     RadiusGraph,
     RadiusGraphPBC,
-    PBCDistance,
     pbc_as_tensor,
+    should_skip_self_loops,
 )
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distributed import nsplit
+from hydragnn.utils.print.print_utils import iterate_tqdm
 
 # Ensure the bundled fairchem package is importable when not installed system-wide.
 dirpwd = os.path.dirname(os.path.abspath(__file__))
@@ -379,6 +380,8 @@ class OpenCatalystDataset(AbstractBaseDataset):
                 ):
                     data_obj = future.result()
                     if data_obj is not None:
+                        if should_skip_self_loops(data_obj, context="oc25"):
+                            continue
                         self.dataset.append(data_obj)
 
     def len(self):

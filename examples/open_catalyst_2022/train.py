@@ -43,6 +43,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     PBCDistance,
     PBCLocalCartesian,
     pbc_as_tensor,
+    should_skip_self_loops,
 )
 from ase.io import read
 
@@ -159,6 +160,10 @@ def ase_to_torch_geom(
         else:
             data_object = radius_graph(data_object)
             data_object = transform_coordinates(data_object)
+
+        # Skip samples that still contain self-loops
+        if should_skip_self_loops(data_object, context="oc2022"):
+            continue
 
         if not hasattr(data_object, "edge_shifts"):
             data_object.edge_shifts = torch.zeros(
