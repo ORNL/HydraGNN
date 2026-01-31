@@ -1056,9 +1056,9 @@ class AdiosDataset(AbstractBaseDataset):
     def __del__(self):
         if self.use_ddstore:
             self.ddstore.free()
-        if not self.preload and not self.shmem:
-            self.f.close()
         try:
+            if not self.preload and not self.shmem:
+                self.f.close()
             self.unlink(self)
         except:
             pass
