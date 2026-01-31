@@ -3,11 +3,18 @@ import glob
 import random
 import sys
 import traceback
+from concurrent.futures import as_completed
+from concurrent.futures.thread import ThreadPoolExecutor
+from functools import partial
+
 import numpy as np
 import torch
 from mpi4py import MPI
+from torch_cluster import radius_graph
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance
+from tqdm import tqdm
+
 from hydragnn.utils.print.print_utils import iterate_tqdm
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
@@ -31,29 +38,127 @@ transform_coordinates = Distance(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
-# Simple greedy load balancer to spread dataset files by sample count.
-def balance_load(dataset_list, nranks, me):
-    indexed = [
-        dict(id=i, num_samples=item["num_samples"])
-        for i, item in enumerate(dataset_list)
-    ]
-    sorted_l = sorted(indexed, key=lambda x: x["num_samples"], reverse=True)
-    heap = [(0, r, []) for r in range(nranks)]
-    import heapq
+def _create_pytorch_data_object(
+    index,
+    dataset,
+    energy_per_atom_bool,
+    radius_graph_pbc,
+    radius_graph,
+    graphgps_transform,
+    forces_norm_threshold,
+):
+    try:
+        atoms = dataset.get_atoms(index)
 
-    heapq.heapify(heap)
-    for item in sorted_l:
-        load, rank, assigned = heapq.heappop(heap)
-        assigned.append(dataset_list[item["id"]])
-        load += item["num_samples"]
-        heapq.heappush(heap, (load, rank, assigned))
-    for _load, rank, assigned in heap:
-        if rank == me:
+        pos = torch.as_tensor(atoms.get_positions(), dtype=torch.float32)
+        natoms = torch.IntTensor([pos.shape[0]])
+        atomic_numbers = torch.as_tensor(
+            atoms.get_atomic_numbers(),
+            dtype=torch.float32,
+        ).unsqueeze(1)
+
+        energy = torch.as_tensor(
+            atoms.get_total_energy(), dtype=torch.float32
+        ).unsqueeze(0)
+        energy_per_atom = energy.detach().clone() / natoms
+        forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
+
+        chemical_formula = atoms.get_chemical_formula()
+
+        cell = None
+        try:
+            cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(torch.float32)
+        except Exception:
             print(
-                f"load balancing. Rank {rank}: num_samples: {_load}, number of datasets: {len(assigned)}"
+                f"Atomic structure {chemical_formula} does not have cell",
+                flush=True,
             )
-            return assigned
-    return []
+
+        pbc = None
+        try:
+            pbc = pbc_as_tensor(atoms.get_pbc())
+        except Exception:
+            print(f"Atomic structure {chemical_formula} does not have pbc", flush=True)
+
+        if cell is None or pbc is None:
+            cell = torch.eye(3, dtype=torch.float32)
+            pbc = torch.tensor([False, False, False], dtype=torch.bool)
+
+        x = torch.cat([atomic_numbers, pos, forces], dim=1)
+
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
+        charge = atoms.info.get("charge", 0)
+        spin = atoms.info.get("spin", 1)
+        graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+
+        data_object = Data(
+            dataset_name="oc25",
+            natoms=natoms,
+            pos=pos,
+            cell=cell,
+            pbc=pbc,
+            edge_index=None,
+            edge_attr=None,
+            atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
+            smiles_string=None,
+            x=x,
+            energy=energy,
+            energy_per_atom=energy_per_atom,
+            forces=forces,
+            graph_attr=graph_attr,
+        )
+
+        data_object.y = (
+            data_object.energy_per_atom if energy_per_atom_bool else data_object.energy
+        )
+
+        if data_object.pbc.any():
+            try:
+                data_object = radius_graph_pbc(data_object)
+                data_object = transform_coordinates_pbc(data_object)
+            except Exception:
+                print(
+                    "Structure could not successfully apply one or both of the pbc radius graph and positional transform",
+                    flush=True,
+                )
+                data_object = radius_graph(data_object)
+                data_object = transform_coordinates(data_object)
+        else:
+            data_object = radius_graph(data_object)
+            data_object = transform_coordinates(data_object)
+
+        if not hasattr(data_object, "edge_shifts"):
+            data_object.edge_shifts = torch.zeros(
+                (data_object.edge_index.size(1), 3), dtype=torch.float32
+            )
+
+        data_object.pbc = data_object.pbc.int()
+
+        if graphgps_transform is not None:
+            data_object = graphgps_transform(data_object)
+
+        if check_forces_values(data_object.forces, forces_norm_threshold):
+            return data_object
+        else:
+            print(
+                f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {forces_norm_threshold} - atomistic structure: {chemical_formula}",
+                flush=True,
+            )
+            return None
+
+    except Exception as e:
+        print(f"Exception: {e}\nTraceback: {traceback.format_exc()}")
+        return None
+
+
+def check_forces_values(forces, forces_norm_threshold):
+    norms = torch.norm(forces, p=2, dim=1)
+    return torch.all(norms < forces_norm_threshold).item()
 
 
 class OpenCatalystDataset(AbstractBaseDataset):
@@ -100,37 +205,10 @@ class OpenCatalystDataset(AbstractBaseDataset):
             self.rank = 0
         self.comm = comm
 
-        dataset_list = self._get_datasets_assigned_to_me(dirpath, data_type)
+        all_files = self._get_all_files(dirpath, data_type)
+        my_files = list(nsplit(all_files, self.world_size))[self.rank]
 
-        for dataset_dict in dataset_list:
-            fullpath = dataset_dict["dataset_fullpath"]
-            try:
-                dataset = AseDBDataset(config=dict(src=fullpath))
-            except ValueError:
-                print(f"{fullpath} not a valid ase lmdb dataset. Ignoring ...")
-                continue
-
-            if data_type == "train":
-                rx = list(range(dataset.num_samples))
-            else:
-                rx = list(nsplit(list(range(dataset.num_samples)), self.world_size))[
-                    self.rank
-                ]
-
-            print(
-                f"Rank: {self.rank}, dataname: {fullpath}, data_type: {data_type}, num_samples: {dataset.num_samples}, len(rx): {len(rx)}"
-            )
-
-            verbosity = 2
-            progress_iter = iterate_tqdm(
-                rx,
-                verbosity_level=verbosity,
-                desc=f"Rank {self.rank} {os.path.basename(fullpath)} [{data_type}]",
-                leave=False,
-            )
-
-            for index in progress_iter:
-                self._create_pytorch_data_object(dataset, index)
+        self._process_local_files(my_files)
 
         print(
             self.rank,
@@ -141,161 +219,54 @@ class OpenCatalystDataset(AbstractBaseDataset):
 
         random.shuffle(self.dataset)
 
-    def _get_datasets_assigned_to_me(self, dirpath, data_type):
-        datasets_info = []
-
-        # Gather the list of ASE LMDB shards
+    def _get_all_files(self, dirpath, data_type):
         total_file_list = None
         if self.rank == 0:
             total_file_list = glob.glob(
                 os.path.join(dirpath, data_type, "*.aselmdb"), recursive=False
             )
         total_file_list = self.comm.bcast(total_file_list, root=0)
+        total_file_list.sort()
+        return total_file_list
 
-        # Early exit if nothing found
-        if total_file_list is None or len(total_file_list) == 0:
-            return []
-
-        # Compute sample counts on a subset of files per rank
-        rx_files = list(nsplit(total_file_list, self.world_size))[self.rank]
-        for fullpath in rx_files:
+    def _process_local_files(self, my_files):
+        """
+        Process files assigned to this MPI rank.
+        Rank spawns threads to process samples in parallel.
+        """
+        for filename in my_files:
             try:
-                dataset = AseDBDataset(config=dict(src=fullpath))
+                dataset = AseDBDataset(config=dict(src=filename))
             except ValueError:
-                print(f"{fullpath} is not a valid ASE LMDB dataset. Ignoring ...")
+                print(f"{filename} not a valid ase lmdb dataset. Ignoring ...")
                 continue
-            datasets_info.append(
-                {"dataset_fullpath": fullpath, "num_samples": dataset.num_samples}
+
+            partial_func = partial(
+                _create_pytorch_data_object,
+                dataset=dataset,
+                energy_per_atom_bool=self.energy_per_atom,
+                radius_graph_pbc=self.radius_graph_pbc,
+                radius_graph=self.radius_graph,
+                graphgps_transform=self.graphgps_transform,
+                forces_norm_threshold=self.forces_norm_threshold,
             )
 
-        # Share sample counts across ranks
-        _all = self.comm.allgather(datasets_info)
-        all_datasets_info = [item for sub in _all for item in sub]
+            nw = int(os.environ.get("SLURM_CPUS_PER_TASK", 8)) - 1
+            with ThreadPoolExecutor(max_workers=nw) as executor:
+                futures = [
+                    executor.submit(partial_func, index)
+                    for index in range(dataset.num_samples)
+                ]
 
-        # Assign datasets to ranks for training; for validation every rank sees all datasets
-        if data_type == "train":
-            my_datasets = balance_load(all_datasets_info, self.world_size, self.rank)
-            return my_datasets if my_datasets is not None else []
-        else:
-            return all_datasets_info
-
-    def _create_pytorch_data_object(self, dataset, index):
-        try:
-            atoms = dataset.get_atoms(index)
-
-            pos = torch.as_tensor(atoms.get_positions(), dtype=torch.float32)
-            natoms = torch.IntTensor([pos.shape[0]])
-            atomic_numbers = torch.as_tensor(
-                atoms.get_atomic_numbers(),
-                dtype=torch.float32,
-            ).unsqueeze(1)
-
-            energy = torch.as_tensor(
-                atoms.get_total_energy(), dtype=torch.float32
-            ).unsqueeze(0)
-            energy_per_atom = energy.detach().clone() / natoms
-            forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
-
-            chemical_formula = atoms.get_chemical_formula()
-
-            cell = None
-            try:
-                cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(torch.float32)
-            except Exception:
-                print(
-                    f"Atomic structure {chemical_formula} does not have cell",
-                    flush=True,
-                )
-
-            pbc = None
-            try:
-                pbc = pbc_as_tensor(atoms.get_pbc())
-            except Exception:
-                print(
-                    f"Atomic structure {chemical_formula} does not have pbc", flush=True
-                )
-
-            if cell is None or pbc is None:
-                cell = torch.eye(3, dtype=torch.float32)
-                pbc = torch.tensor([False, False, False], dtype=torch.bool)
-
-            x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
-            atomic_number_list = atomic_numbers.tolist()
-            assert len(atomic_number_list) == natoms
-            hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
-            chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
-
-            charge = atoms.info.get("charge", 0)
-            spin = atoms.info.get("spin", 1)
-            graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-
-            data_object = Data(
-                dataset_name="oc25",
-                natoms=natoms,
-                pos=pos,
-                cell=cell,
-                pbc=pbc,
-                edge_index=None,
-                edge_attr=None,
-                atomic_numbers=atomic_numbers,
-                chemical_composition=chemical_composition,
-                smiles_string=None,
-                x=x,
-                energy=energy,
-                energy_per_atom=energy_per_atom,
-                forces=forces,
-                graph_attr=graph_attr,
-            )
-
-            data_object.y = (
-                data_object.energy_per_atom
-                if self.energy_per_atom
-                else data_object.energy
-            )
-
-            if data_object.pbc.any():
-                try:
-                    data_object = self.radius_graph_pbc(data_object)
-                    data_object = transform_coordinates_pbc(data_object)
-                except Exception:
-                    print(
-                        "Structure could not successfully apply one or both of the pbc radius graph and positional transform",
-                        flush=True,
-                    )
-                    data_object = self.radius_graph(data_object)
-                    data_object = transform_coordinates(data_object)
-            else:
-                data_object = self.radius_graph(data_object)
-                data_object = transform_coordinates(data_object)
-
-            if not hasattr(data_object, "edge_shifts"):
-                data_object.edge_shifts = torch.zeros(
-                    (data_object.edge_index.size(1), 3), dtype=torch.float32
-                )
-
-            data_object.pbc = data_object.pbc.int()
-
-            if self.graphgps_transform is not None:
-                data_object = self.graphgps_transform(data_object)
-
-            if self.check_forces_values(data_object.forces):
-                self.dataset.append(data_object)
-            else:
-                print(
-                    f"L2-norm of force tensor is {data_object.forces.norm()} and exceeds threshold {self.forces_norm_threshold} - atomistic structure: {chemical_formula}",
-                    flush=True,
-                )
-
-        except Exception as e:
-            print(
-                f"Rank {self.rank} reading - exception: {e}\nTraceback: {traceback.format_exc()}",
-                flush=True,
-            )
-
-    def check_forces_values(self, forces):
-        norms = torch.norm(forces, p=2, dim=1)
-        return torch.all(norms < self.forces_norm_threshold).item()
+                for future in tqdm(
+                    as_completed(futures),
+                    total=len(futures),
+                    desc=f"Processing {filename}",
+                    disable=(self.rank != 0),
+                ):
+                    data_obj = future.result()
+                    if data_obj is not None:
+                        self.dataset.append(data_obj)
 
     def len(self):
         return len(self.dataset)
