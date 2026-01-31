@@ -219,7 +219,8 @@ class AtomsToGraphs:
             if not isinstance(atoms, ase.atoms.Atoms):
                 atoms = atoms.toatoms()
             data = self.convert(atoms)
-            data_list.append(data)
+            if data is not None:
+                data_list.append(data)
 
         if collate_and_save:
             data, slices = collate(data_list)

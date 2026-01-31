@@ -43,6 +43,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     PBCDistance,
     PBCLocalCartesian,
     pbc_as_tensor,
+    should_skip_self_loops,
 )
 from ase.io import read
 
@@ -112,6 +113,13 @@ def ase_to_torch_geom(
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
+        # Calculate chemical composition
+        atomic_number_list = atomic_numbers.tolist()
+        assert len(atomic_number_list) == natoms
+        ## 118: number of atoms in the periodic table
+        hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
+        chemical_composition = torch.tensor(hist).unsqueeze(1).to(torch.float32)
+
         energy = atoms.get_potential_energy(apply_constraint=False)
         energy_tensor = torch.tensor(energy, dtype=torch.float32).unsqueeze(0)
         energy_per_atom_tensor = energy_tensor.detach().clone() / natoms
@@ -129,6 +137,7 @@ def ase_to_torch_geom(
             cell=cell,
             pbc=pbc,
             atomic_numbers=atomic_numbers,
+            chemical_composition=chemical_composition,
             tags=tags,
             x=x,
             energy=energy_tensor,
@@ -151,6 +160,10 @@ def ase_to_torch_geom(
         else:
             data_object = radius_graph(data_object)
             data_object = transform_coordinates(data_object)
+
+        # Skip samples that still contain self-loops
+        if should_skip_self_loops(data_object, context="oc2022"):
+            continue
 
         if not hasattr(data_object, "edge_shifts"):
             data_object.edge_shifts = torch.zeros(
@@ -206,7 +219,7 @@ class OpenCatalystDataset(AbstractBaseDataset):
         config,
         data_type,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         dist=False,
         sampling_ratio=None,
     ):
