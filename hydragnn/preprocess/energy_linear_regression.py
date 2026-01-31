@@ -1,21 +1,19 @@
-import os, json
-import sys
+import os
 from mpi4py import MPI
 import argparse
-
-import torch
 import numpy as np
 
-import hydragnn
 from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
+import logging
 
-# This import requires having installed the package mpi_list
-try:
-    from mpi_list import Context, DFM
-except ImportError:
-    print("mpi_list requires having installed: https://github.com/frobnitzem/mpi_list")
+
+logger = logging.getLogger("energy_linear_transform")
+logging.basicConfig(
+    format="%(levelname)s %(asctime)s %(message)s",
+    level=os.environ.get("GPS_LOG_LEVEL", logging.DEBUG),
+)
 
 
 def solve_least_squares_svd(A, b):
@@ -30,11 +28,14 @@ def solve_least_squares_svd(A, b):
     return x
 
 
-if __name__ == "__main__":
+def __parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("modelname", help="modelname", type=str, default="ANI1x")
+    parser.add_argument("input_file", type=str, help="Path to the input adios file")
+    parser.add_argument(
+        "output_file", type=str, help="Path to the output adios file to be created"
+    )
     parser.add_argument(
         "--nsample_only",
         help="nsample only",
@@ -51,32 +52,55 @@ if __name__ == "__main__":
         action="store_true",
     )
     args = parser.parse_args()
+    return args
+
+
+def _read_adios_input(adios_input, comm):
+    valset = AdiosDataset(
+        adios_input,
+        "valset",
+        comm,
+        enable_cache=True,
+    )
+    trainset = AdiosDataset(
+        adios_input,
+        "trainset",
+        comm,
+        enable_cache=True,
+    )
+    testset = AdiosDataset(
+        adios_input,
+        "testset",
+        comm,
+        enable_cache=True,
+    )
+
+    return trainset, valset, testset
+
+
+def _write_adios_output(
+    adios_output, trainset, valset, testset, pna_deg, x, modelname, comm
+):
+    adwriter = AdiosWriter(adios_output, comm)
+    adwriter.add("trainset", trainset)
+    adwriter.add("valset", valset)
+    adwriter.add("testset", testset)
+    adwriter.add_global("pna_deg", pna_deg)
+    adwriter.add_global("energy_linear_regression_coeff", x)
+    adwriter.add_global("dataset_name", modelname)
+    adwriter.save()
+
+
+def main():
+    args = __parse_args()
 
     comm = MPI.COMM_WORLD
     comm_rank = comm.Get_rank()
     comm_size = comm.Get_size()
 
-    fname = os.path.join(os.path.dirname(__file__), "./datasets/%s.bp" % args.modelname)
-    print("fname:", fname)
-    trainset = AdiosDataset(
-        fname,
-        "trainset",
-        comm,
-        enable_cache=True,
-    )
-    valset = AdiosDataset(
-        fname,
-        "valset",
-        comm,
-        enable_cache=True,
-    )
-    testset = AdiosDataset(
-        fname,
-        "testset",
-        comm,
-        enable_cache=True,
-    )
+    trainset, valset, testset = _read_adios_input(args.input_file, comm)
     pna_deg = trainset.pna_deg
+    modelname = trainset.dataset_name
 
     ## Iterate over local datasets
     energy_list = list()
@@ -154,26 +178,22 @@ if __name__ == "__main__":
             if comm_rank == 0:
                 energy_list_all = comm.gather(energy_list, root=0)
                 energy_arr = np.concatenate(energy_list_all, axis=0)
-                np.savez(f"{args.modelname}_energy.npz", energy=energy_arr)
+                np.savez(f"{modelname}_energy.npz", energy=energy_arr)
             else:
                 comm.gather(energy_list, root=0)
         else:
             energy_arr = np.concatenate(energy_list, axis=0)
-            np.savez(f"{args.modelname}_energy_rank_{comm_rank}.npz", energy=energy_arr)
+            np.savez(f"{modelname}_energy_rank_{comm_rank}.npz", energy=energy_arr)
 
     ## Writing
-    fname = os.path.join(
-        os.path.dirname(__file__), "./datasets/%s-v2.bp" % args.modelname
-    )
     if comm_rank == 0:
-        print("Saving:", fname)
-    adwriter = AdiosWriter(fname, comm)
-    adwriter.add("trainset", trainset)
-    adwriter.add("valset", valset)
-    adwriter.add("testset", testset)
-    adwriter.add_global("pna_deg", pna_deg)
-    adwriter.add_global("energy_linear_regression_coeff", x)
-    adwriter.add_global("dataset_name", args.modelname.lower())
-    adwriter.save()
+        print(f"Writing output to {args.output_file}")
+    _write_adios_output(
+        args.output_file, trainset, valset, testset, pna_deg, x, modelname.lower(), comm
+    )
 
     print("Done.")
+
+
+if __name__ == "__main__":
+    main()
