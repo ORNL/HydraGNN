@@ -48,8 +48,6 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -177,7 +175,6 @@ if __name__ == "__main__":
             dist=True,
         )
         testset = testset[:]
-
 
         comm.Barrier()
 
