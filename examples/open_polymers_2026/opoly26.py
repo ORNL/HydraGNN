@@ -13,6 +13,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     PBCDistance,
     PBCLocalCartesian,
     pbc_as_tensor,
+    should_skip_self_loops,
     gather_deg,
 )
 from hydragnn.utils.distributed import nsplit
@@ -212,6 +213,10 @@ class OPoly2026(AbstractBaseDataset):
             else:
                 data_object = self.radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
+
+            # Skip samples that still contain self-loops
+            if should_skip_self_loops(data_object, context="opoly26"):
+                continue
 
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):

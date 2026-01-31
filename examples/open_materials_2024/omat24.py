@@ -14,6 +14,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     PBCLocalCartesian,
     pbc_as_tensor,
     gather_deg,
+    should_skip_self_loops,
 )
 from hydragnn.utils.distributed import nsplit
 from utils import balance_load
@@ -272,6 +273,10 @@ class OMat2024(AbstractBaseDataset):
             else:
                 data_object = self.radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
+
+            # Skip samples that still contain self-loops
+            if should_skip_self_loops(data_object, context="omat24"):
+                continue
 
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):
