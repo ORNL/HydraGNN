@@ -858,7 +858,7 @@ class AdiosDataset(AbstractBaseDataset):
 
     def setkeys(self, keys):
         for k in keys:
-            assert k in self.keys
+            assert k in self.keys, f"Error reading ADIOS file. {k} not in {self.keys}"
         self.keys = keys
 
     def setsubset(self, subset_istart, subset_iend, preload=False):
