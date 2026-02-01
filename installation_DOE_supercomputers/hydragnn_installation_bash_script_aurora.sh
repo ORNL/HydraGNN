@@ -1,121 +1,142 @@
 #!/usr/bin/env bash
-# setup_env_aurora.sh
-# Automated setup for HydraGNN env + PyTorch(XPU) + PyG(base) on ALCF Aurora.
+# hydragnn_installation_bash_script_aurora.sh
+#
+# Aurora official approach:
+# - PyTorch: use "module load frameworks" (do NOT pip-install torch+xpu wheels)
+#   https://docs.alcf.anl.gov/aurora/data-science/frameworks/pytorch/
+# - PyG: on Aurora, install base torch_geometric in a venv that inherits system site-packages
+#   https://docs.alcf.anl.gov/aurora/data-science/frameworks/pyg/#pyg-on-aurora
+#
+# Critical robustness patch:
+# - Lmod may reference ZSH_EVAL_CONTEXT even in bash; under `set -u` that can crash.
+# - So we:
+#   (1) export ZSH_EVAL_CONTEXT="" early
+#   (2) temporarily disable nounset (set +u) around module init AND module commands.
 
 set -Eeuo pipefail
 
-# =========================
-# Pretty printing helpers
-# =========================
+# --- Make Lmod safe under nounset/non-interactive shells (nohup) ---
+export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
+
 hr() { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '='; }
 banner() { hr; echo ">>> $1"; hr; }
 subbanner() { echo "-- $1"; }
 
-banner "Starting HydraGNN environment setup on ALCF Aurora ($(date))"
+# Save/restore nounset helper
+_nounset_off() {
+  NOUNSET_WAS_ON=0
+  case "$-" in
+    *u*) NOUNSET_WAS_ON=1; set +u ;;
+  esac
+}
+_nounset_restore() {
+  if [[ "${NOUNSET_WAS_ON:-0}" -eq 1 ]]; then
+    set -u
+  fi
+  unset NOUNSET_WAS_ON
+}
+
+banner "Starting HydraGNN Aurora environment setup ($(date))"
 
 # ============================================================
-# Module initialization
+# Modules (robust under `set -u` + nohup)
 # ============================================================
-banner "Configure Aurora Modules"
+banner "Modules: use Aurora-provided frameworks"
+
+# Ensure module command exists
 if ! command -v module >/dev/null 2>&1; then
+  _nounset_off
+  # Ensure var exists for Lmod internals
+  export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
+
   if [[ -f /etc/profile.d/modules.sh ]]; then
-    # Lmod init (common)
+    # shellcheck disable=SC1091
     source /etc/profile.d/modules.sh
   elif [[ -f /usr/share/lmod/lmod/init/bash ]]; then
+    # shellcheck disable=SC1091
     source /usr/share/lmod/lmod/init/bash
+  elif [[ -f /usr/share/Modules/init/bash ]]; then
+    # shellcheck disable=SC1091
+    source /usr/share/Modules/init/bash
   fi
+  _nounset_restore
 fi
 
 if ! command -v module >/dev/null 2>&1; then
-  echo "❌ 'module' command not found. Are you on an Aurora login/compute node?"
+  echo "❌ 'module' command not found after init. Are you on Aurora?"
   exit 1
 fi
 
+# Run module commands with nounset disabled (Lmod internals may reference unset vars)
+_nounset_off
+export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
+
+echo 'Running "module reset". Resetting modules to system default.'
 module reset
 
-# Aurora stack choices (based on your module avail list)
-module load oneapi/release/2025.2.0
-module load miniforge3/24.3.0-0
-module load cmake/3.31.8
-module load ninja/1.12.1
-module load gcc/13.3.0
-module load git-lfs/3.5.1
+# Optional: uncomment only if you need extra packages from /soft
+# module use /soft/modulefiles
 
-# Optional (uncomment if you want)
-# module unload darshan-runtime/3.4.7
+subbanner "Load Aurora provided PyTorch (XPU) via frameworks module"
+module load frameworks
+
+subbanner "Loaded modules"
+module -t list 2>&1 || true
+
+_nounset_restore
 
 # ============================================================
-# Installation root
+# Install root
 # ============================================================
 banner "Set Base Installation Directory"
 INSTALL_ROOT="${INSTALL_ROOT:-${PWD}/HydraGNN-Installation-Aurora}"
 mkdir -p "$INSTALL_ROOT"
-echo "All installation components will be contained in: $INSTALL_ROOT"
-cd "$INSTALL_ROOT"
+echo "INSTALL_ROOT = $INSTALL_ROOT"
 
 # ============================================================
-# Conda activation
+# Create venv that inherits frameworks packages
 # ============================================================
-banner "Initialize Conda"
-# miniforge3 module should provide conda, but ensure shell integration:
-if [[ -n "${CONDA_EXE:-}" && -f "$(dirname "$CONDA_EXE")/../etc/profile.d/conda.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "$(dirname "$CONDA_EXE")/../etc/profile.d/conda.sh"
-elif [[ -f "${CONDA_ROOT:-}/etc/profile.d/conda.sh" ]]; then
-  # shellcheck disable=SC1091
-  source "${CONDA_ROOT}/etc/profile.d/conda.sh"
-else
-  # fallback: try conda hook
-  if command -v conda >/dev/null 2>&1; then
-    eval "$(conda shell.bash hook)"
-  fi
+banner "Create Python venv (inherits frameworks site-packages)"
+VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
+RECREATE_ENV="${RECREATE_ENV:-0}"
+echo "VENV_PATH    = $VENV_PATH"
+echo "RECREATE_ENV = $RECREATE_ENV"
+
+PYTHON_BIN="$(command -v python3 || true)"
+if [[ -z "$PYTHON_BIN" ]]; then
+  PYTHON_BIN="$(command -v python || true)"
 fi
-
-if ! command -v conda >/dev/null 2>&1; then
-  echo "❌ Conda command not found. Ensure miniforge3/24.3.0-0 is loaded."
+if [[ -z "$PYTHON_BIN" ]]; then
+  echo "❌ python/python3 not found after module load frameworks"
   exit 1
 fi
 
-# ============================================================
-# Create and activate env
-# ============================================================
-banner "Create and Activate Conda Environment"
-VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
-PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
-RECREATE_ENV="${RECREATE_ENV:-0}"
-
-echo "Virtual environment path: $VENV_PATH"
-echo "Python version: ${PYTHON_VERSION}"
+echo "Python used for venv: $PYTHON_BIN"
+"$PYTHON_BIN" --version
 
 if [[ -d "$VENV_PATH" && "$RECREATE_ENV" -eq 1 ]]; then
-  echo "Removing existing conda environment at: $VENV_PATH"
-  conda deactivate >/dev/null 2>&1 || true
-  conda env remove -p "$VENV_PATH" -y || rm -rf "$VENV_PATH"
+  subbanner "Removing existing venv: $VENV_PATH"
+  rm -rf "$VENV_PATH"
 fi
 
-if [[ -d "$VENV_PATH" ]]; then
-  echo "Conda environment already exists at $VENV_PATH"
-else
-  echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
-  conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
+if [[ ! -d "$VENV_PATH" ]]; then
+  subbanner "Creating venv (--system-site-packages)"
+  "$PYTHON_BIN" -m venv --system-site-packages "$VENV_PATH"
 fi
 
 # shellcheck disable=SC1091
-conda activate "$VENV_PATH"
-
-echo "Python in use: $(which python)"
-python --version
+source "$VENV_PATH/bin/activate"
 
 # ============================================================
-# pip helpers + pins
+# pip helpers
 # ============================================================
-banner "pip Helpers and Core Pins"
-PIP_FLAGS=(--upgrade-strategy only-if-needed)
+banner "pip bootstrap"
+python -m pip install -U pip setuptools wheel
 
 pip_retry() {
   local tries=3 delay=3
   for ((i=1; i<=tries; i++)); do
-    if python -m pip install "${PIP_FLAGS[@]}" "$@"; then
+    if python -m pip install --upgrade-strategy only-if-needed "$@"; then
       return 0
     fi
     echo "pip install failed (attempt $i/$tries). Retrying in ${delay}s..."
@@ -124,126 +145,71 @@ pip_retry() {
   return 1
 }
 
-subbanner "Upgrade pip/setuptools/wheel"
-pip_retry --disable-pip-version-check -U pip setuptools wheel
-
-# NumPy pin: keep consistent with a lot of HPC python stacks
-NUMPY_VER="${NUMPY_VER:-1.26.4}"
-subbanner "Install numpy==${NUMPY_VER}"
-pip_retry "numpy==${NUMPY_VER}"
-
-python - <<PY
-import numpy as np
-print("numpy =", np.__version__)
-PY
-
 # ============================================================
-# Core scientific Python dependencies (customize as needed)
+# Sanity check: PyTorch import must work (from frameworks)
 # ============================================================
-banner "Install Core Python Packages"
-pip_retry ninja
-pip_retry pyyaml requests tqdm filelock
-pip_retry "psutil==7.1.0" "sympy==1.14.0" "scipy==1.14.1"
-pip_retry pytest build Cython
-pip_retry "tensorboard==2.20.0" "scikit-learn==1.5.1"
-pip_retry ase "h5py==3.14.0" lmdb
-
-# ============================================================
-# PyTorch XPU (Intel GPU)
-# ============================================================
-banner "Install PyTorch with XPU support"
-# PyTorch upstream provides XPU wheels via the nightly/xpu index URL (commonly used on Intel GPU setups). :contentReference[oaicite:1]{index=1}
-TORCH_XPU_INDEX_URL="${TORCH_XPU_INDEX_URL:-https://download.pytorch.org/whl/nightly/xpu}"
-echo "Installing torch/torchvision/torchaudio from: ${TORCH_XPU_INDEX_URL}"
-pip_retry --index-url "${TORCH_XPU_INDEX_URL}" torch torchvision torchaudio
-
+banner "Sanity check: torch import (from frameworks)"
 python - <<'PY'
 import torch
 print("torch.__version__ =", torch.__version__)
-print("xpu available =", hasattr(torch, "xpu") and torch.xpu.is_available())
+print("torch.xpu.is_available() =", hasattr(torch, "xpu") and torch.xpu.is_available())
 if hasattr(torch, "xpu") and torch.xpu.is_available():
-    print("xpu device count =", torch.xpu.device_count())
-    x = torch.randn(8, device="xpu")
-    print("xpu tensor ok:", x.device, x.dtype, x.shape)
+    print("xpu device_count =", torch.xpu.device_count())
 PY
 
 # ============================================================
-# PyTorch-Geometric (BASE ONLY)
+# PyTorch Geometric: follow ALCF PyG-on-Aurora instructions
 # ============================================================
-banner "Install PyTorch-Geometric (base torch_geometric only)"
-# PyG base library can be installed without optional deps and can utilize Intel GPUs via xpu. :contentReference[oaicite:2]{index=2}
+banner "Install PyTorch Geometric base (torch_geometric)"
+# Per ALCF PyG-on-Aurora: install base torch_geometric only.
 pip_retry torch_geometric
 
 python - <<'PY'
 import torch
 import torch_geometric
-print("torch_geometric =", torch_geometric.__version__)
 print("torch =", torch.__version__)
+print("torch_geometric =", torch_geometric.__version__)
 print("xpu available =", hasattr(torch, "xpu") and torch.xpu.is_available())
 PY
 
 # ============================================================
-# Optional: install PyG optional deps (NOT recommended on XPU by default)
+# Additional python deps (NO torch install here!)
 # ============================================================
-banner "Optional PyG deps (disabled by default)"
-INSTALL_PYG_OPTIONAL="${INSTALL_PYG_OPTIONAL:-0}"
-cat <<EOF
-INFO:
-  On Aurora/XPU, PyG optional deps (torch-sparse/torch-cluster/pyg-lib/...) may not have XPU wheels and often expect CUDA/CPU builds.
-  The base torch_geometric install above is the safe default.
-
-To try anyway (at your own risk), re-run with:
-  INSTALL_PYG_OPTIONAL=1 ./setup_env_aurora.sh
-
-EOF
-
-if [[ "$INSTALL_PYG_OPTIONAL" -eq 1 ]]; then
-  subbanner "Attempting optional deps build/install (CPU/CUDA-oriented; may fail on XPU)"
-  # If you try, do it explicitly and expect to debug compilers/ABI:
-  pip_retry pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv || true
-fi
+banner "Install HydraGNN dependencies (do NOT install torch here)"
+pip_retry "numpy<2" scipy pyyaml requests tqdm filelock psutil
+pip_retry networkx jinja2
+pip_retry tensorboard scikit-learn pytest
+pip_retry ase h5py lmdb
+pip_retry mendeleev
+pip_retry rdkit jarvis-tools pymatgen || true
+pip_retry igraph || true
 
 # ============================================================
-# HydraGNN itself (editable install)
+# Install HydraGNN (editable)
 # ============================================================
 banner "Install HydraGNN (editable)"
-HYDRAGNN_REPO="${HYDRAGNN_REPO:-https://github.com/ORNL/HydraGNN.git}"
-HYDRAGNN_BRANCH="${HYDRAGNN_BRANCH:-main}"
-HYDRAGNN_SRC="${HYDRAGNN_SRC:-${INSTALL_ROOT}/HydraGNN}"
+HYDRAGNN_SRC="${HYDRAGNN_SRC:-${PWD}/HydraGNN}"
+echo "HYDRAGNN_SRC = $HYDRAGNN_SRC"
 
-if [[ ! -d "${HYDRAGNN_SRC}/.git" ]]; then
-  git clone --recursive -b "${HYDRAGNN_BRANCH}" "${HYDRAGNN_REPO}" "${HYDRAGNN_SRC}"
+if [[ -d "$HYDRAGNN_SRC" ]]; then
+  pip_retry -e "$HYDRAGNN_SRC"
+else
+  echo "⚠️  HydraGNN source directory not found at: $HYDRAGNN_SRC"
+  echo "    Export HYDRAGNN_SRC=/path/to/HydraGNN and rerun the HydraGNN install step."
 fi
 
-pushd "${HYDRAGNN_SRC}" >/dev/null
-pip_retry -e . --verbose
-popd >/dev/null
-
 # ============================================================
-# Final Summary
+# Final summary / activation instructions
 # ============================================================
 banner "Final Summary"
 cat <<EOF
 Base install:        $INSTALL_ROOT
-Virtual environment: $VENV_PATH
+Venv (system-site):  $VENV_PATH
 
-Modules to load later:
+To activate later:
   module reset
-  module load oneapi/release/2025.2.0
-  module load miniforge3/24.3.0-0
-  module load cmake/3.31.8
-  module load ninja/1.12.1
-  module load gcc/13.3.0
-  module load git-lfs/3.5.1
-
-Activate:
-  conda activate $VENV_PATH
-
-Notes:
-  - torch_geometric installed (base only).
-  - Optional PyG deps are disabled by default on XPU.
-
+  module load frameworks
+  source ${VENV_PATH}/bin/activate
 EOF
 
-echo "✅ HydraGNN-Aurora environment setup complete!"
-
+echo "✅ Aurora HydraGNN environment setup complete!"
