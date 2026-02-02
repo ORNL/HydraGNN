@@ -575,7 +575,7 @@ def should_skip_self_loops(data_object, context=""):
 
     if torch.all(data_object.edge_attr > 1e-12):
         return False
-    
+
     msg = "Skipping sample: self-loops detected in edge_index."
     if context:
         msg = f"{msg} Context: {context}"
