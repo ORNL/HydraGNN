@@ -429,19 +429,21 @@ if __name__ == "__main__":
 
         ## FIXME: Hard-coded for now. Need to find common variable names
         common_variable_names = [
-            "natoms",
-            "atomic_numbers",
-            "chemical_composition",
-            "x",
-            "edge_index",
+            "pbc",
             "edge_attr",
-            "pos",
-            "energy",
             "energy_per_atom",
             "forces",
+            "pos",
+            "edge_index",
+            "cell",
+            "edge_shifts",
             "y",
-            # "dataset_name",
+            "chemical_composition",
+            "natoms",
+            "x",
+            "energy",
             "graph_attr",
+            "atomic_numbers",
         ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
         print("mymodel:", rank, mycolor, mymodel)
