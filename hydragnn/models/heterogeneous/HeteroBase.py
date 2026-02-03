@@ -822,6 +822,7 @@ class HeteroBase(Module):
             value_shape = head_val.shape
             if pred_shape != value_shape:
                 head_val = torch.reshape(head_val, pred_shape)
+            head_val = head_val.to(head_pre.device)
             if var is None:
                 tot_loss += (
                     self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
