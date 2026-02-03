@@ -8,6 +8,7 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
+            "max_neighbours": 100,
             "output_heads": {
                 "graph": {
                     "num_sharedlayers": 1,
