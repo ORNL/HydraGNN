@@ -241,6 +241,7 @@ class NodeBatchAdapter:
     def __init__(self, loader, node_target_type: str):
         self.loader = loader
         self.node_target_type = node_target_type
+        self.dataset = loader.dataset
 
     def __iter__(self):
         for data in self.loader:
