@@ -45,15 +45,31 @@ def _get_row_fields(dataset, index):
         el_idx = index if db_idx == 0 else index - dataset._idlen_cumulative[db_idx - 1]
         row = dataset.dbs[db_idx]._get_row(dataset.db_ids[db_idx][el_idx])
 
+        def _decode_ndarray(value):
+            if isinstance(value, dict) and "__ndarray__" in value:
+                raw = value["__ndarray__"]
+                try:
+                    shape = raw[0]
+                    dtype = raw[1]
+                    flat = raw[2]
+                    arr = np.asarray(flat, dtype=dtype)
+                    return arr.reshape(shape)
+                except Exception:
+                    try:
+                        return np.asarray(raw)
+                    except Exception:
+                        return value
+            return value
+
         def _get_attr_or_container(key):
             if hasattr(row, key):
-                return getattr(row, key)
+                return _decode_ndarray(getattr(row, key))
             for container in (
                 getattr(row, "data", None),
                 getattr(row, "key_value_pairs", None),
             ):
                 if isinstance(container, dict) and key in container:
-                    return container.get(key)
+                    return _decode_ndarray(container.get(key))
             return None
 
         def _to_scalar(val):
