@@ -249,7 +249,12 @@ class HeteroFromHomogeneousDataset:
 
     def __getitem__(self, idx):
         data = self.base[idx]
-        return data.to_heterogeneous()
+        hetero = data.to_heterogeneous()
+        if hasattr(data, "y"):
+            hetero.y = data.y
+        if hasattr(data, "graph_attr"):
+            hetero.graph_attr = data.graph_attr
+        return hetero
 
 
 class NodeBatchAdapter:
