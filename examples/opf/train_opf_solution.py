@@ -331,14 +331,28 @@ class NodeTargetDatasetAdapter:
     def __len__(self):
         return len(self.base)
 
-    def __getitem__(self, idx):
-        data = self.base[idx]
+    def _attach_target(self, data):
         if hasattr(data, "node_types") and self.node_target_type in data.node_types:
             if (
                 hasattr(data[self.node_target_type], "y")
                 and data[self.node_target_type].y is not None
             ):
                 data.y = data[self.node_target_type].y
+        return data
+
+    @staticmethod
+    def _has_nonempty_y(data):
+        return hasattr(data, "y") and data.y is not None and data.y.numel() > 0
+
+    def __getitem__(self, idx):
+        data = self._attach_target(self.base[idx])
+        if not self._has_nonempty_y(data):
+            max_tries = min(50, len(self.base))
+            for offset in range(1, max_tries):
+                cand = self._attach_target(self.base[(idx + offset) % len(self.base)])
+                if self._has_nonempty_y(cand):
+                    data = cand
+                    break
         _ensure_node_y_loc(data)
         return data
 
