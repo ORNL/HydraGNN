@@ -131,14 +131,28 @@ def info(*args, logtype="info", sep=" "):
 
 
 def _build_solution_target(data, node_target_type: str):
-    if not hasattr(data, node_target_type):
-        raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
-    node_store = data[node_target_type]
-    if not hasattr(node_store, "y") or node_store.y is None:
-        raise RuntimeError(
-            f"No targets found for node type '{node_target_type}' in OPF sample."
-        )
-    return node_store.y.to(torch.float32)
+    if hasattr(data, node_target_type):
+        node_store = data[node_target_type]
+        if not hasattr(node_store, "y") or node_store.y is None:
+            raise RuntimeError(
+                f"No targets found for node type '{node_target_type}' in OPF sample."
+            )
+        return node_store.y.to(torch.float32)
+
+    if hasattr(data, "_node_type_names") and hasattr(data, "node_type"):
+        if node_target_type not in data._node_type_names:
+            raise RuntimeError(
+                f"Node type '{node_target_type}' not found in OPF sample."
+            )
+        type_index = data._node_type_names.index(node_target_type)
+        if not hasattr(data, "y") or data.y is None:
+            raise RuntimeError(
+                f"No homogeneous targets found for node type '{node_target_type}'."
+            )
+        mask = data.node_type == type_index
+        return data.y[mask].to(torch.float32)
+
+    raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
 
 
 def _prepare_sample(data, node_target_type: str):
@@ -224,9 +238,21 @@ class NodeBatchAdapter:
 
     def __iter__(self):
         for data in self.loader:
-            if not hasattr(data, "batch") and hasattr(data, self.node_target_type):
-                data.batch = data[self.node_target_type].batch
-            data.y = data[self.node_target_type].y
+            if hasattr(data, self.node_target_type):
+                if not hasattr(data, "batch"):
+                    data.batch = data[self.node_target_type].batch
+                data.y = data[self.node_target_type].y
+            else:
+                if not hasattr(data, "batch") and hasattr(data, "node_type"):
+                    data.batch = data.batch
+                if hasattr(data, "_node_type_names") and hasattr(data, "node_type"):
+                    if self.node_target_type not in data._node_type_names:
+                        raise RuntimeError(
+                            f"Node type '{self.node_target_type}' not found in OPF sample."
+                        )
+                    type_index = data._node_type_names.index(self.node_target_type)
+                    mask = data.node_type == type_index
+                    data.y = data.y[mask]
             yield data
 
     def __len__(self):
