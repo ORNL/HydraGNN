@@ -28,6 +28,7 @@
             "node_feature_dims": [1],
             "output_index": [0],
             "output_dim": [1],
+            "output_names": ["objective"],
             "type": ["graph"],
             "denormalize_output": false
         },
