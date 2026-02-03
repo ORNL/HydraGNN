@@ -691,6 +691,8 @@ class HeteroBase(Module):
             data.dataset_name = torch.zeros(
                 (num_graphs, 1), device=x_graph.device, dtype=torch.long
             )
+        else:
+            data.dataset_name = data.dataset_name.to(x_graph.device)
 
         outputs = []
         outputs_var = []
@@ -709,6 +711,10 @@ class HeteroBase(Module):
                     device=x_graph.device,
                 )
                 if self.num_branches == 1:
+                    head_device = next(
+                        self.graph_shared["branch-0"].parameters()
+                    ).device
+                    x_graph = x_graph.to(head_device)
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
                     output_head = headloc["branch-0"](x_graph_head)
                     head = output_head[:, :head_dim]
@@ -718,6 +724,10 @@ class HeteroBase(Module):
                         mask = data.dataset_name == ID
                         mask = mask[:, 0]
                         branchtype = f"branch-{ID.item()}"
+                        head_device = next(
+                            self.graph_shared[branchtype].parameters()
+                        ).device
+                        x_graph = x_graph.to(head_device)
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
