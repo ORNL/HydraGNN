@@ -182,6 +182,24 @@ def _prepare_sample(data, node_target_type: str, to_homogeneous: bool = False):
     return data_h
 
 
+def _resolve_node_target_type(data, requested: str) -> str:
+    if hasattr(data, "node_types"):
+        if requested in data.node_types:
+            return requested
+        if hasattr(data, "_node_type_names") and requested in data._node_type_names:
+            idx = data._node_type_names.index(requested)
+            if idx < len(data.node_types):
+                return data.node_types[idx]
+        for name in data.node_types:
+            if str(name).lower() == requested.lower():
+                return name
+        if len(data.node_types) > 0:
+            return data.node_types[0]
+    if hasattr(data, "_node_type_names") and requested in data._node_type_names:
+        return requested
+    return requested
+
+
 def _load_split(root, split, case_name, num_groups, topological_perturbations):
     dataset = OPFDataset(
         root=root,
@@ -488,6 +506,18 @@ if __name__ == "__main__":
         )
         valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
         testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
+
+    resolved_node_target_type = _resolve_node_target_type(
+        trainset[0], args.node_target_type
+    )
+    if resolved_node_target_type != args.node_target_type:
+        info(
+            f"Resolved node_target_type '{args.node_target_type}' -> '{resolved_node_target_type}'"
+        )
+        args.node_target_type = resolved_node_target_type
+        config["NeuralNetwork"]["Architecture"][
+            "node_target_type"
+        ] = resolved_node_target_type
 
     trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
     valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
