@@ -262,6 +262,7 @@ class NodeBatchAdapter:
         self.loader = loader
         self.node_target_type = node_target_type
         self.dataset = loader.dataset
+        self.sampler = getattr(loader, "sampler", None)
 
     def __iter__(self):
         for data in self.loader:
@@ -285,6 +286,9 @@ class NodeBatchAdapter:
 
     def __len__(self):
         return len(self.loader)
+
+    def __getattr__(self, name):
+        return getattr(self.loader, name)
 
 
 class NodeTargetDatasetAdapter:
