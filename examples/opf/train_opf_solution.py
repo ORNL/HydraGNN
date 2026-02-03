@@ -155,8 +155,23 @@ def _build_solution_target(data, node_target_type: str):
     raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
 
 
+def _ensure_node_y_loc(data):
+    if not hasattr(data, "y") or data.y is None:
+        raise RuntimeError("Missing node targets (data.y) for OPF sample.")
+    if data.y.dim() == 1:
+        data.y = data.y.unsqueeze(-1)
+    num_nodes = int(data.y.shape[0])
+    target_dim = int(data.y.shape[1])
+    data.y_loc = torch.tensor(
+        [[0, num_nodes * target_dim]],
+        dtype=torch.int64,
+        device=data.y.device,
+    )
+
+
 def _prepare_sample(data, node_target_type: str, to_homogeneous: bool = False):
     data.y = _build_solution_target(data, node_target_type)
+    _ensure_node_y_loc(data)
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
     if not to_homogeneous:
         return data
@@ -260,10 +275,34 @@ class NodeBatchAdapter:
                     type_index = data._node_type_names.index(self.node_target_type)
                     mask = data.node_type == type_index
                     data.y = data.y[mask]
+            _ensure_node_y_loc(data)
             yield data
 
     def __len__(self):
         return len(self.loader)
+
+
+class NodeTargetDatasetAdapter:
+    def __init__(self, base, node_target_type: str):
+        self.base = base
+        self.node_target_type = node_target_type
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx):
+        data = self.base[idx]
+        if hasattr(data, "node_types") and self.node_target_type in data.node_types:
+            if (
+                hasattr(data[self.node_target_type], "y")
+                and data[self.node_target_type].y is not None
+            ):
+                data.y = data[self.node_target_type].y
+        _ensure_node_y_loc(data)
+        return data
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
 
 
 if __name__ == "__main__":
@@ -422,6 +461,10 @@ if __name__ == "__main__":
         )
         valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
         testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
+
+    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
+    valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
+    testset = NodeTargetDatasetAdapter(testset, args.node_target_type)
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
