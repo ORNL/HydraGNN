@@ -267,12 +267,14 @@ class NodeBatchAdapter:
     def __iter__(self):
         for data in self.loader:
             if hasattr(data, "node_types") and self.node_target_type in data.node_types:
-                if not hasattr(data, "batch"):
+                if not hasattr(data, "batch") and hasattr(
+                    data[self.node_target_type], "batch"
+                ):
                     data.batch = data[self.node_target_type].batch
                 data.y = data[self.node_target_type].y
             else:
                 if not hasattr(data, "batch") and hasattr(data, "node_type"):
-                    data.batch = data.batch
+                    raise RuntimeError("Missing batch indices for node targets.")
                 if hasattr(data, "_node_type_names") and hasattr(data, "node_type"):
                     if self.node_target_type not in data._node_type_names:
                         raise RuntimeError(
@@ -281,6 +283,8 @@ class NodeBatchAdapter:
                     type_index = data._node_type_names.index(self.node_target_type)
                     mask = data.node_type == type_index
                     data.y = data.y[mask]
+                    if hasattr(data, "batch"):
+                        data.batch = data.batch[mask]
             _ensure_node_y_loc(data)
             yield data
 
