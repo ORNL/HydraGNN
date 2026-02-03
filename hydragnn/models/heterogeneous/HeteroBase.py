@@ -647,7 +647,20 @@ class HeteroBase(Module):
         if hasattr(data, "to"):
             data = data.to(device)
 
-        x_dict = data.x_dict
+        if hasattr(data, "node_types"):
+            for node_type in data.node_types:
+                store = data[node_type]
+                if hasattr(store, "x") and store.x is not None:
+                    store.x = store.x.to(device)
+        if hasattr(data, "edge_types"):
+            for edge_type in data.edge_types:
+                store = data[edge_type]
+                if hasattr(store, "edge_index") and store.edge_index is not None:
+                    store.edge_index = store.edge_index.to(device)
+                if hasattr(store, "edge_attr") and store.edge_attr is not None:
+                    store.edge_attr = store.edge_attr.to(device)
+
+        x_dict = {node_type: x.to(device) for node_type, x in data.x_dict.items()}
         self._ensure_node_embedders(x_dict)
         x_dict = {
             node_type: self.node_embedders[node_type](x.float())
