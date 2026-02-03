@@ -3,6 +3,7 @@ import glob
 import random
 import sys
 import traceback
+import bisect
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from functools import partial
@@ -38,6 +39,48 @@ transform_coordinates = Distance(norm=False, cat=False)
 transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 
 
+def _get_row_fields(dataset, index):
+    try:
+        db_idx = bisect.bisect(dataset._idlen_cumulative, index)
+        el_idx = index if db_idx == 0 else index - dataset._idlen_cumulative[db_idx - 1]
+        row = dataset.dbs[db_idx]._get_row(dataset.db_ids[db_idx][el_idx])
+
+        def _get_attr_or_container(key):
+            if hasattr(row, key):
+                return getattr(row, key)
+            for container in (
+                getattr(row, "data", None),
+                getattr(row, "key_value_pairs", None),
+            ):
+                if isinstance(container, dict) and key in container:
+                    return container.get(key)
+            return None
+
+        def _to_scalar(val):
+            if val is None:
+                return None
+            try:
+                arr = np.asarray(val, dtype=float).reshape(-1)
+                if arr.size > 0:
+                    return float(arr[0])
+            except Exception:
+                return None
+            return None
+
+        energy_value = _to_scalar(_get_attr_or_container("energy"))
+
+        return {
+            "numbers": _get_attr_or_container("numbers"),
+            "positions": _get_attr_or_container("positions"),
+            "cell": _get_attr_or_container("cell"),
+            "pbc": _get_attr_or_container("pbc"),
+            "forces": _get_attr_or_container("forces"),
+            "energy": energy_value,
+        }
+    except Exception:
+        return {}
+
+
 def _create_pytorch_data_object(
     index,
     dataset,
@@ -50,24 +93,75 @@ def _create_pytorch_data_object(
     try:
         atoms = dataset.get_atoms(index)
 
-        pos = torch.as_tensor(atoms.get_positions(), dtype=torch.float32)
-        natoms = torch.IntTensor([pos.shape[0]])
-        atomic_numbers = torch.as_tensor(
-            atoms.get_atomic_numbers(),
-            dtype=torch.float32,
-        ).unsqueeze(1)
+        row_fields = _get_row_fields(dataset, index)
 
-        energy = torch.as_tensor(
-            atoms.get_total_energy(), dtype=torch.float32
-        ).unsqueeze(0)
+        positions = None
+        try:
+            positions = row_fields.get("positions")
+            if positions is None:
+                positions = atoms.get_positions()
+            pos = torch.as_tensor(positions, dtype=torch.float32)
+        except Exception:
+            print(
+                "Atomic structure does not have valid positions",
+                flush=True,
+            )
+            return None
+
+        natoms = torch.IntTensor([pos.shape[0]])
+
+        numbers_value = None
+        try:
+            numbers_value = row_fields.get("numbers")
+            if numbers_value is None:
+                numbers_value = atoms.get_atomic_numbers()
+            atomic_numbers = torch.as_tensor(
+                numbers_value,
+                dtype=torch.float32,
+            ).unsqueeze(1)
+        except Exception:
+            print(
+                "Atomic structure does not have valid atomic numbers",
+                flush=True,
+            )
+            return None
+
+        energy_value = None
+        try:
+            energy_value = row_fields.get("energy")
+            if energy_value is None:
+                raise ValueError("missing energy")
+            energy = torch.as_tensor(energy_value, dtype=torch.float32).unsqueeze(0)
+        except Exception:
+            print(
+                "Atomic structure does not have valid energy",
+                flush=True,
+            )
+            return None
+
         energy_per_atom = energy.detach().clone() / natoms
-        forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
+
+        forces_value = None
+        try:
+            forces_value = row_fields.get("forces")
+            if forces_value is None:
+                raise ValueError("missing forces")
+            forces = torch.as_tensor(forces_value, dtype=torch.float32)
+        except Exception:
+            print(
+                "Atomic structure does not have valid forces",
+                flush=True,
+            )
+            return None
 
         chemical_formula = atoms.get_chemical_formula()
 
         cell = None
         try:
-            cell = torch.from_numpy(np.asarray(atoms.get_cell())).to(torch.float32)
+            cell_value = row_fields.get("cell")
+            if cell_value is None:
+                raise ValueError("missing cell")
+            cell = torch.from_numpy(np.asarray(cell_value)).to(torch.float32)
         except Exception:
             print(
                 f"Atomic structure {chemical_formula} does not have cell",
@@ -76,7 +170,10 @@ def _create_pytorch_data_object(
 
         pbc = None
         try:
-            pbc = pbc_as_tensor(atoms.get_pbc())
+            pbc_value = row_fields.get("pbc")
+            if pbc_value is None:
+                raise ValueError("missing pbc")
+            pbc = pbc_as_tensor(pbc_value)
         except Exception:
             print(f"Atomic structure {chemical_formula} does not have pbc", flush=True)
 
