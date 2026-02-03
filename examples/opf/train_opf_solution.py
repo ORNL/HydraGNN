@@ -266,14 +266,21 @@ class NodeBatchAdapter:
 
     def __iter__(self):
         for data in self.loader:
-            if hasattr(data, "node_types") and self.node_target_type in data.node_types:
-                if not hasattr(data, "batch"):
-                    if hasattr(data[self.node_target_type], "batch"):
-                        data.batch = data[self.node_target_type].batch
-                    elif hasattr(data, "batch_dict") and self.node_target_type in getattr(
-                        data, "batch_dict", {}
-                    ):
+            if not hasattr(data, "batch"):
+                if (
+                    hasattr(data, "node_types")
+                    and self.node_target_type in data.node_types
+                ):
+                    node_store = data[self.node_target_type]
+                    if hasattr(node_store, "batch"):
+                        data.batch = node_store.batch
+                if not hasattr(data, "batch") and hasattr(data, "batch_dict"):
+                    if self.node_target_type in data.batch_dict:
                         data.batch = data.batch_dict[self.node_target_type]
+                    elif len(data.batch_dict) > 0:
+                        data.batch = next(iter(data.batch_dict.values()))
+
+            if hasattr(data, "node_types") and self.node_target_type in data.node_types:
                 data.y = data[self.node_target_type].y
             else:
                 if not hasattr(data, "batch") and hasattr(data, "node_type"):
