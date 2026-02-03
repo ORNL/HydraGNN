@@ -155,10 +155,16 @@ def _build_solution_target(data, node_target_type: str):
     raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
 
 
-def _prepare_sample(data, node_target_type: str):
+def _prepare_sample(data, node_target_type: str, to_homogeneous: bool = False):
     data.y = _build_solution_target(data, node_target_type)
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
-    return data
+    if not to_homogeneous:
+        return data
+    data_h = data.to_homogeneous(
+        node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
+    )
+    data_h.graph_attr = data.graph_attr
+    return data_h
 
 
 def _load_split(root, split, case_name, num_groups, topological_perturbations):
@@ -349,16 +355,17 @@ if __name__ == "__main__":
     )
 
     if args.preonly:
+        store_homogeneous = args.format == "adios"
         trainset = [
-            _prepare_sample(d, args.node_target_type)
+            _prepare_sample(d, args.node_target_type, store_homogeneous)
             for d in _subset_for_rank(train_raw, rank, comm_size)
         ]
         valset = [
-            _prepare_sample(d, args.node_target_type)
+            _prepare_sample(d, args.node_target_type, store_homogeneous)
             for d in _subset_for_rank(val_raw, rank, comm_size)
         ]
         testset = [
-            _prepare_sample(d, args.node_target_type)
+            _prepare_sample(d, args.node_target_type, store_homogeneous)
             for d in _subset_for_rank(test_raw, rank, comm_size)
         ]
 
