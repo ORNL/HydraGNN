@@ -247,9 +247,14 @@ def update_config_NN_outputs(config, data, graph_size_variable):
                     raise ValueError(
                         '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
                     )
+                denom_nodes = (
+                    data.y_num_nodes
+                    if hasattr(data, "y_num_nodes") and data.y_num_nodes is not None
+                    else data.num_nodes
+                )
                 dim_item = (
                     data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-                ) // data.num_nodes
+                ) // denom_nodes
             else:
                 raise ValueError("Unknown output type", output_type[ihead])
             dims_list.append(dim_item)
