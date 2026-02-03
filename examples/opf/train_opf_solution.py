@@ -1,3 +1,14 @@
+"""Train node-level OPF solution prediction.
+
+Arguments summary:
+    --case_name <name|all>        Select a single case or load all cases.
+    --num_groups <int|all>        Select group count or load all available groups.
+    --node_target_type bus|generator   Choose node target type to predict.
+    --preonly                     Preprocess/serialize only (no training).
+    --adios / --pickle            Serialization format.
+    --batch_size / --num_epoch    Override training hyperparameters.
+"""
+
 import os
 import json
 import logging
@@ -65,6 +76,10 @@ def _opf_raw_dir(root: str, case_name: str, topological_perturbations: bool) -> 
     )
 
 
+def _opf_release_dir(root: str, topological_perturbations: bool) -> str:
+    return os.path.join(root, _opf_release_name(topological_perturbations))
+
+
 def _opf_tmp_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
     return os.path.join(
         _opf_raw_dir(root, case_name, topological_perturbations), "gridopt-dataset-tmp"
@@ -84,6 +99,33 @@ def _find_empty_json(root: str):
             except OSError:
                 empty.append(path)
     return empty
+
+
+def _discover_cases(root: str, topological_perturbations: bool):
+    release_dir = _opf_release_dir(root, topological_perturbations)
+    if not os.path.isdir(release_dir):
+        return []
+    return sorted(
+        name
+        for name in os.listdir(release_dir)
+        if os.path.isdir(os.path.join(release_dir, name))
+    )
+
+
+def _discover_num_groups(root: str, case_name: str, topological_perturbations: bool):
+    raw_dir = _opf_raw_dir(root, case_name, topological_perturbations)
+    if not os.path.isdir(raw_dir):
+        return 0
+    groups = []
+    for name in os.listdir(raw_dir):
+        if not name.startswith(f"{case_name}_") or not name.endswith(".tar.gz"):
+            continue
+        try:
+            idx = int(name[len(case_name) + 1 : -len(".tar.gz")])
+            groups.append(idx)
+        except ValueError:
+            continue
+    return max(groups) + 1 if groups else 0
 
 
 def _reextract_opf_if_needed(root, case_name, num_groups, topological_perturbations):
@@ -210,6 +252,14 @@ def _load_split(root, split, case_name, num_groups, topological_perturbations):
         topological_perturbations=topological_perturbations,
     )
     return dataset
+
+
+def _parse_num_groups(num_groups_arg: str) -> int | None:
+    if isinstance(num_groups_arg, int):
+        return num_groups_arg
+    if str(num_groups_arg).lower() == "all":
+        return None
+    return int(num_groups_arg)
 
 
 def _ensure_opf_downloaded(
@@ -372,8 +422,14 @@ if __name__ == "__main__":
         "--case_name",
         type=str,
         default="pglib_opf_case14_ieee",
+        help="Case name or 'all'",
     )
-    parser.add_argument("--num_groups", type=int, default=1)
+    parser.add_argument(
+        "--num_groups",
+        type=str,
+        default="1",
+        help="Number of groups or 'all'",
+    )
     parser.add_argument("--topological_perturbations", action="store_true")
     parser.add_argument("--preonly", action="store_true", help="preprocess only")
     parser.add_argument("--batch_size", type=int, default=None)
@@ -418,52 +474,93 @@ if __name__ == "__main__":
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
-    _ensure_opf_downloaded(
-        datadir,
-        args.case_name,
-        args.num_groups,
-        args.topological_perturbations,
-        rank,
-        comm,
-    )
+    requested_num_groups = _parse_num_groups(args.num_groups)
+    if args.case_name.lower() == "all":
+        case_names = _discover_cases(datadir, args.topological_perturbations)
+        if not case_names:
+            raise RuntimeError(
+                "No OPF cases found. Please download the dataset or specify a case_name."
+            )
+    else:
+        case_names = [args.case_name]
+
+    for case_name in case_names:
+        num_groups = requested_num_groups
+        if num_groups is None:
+            num_groups = _discover_num_groups(
+                datadir, case_name, args.topological_perturbations
+            )
+            if num_groups == 0:
+                raise RuntimeError(f"No groups found for case '{case_name}'.")
+        _ensure_opf_downloaded(
+            datadir,
+            case_name,
+            num_groups,
+            args.topological_perturbations,
+            rank,
+            comm,
+        )
 
     info("Loading OPF splits...")
-    train_raw = _load_split(
-        datadir,
-        "train",
-        args.case_name,
-        args.num_groups,
-        args.topological_perturbations,
-    )
-    val_raw = _load_split(
-        datadir,
-        "val",
-        args.case_name,
-        args.num_groups,
-        args.topological_perturbations,
-    )
-    test_raw = _load_split(
-        datadir,
-        "test",
-        args.case_name,
-        args.num_groups,
-        args.topological_perturbations,
-    )
+    train_raw = []
+    val_raw = []
+    test_raw = []
+    for case_name in case_names:
+        num_groups = requested_num_groups
+        if num_groups is None:
+            num_groups = _discover_num_groups(
+                datadir, case_name, args.topological_perturbations
+            )
+            if num_groups == 0:
+                raise RuntimeError(f"No groups found for case '{case_name}'.")
+        train_raw.append(
+            _load_split(
+                datadir,
+                "train",
+                case_name,
+                num_groups,
+                args.topological_perturbations,
+            )
+        )
+        val_raw.append(
+            _load_split(
+                datadir,
+                "val",
+                case_name,
+                num_groups,
+                args.topological_perturbations,
+            )
+        )
+        test_raw.append(
+            _load_split(
+                datadir,
+                "test",
+                case_name,
+                num_groups,
+                args.topological_perturbations,
+            )
+        )
 
     if args.preonly:
         store_homogeneous = args.format == "adios"
-        trainset = [
-            _prepare_sample(d, args.node_target_type, store_homogeneous)
-            for d in _subset_for_rank(train_raw, rank, comm_size)
-        ]
-        valset = [
-            _prepare_sample(d, args.node_target_type, store_homogeneous)
-            for d in _subset_for_rank(val_raw, rank, comm_size)
-        ]
-        testset = [
-            _prepare_sample(d, args.node_target_type, store_homogeneous)
-            for d in _subset_for_rank(test_raw, rank, comm_size)
-        ]
+        trainset = []
+        valset = []
+        testset = []
+        for train_split in train_raw:
+            trainset.extend(
+                _prepare_sample(d, args.node_target_type, store_homogeneous)
+                for d in _subset_for_rank(train_split, rank, comm_size)
+            )
+        for val_split in val_raw:
+            valset.extend(
+                _prepare_sample(d, args.node_target_type, store_homogeneous)
+                for d in _subset_for_rank(val_split, rank, comm_size)
+            )
+        for test_split in test_raw:
+            testset.extend(
+                _prepare_sample(d, args.node_target_type, store_homogeneous)
+                for d in _subset_for_rank(test_split, rank, comm_size)
+            )
 
         info(
             f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
@@ -487,7 +584,7 @@ if __name__ == "__main__":
         dist.destroy_process_group()
         raise SystemExit(0)
 
-    sample = _prepare_sample(train_raw[0], args.node_target_type)
+    sample = _prepare_sample(train_raw[0][0], args.node_target_type)
     input_dim = max(
         data.x.size(-1) for data in sample.node_stores if hasattr(data, "x")
     )
