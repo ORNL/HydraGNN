@@ -643,6 +643,10 @@ class HeteroBase(Module):
     def forward(self, data):
         self._maybe_init_metadata(data)
 
+        device = next(self.parameters()).device
+        if hasattr(data, "to"):
+            data = data.to(device)
+
         x_dict = data.x_dict
         self._ensure_node_embedders(x_dict)
         x_dict = {
