@@ -131,7 +131,7 @@ def info(*args, logtype="info", sep=" "):
 
 
 def _build_solution_target(data, node_target_type: str):
-    if hasattr(data, node_target_type):
+    if hasattr(data, "node_types") and node_target_type in data.node_types:
         node_store = data[node_target_type]
         if not hasattr(node_store, "y") or node_store.y is None:
             raise RuntimeError(
@@ -238,7 +238,7 @@ class NodeBatchAdapter:
 
     def __iter__(self):
         for data in self.loader:
-            if hasattr(data, self.node_target_type):
+            if hasattr(data, "node_types") and self.node_target_type in data.node_types:
                 if not hasattr(data, "batch"):
                     data.batch = data[self.node_target_type].batch
                 data.y = data[self.node_target_type].y
