@@ -316,6 +316,10 @@ if __name__ == "__main__":
             for d in _subset_for_rank(test_raw, rank, comm_size)
         ]
 
+        info(
+            f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
+        )
+
         if args.format == "adios":
             if AdiosWriter is None:
                 raise RuntimeError("adios2 is not available in this environment.")
