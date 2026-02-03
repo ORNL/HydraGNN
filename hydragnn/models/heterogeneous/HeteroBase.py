@@ -669,6 +669,7 @@ class HeteroBase(Module):
                 x_dict[node_type] = x
 
         x_graph = self._pool_hetero_graph_features(x_dict, batch_dict)
+        x_graph = x_graph.to(device)
         x_graph = self._apply_graph_pool_conditioning(x_graph, data)
 
         # Prepare dataset_name for multi-branch heads
