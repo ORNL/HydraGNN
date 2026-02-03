@@ -740,6 +740,15 @@ class HeteroBase(Module):
                 x_node = x_dict[self.node_target_type]
                 batch_node = batch_dict[self.node_target_type]
 
+                try:
+                    head_device = next(headloc.parameters()).device
+                except StopIteration:
+                    head_device = x_node.device
+                if x_node.device != head_device:
+                    x_node = x_node.to(head_device)
+                if batch_node.device != head_device:
+                    batch_node = batch_node.to(head_device)
+
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
                 if node_NN_type not in ("mlp", "mlp_per_node", "conv"):
                     raise ValueError(
