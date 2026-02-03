@@ -2,7 +2,10 @@
 
 Arguments summary:
     --case_name <name|all>        Select a single case or load all cases.
+    --case_names <a,b,c>          Comma-separated case list (used if --case_name all).
+    --case_list_file <path>       File with one case name per line.
     --num_groups <int|all>        Select group count or load all available groups.
+    --num_groups_max <int>        Fallback group count when 'all' and none on disk.
     --node_target_type bus|generator   Choose node target type to predict.
     --preonly                     Preprocess/serialize only (no training).
     --adios / --pickle            Serialization format.
@@ -159,6 +162,7 @@ from hydragnn.utils.datasets.pickledataset import (
 )
 from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.model import print_model
+from hydragnn.utils.print import iterate_tqdm
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 
 try:
@@ -204,7 +208,7 @@ def _ensure_node_y_loc(data):
         data.y = data.y.unsqueeze(-1)
     num_nodes = int(data.y.shape[0])
     target_dim = int(data.y.shape[1])
-    data.y_num_nodes = num_nodes
+    data.y_num_nodes = torch.tensor(num_nodes, dtype=torch.int64, device=data.y.device)
     data.y_loc = torch.tensor(
         [[0, num_nodes * target_dim]],
         dtype=torch.int64,
@@ -260,6 +264,19 @@ def _parse_num_groups(num_groups_arg: str) -> int | None:
     if str(num_groups_arg).lower() == "all":
         return None
     return int(num_groups_arg)
+
+
+def _parse_case_list(args):
+    cases = []
+    if args.case_names:
+        cases.extend([c.strip() for c in args.case_names.split(",") if c.strip()])
+    if args.case_list_file:
+        with open(args.case_list_file, "r") as f:
+            for line in f:
+                name = line.strip()
+                if name:
+                    cases.append(name)
+    return cases
 
 
 def _ensure_opf_downloaded(
@@ -425,10 +442,28 @@ if __name__ == "__main__":
         help="Case name or 'all'",
     )
     parser.add_argument(
+        "--case_names",
+        type=str,
+        default="",
+        help="Comma-separated case list (used if --case_name all)",
+    )
+    parser.add_argument(
+        "--case_list_file",
+        type=str,
+        default="",
+        help="File with one case name per line (used if --case_name all)",
+    )
+    parser.add_argument(
         "--num_groups",
         type=str,
         default="1",
         help="Number of groups or 'all'",
+    )
+    parser.add_argument(
+        "--num_groups_max",
+        type=int,
+        default=1,
+        help="Fallback group count when --num_groups all and none on disk",
     )
     parser.add_argument("--topological_perturbations", action="store_true")
     parser.add_argument("--preonly", action="store_true", help="preprocess only")
@@ -478,8 +513,10 @@ if __name__ == "__main__":
     if args.case_name.lower() == "all":
         case_names = _discover_cases(datadir, args.topological_perturbations)
         if not case_names:
+            case_names = _parse_case_list(args)
+        if not case_names:
             raise RuntimeError(
-                "No OPF cases found. Please download the dataset or specify a case_name."
+                "No OPF cases found. Provide --case_names or --case_list_file, or download cases first."
             )
     else:
         case_names = [args.case_name]
@@ -491,7 +528,9 @@ if __name__ == "__main__":
                 datadir, case_name, args.topological_perturbations
             )
             if num_groups == 0:
-                raise RuntimeError(f"No groups found for case '{case_name}'.")
+                if args.num_groups_max <= 0:
+                    raise RuntimeError(f"No groups found for case '{case_name}'.")
+                num_groups = args.num_groups_max
         _ensure_opf_downloaded(
             datadir,
             case_name,
@@ -512,7 +551,9 @@ if __name__ == "__main__":
                 datadir, case_name, args.topological_perturbations
             )
             if num_groups == 0:
-                raise RuntimeError(f"No groups found for case '{case_name}'.")
+                if args.num_groups_max <= 0:
+                    raise RuntimeError(f"No groups found for case '{case_name}'.")
+                num_groups = args.num_groups_max
         train_raw.append(
             _load_split(
                 datadir,
@@ -543,24 +584,34 @@ if __name__ == "__main__":
 
     if args.preonly:
         store_homogeneous = args.format == "adios"
+        verbosity = config["Verbosity"]["level"]
         trainset = []
         valset = []
         testset = []
-        for train_split in train_raw:
-            trainset.extend(
-                _prepare_sample(d, args.node_target_type, store_homogeneous)
-                for d in _subset_for_rank(train_split, rank, comm_size)
-            )
-        for val_split in val_raw:
-            valset.extend(
-                _prepare_sample(d, args.node_target_type, store_homogeneous)
-                for d in _subset_for_rank(val_split, rank, comm_size)
-            )
-        for test_split in test_raw:
-            testset.extend(
-                _prepare_sample(d, args.node_target_type, store_homogeneous)
-                for d in _subset_for_rank(test_split, rank, comm_size)
-            )
+        for case_name, train_split in zip(case_names, train_raw):
+            subset = _subset_for_rank(train_split, rank, comm_size)
+            for d in iterate_tqdm(
+                subset, verbosity, desc=f"Preprocess train {case_name}", leave=False
+            ):
+                trainset.append(
+                    _prepare_sample(d, args.node_target_type, store_homogeneous)
+                )
+        for case_name, val_split in zip(case_names, val_raw):
+            subset = _subset_for_rank(val_split, rank, comm_size)
+            for d in iterate_tqdm(
+                subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
+            ):
+                valset.append(
+                    _prepare_sample(d, args.node_target_type, store_homogeneous)
+                )
+        for case_name, test_split in zip(case_names, test_raw):
+            subset = _subset_for_rank(test_split, rank, comm_size)
+            for d in iterate_tqdm(
+                subset, verbosity, desc=f"Preprocess test {case_name}", leave=False
+            ):
+                testset.append(
+                    _prepare_sample(d, args.node_target_type, store_homogeneous)
+                )
 
         info(
             f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
