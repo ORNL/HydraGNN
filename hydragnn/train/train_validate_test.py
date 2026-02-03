@@ -79,14 +79,18 @@ def move_batch_to_device(data, param_dtype):
         if hasattr(data, "stores"):
             for store in data.stores:
                 for key, value in store.items():
-                    if isinstance(value, torch.Tensor) and torch.is_floating_point(
-                        value
-                    ):
-                        store[key] = value.to(dtype=param_dtype)
+                    if isinstance(value, torch.Tensor):
+                        value = value.to(device=device)
+                        if torch.is_floating_point(value):
+                            value = value.to(dtype=param_dtype)
+                        store[key] = value
         else:
             for key, value in data.items():
-                if isinstance(value, torch.Tensor) and torch.is_floating_point(value):
-                    data[key] = value.to(dtype=param_dtype)
+                if isinstance(value, torch.Tensor):
+                    value = value.to(device=device)
+                    if torch.is_floating_point(value):
+                        value = value.to(dtype=param_dtype)
+                    data[key] = value
 
     return data
 
