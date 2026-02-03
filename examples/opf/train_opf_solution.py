@@ -162,6 +162,7 @@ def _ensure_node_y_loc(data):
         data.y = data.y.unsqueeze(-1)
     num_nodes = int(data.y.shape[0])
     target_dim = int(data.y.shape[1])
+    data.y_num_nodes = num_nodes
     data.y_loc = torch.tensor(
         [[0, num_nodes * target_dim]],
         dtype=torch.int64,
