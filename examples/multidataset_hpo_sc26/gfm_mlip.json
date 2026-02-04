@@ -3,13 +3,14 @@
         "level": 2
     },
     "NeuralNetwork": {
+        "Architecture": {
             "mpnn_type": "MACE",
             "enable_interatomic_potential": true,
             "equivariance": true,
             "radius": 5,
             "max_neighbours": 20,
             "num_gaussians": 50,
-	        "radial_type": "bessel",
+            "radial_type": "bessel",
             "envelope_exponent": 5,
             "int_emb_size": 64,
             "basis_emb_size": 8,
@@ -22,7 +23,7 @@
             "max_ell": 1,
             "node_max_ell": 1,
             "pe_dim": 1,
-	        "global_attn_heads": 8,
+            "global_attn_heads": 8,
             "global_attn_engine": "",
             "global_attn_type": "",
             "graph_pooling": "add",
@@ -31,21 +32,22 @@
             "use_graph_attr_conditioning": true,
             "graph_attr_conditioning_mode": "concat_node",
             "output_heads": {
-                "graph":
-                    {
-                        "type": "mlp",
-			            "num_sharedlayers": 2,
-                    	"dim_sharedlayers": 50,
-                        "num_headlayers": 3,
-                        "dim_headlayers": [
-                                128,
-                                128,
-                                128
-                            ]
-                    }
+                "graph": {
+                    "type": "mlp",
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 50,
+                    "num_headlayers": 3,
+                    "dim_headlayers": [
+                        128,
+                        128,
+                        128
+                    ]
+                }
             },
-	    "task_weights": [1.0],
-	    "energy_peratom_weight": 1.0,
+            "task_weights": [
+                1.0
+            ],
+            "energy_peratom_weight": 1.0,
             "force_weight": 10.0,
             "input_dim": 1,
             "pna_deg": null,
@@ -54,13 +56,23 @@
             "initial_bias": null,
             "activation_function": "relu",
             "SyncBatchNorm": false
-        }, 
+        },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_index": [0],
-            "type": ["graph"],
-            "output_dim": [1],
-            "output_names": ["graph_energy"],
+            "input_node_features": [
+                0
+            ],
+            "output_index": [
+                0
+            ],
+            "type": [
+                "graph"
+            ],
+            "output_dim": [
+                1
+            ],
+            "output_names": [
+                "graph_energy"
+            ],
             "denormalize_output": false
         },
         "Training": {
@@ -73,14 +85,14 @@
             "startfrom": "",
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             },
             "conv_checkpointing": false,
             "patience": 10,
             "Checkpoint": true,
             "checkpoint_warmup": 1,
             "epoch_start": 0,
-	        "precision": "fp64"
+            "precision": "fp64"
         }
     },
     "Visualization": {
