@@ -220,12 +220,25 @@ def _ensure_node_y_loc(data):
         data.y = data.y.unsqueeze(-1)
     num_nodes = int(data.y.shape[0])
     target_dim = int(data.y.shape[1])
-    data.y_num_nodes = torch.tensor(num_nodes, dtype=torch.int64, device=data.y.device)
+    data.y_num_nodes = torch.tensor(
+        [num_nodes], dtype=torch.int64, device=data.y.device
+    )
     data.y_loc = torch.tensor(
         [[0, num_nodes * target_dim]],
         dtype=torch.int64,
         device=data.y.device,
     )
+
+
+def _ensure_non_scalar_attrs(data):
+    keys = data.keys() if callable(data.keys) else data.keys
+    for key in list(keys):
+        value = data[key]
+        if isinstance(value, torch.Tensor) and value.dim() == 0:
+            data[key] = value.reshape(1)
+        elif isinstance(value, np.ndarray) and value.ndim == 0:
+            data[key] = value.reshape(1)
+    return data
 
 
 def _prepare_sample(
@@ -235,6 +248,7 @@ def _prepare_sample(
     _ensure_node_y_loc(data)
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
     data.case_name = case_name
+    _ensure_non_scalar_attrs(data)
     if not to_homogeneous:
         return data
     data_h = data.to_homogeneous(
@@ -242,6 +256,7 @@ def _prepare_sample(
     )
     data_h.graph_attr = data.graph_attr
     data_h.case_name = case_name
+    _ensure_non_scalar_attrs(data_h)
     return data_h
 
 
@@ -363,7 +378,10 @@ class NodeBatchAdapter:
 
     def __iter__(self):
         for data in self.loader:
-            if not hasattr(data, "node_types") or self.node_target_type not in data.node_types:
+            if (
+                not hasattr(data, "node_types")
+                or self.node_target_type not in data.node_types
+            ):
                 raise RuntimeError(
                     f"Node type '{self.node_target_type}' not found in OPF sample."
                 )
@@ -372,12 +390,18 @@ class NodeBatchAdapter:
                 node_store = data[self.node_target_type]
                 if hasattr(node_store, "batch"):
                     data.batch = node_store.batch
-                elif hasattr(data, "batch_dict") and self.node_target_type in data.batch_dict:
+                elif (
+                    hasattr(data, "batch_dict")
+                    and self.node_target_type in data.batch_dict
+                ):
                     data.batch = data.batch_dict[self.node_target_type]
                 elif hasattr(data, "batch_dict") and len(data.batch_dict) > 0:
                     data.batch = next(iter(data.batch_dict.values()))
 
-            if not hasattr(data[self.node_target_type], "y") or data[self.node_target_type].y is None:
+            if (
+                not hasattr(data[self.node_target_type], "y")
+                or data[self.node_target_type].y is None
+            ):
                 raise RuntimeError(
                     f"No targets found for node type '{self.node_target_type}' in OPF sample."
                 )
@@ -402,11 +426,17 @@ class NodeTargetDatasetAdapter:
 
     def __getitem__(self, idx):
         data = self.base[idx]
-        if not hasattr(data, "node_types") or self.node_target_type not in data.node_types:
+        if (
+            not hasattr(data, "node_types")
+            or self.node_target_type not in data.node_types
+        ):
             raise RuntimeError(
                 f"Node type '{self.node_target_type}' not found in OPF sample."
             )
-        if not hasattr(data[self.node_target_type], "y") or data[self.node_target_type].y is None:
+        if (
+            not hasattr(data[self.node_target_type], "y")
+            or data[self.node_target_type].y is None
+        ):
             raise RuntimeError(
                 f"No targets found for node type '{self.node_target_type}' in OPF sample."
             )
