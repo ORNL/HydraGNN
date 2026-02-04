@@ -21,14 +21,14 @@
             "node_target_type": "bus"
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
+            "input_node_features": [0, 1, 2, 3],
             "graph_feature_names": ["context"],
             "graph_feature_dims": [1],
             "node_feature_names": ["node_features"],
-            "node_feature_dims": [1],
+            "node_feature_dims": [4],
             "output_names": ["bus_solution"],
             "output_index": [0],
-            "output_dim": [1],
+            "output_dim": [2],
             "type": ["node"],
             "denormalize_output": false
         },
