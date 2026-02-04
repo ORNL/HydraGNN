@@ -132,9 +132,8 @@ if __name__ == "__main__":
 
     # Choose the sampler (e.g., TPESampler or RandomSampler)
     from deephyper.hpo import HpProblem, CBO
-    from hydragnn.utils.deephyper import read_node_list
-    from deephyper.evaluator import Evaluator, ProcessPoolEvaluator, queued
-    from hydragnn.utils.deephyper import read_node_list
+    from deephyper.evaluator import ProcessPoolEvaluator, queued
+    from hydragnn.utils.hpo.deephyper import read_node_list
 
     # define the variable you want to optimize
     problem = HpProblem()
