@@ -174,7 +174,6 @@ if __name__ == "__main__":
         evaluator,
         acq_func="UCB",
         multi_point_strategy="cl_min",  # Constant liar strategy
-        random_state=42,
         # Location where to store the results
         log_dir=log_name,
         # Number of threads used to update surrogate model of BO
