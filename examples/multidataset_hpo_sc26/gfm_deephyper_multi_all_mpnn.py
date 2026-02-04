@@ -36,12 +36,16 @@ SLURM_JOB_ID = os.environ["SLURM_JOB_ID"]
 
 
 def _parse_results(stdout):
-    pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
+    pattern = r"Tasks Val Loss: \[([^\]]+)\]"
     matches = re.findall(pattern, stdout.decode())
-    if matches:
-        return matches[-1][0]
-    else:
+    if not matches:
         return "F"
+    last = matches[-1]
+    numbers = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", last)
+    if len(numbers) < 3:
+        return "F"
+    avg = (float(numbers[1]) + float(numbers[2])) / 2.0
+    return str(avg)
 
 
 def run(trial, dequed=None):
