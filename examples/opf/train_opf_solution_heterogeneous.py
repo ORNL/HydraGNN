@@ -332,6 +332,20 @@ def _ensure_node_store_features(data):
     return data
 
 
+def _to_jsonable(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.item() if obj.numel() == 1 else obj.tolist()
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.generic):
+        return obj.item()
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
+
+
 def _prepare_sample(
     data, node_target_type: str, case_name: str, to_homogeneous: bool = False
 ):
@@ -787,6 +801,7 @@ if __name__ == "__main__":
     test_loader = NodeBatchAdapter(test_loader, args.node_target_type)
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    config = _to_jsonable(config)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
