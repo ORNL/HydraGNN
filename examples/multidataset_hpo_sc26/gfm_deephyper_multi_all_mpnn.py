@@ -144,7 +144,7 @@ if __name__ == "__main__":
     problem.add_hyperparameter((2, 3), "num_headlayers")  # discrete parameter
     problem.add_hyperparameter((300, 1000), "dim_headlayers")  # discrete parameter
     problem.add_hyperparameter((10.0, 1000.0), "force_weight")  # continuous parameter
-    problem.add_hyperparameter((1e-5, 3e-3), "learning_rate", log=True)  # log-scale
+    problem.add_hyperparameter((1e-5, 3e-3), "learning_rate")  # log-scale
     problem.add_hyperparameter(
         ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"], "mpnn_type"
     )  # categorical parameter (equivariant models)
