@@ -227,6 +227,8 @@ class PainnMessage(nn.Module):
         edge_attr: OptTensor = None,
     ):
         dtype = node_scalar.dtype
+        if node_vector.dtype != dtype:
+            node_vector = node_vector.to(dtype=dtype)
         if edge_dist.dtype != dtype:
             edge_dist = edge_dist.to(dtype=dtype)
         if edge_diff.dtype != dtype:
