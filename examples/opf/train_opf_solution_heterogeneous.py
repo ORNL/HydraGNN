@@ -306,6 +306,32 @@ def _ensure_node_store_metadata(data, target_dim: int):
                 dtype=torch.float32,
                 device=data.y.device,
             )
+    data.num_nodes_dict = {
+        ntype: int(data[ntype].num_nodes) for ntype in data.node_types
+    }
+    return data
+
+
+def _ensure_node_store_features(data):
+    if not hasattr(data, "node_types"):
+        return data
+    default_x_dim = None
+    for node_type in data.node_types:
+        store = data[node_type]
+        if hasattr(store, "x") and store.x is not None:
+            default_x_dim = int(store.x.shape[1]) if store.x.dim() > 1 else 1
+            break
+    if default_x_dim is None:
+        return data
+    for node_type in data.node_types:
+        store = data[node_type]
+        if not hasattr(store, "x") or store.x is None:
+            num_nodes = int(getattr(store, "num_nodes", 0))
+            store.x = torch.zeros(
+                (num_nodes, default_x_dim),
+                dtype=torch.float32,
+                device=data.y.device,
+            )
     return data
 
 
@@ -320,6 +346,7 @@ def _prepare_sample(
     if not to_homogeneous:
         return data
     _ensure_node_store_metadata(data, target_dim=int(data.y.shape[1]))
+    _ensure_node_store_features(data)
     data_h = data.to_homogeneous(
         node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
     )
