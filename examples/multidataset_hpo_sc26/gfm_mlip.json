@@ -3,7 +3,6 @@
         "level": 2
     },
     "NeuralNetwork": {
-        "Architecture": {
             "mpnn_type": "MACE",
             "enable_interatomic_potential": true,
             "equivariance": true,
@@ -26,8 +25,8 @@
 	        "global_attn_heads": 8,
             "global_attn_engine": "",
             "global_attn_type": "",
-	        "graph_pooling": "add", 
-            "hidden_dim": 64,
+            "graph_pooling": "add",
+            "hidden_dim": 128,
             "num_conv_layers": 4,
             "use_graph_attr_conditioning": true,
             "graph_attr_conditioning_mode": "concat_node",
@@ -37,10 +36,11 @@
                         "type": "mlp",
 			            "num_sharedlayers": 2,
                     	"dim_sharedlayers": 50,
-                        "num_headlayers": 2,
+                        "num_headlayers": 3,
                         "dim_headlayers": [
-                                64,
-                                64
+                                128,
+                                128,
+                                128
                             ]
                     }
             },
