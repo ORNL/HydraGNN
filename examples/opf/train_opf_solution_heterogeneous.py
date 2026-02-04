@@ -787,6 +787,9 @@ if __name__ == "__main__":
             f"Resolved node_target_type '{args.node_target_type}' -> '{resolved_node_target_type}'"
         )
         args.node_target_type = resolved_node_target_type
+    config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})[
+        "node_target_type"
+    ] = args.node_target_type
 
     trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
     valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
