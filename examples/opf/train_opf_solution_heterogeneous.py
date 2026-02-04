@@ -247,12 +247,16 @@ def _ensure_node_store_metadata(data, target_dim: int):
         return data
     for node_type in data.node_types:
         store = data[node_type]
-        num_nodes = getattr(store, "num_nodes", None)
+        num_nodes = None
+        if "num_nodes" in store:
+            num_nodes = store["num_nodes"]
+        if num_nodes is None and hasattr(data, "num_nodes_dict"):
+            num_nodes = data.num_nodes_dict.get(node_type)
         if num_nodes is None:
             if hasattr(store, "x") and store.x is not None:
-                num_nodes = int(store.x.shape[0])
+                num_nodes = store.x.shape[0]
             elif hasattr(store, "y") and store.y is not None:
-                num_nodes = int(store.y.shape[0])
+                num_nodes = store.y.shape[0]
         if num_nodes is not None:
             store.num_nodes = int(num_nodes)
             if not hasattr(store, "y") or store.y is None:
