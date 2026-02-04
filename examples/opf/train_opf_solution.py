@@ -27,6 +27,20 @@ from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
 
 
+_DEFAULT_CASE_NAMES = [
+    "pglib_opf_case14_ieee",
+    "pglib_opf_case30_ieee",
+    "pglib_opf_case57_ieee",
+    "pglib_opf_case118_ieee",
+    "pglib_opf_case500_goc",
+    "pglib_opf_case2000_goc",
+    "pglib_opf_case6470_rte",
+    "pglib_opf_case4661_sdet",
+    "pglib_opf_case10000_goc",
+    "pglib_opf_case13659_pegase",
+]
+
+
 def _patch_fast_tar_extraction():
     tar_path = shutil.which("tar")
     if tar_path is None:
@@ -511,12 +525,12 @@ if __name__ == "__main__":
 
     requested_num_groups = _parse_num_groups(args.num_groups)
     if args.case_name.lower() == "all":
-        case_names = _discover_cases(datadir, args.topological_perturbations)
+        case_names = _parse_case_list(args)
         if not case_names:
-            case_names = _parse_case_list(args)
+            case_names = list(_DEFAULT_CASE_NAMES)
         if not case_names:
             raise RuntimeError(
-                "No OPF cases found. Provide --case_names or --case_list_file, or download cases first."
+                "No OPF cases found. Provide --case_names or --case_list_file."
             )
     else:
         case_names = [args.case_name]
