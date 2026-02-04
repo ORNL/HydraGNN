@@ -1,9 +1,7 @@
 """Train node-level OPF solution prediction.
 
 Arguments summary:
-    --case_name <name|all>        Select a single case or load all cases.
-    --case_names <a,b,c>          Comma-separated case list (used if --case_name all).
-    --case_list_file <path>       File with one case name per line.
+    --case_name <name|all> ...    Select one or more cases, or 'all'.
     --num_groups <int|all>        Select group count or load all available groups.
     --num_groups_max <int>        Fallback group count when 'all' and none on disk.
     --node_target_type bus|generator   Choose node target type to predict.
@@ -284,17 +282,12 @@ def _parse_num_groups(num_groups_arg: str) -> int | None:
     return int(num_groups_arg)
 
 
-def _parse_case_list(args):
-    cases = []
-    if args.case_names:
-        cases.extend([c.strip() for c in args.case_names.split(",") if c.strip()])
-    if args.case_list_file:
-        with open(args.case_list_file, "r") as f:
-            for line in f:
-                name = line.strip()
-                if name:
-                    cases.append(name)
-    return cases
+def _parse_case_list(case_name_args):
+    if not case_name_args:
+        return []
+    if isinstance(case_name_args, str):
+        return [case_name_args]
+    return [c.strip() for c in case_name_args if c.strip()]
 
 
 def _ensure_opf_downloaded(
@@ -436,21 +429,9 @@ if __name__ == "__main__":
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument(
         "--case_name",
-        type=str,
-        default="pglib_opf_case14_ieee",
-        help="Case name or 'all'",
-    )
-    parser.add_argument(
-        "--case_names",
-        type=str,
-        default="",
-        help="Comma-separated case list (used if --case_name all)",
-    )
-    parser.add_argument(
-        "--case_list_file",
-        type=str,
-        default="",
-        help="File with one case name per line (used if --case_name all)",
+        nargs="+",
+        default=["pglib_opf_case14_ieee"],
+        help="Case name(s) or 'all'",
     )
     parser.add_argument(
         "--num_groups",
@@ -509,16 +490,15 @@ if __name__ == "__main__":
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     requested_num_groups = _parse_num_groups(args.num_groups)
-    if args.case_name.lower() == "all":
-        case_names = _parse_case_list(args)
+    parsed_case_names = _parse_case_list(args.case_name)
+    if len(parsed_case_names) == 1 and parsed_case_names[0].lower() == "all":
+        case_names = _discover_cases(datadir, args.topological_perturbations)
         if not case_names:
             case_names = list(_DEFAULT_CASE_NAMES)
         if not case_names:
-            raise RuntimeError(
-                "No OPF cases found. Provide --case_names or --case_list_file."
-            )
+            raise RuntimeError("No OPF cases found.")
     else:
-        case_names = [args.case_name]
+        case_names = parsed_case_names
 
     for case_name in case_names:
         num_groups = requested_num_groups
