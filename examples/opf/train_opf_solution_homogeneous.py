@@ -1,4 +1,4 @@
-"""Train node-level OPF solution prediction.
+"""Train node-level OPF solution prediction (homogeneous graph).
 
 Arguments summary:
     --case_name <name|all>        Select a single case or load all cases.
@@ -69,10 +69,7 @@ def _patch_fast_tar_extraction():
                     print("", file=sys.stderr)
                 return
             except Exception:
-                subprocess.run(
-                    [tar_path, "-xzf", path, "-C", folder],
-                    check=True,
-                )
+                subprocess.run([tar_path, "-xzf", path, "-C", folder], check=True)
         except Exception:
             original_extract_tar(path, folder, mode=mode, log=log)
 
@@ -231,7 +228,7 @@ def _ensure_node_y_loc(data):
 
 
 def _prepare_sample(
-    data, node_target_type: str, case_name: str, to_homogeneous: bool = False
+    data, node_target_type: str, case_name: str, to_homogeneous: bool = True
 ):
     data.y = _build_solution_target(data, node_target_type)
     _ensure_node_y_loc(data)
@@ -344,61 +341,50 @@ def _subset_for_rank(dataset, rank, world_size):
     return [dataset[i] for i in range(rx.start, rx.stop)]
 
 
-class HeteroFromHomogeneousDataset:
-    def __init__(self, base):
+class HomogeneousDatasetAdapter:
+    def __init__(self, base, node_target_type: str):
         self.base = base
+        self.node_target_type = node_target_type
 
     def __len__(self):
         return len(self.base)
 
     def __getitem__(self, idx):
         data = self.base[idx]
-        hetero = data.to_heterogeneous()
-        if hasattr(data, "y"):
-            hetero.y = data.y
-        if hasattr(data, "graph_attr"):
-            hetero.graph_attr = data.graph_attr
-        return hetero
+        if hasattr(data, "node_types"):
+            data = data.to_homogeneous(
+                node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
+            )
+        if not hasattr(data, "node_type") or not hasattr(data, "_node_type_names"):
+            raise RuntimeError("Expected homogeneous OPF sample with node_type.")
+        if self.node_target_type not in data._node_type_names:
+            raise RuntimeError(
+                f"Node type '{self.node_target_type}' not found in OPF sample."
+            )
+        if not hasattr(data, "y") or data.y is None:
+            raise RuntimeError(
+                f"No targets found for node type '{self.node_target_type}' in OPF sample."
+            )
+        type_index = data._node_type_names.index(self.node_target_type)
+        mask = data.node_type == type_index
+        data.y = data.y[mask]
+        if hasattr(data, "batch"):
+            data.batch = data.batch[mask]
+        _ensure_node_y_loc(data)
+        return data
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
 
 
-class NodeBatchAdapter:
-    def __init__(self, loader, node_target_type: str):
+class HomogeneousBatchAdapter:
+    def __init__(self, loader):
         self.loader = loader
-        self.node_target_type = node_target_type
         self.dataset = loader.dataset
         self.sampler = getattr(loader, "sampler", None)
 
     def __iter__(self):
         for data in self.loader:
-            if not hasattr(data, "batch"):
-                if (
-                    hasattr(data, "node_types")
-                    and self.node_target_type in data.node_types
-                ):
-                    node_store = data[self.node_target_type]
-                    if hasattr(node_store, "batch"):
-                        data.batch = node_store.batch
-                if not hasattr(data, "batch") and hasattr(data, "batch_dict"):
-                    if self.node_target_type in data.batch_dict:
-                        data.batch = data.batch_dict[self.node_target_type]
-                    elif len(data.batch_dict) > 0:
-                        data.batch = next(iter(data.batch_dict.values()))
-
-            if hasattr(data, "node_types") and self.node_target_type in data.node_types:
-                data.y = data[self.node_target_type].y
-            else:
-                if not hasattr(data, "batch") and hasattr(data, "node_type"):
-                    raise RuntimeError("Missing batch indices for node targets.")
-                if hasattr(data, "_node_type_names") and hasattr(data, "node_type"):
-                    if self.node_target_type not in data._node_type_names:
-                        raise RuntimeError(
-                            f"Node type '{self.node_target_type}' not found in OPF sample."
-                        )
-                    type_index = data._node_type_names.index(self.node_target_type)
-                    mask = data.node_type == type_index
-                    data.y = data.y[mask]
-                    if hasattr(data, "batch"):
-                        data.batch = data.batch[mask]
             _ensure_node_y_loc(data)
             yield data
 
@@ -407,43 +393,6 @@ class NodeBatchAdapter:
 
     def __getattr__(self, name):
         return getattr(self.loader, name)
-
-
-class NodeTargetDatasetAdapter:
-    def __init__(self, base, node_target_type: str):
-        self.base = base
-        self.node_target_type = node_target_type
-
-    def __len__(self):
-        return len(self.base)
-
-    def _attach_target(self, data):
-        if hasattr(data, "node_types") and self.node_target_type in data.node_types:
-            if (
-                hasattr(data[self.node_target_type], "y")
-                and data[self.node_target_type].y is not None
-            ):
-                data.y = data[self.node_target_type].y
-        return data
-
-    @staticmethod
-    def _has_nonempty_y(data):
-        return hasattr(data, "y") and data.y is not None and data.y.numel() > 0
-
-    def __getitem__(self, idx):
-        data = self._attach_target(self.base[idx])
-        if not self._has_nonempty_y(data):
-            max_tries = min(50, len(self.base))
-            for offset in range(1, max_tries):
-                cand = self._attach_target(self.base[(idx + offset) % len(self.base)])
-                if self._has_nonempty_y(cand):
-                    data = cand
-                    break
-        _ensure_node_y_loc(data)
-        return data
-
-    def __getattr__(self, name):
-        return getattr(self.base, name)
 
 
 if __name__ == "__main__":
@@ -601,7 +550,6 @@ if __name__ == "__main__":
         )
 
     if args.preonly:
-        store_homogeneous = args.format == "adios"
         verbosity = config["Verbosity"]["level"]
         trainset = []
         valset = []
@@ -612,29 +560,21 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess train {case_name}", leave=False
             ):
                 trainset.append(
-                    _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
-                    )
+                    _prepare_sample(d, args.node_target_type, case_name, True)
                 )
         for case_name, val_split in zip(case_names, val_raw):
             subset = _subset_for_rank(val_split, rank, comm_size)
             for d in iterate_tqdm(
                 subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
             ):
-                valset.append(
-                    _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
-                    )
-                )
+                valset.append(_prepare_sample(d, args.node_target_type, case_name, True))
         for case_name, test_split in zip(case_names, test_raw):
             subset = _subset_for_rank(test_split, rank, comm_size)
             for d in iterate_tqdm(
                 subset, verbosity, desc=f"Preprocess test {case_name}", leave=False
             ):
                 testset.append(
-                    _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
-                    )
+                    _prepare_sample(d, args.node_target_type, case_name, True)
                 )
 
         info(
@@ -666,16 +606,23 @@ if __name__ == "__main__":
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HeteroFromHomogeneousDataset(train_base)
-        valset = HeteroFromHomogeneousDataset(val_base)
-        testset = HeteroFromHomogeneousDataset(test_base)
+        trainset = HomogeneousDatasetAdapter(train_base, args.node_target_type)
+        valset = HomogeneousDatasetAdapter(val_base, args.node_target_type)
+        testset = HomogeneousDatasetAdapter(test_base, args.node_target_type)
     else:
         basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
-        trainset = SimplePickleDataset(
-            basedir=basedir, label="trainset", var_config=None
+        trainset = HomogeneousDatasetAdapter(
+            SimplePickleDataset(basedir=basedir, label="trainset", var_config=None),
+            args.node_target_type,
         )
-        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
-        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
+        valset = HomogeneousDatasetAdapter(
+            SimplePickleDataset(basedir=basedir, label="valset", var_config=None),
+            args.node_target_type,
+        )
+        testset = HomogeneousDatasetAdapter(
+            SimplePickleDataset(basedir=basedir, label="testset", var_config=None),
+            args.node_target_type,
+        )
 
     resolved_node_target_type = _resolve_node_target_type(
         trainset[0], args.node_target_type
@@ -686,17 +633,13 @@ if __name__ == "__main__":
         )
         args.node_target_type = resolved_node_target_type
 
-    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
-    valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
-    testset = NodeTargetDatasetAdapter(testset, args.node_target_type)
-
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    train_loader = NodeBatchAdapter(train_loader, args.node_target_type)
-    val_loader = NodeBatchAdapter(val_loader, args.node_target_type)
-    test_loader = NodeBatchAdapter(test_loader, args.node_target_type)
+    train_loader = HomogeneousBatchAdapter(train_loader)
+    val_loader = HomogeneousBatchAdapter(val_loader)
+    test_loader = HomogeneousBatchAdapter(test_loader)
 
     config = update_config(config, train_loader, val_loader, test_loader)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
