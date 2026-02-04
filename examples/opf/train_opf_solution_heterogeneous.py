@@ -242,6 +242,28 @@ def _ensure_non_scalar_attrs(data):
     return data
 
 
+def _ensure_node_store_metadata(data, target_dim: int):
+    if not hasattr(data, "node_types"):
+        return data
+    for node_type in data.node_types:
+        store = data[node_type]
+        num_nodes = getattr(store, "num_nodes", None)
+        if num_nodes is None:
+            if hasattr(store, "x") and store.x is not None:
+                num_nodes = int(store.x.shape[0])
+            elif hasattr(store, "y") and store.y is not None:
+                num_nodes = int(store.y.shape[0])
+        if num_nodes is not None:
+            store.num_nodes = int(num_nodes)
+            if not hasattr(store, "y") or store.y is None:
+                store.y = torch.zeros(
+                    (int(num_nodes), int(target_dim)),
+                    dtype=torch.float32,
+                    device=data.y.device,
+                )
+    return data
+
+
 def _prepare_sample(
     data, node_target_type: str, case_name: str, to_homogeneous: bool = False
 ):
@@ -252,6 +274,7 @@ def _prepare_sample(
     _ensure_non_scalar_attrs(data)
     if not to_homogeneous:
         return data
+    _ensure_node_store_metadata(data, target_dim=int(data.y.shape[1]))
     data_h = data.to_homogeneous(
         node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
     )
