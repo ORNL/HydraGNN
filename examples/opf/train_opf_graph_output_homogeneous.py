@@ -204,7 +204,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="opf_homogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="opf_graph_output_homogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument(
         "--case_name",
