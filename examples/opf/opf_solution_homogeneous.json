@@ -1,0 +1,51 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "HeteroGIN",
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "pe_dim": 0,
+            "max_neighbours": 100,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [32, 16],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0],
+            "hetero_pooling_mode": "sum",
+            "node_target_type": "bus"
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0, 1, 2, 3],
+            "graph_feature_names": ["context"],
+            "graph_feature_dims": [1],
+            "node_feature_names": ["node_features"],
+            "node_feature_dims": [4],
+            "output_names": ["bus_solution"],
+            "output_index": [0],
+            "output_dim": [2],
+            "type": ["node"],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 20,
+            "batch_size": 32,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 1e-3
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}
