@@ -259,7 +259,7 @@ class Base(Module):
             self.graph_conditioner = self.graph_conditioner.to(device)
 
     def _ensure_graph_concat_projector(
-        self, graph_attr_dim: int, channel_dim: int, device
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
     ):
         """Instantiate (or move) concat projector used when conditioning_mode='concat_node'."""
         in_dim = channel_dim + graph_attr_dim
@@ -268,8 +268,12 @@ class Base(Module):
         ):
             self.graph_concat_projector = Linear(in_dim, channel_dim)
             self.graph_concat_projector_in_dim = in_dim
-        if self.graph_concat_projector.weight.device != device:
-            self.graph_concat_projector = self.graph_concat_projector.to(device)
+        if (self.graph_concat_projector.weight.device != device) or (
+            dtype is not None and self.graph_concat_projector.weight.dtype != dtype
+        ):
+            self.graph_concat_projector = self.graph_concat_projector.to(
+                device=device, dtype=dtype
+            )
 
     def _ensure_graph_pool_projector(
         self, graph_attr_dim: int, channel_dim: int, device, dtype=None
@@ -363,6 +367,7 @@ class Base(Module):
                 graph_attr_dim=graph_attr.size(-1),
                 channel_dim=channel_dim,
                 device=inv_node_feat.device,
+                dtype=inv_node_feat.dtype,
             )
             graph_attr_b = graph_attr[batch]
             fused = torch.cat([inv_node_feat, graph_attr_b], dim=-1)
