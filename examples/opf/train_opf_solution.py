@@ -509,10 +509,10 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
 
-    if args.batch_size is not None:
-        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-    if args.num_epoch is not None:
-        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+    if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
+        args.node_target_type = config["NeuralNetwork"]["Architecture"][
+            "node_target_type"
+        ]
 
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
@@ -659,23 +659,6 @@ if __name__ == "__main__":
         dist.destroy_process_group()
         raise SystemExit(0)
 
-    sample = _prepare_sample(train_raw[0][0], args.node_target_type, case_names[0])
-    input_dim = max(
-        data.x.size(-1) for data in sample.node_stores if hasattr(data, "x")
-    )
-    target_dim = int(sample.y.size(-1))
-
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["input_node_features"] = list(range(input_dim))
-    var_config["node_feature_dims"] = [input_dim]
-    var_config["graph_feature_names"] = ["context"]
-    var_config["graph_feature_dims"] = [1]
-    var_config["output_names"] = [f"{args.node_target_type}_solution"]
-    var_config["output_index"] = [0]
-    var_config["output_dim"] = [target_dim]
-    var_config["type"] = ["node"]
-    config["NeuralNetwork"]["Architecture"]["node_target_type"] = args.node_target_type
-
     if args.format == "adios":
         if AdiosDataset is None:
             raise RuntimeError("adios2 is not available in this environment.")
@@ -702,9 +685,6 @@ if __name__ == "__main__":
             f"Resolved node_target_type '{args.node_target_type}' -> '{resolved_node_target_type}'"
         )
         args.node_target_type = resolved_node_target_type
-        config["NeuralNetwork"]["Architecture"][
-            "node_target_type"
-        ] = resolved_node_target_type
 
     trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
     valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
