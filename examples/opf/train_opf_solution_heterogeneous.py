@@ -242,6 +242,23 @@ def _ensure_non_scalar_attrs(data):
     return data
 
 
+def _to_int_num_nodes(value):
+    if value is None:
+        return None
+    if isinstance(value, torch.Tensor):
+        if value.numel() == 1:
+            return int(value.item())
+        return None
+    if isinstance(value, np.ndarray):
+        if value.size == 1:
+            return int(value.reshape(1)[0])
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _ensure_node_store_metadata(data, target_dim: int):
     if not hasattr(data, "node_types"):
         return data
@@ -257,8 +274,9 @@ def _ensure_node_store_metadata(data, target_dim: int):
                 num_nodes = store.x.shape[0]
             elif hasattr(store, "y") and store.y is not None:
                 num_nodes = store.y.shape[0]
+        num_nodes = _to_int_num_nodes(num_nodes)
         if num_nodes is not None:
-            store.num_nodes = int(num_nodes)
+            store.num_nodes = num_nodes
             if not hasattr(store, "y") or store.y is None:
                 store.y = torch.zeros(
                     (int(num_nodes), int(target_dim)),
