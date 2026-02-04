@@ -30,7 +30,7 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "use_graph_attr_conditioning": true,
-            "graph_attr_conditioning_mode": "fuse_pool",
+            "graph_attr_conditioning_mode": "concat_node",
             "output_heads": {
                 "graph":
                     {
