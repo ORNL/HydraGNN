@@ -259,9 +259,29 @@ def _to_int_num_nodes(value):
         return None
 
 
+def _infer_num_nodes_from_edges(data):
+    inferred = {}
+    if not hasattr(data, "edge_types"):
+        return inferred
+    for edge_type in data.edge_types:
+        edge_store = data[edge_type]
+        if not hasattr(edge_store, "edge_index") or edge_store.edge_index is None:
+            continue
+        edge_index = edge_store.edge_index
+        if not isinstance(edge_index, torch.Tensor) or edge_index.numel() == 0:
+            continue
+        src_type, _, dst_type = edge_type
+        src_max = int(edge_index[0].max().item()) + 1
+        dst_max = int(edge_index[1].max().item()) + 1
+        inferred[src_type] = max(inferred.get(src_type, 0), src_max)
+        inferred[dst_type] = max(inferred.get(dst_type, 0), dst_max)
+    return inferred
+
+
 def _ensure_node_store_metadata(data, target_dim: int):
     if not hasattr(data, "node_types"):
         return data
+    inferred = _infer_num_nodes_from_edges(data)
     for node_type in data.node_types:
         store = data[node_type]
         num_nodes = None
@@ -270,19 +290,22 @@ def _ensure_node_store_metadata(data, target_dim: int):
         if num_nodes is None and hasattr(data, "num_nodes_dict"):
             num_nodes = data.num_nodes_dict.get(node_type)
         if num_nodes is None:
+            num_nodes = inferred.get(node_type)
+        if num_nodes is None:
             if hasattr(store, "x") and store.x is not None:
                 num_nodes = store.x.shape[0]
             elif hasattr(store, "y") and store.y is not None:
                 num_nodes = store.y.shape[0]
         num_nodes = _to_int_num_nodes(num_nodes)
-        if num_nodes is not None:
-            store.num_nodes = num_nodes
-            if not hasattr(store, "y") or store.y is None:
-                store.y = torch.zeros(
-                    (int(num_nodes), int(target_dim)),
-                    dtype=torch.float32,
-                    device=data.y.device,
-                )
+        if num_nodes is None:
+            num_nodes = 0
+        store.num_nodes = num_nodes
+        if not hasattr(store, "y") or store.y is None:
+            store.y = torch.zeros(
+                (int(num_nodes), int(target_dim)),
+                dtype=torch.float32,
+                device=data.y.device,
+            )
     return data
 
 
