@@ -306,9 +306,6 @@ def _ensure_node_store_metadata(data, target_dim: int):
                 dtype=torch.float32,
                 device=data.y.device,
             )
-    data.num_nodes_dict = {
-        ntype: int(data[ntype].num_nodes) for ntype in data.node_types
-    }
     return data
 
 
@@ -343,6 +340,8 @@ def _prepare_sample(
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
     data.case_name = case_name
     _ensure_non_scalar_attrs(data)
+    if hasattr(data, "num_nodes_dict"):
+        delattr(data, "num_nodes_dict")
     if not to_homogeneous:
         return data
     _ensure_node_store_metadata(data, target_dim=int(data.y.shape[1]))
@@ -353,6 +352,8 @@ def _prepare_sample(
     data_h.graph_attr = data.graph_attr
     data_h.case_name = case_name
     _ensure_non_scalar_attrs(data_h)
+    if hasattr(data_h, "num_nodes_dict"):
+        delattr(data_h, "num_nodes_dict")
     return data_h
 
 
