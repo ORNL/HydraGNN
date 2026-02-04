@@ -1,6 +1,6 @@
 # HydraGNN
 
-Distributed PyTorch Implementation of Multi-Headed Graph Neural Networks
+Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 
 <img src="https://github.com/ORNL/HydraGNN/assets/2488656/a6d5369b-2a70-4eee-aa39-b2cf8dedf262" alt="HydraGNN_QRcode" width="300" />
 
