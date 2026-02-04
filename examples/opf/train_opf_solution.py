@@ -230,16 +230,20 @@ def _ensure_node_y_loc(data):
     )
 
 
-def _prepare_sample(data, node_target_type: str, to_homogeneous: bool = False):
+def _prepare_sample(
+    data, node_target_type: str, case_name: str, to_homogeneous: bool = False
+):
     data.y = _build_solution_target(data, node_target_type)
     _ensure_node_y_loc(data)
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
+    data.case_name = case_name
     if not to_homogeneous:
         return data
     data_h = data.to_homogeneous(
         node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
     )
     data_h.graph_attr = data.graph_attr
+    data_h.case_name = case_name
     return data_h
 
 
@@ -608,7 +612,9 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess train {case_name}", leave=False
             ):
                 trainset.append(
-                    _prepare_sample(d, args.node_target_type, store_homogeneous)
+                    _prepare_sample(
+                        d, args.node_target_type, case_name, store_homogeneous
+                    )
                 )
         for case_name, val_split in zip(case_names, val_raw):
             subset = _subset_for_rank(val_split, rank, comm_size)
@@ -616,7 +622,9 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
             ):
                 valset.append(
-                    _prepare_sample(d, args.node_target_type, store_homogeneous)
+                    _prepare_sample(
+                        d, args.node_target_type, case_name, store_homogeneous
+                    )
                 )
         for case_name, test_split in zip(case_names, test_raw):
             subset = _subset_for_rank(test_split, rank, comm_size)
@@ -624,7 +632,9 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess test {case_name}", leave=False
             ):
                 testset.append(
-                    _prepare_sample(d, args.node_target_type, store_homogeneous)
+                    _prepare_sample(
+                        d, args.node_target_type, case_name, store_homogeneous
+                    )
                 )
 
         info(
@@ -649,7 +659,7 @@ if __name__ == "__main__":
         dist.destroy_process_group()
         raise SystemExit(0)
 
-    sample = _prepare_sample(train_raw[0][0], args.node_target_type)
+    sample = _prepare_sample(train_raw[0][0], args.node_target_type, case_names[0])
     input_dim = max(
         data.x.size(-1) for data in sample.node_stores if hasattr(data, "x")
     )
