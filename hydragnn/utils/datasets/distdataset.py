@@ -37,6 +37,7 @@ class DistDataset(AbstractBaseDataset):
         super().__init__()
 
         self.label = label
+        self.local = local
         self.comm = comm
         self.rank = self.comm.Get_rank()
         self.comm_size = self.comm.Get_size()
@@ -175,9 +176,15 @@ class DistDataset(AbstractBaseDataset):
         ## per-sample approach
         if self.ddstore and self.ddstore_store_per_sample:
             buf = BytesIO()
-            rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
-                self.ddstore_comm_rank
-            ]
+            if self.local:
+                local_ns = len(self.dataset)
+                local_ns_list = self.comm.allgather(local_ns)
+                start_idx = int(np.sum(local_ns_list[: self.rank]))
+                rx = list(range(start_idx, start_idx + local_ns))
+            else:
+                rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
+                    self.ddstore_comm_rank
+                ]
             local_record_count = list()
             for idx in rx:
                 data_object = dict()
