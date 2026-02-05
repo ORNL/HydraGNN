@@ -178,15 +178,20 @@ from hydragnn.utils.model import print_model
 from hydragnn.utils.print import iterate_tqdm
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 
+from opf_solution_utils import (
+    HeteroFromHomogeneousDataset,
+    NodeBatchAdapter,
+    NodeTargetDatasetAdapter,
+    ensure_node_y_loc as _ensure_node_y_loc,
+    info,
+    resolve_node_target_type as _resolve_node_target_type,
+)
+
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     AdiosWriter = None
     AdiosDataset = None
-
-
-def info(*args, logtype="info", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
 
 
 def _build_solution_target(data, node_target_type: str):
@@ -461,102 +466,6 @@ def _ensure_opf_downloaded(
 def _subset_for_rank(dataset, rank, world_size):
     rx = list(nsplit(range(len(dataset)), world_size))[rank]
     return [dataset[i] for i in range(rx.start, rx.stop)]
-
-
-class HeteroFromHomogeneousDataset:
-    def __init__(self, base):
-        self.base = base
-
-    def __len__(self):
-        return len(self.base)
-
-    def __getitem__(self, idx):
-        data = self.base[idx]
-        hetero = data.to_heterogeneous()
-        if hasattr(data, "y"):
-            hetero.y = data.y
-        if hasattr(data, "graph_attr"):
-            hetero.graph_attr = data.graph_attr
-        return hetero
-
-
-class NodeBatchAdapter:
-    def __init__(self, loader, node_target_type: str):
-        self.loader = loader
-        self.node_target_type = node_target_type
-        self.dataset = loader.dataset
-        self.sampler = getattr(loader, "sampler", None)
-
-    def __iter__(self):
-        for data in self.loader:
-            if (
-                not hasattr(data, "node_types")
-                or self.node_target_type not in data.node_types
-            ):
-                raise RuntimeError(
-                    f"Node type '{self.node_target_type}' not found in OPF sample."
-                )
-
-            if not hasattr(data, "batch"):
-                node_store = data[self.node_target_type]
-                if hasattr(node_store, "batch"):
-                    data.batch = node_store.batch
-                elif (
-                    hasattr(data, "batch_dict")
-                    and self.node_target_type in data.batch_dict
-                ):
-                    data.batch = data.batch_dict[self.node_target_type]
-                elif hasattr(data, "batch_dict") and len(data.batch_dict) > 0:
-                    data.batch = next(iter(data.batch_dict.values()))
-
-            if (
-                not hasattr(data[self.node_target_type], "y")
-                or data[self.node_target_type].y is None
-            ):
-                raise RuntimeError(
-                    f"No targets found for node type '{self.node_target_type}' in OPF sample."
-                )
-            data.y = data[self.node_target_type].y
-            _ensure_node_y_loc(data)
-            yield data
-
-    def __len__(self):
-        return len(self.loader)
-
-    def __getattr__(self, name):
-        return getattr(self.loader, name)
-
-
-class NodeTargetDatasetAdapter:
-    def __init__(self, base, node_target_type: str):
-        self.base = base
-        self.node_target_type = node_target_type
-
-    def __len__(self):
-        return len(self.base)
-
-    def __getitem__(self, idx):
-        data = self.base[idx]
-        if (
-            not hasattr(data, "node_types")
-            or self.node_target_type not in data.node_types
-        ):
-            raise RuntimeError(
-                f"Node type '{self.node_target_type}' not found in OPF sample."
-            )
-        if (
-            not hasattr(data[self.node_target_type], "y")
-            or data[self.node_target_type].y is None
-        ):
-            raise RuntimeError(
-                f"No targets found for node type '{self.node_target_type}' in OPF sample."
-            )
-        data.y = data[self.node_target_type].y
-        _ensure_node_y_loc(data)
-        return data
-
-    def __getattr__(self, name):
-        return getattr(self.base, name)
 
 
 if __name__ == "__main__":
