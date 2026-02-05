@@ -170,7 +170,6 @@ if __name__ == "__main__":
         acq_func="UCB",
         multi_point_strategy="cl_min",  # Constant liar strategy
         log_dir=log_name,  # Location where to store the results
-        n_jobs=OMP_NUM_THREADS,  # Number of threads used to update surrogate model of BO
     )
 
     # Ensure the HPO random seed matches the script's random_state
