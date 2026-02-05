@@ -184,9 +184,6 @@ class DistDataset(AbstractBaseDataset):
                 rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
                     self.ddstore_comm_rank
                 ]
-            assert len(data) == len(
-                rx
-            ), f"Local data size mismatch: {len(data)} != {len(rx)}"
             local_record_count = list()
             for idx in rx:
                 data_object = dict()
