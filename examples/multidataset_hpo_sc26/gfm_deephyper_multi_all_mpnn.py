@@ -1,5 +1,6 @@
 import os, sys
 
+import math
 import torch
 
 torch.backends.cudnn.enabled = False
@@ -33,19 +34,6 @@ OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
 DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
 DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
 SLURM_JOB_ID = os.environ["SLURM_JOB_ID"]
-
-
-def _parse_results(stdout):
-    pattern = r"Tasks Val Loss: \[([^\]]+)\]"
-    matches = re.findall(pattern, stdout.decode())
-    if not matches:
-        return "F"
-    last = matches[-1]
-    numbers = re.findall(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", last)
-    if len(numbers) < 3:
-        return "F"
-    avg = (float(numbers[1]) + float(numbers[2])) / 2.0
-    return str(avg)
 
 
 def run(trial, dequed=None):
@@ -99,26 +87,34 @@ def run(trial, dequed=None):
     )
     print("Command = ", command, flush=True, file=f)
 
-    output = "F"
+    objective = -math.inf
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-        pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
+        pattern = r"Tasks Val Loss: \[([^\]]+)\]"
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
+        last_avg = None
         while True:
             line = fout.readline()
             matches = re.findall(pattern, line)
             if matches:
-                output = -float(matches[-1][0])
+                last = matches[-1]
+                numbers = re.findall(
+                    r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?",
+                    last,
+                )
+                if len(numbers) >= 3:
+                    last_avg = (float(numbers[1]) + float(numbers[2])) / 2.0
             if not line:
                 break
         fout.close()
+        if last_avg is not None:
+            objective = -last_avg
 
     except Exception as excp:
         print(excp, flush=True, file=f)
-        output = "F"
+        objective = -math.inf
 
-    print("Output:", output, flush=True, file=f)
-    objective = output
+    print("Objective:", objective, flush=True, file=f)
     print(objective, flush=True, file=f)
     metadata = {"some_info": "some_value"}
     f.close()
@@ -167,19 +163,21 @@ if __name__ == "__main__":
         queue_pop_per_task=NNODES_PER_TRIAL,  # Remove the hard-coded value later
     )
 
-    # Define the search method and scalarization
-    # search = CBO(problem, parallel_evaluator, random_state=42, log_dir=log_name)
+    # Define the search method
+    # IMPORTANT: do NOT pass random_state in CBO(...) with current DeepHyper; it collides with the signature.
     search = CBO(
         problem,
-        evaluator,
         acq_func="UCB",
         multi_point_strategy="cl_min",  # Constant liar strategy
-        # Location where to store the results
-        log_dir=log_name,
-        # Number of threads used to update surrogate model of BO
-        n_jobs=OMP_NUM_THREADS,
+        log_dir=log_name,  # Location where to store the results
+        n_jobs=OMP_NUM_THREADS,  # Number of threads used to update surrogate model of BO
     )
 
+    # Ensure the HPO random seed matches the script's random_state
+    # (Attribute assignment is the most version-tolerant way across recent DeepHyper releases.)
+    search.random_state = random_state
+
+    # Optionally preload results
     fname = os.path.join("gfm", "preloaded_results.csv")
     if os.path.exists(fname):
         t0 = time.time()
@@ -190,7 +188,7 @@ if __name__ == "__main__":
         print("Fit done:", t1 - t0)
 
     timeout = None
-    results = search.search(max_evals=200, timeout=timeout)
+    results = search.search(evaluator, max_evals=200, timeout=timeout)
     print(results)
 
     sys.exit(0)
