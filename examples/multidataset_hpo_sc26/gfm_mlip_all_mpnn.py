@@ -111,6 +111,12 @@ if __name__ == "__main__":
         default=None,
         help="Override Architecture.force_weight; when omitted the JSON value is used",
     )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=None,
+        help="Override Training.Optimizer.learning_rate; when omitted the JSON value is used",
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -169,6 +175,10 @@ if __name__ == "__main__":
     ]
     if args.force_weight is not None:
         config["NeuralNetwork"]["Architecture"]["force_weight"] = args.force_weight
+    if args.learning_rate is not None:
+        config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ] = args.learning_rate
 
     dim_headlayers = [
         args.parameters["dim_headlayers"]
