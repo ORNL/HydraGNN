@@ -95,6 +95,12 @@ if __name__ == "__main__":
         choices=["bus", "generator"],
     )
     parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument(
+        "--config_from_log",
+        action="store_true",
+        help="Load config from logs/<modelname>/config.json when available",
+    )
+    parser.set_defaults(config_from_log=True)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--adios", action="store_const", dest="format", const="adios")
@@ -108,9 +114,16 @@ if __name__ == "__main__":
 
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     input_filename = os.path.join(dirpwd, args.inputfile)
+    log_config_path = os.path.join("./logs", args.modelname, "config.json")
 
-    with open(input_filename, "r") as f:
-        config = json.load(f)
+    if args.config_from_log and os.path.isfile(log_config_path):
+        if rank == 0:
+            info(f"Loading config from {log_config_path}")
+        with open(log_config_path, "r") as f:
+            config = json.load(f)
+    else:
+        with open(input_filename, "r") as f:
+            config = json.load(f)
 
     if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
