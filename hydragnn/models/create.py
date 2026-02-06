@@ -49,6 +49,7 @@ def create_model_config(
     verbosity: int = 0,
     use_gpu: bool = True,
     metadata=None,
+    node_input_dims=None,
 ):
     model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
@@ -109,6 +110,7 @@ def create_model_config(
             "share_relation_weights", False
         ),
         metadata=metadata,
+        node_input_dims=node_input_dims,
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -172,6 +174,7 @@ def create_model(
     node_target_type: str = None,
     share_relation_weights: bool = False,
     metadata=None,
+    node_input_dims=None,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -623,6 +626,7 @@ def create_model(
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
             metadata=metadata,
+            node_input_dims=node_input_dims,
         )
 
     elif mpnn_type == "HeteroSAGE":
@@ -651,6 +655,7 @@ def create_model(
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
             metadata=metadata,
+            node_input_dims=node_input_dims,
         )
 
     elif mpnn_type == "HeteroGAT":
@@ -684,6 +689,7 @@ def create_model(
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
             metadata=metadata,
+            node_input_dims=node_input_dims,
         )
 
     elif mpnn_type == "HeteroPNA":
@@ -715,6 +721,7 @@ def create_model(
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
             metadata=metadata,
+            node_input_dims=node_input_dims,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
