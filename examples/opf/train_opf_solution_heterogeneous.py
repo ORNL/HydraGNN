@@ -1,11 +1,16 @@
 """Train node-level OPF solution prediction.
 
+Use --max_samples <int> to cap the total number of samples preprocessed
+across train/val/test splits (proportional allocation). For example,
+"--max_samples 100 --preonly" will serialize 100 total samples to pickle.
+
 Arguments summary:
     --case_name <name|all> ...    Select one or more cases, or 'all'.
     --num_groups <int|all>        Select group count or load all available groups.
     --num_groups_max <int>        Fallback group count when 'all' and none on disk.
     --node_target_type bus|generator   Choose node target type to predict.
     --preonly                     Preprocess/serialize only (no training).
+    --max_samples <int>           Limit total samples across splits.
     --adios / --pickle            Serialization format.
     --batch_size / --num_epoch    Override training hyperparameters.
 """
@@ -237,6 +242,15 @@ def _ensure_node_y_loc(data):
 
 
 def _ensure_non_scalar_attrs(data):
+    if hasattr(data, "_global_store"):
+        store = data._global_store
+        for key in list(store.keys()):
+            value = store[key]
+            if isinstance(value, torch.Tensor) and value.dim() == 0:
+                store[key] = value.reshape(1)
+            elif isinstance(value, np.ndarray) and value.ndim == 0:
+                store[key] = value.reshape(1)
+        return data
     keys = data.keys() if callable(data.keys) else data.keys
     for key in list(keys):
         value = data[key]
@@ -463,9 +477,40 @@ def _ensure_opf_downloaded(
     comm.Barrier()
 
 
-def _subset_for_rank(dataset, rank, world_size):
-    rx = list(nsplit(range(len(dataset)), world_size))[rank]
+def _subset_for_rank(dataset, rank, world_size, max_samples=None):
+    if max_samples is None:
+        indices = range(len(dataset))
+    else:
+        max_samples = max(0, min(int(max_samples), len(dataset)))
+        indices = range(max_samples)
+    rx = list(nsplit(indices, world_size))[rank]
     return [dataset[i] for i in range(rx.start, rx.stop)]
+
+
+def _allocate_split_caps(max_samples, split_sizes):
+    if max_samples is None:
+        return {name: None for name in split_sizes}
+    total = sum(split_sizes.values())
+    if total <= 0:
+        return {name: 0 for name in split_sizes}
+    raw = {
+        name: (max_samples * (size / total)) if size > 0 else 0
+        for name, size in split_sizes.items()
+    }
+    caps = {name: min(split_sizes[name], int(raw[name])) for name in split_sizes}
+    remainder = max_samples - sum(caps.values())
+    order = sorted(
+        split_sizes.keys(),
+        key=lambda name: (raw[name] - int(raw[name])),
+        reverse=True,
+    )
+    for name in order:
+        if remainder <= 0:
+            break
+        if caps[name] < split_sizes[name]:
+            caps[name] += 1
+            remainder -= 1
+    return caps
 
 
 if __name__ == "__main__":
@@ -497,6 +542,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--topological_perturbations", action="store_true")
     parser.add_argument("--preonly", action="store_true", help="preprocess only")
+    parser.add_argument(
+        "--max_samples",
+        type=int,
+        default=None,
+        help="Limit total number of samples across train/val/test splits",
+    )
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument("--modelname", type=str, default="OPF_Solution")
@@ -611,14 +662,30 @@ if __name__ == "__main__":
             )
         )
 
+    split_sizes = {
+        "train": sum(len(d) for d in train_raw),
+        "val": sum(len(d) for d in val_raw),
+        "test": sum(len(d) for d in test_raw),
+    }
+    split_caps = _allocate_split_caps(args.max_samples, split_sizes)
+    if args.max_samples is not None:
+        info(
+            "Limiting samples across splits: "
+            f"train={split_caps['train']}, val={split_caps['val']}, test={split_caps['test']}"
+        )
+
     if args.preonly:
         store_homogeneous = args.format == "adios"
         verbosity = config["Verbosity"]["level"]
         trainset = []
         valset = []
         testset = []
+        remaining_caps = dict(split_caps)
         for case_name, train_split in zip(case_names, train_raw):
-            subset = _subset_for_rank(train_split, rank, comm_size)
+            case_cap = remaining_caps["train"]
+            if case_cap is not None:
+                case_cap = max(0, min(case_cap, len(train_split)))
+            subset = _subset_for_rank(train_split, rank, comm_size, case_cap)
             for d in iterate_tqdm(
                 subset, verbosity, desc=f"Preprocess train {case_name}", leave=False
             ):
@@ -627,8 +694,15 @@ if __name__ == "__main__":
                         d, args.node_target_type, case_name, store_homogeneous
                     )
                 )
+            if remaining_caps["train"] is not None:
+                remaining_caps["train"] = max(
+                    0, remaining_caps["train"] - min(len(train_split), case_cap or 0)
+                )
         for case_name, val_split in zip(case_names, val_raw):
-            subset = _subset_for_rank(val_split, rank, comm_size)
+            case_cap = remaining_caps["val"]
+            if case_cap is not None:
+                case_cap = max(0, min(case_cap, len(val_split)))
+            subset = _subset_for_rank(val_split, rank, comm_size, case_cap)
             for d in iterate_tqdm(
                 subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
             ):
@@ -637,8 +711,15 @@ if __name__ == "__main__":
                         d, args.node_target_type, case_name, store_homogeneous
                     )
                 )
+            if remaining_caps["val"] is not None:
+                remaining_caps["val"] = max(
+                    0, remaining_caps["val"] - min(len(val_split), case_cap or 0)
+                )
         for case_name, test_split in zip(case_names, test_raw):
-            subset = _subset_for_rank(test_split, rank, comm_size)
+            case_cap = remaining_caps["test"]
+            if case_cap is not None:
+                case_cap = max(0, min(case_cap, len(test_split)))
+            subset = _subset_for_rank(test_split, rank, comm_size, case_cap)
             for d in iterate_tqdm(
                 subset, verbosity, desc=f"Preprocess test {case_name}", leave=False
             ):
@@ -646,6 +727,10 @@ if __name__ == "__main__":
                     _prepare_sample(
                         d, args.node_target_type, case_name, store_homogeneous
                     )
+                )
+            if remaining_caps["test"] is not None:
+                remaining_caps["test"] = max(
+                    0, remaining_caps["test"] - min(len(test_split), case_cap or 0)
                 )
 
         info(
