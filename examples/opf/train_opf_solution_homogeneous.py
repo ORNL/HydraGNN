@@ -569,7 +569,9 @@ if __name__ == "__main__":
             for d in iterate_tqdm(
                 subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
             ):
-                valset.append(_prepare_sample(d, args.node_target_type, case_name, True))
+                valset.append(
+                    _prepare_sample(d, args.node_target_type, case_name, True)
+                )
         for case_name, test_split in zip(case_names, test_raw):
             subset = _subset_for_rank(test_split, rank, comm_size)
             for d in iterate_tqdm(
