@@ -37,6 +37,7 @@ class DistDataset(AbstractBaseDataset):
         super().__init__()
 
         self.label = label
+        self.local = local
         self.comm = comm
         self.rank = self.comm.Get_rank()
         self.comm_size = self.comm.Get_size()
@@ -71,15 +72,15 @@ class DistDataset(AbstractBaseDataset):
         self.ddstore_store_per_sample = ddstore_store_per_sample
 
         ## set total before set subset
-        if local:
+        if self.local:
             local_ns = len(data)
-            local_ns_list = comm.allgather(local_ns)
+            local_ns_list = self.comm.allgather(local_ns)
             maxrank = np.argmax(local_ns_list).item()
             for i in tqdm(
                 range(local_ns), desc="Loading", disable=(self.rank != maxrank)
             ):
                 self.dataset.append(data[i])
-            self.total_ns = comm.allreduce(local_ns, op=MPI.SUM)
+            self.total_ns = self.comm.allreduce(local_ns, op=MPI.SUM)
         else:
             self.total_ns = len(data)
             rx = list(nsplit(range(len(data)), self.ddstore_comm_size))[
@@ -175,9 +176,14 @@ class DistDataset(AbstractBaseDataset):
         ## per-sample approach
         if self.ddstore and self.ddstore_store_per_sample:
             buf = BytesIO()
-            rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
-                self.ddstore_comm_rank
-            ]
+            if self.local:
+                ## local_ns_list is a list of local_ns from all ranks, which is calculated in the above.
+                start_idx = int(np.sum(local_ns_list[: self.rank]))
+                rx = list(range(start_idx, start_idx + local_ns))
+            else:
+                rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
+                    self.ddstore_comm_rank
+                ]
             local_record_count = list()
             for idx in rx:
                 data_object = dict()
