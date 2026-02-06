@@ -38,11 +38,18 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["free_energy"],
-            "output_index": [0],
-            "output_dim": [1],
-            "type": ["graph"],
+            "node_features": {
+                "atomic_number": {
+                    "dim": 1,
+                    "role": "input"
+                }
+            },
+            "graph_features": {
+                "free_energy": {
+                    "dim": 1,
+                    "role": "output"
+                }
+            },
             "denormalize_output": false
         },
         "Training": {
