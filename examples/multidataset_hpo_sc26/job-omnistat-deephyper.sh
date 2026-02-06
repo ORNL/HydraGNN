@@ -4,7 +4,10 @@
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
 #SBATCH -t 02:00:00
+#SBATCH -p batch 
+#SBATCH -q debug
 #SBATCH -N 4
+#SBATCH --network=disable_rdzv_get
 #SBATCH --network=disable_rdzv_get
 
 function cmd() {
@@ -12,11 +15,17 @@ function cmd() {
     time $@
 }
 
-HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
-# source $HYDRAGNN_ROOT/module-to-load-frontier.sh
-source $HYDRAGNN_ROOT/module-to-load-frontier2.sh
+HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN
 
-export PYTHONPATH=$HYDRAGNN_ROOT:$PYTHONPATH
+# Load conda environemnt
+source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm640.sh
+source activate /lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier/hydragnn_venv
+ 
+#export python path to HydragNN
+export PYTHONPATH=$PWD:$HYDRAGNN_ROOT:$PYTHONPATH
+
+#export python path to use ADIOS2 v.2.10.2
+export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
 
 which python
 python -c "import adios2; print(adios2.__version__, adios2.__file__)"
@@ -72,13 +81,15 @@ mkdir -p "$DEEPHYPER_LOG_DIR"
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn.external
+export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
 
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 1
 
+cd ./examples/multidataset_hpo_sc26
+
 ${OMNISTAT_DIR}/omnistat-annotate --mode start --text "DeepHyper HPO"
-cmd python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_deephyper_multi_all_mpnn.py
+cmd python -u $PWD/gfm_deephyper_multi_all_mpnn.py
 ${OMNISTAT_DIR}/omnistat-annotate --mode stop
 sleep 10
 
