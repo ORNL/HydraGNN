@@ -226,6 +226,15 @@ class PainnMessage(nn.Module):
         edge_dist,
         edge_attr: OptTensor = None,
     ):
+        dtype = node_scalar.dtype
+        if node_vector.dtype != dtype:
+            node_vector = node_vector.to(dtype=dtype)
+        if edge_dist.dtype != dtype:
+            edge_dist = edge_dist.to(dtype=dtype)
+        if edge_diff.dtype != dtype:
+            edge_diff = edge_diff.to(dtype=dtype)
+        if edge_attr is not None and edge_attr.dtype != dtype:
+            edge_attr = edge_attr.to(dtype=dtype)
         # remember to use v_j, s_j but not v_i, s_i
         filter_weight = self.filter_layer(
             sinc_expansion(edge_dist, self.num_radial, self.cutoff)

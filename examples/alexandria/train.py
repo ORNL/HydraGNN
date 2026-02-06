@@ -33,6 +33,7 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     PBCDistance,
     PBCLocalCartesian,
     pbc_as_tensor,
+    should_skip_self_loops,
 )
 from hydragnn.preprocess.load_data import split_dataset
 
@@ -92,7 +93,7 @@ class Alexandria(AbstractBaseDataset):
         dirpath,
         config,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         dist=False,
     ):
         super().__init__()
@@ -337,6 +338,10 @@ class Alexandria(AbstractBaseDataset):
         else:
             data_object = self.radius_graph(data_object)
             data_object = transform_coordinates(data_object)
+
+        # Skip samples that still contain self-loops
+        if should_skip_self_loops(data_object, context="alexandria"):
+            return None
 
         # Default edge_shifts for when radius_graph_pbc is not activated
         if not hasattr(data_object, "edge_shifts"):

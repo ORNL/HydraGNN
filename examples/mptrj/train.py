@@ -80,7 +80,7 @@ class MPTrjDataset(AbstractBaseDataset):
         dirpath,
         config,
         graphgps_transform=None,
-        energy_per_atom=True,
+        energy_per_atom=False,
         dist=False,
         tmpfs=None,
     ):
@@ -236,6 +236,16 @@ class MPTrjDataset(AbstractBaseDataset):
                 else:
                     data_object = self.radius_graph(data_object)
                     data_object = transform_coordinates(data_object)
+
+                # Skip samples that still contain self-loops
+                if data_object.edge_index is not None:
+                    loop_mask = data_object.edge_index[0] != data_object.edge_index[1]
+                    if not torch.all(loop_mask):
+                        print(
+                            "Skipping sample: self-loops detected in edge_index.",
+                            flush=True,
+                        )
+                        continue
 
                 # Default edge_shifts for when radius_graph_pbc is not activated
                 if not hasattr(data_object, "edge_shifts"):

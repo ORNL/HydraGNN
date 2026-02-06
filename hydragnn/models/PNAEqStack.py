@@ -333,6 +333,16 @@ class PainnMessage(MessagePassing):
         edge_attr: OptTensor = None,
     ) -> Tensor:
 
+        dtype = x.dtype
+        if v.dtype != dtype:
+            v = v.to(dtype=dtype)
+        if edge_rbf.dtype != dtype:
+            edge_rbf = edge_rbf.to(dtype=dtype)
+        if edge_vec.dtype != dtype:
+            edge_vec = edge_vec.to(dtype=dtype)
+        if edge_attr is not None and edge_attr.dtype != dtype:
+            edge_attr = edge_attr.to(dtype=dtype)
+
         src, dst = edge_index.t()
 
         if self.divide_input:

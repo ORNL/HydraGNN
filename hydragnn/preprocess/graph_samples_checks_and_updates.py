@@ -565,6 +565,24 @@ def gather_deg_dist(dataset):
     return deg.cpu().detach().numpy()
 
 
+def should_skip_self_loops(data_object, context=""):
+    """Return True if data_object contains self-loops in edge_index.
+
+    Optionally prints a context string to help identify the source.
+    """
+    if not hasattr(data_object, "edge_index") or data_object.edge_index is None:
+        return False
+
+    if torch.all(data_object.edge_attr > 1e-12):
+        return False
+
+    msg = "Skipping sample: self-loops detected in edge_index."
+    if context:
+        msg = f"{msg} Context: {context}"
+    print(msg, flush=True)
+    return True
+
+
 def gather_deg_mpi(dataset):
     from mpi4py import MPI
     from hydragnn.utils.print.print_utils import iterate_tqdm
