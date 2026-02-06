@@ -35,6 +35,10 @@
         "Training": {
             "num_epoch": 20,
             "batch_size": 32,
+            "patience": 10,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
             "continue": 0,
             "startfrom": "existing_model",
             "Optimizer": {
