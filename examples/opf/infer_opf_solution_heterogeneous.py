@@ -181,9 +181,17 @@ if __name__ == "__main__":
 
     config = update_config(config, train_loader, val_loader, test_loader)
 
+    metadata = None
+    try:
+        metadata = trainset[0].metadata()
+    except Exception as exc:
+        if rank == 0:
+            info(f"Unable to fetch hetero metadata: {exc}")
+
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
+        metadata=metadata,
     )
 
     model = hydragnn.utils.distributed.distributed_model_wrapper(
