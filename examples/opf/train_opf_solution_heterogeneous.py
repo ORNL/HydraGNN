@@ -735,7 +735,10 @@ if __name__ == "__main__":
     )
 
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer, config["Verbosity"]["level"]
+        model,
+        optimizer,
+        config["Verbosity"]["level"],
+        find_unused_parameters=True,
     )
 
     print_model(model)
