@@ -442,6 +442,8 @@ class HeteroBase(Module):
         return batch_dict
 
     def _get_edge_attr_dict(self, data):
+        if not getattr(self, "is_edge_model", False):
+            return None
         edge_attr_dict = None
         try:
             edge_attr_dict = data.edge_attr_dict
