@@ -807,10 +807,19 @@ if __name__ == "__main__":
         metadata = trainset[0].metadata()
     except Exception as exc:
         info(f"Unable to fetch hetero metadata: {exc}")
+    node_input_dims = (
+        config.get("NeuralNetwork", {}).get("Architecture", {}).get("node_input_dims")
+    )
+    if node_input_dims is None:
+        raise RuntimeError(
+            "Missing NeuralNetwork.Architecture.node_input_dims in config. "
+            "Add node_input_dims to the config to initialize node embedders."
+        )
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
         metadata=metadata,
+        node_input_dims=node_input_dims,
     )
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
