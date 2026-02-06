@@ -50,6 +50,7 @@ def create_model_config(
     config: dict,
     verbosity: int = 0,
     use_gpu: bool = True,
+    metadata=None,
 ):
     model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
@@ -112,6 +113,7 @@ def create_model_config(
         share_relation_weights=config["Architecture"].get(
             "share_relation_weights", False
         ),
+        metadata=metadata,
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
             "equivariant_attn_num_radial", 16
@@ -246,6 +248,7 @@ def create_model(
     hetero_pooling_mode: str = "sum",
     node_target_type: str = None,
     share_relation_weights: bool = False,
+    metadata=None,
     equivariant_attn_lmax: int = 1,
     equivariant_attn_num_radial: int = 16,
     equivariant_attn_feedforward_multiplier: int = 2,
@@ -913,6 +916,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     elif mpnn_type == "HeteroSAGE":
@@ -940,6 +944,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     elif mpnn_type == "HeteroGAT":
@@ -970,6 +975,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     elif mpnn_type == "HeteroPNA":
@@ -1000,6 +1006,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     else:

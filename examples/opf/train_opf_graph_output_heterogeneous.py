@@ -367,7 +367,11 @@ if __name__ == "__main__":
         valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
         testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
@@ -375,9 +379,15 @@ if __name__ == "__main__":
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
+    metadata = None
+    try:
+        metadata = trainset[0].metadata()
+    except Exception as exc:
+        info(f"Unable to fetch hetero metadata: {exc}")
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
+        metadata=metadata,
     )
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]

@@ -25,7 +25,6 @@ import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
 
-
 _DEFAULT_CASE_NAMES = [
     "pglib_opf_case14_ieee",
     "pglib_opf_case30_ieee",
@@ -704,7 +703,11 @@ if __name__ == "__main__":
     valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
     testset = NodeTargetDatasetAdapter(testset, args.node_target_type)
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
@@ -717,9 +720,15 @@ if __name__ == "__main__":
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
+    metadata = None
+    try:
+        metadata = trainset[0].metadata()
+    except Exception as exc:
+        info(f"Unable to fetch hetero metadata: {exc}")
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
+        metadata=metadata,
     )
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
