@@ -59,6 +59,7 @@ class HeteroBase(Module):
         hetero_pooling_mode: str = "sum",
         node_target_type: str = None,
         share_relation_weights: bool = False,
+        node_input_dims: dict | None = None,
         metadata=None,
     ):
         super().__init__()
@@ -78,6 +79,7 @@ class HeteroBase(Module):
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
         self.node_embedders = ModuleDict()
+        self._node_input_dims = node_input_dims
         self.node_target_type = node_target_type
         self.share_relation_weights = share_relation_weights
         self._metadata = metadata
@@ -191,6 +193,18 @@ class HeteroBase(Module):
 
         if self._metadata is not None:
             self._init_conv()
+
+        if self._node_input_dims:
+            self._init_node_embedders_from_dims(self._node_input_dims)
+
+    def _init_node_embedders_from_dims(self, node_input_dims):
+        for node_type, in_dim in node_input_dims.items():
+            if node_type not in self.node_embedders:
+                self.node_embedders[node_type] = Linear(int(in_dim), self.hidden_dim)
+            if self.node_embedders[node_type].weight.device != self.device:
+                self.node_embedders[node_type] = self.node_embedders[node_type].to(
+                    self.device
+                )
 
     def _ensure_node_embedders(self, x_dict):
         for node_type, x in x_dict.items():

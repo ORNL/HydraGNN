@@ -122,6 +122,8 @@ if __name__ == "__main__":
         with open(log_config_path, "r") as f:
             config = json.load(f)
     else:
+        if not os.path.isfile(input_filename):
+            raise FileNotFoundError(f"Missing config file: {input_filename}")
         with open(input_filename, "r") as f:
             config = json.load(f)
 
@@ -187,11 +189,20 @@ if __name__ == "__main__":
     except Exception as exc:
         if rank == 0:
             info(f"Unable to fetch hetero metadata: {exc}")
+    node_input_dims = (
+        config.get("NeuralNetwork", {}).get("Architecture", {}).get("node_input_dims")
+    )
+    if node_input_dims is None:
+        raise RuntimeError(
+            "Missing NeuralNetwork.Architecture.node_input_dims in config. "
+            "Add node_input_dims to the config to initialize node embedders."
+        )
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
         metadata=metadata,
+        node_input_dims=node_input_dims,
     )
 
     model = hydragnn.utils.distributed.distributed_model_wrapper(
