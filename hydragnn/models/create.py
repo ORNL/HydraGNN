@@ -48,6 +48,7 @@ def create_model_config(
     config: dict,
     verbosity: int = 0,
     use_gpu: bool = True,
+    metadata=None,
 ):
     model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
@@ -107,6 +108,7 @@ def create_model_config(
         share_relation_weights=config["Architecture"].get(
             "share_relation_weights", False
         ),
+        metadata=metadata,
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -170,6 +172,7 @@ def create_model(
     hetero_pooling_mode: str = "sum",
     node_target_type: str = None,
     share_relation_weights: bool = False,
+    metadata=None,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -620,6 +623,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     elif mpnn_type == "HeteroSAGE":
@@ -647,6 +651,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     elif mpnn_type == "HeteroGAT":
@@ -679,6 +684,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
 
     elif mpnn_type == "HeteroPNA":
@@ -709,6 +715,7 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
