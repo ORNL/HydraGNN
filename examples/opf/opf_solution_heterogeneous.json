@@ -9,6 +9,12 @@
             "num_conv_layers": 4,
             "pe_dim": 0,
             "max_neighbours": 100,
+            "node_input_dims": {
+                "bus": 4,
+                "generator": 11,
+                "load": 2,
+                "shunt": 2
+            },
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
