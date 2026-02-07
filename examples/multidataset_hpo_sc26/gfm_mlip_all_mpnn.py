@@ -589,13 +589,6 @@ if __name__ == "__main__":
                 trainset.pna_deg = pna_deg
                 valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
-
-        ## FIXME: batch size exception
-        if mymodel == "OC2020_all":
-            config["NeuralNetwork"]["Training"]["batch_size"] = 40
-        if mymodel == "OC2022":
-            config["NeuralNetwork"]["Training"]["batch_size"] = 4
-
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
