@@ -37,6 +37,19 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
 
+    # Infer node_input_dims for heterogeneous data if missing.
+    arch_cfg = config["NeuralNetwork"].setdefault("Architecture", {})
+    if not arch_cfg.get("node_input_dims"):
+        data_sample = train_loader.dataset[0]
+        if hasattr(data_sample, "node_types"):
+            node_input_dims = {}
+            for node_type in data_sample.node_types:
+                node_store = data_sample[node_type]
+                if hasattr(node_store, "x") and node_store.x is not None:
+                    node_input_dims[str(node_type)] = int(node_store.x.shape[1])
+            if node_input_dims:
+                arch_cfg["node_input_dims"] = node_input_dims
+
     # Set default values for GPS variables
     if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = None
