@@ -1,3 +1,4 @@
+import os
 import torch
 from hydragnn.utils.distributed import get_device_name
 from torch.distributed.optim import ZeroRedundancyOptimizer
@@ -106,6 +107,13 @@ def select_optimizer(model, config):
 
     if "use_zero_redundancy" in config:
         use_zero = config["use_zero_redundancy"]
+
+    use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+    if use_fsdp and use_zero:
+        print(
+            "HYDRAGNN_USE_FSDP=1 detected: ZeroRedundancyOptimizer is not compatible with FSDP for this configuration. Falling back to standard optimizer."
+        )
+        use_zero = False
 
     if use_zero:
         return select_zero_redundancy_optimizer(model, config)
