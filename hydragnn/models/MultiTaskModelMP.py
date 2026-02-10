@@ -9,7 +9,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
 
-from torch.distributed.fsdp import fully_shard
+from torch.distributed.fsdp import fully_shard, MixedPrecisionPolicy
 from torch.distributed.device_mesh import DeviceMesh
 from torch.optim import Optimizer
 
@@ -25,6 +25,34 @@ def _get_fsdp2_device_type():
 def _build_fsdp2_mesh(process_group):
     ranks = dist.get_process_group_ranks(process_group)
     return DeviceMesh(_get_fsdp2_device_type(), mesh=ranks)
+
+
+def _get_fsdp2_mp_policy():
+    dtype = torch.get_default_dtype()
+    if dtype == torch.float32:
+        return None
+    if dtype == torch.bfloat16:
+        return MixedPrecisionPolicy(
+            param_dtype=torch.bfloat16,
+            reduce_dtype=torch.bfloat16,
+            output_dtype=torch.bfloat16,
+            cast_forward_inputs=True,
+        )
+    if dtype == torch.float16:
+        return MixedPrecisionPolicy(
+            param_dtype=torch.float16,
+            reduce_dtype=torch.float16,
+            output_dtype=torch.float16,
+            cast_forward_inputs=True,
+        )
+    if dtype == torch.float64:
+        return MixedPrecisionPolicy(
+            param_dtype=torch.float64,
+            reduce_dtype=torch.float64,
+            output_dtype=torch.float64,
+            cast_forward_inputs=True,
+        )
+    return None
 
 
 def average_gradients(model, group):
@@ -350,11 +378,18 @@ class MultiTaskModelMP(nn.Module):
         if use_fsdp:
             shared_mesh = _build_fsdp2_mesh(self.shared_pg)
             head_mesh = _build_fsdp2_mesh(self.head_pg)
+            mp_policy = _get_fsdp2_mp_policy()
             self.encoder = fully_shard(
-                self.encoder, mesh=shared_mesh, reshard_after_forward=True
+                self.encoder,
+                mesh=shared_mesh,
+                reshard_after_forward=True,
+                mp_policy=mp_policy,
             )
             self.decoder = fully_shard(
-                self.decoder, mesh=head_mesh, reshard_after_forward=True
+                self.decoder,
+                mesh=head_mesh,
+                reshard_after_forward=True,
+                mp_policy=mp_policy,
             )
         else:
             self.encoder = DDP(self.encoder, process_group=self.shared_pg)

@@ -106,6 +106,7 @@ def _(config: dict, use_deepspeed=False):
             model,
             config["Verbosity"]["level"],
             sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+            precision=precision,
         )
         print_peak_memory(
             config["Verbosity"]["level"],

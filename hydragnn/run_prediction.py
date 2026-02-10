@@ -68,6 +68,7 @@ def _(config: dict, use_deepspeed=False):
             model,
             config["Verbosity"]["level"],
             sync_batch_norm=config["NeuralNetwork"]["Architecture"]["SyncBatchNorm"],
+            precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
         )
 
     else:

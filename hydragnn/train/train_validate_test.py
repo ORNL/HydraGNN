@@ -106,13 +106,6 @@ def get_autocast_and_scaler(precision):
                 f"Requested bf16 but unsupported on {device_type}; falling back to full precision."
             )
 
-        autocast = (
-            torch.autocast(device_type=device_type, dtype=autocast_dtype)
-            if use_bf16
-            else nullcontext()
-        )
-        return autocast, None
-
     return nullcontext(), None
 
 
