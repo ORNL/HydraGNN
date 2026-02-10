@@ -173,6 +173,12 @@ if hasattr(torch, "xpu") and torch.xpu.is_available():
 PY
 
 # ============================================================
+# IMPORTANT: ensure pybind11 is installed BEFORE ADIOS2 configure
+# ============================================================
+banner "Install pybind11 (required for ADIOS2 Python bindings)"
+python -m pip install --upgrade-strategy only-if-needed pybind11
+
+# ============================================================
 # Build ADIOS2 from source (Frontier-parity: DataSpaces engine OFF)
 # ============================================================
 banner "ADIOS2 (build from source; DataSpaces engine OFF)"
