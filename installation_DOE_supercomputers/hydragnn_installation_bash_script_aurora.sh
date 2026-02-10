@@ -3,12 +3,12 @@
 #
 # Aurora approach (with ADIOS2/DDStore build-from-source):
 # - PyTorch: use "module load frameworks" (do NOT pip-install torch wheels)
-# - PyG: install base torch_geometric in a venv that inherits system site-packages
+# - PyG: install torch_geometric + ALWAYS rebuild CPU-only auxiliary deps per ALCF docs:
+#        torch_scatter, torch_sparse, torch_cluster, torch_spline_conv (+ try pyg_lib)
+# - Robust Lmod/module handling under `set -u` (nohup-safe)
 # - Build ADIOS2 from source (MPI + Python) with DataSpaces engine OFF
-# - IMPORTANT on Aurora: ADIOS2 Python bindings are NOT a pip project.
-#   We link the built/installed python package into the venv site-packages.
-# - Install DDStore from source
-# - Install torch_geometric (base only)
+# - Ensure ADIOS2 Python module import works (fix nested install path issue)
+# - Install DDStore from source (clone + pip install .)
 # - Install HydraGNN editable
 #
 # Run:
@@ -35,7 +35,7 @@ _nounset_restore() {
 banner "Starting HydraGNN Aurora environment setup ($(date))"
 
 # ============================================================
-# Modules
+# Modules (robust under `set -u` + nohup)
 # ============================================================
 banner "Modules: use Aurora-provided frameworks"
 
@@ -83,11 +83,11 @@ mkdir -p "$INSTALL_ROOT"
 echo "INSTALL_ROOT = $INSTALL_ROOT"
 
 # ============================================================
-# Create venv
+# Create venv that inherits frameworks packages
 # ============================================================
 banner "Create Python venv (inherits frameworks site-packages)"
 VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
-RECREATE_ENV="${RECREATE_ENV:-0}"
+RECREATE_ENV="${RECREATE_ENV:-0}"   # set to 1 if you want to always recreate the venv too
 echo "VENV_PATH    = $VENV_PATH"
 echo "RECREATE_ENV = $RECREATE_ENV"
 
@@ -126,7 +126,7 @@ PY
 echo "VENV_SITEPKG = $VENV_SITEPKG"
 
 # ============================================================
-# pip helpers + numpy pin
+# pip helpers + numpy pin (force venv numpy=1.26.4)
 # ============================================================
 banner "pip bootstrap"
 python -m pip install -U pip setuptools wheel
@@ -233,7 +233,7 @@ print("numpy.__file__    =", np.__file__)
 PY
 
 # ============================================================
-# Sanity: torch
+# Sanity check: PyTorch import must work (from frameworks)
 # ============================================================
 banner "Sanity check: torch import (from frameworks)"
 python - <<'PY'
@@ -243,13 +243,13 @@ print("torch.xpu.is_available() =", hasattr(torch, "xpu") and torch.xpu.is_avail
 PY
 
 # ============================================================
-# ADIOS2 build deps
+# IMPORTANT: ensure pybind11 is installed BEFORE ADIOS2 configure
 # ============================================================
 banner "Install pybind11 (required for ADIOS2 Python bindings)"
 pip_retry pybind11
 
 # ============================================================
-# Build ADIOS2
+# Build ADIOS2 from source (DataSpaces engine OFF)
 # ============================================================
 banner "ADIOS2 (build from source; DataSpaces engine OFF)"
 ADIOS2_VERSION="${ADIOS2_VERSION:-v2.10.2}"
@@ -275,7 +275,7 @@ pushd "$ADIOS2_BUILD" >/dev/null
 
 MPICC_BIN="${MPICC_BIN:-$(command -v mpicc || true)}"
 MPICXX_BIN="${MPICXX_BIN:-$(command -v mpicxx || true)}"
-[[ -z "$MPICC_BIN" || -z "$MPICXX_BIN" ]] && { echo "❌ mpicc/mpicxx not found"; exit 1; }
+[[ -z "$MPICC_BIN" || -z "$MPICXX_BIN" ]] && { echo "❌ mpicc/mpicxx not found. Ensure frameworks (and MPI) are available."; exit 1; }
 
 PYTHON_EXEC="$(command -v python)"
 PYTHON3_INCLUDE_DIR="$(python - <<'PY'
@@ -313,17 +313,14 @@ cmake --build . -j"${ADIOS2_BUILD_JOBS:-16}"
 cmake --install .
 popd >/dev/null
 
-# ============================================================
-# Runtime paths (lib vs lib64)
-# ============================================================
+# Export runtime paths (lib vs lib64)
 export ADIOS2_DIR="$ADIOS2_INSTALL"
 export PATH="$ADIOS2_INSTALL/bin:$PATH"
 if [[ -d "$ADIOS2_INSTALL/lib64" ]]; then ADIOS2_LIBDIR="lib64"; else ADIOS2_LIBDIR="lib"; fi
 export LD_LIBRARY_PATH="$ADIOS2_INSTALL/${ADIOS2_LIBDIR}:${LD_LIBRARY_PATH:-}"
 
 # ============================================================
-# FIX: ADIOS2 Python bindings were installed under a *nested absolute path*
-# We recover by linking the actually-installed package into the venv site-packages.
+# Fix ADIOS2 Python bindings install location & ensure import works
 # ============================================================
 banner "Fix ADIOS2 Python install location and ensure import works"
 
@@ -342,7 +339,6 @@ else
   echo "  $ADIOS2_PY_BAD_PKG"
   echo "Trying standard locations..."
 
-  # Standard candidate locations
   CANDIDATES=(
     "${ADIOS2_INSTALL}/${ADIOS2_LIBDIR}/python${PYTHON_XY}/site-packages/adios2"
     "${ADIOS2_INSTALL}/lib/python${PYTHON_XY}/site-packages/adios2"
@@ -362,8 +358,7 @@ else
     echo "Symlinked into venv:"
     echo "  $VENV_SITEPKG/adios2 -> $FOUND"
   else
-    echo "❌ Could not locate ADIOS2 python package in standard locations either."
-    echo "Searched:"
+    echo "❌ Could not locate ADIOS2 python package."
     printf '  - %s\n' "${CANDIDATES[@]}"
     exit 1
   fi
@@ -378,7 +373,7 @@ print("adios2 file:", adios2.__file__)
 PY
 
 # ============================================================
-# DDStore
+# DDStore (clone + pip install .)
 # ============================================================
 banner "DDStore (clone + pip install .)"
 DDSTORE_FRONTIER="${INSTALL_ROOT}/DDStore-Source"
@@ -396,28 +391,110 @@ pip_retry . --no-build-isolation --verbose
 popd >/dev/null
 
 # ============================================================
-# PyTorch Geometric (base only)
+# PyTorch Geometric (base) + ALWAYS rebuild auxiliary deps (CPU-only)
 # ============================================================
 banner "Install PyTorch Geometric base (torch_geometric)"
 pip_retry torch_geometric
 
+# ---- ALCF optional-deps prerequisites (TORCH_LIB + TORCH_VERSION) ----
+TORCH_LIB="$(python -c "import torch; print(torch.__file__)" | sed 's/__init__.py/lib/')"
+TORCH_VERSION="$(python -c "import torch; print(torch.__version__)" | sed 's/^\([0-9.]*\).*/\1/')"
+export LD_LIBRARY_PATH="${TORCH_LIB}:${LD_LIBRARY_PATH:-}"
+echo "TORCH_LIB     = ${TORCH_LIB}"
+echo "TORCH_VERSION = ${TORCH_VERSION}"
+echo "LD_LIBRARY_PATH prepended with TORCH_LIB"
+
+# ---- ALWAYS rebuild optional dependencies (CPU builds) ----
+banner "ALWAYS rebuild PyG auxiliary packages (CPU-only): scatter/sparse/cluster/spline_conv (+ try pyg_lib)"
+
+PYG_AUX_SRCDIR="${PYG_AUX_SRCDIR:-${INSTALL_ROOT}/pyg-aux-src}"
+mkdir -p "$PYG_AUX_SRCDIR"
+pushd "$PYG_AUX_SRCDIR" >/dev/null
+
+# Force rebuild semantics for source installs
+pip_install_force_rebuild() {
+  # IMPORTANT: this WILL overwrite/reinstall that package, by design.
+  python -m pip install --no-build-isolation --no-deps --force-reinstall -v "$@"
+}
+
+libs=( \
+  "https://github.com/rusty1s/pytorch_scatter.git" \
+  "https://github.com/rusty1s/pytorch_sparse.git" \
+  "https://github.com/rusty1s/pytorch_cluster.git" \
+  "https://github.com/rusty1s/pytorch_spline_conv.git" \
+)
+
+for lib in "${libs[@]}"; do
+  LIB_NAME="$(basename "$lib" .git)"
+
+  rm -rf "$LIB_NAME" 2>/dev/null || true
+  git clone "$lib"
+  pushd "$LIB_NAME" >/dev/null
+  git submodule update --init --recursive
+
+  # Determine compatible tag from data.pyg.org (as in ALCF example)
+  WANT_KEY="$(echo "${LIB_NAME}" | sed 's/pytorch_\(.*\)/\1/')"
+  LIB_VERSION="$(wget -O - "https://data.pyg.org/whl/torch-${TORCH_VERSION}%2Bcpu.html" 2>/dev/null | \
+    grep -m1 "${WANT_KEY}" | \
+    sed 's/.*torch_[a-z_]*-\([^+-]*\)[%+-].*/\1/')"
+
+  if [[ -n "$LIB_VERSION" ]]; then
+    echo "$LIB_NAME compatible version: $LIB_VERSION"
+    git checkout "$LIB_VERSION"
+  else
+    echo "⚠️  Could not determine compatible tag for $LIB_NAME from data.pyg.org for torch ${TORCH_VERSION}+cpu"
+    echo "    Building from repo default HEAD (may fail)."
+  fi
+
+  # Patch setup.py to disable OpenMP backend check (ALCF approach)
+  if [[ -f setup.py ]]; then
+    sed "s|if ('backend: OpenMP' in info and 'OpenMP not found' not in info|if (False|g" setup.py > tmp && mv tmp setup.py
+  fi
+
+  # Force rebuild/reinstall into venv
+  pip_install_force_rebuild .
+
+  popd >/dev/null
+  rm -rf "$LIB_NAME" 2>/dev/null || true
+done
+
+# Try pyg_lib from CPU wheel index; force reinstall if available
+echo "Attempting pyg_lib install from CPU wheel index (force reinstall if available)..."
+python -m pip install --upgrade-strategy only-if-needed \
+  -f "https://data.pyg.org/whl/torch-${TORCH_VERSION}%2Bcpu.html" \
+  --force-reinstall --no-deps pyg_lib || \
+  echo "⚠️  pyg_lib install failed (continuing)."
+
+popd >/dev/null
+
 python - <<'PY'
 import torch, torch_geometric
-import numpy as np
 print("torch =", torch.__version__)
 print("torch_geometric =", torch_geometric.__version__)
-print("numpy =", np.__version__, "from", np.__file__)
+mods = ["torch_scatter","torch_sparse","torch_cluster","torch_spline_conv","pyg_lib"]
+for m in mods:
+    try:
+        __import__(m)
+        print(m, "OK")
+    except Exception as e:
+        print(m, "NOT available:", e)
 PY
 
 # ============================================================
-# Additional deps (keep numpy==1.26.4)
+# Additional python deps (NO torch install here!)
 # ============================================================
 banner "Install HydraGNN dependencies (do NOT install torch here)"
 pip_retry scipy pyyaml requests tqdm filelock psutil
 pip_retry networkx jinja2
 pip_retry tensorboard scikit-learn pytest
 pip_retry ase h5py lmdb
-pip_retry "mendeleev<1.1.0"
+
+# Keep numpy pinned and avoid it being bumped by scientific packages
+pip_retry "numpy==1.26.4"
+
+# Avoid numpy>=2 bump pressure from mendeleev in this environment
+pip_retry "mendeleev<1.1.0" || true
+
 pip_retry rdkit jarvis-tools pymatgen || true
 pip_retry igraph || true
 
@@ -430,7 +507,25 @@ print("numpy.__file__    =", np.__file__)
 PY
 
 # ============================================================
-# HydraGNN editable
+# Sanity check: DDStore bindings
+# ============================================================
+banner "Sanity check: DDStore Python bindings"
+python - <<'PY'
+try:
+    import pyddstore
+    print("pyddstore available")
+except ImportError as e:
+    print("WARNING: pyddstore not importable:", e)
+
+try:
+    import thapi
+    print("thapi available")
+except ImportError as e:
+    print("WARNING: thapi not importable:", e)
+PY
+
+# ============================================================
+# Install HydraGNN (editable)
 # ============================================================
 banner "Install HydraGNN (editable)"
 HYDRAGNN_SRC="${HYDRAGNN_SRC:-${PWD}/HydraGNN}"
@@ -440,25 +535,42 @@ if [[ -d "$HYDRAGNN_SRC" ]]; then
   pip_retry -e "$HYDRAGNN_SRC"
 else
   echo "⚠️  HydraGNN source directory not found at: $HYDRAGNN_SRC"
+  echo "    Export HYDRAGNN_SRC=/path/to/HydraGNN and rerun the HydraGNN install step."
 fi
 
+# ============================================================
+# Final summary / activation instructions
+# ============================================================
 banner "Final Summary"
 cat <<EOF
 Base install:        $INSTALL_ROOT
-Venv:               $VENV_PATH
-Venv site-packages: $VENV_SITEPKG
-Constraints:        $CONSTRAINTS_FILE (numpy==1.26.4)
+Venv (system-site):  $VENV_PATH
+Venv site-packages:  $VENV_SITEPKG
+Constraints:         $CONSTRAINTS_FILE (numpy==1.26.4)
 
-ADIOS2 install:     $ADIOS2_INSTALL
-ADIOS2 libdir:      $ADIOS2_LIBDIR
-ADIOS2 runtime:
+ADIOS2:
+  - source:   $ADIOS2_SRC @ $ADIOS2_VERSION
+  - install:  $ADIOS2_INSTALL
+  - NOTE: ADIOS2_USE_DataSpaces=OFF
+
+DDStore:
+  - source:   ${DDSTORE_FRONTIER}/DDStore
+  - python:   installed into venv (pip)
+
+PyG:
+  - torch_geometric installed
+  - ALWAYS rebuilt (CPU-only): torch_scatter, torch_sparse, torch_cluster, torch_spline_conv
+  - pyg_lib attempted from CPU wheel index (force reinstall if available)
+
+To activate later:
+  module reset
+  module load frameworks
+  source ${VENV_PATH}/bin/activate
+
+To ensure ADIOS2 runtime is visible in new shells:
   export ADIOS2_DIR=$ADIOS2_INSTALL
   export PATH=$ADIOS2_INSTALL/bin:\$PATH
   export LD_LIBRARY_PATH=$ADIOS2_INSTALL/${ADIOS2_LIBDIR}:\$LD_LIBRARY_PATH
-
-NOTE:
-- If ADIOS2 installs python into the nested path "$ADIOS2_INSTALL$VENV_SITEPKG",
-  this script auto-links it back into "$VENV_SITEPKG/adios2".
 EOF
 
 echo "✅ Aurora HydraGNN environment setup complete!"
