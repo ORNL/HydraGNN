@@ -9,12 +9,14 @@
 # - Robust Lmod/module handling under `set -u` (nohup-safe)
 # - Load Aurora "frameworks" for PyTorch (XPU) via modules (do NOT pip-install torch wheels)
 # - Build ADIOS2 from source (MPI + Python) with DataSpaces engine OFF (as in Frontier script)
+# - IMPORTANT on Aurora: explicitly pip-install ADIOS2 Python bindings (do not rely on cmake --install for Python)
 # - Install DDStore from source (clone + pip install .) (independent of ADIOS2 DataSpaces engine)
 # - Install PyTorch Geometric base only (torch_geometric) per ALCF guidance
 # - Install HydraGNN editable
 #
 # Notes:
 # - ADIOS2 is installed under: ${INSTALL_ROOT}/adios2
+# - ADIOS2 Python bindings are installed into the venv via pip from ADIOS2-src/bindings/Python
 # - DDStore is installed into the venv site-packages via pip
 # - We intentionally do NOT install DataSpaces / enable ADIOS2_USE_DataSpaces (kept OFF)
 #
@@ -134,7 +136,7 @@ fi
 # shellcheck disable=SC1091
 source "$VENV_PATH/bin/activate"
 
-# Determine python X.Y for PYTHONPATH additions later
+# Determine python X.Y for path additions later
 PYTHON_XY="$(python - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
@@ -143,14 +145,14 @@ PY
 echo "Python X.Y in venv: ${PYTHON_XY}"
 
 # ============================================================
-# pip helpers (skip installing things already satisfied)
-# + Global constraint to keep NumPy at 1.26.4 in the venv (so it shadows system numpy>=2)
+# pip helpers:
+# - PIP_CONSTRAINT pins numpy to 1.26.4 (venv shadows system numpy>=2)
+# - pip_retry skips requirements already satisfied (avoids churn on system-site-packages)
 # ============================================================
 banner "pip bootstrap"
 python -m pip install -U pip setuptools wheel
 
 # Enforce numpy 1.26.4 across ALL pip installs in this script.
-# This keeps the venv consistently on numpy==1.26.4 (and avoids later upgrades to numpy>=2).
 CONSTRAINTS_FILE="${INSTALL_ROOT}/pip-constraints.txt"
 cat > "$CONSTRAINTS_FILE" <<'EOF'
 numpy==1.26.4
@@ -160,9 +162,8 @@ echo "PIP_CONSTRAINT = $PIP_CONSTRAINT"
 echo "Constraints file contents:"
 cat "$CONSTRAINTS_FILE"
 
-# Helper: filter out requirement specs that are already satisfied (so pip doesn't reinstall/overwrite).
-# - Handles common PEP508 requirement specs like "pkg", "pkg==1.2", "pkg<2", "pkg[extra]>=1"
-# - Does NOT try to interpret local paths / URLs / editable installs; those are passed through.
+# Filter out requirement specs already satisfied (so pip doesn't reinstall/overwrite).
+# Does NOT filter local paths/URLs/editable installs.
 _pip_filter_unsatisfied() {
   python - "$@" <<'PY'
 import sys
@@ -174,17 +175,14 @@ def is_option(a: str) -> bool:
   return a.startswith("-")
 
 def is_localish(a: str) -> bool:
-  # local paths, editable markers, VCS/URL, or "file:" style
   if a in (".", "..") or a.startswith(("./", "../", "/")):
     return True
   if "://" in a or a.startswith(("git+", "hg+", "svn+", "bzr+", "file:")):
     return True
-  # requirements file
   if a.endswith(".txt") and Path(a).exists():
     return True
   return False
 
-# Collect requirement-like tokens (ignore options and their values conservatively)
 tokens = []
 skip_next = False
 for a in args:
@@ -192,7 +190,6 @@ for a in args:
     skip_next = False
     continue
   if is_option(a):
-    # very conservative: skip option arguments that take a value
     if a in ("-r","--requirement","-c","--constraint","-t","--target","--prefix","--root","--index-url","--extra-index-url","--find-links"):
       skip_next = True
     continue
@@ -202,18 +199,15 @@ try:
   from packaging.requirements import Requirement
   from importlib import metadata
 except Exception:
-  # If packaging isn't importable for some reason, just pass through everything.
   print("\n".join(tokens))
   raise SystemExit(0)
 
 unsatisfied = []
-
 for t in tokens:
   if is_localish(t) or t == "-e":
     unsatisfied.append(t)
     continue
 
-  # Requirement parsing: if it doesn't parse, pass it through.
   try:
     req = Requirement(t)
   except Exception:
@@ -231,11 +225,6 @@ for t in tokens:
     unsatisfied.append(t)
     continue
 
-  # Extras are ignored for satisfaction check; if base package is present and version is OK, skip.
-  # (This is intentional to prevent churn in system-site-packages setups.)
-  # Environment markers are also ignored here (pip will re-check them if we install).
-  continue
-
 print("\n".join(unsatisfied))
 PY
 }
@@ -244,7 +233,6 @@ pip_retry() {
   local tries=3 delay=3
   local -a raw_args=("$@")
 
-  # If this is a local install ('.', path, URL, editable), do not filter.
   local do_filter=1
   for a in "${raw_args[@]}"; do
     case "$a" in
@@ -370,13 +358,12 @@ cmake --install .
 popd >/dev/null
 
 # ============================================================
-# Export runtime + python paths so the venv can import adios2 from this build
-# FIX 1: Aurora may install to lib64 (not lib). Detect and use the correct libdir.
+# Export runtime + python paths so the venv can find ADIOS2 libs
+# FIX 1: Aurora may install to lib64 (not lib). Detect and use correct libdir.
 # ============================================================
 export ADIOS2_DIR="$ADIOS2_INSTALL"
 export PATH="$ADIOS2_INSTALL/bin:$PATH"
 
-# Aurora often installs to lib64
 if [[ -d "$ADIOS2_INSTALL/lib64" ]]; then
   ADIOS2_LIBDIR="lib64"
 else
@@ -385,10 +372,36 @@ fi
 
 export LD_LIBRARY_PATH="$ADIOS2_INSTALL/${ADIOS2_LIBDIR}:${LD_LIBRARY_PATH:-}"
 
-# ADIOS2 python bindings typically live under .../${libdir}/pythonX.Y/site-packages
+# (Optional) Add ADIOS2 CMake-installed python path if it exists (often it won't on Aurora)
 if [[ -d "$ADIOS2_INSTALL/${ADIOS2_LIBDIR}/python${PYTHON_XY}/site-packages" ]]; then
   export PYTHONPATH="$ADIOS2_INSTALL/${ADIOS2_LIBDIR}/python${PYTHON_XY}/site-packages:${PYTHONPATH:-}"
 fi
+
+# ============================================================
+# IMPORTANT on Aurora: Explicitly install ADIOS2 Python bindings into the venv
+# (Do NOT rely on cmake --install to populate site-packages)
+# ============================================================
+banner "Install ADIOS2 Python bindings (explicit pip install)"
+ADIOS2_PY_BINDINGS="${ADIOS2_SRC}/bindings/Python"
+
+if [[ -d "$ADIOS2_PY_BINDINGS" ]]; then
+  pushd "$ADIOS2_PY_BINDINGS" >/dev/null
+  # Local install: do not filter, but still retried; respects PIP_CONSTRAINT (numpy==1.26.4)
+  pip_retry . --no-build-isolation --verbose
+  popd >/dev/null
+else
+  echo "❌ ADIOS2 Python bindings directory not found at: $ADIOS2_PY_BINDINGS"
+  echo "   Check ADIOS2 version/layout. You may need to locate the Python bindings directory."
+  exit 1
+fi
+
+# Verify adios2 is importable NOW
+banner "Sanity check: import adios2 (must succeed)"
+python - <<'PY'
+import adios2
+print("adios2 version:", adios2.__version__)
+print("adios2 module:", adios2.__file__)
+PY
 
 # ============================================================
 # DDStore (clone + pip install .) — Frontier-style
@@ -406,7 +419,6 @@ if [[ ! -d "${DDSTORE_FRONTIER}/DDStore/.git" ]]; then
 fi
 
 pushd "${DDSTORE_FRONTIER}/DDStore" >/dev/null
-# Build/install into venv
 pip_retry . --no-build-isolation --verbose
 popd >/dev/null
 
@@ -430,7 +442,7 @@ PY
 # Additional python deps (NO torch install here!)
 # - pip_retry will skip already-satisfied requirements to reduce churn
 # - PIP_CONSTRAINT enforces numpy==1.26.4 globally
-# - mendeleev 1.1.0+ requires numpy>=2; pin to <1.1.0 to stay compatible with numpy==1.26.4
+# - mendeleev >= 1.1.0 requires numpy>=2; pin to <1.1.0 to remain compatible
 # ============================================================
 banner "Install HydraGNN dependencies (do NOT install torch here)"
 pip_retry scipy pyyaml requests tqdm filelock psutil
@@ -454,10 +466,9 @@ print("numpy.__file__    =", np.__file__)
 PY
 
 # ============================================================
-# Sanity check: ADIOS2 + DataSpaces bindings (user-provided block)
+# Sanity check: ADIOS2 + DDStore bindings
 # ============================================================
-banner "Sanity check: ADIOS2 + DataSpaces Python bindings"
-
+banner "Sanity check: ADIOS2 + DDStore Python bindings"
 python - <<'PY'
 import adios2
 print("adios2 version:", adios2.__version__)
@@ -505,6 +516,7 @@ ADIOS2:
   - source:   $ADIOS2_SRC @ $ADIOS2_VERSION
   - install:  $ADIOS2_INSTALL
   - libdir:   ${ADIOS2_LIBDIR}
+  - python:   installed into venv via pip from ${ADIOS2_PY_BINDINGS}
   - NOTE: ADIOS2_USE_DataSpaces=OFF (Frontier-parity)
 
 DDStore:
@@ -516,10 +528,12 @@ To activate later:
   module load frameworks
   source ${VENV_PATH}/bin/activate
 
-To ensure adios2 python bindings are visible in new shells:
+To ensure ADIOS2 runtime libs are visible in new shells:
   export ADIOS2_DIR=$ADIOS2_INSTALL
   export PATH=$ADIOS2_INSTALL/bin:\$PATH
   export LD_LIBRARY_PATH=$ADIOS2_INSTALL/${ADIOS2_LIBDIR}:\$LD_LIBRARY_PATH
+
+If you ever need ADIOS2 python bindings visible in new shells (usually not needed once installed into venv):
   export PYTHONPATH=$ADIOS2_INSTALL/${ADIOS2_LIBDIR}/python${PYTHON_XY}/site-packages:\$PYTHONPATH
 
 To keep numpy pinned for any future pip installs in this venv:
