@@ -27,6 +27,22 @@ from collections import OrderedDict
 from torch.distributed.optim import ZeroRedundancyOptimizer
 
 
+def _unwrap_model(model):
+    return model.module if hasattr(model, "module") else model
+
+
+def _has_fsdp2_module(model) -> bool:
+    try:
+        from torch.distributed.fsdp import FSDPModule
+    except Exception:
+        return False
+
+    root = _unwrap_model(model)
+    if isinstance(root, FSDPModule):
+        return True
+    return any(isinstance(module, FSDPModule) for module in root.modules())
+
+
 def activation_function_selection(activation_function_string: str):
     if activation_function_string == "relu":
         return torch.nn.ReLU()
@@ -68,6 +84,12 @@ def multitask_optim_state_dict(model, optimizer):
 
     assert isinstance(model, MultiTaskModelMP)
     assert isinstance(optimizer, DualOptimizer)
+
+    if _has_fsdp2_module(model):
+        return {
+            "optimizer1": optimizer.optimizer1.state_dict(),
+            "optimizer2": optimizer.optimizer2.state_dict(),
+        }
 
     ## Need a patch to fix dist.broadcast_object_list
     import torch.distributed as dist
@@ -118,33 +140,43 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
 
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
         if use_fsdp:
-            from torch.distributed.fsdp import (
-                FullyShardedDataParallel as FSDP,
-                StateDictType,
-                FullStateDictConfig,
-                FullOptimStateDictConfig,
-            )
-
-            if use_multitask:
-                model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=False)
-                optim_cfg = FullOptimStateDictConfig(
-                    offload_to_cpu=True, rank0_only=False
-                )
-            else:
-                model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-                optim_cfg = FullOptimStateDictConfig(
-                    offload_to_cpu=True, rank0_only=True
-                )
-
-            with FSDP.state_dict_type(
-                model, StateDictType.FULL_STATE_DICT, model_cfg, optim_cfg
-            ):
+            if _has_fsdp2_module(model):
                 model_state_dict = model.state_dict()
                 optimizer_state_dict = (
                     multitask_optim_state_dict(model, optimizer)
                     if use_multitask
                     else optimizer.state_dict()
+                optimizer_state_dict = optimizer.state_dict()
+            else:
+                from torch.distributed.fsdp import (
+                    FullyShardedDataParallel as FSDP,
+                    StateDictType,
+                    FullStateDictConfig,
+                    FullOptimStateDictConfig,
                 )
+
+                if use_multitask:
+                    model_cfg = FullStateDictConfig(
+                        offload_to_cpu=True, rank0_only=False
+                    )
+                    optim_cfg = FullOptimStateDictConfig(
+                        offload_to_cpu=True, rank0_only=False
+                    )
+                else:
+                    model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                    optim_cfg = FullOptimStateDictConfig(
+                        offload_to_cpu=True, rank0_only=True
+                    )
+
+                with FSDP.state_dict_type(
+                    model, StateDictType.FULL_STATE_DICT, model_cfg, optim_cfg
+                ):
+                    model_state_dict = model.state_dict()
+                    optimizer_state_dict = (
+                        multitask_optim_state_dict(model, optimizer)
+                        if not use_multitask
+                        else optimizer.state_dict()
+                    )
         else:
             model_state_dict = model.state_dict()
             if isinstance(optimizer, ZeroRedundancyOptimizer):
@@ -284,23 +316,28 @@ def load_existing_model(
         ## Load with FSDP
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
         if use_fsdp:
-            from torch.distributed.fsdp import (
-                FullyShardedDataParallel as FSDP,
-                StateDictType,
-            )
-
-            with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT):
+            if _has_fsdp2_module(model):
                 model.load_state_dict(state_dict)
                 if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
-                    if use_multitask:
-                        ## MultiTaskModelMP uses standard optimizer
-                        optimizer_state_dict = checkpoint["optimizer_state_dict"]
+                    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            else:
+                from torch.distributed.fsdp import (
+                    FullyShardedDataParallel as FSDP,
+                    StateDictType,
+                )
 
-                    else:
-                        optimizer_state_dict = FSDP.optim_state_dict_to_load(
-                            model, optimizer, checkpoint["optimizer_state_dict"]
-                        )
-                    optimizer.load_state_dict(optimizer_state_dict)
+                with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT):
+                    model.load_state_dict(state_dict)
+                    if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+                        if use_multitask:
+                            ## MultiTaskModelMP uses standard optimizer
+                            optimizer_state_dict = checkpoint["optimizer_state_dict"]
+
+                        else:
+                            optimizer_state_dict = FSDP.optim_state_dict_to_load(
+                                model, optimizer, checkpoint["optimizer_state_dict"]
+                            )
+                        optimizer.load_state_dict(optimizer_state_dict)
         else:
             model.load_state_dict(state_dict)
             if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):

@@ -9,9 +9,22 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
 
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.api import ShardingStrategy
+from torch.distributed.fsdp import fully_shard
+from torch.distributed.device_mesh import DeviceMesh
 from torch.optim import Optimizer
+
+
+def _get_fsdp2_device_type():
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return "xpu"
+    return "cpu"
+
+
+def _build_fsdp2_mesh(process_group):
+    ranks = dist.get_process_group_ranks(process_group)
+    return DeviceMesh(_get_fsdp2_device_type(), mesh=ranks)
 
 
 def average_gradients(model, group):
@@ -326,21 +339,22 @@ class MultiTaskModelMP(nn.Module):
 
         ## check if FSDP is to be used
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
-        ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
         fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
-        sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
-        print("MultiTaskModelMP FSDP:", use_fsdp, "Sharding:", sharding_strategy)
+        if use_fsdp and fsdp_strategy != "FULL_SHARD":
+            print(
+                "MultiTaskModelMP FSDP2 only supports FULL_SHARD; ignoring HYDRAGNN_FSDP_STRATEGY=",
+                fsdp_strategy,
+            )
+        print("MultiTaskModelMP FSDP2:", use_fsdp)
 
         if use_fsdp:
-            self.encoder = FSDP(
-                self.encoder,
-                process_group=self.shared_pg,
-                sharding_strategy=sharding_strategy,
+            shared_mesh = _build_fsdp2_mesh(self.shared_pg)
+            head_mesh = _build_fsdp2_mesh(self.head_pg)
+            self.encoder = fully_shard(
+                self.encoder, mesh=shared_mesh, reshard_after_forward=True
             )
-            self.decoder = FSDP(
-                self.decoder,
-                process_group=self.head_pg,
-                sharding_strategy=sharding_strategy,
+            self.decoder = fully_shard(
+                self.decoder, mesh=head_mesh, reshard_after_forward=True
             )
         else:
             self.encoder = DDP(self.encoder, process_group=self.shared_pg)

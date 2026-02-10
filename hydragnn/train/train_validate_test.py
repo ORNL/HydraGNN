@@ -69,6 +69,15 @@ def resolve_precision(precision: str):
     return prec, info["param_dtype"], info["autocast_dtype"]
 
 
+def _set_fsdp_reshard_after_backward(model, enabled: bool):
+    """Toggle FSDP2 resharding if supported by the wrapper."""
+
+    if hasattr(model, "set_reshard_after_backward"):
+        model.set_reshard_after_backward(enabled)
+    elif hasattr(model, "module") and hasattr(model.module, "set_reshard_after_backward"):
+        model.module.set_reshard_after_backward(enabled)
+
+
 def move_batch_to_device(data, param_dtype):
     device = get_device()
 
@@ -634,9 +643,11 @@ def train(
             if compute_grad_energy:  # for force and energy prediction
                 data.pos.requires_grad = True
                 # Perform forward pass and backward pass under autocast
+                _set_fsdp_reshard_after_backward(model, False)
                 with autocast_context:
                     pred = model(data)
                     loss, tasks_loss = model.module.energy_force_loss(pred, data)
+                _set_fsdp_reshard_after_backward(model, True)
             else:
                 # Perform forward pass and backward pass under autocast
                 with autocast_context:
@@ -736,9 +747,11 @@ def validate(
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
                 data.pos.requires_grad = True
+                _set_fsdp_reshard_after_backward(model, False)
                 with autocast_context:
                     pred = model(data)
                     error, tasks_loss = model.module.energy_force_loss(pred, data)
+                _set_fsdp_reshard_after_backward(model, True)
         else:
             with autocast_context:
                 head_index = get_head_indices(model, data)
@@ -808,9 +821,11 @@ def test(
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
                 data.pos.requires_grad = True
+                _set_fsdp_reshard_after_backward(model, False)
                 with autocast_context:
                     pred = model(data)
                     error, tasks_loss = model.module.energy_force_loss(pred, data)
+                _set_fsdp_reshard_after_backward(model, True)
         else:
             with autocast_context:
                 head_index = get_head_indices(model, data)
@@ -880,6 +895,7 @@ def test(
             if compute_grad_energy:
                 with torch.enable_grad():
                     data.pos.requires_grad = True
+                    _set_fsdp_reshard_after_backward(model, False)
                     with autocast_context:
                         pred = model(data)
                         # Support both node and graph heads; enforce sum pooling for graph heads
@@ -939,6 +955,7 @@ def test(
                             graph_energy_peratom_pred.reshape(-1, 1)
                         )
                         predicted_values[2].append(forces_pred.reshape(-1, 1))
+                    _set_fsdp_reshard_after_backward(model, True)
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y

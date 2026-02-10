@@ -15,8 +15,8 @@ import re
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
-from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.fsdp import fully_shard
+from torch.distributed.device_mesh import DeviceMesh
 
 from hydragnn.utils.print.print_utils import print_distributed
 
@@ -360,6 +360,19 @@ def get_device_from_name(name: str):
         return torch.device("cpu")
 
 
+def _get_fsdp2_device_type():
+    if torch.cuda.is_available():
+        return "cuda"
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
+        return "xpu"
+    return "cpu"
+
+
+def _build_fsdp2_mesh(process_group=None):
+    ranks = dist.get_process_group_ranks(process_group)
+    return DeviceMesh(_get_fsdp2_device_type(), mesh=ranks)
+
+
 def get_device(use_gpu=True, rank_per_model=1, verbosity_level=0):
 
     name = get_device_name(use_gpu, rank_per_model, verbosity_level)
@@ -404,43 +417,24 @@ def get_distributed_model(
 
         ## check if FSDP is to be used
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
-        ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
         fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
-        sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
-        print("Using FSDP:", use_fsdp, "Sharding:", sharding_strategy)
+        if use_fsdp and fsdp_strategy != "FULL_SHARD":
+            print_distributed(
+                verbosity,
+                "FSDP2 only supports FULL_SHARD; ignoring HYDRAGNN_FSDP_STRATEGY=",
+                fsdp_strategy,
+            )
+        print("Using FSDP2:", use_fsdp)
 
         if use_fsdp:
-            print_distributed(verbosity, "Using FSDP wrapper")
-            model = FSDP(model, sharding_strategy=sharding_strategy)
-
-            # ## FIXME: FSDP2 test
-            # from torch.distributed.fsdp import fully_shard
-            # model = fully_shard(
-            #     model,
-            #     reshard_after_forward=False
-            # )
-
-            # import torch.nn as nn
-            # class ModuleCompat(nn.Module):
-            #     """
-            #     Wrapper that provides .module (DDP/FSDP1-style) for backward compatibility.
-            #     Forward calls into the wrapped module.
-            #     Attribute access falls back to the wrapped module.
-            #     """
-            #     def __init__(self, module: nn.Module):
-            #         super().__init__()
-            #         self.module = module
-
-            #     def forward(self, *args, **kwargs):
-            #         return self.module(*args, **kwargs)
-
-            #     def __getattr__(self, name):
-            #         # Called only if normal attribute lookup fails
-            #         if name != "module":
-            #             return getattr(self.module, name)
-            #         return super().__getattr__(name)
-
-            # model = ModuleCompat(model)
+            print_distributed(verbosity, "Using FSDP2 fully_shard wrapper")
+            if dist.is_initialized():
+                print_distributed(
+                    verbosity,
+                    f"FSDP2 active on rank {dist.get_rank()}: {model.__class__.__name__}",
+                )
+            mesh = _build_fsdp2_mesh()
+            model = fully_shard(model, mesh=mesh, reshard_after_forward=True)
         else:
             model = DDP(model, **ddp_kwargs)
 
