@@ -5,9 +5,8 @@
 # - PyTorch: use "module load frameworks" (do NOT pip-install torch wheels)
 # - PyG: install base torch_geometric in a venv that inherits system site-packages
 # - Build ADIOS2 from source (MPI + Python) with DataSpaces engine OFF
-# - IMPORTANT on Aurora: ADIOS2 Python bindings are produced by CMake as a built module
-#   under lib{,64}/pythonX.Y/site-packages (often in the *build* tree). We symlink that
-#   into the venv site-packages so "import adios2" works reliably.
+# - IMPORTANT on Aurora: ADIOS2 Python bindings are NOT a pip project.
+#   We link the built/installed python package into the venv site-packages.
 # - Install DDStore from source
 # - Install torch_geometric (base only)
 # - Install HydraGNN editable
@@ -16,15 +15,12 @@
 #   nohup ./hydragnn_installation_bash_script_aurora.sh > installation_aurora.log 2>&1 &
 
 set -Eeuo pipefail
-
-# --- Make Lmod safe under nounset/non-interactive shells (nohup) ---
 export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
 
 hr() { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '='; }
 banner() { hr; echo ">>> $1"; hr; }
 subbanner() { echo "-- $1"; }
 
-# Save/restore nounset helper
 _nounset_off() {
   NOUNSET_WAS_ON=0
   case "$-" in
@@ -32,24 +28,20 @@ _nounset_off() {
   esac
 }
 _nounset_restore() {
-  if [[ "${NOUNSET_WAS_ON:-0}" -eq 1 ]]; then
-    set -u
-  fi
+  if [[ "${NOUNSET_WAS_ON:-0}" -eq 1 ]]; then set -u; fi
   unset NOUNSET_WAS_ON
 }
 
 banner "Starting HydraGNN Aurora environment setup ($(date))"
 
 # ============================================================
-# Modules (robust under `set -u` + nohup)
+# Modules
 # ============================================================
 banner "Modules: use Aurora-provided frameworks"
 
-# Ensure module command exists
 if ! command -v module >/dev/null 2>&1; then
   _nounset_off
   export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
-
   if [[ -f /etc/profile.d/modules.sh ]]; then
     # shellcheck disable=SC1091
     source /etc/profile.d/modules.sh
@@ -68,7 +60,6 @@ if ! command -v module >/dev/null 2>&1; then
   exit 1
 fi
 
-# Run module commands with nounset disabled (Lmod internals may reference unset vars)
 _nounset_off
 export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
 
@@ -92,7 +83,7 @@ mkdir -p "$INSTALL_ROOT"
 echo "INSTALL_ROOT = $INSTALL_ROOT"
 
 # ============================================================
-# Create venv that inherits frameworks packages
+# Create venv
 # ============================================================
 banner "Create Python venv (inherits frameworks site-packages)"
 VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
@@ -101,13 +92,8 @@ echo "VENV_PATH    = $VENV_PATH"
 echo "RECREATE_ENV = $RECREATE_ENV"
 
 PYTHON_BIN="$(command -v python3 || true)"
-if [[ -z "$PYTHON_BIN" ]]; then
-  PYTHON_BIN="$(command -v python || true)"
-fi
-if [[ -z "$PYTHON_BIN" ]]; then
-  echo "❌ python/python3 not found after module load frameworks"
-  exit 1
-fi
+[[ -z "$PYTHON_BIN" ]] && PYTHON_BIN="$(command -v python || true)"
+[[ -z "$PYTHON_BIN" ]] && { echo "❌ python/python3 not found after module load frameworks"; exit 1; }
 
 echo "Python used for venv: $PYTHON_BIN"
 "$PYTHON_BIN" --version
@@ -125,7 +111,6 @@ fi
 # shellcheck disable=SC1091
 source "$VENV_PATH/bin/activate"
 
-# Determine python X.Y for path additions later
 PYTHON_XY="$(python - <<'PY'
 import sys
 print(f"{sys.version_info.major}.{sys.version_info.minor}")
@@ -133,7 +118,6 @@ PY
 )"
 echo "Python X.Y in venv: ${PYTHON_XY}"
 
-# Venv site-packages (for symlinks later)
 VENV_SITEPKG="$(python - <<'PY'
 import site
 print(site.getsitepackages()[0])
@@ -142,9 +126,7 @@ PY
 echo "VENV_SITEPKG = $VENV_SITEPKG"
 
 # ============================================================
-# pip helpers:
-# - PIP_CONSTRAINT pins numpy to 1.26.4 (venv shadows system numpy>=2)
-# - pip_retry skips requirements already satisfied (avoids churn on system-site-packages)
+# pip helpers + numpy pin
 # ============================================================
 banner "pip bootstrap"
 python -m pip install -U pip setuptools wheel
@@ -155,7 +137,6 @@ numpy==1.26.4
 EOF
 export PIP_CONSTRAINT="$CONSTRAINTS_FILE"
 echo "PIP_CONSTRAINT = $PIP_CONSTRAINT"
-echo "Constraints file contents:"
 cat "$CONSTRAINTS_FILE"
 
 _pip_filter_unsatisfied() {
@@ -165,27 +146,20 @@ from pathlib import Path
 
 args = sys.argv[1:]
 
-def is_option(a: str) -> bool:
-  return a.startswith("-")
-
+def is_option(a: str) -> bool: return a.startswith("-")
 def is_localish(a: str) -> bool:
-  if a in (".", "..") or a.startswith(("./", "../", "/")):
-    return True
-  if "://" in a or a.startswith(("git+", "hg+", "svn+", "bzr+", "file:")):
-    return True
-  if a.endswith(".txt") and Path(a).exists():
-    return True
+  if a in (".","..") or a.startswith(("./","../","/")): return True
+  if "://" in a or a.startswith(("git+","hg+","svn+","bzr+","file:")): return True
+  if a.endswith(".txt") and Path(a).exists(): return True
   return False
 
-tokens = []
-skip_next = False
+tokens=[]
+skip_next=False
 for a in args:
-  if skip_next:
-    skip_next = False
-    continue
+  if skip_next: skip_next=False; continue
   if is_option(a):
     if a in ("-r","--requirement","-c","--constraint","-t","--target","--prefix","--root","--index-url","--extra-index-url","--find-links"):
-      skip_next = True
+      skip_next=True
     continue
   tokens.append(a)
 
@@ -196,28 +170,20 @@ except Exception:
   print("\n".join(tokens))
   raise SystemExit(0)
 
-unsatisfied = []
+unsatisfied=[]
 for t in tokens:
-  if is_localish(t) or t == "-e":
-    unsatisfied.append(t)
-    continue
-
+  if is_localish(t) or t=="-e":
+    unsatisfied.append(t); continue
   try:
-    req = Requirement(t)
+    req=Requirement(t)
   except Exception:
-    unsatisfied.append(t)
-    continue
-
-  name = req.name
+    unsatisfied.append(t); continue
   try:
-    ver = metadata.version(name)
+    ver=metadata.version(req.name)
   except metadata.PackageNotFoundError:
-    unsatisfied.append(t)
-    continue
-
+    unsatisfied.append(t); continue
   if req.specifier and (ver not in req.specifier):
-    unsatisfied.append(t)
-    continue
+    unsatisfied.append(t); continue
 
 print("\n".join(unsatisfied))
 PY
@@ -231,9 +197,7 @@ pip_retry() {
   for a in "${raw_args[@]}"; do
     case "$a" in
       "."|"-e"|./*|../*|/*|git+*|http*|https*|file:*)
-        do_filter=0
-        break
-        ;;
+        do_filter=0; break;;
     esac
   done
 
@@ -250,7 +214,6 @@ pip_retry() {
   fi
 
   echo "pip will install (unsatisfied only): ${to_install[*]}"
-
   for ((i=1; i<=tries; i++)); do
     if python -m pip install --upgrade-strategy only-if-needed "${to_install[@]}"; then
       return 0
@@ -261,19 +224,16 @@ pip_retry() {
   return 1
 }
 
-# Ensure the venv has numpy==1.26.4 and that it shadows system numpy>=2.
 banner "Pin NumPy to 1.26.4 inside venv (shadow system-site numpy)"
 pip_retry "numpy==1.26.4"
-
 python - <<'PY'
-import numpy as np, sys
+import numpy as np
 print("numpy.__version__ =", np.__version__)
 print("numpy.__file__    =", np.__file__)
-print("sys.prefix        =", sys.prefix)
 PY
 
 # ============================================================
-# Sanity check: PyTorch import must work (from frameworks)
+# Sanity: torch
 # ============================================================
 banner "Sanity check: torch import (from frameworks)"
 python - <<'PY'
@@ -283,23 +243,13 @@ print("torch.xpu.is_available() =", hasattr(torch, "xpu") and torch.xpu.is_avail
 PY
 
 # ============================================================
-# Ensure build deps for ADIOS2 Python bindings exist in *this* Python
+# ADIOS2 build deps
 # ============================================================
 banner "Install pybind11 (required for ADIOS2 Python bindings)"
 pip_retry pybind11
 
-# mpi4py should already be in frameworks; keep this check lightweight
-banner "Sanity check: mpi4py import (from frameworks/venv)"
-python - <<'PY'
-try:
-    import mpi4py
-    print("mpi4py =", mpi4py.__version__)
-except Exception as e:
-    print("WARNING: mpi4py not importable:", e)
-PY
-
 # ============================================================
-# Build ADIOS2 from source (Frontier-parity: DataSpaces engine OFF)
+# Build ADIOS2
 # ============================================================
 banner "ADIOS2 (build from source; DataSpaces engine OFF)"
 ADIOS2_VERSION="${ADIOS2_VERSION:-v2.10.2}"
@@ -325,21 +275,12 @@ pushd "$ADIOS2_BUILD" >/dev/null
 
 MPICC_BIN="${MPICC_BIN:-$(command -v mpicc || true)}"
 MPICXX_BIN="${MPICXX_BIN:-$(command -v mpicxx || true)}"
-if [[ -z "$MPICC_BIN" || -z "$MPICXX_BIN" ]]; then
-  echo "❌ mpicc/mpicxx not found. Ensure frameworks (and MPI) are available."
-  exit 1
-fi
+[[ -z "$MPICC_BIN" || -z "$MPICXX_BIN" ]] && { echo "❌ mpicc/mpicxx not found"; exit 1; }
 
-# Force CMake to use the venv Python (critical on Aurora so Python bindings are actually built)
 PYTHON_EXEC="$(command -v python)"
 PYTHON3_INCLUDE_DIR="$(python - <<'PY'
 import sysconfig
 print(sysconfig.get_path("include"))
-PY
-)"
-PYTHON3_LIBRARY_HINT="$(python - <<'PY'
-import sysconfig
-print(sysconfig.get_config_var("LIBDIR") or "")
 PY
 )"
 
@@ -373,98 +314,71 @@ cmake --install .
 popd >/dev/null
 
 # ============================================================
-# Export runtime paths (Fix 1: lib vs lib64)
+# Runtime paths (lib vs lib64)
 # ============================================================
 export ADIOS2_DIR="$ADIOS2_INSTALL"
 export PATH="$ADIOS2_INSTALL/bin:$PATH"
-
-if [[ -d "$ADIOS2_INSTALL/lib64" ]]; then
-  ADIOS2_LIBDIR="lib64"
-else
-  ADIOS2_LIBDIR="lib"
-fi
-
+if [[ -d "$ADIOS2_INSTALL/lib64" ]]; then ADIOS2_LIBDIR="lib64"; else ADIOS2_LIBDIR="lib"; fi
 export LD_LIBRARY_PATH="$ADIOS2_INSTALL/${ADIOS2_LIBDIR}:${LD_LIBRARY_PATH:-}"
 
 # ============================================================
-# Make ADIOS2 Python module importable
-# Strategy:
-#   1) Look for built python site-packages under build tree
-#   2) Look for installed python site-packages under install tree
-#   3) Symlink discovered "adios2" package (or adios2*.so) into venv site-packages
+# FIX: ADIOS2 Python bindings were installed under a *nested absolute path*
+# We recover by linking the actually-installed package into the venv site-packages.
 # ============================================================
-banner "Locate ADIOS2 Python module and link into venv site-packages"
+banner "Fix ADIOS2 Python install location and ensure import works"
 
-find_adios2_sitepkgs() {
-  local base="$1"
-  local libdir="$2"
-  local pyxy="$3"
-  local cand1="${base}/${libdir}/python${pyxy}/site-packages"
-  local cand2="${base}/lib/python${pyxy}/site-packages"
-  local cand3="${base}/lib64/python${pyxy}/site-packages"
+ADIOS2_PY_BAD_ROOT="${ADIOS2_INSTALL}${VENV_SITEPKG}"
+ADIOS2_PY_BAD_PKG="${ADIOS2_PY_BAD_ROOT}/adios2"
 
-  for c in "$cand1" "$cand2" "$cand3"; do
-    if [[ -d "$c" ]]; then
-      # Must contain adios2 package dir or adios2*.so
-      if [[ -d "$c/adios2" ]] || compgen -G "$c/adios2*.so" >/dev/null 2>&1; then
-        echo "$c"
-        return 0
-      fi
-    fi
-  done
-  return 1
-}
-
-ADIOS2_PY_SITEPKG=""
-
-# First prefer BUILD tree (most reliable on Aurora)
-if ADIOS2_PY_SITEPKG="$(find_adios2_sitepkgs "${ADIOS2_SRC}/build" "lib"    "${PYTHON_XY}")"; then :; \
-elif ADIOS2_PY_SITEPKG="$(find_adios2_sitepkgs "${ADIOS2_SRC}/build" "lib64" "${PYTHON_XY}")"; then :; \
-elif ADIOS2_PY_SITEPKG="$(find_adios2_sitepkgs "${ADIOS2_INSTALL}" "${ADIOS2_LIBDIR}" "${PYTHON_XY}")"; then :; \
-else
-  echo "❌ Could not find ADIOS2 python module under build/install trees."
-  echo "Searched for directories like:"
-  echo "  - ${ADIOS2_SRC}/build/lib/python${PYTHON_XY}/site-packages"
-  echo "  - ${ADIOS2_SRC}/build/lib64/python${PYTHON_XY}/site-packages"
-  echo "  - ${ADIOS2_INSTALL}/${ADIOS2_LIBDIR}/python${PYTHON_XY}/site-packages"
-  echo
-  echo "Tip: check whether Python bindings were enabled during CMake configure."
-  echo "      In CMake output, you should see Python being detected; otherwise bindings won't be built."
-  exit 1
-fi
-
-echo "Found ADIOS2 python site-packages at: $ADIOS2_PY_SITEPKG"
-
-mkdir -p "$VENV_SITEPKG"
-
-# Link package directory if present
-if [[ -d "$ADIOS2_PY_SITEPKG/adios2" ]]; then
+if [[ -d "$ADIOS2_PY_BAD_PKG" ]]; then
+  echo "Detected nested ADIOS2 Python install:"
+  echo "  $ADIOS2_PY_BAD_PKG"
   rm -rf "$VENV_SITEPKG/adios2" 2>/dev/null || true
-  ln -s "$ADIOS2_PY_SITEPKG/adios2" "$VENV_SITEPKG/adios2"
-  echo "Symlinked adios2 package dir into venv:"
-  echo "  $VENV_SITEPKG/adios2 -> $ADIOS2_PY_SITEPKG/adios2"
+  ln -s "$ADIOS2_PY_BAD_PKG" "$VENV_SITEPKG/adios2"
+  echo "Symlinked into venv:"
+  echo "  $VENV_SITEPKG/adios2 -> $ADIOS2_PY_BAD_PKG"
+else
+  echo "Did not find nested python package at:"
+  echo "  $ADIOS2_PY_BAD_PKG"
+  echo "Trying standard locations..."
+
+  # Standard candidate locations
+  CANDIDATES=(
+    "${ADIOS2_INSTALL}/${ADIOS2_LIBDIR}/python${PYTHON_XY}/site-packages/adios2"
+    "${ADIOS2_INSTALL}/lib/python${PYTHON_XY}/site-packages/adios2"
+    "${ADIOS2_INSTALL}/lib64/python${PYTHON_XY}/site-packages/adios2"
+    "${ADIOS2_SRC}/build/lib/python${PYTHON_XY}/site-packages/adios2"
+    "${ADIOS2_SRC}/build/lib64/python${PYTHON_XY}/site-packages/adios2"
+  )
+
+  FOUND=""
+  for c in "${CANDIDATES[@]}"; do
+    if [[ -d "$c" ]]; then FOUND="$c"; break; fi
+  done
+
+  if [[ -n "$FOUND" ]]; then
+    rm -rf "$VENV_SITEPKG/adios2" 2>/dev/null || true
+    ln -s "$FOUND" "$VENV_SITEPKG/adios2"
+    echo "Symlinked into venv:"
+    echo "  $VENV_SITEPKG/adios2 -> $FOUND"
+  else
+    echo "❌ Could not locate ADIOS2 python package in standard locations either."
+    echo "Searched:"
+    printf '  - %s\n' "${CANDIDATES[@]}"
+    exit 1
+  fi
 fi
 
-# Also link top-level extension module(s) if they exist (some layouts expose adios2*.so)
-for so in "$ADIOS2_PY_SITEPKG"/adios2*.so; do
-  if [[ -f "$so" ]]; then
-    bn="$(basename "$so")"
-    rm -f "$VENV_SITEPKG/$bn" 2>/dev/null || true
-    ln -s "$so" "$VENV_SITEPKG/$bn"
-    echo "Symlinked $bn into venv site-packages"
-  fi
-done
-
-# Verify import now (and print its location)
-banner "Sanity check: import adios2 (must succeed)"
+banner "Sanity check: import adios2"
 python - <<'PY'
 import adios2
+print("adios2 import OK")
 print("adios2 version:", getattr(adios2, "__version__", "unknown"))
-print("adios2 module:", adios2.__file__)
+print("adios2 file:", adios2.__file__)
 PY
 
 # ============================================================
-# DDStore (clone + pip install .) — Frontier-style
+# DDStore
 # ============================================================
 banner "DDStore (clone + pip install .)"
 DDSTORE_FRONTIER="${INSTALL_ROOT}/DDStore-Source"
@@ -488,17 +402,15 @@ banner "Install PyTorch Geometric base (torch_geometric)"
 pip_retry torch_geometric
 
 python - <<'PY'
-import torch, torch_geometric, numpy as np
+import torch, torch_geometric
+import numpy as np
 print("torch =", torch.__version__)
 print("torch_geometric =", torch_geometric.__version__)
-print("xpu available =", hasattr(torch, "xpu") and torch.xpu.is_available())
 print("numpy =", np.__version__, "from", np.__file__)
 PY
 
 # ============================================================
-# Additional python deps (NO torch install here!)
-# - PIP_CONSTRAINT enforces numpy==1.26.4 globally
-# - mendeleev >= 1.1.0 requires numpy>=2; pin to <1.1.0 to remain compatible
+# Additional deps (keep numpy==1.26.4)
 # ============================================================
 banner "Install HydraGNN dependencies (do NOT install torch here)"
 pip_retry scipy pyyaml requests tqdm filelock psutil
@@ -518,28 +430,7 @@ print("numpy.__file__    =", np.__file__)
 PY
 
 # ============================================================
-# Sanity check: ADIOS2 + DDStore bindings
-# ============================================================
-banner "Sanity check: ADIOS2 + DDStore Python bindings"
-python - <<'PY'
-import adios2
-print("adios2 version:", getattr(adios2, "__version__", "unknown"))
-
-try:
-    import pyddstore
-    print("pyddstore available")
-except ImportError as e:
-    print("WARNING: pyddstore not importable:", e)
-
-try:
-    import thapi
-    print("thapi available")
-except ImportError as e:
-    print("WARNING: thapi not importable:", e)
-PY
-
-# ============================================================
-# Install HydraGNN (editable)
+# HydraGNN editable
 # ============================================================
 banner "Install HydraGNN (editable)"
 HYDRAGNN_SRC="${HYDRAGNN_SRC:-${PWD}/HydraGNN}"
@@ -549,46 +440,25 @@ if [[ -d "$HYDRAGNN_SRC" ]]; then
   pip_retry -e "$HYDRAGNN_SRC"
 else
   echo "⚠️  HydraGNN source directory not found at: $HYDRAGNN_SRC"
-  echo "    Export HYDRAGNN_SRC=/path/to/HydraGNN and rerun the HydraGNN install step."
 fi
 
-# ============================================================
-# Final summary / activation instructions
-# ============================================================
 banner "Final Summary"
 cat <<EOF
 Base install:        $INSTALL_ROOT
-Venv (system-site):  $VENV_PATH
-Venv site-packages:  $VENV_SITEPKG
+Venv:               $VENV_PATH
+Venv site-packages: $VENV_SITEPKG
+Constraints:        $CONSTRAINTS_FILE (numpy==1.26.4)
 
-Pip constraints:
-  - file:   $CONSTRAINTS_FILE
-  - numpy:  pinned to 1.26.4 inside venv (shadows system numpy>=2)
-
-ADIOS2:
-  - source:   $ADIOS2_SRC @ $ADIOS2_VERSION
-  - build:    $ADIOS2_BUILD
-  - install:  $ADIOS2_INSTALL
-  - libdir:   ${ADIOS2_LIBDIR}
-  - python:   linked from $ADIOS2_PY_SITEPKG into $VENV_SITEPKG
-  - NOTE: ADIOS2_USE_DataSpaces=OFF (Frontier-parity)
-
-DDStore:
-  - source:   ${DDSTORE_FRONTIER}/DDStore
-  - python:   installed into venv (pip)
-
-To activate later:
-  module reset
-  module load frameworks
-  source ${VENV_PATH}/bin/activate
-
-Runtime library vars:
+ADIOS2 install:     $ADIOS2_INSTALL
+ADIOS2 libdir:      $ADIOS2_LIBDIR
+ADIOS2 runtime:
   export ADIOS2_DIR=$ADIOS2_INSTALL
   export PATH=$ADIOS2_INSTALL/bin:\$PATH
   export LD_LIBRARY_PATH=$ADIOS2_INSTALL/${ADIOS2_LIBDIR}:\$LD_LIBRARY_PATH
 
-To keep numpy pinned for any future pip installs in this venv:
-  export PIP_CONSTRAINT=$CONSTRAINTS_FILE
+NOTE:
+- If ADIOS2 installs python into the nested path "$ADIOS2_INSTALL$VENV_SITEPKG",
+  this script auto-links it back into "$VENV_SITEPKG/adios2".
 EOF
 
 echo "✅ Aurora HydraGNN environment setup complete!"
