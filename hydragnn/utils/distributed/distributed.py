@@ -244,7 +244,8 @@ def setup_ddp(use_deepspeed=False):
                 if should_retry:
                     if world_rank == 0:
                         print(
-                            "MASTER_PORT collision on %s. Retrying with next port." % selected_port
+                            "MASTER_PORT collision on %s. Retrying with next port."
+                            % selected_port
                         )
                     time.sleep(0.5)
                     continue
