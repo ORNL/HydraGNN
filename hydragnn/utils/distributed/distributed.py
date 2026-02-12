@@ -144,9 +144,25 @@ def setup_ddp(use_deepspeed=False):
 
     world_size, world_rank = init_comm_size_and_rank()
 
+    def _derive_master_port(default_port: int = 8889) -> str:
+        user_port = os.getenv("HYDRAGNN_MASTER_PORT")
+        if user_port is not None:
+            return user_port
+
+        for var in ["SLURM_JOB_ID", "PBS_JOBID", "LSB_JOBID"]:
+            value = os.getenv(var)
+            if not value:
+                continue
+            digits = "".join(ch for ch in value if ch.isdigit())
+            if not digits:
+                continue
+            return str(10000 + (int(digits) % 50000))
+
+        return str(default_port)
+
     ## Default setting
     master_addr = "127.0.0.1"
-    master_port = os.getenv("HYDRAGNN_MASTER_PORT", "8889")
+    master_port = _derive_master_port()
 
     if os.getenv("HYDRAGNN_MASTER_ADDR") is not None:
         master_addr = os.environ["HYDRAGNN_MASTER_ADDR"]
@@ -176,39 +192,63 @@ def setup_ddp(use_deepspeed=False):
             master_addr = parse_slurm_nodelist(os.environ["PBS_O_HOST"])[0]
 
     try:
-        if backend in ["nccl", "gloo", "ccl"]:
-            os.environ["MASTER_ADDR"] = master_addr
-            os.environ["MASTER_PORT"] = master_port
-            os.environ["WORLD_SIZE"] = str(world_size)
-            os.environ["RANK"] = str(world_rank)
-            ## Setting LOCAL_RANK complicts with DeviceMesh when using the srun "--gpus-per-task=1" option
-            # os.environ["LOCAL_RANK"] = str(get_local_rank())
+        port_retries = int(os.getenv("HYDRAGNN_MASTER_PORT_RETRIES", "8"))
+        explicit_port = os.getenv("HYDRAGNN_MASTER_PORT") is not None
+        base_port = int(master_port)
 
-        if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
-            ifname = find_ifname(master_addr)
-            if ifname is not None:
-                os.environ["GLOO_SOCKET_IFNAME"] = ifname
+        for attempt in range(port_retries + 1):
+            selected_port = str(base_port + attempt)
 
-        if world_rank == 0:
-            print(
-                "Distributed data parallel: %s master at %s:%s"
-                % (backend, master_addr, master_port),
-            )
+            if backend in ["nccl", "gloo", "ccl"]:
+                os.environ["MASTER_ADDR"] = master_addr
+                os.environ["MASTER_PORT"] = selected_port
+                os.environ["WORLD_SIZE"] = str(world_size)
+                os.environ["RANK"] = str(world_rank)
+                ## Setting LOCAL_RANK complicts with DeviceMesh when using the srun "--gpus-per-task=1" option
+                # os.environ["LOCAL_RANK"] = str(get_local_rank())
 
-        if not dist.is_initialized():
-            if use_deepspeed:
-                assert deepspeed_available, "deepspeed package not installed"
-                deepspeed.init_distributed(
-                    dist_backend=backend,
-                    init_method="env://",
-                    timeout=timedelta(seconds=1800),
+            if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
+                ifname = find_ifname(master_addr)
+                if ifname is not None:
+                    os.environ["GLOO_SOCKET_IFNAME"] = ifname
+
+            if world_rank == 0:
+                print(
+                    "Distributed data parallel: %s master at %s:%s"
+                    % (backend, master_addr, selected_port),
                 )
-            else:
-                dist.init_process_group(
-                    backend=backend,
-                    init_method="env://",
-                    timeout=timedelta(seconds=1800),
+
+            try:
+                if not dist.is_initialized():
+                    if use_deepspeed:
+                        assert deepspeed_available, "deepspeed package not installed"
+                        deepspeed.init_distributed(
+                            dist_backend=backend,
+                            init_method="env://",
+                            timeout=timedelta(seconds=1800),
+                        )
+                    else:
+                        dist.init_process_group(
+                            backend=backend,
+                            init_method="env://",
+                            timeout=timedelta(seconds=1800),
+                        )
+                break
+            except Exception as exc:
+                err = str(exc)
+                should_retry = (
+                    ("EADDRINUSE" in err or "address already in use" in err.lower())
+                    and (not explicit_port)
+                    and (attempt < port_retries)
                 )
+                if should_retry:
+                    if world_rank == 0:
+                        print(
+                            "MASTER_PORT collision on %s. Retrying with next port." % selected_port
+                        )
+                    time.sleep(0.5)
+                    continue
+                raise
 
     except KeyError:
         print("DDP has to be initialized within a job - Running in sequential mode")
@@ -337,12 +377,6 @@ def get_distributed_model(
     enhanced_model=False,
 ):
     device_name = get_device_name(verbosity_level=verbosity)
-    print(
-        "dist.is_initialized(),sync_batch_norm,device_name:",
-        dist.is_initialized(),
-        sync_batch_norm,
-        device_name,
-    )
 
     if dist.is_initialized():
         if device_name == "cpu":
