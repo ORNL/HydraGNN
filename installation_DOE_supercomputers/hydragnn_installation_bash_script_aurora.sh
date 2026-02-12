@@ -14,6 +14,25 @@
 # Run:
 #   nohup ./hydragnn_installation_bash_script_aurora.sh > installation_aurora.log 2>&1 &
 
+# ============================================================
+# Aurora compute node proxy (required for outbound HTTPS)
+# ============================================================
+banner "Configure outbound proxy (Aurora compute nodes)"
+
+export HTTP_PROXY="http://proxy.alcf.anl.gov:3128"
+export HTTPS_PROXY="http://proxy.alcf.anl.gov:3128"
+export http_proxy="$HTTP_PROXY"
+export https_proxy="$HTTPS_PROXY"
+export ftp_proxy="$HTTP_PROXY"
+export no_proxy="admin,*.hostmgmt.cm.aurora.alcf.anl.gov,*.alcf.anl.gov,localhost"
+
+echo "HTTP_PROXY  = $HTTP_PROXY"
+echo "HTTPS_PROXY = $HTTPS_PROXY"
+
+# Ensure git respects proxy explicitly
+git config --global http.proxy "$HTTP_PROXY" || true
+git config --global https.proxy "$HTTPS_PROXY" || true
+
 set -Eeuo pipefail
 export ZSH_EVAL_CONTEXT="${ZSH_EVAL_CONTEXT:-}"
 
