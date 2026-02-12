@@ -117,6 +117,7 @@ if __name__ == "__main__":
         default=None,
         help="Override Training.Optimizer.learning_rate; when omitted the JSON value is used",
     )
+    parser.add_argument("--nvme", action="store_true", help="use NVME")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -319,13 +320,20 @@ if __name__ == "__main__":
                         pna_deg = f.read_attribute("pna_deg")
                     ndata_list.append(ndata)
                     pna_deg_list.append(pna_deg)
-            ndata_list = np.array(ndata_list, dtype=np.float32)
-            process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
-                np.int32
-            )
-            imax = np.argmax(process_list)
-            process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
-            process_list = process_list.tolist()
+
+            # ## Proportional split
+            # ndata_list = np.array(ndata_list, dtype=np.float32)
+            # process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
+            #     np.int32
+            # )
+            # imax = np.argmax(process_list)
+            # process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
+            # process_list = process_list.tolist()
+
+            ## Evenly split
+            num_processes_per_model = comm_size // len(modellist)
+            assert comm_size % len(modellist) == 0
+            process_list = [num_processes_per_model] * len(modellist)
             print("process_list:", process_list)
 
             ## Merge pna_deg using interpolation
@@ -416,8 +424,6 @@ if __name__ == "__main__":
                         "subgroup_ranks:",
                         subgroup_ranks,
                     )
-                    subgroup = DeviceMesh(device_type=device_type, mesh=subgroup_ranks)
-                    subgroup_list.append(subgroup)
 
                 branch_id = mycolor
                 branch_group = subgroup_list[mycolor]
@@ -456,6 +462,84 @@ if __name__ == "__main__":
             "atomic_numbers",
         ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
+
+        ## FIXME: only for Frontier NVME
+        bbpath = f"/mnt/bb/{os.getenv('USER')}"
+        ## OC2020 dataset is too large to copy to NVME
+        if args.nvme and os.path.exists(bbpath):
+            import subprocess
+
+            def dojob(cmd):
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return cmd, result.returncode
+
+            hostname = MPI.Get_processor_name()
+            hostname_list = local_comm.gather(hostname, root=0)
+            dstdir = os.path.join(bbpath, "./dataset/%s-v2.bp" % mymodel)
+            os.makedirs(dstdir, exist_ok=True)
+
+            is_ok = True
+            if local_comm_rank == 0:
+                total_size = 0
+                for file in os.listdir(fname):
+                    total_size += os.path.getsize(os.path.join(fname, file))
+
+                if total_size < 1.5 * 1024**4:
+                    print(
+                        f"Copying {fname} to local NVME (size: {total_size/1024**4:.2f} TB)"
+                    )
+
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+                    import time
+
+                    with ThreadPoolExecutor(max_workers=4) as executor:
+                        t0 = time.time()
+                        future_list = list()
+                        for file in os.listdir(fname):
+                            src = os.path.join(fname, file)
+                            dst = os.path.join(dstdir, file)
+                            if os.path.exists(dst) and os.path.getsize(
+                                src
+                            ) == os.path.getsize(dst):
+                                continue
+
+                            CMD = f"sbcast -w {','.join(list(set(hostname_list)))} -pfv {os.path.join(fname, file)} {os.path.join(dstdir, file)}"
+                            future = executor.submit(dojob, CMD)
+                            future_list.append(future)
+
+                        for future in as_completed(future_list):
+                            cmd, return_code = future.result()
+                            print(f"Command: {cmd}, Return code: {return_code}")
+                            if return_code != 0:
+                                print(
+                                    f"Error in copying file with sbcast. Command: {cmd}, Return code: {return_code}"
+                                )
+                                is_ok = False
+                                break
+                        print(
+                            f"NVME setup is done: {fname} (Elapsed time: {time.time() - t0:.2f} seconds)"
+                        )
+                else:
+                    is_ok = False
+                    print(
+                        f"Dataset {fname} is too large: {total_size/1024**4:.2f} TB. Skipping NVME copy."
+                    )
+
+            x = np.array(int(is_ok), dtype=np.int32)
+            y = np.array(0, dtype=np.int32)
+            comm.Allreduce(x, y, op=MPI.MIN)
+            all_ok = bool(y.item())
+
+            if all_ok:
+                ## Use the local NVME path
+                fname = dstdir
+        comm.Barrier()
+
         print("mymodel:", rank, mycolor, mymodel)
         trainset = AdiosDataset(
             fname,
@@ -601,7 +685,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
