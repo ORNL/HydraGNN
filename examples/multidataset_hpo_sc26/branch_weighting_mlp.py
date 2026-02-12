@@ -93,7 +93,9 @@ def _load_multidataset_dataloaders(args, config):
             pna_deg = None
         else:
             intp_list = []
-            mlen = min([len(pna_deg) for pna_deg in pna_deg_list if pna_deg is not None])
+            mlen = min(
+                [len(pna_deg) for pna_deg in pna_deg_list if pna_deg is not None]
+            )
             for pna_deg in pna_deg_list:
                 if pna_deg is None:
                     continue
@@ -101,7 +103,11 @@ def _load_multidataset_dataloaders(args, config):
                 intp = np.interp(np.linspace(0, 1, num=mlen), x, pna_deg)
                 intp_list.append(intp)
             if len(intp_list) > 0:
-                pna_deg = np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+                pna_deg = (
+                    np.sum(np.stack(intp_list, axis=0), axis=0)
+                    .astype(np.int64)
+                    .tolist()
+                )
             else:
                 pna_deg = None
     else:
@@ -164,7 +170,9 @@ def _load_multidataset_dataloaders(args, config):
     testset = AdiosDataset(fname, "testset", local_comm, keys=common_variable_names)
 
     for ds in [trainset, valset, testset]:
-        ds.dataset_name_dict = {name.lower(): torch.tensor([[i]]) for i, name in enumerate(modellist)}
+        ds.dataset_name_dict = {
+            name.lower(): torch.tensor([[i]]) for i, name in enumerate(modellist)
+        }
 
     num_samples_list = []
     for i, dataset in enumerate([trainset, valset, testset]):
@@ -241,7 +249,9 @@ def _load_single_dataset_dataloaders(args, config, var_config):
     comm = MPI.COMM_WORLD
     if args.format == "adios":
         if AdiosDataset is None:
-            raise ImportError("AdiosDataset is unavailable; install adios2 to use --adios")
+            raise ImportError(
+                "AdiosDataset is unavailable; install adios2 to use --adios"
+            )
         opt = {
             "preload": False,
             "shmem": args.shmem,
@@ -347,7 +357,9 @@ def _energy_from_pred(pred) -> torch.Tensor:
     return energy.squeeze(-1)
 
 
-def _predict_branch_energy_forces(model, data, branch_id: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def _predict_branch_energy_forces(
+    model, data, branch_id: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
     original_dataset_name = getattr(data, "dataset_name", None)
     data.dataset_name = _build_dataset_name(data, branch_id)
 
@@ -385,7 +397,9 @@ def _weighted_average(
     weighted_forces = torch.zeros_like(forces_preds[0])
     for branch_idx in range(energy_preds.size(0)):
         node_weights = torch.repeat_interleave(weights[:, branch_idx], node_counts)
-        weighted_forces = weighted_forces + node_weights.unsqueeze(-1) * forces_preds[branch_idx]
+        weighted_forces = (
+            weighted_forces + node_weights.unsqueeze(-1) * forces_preds[branch_idx]
+        )
 
     return weighted_energy, weighted_forces
 
@@ -412,7 +426,9 @@ def train_epoch(
     for data in loader:
         data = move_batch_to_device(data, param_dtype)
         if not hasattr(data, "chemical_composition"):
-            raise ValueError("data.chemical_composition is required for branch weighting")
+            raise ValueError(
+                "data.chemical_composition is required for branch weighting"
+            )
 
         data.pos.requires_grad_(True)
         comp = _reshape_composition(data).to(device)
@@ -706,7 +722,9 @@ def main():
             force_weight,
             precision,
         )
-        print(f"Epoch {epoch + 1}/{args.epochs}: train={train_loss:.6f} val={val_loss:.6f}")
+        print(
+            f"Epoch {epoch + 1}/{args.epochs}: train={train_loss:.6f} val={val_loss:.6f}"
+        )
 
     os.makedirs(args.output_dir, exist_ok=True)
     output_path = os.path.join(args.output_dir, args.output)
