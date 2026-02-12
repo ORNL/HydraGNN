@@ -86,12 +86,15 @@ export datadir4=OC2022
 export datadir5=ODAC23
 export datadir6=OMat24
 export datadir7=OMol25
-export datadir8=OC2025
-export datadir9=OPoly2026
-export datadir10=Nabla2DFT
-export datadir11=QCML
-export datadir12=QM7-X
-export datadir13=transition1x
+export datadir8=OMol25-neutral
+export datadir9=OMol25-non-neutral
+export datadir10=OC2025
+export datadir11=OPoly2026
+export datadir12=Nabla2DFT
+export datadir13=QCML
+export datadir14=QM7-X
+export datadir15=transition1x
+
 
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/

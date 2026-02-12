@@ -77,7 +77,7 @@ def run(trial, dequed=None):
             f"--inputfile=gfm_mlip.json",
             f"--multi",
             f"--ddstore",
-            f'--multi_model_list="Alexandria,ANI1x,MPTrj,OC2020,OC2022,ODAC23,OMat24,OMol25,OC2025,OPoly2026,Nabla2DFT,QCML,QM7-X,transition1x"',
+            f'--multi_model_list="Alexandria,ANI1x,MPTrj,OC2020,OC2022,OC25,ODAC23,OMat24,OMol25,OMol25-neutral,OMol25-non-neutral,OC2025,OPoly2026,Nabla2DFT,QCML,QM7-X,transition1x"',
             ## debugging
             ##f'--multi_model_list="ANI1x"',
             f"--num_epoch=10",
