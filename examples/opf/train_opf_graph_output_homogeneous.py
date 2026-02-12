@@ -11,6 +11,7 @@ import torch
 import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
+from __init__ import data_ops
 
 
 def _patch_fast_tar_extraction():
@@ -49,65 +50,6 @@ def _patch_fast_tar_extraction():
             original_extract_tar(path, folder, mode=mode, log=log)
 
     tg_opf.extract_tar = _fast_extract_tar
-
-
-def _opf_release_name(topological_perturbations: bool) -> str:
-    return (
-        "dataset_release_1_nminusone"
-        if topological_perturbations
-        else "dataset_release_1"
-    )
-
-
-def _opf_raw_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
-    return os.path.join(
-        root, _opf_release_name(topological_perturbations), case_name, "raw"
-    )
-
-
-def _opf_tmp_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
-    return os.path.join(
-        _opf_raw_dir(root, case_name, topological_perturbations), "gridopt-dataset-tmp"
-    )
-
-
-def _find_empty_json(root: str):
-    empty = []
-    for dirpath, _, filenames in os.walk(root):
-        for name in filenames:
-            if not name.endswith(".json"):
-                continue
-            path = os.path.join(dirpath, name)
-            try:
-                if os.path.getsize(path) == 0:
-                    empty.append(path)
-            except OSError:
-                empty.append(path)
-    return empty
-
-
-def _reextract_opf_if_needed(root, case_name, num_groups, topological_perturbations):
-    raw_dir = _opf_raw_dir(root, case_name, topological_perturbations)
-    tmp_dir = _opf_tmp_dir(root, case_name, topological_perturbations)
-    raw_files = [f"{case_name}_{i}.tar.gz" for i in range(num_groups)]
-
-    if not os.path.isdir(raw_dir):
-        return
-
-    missing = [
-        name for name in raw_files if not os.path.isfile(os.path.join(raw_dir, name))
-    ]
-    if missing:
-        return
-
-    if os.path.isdir(tmp_dir):
-        empty = _find_empty_json(tmp_dir)
-        if not empty:
-            return
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-    for name in raw_files:
-        tg_opf.extract_tar(os.path.join(raw_dir, name), raw_dir)
 
 
 import hydragnn
@@ -152,48 +94,6 @@ def _load_split(root, split, case_name, num_groups, topological_perturbations):
     return dataset
 
 
-def _ensure_opf_downloaded(
-    root,
-    case_name,
-    num_groups,
-    topological_perturbations,
-    rank,
-    comm,
-):
-    if rank == 0:
-        _reextract_opf_if_needed(
-            root,
-            case_name,
-            num_groups,
-            topological_perturbations,
-        )
-        try:
-            OPFDataset(
-                root=root,
-                split="train",
-                case_name=case_name,
-                num_groups=num_groups,
-                topological_perturbations=topological_perturbations,
-            )
-        except json.JSONDecodeError:
-            tmp_dir = _opf_tmp_dir(root, case_name, topological_perturbations)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            _reextract_opf_if_needed(
-                root,
-                case_name,
-                num_groups,
-                topological_perturbations,
-            )
-            OPFDataset(
-                root=root,
-                split="train",
-                case_name=case_name,
-                num_groups=num_groups,
-                topological_perturbations=topological_perturbations,
-            )
-    comm.Barrier()
-
-
 def _subset_for_rank(dataset, rank, world_size):
     rx = list(nsplit(range(len(dataset)), world_size))[rank]
     return [dataset[i] for i in range(rx.start, rx.stop)]
@@ -213,7 +113,25 @@ if __name__ == "__main__":
         type=str,
         default="pglib_opf_case14_ieee",
     )
-    parser.add_argument("--num_groups", type=int, default=1)
+    parser.add_argument(
+        "--num_groups",
+        type=str,
+        default="1",
+        help="Number of groups or 'all'",
+    )
+    parser.add_argument(
+        "--num_groups_max",
+        type=int,
+        default=1,
+        help="Fallback/probe cap when --num_groups all and none on disk",
+    )
+    parser.add_argument(
+        "--no_num_groups_probe",
+        action="store_false",
+        dest="num_groups_probe",
+        help="Disable probing remote storage when --num_groups all and none on disk",
+    )
+    parser.set_defaults(num_groups_probe=True)
     parser.add_argument("--topological_perturbations", action="store_true")
     parser.add_argument("--preonly", action="store_true", help="preprocess only")
     parser.add_argument("--batch_size", type=int, default=None)
@@ -252,10 +170,22 @@ if __name__ == "__main__":
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
-    _ensure_opf_downloaded(
+    requested_num_groups = data_ops.parse_num_groups(args.num_groups)
+    num_groups = data_ops.resolve_num_groups(
+        requested_num_groups,
         datadir,
         args.case_name,
-        args.num_groups,
+        args.topological_perturbations,
+        args.num_groups_max,
+        args.num_groups_probe,
+        rank,
+        comm,
+    )
+
+    data_ops.ensure_opf_downloaded(
+        datadir,
+        args.case_name,
+        num_groups,
         args.topological_perturbations,
         rank,
         comm,
@@ -266,21 +196,21 @@ if __name__ == "__main__":
         datadir,
         "train",
         args.case_name,
-        args.num_groups,
+        num_groups,
         args.topological_perturbations,
     )
     val_raw = _load_split(
         datadir,
         "val",
         args.case_name,
-        args.num_groups,
+        num_groups,
         args.topological_perturbations,
     )
     test_raw = _load_split(
         datadir,
         "test",
         args.case_name,
-        args.num_groups,
+        num_groups,
         args.topological_perturbations,
     )
 

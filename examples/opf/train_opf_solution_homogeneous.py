@@ -5,7 +5,8 @@ Arguments summary:
     --case_names <a,b,c>          Comma-separated case list (used if --case_name all).
     --case_list_file <path>       File with one case name per line.
     --num_groups <int|all>        Select group count or load all available groups.
-    --num_groups_max <int>        Fallback group count when 'all' and none on disk.
+    --num_groups_max <int>        Fallback/probe cap when 'all' and none on disk.
+    --no_num_groups_probe         Disable remote probing for 'all'.
     --node_target_type bus|generator   Choose node target type to predict.
     --preonly                     Preprocess/serialize only (no training).
     --adios / --pickle            Serialization format.
@@ -25,6 +26,7 @@ import torch
 import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
+from __init__ import data_ops
 
 
 _DEFAULT_CASE_NAMES = [
@@ -76,97 +78,21 @@ def _patch_fast_tar_extraction():
     tg_opf.extract_tar = _fast_extract_tar
 
 
-def _opf_release_name(topological_perturbations: bool) -> str:
-    return (
-        "dataset_release_1_nminusone"
-        if topological_perturbations
-        else "dataset_release_1"
-    )
-
-
-def _opf_raw_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
-    return os.path.join(
-        root, _opf_release_name(topological_perturbations), case_name, "raw"
-    )
-
-
-def _opf_release_dir(root: str, topological_perturbations: bool) -> str:
-    return os.path.join(root, _opf_release_name(topological_perturbations))
-
-
-def _opf_tmp_dir(root: str, case_name: str, topological_perturbations: bool) -> str:
-    return os.path.join(
-        _opf_raw_dir(root, case_name, topological_perturbations), "gridopt-dataset-tmp"
-    )
-
-
-def _find_empty_json(root: str):
-    empty = []
-    for dirpath, _, filenames in os.walk(root):
-        for name in filenames:
-            if not name.endswith(".json"):
-                continue
-            path = os.path.join(dirpath, name)
-            try:
-                if os.path.getsize(path) == 0:
-                    empty.append(path)
-            except OSError:
-                empty.append(path)
-    return empty
-
-
-def _discover_cases(root: str, topological_perturbations: bool):
-    release_dir = _opf_release_dir(root, topological_perturbations)
-    if not os.path.isdir(release_dir):
-        return []
-    return sorted(
-        name
-        for name in os.listdir(release_dir)
-        if os.path.isdir(os.path.join(release_dir, name))
-    )
-
-
-def _discover_num_groups(root: str, case_name: str, topological_perturbations: bool):
-    raw_dir = _opf_raw_dir(root, case_name, topological_perturbations)
-    if not os.path.isdir(raw_dir):
-        return 0
-    groups = []
-    for name in os.listdir(raw_dir):
-        if not name.startswith(f"{case_name}_") or not name.endswith(".tar.gz"):
-            continue
-        try:
-            idx = int(name[len(case_name) + 1 : -len(".tar.gz")])
-            groups.append(idx)
-        except ValueError:
-            continue
-    return max(groups) + 1 if groups else 0
-
-
-def _reextract_opf_if_needed(root, case_name, num_groups, topological_perturbations):
-    raw_dir = _opf_raw_dir(root, case_name, topological_perturbations)
-    tmp_dir = _opf_tmp_dir(root, case_name, topological_perturbations)
-    raw_files = [f"{case_name}_{i}.tar.gz" for i in range(num_groups)]
-
-    if not os.path.isdir(raw_dir):
-        return
-
-    missing = [
-        name for name in raw_files if not os.path.isfile(os.path.join(raw_dir, name))
-    ]
-    if missing:
-        return
-
-    if os.path.isdir(tmp_dir):
-        empty = _find_empty_json(tmp_dir)
-        if not empty:
-            return
-        shutil.rmtree(tmp_dir, ignore_errors=True)
-
-    for name in raw_files:
-        tg_opf.extract_tar(os.path.join(raw_dir, name), raw_dir)
-
-
 import hydragnn
+import time
+def _diag(msg: str):
+    if os.getenv("HYDRAGNN_DIAG") != "1":
+        return
+    rank = dist.get_rank() if dist.is_initialized() else 0
+    rank_filter = os.getenv("HYDRAGNN_DIAG_RANK")
+    if rank_filter is not None:
+        try:
+            if int(rank_filter) != int(rank):
+                return
+        except ValueError:
+            pass
+    now = time.perf_counter()
+    print(f"[diag][rank {rank}][{now:.3f}] {msg}", flush=True)
 from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
@@ -273,14 +199,6 @@ def _load_split(root, split, case_name, num_groups, topological_perturbations):
     return dataset
 
 
-def _parse_num_groups(num_groups_arg: str) -> int | None:
-    if isinstance(num_groups_arg, int):
-        return num_groups_arg
-    if str(num_groups_arg).lower() == "all":
-        return None
-    return int(num_groups_arg)
-
-
 def _parse_case_list(args):
     cases = []
     if args.case_names:
@@ -292,48 +210,6 @@ def _parse_case_list(args):
                 if name:
                     cases.append(name)
     return cases
-
-
-def _ensure_opf_downloaded(
-    root,
-    case_name,
-    num_groups,
-    topological_perturbations,
-    rank,
-    comm,
-):
-    if rank == 0:
-        _reextract_opf_if_needed(
-            root,
-            case_name,
-            num_groups,
-            topological_perturbations,
-        )
-        try:
-            OPFDataset(
-                root=root,
-                split="train",
-                case_name=case_name,
-                num_groups=num_groups,
-                topological_perturbations=topological_perturbations,
-            )
-        except json.JSONDecodeError:
-            tmp_dir = _opf_tmp_dir(root, case_name, topological_perturbations)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            _reextract_opf_if_needed(
-                root,
-                case_name,
-                num_groups,
-                topological_perturbations,
-            )
-            OPFDataset(
-                root=root,
-                split="train",
-                case_name=case_name,
-                num_groups=num_groups,
-                topological_perturbations=topological_perturbations,
-            )
-    comm.Barrier()
 
 
 def _subset_for_rank(dataset, rank, world_size):
@@ -432,8 +308,15 @@ if __name__ == "__main__":
         "--num_groups_max",
         type=int,
         default=1,
-        help="Fallback group count when --num_groups all and none on disk",
+        help="Fallback/probe cap when --num_groups all and none on disk",
     )
+    parser.add_argument(
+        "--no_num_groups_probe",
+        action="store_false",
+        dest="num_groups_probe",
+        help="Disable probing remote storage when --num_groups all and none on disk",
+    )
+    parser.set_defaults(num_groups_probe=True)
     parser.add_argument("--topological_perturbations", action="store_true")
     parser.add_argument("--preonly", action="store_true", help="preprocess only")
     parser.add_argument("--batch_size", type=int, default=None)
@@ -478,7 +361,7 @@ if __name__ == "__main__":
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
-    requested_num_groups = _parse_num_groups(args.num_groups)
+    requested_num_groups = data_ops.parse_num_groups(args.num_groups)
     if args.case_name.lower() == "all":
         case_names = _parse_case_list(args)
         if not case_names:
@@ -491,16 +374,17 @@ if __name__ == "__main__":
         case_names = [args.case_name]
 
     for case_name in case_names:
-        num_groups = requested_num_groups
-        if num_groups is None:
-            num_groups = _discover_num_groups(
-                datadir, case_name, args.topological_perturbations
-            )
-            if num_groups == 0:
-                if args.num_groups_max <= 0:
-                    raise RuntimeError(f"No groups found for case '{case_name}'.")
-                num_groups = args.num_groups_max
-        _ensure_opf_downloaded(
+        num_groups = data_ops.resolve_num_groups(
+            requested_num_groups,
+            datadir,
+            case_name,
+            args.topological_perturbations,
+            args.num_groups_max,
+            args.num_groups_probe,
+            rank,
+            comm,
+        )
+        data_ops.ensure_opf_downloaded(
             datadir,
             case_name,
             num_groups,
@@ -514,15 +398,16 @@ if __name__ == "__main__":
     val_raw = []
     test_raw = []
     for case_name in case_names:
-        num_groups = requested_num_groups
-        if num_groups is None:
-            num_groups = _discover_num_groups(
-                datadir, case_name, args.topological_perturbations
-            )
-            if num_groups == 0:
-                if args.num_groups_max <= 0:
-                    raise RuntimeError(f"No groups found for case '{case_name}'.")
-                num_groups = args.num_groups_max
+        num_groups = data_ops.resolve_num_groups(
+            requested_num_groups,
+            datadir,
+            case_name,
+            args.topological_perturbations,
+            args.num_groups_max,
+            args.num_groups_probe,
+            rank,
+            comm,
+        )
         train_raw.append(
             _load_split(
                 datadir,
@@ -664,12 +549,17 @@ if __name__ == "__main__":
         model, optimizer, config["Verbosity"]["level"]
     )
 
+    _diag("Entering print_model")
     print_model(model)
+    _diag("Exited print_model")
 
+    _diag("Entering load_existing_model_config")
     hydragnn.utils.model.load_existing_model_config(
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
+    _diag("Exited load_existing_model_config")
 
+    _diag("Entering train_validate_test")
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -684,6 +574,7 @@ if __name__ == "__main__":
         create_plots=False,
         precision=precision,
     )
+    _diag("Exited train_validate_test")
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])

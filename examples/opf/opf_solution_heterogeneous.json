@@ -39,7 +39,7 @@
             "denormalize_output": false
         },
         "Training": {
-            "num_epoch": 20,
+            "num_epoch": 50,
             "batch_size": 32,
             "patience": 10,
             "early_stopping": true,
