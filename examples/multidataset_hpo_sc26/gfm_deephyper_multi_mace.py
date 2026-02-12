@@ -132,9 +132,27 @@ if __name__ == "__main__":
     problem = HpProblem()
 
     problem.add_hyperparameter((2, 6), "num_conv_layers")
-    problem.add_hyperparameter((100, 2000), "hidden_dim")
-    problem.add_hyperparameter((2, 3), "num_headlayers")
-    problem.add_hyperparameter((300, 1000), "dim_headlayers")
+    # keep <=6 conv layers to mitigate oversmoothing/oversquashing
+    # ~5B params target (rough):  problem.add_hyperparameter((2, 6), "num_conv_layers")
+    # ~10B params target (rough): problem.add_hyperparameter((2, 6), "num_conv_layers")
+    # ~100B params target (rough): problem.add_hyperparameter((2, 6), "num_conv_layers")
+
+    problem.add_hyperparameter((100, 3000), "hidden_dim")
+    # compensate with channel width (MPNN hidden_dim) instead of extra depth
+    # ~5B params target (rough):  problem.add_hyperparameter((3000, 10000), "hidden_dim")
+    # ~10B params target (rough): problem.add_hyperparameter((10000, 20000), "hidden_dim")
+    # ~100B params target (rough): problem.add_hyperparameter((20000, 30000), "hidden_dim")
+
+    problem.add_hyperparameter((2, 4), "num_headlayers")
+    # keep <=4 MLP head layers to mitigate oversmoothing/oversquashing
+    # ~5B params target (rough):  problem.add_hyperparameter((2, 4), "num_headlayers")
+    # ~10B params target (rough): problem.add_hyperparameter((2, 4), "num_headlayers")
+    # ~100B params target (rough): problem.add_hyperparameter((2, 4), "num_headlayers")
+
+    problem.add_hyperparameter((300, 2000), "dim_headlayers")
+    # ~5B params target (rough):  problem.add_hyperparameter((2000, 4000), "dim_headlayers")
+    # ~10B params target (rough): problem.add_hyperparameter((4000, 600), "dim_headlayers")
+    # ~100B params target (rough): problem.add_hyperparameter((6000, 9000), "dim_headlayers")
     problem.add_hyperparameter((10.0, 1000.0), "force_weight")
     problem.add_hyperparameter((1e-5, 3e-3), "learning_rate", log=True)
     problem.add_hyperparameter(["bessel", "gaussian", "chebyshev"], "radial_type")
