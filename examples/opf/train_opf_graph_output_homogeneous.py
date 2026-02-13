@@ -199,7 +199,9 @@ if __name__ == "__main__":
 
     if args.nvme:
         serialized_target = (
-            f"{args.modelname}.bp" if args.format == "adios" else f"{args.modelname}.pickle"
+            f"{args.modelname}.bp"
+            if args.format == "adios"
+            else f"{args.modelname}.pickle"
         )
         datadir = stage_case_to_nvme(
             datadir,
