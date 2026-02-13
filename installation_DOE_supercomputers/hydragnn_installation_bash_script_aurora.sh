@@ -373,24 +373,6 @@ print("adios2 file:", adios2.__file__)
 PY
 
 # ============================================================
-# DDStore (clone + pip install .)
-# ============================================================
-banner "DDStore (clone + pip install .)"
-DDSTORE_FRONTIER="${INSTALL_ROOT}/DDStore-Source"
-export DDSTORE_FRONTIER
-
-if [[ ! -d "${DDSTORE_FRONTIER}/DDStore/.git" ]]; then
-  mkdir -p "$DDSTORE_FRONTIER"
-  pushd "$DDSTORE_FRONTIER" >/dev/null
-  git clone https://github.com/ORNL/DDStore.git
-  popd >/dev/null
-fi
-
-pushd "${DDSTORE_FRONTIER}/DDStore" >/dev/null
-pip_retry . --no-build-isolation --verbose
-popd >/dev/null
-
-# ============================================================
 # PyTorch Geometric (base) + ALWAYS rebuild auxiliary deps (CPU-only)
 # ============================================================
 banner "Install PyTorch Geometric base (torch_geometric)"
@@ -436,7 +418,7 @@ for lib in "${libs[@]}"; do
   WANT_KEY="$(echo "${LIB_NAME}" | sed 's/pytorch_\(.*\)/\1/')"
   LIB_VERSION="$(wget -O - "https://data.pyg.org/whl/torch-${TORCH_VERSION}%2Bcpu.html" 2>/dev/null | \
     grep -m1 "${WANT_KEY}" | \
-    sed 's/.*torch_[a-z_]*-\([^+-]*\)[%+-].*/\1/')"
+    sed 's/.*torch_[a-z_]*-\([^+-]*\)[%+-].*/\1/' || true)"
 
   if [[ -n "$LIB_VERSION" ]]; then
     echo "$LIB_NAME compatible version: $LIB_VERSION"
@@ -498,6 +480,10 @@ pip_retry "mendeleev<1.1.0" || true
 pip_retry rdkit jarvis-tools pymatgen || true
 pip_retry igraph || true
 
+pip_retry e3nn openequivariance
+pip_retry Cython
+pip_retry setuptools wheel
+
 banner "Re-check NumPy pin (must be 1.26.4 in venv)"
 pip_retry "numpy==1.26.4"
 python - <<'PY'
@@ -507,16 +493,31 @@ print("numpy.__file__    =", np.__file__)
 PY
 
 # ============================================================
-# Sanity check: DDStore bindings
+# GPTL
 # ============================================================
-banner "Sanity check: DDStore Python bindings"
-python - <<'PY'
-try:
-    import pyddstore
-    print("pyddstore available")
-except ImportError as e:
-    print("WARNING: pyddstore not importable:", e)
+wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+tar xvf gptl-8.1.1.tar.gz
+pushd gptl-8.1.1 >/dev/null
+aclocal
+automake --add-missing
+autoconf
+./configure --prefix=$VENV_PATH --disable-libunwind CC=mpicc CXX=mpicxx FC=mpifort
+make install
+popd >/dev/null
 
+GPTL_DIR=$VENV_PATH CC=mpicc CXX=mpicxx pip_retry git+https://github.com/jychoi-hpc/gptl4py.git --no-build-isolation --verbose
+
+# ============================================================
+# DDStore
+# ============================================================
+banner "DDStore (pip install)"
+CC=mpicc  CXX=mpicxx pip_retry git+https://github.com/ORNL/DDStore.git --no-build-isolation --verbose
+
+# ============================================================
+# Sanity check
+# ============================================================
+banner "Sanity check: thapi"
+python - <<'PY'
 try:
     import thapi
     print("thapi available")
@@ -552,10 +553,6 @@ ADIOS2:
   - source:   $ADIOS2_SRC @ $ADIOS2_VERSION
   - install:  $ADIOS2_INSTALL
   - NOTE: ADIOS2_USE_DataSpaces=OFF
-
-DDStore:
-  - source:   ${DDSTORE_FRONTIER}/DDStore
-  - python:   installed into venv (pip)
 
 PyG:
   - torch_geometric installed
