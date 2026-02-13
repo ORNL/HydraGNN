@@ -122,7 +122,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_groups_max",
         type=int,
-        default=1,
+        default=128,
         help="Fallback/probe cap when --num_groups all and none on disk",
     )
     parser.add_argument(
@@ -244,7 +244,9 @@ if __name__ == "__main__":
             SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
             SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
 
-        dist.destroy_process_group()
+        comm.Barrier()
+        if dist.is_initialized():
+            dist.destroy_process_group()
         raise SystemExit(0)
 
     # Build var_config from first sample
@@ -323,4 +325,6 @@ if __name__ == "__main__":
     if writer is not None:
         writer.close()
 
-    dist.destroy_process_group()
+    comm.Barrier()
+    if dist.is_initialized():
+        dist.destroy_process_group()

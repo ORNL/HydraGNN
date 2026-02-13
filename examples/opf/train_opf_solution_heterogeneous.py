@@ -412,7 +412,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_groups_max",
         type=int,
-        default=1,
+        default=128,
         help="Fallback/probe cap when --num_groups all and none on disk",
     )
     parser.add_argument(
@@ -483,6 +483,7 @@ if __name__ == "__main__":
     else:
         case_names = parsed_case_names
 
+    case_num_groups = {}
     for case_name in case_names:
         num_groups = data_ops.resolve_num_groups(
             requested_num_groups,
@@ -494,6 +495,7 @@ if __name__ == "__main__":
             rank,
             comm,
         )
+        case_num_groups[case_name] = num_groups
         data_ops.ensure_opf_downloaded(
             datadir,
             case_name,
@@ -503,21 +505,13 @@ if __name__ == "__main__":
             comm,
         )
 
-    info("Loading OPF splits...")
+    if rank == 0:
+        info("Loading OPF splits...")
     train_raw = []
     val_raw = []
     test_raw = []
     for case_name in case_names:
-        num_groups = data_ops.resolve_num_groups(
-            requested_num_groups,
-            datadir,
-            case_name,
-            args.topological_perturbations,
-            args.num_groups_max,
-            args.num_groups_probe,
-            rank,
-            comm,
-        )
+        num_groups = case_num_groups[case_name]
         train_raw.append(
             _load_split(
                 datadir,
@@ -636,7 +630,9 @@ if __name__ == "__main__":
             SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
             SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
 
-        dist.destroy_process_group()
+        comm.Barrier()
+        if dist.is_initialized():
+            dist.destroy_process_group()
         raise SystemExit(0)
 
     if args.format == "adios":
@@ -755,4 +751,6 @@ if __name__ == "__main__":
     if writer is not None:
         writer.close()
 
-    dist.destroy_process_group()
+    comm.Barrier()
+    if dist.is_initialized():
+        dist.destroy_process_group()
