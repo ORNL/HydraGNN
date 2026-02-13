@@ -12,6 +12,7 @@ import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
 from __init__ import data_ops
+from opf_nvme_utils import stage_case_to_nvme
 
 
 def _patch_fast_tar_extraction():
@@ -170,6 +171,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument("--modelname", type=str, default="OPF_Hetero")
+    parser.add_argument(
+        "--nvme",
+        action="store_true",
+        help="Stage selected OPF case onto node-local NVMe/scratch if available",
+    )
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--adios", action="store_const", dest="format", const="adios")
@@ -224,6 +230,20 @@ if __name__ == "__main__":
         comm,
     )
 
+    if args.nvme:
+        serialized_target = (
+            f"{args.modelname}.bp" if args.format == "adios" else f"{args.modelname}.pickle"
+        )
+        datadir = stage_case_to_nvme(
+            datadir,
+            args.case_name,
+            args.topological_perturbations,
+            comm,
+            rank,
+            None,
+            serialized_targets=[serialized_target],
+        )
+
     info("Loading OPF splits...")
     train_raw = _load_split(
         datadir,
@@ -269,14 +289,14 @@ if __name__ == "__main__":
         if args.format == "adios":
             if AdiosWriter is None:
                 raise RuntimeError("adios2 is not available in this environment.")
-            fname = os.path.join(dirpwd, "dataset", f"{args.modelname}.bp")
+            fname = os.path.join(datadir, f"{args.modelname}.bp")
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
             adwriter.save()
         else:
-            basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
+            basedir = os.path.join(datadir, f"{args.modelname}.pickle")
             SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
             SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
             SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
@@ -298,7 +318,7 @@ if __name__ == "__main__":
     if args.format == "adios":
         if AdiosDataset is None:
             raise RuntimeError("adios2 is not available in this environment.")
-        fname = os.path.join(dirpwd, "dataset", f"{args.modelname}.bp")
+        fname = os.path.join(datadir, f"{args.modelname}.bp")
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
@@ -306,7 +326,7 @@ if __name__ == "__main__":
         valset = HeteroFromHomogeneousDataset(val_base)
         testset = HeteroFromHomogeneousDataset(test_base)
     else:
-        basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
+        basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=None
         )
