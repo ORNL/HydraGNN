@@ -47,7 +47,9 @@ def _opf_group_dir(
     )
 
 
-def _opf_remote_url(case_name: str, group_idx: int, topological_perturbations: bool) -> str:
+def _opf_remote_url(
+    case_name: str, group_idx: int, topological_perturbations: bool
+) -> str:
     release = _opf_release_name(topological_perturbations)
     return (
         "https://storage.googleapis.com/gridopt-dataset/"
@@ -384,7 +386,9 @@ def _ensure_missing_group_dirs(
     raw_dir = _opf_raw_dir(root, case_name, topological_perturbations)
     missing_groups = []
     for group_idx in range(num_groups):
-        group_dir = _opf_group_dir(root, case_name, group_idx, topological_perturbations)
+        group_dir = _opf_group_dir(
+            root, case_name, group_idx, topological_perturbations
+        )
         if not os.path.isdir(group_dir):
             missing_groups.append(group_idx)
 

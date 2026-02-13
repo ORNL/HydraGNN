@@ -138,7 +138,9 @@ def stage_case_to_nvme(
                 for archive_name in archive_names:
                     src_archive = os.path.join(src_raw_dir, archive_name)
                     dst_archive = os.path.join(dst_raw_dir, archive_name)
-                    if os.path.isfile(dst_archive) and os.path.getsize(dst_archive) == os.path.getsize(src_archive):
+                    if os.path.isfile(dst_archive) and os.path.getsize(
+                        dst_archive
+                    ) == os.path.getsize(src_archive):
                         continue
                     shutil.copy2(src_archive, dst_archive)
                 with open(copy_marker, "w") as marker:
