@@ -87,6 +87,8 @@ def _patch_fast_tar_extraction():
 
 import hydragnn
 import time
+
+
 def _diag(msg: str):
     if os.getenv("HYDRAGNN_DIAG") != "1":
         return
@@ -100,6 +102,8 @@ def _diag(msg: str):
             pass
     now = time.perf_counter()
     print(f"[diag][rank {rank}][{now:.3f}] {msg}", flush=True)
+
+
 from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
