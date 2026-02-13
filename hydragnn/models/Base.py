@@ -259,7 +259,7 @@ class Base(Module):
             self.graph_conditioner = self.graph_conditioner.to(device)
 
     def _ensure_graph_concat_projector(
-        self, graph_attr_dim: int, channel_dim: int, device
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
     ):
         """Instantiate (or move) concat projector used when conditioning_mode='concat_node'."""
         in_dim = channel_dim + graph_attr_dim
@@ -268,11 +268,15 @@ class Base(Module):
         ):
             self.graph_concat_projector = Linear(in_dim, channel_dim)
             self.graph_concat_projector_in_dim = in_dim
-        if self.graph_concat_projector.weight.device != device:
-            self.graph_concat_projector = self.graph_concat_projector.to(device)
+        if (self.graph_concat_projector.weight.device != device) or (
+            dtype is not None and self.graph_concat_projector.weight.dtype != dtype
+        ):
+            self.graph_concat_projector = self.graph_concat_projector.to(
+                device=device, dtype=dtype
+            )
 
     def _ensure_graph_pool_projector(
-        self, graph_attr_dim: int, channel_dim: int, device
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
     ):
         """Instantiate (or move) projector used when conditioning_mode='fuse_pool'."""
         in_dim = channel_dim + graph_attr_dim
@@ -285,8 +289,12 @@ class Base(Module):
                 Linear(channel_dim, channel_dim),
             )
             self.graph_pool_projector_in_dim = in_dim
-        if self.graph_pool_projector[0].weight.device != device:
-            self.graph_pool_projector = self.graph_pool_projector.to(device)
+        if (self.graph_pool_projector[0].weight.device != device) or (
+            dtype is not None and self.graph_pool_projector[0].weight.dtype != dtype
+        ):
+            self.graph_pool_projector = self.graph_pool_projector.to(
+                device=device, dtype=dtype
+            )
 
     def _apply_graph_conditioning(self, inv_node_feat, batch, data):
         """Apply graph_attr conditioning (FiLM, concat_node, or defer to fuse_pool) to invariant node channels."""
@@ -300,7 +308,9 @@ class Base(Module):
 
         graph_attr = data.graph_attr
 
-        graph_attr = graph_attr.to(inv_node_feat.device).float()
+        graph_attr = graph_attr.to(
+            device=inv_node_feat.device, dtype=inv_node_feat.dtype
+        )
 
         # Batch can be None for single-graph inputs; create a dummy batch in that case.
         if batch is None:
@@ -357,6 +367,7 @@ class Base(Module):
                 graph_attr_dim=graph_attr.size(-1),
                 channel_dim=channel_dim,
                 device=inv_node_feat.device,
+                dtype=inv_node_feat.dtype,
             )
             graph_attr_b = graph_attr[batch]
             fused = torch.cat([inv_node_feat, graph_attr_b], dim=-1)
@@ -403,12 +414,14 @@ class Base(Module):
                 f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
             )
 
-        graph_attr = graph_attr.to(x_graph.device).float()
+        # Preserve the model/input dtype to avoid mixed precision mismatches under fp64 runs.
+        graph_attr = graph_attr.to(device=x_graph.device, dtype=x_graph.dtype)
 
         self._ensure_graph_pool_projector(
             graph_attr_dim=graph_attr.size(-1),
             channel_dim=x_graph.size(-1),
             device=x_graph.device,
+            dtype=x_graph.dtype,
         )
 
         # graph_attr is per-graph; assume batch aligns with x_graph rows
@@ -728,10 +741,16 @@ class Base(Module):
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                head = torch.zeros((len(data.dataset_name), head_dim), device=x.device)
+                out_dtype = x_graph.dtype
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim),
+                    device=x.device,
+                    dtype=out_dtype,
+                )
                 headvar = torch.zeros(
                     (len(data.dataset_name), head_dim * self.var_output),
                     device=x.device,
+                    dtype=out_dtype,
                 )
                 if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
@@ -747,15 +766,22 @@ class Base(Module):
                         x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
-                        headvar[mask] = output_head[:, head_dim:] ** 2
+                        headvar[mask] = (output_head[:, head_dim:] ** 2).to(
+                            dtype=out_dtype
+                        )
                 outputs.append(head)
                 outputs_var.append(headvar)
             else:
                 # assuming all node types are the same
                 node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
-                head = torch.zeros((x.shape[0], head_dim), device=x.device)
+                out_dtype = x.dtype
+                head = torch.zeros(
+                    (x.shape[0], head_dim), device=x.device, dtype=out_dtype
+                )
                 headvar = torch.zeros(
-                    (x.shape[0], head_dim * self.var_output), device=x.device
+                    (x.shape[0], head_dim * self.var_output),
+                    device=x.device,
+                    dtype=out_dtype,
                 )
                 if self.num_branches == 1:
                     branchtype = "branch-0"

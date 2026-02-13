@@ -1,4 +1,4 @@
-import os, json
+import os, json, copy
 import logging
 import sys
 from mpi4py import MPI
@@ -56,9 +56,9 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        "--inputfile", help="input file", type=str, default="gfm_multitasking.json"
+        "--inputfile", help="input file", type=str, default="gfm_mlip.json"
     )
-    parser.add_argument("--mpnn_type", help="mpnn_type", default="EGNN")
+    parser.add_argument("--mpnn_type", help="mpnn_type", default="MACE")
     parser.add_argument("--hidden_dim", type=int, help="hidden_dim", default=866)
     parser.add_argument(
         "--num_conv_layers", type=int, help="num_conv_layers", default=4
@@ -76,7 +76,9 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     parser.add_argument("--modelname", help="model name")
     parser.add_argument(
-        "--multi_model_list", help="multidataset list", default="OC2020"
+        "--multi_model_list",
+        help="Comma-separated dataset/model names; required when --format multi",
+        default=None,
     )
     parser.add_argument(
         "--num_samples",
@@ -100,9 +102,22 @@ if __name__ == "__main__":
         "--precision",
         type=str,
         choices=["fp32", "fp64", "bf16"],
-        default="fp32",
-        help="Override precision; defaults to fp32 when not set",
+        default="fp64",
+        help="Precision to use; defaults to fp64 and overrides the JSON unless explicitly set",
     )
+    parser.add_argument(
+        "--force_weight",
+        type=float,
+        default=None,
+        help="Override Architecture.force_weight; when omitted the JSON value is used",
+    )
+    parser.add_argument(
+        "--learning_rate",
+        type=float,
+        default=None,
+        help="Override Training.Optimizer.learning_rate; when omitted the JSON value is used",
+    )
+    parser.add_argument("--nvme", action="store_true", help="use NVME")
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -132,7 +147,7 @@ if __name__ == "__main__":
 
     graph_feature_names = ["energy"]
     graph_feature_dims = [1]
-    node_feature_names = ["atomic_number" "cartesian_coordinates", "forces"]
+    node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
@@ -148,9 +163,8 @@ if __name__ == "__main__":
     var_config["graph_feature_dims"] = graph_feature_dims
     var_config["node_feature_names"] = node_feature_names
     var_config["node_feature_dims"] = node_feature_dims
-    if args.parameters["mpnn_type"] == "MACE":
-        # Currently, MACE only supports atomic number node attributes, see hydragnn/models/MACEStack.py
-        var_config["input_node_features"] = [0]
+    # Force use of atomic number only; MACE stack expects this
+    var_config["input_node_features"] = [0]
 
     # Update the config dictionary with the suggested hyperparameters
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.parameters["mpnn_type"]
@@ -160,6 +174,12 @@ if __name__ == "__main__":
     config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = args.parameters[
         "num_conv_layers"
     ]
+    if args.force_weight is not None:
+        config["NeuralNetwork"]["Architecture"]["force_weight"] = args.force_weight
+    if args.learning_rate is not None:
+        config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ] = args.learning_rate
 
     dim_headlayers = [
         args.parameters["dim_headlayers"]
@@ -167,26 +187,66 @@ if __name__ == "__main__":
     ]
 
     for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
-        num_branches = len(
-            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]
-        )
-        for i in range(num_branches):
-            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
-                "architecture"
-            ]["num_headlayers"] = args.parameters["num_headlayers"]
-            config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][i][
-                "architecture"
-            ]["dim_headlayers"] = dim_headlayers
+        head_cfg = config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]
 
-        modellist = args.multi_model_list.split(",")
-        print("modellist:", len(modellist))
-        for i in range(len(modellist), num_branches):
-            del config["NeuralNetwork"]["Architecture"]["output_heads"][head_type][
-                len(modellist)
-            ]
+        # Require one template per head type; replicate for each dataset/model.
+        if isinstance(head_cfg, dict):
+            template = head_cfg
+        elif isinstance(head_cfg, (list, tuple)) and len(head_cfg) >= 1:
+            if len(head_cfg) > 1:
+                logging.warning(
+                    "output_heads.%s provides %d entries; using the first as template and ignoring the rest",
+                    head_type,
+                    len(head_cfg),
+                )
+            template = head_cfg[0]
+        else:
+            raise ValueError(
+                f"output_heads.{head_type} must define at least one branch template"
+            )
 
-    if args.parameters["mpnn_type"] not in ["EGNN", "SchNet", "DimeNet"]:
-        config["NeuralNetwork"]["Architecture"]["equivariance"] = False
+        if not args.multi_model_list or args.multi_model_list.strip() == "":
+            logging.warning(
+                "--multi_model_list not provided; defaulting to a single branch named 'default'"
+            )
+            modellist = ["default"]
+        else:
+            modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
+        n_models = len(modellist)
+        if n_models == 0:
+            raise ValueError(
+                "--multi_model_list resulted in zero entries; provide at least one dataset/model name"
+            )
+        print("modellist:", n_models)
+
+        # Replicate the template once per model.
+        head_branches = [copy.deepcopy(template) for _ in range(n_models)]
+
+        for i in range(len(head_branches)):
+            branch = head_branches[i]
+            branch_type = f"branch-{i}"
+
+            # Normalize to the multibranch schema required by update_multibranch_heads:
+            # each branch must have a 'type' label and an 'architecture' dictionary, and
+            # branch names must follow branch-<index> to match dataset_name IDs.
+            if "architecture" not in branch:
+                architecture = {k: v for k, v in branch.items() if k != "type"}
+                branch.clear()
+                branch["architecture"] = architecture
+            branch["type"] = branch_type
+
+            branch["architecture"]["num_headlayers"] = args.parameters["num_headlayers"]
+            branch["architecture"]["dim_headlayers"] = dim_headlayers
+
+        # Write back the expanded branch list
+        config["NeuralNetwork"]["Architecture"]["output_heads"][
+            head_type
+        ] = head_branches
+
+    equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
+    assert (
+        args.parameters["mpnn_type"] in equivariant_models
+    ), f"mpnn_type must be one of {equivariant_models} for this workflow"
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -237,13 +297,19 @@ if __name__ == "__main__":
     if args.format == "multi":
         ## Reading multiple datasets, which requires the following arguments:
         ## --multi_model_list: the list dataset/model names
-        modellist = args.multi_model_list.split(",")
+        if not args.multi_model_list or args.multi_model_list.strip() == "":
+            logging.warning(
+                "--multi_model_list not provided; defaulting to a single branch named 'default'"
+            )
+            modellist = ["default"]
+        else:
+            modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
         if rank == 0:
             ndata_list = list()
             pna_deg_list = list()
             for model in modellist:
                 fname = os.path.join(
-                    os.path.dirname(__file__), "./dataset/%s-v3.bp" % model
+                    os.path.dirname(__file__), "./dataset/%s-v2.bp" % model
                 )
                 with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
@@ -254,13 +320,20 @@ if __name__ == "__main__":
                         pna_deg = f.read_attribute("pna_deg")
                     ndata_list.append(ndata)
                     pna_deg_list.append(pna_deg)
-            ndata_list = np.array(ndata_list, dtype=np.float32)
-            process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
-                np.int32
-            )
-            imax = np.argmax(process_list)
-            process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
-            process_list = process_list.tolist()
+
+            # ## Proportional split
+            # ndata_list = np.array(ndata_list, dtype=np.float32)
+            # process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
+            #     np.int32
+            # )
+            # imax = np.argmax(process_list)
+            # process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
+            # process_list = process_list.tolist()
+
+            ## Evenly split
+            num_processes_per_model = comm_size // len(modellist)
+            assert comm_size % len(modellist) == 0
+            process_list = [num_processes_per_model] * len(modellist)
             print("process_list:", process_list)
 
             ## Merge pna_deg using interpolation
@@ -351,8 +424,6 @@ if __name__ == "__main__":
                         "subgroup_ranks:",
                         subgroup_ranks,
                     )
-                    subgroup = DeviceMesh(device_type=device_type, mesh=subgroup_ranks)
-                    subgroup_list.append(subgroup)
 
                 branch_id = mycolor
                 branch_group = subgroup_list[mycolor]
@@ -374,16 +445,101 @@ if __name__ == "__main__":
 
         ## FIXME: Hard-coded for now. Need to find common variable names
         common_variable_names = [
-            "x",
-            "edge_index",
+            "pbc",
             "edge_attr",
-            "pos",
-            "energy",
+            "energy_per_atom",
             "forces",
+            "pos",
+            "edge_index",
+            "cell",
+            "edge_shifts",
             "y",
-            # "dataset_name",
+            "chemical_composition",
+            "natoms",
+            "x",
+            "energy",
+            "graph_attr",
+            "atomic_numbers",
         ]
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v3.bp" % mymodel)
+        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
+
+        ## FIXME: only for Frontier NVME
+        bbpath = f"/mnt/bb/{os.getenv('USER')}"
+        ## OC2020 dataset is too large to copy to NVME
+        if args.nvme and os.path.exists(bbpath):
+            import subprocess
+
+            def dojob(cmd):
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                return cmd, result.returncode
+
+            hostname = MPI.Get_processor_name()
+            hostname_list = local_comm.gather(hostname, root=0)
+            dstdir = os.path.join(bbpath, "./dataset/%s-v2.bp" % mymodel)
+            os.makedirs(dstdir, exist_ok=True)
+
+            is_ok = True
+            if local_comm_rank == 0:
+                total_size = 0
+                for file in os.listdir(fname):
+                    total_size += os.path.getsize(os.path.join(fname, file))
+
+                if total_size < 1.5 * 1024 ** 4:
+                    print(
+                        f"Copying {fname} to local NVME (size: {total_size/1024**4:.2f} TB)"
+                    )
+
+                    from concurrent.futures import ThreadPoolExecutor, as_completed
+                    import time
+
+                    with ThreadPoolExecutor(max_workers=4) as executor:
+                        t0 = time.time()
+                        future_list = list()
+                        for file in os.listdir(fname):
+                            src = os.path.join(fname, file)
+                            dst = os.path.join(dstdir, file)
+                            if os.path.exists(dst) and os.path.getsize(
+                                src
+                            ) == os.path.getsize(dst):
+                                continue
+
+                            CMD = f"sbcast -w {','.join(list(set(hostname_list)))} -pfv {os.path.join(fname, file)} {os.path.join(dstdir, file)}"
+                            future = executor.submit(dojob, CMD)
+                            future_list.append(future)
+
+                        for future in as_completed(future_list):
+                            cmd, return_code = future.result()
+                            print(f"Command: {cmd}, Return code: {return_code}")
+                            if return_code != 0:
+                                print(
+                                    f"Error in copying file with sbcast. Command: {cmd}, Return code: {return_code}"
+                                )
+                                is_ok = False
+                                break
+                        print(
+                            f"NVME setup is done: {fname} (Elapsed time: {time.time() - t0:.2f} seconds)"
+                        )
+                else:
+                    is_ok = False
+                    print(
+                        f"Dataset {fname} is too large: {total_size/1024**4:.2f} TB. Skipping NVME copy."
+                    )
+
+            x = np.array(int(is_ok), dtype=np.int32)
+            y = np.array(0, dtype=np.int32)
+            comm.Allreduce(x, y, op=MPI.MIN)
+            all_ok = bool(y.item())
+
+            if all_ok:
+                ## Use the local NVME path
+                fname = dstdir
+        comm.Barrier()
+
         print("mymodel:", rank, mycolor, mymodel)
         trainset = AdiosDataset(
             fname,
@@ -612,6 +768,10 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
+    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
+        "enable_interatomic_potential", False
+    )
+
     with context:
         hydragnn.train.train_validate_test(
             model,
@@ -625,6 +785,7 @@ if __name__ == "__main__":
             log_name,
             verbosity,
             create_plots=False,
+            compute_grad_energy=enable_interatomic_potential,
             precision=precision,
         )
 

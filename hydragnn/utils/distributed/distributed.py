@@ -412,6 +412,35 @@ def get_distributed_model(
         if use_fsdp:
             print_distributed(verbosity, "Using FSDP wrapper")
             model = FSDP(model, sharding_strategy=sharding_strategy)
+
+            # ## FIXME: FSDP2 test
+            # from torch.distributed.fsdp import fully_shard
+            # model = fully_shard(
+            #     model,
+            #     reshard_after_forward=False
+            # )
+
+            # import torch.nn as nn
+            # class ModuleCompat(nn.Module):
+            #     """
+            #     Wrapper that provides .module (DDP/FSDP1-style) for backward compatibility.
+            #     Forward calls into the wrapped module.
+            #     Attribute access falls back to the wrapped module.
+            #     """
+            #     def __init__(self, module: nn.Module):
+            #         super().__init__()
+            #         self.module = module
+
+            #     def forward(self, *args, **kwargs):
+            #         return self.module(*args, **kwargs)
+
+            #     def __getattr__(self, name):
+            #         # Called only if normal attribute lookup fails
+            #         if name != "module":
+            #             return getattr(self.module, name)
+            #         return super().__getattr__(name)
+
+            # model = ModuleCompat(model)
         else:
             model = DDP(model, **ddp_kwargs)
 

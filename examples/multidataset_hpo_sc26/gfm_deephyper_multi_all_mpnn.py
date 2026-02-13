@@ -1,0 +1,213 @@
+import os, sys
+
+import math
+import torch
+
+torch.backends.cudnn.enabled = False
+
+# FIX random seed
+random_state = 0
+torch.manual_seed(random_state)
+
+# deprecated in torch_geometric 2.0
+try:
+    from torch_geometric.loader import DataLoader
+except:
+    from torch_geometric.data import DataLoader
+
+import pandas as pd
+import subprocess
+import re
+
+pd.options.display.max_columns = None
+pd.options.display.max_rows = None
+pd.options.display.width = None
+
+# Retrieve constants
+NNODES = int(os.environ["NNODES"])
+NTOTGPUS = int(os.environ["NTOTGPUS"])
+NNODES_PER_TRIAL = int(os.environ["NNODES_PER_TRIAL"])
+NGPUS_PER_TRIAL = int(os.environ["NGPUS_PER_TRIAL"])
+NUM_CONCURRENT_TRIALS = int(os.environ["NUM_CONCURRENT_TRIALS"])
+NTOT_DEEPHYPER_RANKS = int(os.environ["NTOT_DEEPHYPER_RANKS"])
+OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
+DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
+DEEPHYPER_DB_HOST = os.environ["DEEPHYPER_DB_HOST"]
+SLURM_JOB_ID = os.environ["SLURM_JOB_ID"]
+
+
+def run(trial, dequed=None):
+    f = open(f"output-{trial.id}.txt", "w")
+    python_exe = sys.executable
+    python_script = os.path.join(os.path.dirname(__file__), "gfm_mlip_all_mpnn.py")
+
+    # TODO: Launch a subprocess with `srun` to train neural networks
+    params = trial.parameters
+    log_name = "gfm" + "_" + str(trial.id)
+    master_addr = f"HYDRAGNN_MASTER_ADDR={dequed[0]}"
+    nodelist = ",".join(dequed)
+
+    # time srun -u -n32 -c2 --ntasks-per-node=8 --gpus-per-node=8 --gpu-bind=closest
+    prefix = " ".join(
+        [
+            f"srun",
+            f"-N {NNODES_PER_TRIAL} -n {NGPUS_PER_TRIAL}",
+            f"--ntasks-per-node=8 --gpus-per-node=8",
+            f"--cpus-per-task {OMP_NUM_THREADS} --threads-per-core 1 --cpu-bind threads",
+            f"--gpus-per-task=1 --gpu-bind=closest",
+            f"--export=ALL,{master_addr},HYDRAGNN_MAX_NUM_BATCH=100,HYDRAGNN_USE_VARIABLE_GRAPH_SIZE=1,HYDRAGNN_AGGR_BACKEND=mpi",
+            f"--nodelist={nodelist}",
+            f"--output {DEEPHYPER_LOG_DIR}/output_{SLURM_JOB_ID}_{trial.id}.txt",
+            f"--error {DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt",
+        ]
+    )
+
+    command = " ".join(
+        [
+            prefix,
+            python_exe,
+            "-u",
+            python_script,
+            f"--mpnn_type={trial.parameters['mpnn_type']}",
+            f"--hidden_dim={trial.parameters['hidden_dim']}",
+            f"--num_conv_layers={trial.parameters['num_conv_layers']}",
+            f"--num_headlayers={trial.parameters['num_headlayers']}",
+            f"--dim_headlayers={trial.parameters['dim_headlayers']}",
+            f"--force_weight={trial.parameters['force_weight']}",
+            f"--inputfile=gfm_mlip.json",
+            f"--multi",
+            f"--ddstore",
+            f'--multi_model_list="Alexandria,ANI1x,MPTrj,OC2020,OC2022,OC25,ODAC23,OMat24,OMol25,OMol25-neutral,OMol25-non-neutral,OC2025,OPoly2026,Nabla2DFT,QCML,QM7-X,transition1x"',
+            ## debugging
+            ##f'--multi_model_list="ANI1x"',
+            f"--num_epoch=10",
+            f"--log={log_name}",
+            f"--learning_rate={trial.parameters['learning_rate']}",
+        ]
+    )
+    print("Command = ", command, flush=True, file=f)
+
+    objective = -math.inf
+    try:
+        result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
+        pattern = r"Tasks Val Loss: \[([^\]]+)\]"
+        fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
+        last_avg = None
+        while True:
+            line = fout.readline()
+            matches = re.findall(pattern, line)
+            if matches:
+                last = matches[-1]
+                numbers = re.findall(
+                    r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?",
+                    last,
+                )
+                if len(numbers) >= 3:
+                    last_avg = (float(numbers[1]) + float(numbers[2])) / 2.0
+            if not line:
+                break
+        fout.close()
+        if last_avg is not None:
+            objective = -last_avg
+
+    except Exception as excp:
+        print(excp, flush=True, file=f)
+        objective = -math.inf
+
+    print("Objective:", objective, flush=True, file=f)
+    print(objective, flush=True, file=f)
+    metadata = {"some_info": "some_value"}
+    f.close()
+
+    return {"objective": objective, "metadata": metadata}
+
+
+if __name__ == "__main__":
+
+    log_name = "gfm"
+
+    # Choose the sampler (e.g., TPESampler or RandomSampler)
+    from deephyper.hpo import HpProblem, CBO
+    from deephyper.evaluator import ProcessPoolEvaluator, queued
+    from hydragnn.utils.hpo.deephyper import read_node_list
+
+    # define the variable you want to optimize
+    problem = HpProblem()
+
+    # Define the search space for hyperparameters
+    problem.add_hyperparameter((2, 6), "num_conv_layers")  # discrete parameter
+    # keep <=6 conv layers to mitigate oversmoothing/oversquashing
+    # ~5B params target (rough):  problem.add_hyperparameter((2, 6), "num_conv_layers")
+    # ~10B params target (rough): problem.add_hyperparameter((2, 6), "num_conv_layers")
+    # ~100B params target (rough): problem.add_hyperparameter((2, 6), "num_conv_layers")
+
+    problem.add_hyperparameter((100, 3000), "hidden_dim")  # discrete parameter
+    # compensate with channel width (MPNN hidden_dim) instead of extra depth
+    # ~5B params target (rough):  problem.add_hyperparameter((3000, 10000), "hidden_dim")
+    # ~10B params target (rough): problem.add_hyperparameter((10000, 20000), "hidden_dim")
+    # ~100B params target (rough): problem.add_hyperparameter((20000, 30000), "hidden_dim")
+
+    problem.add_hyperparameter((2, 4), "num_headlayers")  # discrete parameter
+    # keep <=4 MLP head layers to mitigate oversmoothing/oversquashing
+    # ~5B params target (rough):  problem.add_hyperparameter((2, 4), "num_headlayers")
+    # ~10B params target (rough): problem.add_hyperparameter((2, 4), "num_headlayers")
+    # ~100B params target (rough): problem.add_hyperparameter((2, 4), "num_headlayers")
+
+    problem.add_hyperparameter((300, 2000), "dim_headlayers")  # discrete parameter
+    # ~5B params target (rough):  problem.add_hyperparameter((2000, 4000), "dim_headlayers")
+    # ~10B params target (rough): problem.add_hyperparameter((4000, 600), "dim_headlayers")
+    # ~100B params target (rough): problem.add_hyperparameter((6000, 9000), "dim_headlayers")
+    problem.add_hyperparameter(
+        [10.0, 50.0, 100.0], "force_weight"
+    )  # categorical parameter
+    problem.add_hyperparameter((1e-5, 1e-3), "learning_rate")  # continuous parameter
+    problem.add_hyperparameter(
+        ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"], "mpnn_type"
+    )  # categorical parameter (equivariant models)
+
+    # Create the node queue
+    queue, _ = read_node_list()
+    print("The queue:", queue, len(queue))
+    print("NNODES_PER_TRIAL", NNODES_PER_TRIAL)
+    print("NUM_CONCURRENT_TRIALS", NUM_CONCURRENT_TRIALS)
+    print("NGPUS_PER_TRIAL", NGPUS_PER_TRIAL)
+    print("NTOTGPUS", NTOTGPUS)
+    print(NTOTGPUS, NGPUS_PER_TRIAL, NTOTGPUS // NGPUS_PER_TRIAL, len(queue))
+
+    # Define the search space for hyperparameters
+    # define the evaluator to distribute the computation
+    evaluator = queued(ProcessPoolEvaluator)(
+        run,
+        num_workers=NUM_CONCURRENT_TRIALS,
+        queue=queue,
+        queue_pop_per_task=NNODES_PER_TRIAL,  # Remove the hard-coded value later
+    )
+
+    # Define the search method
+    # IMPORTANT: do NOT pass random_state in CBO(...) with current DeepHyper; it collides with the signature.
+    search = CBO(
+        problem,
+        acq_func="UCB",
+        multi_point_strategy="cl_min",  # Constant liar strategy
+        log_dir=log_name,  # Location where to store the results
+    )
+
+    # Ensure the HPO random seed matches the script's random_state
+    # (Attribute assignment is the most version-tolerant way across recent DeepHyper releases.)
+    search.random_state = random_state
+
+    # Optionally preload results
+    fname = os.path.join("gfm", "preloaded_results.csv")
+    if os.path.exists(fname):
+        t0 = time.time()
+        print("Read existing results:", fname)
+        preloaded_results = pd.read_csv(fname, header=0)
+        search.fit_surrogate(preloaded_results)
+        t1 = time.time()
+        print("Fit done:", t1 - t0)
+
+    timeout = None
+    results = search.search(evaluator, max_evals=200, timeout=timeout)
+    print(results)
+
+    sys.exit(0)

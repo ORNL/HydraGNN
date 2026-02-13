@@ -6,3 +6,4 @@ dist/
 dataset/
 logs/
 serialized_dataset/
+exporter.log
