@@ -31,6 +31,7 @@ import torch.distributed as dist
 from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
 from __init__ import data_ops
+from opf_nvme_utils import stage_case_to_nvme
 
 
 _DEFAULT_CASE_NAMES = [
@@ -435,6 +436,11 @@ if __name__ == "__main__":
     parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument("--modelname", type=str, default="OPF_Solution")
     parser.add_argument(
+        "--nvme",
+        action="store_true",
+        help="Stage selected OPF case(s) onto node-local NVMe/scratch if available",
+    )
+    parser.add_argument(
         "--node_target_type",
         type=str,
         default="bus",
@@ -485,10 +491,15 @@ if __name__ == "__main__":
         case_names = parsed_case_names
 
     case_num_groups = {}
+    shared_datadir = datadir
+    active_datadir = datadir
+    serialized_target = (
+        f"{args.modelname}.bp" if args.format == "adios" else f"{args.modelname}.pickle"
+    )
     for case_name in case_names:
         num_groups = data_ops.resolve_num_groups(
             requested_num_groups,
-            datadir,
+            shared_datadir,
             case_name,
             args.topological_perturbations,
             args.num_groups_max,
@@ -498,13 +509,30 @@ if __name__ == "__main__":
         )
         case_num_groups[case_name] = num_groups
         data_ops.ensure_opf_downloaded(
-            datadir,
+            shared_datadir,
             case_name,
             num_groups,
             args.topological_perturbations,
             rank,
             comm,
         )
+        if args.nvme:
+            staged_datadir = stage_case_to_nvme(
+                shared_datadir,
+                case_name,
+                args.topological_perturbations,
+                comm,
+                rank,
+                None,
+                serialized_targets=[serialized_target],
+            )
+            if staged_datadir != shared_datadir:
+                active_datadir = staged_datadir
+            else:
+                active_datadir = shared_datadir
+                break
+
+    datadir = active_datadir
 
     if rank == 0:
         info("Loading OPF splits...")
@@ -619,14 +647,14 @@ if __name__ == "__main__":
         if args.format == "adios":
             if AdiosWriter is None:
                 raise RuntimeError("adios2 is not available in this environment.")
-            fname = os.path.join(dirpwd, "dataset", f"{args.modelname}.bp")
+            fname = os.path.join(datadir, f"{args.modelname}.bp")
             adwriter = AdiosWriter(fname, comm)
             adwriter.add("trainset", trainset)
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
             adwriter.save()
         else:
-            basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
+            basedir = os.path.join(datadir, f"{args.modelname}.pickle")
             SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
             SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
             SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
@@ -639,7 +667,7 @@ if __name__ == "__main__":
     if args.format == "adios":
         if AdiosDataset is None:
             raise RuntimeError("adios2 is not available in this environment.")
-        fname = os.path.join(dirpwd, "dataset", f"{args.modelname}.bp")
+        fname = os.path.join(datadir, f"{args.modelname}.bp")
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
@@ -647,7 +675,7 @@ if __name__ == "__main__":
         valset = HeteroFromHomogeneousDataset(val_base)
         testset = HeteroFromHomogeneousDataset(test_base)
     else:
-        basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
+        basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=None
         )
