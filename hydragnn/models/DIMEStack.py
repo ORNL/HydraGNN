@@ -236,36 +236,44 @@ def triplets(
     src, dst = edge_index  # j -> i
 
     # Workaround for torch_sparse bug on AMD GPUs (OLCF Frontier with ROCm):
-    # The SparseTensor operations produce severe memory corruption and negative values.
-    # Use vectorized PyTorch implementation that avoids torch_sparse indexing.
-
+    # avoid SparseTensor indexing while keeping memory linear in number of triplets.
     num_edges = src.size(0)
+    if num_edges == 0:
+        empty = src.new_empty(0)
+        return dst, src, empty, empty, empty, empty, empty
 
-    # For each edge j->i, find all edges k->j to form triplets k->j->i with the constraint that k != i (no self-loops)
-    # Vectorized approach: create a matrix [e1, e2] where 'True' indicates if they form a valid triplet
-    e2_src = src.unsqueeze(0)  # k
-    e2_dst = dst.unsqueeze(0)  # j
-    e1_src = src.unsqueeze(1)  # j
-    e1_dst = dst.unsqueeze(1)  # i
+    # Group edges by destination node to enumerate incoming edges k -> j.
+    counts_in = torch.bincount(dst, minlength=num_nodes)
+    perm_in = torch.argsort(dst)
+    ptr_in = torch.zeros(num_nodes + 1, device=src.device, dtype=torch.long)
+    ptr_in[1:] = torch.cumsum(counts_in, dim=0)
 
-    # Find where the second edge's destination (j) is the first edge's source (j) (i.e. both edges connect on j)
-    triplet_mask = e2_dst == e1_src
+    # For each edge j -> i (index ji), pair it with all edges k -> j.
+    deg_per_ji = counts_in[src]
+    idx_ji_all = torch.repeat_interleave(
+        torch.arange(num_edges, device=src.device, dtype=torch.long), deg_per_ji
+    )
 
-    # Find where the second edge's source (k) is the first edge's destination (i) (i.e. k == i)
-    self_loop_mask = e2_src == e1_dst
+    if idx_ji_all.numel() == 0:
+        empty = src.new_empty(0)
+        return dst, src, empty, empty, empty, empty, empty
 
-    # Valid triplets are those where edges connect AND k != i
-    valid_triplets = triplet_mask & (~self_loop_mask)
+    seg_offsets = torch.cumsum(deg_per_ji, dim=0) - deg_per_ji
+    local_pos = torch.arange(idx_ji_all.numel(), device=src.device, dtype=torch.long)
+    local_pos = local_pos - torch.repeat_interleave(seg_offsets, deg_per_ji)
 
-    # Get indices of valid triplets
-    ji_indices, kj_indices = valid_triplets.nonzero(as_tuple=True)
+    j_for_all = src[idx_ji_all]
+    start_for_all = ptr_in[j_for_all]
+    idx_kj_all = perm_in[start_for_all + local_pos]
 
-    # Extract the actual node indices for the triplets
-    idx_i = dst[ji_indices]  # i nodes (targets of j->i edges)
-    idx_j = src[ji_indices]  # j nodes (sources of j->i edges, targets of k->j edges)
-    idx_k = src[kj_indices]  # k nodes (sources of k->j edges)
-    idx_kj = kj_indices  # Edge indices for k->j
-    idx_ji = ji_indices  # Edge indices for j->i
+    # Exclude triplets with k == i.
+    valid = src[idx_kj_all] != dst[idx_ji_all]
+    idx_ji = idx_ji_all[valid]
+    idx_kj = idx_kj_all[valid]
+
+    idx_i = dst[idx_ji]
+    idx_j = src[idx_ji]
+    idx_k = src[idx_kj]
 
     return dst, src, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
