@@ -454,7 +454,7 @@ def create_model(
 
     elif mpnn_type == "EGNN":
         model = EGCLStack(
-            "inv_node_feat, equiv_node_feat, edge_index, edge_attr",  # input_args
+            "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts",  # input_args
             "",  # conv_args
             edge_dim,
             input_dim,
