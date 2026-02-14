@@ -113,7 +113,8 @@ class EGCLStack(Base):
 
         if not hasattr(data, "edge_shifts") or data.edge_shifts is None:
             data.edge_shifts = torch.zeros(
-                (data.edge_index.size(1), data.pos.size(1)), device=data.edge_index.device
+                (data.edge_index.size(1), data.pos.size(1)),
+                device=data.edge_index.device,
             )
 
         if self.edge_dim > 0:
