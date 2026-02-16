@@ -37,7 +37,8 @@ class EGCLStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         assert (
-            self.input_args == "inv_node_feat, equiv_node_feat, edge_index, edge_attr"
+            self.input_args
+            == "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts"
         )
         pass
 
@@ -85,7 +86,7 @@ class EGCLStack(Base):
                 [
                     (
                         egcl,
-                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat, equiv_node_feat",
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts -> inv_node_feat, equiv_node_feat",
                     ),
                 ],
             )
@@ -95,7 +96,7 @@ class EGCLStack(Base):
                 [
                     (
                         egcl,
-                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr -> inv_node_feat",
+                        "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts -> inv_node_feat",
                     ),
                     (
                         lambda inv_node_feat, equiv_node_feat: [
@@ -110,19 +111,23 @@ class EGCLStack(Base):
     def _embedding(self, data):
         super()._embedding(data)
 
-        data.edge_shifts = torch.zeros(
-            (data.edge_index.size(1), 3), device=data.edge_index.device
-        )  # Override. pbc edge shifts are currently not supported in positional update models
+        if not hasattr(data, "edge_shifts") or data.edge_shifts is None:
+            data.edge_shifts = torch.zeros(
+                (data.edge_index.size(1), data.pos.size(1)),
+                device=data.edge_index.device,
+            )
 
         if self.edge_dim > 0:
             conv_args = {
                 "edge_index": data.edge_index,
                 "edge_attr": data.edge_attr,
+                "edge_shifts": data.edge_shifts,
             }
         else:
             conv_args = {
                 "edge_index": data.edge_index,
                 "edge_attr": None,
+                "edge_shifts": data.edge_shifts,
             }
 
         if self.use_global_attn:
@@ -270,11 +275,8 @@ class E_GCL(nn.Module):
         coord = coord + agg * self.coords_weight
         return coord
 
-    def forward(self, x, coord, edge_index, edge_attr, node_attr=None):
+    def forward(self, x, coord, edge_index, edge_attr, edge_shifts, node_attr=None):
         row, col = edge_index
-        edge_shifts = torch.zeros(
-            (edge_index.size(1), 3), device=edge_index.device
-        )  # pbc edge shifts are currently not supported in positional update models
         coord_diff, radial = get_edge_vectors_and_lengths(
             coord, edge_index, edge_shifts, normalize=self.norm_diff, eps=1.0
         )
