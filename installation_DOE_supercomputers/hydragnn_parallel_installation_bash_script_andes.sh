@@ -197,13 +197,13 @@ pip_retry vesin==0.4.2
 # ============================================================
 # mpi4py
 # ============================================================
-banner "mpi4py (v3.1.5)"
+banner "mpi4py (v1.1.1)"
 MPI4PY_ANDES="${INSTALL_ROOT}/MPI4PY-Andes"
 export MPI4PY_ANDES
 mkdir -p "$MPI4PY_ANDES"
 cd "$MPI4PY_ANDES"
 
-git clone -b 3.1.5 https://github.com/mpi4py/mpi4py.git || true
+git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
 pushd mpi4py >/dev/null
 rm -rf build
 CC=mpicc MPICC=mpicc pip_retry . --verbose

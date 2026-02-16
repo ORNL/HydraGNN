@@ -318,14 +318,14 @@ PY
 # ============================================================
 # mpi4py
 # ============================================================
-banner "mpi4py (v3.1.5)"
+banner "mpi4py (v4.1.1)"
 
 MPI4PY_PERLMUTTER="${INSTALL_ROOT}/MPI4PY-Perlmutter"
 export MPI4PY_PERLMUTTER
 mkdir -p "$MPI4PY_PERLMUTTER"
 cd "$MPI4PY_PERLMUTTER"
 
-git clone -b 3.1.5 https://github.com/mpi4py/mpi4py.git || true
+git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
 pushd mpi4py >/dev/null
 rm -rf build
 CC=cc MPICC=cc pip_retry . --verbose
