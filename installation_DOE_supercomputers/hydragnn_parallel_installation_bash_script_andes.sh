@@ -197,7 +197,7 @@ pip_retry vesin==0.4.2
 # ============================================================
 # mpi4py
 # ============================================================
-banner "mpi4py (v1.1.1)"
+banner "mpi4py (v4.1.1)"
 MPI4PY_ANDES="${INSTALL_ROOT}/MPI4PY-Andes"
 export MPI4PY_ANDES
 mkdir -p "$MPI4PY_ANDES"
