@@ -85,7 +85,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     if config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "MACE":
         if hasattr(train_loader.dataset, "avg_num_neighbors"):
             ## Use avg neighbours used in the dataset.
-            avg_num_neighbors = torch.tensor(train_loader.dataset.avg_num_neighbors)
+            avg_num_neighbors = float(train_loader.dataset.avg_num_neighbors)
         else:
             avg_num_neighbors = float(calculate_avg_deg(train_loader.dataset))
         config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"] = avg_num_neighbors

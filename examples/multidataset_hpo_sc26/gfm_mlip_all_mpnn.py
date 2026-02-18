@@ -673,6 +673,18 @@ if __name__ == "__main__":
                 trainset.pna_deg = pna_deg
                 valset.pna_deg = pna_deg
                 testset.pna_deg = pna_deg
+
+            if (
+                "avg_num_neighbors" in config["NeuralNetwork"]["Architecture"]
+                and config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"]
+                is not None
+            ):
+                avg_num_neighbors = config["NeuralNetwork"]["Architecture"][
+                    "avg_num_neighbors"
+                ]
+                trainset.avg_num_neighbors = avg_num_neighbors
+                valset.avg_num_neighbors = avg_num_neighbors
+                testset.avg_num_neighbors = avg_num_neighbors
     else:
         raise NotImplementedError("No supported format: %s" % (args.format))
 
