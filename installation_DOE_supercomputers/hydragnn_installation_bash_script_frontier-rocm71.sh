@@ -15,23 +15,6 @@ subbanner() { echo "-- $1"; }
 banner "Starting HydraGNN environment setup ($(date))"
 
 # ============================================================
-# Compiler policy (role-based)
-# ============================================================
-# HOST_*: non-MPI local builds/extensions.
-# MPI_*:  Cray MPI wrapper toolchain for MPI-enabled packages.
-HOST_CC="${HOST_CC:-gcc}"
-HOST_CXX="${HOST_CXX:-g++}"
-if command -v gfortran >/dev/null 2>&1; then
-  HOST_FC="${HOST_FC:-gfortran}"
-else
-  HOST_FC="${HOST_FC:-ftn}"
-fi
-
-MPI_CC="${MPI_CC:-cc}"
-MPI_CXX="${MPI_CXX:-CC}"
-MPI_FC="${MPI_FC:-ftn}"
-
-# ============================================================
 # Module initialization & Frontier stack
 # ============================================================
 banner "Configure Frontier Modules"
@@ -266,8 +249,8 @@ git fetch --all
 git checkout 9799c51
 git submodule update --init --recursive
 rm -rf build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py install
+CC=gcc CXX=g++ python setup.py build
+CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
@@ -284,8 +267,8 @@ pushd pytorch_sparse >/dev/null
 git fetch --all
 git checkout 2340737
 rm -rf build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py install
+CC=gcc CXX=g++ python setup.py build
+CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
@@ -299,8 +282,8 @@ pushd pytorch_cluster >/dev/null
 git fetch --all
 git checkout 1.6.3-11-g4126a52
 rm -rf build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py install
+CC=gcc CXX=g++ python setup.py build
+CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 popd >/dev/null
 
@@ -313,14 +296,19 @@ pushd pytorch_spline_conv >/dev/null
 git fetch --all
 git checkout 1.2.2-9-ga6d1020
 rm -rf build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py build
-CC="$HOST_CC" CXX="$HOST_CXX" python setup.py install
+CC=gcc CXX=g++ python setup.py build
+CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 popd >/dev/null
 
 subbanner "Install e3nn and openequivariance"
 pip_retry e3nn openequivariance --verbose
 assert_numpy_1264
+
+# NOTE: unload ROCm for mpi4py build
+module unload craype-accel-amd-gfx90a
+module unload rocm
+#######
 
 # ============================================================
 # mpi4py
@@ -334,7 +322,7 @@ cd "$MPI4PY_FRONTIER"
 git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
 pushd mpi4py >/dev/null
 rm -rf build
-CC="$MPI_CC" MPICC="$MPI_CC" pip_retry . --verbose
+CC=cc MPICC=cc pip_retry . --verbose
 popd >/dev/null
 
 # ============================================================
@@ -352,7 +340,7 @@ fi
 
 mkdir -p adios2-build
 
-CC="$MPI_CC" CXX="$MPI_CXX" FC="$MPI_FC" \
+CC=cc CXX=CC FC=ftn \
 cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
     -DCMAKE_BUILD_TYPE=Release \
     -DBUILD_TESTING=OFF \
@@ -383,7 +371,7 @@ cd "$DDSTORE_FRONTIER"
 
 git clone git@github.com:ORNL/DDStore.git || true
 pushd DDStore >/dev/null
-CC="$MPI_CC" CXX="$MPI_CXX" pip_retry . --no-build-isolation --verbose
+CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
 popd >/dev/null
 
 # ============================================================
@@ -414,16 +402,13 @@ cd "$GPTL_FRONTIER"
 wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
 tar xvf gptl-8.1.1.tar.gz
 pushd gptl-8.1.1 >/dev/null
-CC="$HOST_CC" CXX="$HOST_CXX" FC="$HOST_FC" ./configure --prefix="$INSTALL_ROOT" --disable-libunwind
+./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=cc CXX=CC FC=ftn
 make install
-if [[ -f include/gptlmpi.h ]]; then
-  install -m 644 include/gptlmpi.h "$INSTALL_ROOT/include/"
-fi
 popd >/dev/null
 
 git clone git@github.com:jychoi-hpc/gptl4py.git || true
 pushd gptl4py >/dev/null
-GPTL_DIR="$INSTALL_ROOT" CC="$MPI_CC" CXX="$MPI_CXX" MPICC="$MPI_CC" pip_retry . --no-build-isolation --verbose
+GPTL_DIR=$INSTALL_ROOT CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
 popd >/dev/null
 
 # ============================================================
@@ -442,8 +427,6 @@ MPI4PY:              $MPI4PY_FRONTIER
 ADIOS2:              $ADIOS2_FRONTIER
 DDStore:             $DDSTORE_FRONTIER
 DeepHyper:           $DEEPHYPER_FRONTIER
-Compilers (HOST):    CC=$HOST_CC CXX=$HOST_CXX FC=$HOST_FC
-Compilers (MPI):     CC=$MPI_CC CXX=$MPI_CXX FC=$MPI_FC
 EOF
 
 echo "✅ HydraGNN-Installation-Frontier environment setup complete!"
