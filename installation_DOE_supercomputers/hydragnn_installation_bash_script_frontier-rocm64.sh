@@ -384,13 +384,13 @@ cd "$GPTL_FRONTIER"
 wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
 tar xvf gptl-8.1.1.tar.gz
 pushd gptl-8.1.1 >/dev/null
-./configure --prefix=$INSTALL_ROOT --disable-libunwind CC=cc CXX=CC FC=ftn
+./configure --prefix=$VENV_PATH --disable-libunwind CC=cc CXX=CC FC=ftn
 make install
 popd >/dev/null
 
 git clone git@github.com:jychoi-hpc/gptl4py.git || true
 pushd gptl4py >/dev/null
-GPTL_DIR=$INSTALL_ROOT CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
+GPTL_DIR=$VENV_PATH CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
 popd >/dev/null
 
 # ============================================================
