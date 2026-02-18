@@ -3,6 +3,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.nn as nn
 from collections import OrderedDict
+from torch.utils.checkpoint import checkpoint
 from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
@@ -27,13 +28,58 @@ class EncoderModel(nn.Module):
     def __init__(self, base_model):
         super().__init__()
         self.device = base_model.device
+        self.is_mace = hasattr(base_model, "multihead_decoders")
         self._embedding = base_model._embedding  # Use existing embedding function
         self.graph_convs = base_model.graph_convs
         self.feature_layers = base_model.feature_layers
         self.activation_function = base_model.activation_function
         self.conv_checkpointing = base_model.conv_checkpointing
+        self._apply_graph_conditioning = getattr(
+            base_model, "_apply_graph_conditioning"
+        )
 
     def forward(self, data):
+        if self.is_mace:
+            inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
+
+            batch_for_cond = (
+                data.batch
+                if hasattr(data, "batch") and data.batch is not None
+                else None
+            )
+            inv_node_feat = self._apply_graph_conditioning(
+                inv_node_feat, batch_for_cond, data
+            )
+
+            node_features_per_layer = []
+            for conv in self.graph_convs:
+                if not self.conv_checkpointing:
+                    inv_node_feat, equiv_node_feat = conv(
+                        inv_node_feat=inv_node_feat,
+                        equiv_node_feat=equiv_node_feat,
+                        **conv_args,
+                    )
+                else:
+                    inv_node_feat, equiv_node_feat = checkpoint(
+                        conv,
+                        use_reentrant=False,
+                        inv_node_feat=inv_node_feat,
+                        equiv_node_feat=equiv_node_feat,
+                        **conv_args,
+                    )
+
+                inv_node_feat = self._apply_graph_conditioning(
+                    inv_node_feat, batch_for_cond, data
+                )
+                node_features_per_layer.append(
+                    torch.cat([inv_node_feat, equiv_node_feat], dim=1)
+                )
+
+            return {
+                "node_attributes": data.node_attributes,
+                "node_features_per_layer": node_features_per_layer,
+            }
+
         ### encoder part ####
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
 
@@ -61,17 +107,22 @@ class DecoderModel(nn.Module):
     def __init__(self, base_model):
         super().__init__()
         self.device = base_model.device
-        self.graph_shared = base_model.graph_shared
-        self.heads_NN = base_model.heads_NN
-        self.head_dims = base_model.head_dims
-        self.head_type = base_model.head_type
-        self.config_heads = base_model.config_heads
-        self.var_output = base_model.var_output
-        self.activation_function = base_model.activation_function
-        self.num_branches = base_model.num_branches
-        self.graph_pool_fn = base_model.graph_pool_fn
-        self.graph_pool_reduction = base_model.graph_pool_reduction
-        self.graph_pooling = base_model.graph_pooling
+        self.is_mace = hasattr(base_model, "multihead_decoders")
+
+        if self.is_mace:
+            self.multihead_decoders = base_model.multihead_decoders
+        else:
+            self.graph_shared = base_model.graph_shared
+            self.heads_NN = base_model.heads_NN
+            self.head_dims = base_model.head_dims
+            self.head_type = base_model.head_type
+            self.config_heads = base_model.config_heads
+            self.var_output = base_model.var_output
+            self.activation_function = base_model.activation_function
+            self.num_branches = base_model.num_branches
+            self.graph_pool_fn = base_model.graph_pool_fn
+            self.graph_pool_reduction = base_model.graph_pool_reduction
+            self.graph_pooling = base_model.graph_pooling
 
     def _pool_graph_features(self, x_tensor, batch_tensor):
         if batch_tensor is None:
@@ -83,6 +134,16 @@ class DecoderModel(nn.Module):
         return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
 
     def forward(self, data, encoded_feats):
+        if self.is_mace:
+            outputs = self.multihead_decoders[0](data, encoded_feats["node_attributes"])
+            for readout, node_features in zip(
+                self.multihead_decoders[1:], encoded_feats["node_features_per_layer"]
+            ):
+                output = readout(data, node_features)
+                for idx, prediction in enumerate(output):
+                    outputs[idx] = outputs[idx] + prediction
+            return outputs
+
         ## Take encoded features as input
         inv_node_feat, equiv_node_feat, conv_args = encoded_feats
         x = inv_node_feat
@@ -228,21 +289,40 @@ class MultiTaskModelMP(nn.Module):
         self.encoder = EncoderModel(base_model)
         self.decoder = DecoderModel(base_model)
 
-        delete_list = list()
-        for name, layer in self.decoder.graph_shared.named_children():
-            if name != f"branch-{self.branch_id}":
-                delete_list.append(name)
+        if hasattr(self.decoder, "multihead_decoders"):
+            for decoder_block in self.decoder.multihead_decoders:
+                if hasattr(decoder_block, "graph_shared"):
+                    delete_list = []
+                    for name in decoder_block.graph_shared.keys():
+                        if name != f"branch-{self.branch_id}":
+                            delete_list.append(name)
+                    for key in delete_list:
+                        del decoder_block.graph_shared[key]
 
-        for k in delete_list:
-            del self.decoder.graph_shared[k]
-
-        for name, layer in self.decoder.heads_NN.named_children():
+                if hasattr(decoder_block, "heads_NN"):
+                    for layer in decoder_block.heads_NN:
+                        delete_list = []
+                        for key in layer.keys():
+                            if key != f"branch-{self.branch_id}":
+                                delete_list.append(key)
+                        for key in delete_list:
+                            del layer[key]
+        else:
             delete_list = list()
-            for k in layer.keys():
-                if k != f"branch-{self.branch_id}":
-                    delete_list.append(k)
+            for name, layer in self.decoder.graph_shared.named_children():
+                if name != f"branch-{self.branch_id}":
+                    delete_list.append(name)
+
             for k in delete_list:
-                del layer[k]
+                del self.decoder.graph_shared[k]
+
+            for name, layer in self.decoder.heads_NN.named_children():
+                delete_list = list()
+                for k in layer.keys():
+                    if k != f"branch-{self.branch_id}":
+                        delete_list.append(k)
+                for k in delete_list:
+                    del layer[k]
 
         ## check if FSDP is to be used
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
