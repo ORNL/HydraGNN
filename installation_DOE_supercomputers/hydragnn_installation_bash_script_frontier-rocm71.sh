@@ -305,6 +305,11 @@ subbanner "Install e3nn and openequivariance"
 pip_retry e3nn openequivariance --verbose
 assert_numpy_1264
 
+# NOTE: unload ROCm for mpi4py build
+module unload craype-accel-amd-gfx90a
+module unload rocm
+#######
+
 # ============================================================
 # mpi4py
 # ============================================================
