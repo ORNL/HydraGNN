@@ -163,7 +163,9 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                         offload_to_cpu=True, rank0_only=False
                     )
                 else:
-                    model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                    model_cfg = FullStateDictConfig(
+                        offload_to_cpu=True, rank0_only=True
+                    )
                     optim_cfg = FullOptimStateDictConfig(
                         offload_to_cpu=True, rank0_only=True
                     )
@@ -328,7 +330,9 @@ def load_existing_model(
 
                 with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT):
                     model.load_state_dict(state_dict)
-                    if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+                    if (optimizer is not None) and (
+                        "optimizer_state_dict" in checkpoint
+                    ):
                         if use_multitask:
                             ## MultiTaskModelMP uses standard optimizer
                             optimizer_state_dict = checkpoint["optimizer_state_dict"]
