@@ -720,9 +720,9 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 hydragnn.run_training(config, use_deepspeed=True)
 ```
 
-### FSDP (Fully Sharded Data Parallel) Integration
+### FSDP2 (Fully Sharded Data Parallel) Integration
 
-Pytorch's FSDP (Fully Sharded Data Parallel) provides functionality similar to DeepSpeed ZeRO. 
+Pytorch FSDP2 (Fully Sharded Data Parallel) provides functionality similar to DeepSpeed ZeRO.
 
 FSDP can be turned on or off using the `HYDRAGNN_USE_FSDP` env:
 
@@ -733,13 +733,12 @@ export HYDRAGNN_USE_FSDP=0
 export HYDRAGNN_USE_FSDP=1
 ```
 
-The level of ZeRO optimization can be chosen by `HYDRAGNN_FSDP_STRATEGY` env:
+FSDP2 currently supports `FULL_SHARD` in HydraGNN. `HYDRAGNN_FSDP_STRATEGY` may be set,
+but values other than `FULL_SHARD` are ignored.
 
 ```bash
-# Choose one of them. FULL_SHARD is default.
+# FULL_SHARD is the only supported strategy for FSDP2.
 export HYDRAGNN_FSDP_STRATEGY=FULL_SHARD
-export HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP
-export HYDRAGNN_FSDP_STRATEGY=NO_SHARD
 ```
 
 ### Multi-Branch Training

@@ -146,7 +146,7 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                     multitask_optim_state_dict(model, optimizer)
                     if use_multitask
                     else optimizer.state_dict()
-                optimizer_state_dict = optimizer.state_dict()
+                )
             else:
                 from torch.distributed.fsdp import (
                     FullyShardedDataParallel as FSDP,
@@ -174,7 +174,7 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
                     model_state_dict = model.state_dict()
                     optimizer_state_dict = (
                         multitask_optim_state_dict(model, optimizer)
-                        if not use_multitask
+                        if use_multitask
                         else optimizer.state_dict()
                     )
         else:

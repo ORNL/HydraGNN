@@ -74,7 +74,9 @@ def _set_fsdp_reshard_after_backward(model, enabled: bool):
 
     if hasattr(model, "set_reshard_after_backward"):
         model.set_reshard_after_backward(enabled)
-    elif hasattr(model, "module") and hasattr(model.module, "set_reshard_after_backward"):
+    elif hasattr(model, "module") and hasattr(
+        model.module, "set_reshard_after_backward"
+    ):
         model.module.set_reshard_after_backward(enabled)
 
 
