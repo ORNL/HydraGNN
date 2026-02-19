@@ -58,13 +58,29 @@
                     "type": "mlp"
                 }
             },
-            "task_weights": [20.0, 1.0, 1.0, 1.0]
+            "task_weights": [20.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["sum_x_x2_x3","x","x2","x3"],
-            "output_index": [0,0,1,2],
-            "type": ["graph","node","node","node"],
+            "node_features": {
+                "x": {
+                    "dim": 1,
+                    "role": "input"
+                },
+                "x2": {
+                    "dim": 1,
+                    "role": "output"
+                },
+                "x3": {
+                    "dim": 1,
+                    "role": "output"
+                }
+            },
+            "graph_features": {
+                "sum_x_x2_x3": {
+                    "dim": 1,
+                    "role": "output"
+                }
+            },
             "denormalize_output": false
         },
         "Training": {
