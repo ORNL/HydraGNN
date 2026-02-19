@@ -3,20 +3,18 @@
 #SBATCH -J HydraGNN
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
-#SBATCH -t 02:00:00
-#SBATCH -p batch 
-#SBATCH -q debug
-#SBATCH -N 10
-#SBATCH --network=disable_rdzv_get
+#SBATCH -t 01:00:00
+#SBATCH -p batch
+#SBATCH -N 16
 
 function cmd() {
     echo "$@"
     time $@
-} 
+}
 
-HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN
+HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
 
-# Load conda environemnt
+# Load conda environment
 module reset
 ml cpe/24.07
 ml cce/18.0.0
@@ -28,21 +26,22 @@ ml miniforge3/23.11.0-0
 module unload darshan-runtime
 
 source activate $HYDRAGNN_ROOT/HydraGNN-Installation-Frontier/hydragnn_venv
- 
-#export python path to HydragNN
-export PYTHONPATH=$PWD:$PYTHONPATH
 
-#export python path to use ADIOS2 v.2.10.2
-export PYTHONPATH=$HYDRAGNN_ROOT/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
- 
+#export python path to HydragNN
+export PYTHONPATH=$HYDRAGNN_ROOT:$PYTHONPATH
+
+echo ""
+echo "===== Check ====="
 which python
 python -c "import adios2; print(adios2.__version__, adios2.__file__)"
 python -c "import torch; print(torch.__version__, torch.__file__)"
 
-module unload darshan-runtime
+echo ""
+echo "===== Module List ====="
 module list
 
-
+echo ""
+echo "===== Check LD_LIBRARY_PATH ====="
 echo $LD_LIBRARY_PATH  | tr ':' '\n'
 
 export MPICH_ENV_DISPLAY=0
@@ -89,7 +88,6 @@ export datadir12=Nabla2DFT
 export datadir13=QCML
 export datadir14=QM7X
 export datadir15=transition1x
-
 
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
