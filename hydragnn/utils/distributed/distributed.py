@@ -479,12 +479,13 @@ def get_distributed_model(
                 )
             mesh = _build_fsdp2_mesh()
             mp_policy = _get_fsdp2_mp_policy(precision)
-            model = fully_shard(
-                model,
-                mesh=mesh,
-                reshard_after_forward=True,
-                mp_policy=mp_policy,
-            )
+            fsdp_kwargs = {
+                "mesh": mesh,
+                "reshard_after_forward": True,
+            }
+            if mp_policy is not None:
+                fsdp_kwargs["mp_policy"] = mp_policy
+            model = fully_shard(model, **fsdp_kwargs)
         else:
             model = DDP(model, **ddp_kwargs)
 

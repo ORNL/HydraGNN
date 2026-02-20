@@ -379,18 +379,19 @@ class MultiTaskModelMP(nn.Module):
             shared_mesh = _build_fsdp2_mesh(self.shared_pg)
             head_mesh = _build_fsdp2_mesh(self.head_pg)
             mp_policy = _get_fsdp2_mp_policy()
-            self.encoder = fully_shard(
-                self.encoder,
-                mesh=shared_mesh,
-                reshard_after_forward=True,
-                mp_policy=mp_policy,
-            )
-            self.decoder = fully_shard(
-                self.decoder,
-                mesh=head_mesh,
-                reshard_after_forward=True,
-                mp_policy=mp_policy,
-            )
+            encoder_fsdp_kwargs = {
+                "mesh": shared_mesh,
+                "reshard_after_forward": True,
+            }
+            decoder_fsdp_kwargs = {
+                "mesh": head_mesh,
+                "reshard_after_forward": True,
+            }
+            if mp_policy is not None:
+                encoder_fsdp_kwargs["mp_policy"] = mp_policy
+                decoder_fsdp_kwargs["mp_policy"] = mp_policy
+            self.encoder = fully_shard(self.encoder, **encoder_fsdp_kwargs)
+            self.decoder = fully_shard(self.decoder, **decoder_fsdp_kwargs)
         else:
             self.encoder = DDP(self.encoder, process_group=self.shared_pg)
             self.decoder = DDP(self.decoder, process_group=self.head_pg)
