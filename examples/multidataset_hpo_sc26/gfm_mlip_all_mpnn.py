@@ -755,7 +755,10 @@ if __name__ == "__main__":
     else:
         ## Wrap the model with DDP
         model = hydragnn.utils.distributed.get_distributed_model(
-            model, verbosity, find_unused_parameters=True
+            model,
+            verbosity,
+            find_unused_parameters=True,
+            precision=precision,
         )
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(

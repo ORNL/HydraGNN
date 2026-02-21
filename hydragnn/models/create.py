@@ -618,6 +618,10 @@ def create_model(
                         f"'{self.__class__.__name__}' object has no attribute '{name}'"
                     )
 
+            @property
+            def module(self):
+                return self
+
             # ---------- forward ----------
             def forward(self, data):
 
