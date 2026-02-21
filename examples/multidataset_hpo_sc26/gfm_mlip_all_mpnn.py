@@ -51,6 +51,21 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+def build_optimizer(parameters, optimizer_cfg):
+    optimizer_type = optimizer_cfg.get("type", "SGD")
+    learning_rate = optimizer_cfg["learning_rate"]
+
+    if optimizer_type == "SGD":
+        momentum = optimizer_cfg.get("momentum", 0.9)
+        return torch.optim.SGD(parameters, lr=learning_rate, momentum=momentum)
+    if optimizer_type == "AdamW":
+        return torch.optim.AdamW(parameters, lr=learning_rate)
+
+    raise ValueError(
+        f"Unsupported optimizer type {optimizer_type} for this script. Use SGD or AdamW."
+    )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -735,7 +750,7 @@ if __name__ == "__main__":
         verbosity=verbosity,
     )
 
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
+    optimizer_cfg = config["NeuralNetwork"]["Training"]["Optimizer"]
 
     ## task parallel
     if args.task_parallel:
@@ -743,8 +758,8 @@ if __name__ == "__main__":
         ## It initializes encoder and decoder with DDP
         model = MultiTaskModelMP(model, branch_id, branch_group)
         ## creating optimizer and scheduler after creating MultiTaskModelMP
-        optimizer1 = torch.optim.AdamW(model.encoder.parameters(), lr=learning_rate)
-        optimizer2 = torch.optim.AdamW(model.decoder.parameters(), lr=learning_rate)
+        optimizer1 = build_optimizer(model.encoder.parameters(), optimizer_cfg)
+        optimizer2 = build_optimizer(model.decoder.parameters(), optimizer_cfg)
         optimizer = DualOptimizer(optimizer1, optimizer2)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
@@ -757,7 +772,7 @@ if __name__ == "__main__":
         model = hydragnn.utils.distributed.get_distributed_model(
             model, verbosity, find_unused_parameters=True
         )
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        optimizer = build_optimizer(model.parameters(), optimizer_cfg)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )

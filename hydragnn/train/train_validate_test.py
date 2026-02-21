@@ -281,6 +281,11 @@ def train_validate_test(
         if int(os.getenv("HYDRAGNN_VALTEST", "1")) == 0:
             continue
 
+        try:
+            optimizer.zero_grad(set_to_none=True)
+        except TypeError:
+            optimizer.zero_grad()
+
         val_loss, val_taskserr = validate(
             val_loader,
             model,

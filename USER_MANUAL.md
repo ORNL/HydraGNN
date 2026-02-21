@@ -742,6 +742,20 @@ export HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP
 export HYDRAGNN_FSDP_STRATEGY=NO_SHARD
 ```
 
+The FSDP implementation version can be selected using `HYDRAGNN_FSDP_VERSION`:
+
+```bash
+# FSDP v1 (default, FlatParameter-based wrapper)
+export HYDRAGNN_FSDP_VERSION=1
+
+# FSDP v2 (composable fully_shard path)
+export HYDRAGNN_FSDP_VERSION=2
+```
+
+Notes:
+- FSDP v2 currently supports `HYDRAGNN_FSDP_STRATEGY` values `FULL_SHARD` and `SHARD_GRAD_OP`.
+- Multi-branch model-parallel mode (`MultiTaskModelMP`) currently supports only `HYDRAGNN_FSDP_VERSION=1`.
+
 ### Multi-Branch Training
 
 Multi-branch training allows training on multiple datasets with different data distributions simultaneously.

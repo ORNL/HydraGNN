@@ -326,12 +326,30 @@ class MultiTaskModelMP(nn.Module):
 
         ## check if FSDP is to be used
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if fsdp_version not in [1, 2]:
+            raise ValueError(
+                f"Unsupported HYDRAGNN_FSDP_VERSION={fsdp_version}. Supported values are 1 or 2."
+            )
         ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
         fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
         sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
-        print("MultiTaskModelMP FSDP:", use_fsdp, "Sharding:", sharding_strategy)
+        print(
+            "MultiTaskModelMP FSDP:",
+            use_fsdp,
+            "Version:",
+            fsdp_version,
+            "Sharding:",
+            sharding_strategy,
+        )
 
         if use_fsdp:
+            if fsdp_version != 1:
+                raise NotImplementedError(
+                    "MultiTaskModelMP currently supports only HYDRAGNN_FSDP_VERSION=1. "
+                    "FSDP2/composable wrapping does not yet support this separate-process-group "
+                    "encoder/decoder setup in HydraGNN."
+                )
             self.encoder = FSDP(
                 self.encoder,
                 process_group=self.shared_pg,
