@@ -107,6 +107,27 @@ def get_autocast_and_scaler(precision):
     return nullcontext(), None
 
 
+def _is_fsdp2_enabled():
+    return bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))) and int(
+        os.getenv("HYDRAGNN_FSDP_VERSION", "1")
+    ) == 2
+
+
+def _set_reshard_after_backward(model, enabled):
+    setter = getattr(model, "set_reshard_after_backward", None)
+    if callable(setter):
+        setter(enabled)
+        return True
+
+    wrapped = getattr(model, "module", None)
+    setter = getattr(wrapped, "set_reshard_after_backward", None)
+    if callable(setter):
+        setter(enabled)
+        return True
+
+    return False
+
+
 def get_nbatch(loader):
     ## calculate numbrer of batches for a given loader
     m = len(loader.sampler)
@@ -591,6 +612,8 @@ def train(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
+    fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
+    fsdp2_workaround_available = True
 
     nbatch = get_nbatch(loader)
     syncopt = {"cudasync": False}
@@ -638,6 +661,10 @@ def train(
                 tr.stop("h2d", **syncopt)
             if compute_grad_energy:  # for force and energy prediction
                 data.pos.requires_grad = True
+                if fsdp2_force_workaround and fsdp2_workaround_available:
+                    fsdp2_workaround_available = _set_reshard_after_backward(
+                        model, False
+                    )
                 # Perform forward pass and backward pass under autocast
                 with autocast_context:
                     pred = model(data)
@@ -654,6 +681,8 @@ def train(
         tr.stop("forward", **syncopt)
         tr.start("backward", **syncopt)
         with record_function("backward"):
+            if fsdp2_force_workaround and fsdp2_workaround_available:
+                _set_reshard_after_backward(model, True)
             if use_deepspeed:
                 model.backward(loss)
             else:
@@ -661,6 +690,8 @@ def train(
                     scaler.scale(loss).backward()
                 else:
                     loss.backward()
+            if fsdp2_force_workaround and fsdp2_workaround_available:
+                _set_reshard_after_backward(model, True)
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
