@@ -117,7 +117,8 @@ def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
             eligible = world_rank == 0
 
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
-        if use_fsdp:
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if use_fsdp and fsdp_version == 1:
             from torch.distributed.fsdp import (
                 FullyShardedDataParallel as FSDP,
                 StateDictType,
@@ -283,7 +284,8 @@ def load_existing_model(
 
         ## Load with FSDP
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
-        if use_fsdp:
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if use_fsdp and fsdp_version == 1:
             from torch.distributed.fsdp import (
                 FullyShardedDataParallel as FSDP,
                 StateDictType,

@@ -623,7 +623,7 @@ def create_model(
 
                 return self.model(data)
 
-            def energy_force_loss(self, pred, data):
+            def energy_force_loss(self, pred, data, create_graph=True):
                 """
                 Compute energy and force loss for MLIP training.
 
@@ -720,8 +720,7 @@ def create_model(
                     data.pos,
                     grad_outputs=torch.ones_like(graph_energy_pred),
                     retain_graph=graph_energy_pred.requires_grad,
-                    # Retain graph only if needed (it will be needed during training, but not during validation/testing)
-                    create_graph=True,
+                    create_graph=create_graph,
                 )[0].float()
                 assert (
                     forces_pred is not None

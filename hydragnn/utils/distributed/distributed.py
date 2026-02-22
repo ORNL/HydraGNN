@@ -11,6 +11,7 @@
 
 import os
 import re
+import warnings
 
 import torch
 import torch.distributed as dist
@@ -31,6 +32,29 @@ try:
     import deepspeed
 except:
     deepspeed_available = False
+
+
+class ModuleCompat(torch.nn.Module):
+    """
+    Wrapper that provides .module (DDP/FSDP1-style) for backward compatibility.
+    Forward calls into the wrapped module.
+    Attribute access falls back to the wrapped module.
+    """
+
+    def __init__(self, module: torch.nn.Module):
+        super().__init__()
+        self.module = module
+
+    def forward(self, *args, **kwargs):
+        return self.module(*args, **kwargs)
+
+    def __getattr__(self, name):
+        if name != "module":
+            try:
+                return super().__getattr__(name)
+            except AttributeError:
+                return getattr(self.module, name)
+        return super().__getattr__(name)
 
 
 def find_ifname(myaddr):
@@ -404,43 +428,54 @@ def get_distributed_model(
 
         ## check if FSDP is to be used
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if fsdp_version not in [1, 2]:
+            raise ValueError(
+                f"Unsupported HYDRAGNN_FSDP_VERSION={fsdp_version}. Supported values are 1 or 2."
+            )
         ## List of ShardingStrategy: FULL_SHARD, SHARD_GRAD_OP, NO_SHARD, HYBRID_SHARD, HYBRID_SHARD_ZERO2
         fsdp_strategy = os.getenv("HYDRAGNN_FSDP_STRATEGY", "FULL_SHARD")
         sharding_strategy = eval(f"ShardingStrategy.{fsdp_strategy}")
-        print("Using FSDP:", use_fsdp, "Sharding:", sharding_strategy)
+        print(
+            "Using FSDP:",
+            use_fsdp,
+            "Version:",
+            fsdp_version,
+            "Sharding:",
+            sharding_strategy,
+        )
 
         if use_fsdp:
-            print_distributed(verbosity, "Using FSDP wrapper")
-            model = FSDP(model, sharding_strategy=sharding_strategy)
+            if fsdp_version == 1:
+                print_distributed(verbosity, "Using FSDP v1 wrapper")
+                model = FSDP(model, sharding_strategy=sharding_strategy)
+            else:
+                if fsdp_strategy not in ["FULL_SHARD", "SHARD_GRAD_OP"]:
+                    raise ValueError(
+                        "FSDP v2 currently supports HYDRAGNN_FSDP_STRATEGY in {FULL_SHARD, SHARD_GRAD_OP}."
+                    )
+                try:
+                    from torch.distributed.fsdp import fully_shard
+                except (ImportError, AttributeError):
+                    from torch.distributed._composable.fsdp import fully_shard
 
-            # ## FIXME: FSDP2 test
-            # from torch.distributed.fsdp import fully_shard
-            # model = fully_shard(
-            #     model,
-            #     reshard_after_forward=False
-            # )
+                if fsdp_strategy == "SHARD_GRAD_OP":
+                    warnings.warn(
+                        "Using HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP with FSDP v2 maps to "
+                        "reshard_after_forward=False for approximate behavior.",
+                        RuntimeWarning,
+                    )
 
-            # import torch.nn as nn
-            # class ModuleCompat(nn.Module):
-            #     """
-            #     Wrapper that provides .module (DDP/FSDP1-style) for backward compatibility.
-            #     Forward calls into the wrapped module.
-            #     Attribute access falls back to the wrapped module.
-            #     """
-            #     def __init__(self, module: nn.Module):
-            #         super().__init__()
-            #         self.module = module
-
-            #     def forward(self, *args, **kwargs):
-            #         return self.module(*args, **kwargs)
-
-            #     def __getattr__(self, name):
-            #         # Called only if normal attribute lookup fails
-            #         if name != "module":
-            #             return getattr(self.module, name)
-            #         return super().__getattr__(name)
-
-            # model = ModuleCompat(model)
+                reshard_after_forward = fsdp_strategy == "FULL_SHARD"
+                print_distributed(
+                    verbosity,
+                    f"Using FSDP v2 composable wrapper (reshard_after_forward={reshard_after_forward})",
+                )
+                model = fully_shard(
+                    model,
+                    reshard_after_forward=reshard_after_forward,
+                )
+                model = ModuleCompat(model)
         else:
             model = DDP(model, **ddp_kwargs)
 

@@ -51,6 +51,21 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+def build_optimizer(parameters, optimizer_cfg):
+    optimizer_type = optimizer_cfg.get("type", "SGD")
+    learning_rate = optimizer_cfg["learning_rate"]
+
+    if optimizer_type == "SGD":
+        momentum = optimizer_cfg.get("momentum", 0.9)
+        return torch.optim.SGD(parameters, lr=learning_rate, momentum=momentum)
+    if optimizer_type == "AdamW":
+        return torch.optim.AdamW(parameters, lr=learning_rate)
+
+    raise ValueError(
+        f"Unsupported optimizer type {optimizer_type} for this script. Use SGD or AdamW."
+    )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -330,11 +345,59 @@ if __name__ == "__main__":
             # process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
             # process_list = process_list.tolist()
 
-            ## Evenly split
-            num_processes_per_model = comm_size // len(modellist)
-            assert comm_size % len(modellist) == 0
-            process_list = [num_processes_per_model] * len(modellist)
-            print("process_list:", process_list)
+            ## Process split
+            ## - DeviceMesh task-parallel currently requires uniform group sizes.
+            ## - Non-DeviceMesh task-parallel can use non-uniform group sizes; prefer proportional split by dataset size.
+            proportional_tp_split = bool(
+                int(os.getenv("HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT", "1"))
+            )
+            print(
+                "Task-parallel split mode:",
+                "proportional" if proportional_tp_split else "uniform",
+                f"(HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT={int(proportional_tp_split)})",
+            )
+            if (
+                args.task_parallel
+                and (not args.use_devicemesh)
+                and proportional_tp_split
+            ):
+                nmodels = len(modellist)
+                if comm_size < nmodels:
+                    raise ValueError(
+                        f"Task-parallel proportional split requires comm_size >= number of models. Got comm_size={comm_size}, models={nmodels}."
+                    )
+
+                ndata_arr = np.asarray(ndata_list, dtype=np.float64)
+                if np.any(ndata_arr < 0):
+                    raise ValueError("Invalid ndata_list with negative values.")
+
+                process_arr = np.ones(nmodels, dtype=np.int32)
+                remaining = comm_size - nmodels
+                if remaining > 0:
+                    total = ndata_arr.sum()
+                    if total <= 0:
+                        weights = np.full(nmodels, 1.0 / nmodels, dtype=np.float64)
+                    else:
+                        weights = ndata_arr / total
+
+                    raw_extra = weights * remaining
+                    extra = np.floor(raw_extra).astype(np.int32)
+                    process_arr += extra
+
+                    rem = int(remaining - int(extra.sum()))
+                    if rem > 0:
+                        frac = raw_extra - extra
+                        for idx in np.argsort(-frac)[:rem]:
+                            process_arr[idx] += 1
+
+                process_list = process_arr.tolist()
+                print("ndata_list:", ndata_list)
+                print("process_list (proportional):", process_list)
+            else:
+                num_processes_per_model = comm_size // len(modellist)
+                assert comm_size % len(modellist) == 0
+                process_list = [num_processes_per_model] * len(modellist)
+                print("process_list (uniform):", process_list)
 
             ## Merge pna_deg using interpolation
             intp_list = list()
@@ -735,7 +798,7 @@ if __name__ == "__main__":
         verbosity=verbosity,
     )
 
-    learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
+    optimizer_cfg = config["NeuralNetwork"]["Training"]["Optimizer"]
 
     ## task parallel
     if args.task_parallel:
@@ -743,8 +806,8 @@ if __name__ == "__main__":
         ## It initializes encoder and decoder with DDP
         model = MultiTaskModelMP(model, branch_id, branch_group)
         ## creating optimizer and scheduler after creating MultiTaskModelMP
-        optimizer1 = torch.optim.AdamW(model.encoder.parameters(), lr=learning_rate)
-        optimizer2 = torch.optim.AdamW(model.decoder.parameters(), lr=learning_rate)
+        optimizer1 = build_optimizer(model.encoder.parameters(), optimizer_cfg)
+        optimizer2 = build_optimizer(model.decoder.parameters(), optimizer_cfg)
         optimizer = DualOptimizer(optimizer1, optimizer2)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
@@ -757,7 +820,7 @@ if __name__ == "__main__":
         model = hydragnn.utils.distributed.get_distributed_model(
             model, verbosity, find_unused_parameters=True
         )
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+        optimizer = build_optimizer(model.parameters(), optimizer_cfg)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
