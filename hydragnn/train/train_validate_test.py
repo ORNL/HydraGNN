@@ -108,9 +108,10 @@ def get_autocast_and_scaler(precision):
 
 
 def _is_fsdp2_enabled():
-    return bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))) and int(
-        os.getenv("HYDRAGNN_FSDP_VERSION", "1")
-    ) == 2
+    return (
+        bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        and int(os.getenv("HYDRAGNN_FSDP_VERSION", "1")) == 2
+    )
 
 
 def _set_reshard_after_backward(model, enabled):

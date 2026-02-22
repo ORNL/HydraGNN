@@ -356,7 +356,11 @@ if __name__ == "__main__":
                 "proportional" if proportional_tp_split else "uniform",
                 f"(HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT={int(proportional_tp_split)})",
             )
-            if args.task_parallel and (not args.use_devicemesh) and proportional_tp_split:
+            if (
+                args.task_parallel
+                and (not args.use_devicemesh)
+                and proportional_tp_split
+            ):
                 nmodels = len(modellist)
                 if comm_size < nmodels:
                     raise ValueError(
