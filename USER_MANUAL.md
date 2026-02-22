@@ -754,7 +754,10 @@ export HYDRAGNN_FSDP_VERSION=2
 
 Notes:
 - FSDP v2 currently supports `HYDRAGNN_FSDP_STRATEGY` values `FULL_SHARD` and `SHARD_GRAD_OP`.
-- Multi-branch model-parallel mode (`MultiTaskModelMP`) currently supports only `HYDRAGNN_FSDP_VERSION=1`.
+- Multi-branch model-parallel mode (`MultiTaskModelMP`) supports `HYDRAGNN_FSDP_VERSION=2`.
+- For task-parallel runs (`--task_parallel`) without `--use_devicemesh`, branch groups are split proportionally by dataset size by default.
+    - Controlled by `HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT` (default `1`).
+    - Set `HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT=0` to force uniform split.
 
 ### Multi-Branch Training
 

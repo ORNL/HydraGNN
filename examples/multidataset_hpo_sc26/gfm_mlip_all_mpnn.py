@@ -345,11 +345,55 @@ if __name__ == "__main__":
             # process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
             # process_list = process_list.tolist()
 
-            ## Evenly split
-            num_processes_per_model = comm_size // len(modellist)
-            assert comm_size % len(modellist) == 0
-            process_list = [num_processes_per_model] * len(modellist)
-            print("process_list:", process_list)
+            ## Process split
+            ## - DeviceMesh task-parallel currently requires uniform group sizes.
+            ## - Non-DeviceMesh task-parallel can use non-uniform group sizes; prefer proportional split by dataset size.
+            proportional_tp_split = bool(
+                int(os.getenv("HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT", "1"))
+            )
+            print(
+                "Task-parallel split mode:",
+                "proportional" if proportional_tp_split else "uniform",
+                f"(HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT={int(proportional_tp_split)})",
+            )
+            if args.task_parallel and (not args.use_devicemesh) and proportional_tp_split:
+                nmodels = len(modellist)
+                if comm_size < nmodels:
+                    raise ValueError(
+                        f"Task-parallel proportional split requires comm_size >= number of models. Got comm_size={comm_size}, models={nmodels}."
+                    )
+
+                ndata_arr = np.asarray(ndata_list, dtype=np.float64)
+                if np.any(ndata_arr < 0):
+                    raise ValueError("Invalid ndata_list with negative values.")
+
+                process_arr = np.ones(nmodels, dtype=np.int32)
+                remaining = comm_size - nmodels
+                if remaining > 0:
+                    total = ndata_arr.sum()
+                    if total <= 0:
+                        weights = np.full(nmodels, 1.0 / nmodels, dtype=np.float64)
+                    else:
+                        weights = ndata_arr / total
+
+                    raw_extra = weights * remaining
+                    extra = np.floor(raw_extra).astype(np.int32)
+                    process_arr += extra
+
+                    rem = int(remaining - int(extra.sum()))
+                    if rem > 0:
+                        frac = raw_extra - extra
+                        for idx in np.argsort(-frac)[:rem]:
+                            process_arr[idx] += 1
+
+                process_list = process_arr.tolist()
+                print("ndata_list:", ndata_list)
+                print("process_list (proportional):", process_list)
+            else:
+                num_processes_per_model = comm_size // len(modellist)
+                assert comm_size % len(modellist) == 0
+                process_list = [num_processes_per_model] * len(modellist)
+                print("process_list (uniform):", process_list)
 
             ## Merge pna_deg using interpolation
             intp_list = list()

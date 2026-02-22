@@ -8,10 +8,18 @@ from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_poo
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import os
 from contextlib import contextmanager
+import warnings
 
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp.api import ShardingStrategy
 from torch.optim import Optimizer
+
+try:
+    from torch.distributed.fsdp import fully_shard
+except (ImportError, AttributeError):
+    from torch.distributed._composable.fsdp import fully_shard
+
+from torch.distributed.device_mesh import DeviceMesh
 
 
 def average_gradients(model, group):
@@ -344,22 +352,54 @@ class MultiTaskModelMP(nn.Module):
         )
 
         if use_fsdp:
-            if fsdp_version != 1:
-                raise NotImplementedError(
-                    "MultiTaskModelMP currently supports only HYDRAGNN_FSDP_VERSION=1. "
-                    "FSDP2/composable wrapping does not yet support this separate-process-group "
-                    "encoder/decoder setup in HydraGNN."
+            if fsdp_version == 1:
+                self.encoder = FSDP(
+                    self.encoder,
+                    process_group=self.shared_pg,
+                    sharding_strategy=sharding_strategy,
                 )
-            self.encoder = FSDP(
-                self.encoder,
-                process_group=self.shared_pg,
-                sharding_strategy=sharding_strategy,
-            )
-            self.decoder = FSDP(
-                self.decoder,
-                process_group=self.head_pg,
-                sharding_strategy=sharding_strategy,
-            )
+                self.decoder = FSDP(
+                    self.decoder,
+                    process_group=self.head_pg,
+                    sharding_strategy=sharding_strategy,
+                )
+            else:
+                if fsdp_strategy not in ["FULL_SHARD", "SHARD_GRAD_OP"]:
+                    raise ValueError(
+                        "MultiTaskModelMP FSDP2 supports HYDRAGNN_FSDP_STRATEGY in {FULL_SHARD, SHARD_GRAD_OP}."
+                    )
+
+                device_type = "cuda" if torch.cuda.is_available() else "cpu"
+                if hasattr(torch, "xpu") and torch.xpu.is_available():
+                    device_type = "xpu"
+
+                shared_mesh = DeviceMesh.from_group(
+                    group=self.shared_pg,
+                    device_type=device_type,
+                )
+                head_mesh = DeviceMesh.from_group(
+                    group=self.head_pg,
+                    device_type=device_type,
+                )
+
+                if fsdp_strategy == "SHARD_GRAD_OP":
+                    warnings.warn(
+                        "Using HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP with MultiTaskModelMP FSDP2 maps to "
+                        "reshard_after_forward=False for approximate behavior.",
+                        RuntimeWarning,
+                    )
+                reshard_after_forward = fsdp_strategy == "FULL_SHARD"
+
+                self.encoder = fully_shard(
+                    self.encoder,
+                    mesh=shared_mesh,
+                    reshard_after_forward=reshard_after_forward,
+                )
+                self.decoder = fully_shard(
+                    self.decoder,
+                    mesh=head_mesh,
+                    reshard_after_forward=reshard_after_forward,
+                )
         else:
             self.encoder = DDP(self.encoder, process_group=self.shared_pg)
             self.decoder = DDP(self.decoder, process_group=self.head_pg)
@@ -421,19 +461,33 @@ class MultiTaskModelMP(nn.Module):
 
     @contextmanager
     def no_sync(self):
-        old_encoder_require_backward_grad_sync = self.encoder.require_backward_grad_sync
-        old_decoder_require_backward_grad_sync = self.decoder.require_backward_grad_sync
-        self.encoder.require_backward_grad_sync = False
-        self.decoder.require_backward_grad_sync = False
+        old_encoder_require_backward_grad_sync = getattr(
+            self.encoder, "require_backward_grad_sync", None
+        )
+        old_decoder_require_backward_grad_sync = getattr(
+            self.decoder, "require_backward_grad_sync", None
+        )
+        if hasattr(self.encoder, "require_backward_grad_sync"):
+            self.encoder.require_backward_grad_sync = False
+        if hasattr(self.decoder, "require_backward_grad_sync"):
+            self.decoder.require_backward_grad_sync = False
         try:
             yield
         finally:
-            self.encoder.require_backward_grad_sync = (
-                old_encoder_require_backward_grad_sync
-            )
-            self.decoder.require_backward_grad_sync = (
-                old_decoder_require_backward_grad_sync
-            )
+            if old_encoder_require_backward_grad_sync is not None:
+                self.encoder.require_backward_grad_sync = (
+                    old_encoder_require_backward_grad_sync
+                )
+            if old_decoder_require_backward_grad_sync is not None:
+                self.decoder.require_backward_grad_sync = (
+                    old_decoder_require_backward_grad_sync
+                )
+
+    def set_reshard_after_backward(self, enabled: bool):
+        for wrapped in [self.encoder, self.decoder]:
+            setter = getattr(wrapped, "set_reshard_after_backward", None)
+            if callable(setter):
+                setter(enabled)
 
 
 class DualOptimizer(Optimizer):

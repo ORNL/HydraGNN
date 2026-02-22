@@ -4,7 +4,7 @@
 #SBATCH -o job-%j.out
 #SBATCH -e job-%j.out
 #SBATCH -t 00:30:00
-#SBATCH -N 2
+#SBATCH -N 16
 #SBATCH -p batch
 #SBATCH -q debug
 #SBATCH -C nvme
@@ -116,8 +116,9 @@ env | grep ^HYDRA
 
 export HYDRAGNN_TRACE_LEVEL=0
 export HYDRAGNN_MAX_NUM_BATCH=10
-[ -z $BATCH_SIZE ] && BATCH_SIZE=40 ## 320 (Perlmutter) 160 (Frontier)
-export BATCH_SIZE=$BATCH_SIZE
+export TASK_PARALLEL=1
+export HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT=1
+export BATCH_SIZE=40
 export NUM_EPOCH=4
 
 export HYDRAGNN_DDSTORE_METHOD=1
@@ -151,16 +152,12 @@ export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 15
 
-## HYDRAGNN_USE_FSDP: 1 (enabled), 0 (disabled)
-export HYDRAGNN_USE_FSDP=${HYDRAGNN_USE_FSDP:-0}
-## HYDRAGNN_FSDP_VERSION: 1 (FSDP1), 2 (FSDP2/composable)
-export HYDRAGNN_FSDP_VERSION=${HYDRAGNN_FSDP_VERSION:-1}
-## HYDRAGNN_FSDP_STRATEGY: FULL_SHARD | SHARD_GRAD_OP | NO_SHARD
-export HYDRAGNN_FSDP_STRATEGY=${HYDRAGNN_FSDP_STRATEGY:-FULL_SHARD}
-## HYDRAGNN_TASK_PARALLEL: 1 (enable --task_parallel), 0 (disable)
-export HYDRAGNN_TASK_PARALLEL=${HYDRAGNN_TASK_PARALLEL:-1}
+## Verification mode for this script: FSDP2 + SHARD_GRAD_OP, task-parallel optional
+export HYDRAGNN_USE_FSDP=1
+export HYDRAGNN_FSDP_VERSION=2
+export HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP
 TASK_PARALLEL_ARG=""
-if [ "$HYDRAGNN_TASK_PARALLEL" = "1" ]; then
+if [ "$TASK_PARALLEL" = "1" ]; then
     TASK_PARALLEL_ARG="--task_parallel"
 fi
 
@@ -173,7 +170,7 @@ DATASET=datadir$K
 ${OMNISTAT_DIR}/omnistat-annotate --mode start --text  "$MPNN"
 cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest -l --kill-on-bad-exit=1 \
 python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py \
-    --log=multidataset_hpo-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-FSDP$HYDRAGNN_USE_FSDP-V$HYDRAGNN_FSDP_VERSION-TP$HYDRAGNN_TASK_PARALLEL --everyone \
+    --log=multidataset_hpo-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-FSDP$HYDRAGNN_USE_FSDP-V$HYDRAGNN_FSDP_VERSION-TP$TASK_PARALLEL --everyone \
     --inputfile=gfm_mlip.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH*NUM_EPOCH)) \
     --multi --ddstore --multi_model_list=$MULTI_MODEL_LIST --batch_size=$BATCH_SIZE --num_epoch=$NUM_EPOCH \
     $TASK_PARALLEL_ARG \

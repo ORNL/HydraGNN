@@ -774,12 +774,20 @@ def validate(
                 data.pos.requires_grad = True
                 with autocast_context:
                     pred = model(data)
-                    error, tasks_loss = model.module.energy_force_loss(pred, data)
+                    error, tasks_loss = model.module.energy_force_loss(
+                        pred, data, create_graph=False
+                    )
         else:
             with autocast_context:
                 head_index = get_head_indices(model, data)
                 pred = model(data)
                 error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        error = error.detach()
+        if torch.is_tensor(tasks_loss):
+            tasks_loss = tasks_loss.detach()
+        else:
+            tasks_loss = [task.detach() for task in tasks_loss]
+
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -846,7 +854,9 @@ def test(
                 data.pos.requires_grad = True
                 with autocast_context:
                     pred = model(data)
-                    error, tasks_loss = model.module.energy_force_loss(pred, data)
+                    error, tasks_loss = model.module.energy_force_loss(
+                        pred, data, create_graph=False
+                    )
         else:
             with autocast_context:
                 head_index = get_head_indices(model, data)
@@ -883,6 +893,12 @@ def test(
                         y2.item(),
                     )
                 offset += n
+
+        error = error.detach()
+        if torch.is_tensor(tasks_loss):
+            tasks_loss = tasks_loss.detach()
+        else:
+            tasks_loss = [task.detach() for task in tasks_loss]
 
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
@@ -958,8 +974,7 @@ def test(
                             data.pos,
                             grad_outputs=torch.ones_like(graph_energy_pred),
                             retain_graph=graph_energy_pred.requires_grad,
-                            # Retain graph only if needed (it will be needed during training, but not during validation/testing)
-                            create_graph=True,
+                            create_graph=False,
                         )[0].float()
                         assert (
                             forces_pred is not None
