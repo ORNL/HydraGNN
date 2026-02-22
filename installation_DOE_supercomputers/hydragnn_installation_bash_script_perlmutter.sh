@@ -394,9 +394,7 @@ cd "$DEEPHYPER_PERLMUTTER"
 
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
-git fetch origin develop
-git checkout develop
-pip_retry -e ".[hps,hps-tl]" --verbose
+pip_retry -e . --verbose
 assert_numpy_1264
 
 # ============================================================

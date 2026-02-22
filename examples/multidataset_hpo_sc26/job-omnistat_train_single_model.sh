@@ -62,8 +62,8 @@ env | grep ^MPICH
 env | grep ^HYDRA
 
 export HYDRAGNN_TRACE_LEVEL=1
-export HYDRAGNN_MAX_NUM_BATCH=100
-[ -z $BATCH_SIZE ] && BATCH_SIZE=20 ## 320 (Perlmutter) 160 (Frontier)
+export HYDRAGNN_MAX_NUM_BATCH=1000
+[ -z $BATCH_SIZE ] && BATCH_SIZE=40
 export BATCH_SIZE=$BATCH_SIZE
 export NUM_EPOCH=4
 
@@ -99,17 +99,17 @@ ${OMNISTAT_WRAPPER} usermode --start --interval 15
 
 MULTI_MODEL_LIST=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4,$datadir5,$datadir6,$datadir7,$datadir8,$datadir9,$datadir10,$datadir11,$datadir12,$datadir13,$datadir14,$datadir15
 
-cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest -l \
+cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest \
 python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py \
     --log=multidataset_hpo-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-FSDP$HYDRAGNN_USE_FSDP --everyone \
-    --inputfile=gfm_mlip.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH*NUM_EPOCH)) \
+    --inputfile=gfm_mlip.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH)) --oversampling_num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH)) \
     --multi --ddstore --multi_model_list=$MULTI_MODEL_LIST --batch_size=$BATCH_SIZE --num_epoch=$NUM_EPOCH \
     --precision=fp64 \
-    --mpnn_type=EGNN \
-    --num_conv_layers=2 \
-    --hidden_dim=100 \
-    --num_headlayers=2 \
-    --dim_headlayers=300
+    --mpnn_type=SchNet \
+    --num_conv_layers=6 \
+    --hidden_dim=3000 \
+    --num_headlayers=4 \
+    --dim_headlayers=2000
 
 # (C) End of job: stop data collection
 ${OMNISTAT_WRAPPER} usermode --stop
