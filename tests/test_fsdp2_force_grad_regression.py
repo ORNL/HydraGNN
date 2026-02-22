@@ -55,7 +55,13 @@ def _bf16_supported():
 
 @pytest.mark.gpu()
 @pytest.mark.parametrize("precision", ["fp32", "fp64", "bf16"])
-def pytest_fsdp2_enhanced_wrapper_force_grad_regression(monkeypatch, precision):
+@pytest.mark.parametrize(
+    "mpnn_type",
+    ["EGNN", "DimeNet", "SchNet", "MACE", "PAINN", "PNAEq"],
+)
+def pytest_fsdp2_enhanced_wrapper_force_grad_regression(
+    monkeypatch, precision, mpnn_type
+):
     has_cuda = torch.cuda.is_available()
     has_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
     if not (has_cuda or has_xpu):
@@ -93,7 +99,7 @@ def pytest_fsdp2_enhanced_wrapper_force_grad_regression(monkeypatch, precision):
             }
 
             model = create_model(
-                mpnn_type="EGNN",
+                mpnn_type=mpnn_type,
                 input_dim=1,
                 hidden_dim=32,
                 output_dim=[1],
