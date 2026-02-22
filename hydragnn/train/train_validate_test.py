@@ -107,6 +107,28 @@ def get_autocast_and_scaler(precision):
     return nullcontext(), None
 
 
+def _is_fsdp2_enabled():
+    return (
+        bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        and int(os.getenv("HYDRAGNN_FSDP_VERSION", "1")) == 2
+    )
+
+
+def _set_reshard_after_backward(model, enabled):
+    setter = getattr(model, "set_reshard_after_backward", None)
+    if callable(setter):
+        setter(enabled)
+        return True
+
+    wrapped = getattr(model, "module", None)
+    setter = getattr(wrapped, "set_reshard_after_backward", None)
+    if callable(setter):
+        setter(enabled)
+        return True
+
+    return False
+
+
 def get_nbatch(loader):
     ## calculate numbrer of batches for a given loader
     m = len(loader.sampler)
@@ -280,6 +302,11 @@ def train_validate_test(
 
         if int(os.getenv("HYDRAGNN_VALTEST", "1")) == 0:
             continue
+
+        try:
+            optimizer.zero_grad(set_to_none=True)
+        except TypeError:
+            optimizer.zero_grad()
 
         val_loss, val_taskserr = validate(
             val_loader,
@@ -586,6 +613,8 @@ def train(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
+    fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
+    fsdp2_workaround_available = True
 
     nbatch = get_nbatch(loader)
     syncopt = {"cudasync": False}
@@ -633,6 +662,10 @@ def train(
                 tr.stop("h2d", **syncopt)
             if compute_grad_energy:  # for force and energy prediction
                 data.pos.requires_grad = True
+                if fsdp2_force_workaround and fsdp2_workaround_available:
+                    fsdp2_workaround_available = _set_reshard_after_backward(
+                        model, False
+                    )
                 # Perform forward pass and backward pass under autocast
                 with autocast_context:
                     pred = model(data)
@@ -649,6 +682,8 @@ def train(
         tr.stop("forward", **syncopt)
         tr.start("backward", **syncopt)
         with record_function("backward"):
+            if fsdp2_force_workaround and fsdp2_workaround_available:
+                _set_reshard_after_backward(model, True)
             if use_deepspeed:
                 model.backward(loss)
             else:
@@ -656,6 +691,8 @@ def train(
                     scaler.scale(loss).backward()
                 else:
                     loss.backward()
+            if fsdp2_force_workaround and fsdp2_workaround_available:
+                _set_reshard_after_backward(model, True)
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -738,12 +775,20 @@ def validate(
                 data.pos.requires_grad = True
                 with autocast_context:
                     pred = model(data)
-                    error, tasks_loss = model.module.energy_force_loss(pred, data)
+                    error, tasks_loss = model.module.energy_force_loss(
+                        pred, data, create_graph=False
+                    )
         else:
             with autocast_context:
                 head_index = get_head_indices(model, data)
                 pred = model(data)
                 error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        error = error.detach()
+        if torch.is_tensor(tasks_loss):
+            tasks_loss = tasks_loss.detach()
+        else:
+            tasks_loss = [task.detach() for task in tasks_loss]
+
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -810,7 +855,9 @@ def test(
                 data.pos.requires_grad = True
                 with autocast_context:
                     pred = model(data)
-                    error, tasks_loss = model.module.energy_force_loss(pred, data)
+                    error, tasks_loss = model.module.energy_force_loss(
+                        pred, data, create_graph=False
+                    )
         else:
             with autocast_context:
                 head_index = get_head_indices(model, data)
@@ -847,6 +894,12 @@ def test(
                         y2.item(),
                     )
                 offset += n
+
+        error = error.detach()
+        if torch.is_tensor(tasks_loss):
+            tasks_loss = tasks_loss.detach()
+        else:
+            tasks_loss = [task.detach() for task in tasks_loss]
 
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
@@ -922,8 +975,7 @@ def test(
                             data.pos,
                             grad_outputs=torch.ones_like(graph_energy_pred),
                             retain_graph=graph_energy_pred.requires_grad,
-                            # Retain graph only if needed (it will be needed during training, but not during validation/testing)
-                            create_graph=True,
+                            create_graph=False,
                         )[0].float()
                         assert (
                             forces_pred is not None
