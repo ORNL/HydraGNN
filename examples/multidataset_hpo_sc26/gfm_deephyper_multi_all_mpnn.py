@@ -105,17 +105,16 @@ def run(trial, dequed=None):
     objective = -math.inf
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
-        pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
         while True:
             line = fout.readline()
-            matches = re.findall(pattern, line)
-            if matches:
-                output = -float(matches[-1][0])
+            if "Tasks Val Loss" in line:
+                nums = re.findall(r"[-+]?\d*\.\d+|\d+", line)
+                output = -0.5 * (float(nums[1]) + float(nums[2]))
+                print(f"Val losses: {-float(nums[1])}, {-float(nums[2])} Average: {output}", flush=True, file=f)
             if not line:
                 break
         fout.close()
-
     except Exception as excp:
         print(excp, flush=True, file=f)
         output = -math.inf
@@ -136,6 +135,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mpnn_type", type=str, default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq"
+    )
+    parser.add_argument(
+        "--max_evals", type=int, default=200, help="Number of max evaluations for HPO search"
     )
     args = parser.parse_args()
     mpnn_type_list = args.mpnn_type.split(",")
@@ -268,7 +270,7 @@ if __name__ == "__main__":
         print("Fit done:", t1 - t0)
 
     timeout = None
-    results = search.search(evaluator, max_evals=200, timeout=timeout)
+    results = search.search(evaluator, max_evals=args.max_evals, timeout=timeout)
     print(results)
 
     sys.exit(0)
