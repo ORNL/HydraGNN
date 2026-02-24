@@ -18,6 +18,8 @@ except:
 import pandas as pd
 import subprocess
 import re
+import argparse
+import time
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
@@ -79,12 +81,6 @@ def run(trial, dequed=None):
             python_exe,
             "-u",
             python_script,
-            f"--mpnn_type={trial.parameters['mpnn_type']}",
-            f"--hidden_dim={trial.parameters['hidden_dim']}",
-            f"--num_conv_layers={trial.parameters['num_conv_layers']}",
-            f"--num_headlayers={trial.parameters['num_headlayers']}",
-            f"--dim_headlayers={trial.parameters['dim_headlayers']}",
-            f"--force_weight={trial.parameters['force_weight']}",
             f"--inputfile=gfm_mlip.json",
             f"--multi",
             f"--ddstore",
@@ -95,9 +91,15 @@ def run(trial, dequed=None):
             f"--num_samples={BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH}",
             f"--oversampling_num_samples={BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH}",
             f"--log={log_name}",
-            f"--learning_rate={trial.parameters['learning_rate']}",
+            # f"--learning_rate={trial.parameters['learning_rate']}",
+        ]
+        + [
+            f"--{param}={trial.parameters[param]}"
+            for param in trial.parameters
+            if param != "id"
         ]
     )
+
     print("Command = ", command, flush=True, file=f)
 
     objective = -math.inf
@@ -129,41 +131,107 @@ def run(trial, dequed=None):
 
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument(
+        "--mpnn_type", type=str, default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq"
+    )
+    args = parser.parse_args()
+    mpnn_type_list = args.mpnn_type.split(",")
+
     log_name = f"gfm-{SLURM_JOB_ID}"
 
     from deephyper.hpo import HpProblem, CBO
     from deephyper.evaluator import ProcessPoolEvaluator, queued
     from hydragnn.utils.hpo.deephyper import read_node_list
 
-    problem = HpProblem()
-
-    problem.add_hyperparameter((2, 6), "num_conv_layers")
+    ## We maintain dict of hyperparameters and then problem.add later
+    hyperparameters = dict()
+    hyperparameters["num_conv_layers"] = (2, 6)
     # keep <=6 conv layers to mitigate oversmoothing/oversquashing
     # ~5B params target (rough):  problem.add_hyperparameter((2, 6), "num_conv_layers")
     # ~10B params target (rough): problem.add_hyperparameter((2, 6), "num_conv_layers")
     # ~100B params target (rough): problem.add_hyperparameter((2, 6), "num_conv_layers")
 
-    problem.add_hyperparameter((100, 3000), "hidden_dim")
+    hyperparameters["hidden_dim"] = (100, 3000)
     # compensate with channel width (MPNN hidden_dim) instead of extra depth
     # ~5B params target (rough):  problem.add_hyperparameter((3000, 10000), "hidden_dim")
     # ~10B params target (rough): problem.add_hyperparameter((10000, 20000), "hidden_dim")
     # ~100B params target (rough): problem.add_hyperparameter((20000, 30000), "hidden_dim")
 
-    problem.add_hyperparameter((2, 4), "num_headlayers")
+    hyperparameters["num_headlayers"] = (2, 4)
     # keep <=4 MLP head layers to mitigate oversmoothing/oversquashing
     # ~5B params target (rough):  problem.add_hyperparameter((2, 4), "num_headlayers")
     # ~10B params target (rough): problem.add_hyperparameter((2, 4), "num_headlayers")
     # ~100B params target (rough): problem.add_hyperparameter((2, 4), "num_headlayers")
 
-    problem.add_hyperparameter((300, 2000), "dim_headlayers")
+    hyperparameters["dim_headlayers"] = (300, 2000)
     # ~5B params target (rough):  problem.add_hyperparameter((2000, 4000), "dim_headlayers")
     # ~10B params target (rough): problem.add_hyperparameter((4000, 600), "dim_headlayers")
     # ~100B params target (rough): problem.add_hyperparameter((6000, 9000), "dim_headlayers")
-    problem.add_hyperparameter([10.0, 50.0, 100.0], "force_weight")
-    problem.add_hyperparameter((1e-5, 1e-3), "learning_rate")
-    problem.add_hyperparameter(
-        ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"], "mpnn_type"
-    )
+
+    hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+    hyperparameters["learning_rate"] = (1e-5, 1e-3)
+    hyperparameters["mpnn_type"] = mpnn_type_list
+
+    ## Model specific hyperparameters
+    if len(mpnn_type_list) == 1:
+        if mpnn_type_list[0] == "EGNN":
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+        elif mpnn_type_list[0] == "SchNet":
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+
+            hyperparameters["num_filters"] = (6, 2000)
+            hyperparameters["num_gaussians"] = (3, 24)
+        elif mpnn_type_list[0] == "DimeNet":
+            hyperparameters["hidden_dim"] = (100, 100)
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+
+            hyperparameters["basis_emb_size"] = (8, 200)
+            hyperparameters["envelope_exponent"] = (4, 6)
+            hyperparameters["int_emb_size"] = (16, 500)
+            hyperparameters["out_emb_size"] = (24, 4000)
+            hyperparameters["num_after_skip"] = (0, 2)
+            hyperparameters["num_before_skip"] = (0, 2)
+            hyperparameters["num_radial"] = (3, 12)
+            hyperparameters["num_spherical"] = (2, 8)
+        elif mpnn_type_list[0] == "MACE":
+            hyperparameters["hidden_dim"] = (100, 1000)
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+
+            hyperparameters["radial_type"] = ["bessel", "gaussian", "chebyshev"]
+            hyperparameters["distance_transform"] = ["Agnesi", "Soft"]
+            hyperparameters["num_radial"] = (3, 12)
+            hyperparameters["max_ell"] = (2, 3)
+            hyperparameters["node_max_ell"] = (1, 3)
+            hyperparameters["correlation"] = (2, 3)
+        elif mpnn_type_list[0] == "PAINN":
+            hyperparameters["hidden_dim"] = (100, 1000)
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+
+            hyperparameters["num_radial"] = (3, 12)
+        elif mpnn_type_list[0] == "EGNN":
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+        elif mpnn_type_list[0] == "PNAEq":
+            hyperparameters["hidden_dim"] = (100, 1000)
+            hyperparameters["force_weight"] = (10.0, 1000.0)
+            hyperparameters["learning_rate"] = (1e-5, 3e-3)
+
+            hyperparameters["num_radial"] = (3, 12)
+        else:
+            raise ValueError(f"Unsupported MPNN type: {mpnn_type_list[0]}")
+
+    ## Create HPO problem with the defined hyperparameters
+    problem = HpProblem()
+    for k, v in hyperparameters.items():
+        problem.add_hyperparameter(v, k)
 
     # Create the node queue
     queue, _ = read_node_list()

@@ -5,9 +5,8 @@
 #SBATCH -e job-%j.out
 #SBATCH -t 02:00:00
 #SBATCH -p batch
-#SBATCH -N 16
+#SBATCH -N 256
 #SBATCH -C nvme
-#SBATCH --exclude=frontier00878
 
 function cmd() {
     echo "$@"
@@ -94,11 +93,13 @@ env | grep ^MI
 env | grep ^MPICH
 env | grep ^HYDRA
 
+export HYDRAGNN_USE_FSDP=0
+# export HYDRAGNN_FSDP_VERSION=2
+# export HYDRAGNN_FSDP_STRATEGY=SHARD_GRAD_OP
 export HYDRAGNN_TRACE_LEVEL=1
-export HYDRAGNN_MAX_NUM_BATCH=1000
-[ -z $BATCH_SIZE ] && BATCH_SIZE=40
-export BATCH_SIZE=$BATCH_SIZE
-export NUM_EPOCH=4
+export HYDRAGNN_MAX_NUM_BATCH=100
+export BATCH_SIZE=200
+export NUM_EPOCH=20
 
 export HYDRAGNN_DDSTORE_METHOD=1
 export HYDRAGNN_CUSTOM_DATALOADER=1
@@ -146,7 +147,9 @@ export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 15
 
-cmd python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_deephyper_multi_all_mpnn.py
+cmd python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_deephyper_multi_all_mpnn.py \
+    --mpnn_type=SchNet
+    # --mpnn_type=EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq
 
 # (C) End of job: stop data collection
 ${OMNISTAT_WRAPPER} usermode --stop
