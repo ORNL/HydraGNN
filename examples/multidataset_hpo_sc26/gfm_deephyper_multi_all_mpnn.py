@@ -189,7 +189,7 @@ if __name__ == "__main__":
             hyperparameters["num_filters"] = (6, 2000)
             hyperparameters["num_gaussians"] = (3, 24)
         elif mpnn_type_list[0] == "DimeNet":
-            hyperparameters["hidden_dim"] = (100, 100)
+            hyperparameters["hidden_dim"] = (10, 100)
             hyperparameters["force_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
