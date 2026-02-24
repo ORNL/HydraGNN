@@ -53,6 +53,7 @@ def to_float(x):
         return -math.inf
     return float(x)
 
+
 def run(trial, dequed=None):
     f = open(f"output-{trial.id}.txt", "w")
     python_exe = sys.executable
@@ -114,7 +115,11 @@ def run(trial, dequed=None):
                 nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
                 ## Task Val Loss: [a, b, c]. The output must be -(b+c)/2
                 output = -0.5 * (to_float(nums[1]) + to_float(nums[2]))
-                print(f"Val losses: {-to_float(nums[1])}, {-to_float(nums[2])} Average: {output}", flush=True, file=f)
+                print(
+                    f"Val losses: {-to_float(nums[1])}, {-to_float(nums[2])} Average: {output}",
+                    flush=True,
+                    file=f,
+                )
             if not line:
                 break
         fout.close()
@@ -140,7 +145,10 @@ if __name__ == "__main__":
         "--mpnn_type", type=str, default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq"
     )
     parser.add_argument(
-        "--max_evals", type=int, default=200, help="Number of max evaluations for HPO search"
+        "--max_evals",
+        type=int,
+        default=200,
+        help="Number of max evaluations for HPO search",
     )
     args = parser.parse_args()
     mpnn_type_list = args.mpnn_type.split(",")
