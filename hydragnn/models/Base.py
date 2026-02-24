@@ -869,13 +869,25 @@ class Base(Module):
 
     def loss_hpweighted(self, pred, value, head_index, var=None):
         # weights for different tasks as hyper-parameters
-        tot_loss = 0
+        tot_loss = pred[0].sum() * 0.0
         tasks_loss = []
         for ihead in range(self.num_heads):
             head_pre = pred[ihead]
+            if head_pre.numel() == 0 or head_pre.shape[0] == 0:
+                tasks_loss.append(head_pre.sum() * 0.0)
+                continue
+
+            current_head_index = head_index[ihead]
+            if current_head_index is None or current_head_index.numel() == 0:
+                tasks_loss.append(head_pre.sum() * 0.0)
+                continue
+
             pred_shape = head_pre.shape
-            head_val = value[head_index[ihead]]
+            head_val = value[current_head_index]
             value_shape = head_val.shape
+            if head_val.numel() == 0 or head_val.shape[0] == 0:
+                tasks_loss.append(head_pre.sum() * 0.0)
+                continue
             if pred_shape != value_shape:
                 head_val = torch.reshape(head_val, pred_shape)
             if var is None:
