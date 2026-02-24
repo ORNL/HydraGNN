@@ -84,7 +84,7 @@
             "continue": 0,
             "startfrom": "",
             "Optimizer": {
-                "type": "SGD",
+                "type": "AdamW",
                 "learning_rate": 0.001
             },
             "conv_checkpointing": false,
