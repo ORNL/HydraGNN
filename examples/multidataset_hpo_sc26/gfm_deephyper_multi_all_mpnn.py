@@ -43,14 +43,15 @@ BATCH_SIZE = int(os.environ["BATCH_SIZE"])
 HYDRAGNN_MAX_NUM_BATCH = int(os.environ["HYDRAGNN_MAX_NUM_BATCH"])
 
 
-def _parse_results(stdout):
-    pattern = r"Val Loss: ([-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?)"
-    matches = re.findall(pattern, stdout.decode())
-    if matches:
-        return matches[-1][0]
-    else:
+def to_float(x):
+    x = x.lower()
+    if x == "nan":
+        return math.nan
+    if x in ("inf", "+inf"):
+        return math.inf
+    if x == "-inf":
         return -math.inf
-
+    return float(x)
 
 def run(trial, dequed=None):
     f = open(f"output-{trial.id}.txt", "w")
@@ -103,15 +104,17 @@ def run(trial, dequed=None):
     print("Command = ", command, flush=True, file=f)
 
     objective = -math.inf
+    num_pattern = r"[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?|[-+]?(?:inf|nan)"
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
         while True:
             line = fout.readline()
             if "Tasks Val Loss" in line:
-                nums = re.findall(r"[-+]?\d*\.\d+|\d+", line)
-                output = -0.5 * (float(nums[1]) + float(nums[2]))
-                print(f"Val losses: {-float(nums[1])}, {-float(nums[2])} Average: {output}", flush=True, file=f)
+                nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
+                ## Task Val Loss: [a, b, c]. The output must be -(b+c)/2
+                output = -0.5 * (to_float(nums[1]) + to_float(nums[2]))
+                print(f"Val losses: {-to_float(nums[1])}, {-to_float(nums[2])} Average: {output}", flush=True, file=f)
             if not line:
                 break
         fout.close()
