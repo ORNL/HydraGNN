@@ -351,7 +351,7 @@ pushd gptl-8.1.1 >/dev/null
 make install
 popd >/dev/null
 
-git clone git@github.com:jychoi-hpc/gptl4py.git || true
+git clone https://github.com/jychoi-hpc/gptl4py.git || true
 pushd gptl4py >/dev/null
 GPTL_DIR=$VENV_PATH CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
 popd >/dev/null
