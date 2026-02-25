@@ -132,6 +132,31 @@ if __name__ == "__main__":
         default=None,
         help="Override Training.Optimizer.learning_rate; when omitted the JSON value is used",
     )
+    parser.add_argument("--num_filters", type=int, help="num_filters", default=None)
+    parser.add_argument("--num_gaussians", type=int, help="num_gaussians", default=None)
+    parser.add_argument(
+        "--basis_emb_size", type=int, help="basis_emb_size", default=None
+    )
+    parser.add_argument(
+        "--envelope_exponent", type=int, help="envelope_exponent", default=None
+    )
+    parser.add_argument("--int_emb_size", type=int, help="int_emb_size", default=None)
+    parser.add_argument("--out_emb_size", type=int, help="out_emb_size", default=None)
+    parser.add_argument(
+        "--num_after_skip", type=int, help="num_after_skip", default=None
+    )
+    parser.add_argument(
+        "--num_before_skip", type=int, help="num_before_skip", default=None
+    )
+    parser.add_argument("--num_radial", type=int, help="num_radial", default=None)
+    parser.add_argument("--num_spherical", type=int, help="num_spherical", default=None)
+    parser.add_argument("--radial_type", type=str, help="radial_type", default=None)
+    parser.add_argument(
+        "--distance_transform", type=str, help="distance_transform", default=None
+    )
+    parser.add_argument("--max_ell", type=int, help="max_ell", default=None)
+    parser.add_argument("--node_max_ell", type=int, help="node_max_ell", default=None)
+    parser.add_argument("--correlation", type=int, help="correlation", default=None)
     parser.add_argument("--nvme", action="store_true", help="use NVME")
 
     group = parser.add_mutually_exclusive_group()
@@ -268,6 +293,26 @@ if __name__ == "__main__":
 
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+
+    def set_param_value(param):
+        if args.parameters[param] is not None:
+            config["NeuralNetwork"]["Architecture"][param] = args.parameters[param]
+
+    set_param_value("num_filters")
+    set_param_value("num_gaussians")
+    set_param_value("basis_emb_size")
+    set_param_value("envelope_exponent")
+    set_param_value("int_emb_size")
+    set_param_value("out_emb_size")
+    set_param_value("num_after_skip")
+    set_param_value("num_before_skip")
+    set_param_value("num_radial")
+    set_param_value("num_spherical")
+    set_param_value("radial_type")
+    set_param_value("distance_transform")
+    set_param_value("max_ell")
+    set_param_value("node_max_ell")
+    set_param_value("correlation")
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
