@@ -100,8 +100,12 @@ class _NormalizedDataset:
         if hasattr(data, "atomic_numbers") and torch.is_tensor(data.atomic_numbers):
             data.atomic_numbers = data.atomic_numbers.to(dtype=torch.long)
 
-        if hasattr(data, "chemical_composition") and torch.is_tensor(data.chemical_composition):
-            data.chemical_composition = data.chemical_composition.to(dtype=torch.float32)
+        if hasattr(data, "chemical_composition") and torch.is_tensor(
+            data.chemical_composition
+        ):
+            data.chemical_composition = data.chemical_composition.to(
+                dtype=torch.float32
+            )
 
         if hasattr(data, "energy") and torch.is_tensor(data.energy):
             data.energy = data.energy.to(dtype=torch.float32)
@@ -203,7 +207,9 @@ def _load_multidataset_dataloaders(args, config, var_config):
                 x = np.linspace(0, 1, num=len(p))
                 intp = np.interp(np.linspace(0, 1, num=mlen), x, p)
                 intp_list.append(intp)
-            pna_deg = np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+            pna_deg = (
+                np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+            )
     else:
         pna_deg = None
 
@@ -246,7 +252,11 @@ def _load_multidataset_dataloaders(args, config, var_config):
             dataset_len = len(dataset)
             subset_len = dataset_len
             if args.num_samples is not None:
-                requested = args.num_samples if split_index == 0 else max(args.num_samples // 10, 1)
+                requested = (
+                    args.num_samples
+                    if split_index == 0
+                    else max(args.num_samples // 10, 1)
+                )
                 subset_len = min(requested, dataset_len)
 
             dataset.setkeys(common_variable_names)
@@ -409,11 +419,11 @@ def _infer_num_branches(config: dict, model) -> int:
     return 1
 
 
-def _resolve_selected_precision(args_precision: Optional[str], config: dict) -> Tuple[str, str]:
+def _resolve_selected_precision(
+    args_precision: Optional[str], config: dict
+) -> Tuple[str, str]:
     cfg_precision = (
-        config.get("NeuralNetwork", {})
-        .get("Training", {})
-        .get("precision", None)
+        config.get("NeuralNetwork", {}).get("Training", {}).get("precision", None)
     )
 
     if args_precision is not None:
