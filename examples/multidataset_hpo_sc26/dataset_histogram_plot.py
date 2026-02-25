@@ -17,6 +17,7 @@ import os
 from typing import Iterable, List
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -333,7 +334,9 @@ def main():
             global_hist += dataset_histograms[model]
         global_total_atoms = float(global_hist.sum())
 
-        global_plot_path = os.path.join(output_dir, "global_element_probability_histogram.png")
+        global_plot_path = os.path.join(
+            output_dir, "global_element_probability_histogram.png"
+        )
         _plot_histogram(
             global_hist,
             "Global Element Histogram (Counts)",
@@ -368,7 +371,9 @@ def main():
                 "element_probabilities_by_atomic_number": by_atomic_number,
             }
 
-            output_path = os.path.join(output_dir, f"{model}_element_probabilities.json")
+            output_path = os.path.join(
+                output_dir, f"{model}_element_probabilities.json"
+            )
             with open(output_path, "w", encoding="utf-8") as fout:
                 json.dump(output, fout, indent=2)
 
