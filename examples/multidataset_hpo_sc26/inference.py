@@ -60,7 +60,9 @@ def _allreduce_pair(sum_value: float, count_value: int):
         return sum_value, count_value
 
     device = get_device()
-    pair = torch.tensor([sum_value, float(count_value)], dtype=torch.float64, device=device)
+    pair = torch.tensor(
+        [sum_value, float(count_value)], dtype=torch.float64, device=device
+    )
     dist.all_reduce(pair, op=dist.ReduceOp.SUM)
     return float(pair[0].item()), int(pair[1].item())
 
@@ -77,10 +79,14 @@ def _graph_natoms(data, num_graphs: int, device: torch.device) -> torch.Tensor:
         return natoms.clamp_min(1.0)
 
     if hasattr(data, "batch") and torch.is_tensor(data.batch):
-        natoms = torch.bincount(data.batch.to(device=device, dtype=torch.long), minlength=num_graphs)
+        natoms = torch.bincount(
+            data.batch.to(device=device, dtype=torch.long), minlength=num_graphs
+        )
         return natoms.to(dtype=torch.float64).clamp_min(1.0)
 
-    raise ValueError("Cannot infer per-graph atom counts; expected `natoms` or `batch` in data")
+    raise ValueError(
+        "Cannot infer per-graph atom counts; expected `natoms` or `batch` in data"
+    )
 
 
 def _evaluate_split(model, loader, num_branches, precision, split_name):
@@ -127,9 +133,9 @@ def _evaluate_split(model, loader, num_branches, precision, split_name):
 
         energy_abs_sum += torch.abs(energy_pred - energy_true).sum().item()
         energy_count += energy_true.numel()
-        energy_per_atom_abs_sum += torch.abs(
-            energy_pred_per_atom - energy_true_per_atom
-        ).sum().item()
+        energy_per_atom_abs_sum += (
+            torch.abs(energy_pred_per_atom - energy_true_per_atom).sum().item()
+        )
         energy_per_atom_count += energy_true_per_atom.numel()
         force_abs_sum += torch.abs(forces_pred - forces_true).sum().item()
         force_count += forces_true.numel()
