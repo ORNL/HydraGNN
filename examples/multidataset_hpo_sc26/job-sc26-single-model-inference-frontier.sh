@@ -20,12 +20,12 @@ function cmd() {
     time "$@"
 }
 
-HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN
+HYDRAGNN_ROOT=/lustre/orion/mat746/world-shared/mlupopa/Supercomputing2026/HydraGNN
 EXAMPLE_DIR=$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26
 
 # Load conda environment (same pattern as job-sc26-oom.sh)
-source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm640.sh
-source activate /lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
+source /lustre/orion/mat746/world-shared/mlupopa/module-to-load-frontier-rocm640.sh
+source activate /lustre/orion/mat746/world-shared/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
 
 cd "$HYDRAGNN_ROOT"
 export PYTHONPATH=$PWD:$PYTHONPATH
