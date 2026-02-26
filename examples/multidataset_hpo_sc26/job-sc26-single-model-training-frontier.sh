@@ -46,14 +46,12 @@ function setup_bb()
     fi
 }
 
-HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN
-# HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
+HYDRAGNN_ROOT=/lustre/orion/mat746/proj-shared/mlupopa/HydraGNN
 
 # Load conda environemnt
-source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm640.sh
+source /lustre/orion/mat746/proj-shared/mlupopa/module-to-load-frontier-rocm640.sh
 
-# source activate /lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN/HydraGNN-Installation-Frontier/hydragnn_venv
-source activate /lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
+source activate /lustre/orion/mat746/proj-shared/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
 
 
 # setup_bb
