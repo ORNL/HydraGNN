@@ -278,8 +278,11 @@ def main():
     parser.add_argument(
         "--top_k",
         type=int,
-        default=0,
-        help="Optional top-k gating (0 means use all branches)",
+        default=None,
+        help=(
+            "Optional top-k gating. If omitted, defaults to total number of branches. "
+            "Use 0 to include all branches."
+        ),
     )
     parser.add_argument(
         "--cache_dir",
@@ -370,12 +373,17 @@ def main():
         p.requires_grad_(False)
 
     num_branches = bw._infer_num_branches(config, model)
+    if args.top_k is None:
+        top_k = num_branches
+    else:
+        top_k = args.top_k
+
     cache_dtype = _resolve_cache_dtype(args.cache_dtype)
     rank = dist.get_rank() if dist.is_available() and dist.is_initialized() else 0
     if rank == 0:
         print(f"Using precision={precision} (source={precision_source})")
         print(
-            f"Cached stacking config: num_branches={num_branches}, top_k={args.top_k}, cache_dtype={cache_dtype}"
+            f"Cached stacking config: num_branches={num_branches}, top_k={top_k}, cache_dtype={cache_dtype}"
         )
 
     train_cached = _cache_split(
@@ -449,7 +457,7 @@ def main():
             loss_fn,
             energy_weight,
             force_weight,
-            args.top_k,
+            top_k,
             precision,
         )
         val_loss, val_timing = _validate_epoch_from_cache(
@@ -458,7 +466,7 @@ def main():
             loss_fn,
             energy_weight,
             force_weight,
-            args.top_k,
+            top_k,
             precision,
         )
 
