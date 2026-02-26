@@ -113,19 +113,21 @@ def _cache_split(
                 energy_preds.append(energy_pred)
                 forces_preds.append(forces_pred)
 
+        energy_preds_stacked = torch.stack(energy_preds, dim=0)
+        forces_preds_stacked = torch.stack(forces_preds, dim=0)
+        dataset_ids = bw._extract_dataset_ids(data, num_branches)
+        energy_target, forces_target = bw._teacher_from_dataset_id(
+            energy_preds_stacked, forces_preds_stacked, data.batch, dataset_ids
+        )
+
         record = {
             "comp": comp.detach().to(dtype=cache_dtype).cpu(),
-            "energy_true": data.energy.squeeze().detach().to(dtype=cache_dtype).cpu(),
-            "forces_true": data.forces.detach().to(dtype=cache_dtype).cpu(),
+            "dataset_ids": dataset_ids.detach().to(dtype=torch.long).cpu(),
+            "energy_target": energy_target.detach().to(dtype=cache_dtype).cpu(),
+            "forces_target": forces_target.detach().to(dtype=cache_dtype).cpu(),
             "batch": data.batch.detach().to(dtype=torch.long).cpu(),
-            "energy_preds": torch.stack(energy_preds, dim=0)
-            .detach()
-            .to(dtype=cache_dtype)
-            .cpu(),
-            "forces_preds": torch.stack(forces_preds, dim=0)
-            .detach()
-            .to(dtype=cache_dtype)
-            .cpu(),
+            "energy_preds": energy_preds_stacked.detach().to(dtype=cache_dtype).cpu(),
+            "forces_preds": forces_preds_stacked.detach().to(dtype=cache_dtype).cpu(),
             "num_graphs": int(data.num_graphs),
             "num_branches": int(num_branches),
         }
@@ -181,10 +183,10 @@ def _train_epoch_from_cache(
         weighted_energy, weighted_forces = bw._weighted_average(
             energy_preds, forces_preds, weights, batch
         )
-        energy_true = record["energy_true"].to(device=device, dtype=param_dtype)
-        forces_true = record["forces_true"].to(device=device, dtype=param_dtype)
-        loss_energy = loss_fn(weighted_energy, energy_true)
-        loss_forces = loss_fn(weighted_forces, forces_true)
+        energy_target = record["energy_target"].to(device=device, dtype=param_dtype)
+        forces_target = record["forces_target"].to(device=device, dtype=param_dtype)
+        loss_energy = loss_fn(weighted_energy, energy_target)
+        loss_forces = loss_fn(weighted_forces, forces_target)
         loss = energy_weight * loss_energy + force_weight * loss_forces
         timing["loss"] += time.perf_counter() - t0
 
@@ -241,10 +243,10 @@ def _validate_epoch_from_cache(
         weighted_energy, weighted_forces = bw._weighted_average(
             energy_preds, forces_preds, weights, batch
         )
-        energy_true = record["energy_true"].to(device=device, dtype=param_dtype)
-        forces_true = record["forces_true"].to(device=device, dtype=param_dtype)
-        loss_energy = loss_fn(weighted_energy, energy_true)
-        loss_forces = loss_fn(weighted_forces, forces_true)
+        energy_target = record["energy_target"].to(device=device, dtype=param_dtype)
+        forces_target = record["forces_target"].to(device=device, dtype=param_dtype)
+        loss_energy = loss_fn(weighted_energy, energy_target)
+        loss_forces = loss_fn(weighted_forces, forces_target)
         loss = energy_weight * loss_energy + force_weight * loss_forces
         timing["loss"] += time.perf_counter() - t0
 
