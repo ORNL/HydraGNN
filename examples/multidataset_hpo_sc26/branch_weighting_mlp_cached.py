@@ -11,7 +11,7 @@ import glob
 import json
 import os
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple
 
 import torch
 import torch.distributed as dist
@@ -24,17 +24,32 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 from hydragnn.utils.print.print_utils import iterate_tqdm
 
-import branch_weighting_mlp as bw
+from branch_weighting_mlp import BranchWeightMLP
 
-
-def _cleanup_distributed():
-    if dist.is_available() and dist.is_initialized():
-        try:
-            dist.destroy_process_group()
-        except Exception:
-            pass
-
-
+try:
+    from .utils import (
+        cleanup_distributed,
+        configure_variable_names,
+        resolve_selected_precision,
+        infer_num_branches,
+        load_multidataset_dataloaders,
+        predict_branch_energy_forces,
+        weighted_average,
+        extract_dataset_ids,
+        teacher_from_dataset_id,
+    )
+except ImportError:
+    from utils import (
+        cleanup_distributed,
+        configure_variable_names,
+        resolve_selected_precision,
+        infer_num_branches,
+        load_multidataset_dataloaders,
+        predict_branch_energy_forces,
+        weighted_average,
+        extract_dataset_ids,
+        teacher_from_dataset_id,
+    )
 def _allreduce_mean(value: float) -> float:
     if not (dist.is_available() and dist.is_initialized()):
         return value
@@ -102,12 +117,17 @@ def _cache_split(
         data = move_batch_to_device(data, param_dtype)
         data.pos.requires_grad_(True)
 
-        comp = bw._reshape_composition(data).to(device=device, dtype=param_dtype)
+        comp = data.chemical_composition
+        if comp.dim() == 1:
+            comp = comp.unsqueeze(0)
+        elif comp.dim() == 2 and comp.size(0) != data.num_graphs and comp.size(1) == data.num_graphs:
+            comp = comp.t()
+        comp = comp.to(device=device, dtype=param_dtype)
         energy_preds = []
         forces_preds = []
         with torch.enable_grad():
             for branch_id in range(num_branches):
-                energy_pred, forces_pred = bw._predict_branch_energy_forces(
+                energy_pred, forces_pred = predict_branch_energy_forces(
                     model, data, branch_id
                 )
                 energy_preds.append(energy_pred)
@@ -115,8 +135,8 @@ def _cache_split(
 
         energy_preds_stacked = torch.stack(energy_preds, dim=0)
         forces_preds_stacked = torch.stack(forces_preds, dim=0)
-        dataset_ids = bw._extract_dataset_ids(data, num_branches)
-        energy_target, forces_target = bw._teacher_from_dataset_id(
+        dataset_ids = extract_dataset_ids(data, num_branches)
+        energy_target, forces_target = teacher_from_dataset_id(
             energy_preds_stacked, forces_preds_stacked, data.batch, dataset_ids
         )
 
@@ -180,7 +200,7 @@ def _train_epoch_from_cache(
         energy_preds = record["energy_preds"].to(device=device, dtype=param_dtype)
         forces_preds = record["forces_preds"].to(device=device, dtype=param_dtype)
         batch = record["batch"].to(device=device, dtype=torch.long)
-        weighted_energy, weighted_forces = bw._weighted_average(
+        weighted_energy, weighted_forces = weighted_average(
             energy_preds, forces_preds, weights, batch
         )
         energy_target = record["energy_target"].to(device=device, dtype=param_dtype)
@@ -240,7 +260,7 @@ def _validate_epoch_from_cache(
         energy_preds = record["energy_preds"].to(device=device, dtype=param_dtype)
         forces_preds = record["forces_preds"].to(device=device, dtype=param_dtype)
         batch = record["batch"].to(device=device, dtype=torch.long)
-        weighted_energy, weighted_forces = bw._weighted_average(
+        weighted_energy, weighted_forces = weighted_average(
             energy_preds, forces_preds, weights, batch
         )
         energy_target = record["energy_target"].to(device=device, dtype=param_dtype)
@@ -342,23 +362,21 @@ def main():
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
-    bw._configure_variable_names(config)
+    configure_variable_names(config)
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
     hydragnn.utils.distributed.setup_ddp()
 
     if args.multi_model_list:
-        train_loader, val_loader, _ = bw._load_multidataset_dataloaders(
+        train_loader, val_loader, _ = load_multidataset_dataloaders(
             args, config, var_config
         )
     else:
-        train_loader, val_loader, _ = bw._load_single_dataset_dataloaders(
-            args, config, var_config
-        )
+        raise NotImplementedError("Cached script currently supports multi-dataset mode only")
 
     config = update_config(config, train_loader, val_loader, val_loader)
 
-    precision, precision_source = bw._resolve_selected_precision(args.precision, config)
+    precision, precision_source = resolve_selected_precision(args.precision, config)
     precision, param_dtype, _ = resolve_precision(precision)
     torch.set_default_dtype(param_dtype)
 
@@ -372,7 +390,7 @@ def main():
     for p in model.parameters():
         p.requires_grad_(False)
 
-    num_branches = bw._infer_num_branches(config, model)
+    num_branches = infer_num_branches(config, model)
     if args.top_k is None:
         top_k = num_branches
     else:
@@ -424,7 +442,7 @@ def main():
         raise RuntimeError("Cache files are missing; run with --rebuild_cache")
 
     hidden_dims = tuple(int(x) for x in args.hidden_dims.split(",") if x.strip())
-    mlp = bw.BranchWeightMLP(None, hidden_dims, num_branches).to(
+    mlp = BranchWeightMLP(None, hidden_dims, num_branches).to(
         device=device, dtype=param_dtype
     )
     optimizer = torch.optim.AdamW(
@@ -502,4 +520,4 @@ if __name__ == "__main__":
     try:
         main()
     finally:
-        _cleanup_distributed()
+        cleanup_distributed()
