@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-8.4.2, pluggy-1.6.0 -- /Users/7ml/Documents/Codes/HydraGNN/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/7ml/Documents/Codes/HydraGNN
+configfile: pytest.ini
+collecting ... collected 172 items
+
+tests/test_atomicdescriptors.py::pytest_atomicdescriptors FAILED         [  0%]
+tests/test_config.py::pytest_config[lsms/lsms.json] PASSED               [  1%]
+tests/test_datasetclass_inheritance.py::pytest_train_model_vectoroutput[PNA] SKIPPED [  1%]
+tests/test_deepspeed.py::pytest_train_model_vectoroutput_w_deepspeed[PNA] SKIPPED [  2%]
+tests/test_deepspeed.py::pytest_train_model_vectoroutput_w_deepspeed_global_attention[PNA-multihead-GPS] SKIPPED [  2%]
+tests/test_enthalpy.py::pytest_formation_enthalpy PASSED                 [  3%]
+tests/test_examples.py::pytest_examples_energy[qm9-SAGE-multihead-GPS] FAILED [  4%]
+tests/test_examples.py::pytest_examples_energy[qm9-GIN-multihead-GPS] FAILED [  4%]
+tests/test_examples.py::pytest_examples_energy[qm9-GAT-multihead-GPS] FAILED [  5%]
+tests/test_examples.py::pytest_examples_energy[qm9-MFC-multihead-GPS] FAILED [  5%]
+tests/test_examples.py::pytest_examples_energy[qm9-PNA-multihead-GPS] FAILED [  6%]
+tests/test_examples.py::pytest_examples_energy[qm9-PNAPlus-multihead-GPS] FAILED [  6%]
+tests/test_examples.py::pytest_examples_energy[qm9-SchNet-multihead-GPS] FAILED [  7%]
+tests/test_examples.py::pytest_examples_energy[qm9-DimeNet-multihead-GPS] FAILED [  8%]
+tests/test_examples.py::pytest_examples_energy[qm9-EGNN-multihead-GPS] FAILED [  8%]
+tests/test_examples.py::pytest_examples_energy[qm9-PNAEq-multihead-GPS] FAILED [  9%]
+tests/test_examples.py::pytest_examples_energy[qm9-PAINN-multihead-GPS] FAILED [  9%]
+tests/test_examples.py::pytest_examples_energy[md17-SAGE-multihead-GPS] FAILED [ 10%]
+tests/test_examples.py::pytest_examples_energy[md17-GIN-multihead-GPS] FAILED [ 11%]
+tests/test_examples.py::pytest_examples_energy[md17-GAT-multihead-GPS] FAILED [ 11%]
+tests/test_examples.py::pytest_examples_energy[md17-MFC-multihead-GPS] FAILED [ 12%]
+tests/test_examples.py::pytest_examples_energy[md17-PNA-multihead-GPS] FAILED [ 12%]
+tests/test_examples.py::pytest_examples_energy[md17-PNAPlus-multihead-GPS] 

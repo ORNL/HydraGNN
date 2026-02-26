@@ -130,10 +130,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.parameters = vars(args)
 
-    graph_feature_names = ["energy"]
-    graph_feature_dims = [1]
-    node_feature_names = ["atomic_number" "cartesian_coordinates", "forces"]
-    node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset")
     ##################################################################################################################
@@ -144,10 +140,14 @@ if __name__ == "__main__":
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+
+    # Note: Feature configuration now handled automatically in update_config()
+    # If using legacy format, you can still override features here if needed:
+    # var_config["graph_feature_names"] = ["energy"]
+    # var_config["graph_feature_dims"] = [1]
+    # var_config["node_feature_names"] = ["atomic_number", "cartesian_coordinates", "forces"]
+    # var_config["node_feature_dims"] = [1, 3, 3]
+
     if args.parameters["mpnn_type"] == "MACE":
         # Currently, MACE only supports atomic number node attributes, see hydragnn/models/MACEStack.py
         var_config["input_node_features"] = [0]

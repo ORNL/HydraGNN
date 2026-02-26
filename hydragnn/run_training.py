@@ -36,6 +36,9 @@ from hydragnn.utils.input_config_parsing.config_utils import (
     save_config,
     parse_deepspeed_config,
 )
+from hydragnn.utils.input_config_parsing.feature_config import (
+    update_var_config_with_features,
+)
 from hydragnn.utils.optimizer import select_optimizer
 from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import train_validate_test, resolve_precision
@@ -72,6 +75,12 @@ def _(config_file: str, use_deepspeed=False):
 
 @run_training.register
 def _(config: dict, use_deepspeed=False):
+
+    # Parse and populate var_config with legacy keys if using new format
+    # This must happen FIRST, before any other function tries to access var_config
+    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = update_var_config_with_features(var_config)
+    config["NeuralNetwork"]["Variables_of_interest"] = var_config
 
     try:
         os.environ["SERIALIZED_DATA_PATH"]

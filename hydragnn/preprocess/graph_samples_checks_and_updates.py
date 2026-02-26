@@ -647,11 +647,11 @@ def update_predicted_values(
 
 def update_atom_features(atom_features: [AtomFeatures], data: Data):
     """Updates atom features of a structure. An atom is represented with x,y,z coordinates and associated features.
-
     Parameters
     ----------
     atom_features: [AtomFeatures]
         List of features to update. Each feature is instance of Enum AtomFeatures.
+        List of feature indices to keep as inputs.
     data: Data
         A Data object representing a structure that has atoms.
     """
