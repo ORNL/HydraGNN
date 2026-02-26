@@ -9,6 +9,12 @@ This folder contains Slurm scripts for both Frontier and Perlmutter:
   - `job-sc26-single-model-training-perlmutter.sh`
   - `job-sc26-single-model-inference-perlmutter.sh`
 
+It also contains PBS scripts for Aurora:
+
+- Aurora (PBS):
+  - `job-sc26-single-model-training-aurora-pbs.sh`
+  - `job-sc26-single-model-inference-aurora-pbs.sh`
+
 All scripts are configured for distributed multi-node execution (`srun` with 16 nodes).
 
 ## Main Features
@@ -64,6 +70,21 @@ sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-training-perlmutter.
 
 # Inference (after training finishes and CHECKPOINT_LOGDIR is set correctly)
 sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-inference-perlmutter.sh
+```
+
+## Aurora (PBS): How To Run
+
+From the HydraGNN root on Aurora:
+
+```bash
+cd /path/to/HydraGNN
+
+# Training
+qsub examples/multidataset_hpo_sc26/job-sc26-single-model-training-aurora-pbs.sh
+
+# Inference (after training finishes and CHECKPOINT_LOGDIR is exported)
+export CHECKPOINT_LOGDIR="/path/to/HydraGNN/logs/multidataset_hpo-<training-job-id>-NN16-AURORA-FSDP1-V2-TP0"
+qsub examples/multidataset_hpo_sc26/job-sc26-single-model-inference-aurora-pbs.sh
 ```
 
 ## Quick Checklist
