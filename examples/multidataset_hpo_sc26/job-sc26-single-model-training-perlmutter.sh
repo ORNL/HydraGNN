@@ -19,6 +19,7 @@ function cmd() {
 # --- Paths (override with environment variables if needed) ---
 HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN}
 VENV_PATH=${VENV_PATH:-$HYDRAGNN_ROOT/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv}
+EXAMPLE_DIR=$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26
 
 # --- Perlmutter module + conda setup ---
 module reset
@@ -126,9 +127,9 @@ fi
 
 cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*4)) -c32 --ntasks-per-node=4 --gpus-per-task=1 --gpu-bind=none -l --kill-on-bad-exit=1 \
     --export=ALL \
-    python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py \
+    python -u "$EXAMPLE_DIR/gfm_mlip_all_mpnn.py" \
     --log=multidataset_hpo-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-PM-FSDP$HYDRAGNN_USE_FSDP-V$HYDRAGNN_FSDP_VERSION-TP$TASK_PARALLEL --everyone \
-    --inputfile=gfm_mlip.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH*NUM_EPOCH)) \
+    --inputfile="$EXAMPLE_DIR/gfm_mlip.json" --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH*NUM_EPOCH)) \
     --multi --ddstore --multi_model_list=$MULTI_MODEL_LIST --batch_size=$BATCH_SIZE --num_epoch=$NUM_EPOCH \
     $TASK_PARALLEL_ARG \
     --precision=fp64 \
