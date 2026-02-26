@@ -524,7 +524,9 @@ def _extract_dataset_ids(data, num_branches: int) -> torch.Tensor:
 
     dataset_ids = data.dataset_name
     if not torch.is_tensor(dataset_ids):
-        dataset_ids = torch.tensor(dataset_ids, dtype=torch.long, device=data.batch.device)
+        dataset_ids = torch.tensor(
+            dataset_ids, dtype=torch.long, device=data.batch.device
+        )
 
     dataset_ids = dataset_ids.to(device=data.batch.device, dtype=torch.long)
 
