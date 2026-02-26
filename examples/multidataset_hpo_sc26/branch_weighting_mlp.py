@@ -518,6 +518,59 @@ def _weighted_average(
     return weighted_energy, weighted_forces
 
 
+def _extract_dataset_ids(data, num_branches: int) -> torch.Tensor:
+    if not hasattr(data, "dataset_name"):
+        return torch.zeros(data.num_graphs, dtype=torch.long, device=data.batch.device)
+
+    dataset_ids = data.dataset_name
+    if not torch.is_tensor(dataset_ids):
+        dataset_ids = torch.tensor(dataset_ids, dtype=torch.long, device=data.batch.device)
+
+    dataset_ids = dataset_ids.to(device=data.batch.device, dtype=torch.long)
+
+    if dataset_ids.dim() == 0:
+        dataset_ids = dataset_ids.view(1)
+    elif dataset_ids.dim() == 2 and dataset_ids.size(-1) == 1:
+        dataset_ids = dataset_ids.squeeze(-1)
+    elif dataset_ids.dim() > 2:
+        dataset_ids = dataset_ids.view(dataset_ids.size(0), -1)
+        if dataset_ids.size(1) != 1:
+            raise ValueError(
+                f"Unsupported dataset_name shape {tuple(data.dataset_name.shape)}"
+            )
+        dataset_ids = dataset_ids.squeeze(-1)
+
+    if dataset_ids.numel() == 1 and data.num_graphs > 1:
+        dataset_ids = dataset_ids.repeat(data.num_graphs)
+
+    if dataset_ids.numel() != data.num_graphs:
+        raise ValueError(
+            f"dataset_name has {dataset_ids.numel()} entries but batch has num_graphs={data.num_graphs}"
+        )
+
+    if torch.any(dataset_ids < 0) or torch.any(dataset_ids >= num_branches):
+        bad_min = int(dataset_ids.min().item())
+        bad_max = int(dataset_ids.max().item())
+        raise ValueError(
+            f"dataset_name IDs out of range [0, {num_branches - 1}]: min={bad_min}, max={bad_max}"
+        )
+
+    return dataset_ids
+
+
+def _teacher_from_dataset_id(
+    energy_preds: torch.Tensor,
+    forces_preds: torch.Tensor,
+    batch: torch.Tensor,
+    dataset_ids: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    num_branches = energy_preds.size(0)
+    target_weights = F.one_hot(dataset_ids, num_classes=num_branches).to(
+        dtype=energy_preds.dtype
+    )
+    return _weighted_average(energy_preds, forces_preds, target_weights, batch)
+
+
 def train_epoch(
     model,
     mlp,
@@ -585,8 +638,10 @@ def train_epoch(
             energy_preds, forces_preds, weights, data.batch
         )
 
-        energy_true = data.energy.squeeze().to(dtype=weighted_energy.dtype)
-        forces_true = data.forces.to(dtype=weighted_forces.dtype)
+        dataset_ids = _extract_dataset_ids(data, num_branches)
+        energy_true, forces_true = _teacher_from_dataset_id(
+            energy_preds, forces_preds, data.batch, dataset_ids
+        )
 
         loss_energy = loss_fn(weighted_energy, energy_true)
         loss_forces = loss_fn(weighted_forces, forces_true)
@@ -667,8 +722,10 @@ def validate_epoch(
             energy_preds, forces_preds, weights, data.batch
         )
 
-        energy_true = data.energy.squeeze().to(dtype=weighted_energy.dtype)
-        forces_true = data.forces.to(dtype=weighted_forces.dtype)
+        dataset_ids = _extract_dataset_ids(data, num_branches)
+        energy_true, forces_true = _teacher_from_dataset_id(
+            energy_preds, forces_preds, data.batch, dataset_ids
+        )
 
         loss_energy = loss_fn(weighted_energy, energy_true)
         loss_forces = loss_fn(weighted_forces, forces_true)
