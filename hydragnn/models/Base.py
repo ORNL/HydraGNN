@@ -28,6 +28,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import GPSConv
+from hydragnn.globalAtt.gps_equivariant import GPSConvEquivariant
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
@@ -237,6 +238,14 @@ class Base(Module):
             # specify global attention engine; use this to support more engines in future
             if self.global_attn_engine == "GPS":
                 return GPSConv(
+                    channels=self.hidden_dim,
+                    conv=mpnn,
+                    heads=self.global_attn_heads,
+                    dropout=self.global_attn_dropout,
+                    attn_type=self.global_attn_type,
+                )
+            elif self.global_attn_engine == "GPS_Equivariant":
+                return GPSConvEquivariant(
                     channels=self.hidden_dim,
                     conv=mpnn,
                     heads=self.global_attn_heads,
