@@ -1,17 +1,21 @@
 # SC26 Single-Model Training + Inference Jobs
 
-This folder contains two Slurm job scripts for Frontier:
+This folder contains Slurm scripts for both Frontier and Perlmutter:
 
-- `job-sc26-single-model-training.sh`: trains a HydraGNN model.
-- `job-sc26-single-model-inference.sh`: evaluates a trained checkpoint with `inference.py`.
+- Frontier:
+  - `job-sc26-single-model-training-frontier.sh`
+  - `job-sc26-single-model-inference-frontier.sh`
+- Perlmutter:
+  - `job-sc26-single-model-training-perlmutter.sh`
+  - `job-sc26-single-model-inference-perlmutter.sh`
 
-Both scripts are configured for distributed multi-node execution (`srun` with 16 nodes, 8 GPU tasks per node).
+All scripts are configured for distributed multi-node execution (`srun` with 16 nodes).
 
 ## Main Features
 
-## 1) Training job (`job-sc26-single-model-training.sh`)
+## 1) Training jobs
 
-- Sets up Frontier modules and the HydraGNN conda environment.
+- Sets up system-specific modules and the HydraGNN conda environment.
 - Exports runtime/distributed environment variables.
 - Runs:
   - `gfm_mlip_all_mpnn.py`
@@ -23,7 +27,7 @@ Both scripts are configured for distributed multi-node execution (`srun` with 16
 
   `num_samples = BATCH_SIZE * HYDRAGNN_MAX_NUM_BATCH * NUM_EPOCH`
 
-## 2) Inference job (`job-sc26-single-model-inference.sh`)
+## 2) Inference jobs
 
 - Uses the same environment + distributed launch pattern.
 - Runs:
@@ -34,17 +38,57 @@ Both scripts are configured for distributed multi-node execution (`srun` with 16
 
 ## How To Run
 
-From the HydraGNN root:
+## Frontier: How To Run
+
+From the HydraGNN root on Frontier:
 
 ```bash
 cd /lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN
 
 # Training
-sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-training.sh
+sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-training-frontier.sh
 
 # Inference (after training finishes and CHECKPOINT_LOGDIR is set correctly)
-sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-inference.sh
+sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-inference-frontier.sh
 ```
+
+## Perlmutter: How To Run
+
+From the HydraGNN root on Perlmutter:
+
+```bash
+cd /global/cfs/projectdirs/m4716/mlupopa/HydraGNN
+
+# Training
+sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-training-perlmutter.sh
+
+# Inference (after training finishes and CHECKPOINT_LOGDIR is set correctly)
+sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-inference-perlmutter.sh
+```
+
+## Quick Checklist
+
+### Frontier
+
+1. Verify the environment setup in:
+  - `job-sc26-single-model-training-frontier.sh`
+  - `job-sc26-single-model-inference-frontier.sh`
+2. Submit training:
+  - `sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-training-frontier.sh`
+3. After training completes, update `CHECKPOINT_LOGDIR` in the Frontier inference script.
+4. Submit inference:
+  - `sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-inference-frontier.sh`
+
+### Perlmutter
+
+1. Verify `VENV_PATH` in:
+  - `job-sc26-single-model-training-perlmutter.sh`
+  - `job-sc26-single-model-inference-perlmutter.sh`
+2. Submit training:
+  - `sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-training-perlmutter.sh`
+3. After training completes, update `CHECKPOINT_LOGDIR` in the Perlmutter inference script.
+4. Submit inference:
+  - `sbatch examples/multidataset_hpo_sc26/job-sc26-single-model-inference-perlmutter.sh`
 
 ## Single Dataset vs Multi Dataset
 
@@ -66,7 +110,7 @@ To switch to multi-dataset training/inference, replace with the full list line a
 
 For multi-dataset runs, **FSDP2 must be turned off**.
 
-In `job-sc26-single-model-training.sh`, set:
+In both training scripts, set:
 
 ```bash
 export HYDRAGNN_USE_FSDP=0
