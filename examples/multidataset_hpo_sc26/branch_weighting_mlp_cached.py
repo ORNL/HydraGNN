@@ -50,6 +50,8 @@ except ImportError:
         extract_dataset_ids,
         teacher_from_dataset_id,
     )
+
+
 def _allreduce_mean(value: float) -> float:
     if not (dist.is_available() and dist.is_initialized()):
         return value
@@ -120,7 +122,11 @@ def _cache_split(
         comp = data.chemical_composition
         if comp.dim() == 1:
             comp = comp.unsqueeze(0)
-        elif comp.dim() == 2 and comp.size(0) != data.num_graphs and comp.size(1) == data.num_graphs:
+        elif (
+            comp.dim() == 2
+            and comp.size(0) != data.num_graphs
+            and comp.size(1) == data.num_graphs
+        ):
             comp = comp.t()
         comp = comp.to(device=device, dtype=param_dtype)
         energy_preds = []
@@ -372,7 +378,9 @@ def main():
             args, config, var_config
         )
     else:
-        raise NotImplementedError("Cached script currently supports multi-dataset mode only")
+        raise NotImplementedError(
+            "Cached script currently supports multi-dataset mode only"
+        )
 
     config = update_config(config, train_loader, val_loader, val_loader)
 
