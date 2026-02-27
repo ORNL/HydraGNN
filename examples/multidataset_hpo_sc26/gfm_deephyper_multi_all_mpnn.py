@@ -91,6 +91,7 @@ def run(trial, dequed=None):
             f"--num_epoch={NUM_EPOCH}",
             f"--batch_size={BATCH_SIZE}",
             f"--num_samples={BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH}",
+            f"--oversampling",
             f"--oversampling_num_samples={BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH}",
             f"--log={log_name}",
             # f"--learning_rate={trial.parameters['learning_rate']}",
