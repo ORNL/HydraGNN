@@ -80,6 +80,7 @@ echo $LD_LIBRARY_PATH  | tr ':' '\n'
 export MPICH_ENV_DISPLAY=0
 export MPICH_VERSION_DISPLAY=0
 export MIOPEN_DISABLE_CACHE=1
+export MIOPEN_USER_DB_PATH=/tmp
 export PYTHONNOUSERSITE=1
 
 export OMP_NUM_THREADS=7
@@ -142,6 +143,7 @@ mkdir -p $DEEPHYPER_LOG_DIR
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
+export OMNISTAT_DIR=$OMNISTAT_DIR
 export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
 
 # (B) Enable data collectors and polling (1 sec interval)
