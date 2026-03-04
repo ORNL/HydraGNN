@@ -35,6 +35,7 @@ NTOT_DEEPHYPER_RANKS = int(os.environ["NTOT_DEEPHYPER_RANKS"])
 OMP_NUM_THREADS = int(os.environ["OMP_NUM_THREADS"])
 DEEPHYPER_LOG_DIR = os.environ["DEEPHYPER_LOG_DIR"]
 SLURM_JOB_ID = os.environ["SLURM_JOB_ID"]
+OMNISTAT_DIR = os.getenv("OMNISTAT_DIR", None)
 
 # HydraGNN-specific environment variables
 MULTI_MODEL_LIST = os.environ["MULTI_MODEL_LIST"]
@@ -91,9 +92,10 @@ def run(trial, dequed=None):
             f"--num_epoch={NUM_EPOCH}",
             f"--batch_size={BATCH_SIZE}",
             f"--num_samples={BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH}",
+            f"--oversampling",
             f"--oversampling_num_samples={BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH}",
             f"--log={log_name}",
-            # f"--learning_rate={trial.parameters['learning_rate']}",
+            f"--learning_rate={trial.parameters['learning_rate']}",
         ]
         + [
             f"--{param}={trial.parameters[param]}"
@@ -102,9 +104,17 @@ def run(trial, dequed=None):
         ]
     )
 
+    if OMNISTAT_DIR is not None:
+        ## Wrap command with omnistat annotate start/stop
+        annotate_start = (
+            f"{OMNISTAT_DIR}/omnistat-annotate --mode start --text 'gfm_{trial.id}'"
+        )
+        annotate_stop = f"{OMNISTAT_DIR}/omnistat-annotate --mode stop"
+        command = "; ".join([annotate_start, command, annotate_stop])
+
     print("Command = ", command, flush=True, file=f)
 
-    objective = -math.inf
+    output = -math.inf
     num_pattern = r"[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?|[-+]?(?:inf|nan)"
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)

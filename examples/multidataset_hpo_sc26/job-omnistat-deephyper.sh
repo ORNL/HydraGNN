@@ -46,21 +46,23 @@ HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
 module reset
 ml cpe/24.07
 ml cce/18.0.0
-ml rocm/6.4.0
-ml amd-mixed/6.4.0
+ml rocm/7.1.1
+ml amd-mixed/7.1.1
 ml craype-accel-amd-gfx90a
 ml PrgEnv-gnu
 ml miniforge3/23.11.0-0
 module unload darshan-runtime
 
-source activate $HYDRAGNN_ROOT/HydraGNN-Installation-Frontier/hydragnn_venv
 setup_bb
 if [ -d /mnt/bb/${USER}/HydraGNN-Installation-Frontier ]; then
-    export PYTHONPATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
-    export PATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/bin/:$PATH
+    source activate /mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv
+    # export PYTHONPATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
+    # export PATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/bin/:$PATH
+else
+    source activate $HYDRAGNN_ROOT/HydraGNN-Installation-Frontier/hydragnn_venv
 fi
 
-#export python path to HydragNN
+# Add HydraGNN in PYTHONPATH
 export PYTHONPATH=$HYDRAGNN_ROOT:$PYTHONPATH
 
 echo ""
@@ -80,6 +82,7 @@ echo $LD_LIBRARY_PATH  | tr ':' '\n'
 export MPICH_ENV_DISPLAY=0
 export MPICH_VERSION_DISPLAY=0
 export MIOPEN_DISABLE_CACHE=1
+export MIOPEN_USER_DB_PATH=/tmp
 export PYTHONNOUSERSITE=1
 
 export OMP_NUM_THREADS=7
@@ -142,6 +145,7 @@ mkdir -p $DEEPHYPER_LOG_DIR
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
+export OMNISTAT_DIR=$OMNISTAT_DIR
 export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
 
 # (B) Enable data collectors and polling (1 sec interval)
