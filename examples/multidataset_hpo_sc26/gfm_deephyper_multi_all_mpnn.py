@@ -112,7 +112,7 @@ def run(trial, dequed=None):
 
     print("Command = ", command, flush=True, file=f)
 
-    objective = -math.inf
+    output = -math.inf
     num_pattern = r"[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?|[-+]?(?:inf|nan)"
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
