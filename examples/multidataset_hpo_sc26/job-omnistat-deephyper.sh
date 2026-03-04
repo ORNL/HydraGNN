@@ -46,21 +46,23 @@ HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
 module reset
 ml cpe/24.07
 ml cce/18.0.0
-ml rocm/6.4.0
-ml amd-mixed/6.4.0
+ml rocm/7.1.1
+ml amd-mixed/7.1.1
 ml craype-accel-amd-gfx90a
 ml PrgEnv-gnu
 ml miniforge3/23.11.0-0
 module unload darshan-runtime
 
-source activate $HYDRAGNN_ROOT/HydraGNN-Installation-Frontier/hydragnn_venv
 setup_bb
 if [ -d /mnt/bb/${USER}/HydraGNN-Installation-Frontier ]; then
-    export PYTHONPATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
-    export PATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/bin/:$PATH
+    source activate /mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv
+    # export PYTHONPATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
+    # export PATH=/mnt/bb/${USER}/HydraGNN-Installation-Frontier/hydragnn_venv/bin/:$PATH
+else
+    source activate $HYDRAGNN_ROOT/HydraGNN-Installation-Frontier/hydragnn_venv
 fi
 
-#export python path to HydragNN
+# Add HydraGNN in PYTHONPATH
 export PYTHONPATH=$HYDRAGNN_ROOT:$PYTHONPATH
 
 echo ""

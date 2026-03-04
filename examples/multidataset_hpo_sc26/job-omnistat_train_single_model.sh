@@ -19,8 +19,8 @@ HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
 module reset
 ml cpe/24.07
 ml cce/18.0.0
-ml rocm/6.4.0
-ml amd-mixed/6.4.0
+ml rocm/7.1.1
+ml amd-mixed/7.1.1
 ml craype-accel-amd-gfx90a
 ml PrgEnv-gnu
 ml miniforge3/23.11.0-0
@@ -48,6 +48,7 @@ echo $LD_LIBRARY_PATH  | tr ':' '\n'
 export MPICH_ENV_DISPLAY=0
 export MPICH_VERSION_DISPLAY=0
 export MIOPEN_DISABLE_CACHE=1
+export MIOPEN_USER_DB_PATH=/tmp
 export PYTHONNOUSERSITE=1
 
 export OMP_NUM_THREADS=7
@@ -112,7 +113,8 @@ python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py \
     --num_conv_layers=6 \
     --hidden_dim=3000 \
     --num_headlayers=4 \
-    --dim_headlayers=2000
+    --dim_headlayers=2000 \
+    --learning_rate=0.001
 
 # (C) End of job: stop data collection
 ${OMNISTAT_WRAPPER} usermode --stop

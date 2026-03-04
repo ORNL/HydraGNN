@@ -301,8 +301,8 @@ CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 popd >/dev/null
 
-subbanner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
+subbanner "Install e3nn"
+pip_retry e3nn --verbose
 assert_numpy_1264
 
 # NOTE: unload ROCm for mpi4py build
@@ -385,7 +385,7 @@ cd "$DEEPHYPER_FRONTIER"
 
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
-pip_retry -e . --verbose
+pip_retry . --verbose
 assert_numpy_1264
 
 # ============================================================
