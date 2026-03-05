@@ -57,7 +57,8 @@ def to_float(x):
 
 
 def run(trial, dequed=None):
-    f = open(f"output-{trial.id}.txt", "w")
+    os.makedirs(f"{DEEPHYPER_LOG_DIR}", exist_ok=True)
+    f = open(f"{DEEPHYPER_LOG_DIR}/output-{trial.id}.txt", "w")
     python_exe = sys.executable
     python_script = os.path.join(os.path.dirname(__file__), "gfm_mlip_all_mpnn.py")
 
