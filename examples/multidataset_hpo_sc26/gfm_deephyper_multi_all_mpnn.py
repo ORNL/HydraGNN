@@ -20,6 +20,7 @@ import subprocess
 import re
 import argparse
 import time
+import glob
 
 pd.options.display.max_columns = None
 pd.options.display.max_rows = None
@@ -280,15 +281,56 @@ if __name__ == "__main__":
         log_dir=log_name,
     )
 
-    # Optionally preload results
-    fname = os.path.join("gfm", "preloaded_results.csv")
-    if os.path.exists(fname):
-        t0 = time.time()
-        print("Read existing results:", fname)
-        preloaded_results = pd.read_csv(fname, header=0)
-        search.fit_surrogate(preloaded_results)
-        t1 = time.time()
-        print("Fit done:", t1 - t0)
+    ## Preload results from previous runs.
+    ## gfm_dir is the directory where the preloaded results are stored.
+    ## If there is only one MPNN type, we look for results in gfm_{mpnn_type} directory.
+    ## Otherwise, we look for results in gfm directory.
+    gfm_dir = "gfm"
+    if len(mpnn_type_list) == 1:
+        gfm_dir = f"gfm_{mpnn_type_list[0]}"
+
+    df_list = list()
+    files = glob.glob(os.path.join(gfm_dir, "*.csv"))
+    for fname in files:
+        try:
+            df = pd.read_csv(fname, header=0)
+            total_rows = len(df)
+            df["objective"] = pd.to_numeric(df["objective"], errors="coerce")
+            df = df.dropna(subset=["objective"])
+            valid_rows = list()
+            for i in range(len(df)):
+                single = df.iloc[i:i+1]
+                try:
+                    ## Remove rows that can cause the following error:
+                    ## "Error in loading preloaded results: Not all points are within the bounds of the space."
+                    search.fit_surrogate(df.iloc[i:i+1])
+                    valid_rows.append(i)
+                except:
+                    continue
+            print(f"Checking {fname}: total {total_rows}, valid {len(valid_rows)}")
+            df = df.iloc[valid_rows]
+            df_list.append(df)
+        except Exception as excp:
+            print(f"Error loading {fname}:", excp)
+
+    ## Create a clean search object again
+    search = CBO(
+        problem,
+        acq_func="UCB",
+        multi_point_strategy="cl_min",
+        random_state=42,
+        log_dir=log_name,
+    )
+
+    if len(df_list) > 0:
+        try:
+            preloaded_results = pd.concat(df_list, ignore_index=True)
+            print(
+                f"Loaded {len(preloaded_results)} preloaded results from {len(df_list)} files."
+            )
+            search.fit_surrogate(preloaded_results)
+        except Exception as excp:
+            print("Error in loading preloaded results:", excp)
 
     timeout = None
     results = search.search(evaluator, max_evals=args.max_evals, timeout=timeout)
