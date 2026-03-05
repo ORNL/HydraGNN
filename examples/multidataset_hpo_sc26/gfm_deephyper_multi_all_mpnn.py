@@ -166,6 +166,8 @@ if __name__ == "__main__":
     mpnn_type_list = args.mpnn_type.split(",")
 
     log_name = f"gfm-{SLURM_JOB_ID}"
+    if len(mpnn_type_list) == 1:
+        log_name = f"gfm_{mpnn_type_list[0]}-{SLURM_JOB_ID}"
 
     from deephyper.hpo import HpProblem, CBO
     from deephyper.evaluator import ProcessPoolEvaluator, queued
