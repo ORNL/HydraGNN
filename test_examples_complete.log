@@ -1,0 +1,1524 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.7, pytest-8.4.2, pluggy-1.6.0 -- /Users/7ml/Documents/Codes/HydraGNN/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/7ml/Documents/Codes/HydraGNN
+configfile: pytest.ini
+collecting ... collected 29 items
+
+tests/test_examples.py::pytest_examples_energy[qm9-SAGE-multihead-GPS] FAILED [  3%]
+tests/test_examples.py::pytest_examples_energy[qm9-GIN-multihead-GPS] FAILED [  6%]
+tests/test_examples.py::pytest_examples_energy[qm9-GAT-multihead-GPS] FAILED [ 10%]
+tests/test_examples.py::pytest_examples_energy[qm9-MFC-multihead-GPS] FAILED [ 13%]
+tests/test_examples.py::pytest_examples_energy[qm9-PNA-multihead-GPS] FAILED [ 17%]
+tests/test_examples.py::pytest_examples_energy[qm9-PNAPlus-multihead-GPS] FAILED [ 20%]
+tests/test_examples.py::pytest_examples_energy[qm9-SchNet-multihead-GPS] FAILED [ 24%]
+tests/test_examples.py::pytest_examples_energy[qm9-DimeNet-multihead-GPS] FAILED [ 27%]
+tests/test_examples.py::pytest_examples_energy[qm9-EGNN-multihead-GPS] FAILED [ 31%]
+tests/test_examples.py::pytest_examples_energy[qm9-PNAEq-multihead-GPS] FAILED [ 34%]
+tests/test_examples.py::pytest_examples_energy[qm9-PAINN-multihead-GPS] FAILED [ 37%]
+tests/test_examples.py::pytest_examples_energy[md17-SAGE-multihead-GPS] FAILED [ 41%]
+tests/test_examples.py::pytest_examples_energy[md17-GIN-multihead-GPS] FAILED [ 44%]
+tests/test_examples.py::pytest_examples_energy[md17-GAT-multihead-GPS] FAILED [ 48%]
+tests/test_examples.py::pytest_examples_energy[md17-MFC-multihead-GPS] FAILED [ 51%]
+tests/test_examples.py::pytest_examples_energy[md17-PNA-multihead-GPS] FAILED [ 55%]
+tests/test_examples.py::pytest_examples_energy[md17-PNAPlus-multihead-GPS] FAILED [ 58%]
+tests/test_examples.py::pytest_examples_energy[md17-SchNet-multihead-GPS] FAILED [ 62%]
+tests/test_examples.py::pytest_examples_energy[md17-DimeNet-multihead-GPS] FAILED [ 65%]
+tests/test_examples.py::pytest_examples_energy[md17-EGNN-multihead-GPS] FAILED [ 68%]
+tests/test_examples.py::pytest_examples_energy[md17-PNAEq-multihead-GPS] FAILED [ 72%]
+tests/test_examples.py::pytest_examples_energy[md17-PAINN-multihead-GPS] FAILED [ 75%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-PNAPlus] FAILED [ 79%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-SchNet] FAILED [ 82%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-DimeNet] FAILED [ 86%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-EGNN] FAILED [ 89%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-PNAEq] FAILED [ 93%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-PAINN] FAILED [ 96%]
+tests/test_examples.py::pytest_examples_grad_forces[LennardJones-MACE] FAILED [100%]
+
+=================================== FAILURES ===================================
+________________ pytest_examples_energy[qm9-SAGE-multihead-GPS] ________________
+
+example = 'qm9', mpnn_type = 'SAGE', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[qm9-GIN-multihead-GPS] _________________
+
+example = 'qm9', mpnn_type = 'GIN', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[qm9-GAT-multihead-GPS] _________________
+
+example = 'qm9', mpnn_type = 'GAT', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[qm9-MFC-multihead-GPS] _________________
+
+example = 'qm9', mpnn_type = 'MFC', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[qm9-PNA-multihead-GPS] _________________
+
+example = 'qm9', mpnn_type = 'PNA', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_energy[qm9-PNAPlus-multihead-GPS] _______________
+
+example = 'qm9', mpnn_type = 'PNAPlus', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[qm9-SchNet-multihead-GPS] _______________
+
+example = 'qm9', mpnn_type = 'SchNet', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_energy[qm9-DimeNet-multihead-GPS] _______________
+
+example = 'qm9', mpnn_type = 'DimeNet', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[qm9-EGNN-multihead-GPS] ________________
+
+example = 'qm9', mpnn_type = 'EGNN', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[qm9-PNAEq-multihead-GPS] ________________
+
+example = 'qm9', mpnn_type = 'PNAEq', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[qm9-PAINN-multihead-GPS] ________________
+
+example = 'qm9', mpnn_type = 'PAINN', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/qm9/qm9.py", line 16, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[md17-SAGE-multihead-GPS] ________________
+
+example = 'md17', mpnn_type = 'SAGE', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[md17-GIN-multihead-GPS] ________________
+
+example = 'md17', mpnn_type = 'GIN', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[md17-GAT-multihead-GPS] ________________
+
+example = 'md17', mpnn_type = 'GAT', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[md17-MFC-multihead-GPS] ________________
+
+example = 'md17', mpnn_type = 'MFC', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_energy[md17-PNA-multihead-GPS] ________________
+
+example = 'md17', mpnn_type = 'PNA', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_energy[md17-PNAPlus-multihead-GPS] ______________
+
+example = 'md17', mpnn_type = 'PNAPlus', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_energy[md17-SchNet-multihead-GPS] _______________
+
+example = 'md17', mpnn_type = 'SchNet', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_energy[md17-DimeNet-multihead-GPS] ______________
+
+example = 'md17', mpnn_type = 'DimeNet', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[md17-EGNN-multihead-GPS] ________________
+
+example = 'md17', mpnn_type = 'EGNN', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[md17-PNAEq-multihead-GPS] _______________
+
+example = 'md17', mpnn_type = 'PNAEq', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_energy[md17-PAINN-multihead-GPS] _______________
+
+example = 'md17', mpnn_type = 'PAINN', global_attn_engine = 'GPS'
+global_attn_type = 'multihead'
+
+    @pytest.mark.parametrize(
+        "global_attn_engine",
+        ["GPS"],
+    )
+    @pytest.mark.parametrize("global_attn_type", ["multihead"])
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "SAGE",
+            "GIN",
+            "GAT",
+            "MFC",
+            "PNA",
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["qm9", "md17"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(
+            [
+                "python",
+                file_path,
+                "--mpnn_type",
+                mpnn_type,
+                "--global_attn_engine",
+                global_attn_engine,
+                "--global_attn_type",
+                global_attn_type,
+            ]
+        )
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:59: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/md17/md17.py", line 17, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_grad_forces[LennardJones-PNAPlus] _______________
+
+example = 'LennardJones', mpnn_type = 'PNAPlus'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_grad_forces[LennardJones-SchNet] _______________
+
+example = 'LennardJones', mpnn_type = 'SchNet'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+______________ pytest_examples_grad_forces[LennardJones-DimeNet] _______________
+
+example = 'LennardJones', mpnn_type = 'DimeNet'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_grad_forces[LennardJones-EGNN] ________________
+
+example = 'LennardJones', mpnn_type = 'EGNN'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_grad_forces[LennardJones-PNAEq] ________________
+
+example = 'LennardJones', mpnn_type = 'PNAEq'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+_______________ pytest_examples_grad_forces[LennardJones-PAINN] ________________
+
+example = 'LennardJones', mpnn_type = 'PAINN'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+________________ pytest_examples_grad_forces[LennardJones-MACE] ________________
+
+example = 'LennardJones', mpnn_type = 'MACE'
+
+    @pytest.mark.parametrize(
+        "mpnn_type",
+        [
+            "PNAPlus",
+            "SchNet",
+            "DimeNet",
+            "EGNN",
+            "PNAEq",
+            "PAINN",
+            "MACE",
+        ],
+    )
+    @pytest.mark.parametrize("example", ["LennardJones"])
+    @pytest.mark.mpi_skip()
+    def pytest_examples_grad_forces(example, mpnn_type):
+        path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
+        file_path = os.path.join(path, example + ".py")
+    
+        # Add the --mpnn_type argument for the subprocess call
+        return_code = subprocess.call(["python", file_path, "--mpnn_type", mpnn_type])
+    
+        # Check the file ran without error.
+>       assert return_code == 0
+E       assert 1 == 0
+
+tests/test_examples.py:87: AssertionError
+----------------------------- Captured stderr call -----------------------------
+Traceback (most recent call last):
+  File "/Users/7ml/Documents/Codes/HydraGNN/tests/../examples/LennardJones/LennardJones.py", line 33, in <module>
+    import hydragnn
+ModuleNotFoundError: No module named 'hydragnn'
+=========================== short test summary info ============================
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-SAGE-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-GIN-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-GAT-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-MFC-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-PNA-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-PNAPlus-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-SchNet-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-DimeNet-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-EGNN-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-PNAEq-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[qm9-PAINN-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-SAGE-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-GIN-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-GAT-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-MFC-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-PNA-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-PNAPlus-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-SchNet-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-DimeNet-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-EGNN-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-PNAEq-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_energy[md17-PAINN-multihead-GPS]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-PNAPlus]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-SchNet]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-DimeNet]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-EGNN]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-PNAEq]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-PAINN]
+FAILED tests/test_examples.py::pytest_examples_grad_forces[LennardJones-MACE]
+============================= 29 failed in 48.23s ==============================

@@ -27,7 +27,6 @@ filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zinc.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
-var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
