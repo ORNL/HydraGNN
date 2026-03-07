@@ -76,6 +76,13 @@ def find_ifname(myaddr):
     return ifname
 
 
+def _resolve_ipv4_addr(host: str) -> str:
+    try:
+        return socket.gethostbyname(host)
+    except socket.gaierror:
+        return host
+
+
 def parse_slurm_nodelist(nodelist):
     """
     Parse SLURM_NODELIST env string to get list of nodes.
@@ -214,6 +221,9 @@ def setup_ddp(use_deepspeed=False):
         else:
             ## The following is CADES specific
             master_addr = parse_slurm_nodelist(os.environ["PBS_O_HOST"])[0]
+
+    if os.getenv("HYDRAGNN_PREFER_IPV4", "1") == "1":
+        master_addr = _resolve_ipv4_addr(master_addr)
 
     try:
         port_retries = int(os.getenv("HYDRAGNN_MASTER_PORT_RETRIES", "8"))
