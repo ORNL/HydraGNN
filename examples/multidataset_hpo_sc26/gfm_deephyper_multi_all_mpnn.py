@@ -117,7 +117,9 @@ def run(trial, dequed=None):
         job_step_start = f"{OMNISTAT_DIR}/omnistat-rms-env"
         job_step_stop = f"{OMNISTAT_DIR}/omnistat-rms-env --nostep"
 
-        command = "; ".join([annotate_start, job_step_start, command, job_step_stop, annotate_stop])
+        command = "; ".join(
+            [annotate_start, job_step_start, command, job_step_stop, annotate_stop]
+        )
 
     print("Command = ", command, flush=True, file=f)
 
@@ -307,11 +309,11 @@ if __name__ == "__main__":
             df = df.dropna(subset=["objective"])
             valid_rows = list()
             for i in range(len(df)):
-                single = df.iloc[i:i+1]
+                single = df.iloc[i : i + 1]
                 try:
                     ## Remove rows that can cause the following error:
                     ## "Error in loading preloaded results: Not all points are within the bounds of the space."
-                    search.fit_surrogate(df.iloc[i:i+1])
+                    search.fit_surrogate(df.iloc[i : i + 1])
                     valid_rows.append(i)
                 except:
                     continue
