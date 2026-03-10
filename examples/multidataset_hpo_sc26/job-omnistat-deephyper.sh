@@ -184,9 +184,11 @@ export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 15
 
+# [ -z $MPNN_TYPE ] && MPNN_TYPE=EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq
+[ -z $MPNN_TYPE ] && MPNN_TYPE=SchNet
+
 cmd python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_deephyper_multi_all_mpnn.py \
-    --mpnn_type=SchNet
-    # --mpnn_type=EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq
+    --mpnn_type=$MPNN_TYPE
 
 # (C) End of job: stop data collection
 ${OMNISTAT_WRAPPER} usermode --stop
