@@ -112,7 +112,12 @@ def run(trial, dequed=None):
             f"{OMNISTAT_DIR}/omnistat-annotate --mode start --text 'gfm_{trial.id}'"
         )
         annotate_stop = f"{OMNISTAT_DIR}/omnistat-annotate --mode stop"
-        command = "; ".join([annotate_start, command, annotate_stop])
+
+        # additional job step tracking commands
+        job_step_start = f"{OMNISTAT_DIR}/omnistat-rms-env"
+        job_step_stop = f"{OMNISTAT_DIR}/omnistat-rms-env --nostep"
+
+        command = "; ".join([annotate_start, job_step_start, command, job_step_stop, annotate_stop])
 
     print("Command = ", command, flush=True, file=f)
 
@@ -211,8 +216,8 @@ if __name__ == "__main__":
             hyperparameters["force_weight"] = (10.0, 1000.0)
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
-            hyperparameters["num_filters"] = (6, 2000)
-            hyperparameters["num_gaussians"] = (3, 24)
+            hyperparameters["num_filters"] = (6, 300)
+            hyperparameters["num_gaussians"] = (3, 100)
         elif mpnn_type_list[0] == "DimeNet":
             hyperparameters["hidden_dim"] = (10, 100)
             hyperparameters["force_weight"] = (10.0, 1000.0)
