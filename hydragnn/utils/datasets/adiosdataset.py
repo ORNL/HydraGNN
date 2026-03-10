@@ -1113,3 +1113,28 @@ class AdiosDataset(AbstractBaseDataset):
             del self._data[k]
 
         self.preflight = False
+
+
+class AdiosMultiDataset(AbstractBaseDataset):
+    """
+    AdiosMultiDataset is a wrapper of multiple AdiosDataset. It will concatenate multiple AdiosDataset together.
+    """
+
+    def __init__(self, filenames, label, comm, **kwargs):
+        datasets = list()
+        for filename in filenames:
+            dataset = AdiosDataset(filename, label, comm, **kwargs)
+            datasets.append(dataset)
+        self.datasets = datasets
+
+    def len(self):
+        return sum([dataset.len() for dataset in self.datasets])
+
+    def get(self, i):
+        # find which dataset the index belongs to
+        for dataset in self.datasets:
+            if i < dataset.len():
+                return dataset.get(i)
+            else:
+                i -= dataset.len()
+        raise IndexError("Index out of range")
