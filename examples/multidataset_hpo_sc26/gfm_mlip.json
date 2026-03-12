@@ -51,6 +51,7 @@
             "force_weight": 10.0,
             "input_dim": 1,
             "pna_deg": null,
+            "avg_num_neighbors": 13.735293601560318,
             "edge_dim": 1,
             "freeze_conv_layers": false,
             "initial_bias": null,

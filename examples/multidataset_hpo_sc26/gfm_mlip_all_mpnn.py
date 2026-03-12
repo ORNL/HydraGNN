@@ -30,7 +30,11 @@ from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.distributed import get_device
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
+    from hydragnn.utils.datasets.adiosdataset import (
+        AdiosDataset,
+        AdiosMultiDataset,
+        adios2_open,
+    )
 except ImportError:
     pass
 
@@ -363,6 +367,27 @@ if __name__ == "__main__":
             modellist = ["default"]
         else:
             modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
+
+    ## FIXME: Hard-coded for now. Need to find common variable names
+    common_variable_names = [
+        "pbc",
+        "edge_attr",
+        "energy_per_atom",
+        "forces",
+        "pos",
+        "edge_index",
+        "cell",
+        "edge_shifts",
+        "y",
+        "chemical_composition",
+        "natoms",
+        "x",
+        "energy",
+        "graph_attr",
+        "atomic_numbers",
+    ]
+
+    if args.ddstore:
         if rank == 0:
             ndata_list = list()
             pna_deg_list = list()
@@ -550,24 +575,6 @@ if __name__ == "__main__":
         local_comm_rank = local_comm.Get_rank()
         local_comm_size = local_comm.Get_size()
 
-        ## FIXME: Hard-coded for now. Need to find common variable names
-        common_variable_names = [
-            "pbc",
-            "edge_attr",
-            "energy_per_atom",
-            "forces",
-            "pos",
-            "edge_index",
-            "cell",
-            "edge_shifts",
-            "y",
-            "chemical_composition",
-            "natoms",
-            "x",
-            "energy",
-            "graph_attr",
-            "atomic_numbers",
-        ]
         fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
 
         ## FIXME: only for Frontier NVME
@@ -793,8 +800,28 @@ if __name__ == "__main__":
                 valset.avg_num_neighbors = avg_num_neighbors
                 testset.avg_num_neighbors = avg_num_neighbors
     else:
-        raise NotImplementedError("No supported format: %s" % (args.format))
+        ## No DDStore. Each process opens multiple adios files.
+        filename_list = list()
+        for model in modellist:
+            fname = os.path.join(
+                os.path.dirname(__file__), "./dataset/%s-v2.bp" % model
+            )
+            filename_list.append(fname)
 
+        kwargs = {"var_config": var_config, "keys": common_variable_names}
+        trainset = AdiosMultiDataset(
+            filenames=filename_list, label="trainset", comm=comm, **kwargs
+        )
+        valset = AdiosMultiDataset(
+            filenames=filename_list, label="valset", comm=comm, **kwargs
+        )
+        testset = AdiosMultiDataset(
+            filenames=filename_list, label="testset", comm=comm, **kwargs
+        )
+        num_samples_list = None
+        args.oversampling = None
+        args.num_samples = None
+        os.environ["HYDRAGNN_CUSTOM_DATALOADER"] = "0"
     log0(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))

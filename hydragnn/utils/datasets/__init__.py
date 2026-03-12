@@ -1,6 +1,6 @@
 from .abstractbasedataset import AbstractBaseDataset
 from .abstractrawdataset import AbstractRawDataset
-from .adiosdataset import AdiosDataset, AdiosWriter
+from .adiosdataset import AdiosDataset, AdiosMultiDataset, AdiosWriter
 from .cfgdataset import CFGDataset
 from .compositional_data_splitting import (
     get_keys,
