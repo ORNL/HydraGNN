@@ -500,6 +500,7 @@ pip_retry rdkit jarvis-tools pymatgen || true
 pip_retry igraph || true
 
 pip_retry e3nn openequivariance
+pip_retry vesin
 pip_retry Cython
 pip_retry setuptools wheel
 
