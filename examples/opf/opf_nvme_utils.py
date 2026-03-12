@@ -117,64 +117,95 @@ def stage_case_to_nvme(
 
     local_comm = comm.Split_type(MPI.COMM_TYPE_SHARED, rank)
     local_rank = local_comm.Get_rank()
+    local_size = local_comm.Get_size()
     local_ok = True
     local_err = ""
 
-    if local_rank == 0:
-        try:
-            os.makedirs(dst_raw_dir, exist_ok=True)
+    try:
+        if local_rank == 0:
             if effective_refresh and os.path.isdir(dst_case_dir):
                 shutil.rmtree(dst_case_dir, ignore_errors=True)
-                os.makedirs(dst_raw_dir, exist_ok=True)
+            os.makedirs(dst_raw_dir, exist_ok=True)
+        local_comm.Barrier()
 
-            if not os.path.isfile(copy_marker):
+        did_copy = not os.path.isfile(copy_marker)
+        copied_local = 0
+        if did_copy:
+            if local_rank == 0:
                 t0_copy = time.perf_counter()
                 logging.info(
-                    "Copying OPF archives to NVMe: src=%s dst=%s archives=%d",
+                    "Copying OPF archives to NVMe in parallel: src=%s dst=%s archives=%d local_ranks=%d",
                     src_raw_dir,
                     dst_raw_dir,
                     len(archive_names),
+                    local_size,
                 )
-                for archive_name in archive_names:
-                    src_archive = os.path.join(src_raw_dir, archive_name)
-                    dst_archive = os.path.join(dst_raw_dir, archive_name)
-                    if os.path.isfile(dst_archive) and os.path.getsize(
-                        dst_archive
-                    ) == os.path.getsize(src_archive):
-                        continue
-                    shutil.copy2(src_archive, dst_archive)
+            for archive_idx in range(local_rank, len(archive_names), local_size):
+                archive_name = archive_names[archive_idx]
+                src_archive = os.path.join(src_raw_dir, archive_name)
+                dst_archive = os.path.join(dst_raw_dir, archive_name)
+                if os.path.isfile(dst_archive) and os.path.getsize(dst_archive) == os.path.getsize(
+                    src_archive
+                ):
+                    continue
+                shutil.copy2(src_archive, dst_archive)
+                copied_local += 1
+            copied_total = local_comm.allreduce(copied_local, op=MPI.SUM)
+            local_comm.Barrier()
+            if local_rank == 0:
                 with open(copy_marker, "w") as marker:
                     marker.write(f"archives={len(archive_names)}\n")
                 logging.info(
-                    "OPF archive copy complete for case=%s elapsed=%.1fs",
+                    "OPF archive copy complete for case=%s copied=%d elapsed=%.1fs",
                     case_name,
+                    copied_total,
                     time.perf_counter() - t0_copy,
                 )
 
-            if not os.path.isfile(extract_marker):
+        local_comm.Barrier()
+
+        did_extract = not os.path.isfile(extract_marker)
+        extracted_local = 0
+        if did_extract:
+            if local_rank == 0:
                 t0_extract = time.perf_counter()
                 logging.info(
-                    "Extracting OPF archives on NVMe: case=%s archives=%d",
+                    "Extracting OPF archives on NVMe in parallel: case=%s archives=%d local_ranks=%d",
                     case_name,
                     len(archive_names),
+                    local_size,
                 )
-                for archive_name in archive_names:
-                    dst_archive = os.path.join(dst_raw_dir, archive_name)
-                    _extract_archive(dst_archive, dst_raw_dir)
+            for archive_idx in range(local_rank, len(archive_names), local_size):
+                archive_name = archive_names[archive_idx]
+                dst_archive = os.path.join(dst_raw_dir, archive_name)
+                _extract_archive(dst_archive, dst_raw_dir)
+                extracted_local += 1
+            extracted_total = local_comm.allreduce(extracted_local, op=MPI.SUM)
+            local_comm.Barrier()
+            if local_rank == 0:
                 with open(extract_marker, "w") as marker:
                     marker.write(f"archives={len(archive_names)}\n")
                 logging.info(
-                    "OPF archive extraction complete for case=%s elapsed=%.1fs",
+                    "OPF archive extraction complete for case=%s extracted=%d elapsed=%.1fs",
                     case_name,
+                    extracted_total,
                     time.perf_counter() - t0_extract,
                 )
-        except Exception as exc:
-            local_ok = False
-            local_err = str(exc)
+    except Exception as exc:
+        local_ok = False
+        local_err = str(exc)
 
-    local_ok = local_comm.bcast(local_ok, root=0)
-    local_err = local_comm.bcast(local_err, root=0)
-    all_ok = comm.allreduce(1 if local_ok else 0, op=MPI.MIN) == 1
+    node_ok = local_comm.allreduce(1 if local_ok else 0, op=MPI.MIN) == 1
+    node_err = ""
+    if not node_ok:
+        node_errs = local_comm.allgather(local_err)
+        node_err = next((err for err in node_errs if err), "unknown local node error")
+
+    all_ok = comm.allreduce(1 if node_ok else 0, op=MPI.MIN) == 1
+    global_err = ""
+    if not all_ok:
+        global_errs = comm.allgather(node_err)
+        global_err = next((err for err in global_errs if err), "unknown MPI error")
     local_comm.Barrier()
     local_comm.Free()
     comm.Barrier()
@@ -183,7 +214,7 @@ def stage_case_to_nvme(
         if rank == 0:
             logging.warning(
                 "NVMe staging failed on at least one node (%s); falling back to shared datadir=%s",
-                local_err,
+                global_err,
                 source_datadir,
             )
         return source_datadir
