@@ -8,7 +8,6 @@ import torch
 
 try:
     import intel_extension_for_pytorch as ipex
-    import oneccl_bindings_for_pytorch as torch_ccl
 except:
     pass
 

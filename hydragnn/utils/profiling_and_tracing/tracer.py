@@ -286,7 +286,10 @@ try:
     class XPUTracer:
         def __init__(self, **kwargs):
             self.rank = MPI.COMM_WORLD.Get_rank()
-            self.device = torch.xpu.current_device()
+            self.device = int(os.environ.get("PALS_LOCAL_RANKID", "0"))
+            group = self.device // 2
+            counter_id = group * 3 + self.device % 2 + 1  ## 0: cpu, 1,2: gpu
+
             group = self.device // 2
             counter_id = group * 3 + self.device % 2 + 1
             counter = f"/sys/class/hwmon/hwmon{counter_id}/energy1_input"
@@ -296,12 +299,17 @@ try:
             self.energyTracer = defaultdict(list)
             self.enabled = True
 
-            print(f"XPUTracer initalized: rank={self.rank}, device={self.device}")
+            print(
+                f"XPUTracer initalized: rank={self.rank}, device={self.device}, counter_id={counter_id}"
+            )
 
         def get_energy_read(self):
             ## Cumulative energy used (uJ)
-            self.f.seek(0)
-            energy_uj = float(self.f.read().strip())
+            try:
+                self.f.seek(0)
+                energy_uj = float(self.f.read().strip())
+            except:
+                energy_uj = np.nan
             return energy_uj
 
         def start(self, name):
