@@ -41,7 +41,9 @@ except (ImportError, ModuleNotFoundError):
     GradScaler = None
 
 PRECISION_MAP = {
-    "bf16": {"param_dtype": torch.bfloat16, "autocast_dtype": torch.bfloat16},
+    # Keep optimizer/master parameters in FP32 for BF16 runs and use autocast for compute.
+    # This avoids backend-specific optimizer paths that require FP32 parameters.
+    "bf16": {"param_dtype": torch.float32, "autocast_dtype": torch.bfloat16},
     "fp32": {"param_dtype": torch.float32, "autocast_dtype": None},
     "fp64": {"param_dtype": torch.float64, "autocast_dtype": None},
 }
@@ -105,6 +107,44 @@ def get_autocast_and_scaler(precision):
         return autocast, None
 
     return nullcontext(), None
+
+
+def _first_float_tensor_dtype(obj):
+    if torch.is_tensor(obj):
+        return obj.dtype if torch.is_floating_point(obj) else None
+
+    if isinstance(obj, dict):
+        values = obj.values()
+    elif hasattr(obj, "items"):
+        values = (value for _, value in obj.items())
+    else:
+        values = []
+
+    for value in values:
+        dtype = _first_float_tensor_dtype(value)
+        if dtype is not None:
+            return dtype
+
+    return None
+
+
+def _first_optimizer_state_dtype(optimizer):
+    if optimizer is None:
+        return None
+
+    if hasattr(optimizer, "optimizer1") and hasattr(optimizer, "optimizer2"):
+        for subopt in (optimizer.optimizer1, optimizer.optimizer2):
+            dtype = _first_optimizer_state_dtype(subopt)
+            if dtype is not None:
+                return dtype
+        return None
+
+    for state in optimizer.state.values():
+        for value in state.values():
+            if torch.is_tensor(value) and torch.is_floating_point(value):
+                return value.dtype
+
+    return None
 
 
 def _is_fsdp2_enabled():
@@ -608,6 +648,18 @@ def train(
     num_samples_local = 0
     model.train()
 
+    rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
+    model_param_dtype = None
+    for parameter in model.parameters():
+        model_param_dtype = parameter.dtype
+        break
+    if rank0:
+        print(
+            f"[precision-diagnostic] requested={precision} model_param_dtype={model_param_dtype}"
+        )
+    batch_dtype_logged = False
+    optimizer_state_dtype_logged = False
+
     use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
@@ -658,6 +710,12 @@ def train(
             if trace_level > 0:
                 tr.start("h2d", **syncopt)
             data = move_batch_to_device(data, param_dtype)
+            if rank0 and not batch_dtype_logged:
+                batch_float_dtype = _first_float_tensor_dtype(data)
+                print(
+                    f"[precision-diagnostic] first_batch_float_dtype={batch_float_dtype}"
+                )
+                batch_dtype_logged = True
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
             if compute_grad_energy:  # for force and energy prediction
@@ -708,6 +766,12 @@ def train(
                 scaler.update()
             else:
                 opt.step()
+        if rank0 and not optimizer_state_dtype_logged:
+            optimizer_state_dtype = _first_optimizer_state_dtype(opt)
+            print(
+                f"[precision-diagnostic] first_optimizer_state_float_dtype={optimizer_state_dtype}"
+            )
+            optimizer_state_dtype_logged = True
         print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()

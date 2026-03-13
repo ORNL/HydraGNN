@@ -491,13 +491,34 @@ def distributed_model_wrapper(
     config=None,
     zero_opt=False,
     bf16=False,
+    precision="fp32",
 ):
 
-    if hasattr(torch, "xpu") and torch.xpu.is_available():
+    normalized_precision = str(precision).lower()
+    if normalized_precision == "bfloat16":
+        normalized_precision = "bf16"
+    elif normalized_precision in ["float", "float32"]:
+        normalized_precision = "fp32"
+    elif normalized_precision in ["double", "float64"]:
+        normalized_precision = "fp64"
+
+    use_ipex_optimize = (
+        hasattr(torch, "xpu")
+        and torch.xpu.is_available()
+        and not bf16
+        and normalized_precision == "fp32"
+    )
+
+    if use_ipex_optimize:
         print_distributed(verbosity, "Using ipex.optimize wrapper")
         import intel_extension_for_pytorch as ipex
 
         model, optimizer = ipex.optimize(model, optimizer=optimizer)
+    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+        print_distributed(
+            verbosity,
+            f"Skipping ipex.optimize for precision={normalized_precision}; using native optimizer path.",
+        )
     else:
         print_distributed(
             verbosity, "CPUs, NVIDIA, and AMD GPUs do not need optimize wrapper"

@@ -864,6 +864,17 @@ if __name__ == "__main__":
     precision = args.precision.lower()
     config["NeuralNetwork"]["Training"]["precision"] = precision
 
+    xpu_available = hasattr(torch, "xpu") and torch.xpu.is_available()
+    ipex_available = "ipex" in globals()
+    # ipex AdamW functional path on Aurora expects FP32 parameters.
+    use_ipex_optimize = xpu_available and ipex_available and precision == "fp32"
+    if xpu_available and precision != "fp32":
+        print(
+            f"Skipping ipex.optimize for precision={precision}; preserving requested non-FP32 parameter dtype."
+        )
+    elif xpu_available and not ipex_available:
+        print("intel_extension_for_pytorch not available; skipping ipex.optimize")
+
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
         verbosity=verbosity,
@@ -883,7 +894,7 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
-        if hasattr(torch, "xpu") and torch.xpu.is_available():
+        if use_ipex_optimize:
             print("Using ipex.optimize wrapper")
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
     else:
@@ -895,7 +906,7 @@ if __name__ == "__main__":
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
-        if hasattr(torch, "xpu") and torch.xpu.is_available():
+        if use_ipex_optimize:
             print("Using ipex.optimize wrapper")
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
 
