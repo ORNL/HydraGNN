@@ -138,8 +138,8 @@ PY
 echo "Python X.Y in venv: ${PYTHON_XY}"
 
 VENV_SITEPKG="$(python - <<'PY'
-import site
-print(site.getsitepackages()[0])
+import sysconfig
+print(sysconfig.get_paths()["purelib"])
 PY
 )"
 echo "VENV_SITEPKG = $VENV_SITEPKG"
@@ -292,6 +292,13 @@ popd >/dev/null
 mkdir -p "$ADIOS2_BUILD"
 pushd "$ADIOS2_BUILD" >/dev/null
 
+# Avoid stale CMake cache pinning an old Python ABI/path from previous installs.
+if [[ -f CMakeCache.txt ]]; then
+  echo "Removing stale ADIOS2 CMake cache in $ADIOS2_BUILD"
+  rm -f CMakeCache.txt
+  rm -rf CMakeFiles
+fi
+
 MPICC_BIN="${MPICC_BIN:-$(command -v mpicc || true)}"
 MPICXX_BIN="${MPICXX_BIN:-$(command -v mpicxx || true)}"
 [[ -z "$MPICC_BIN" || -z "$MPICXX_BIN" ]] && { echo "❌ mpicc/mpicxx not found. Ensure frameworks (and MPI) are available."; exit 1; }
@@ -313,6 +320,8 @@ cmake .. \
   -DADIOS2_USE_MPI=ON \
   -DADIOS2_USE_Fortran=OFF \
   -DADIOS2_USE_Python=ON \
+  -DPython3_FIND_VIRTUALENV=ONLY \
+  -DPython3_ROOT_DIR="$VIRTUAL_ENV" \
   -DPython_EXECUTABLE="$PYTHON_EXEC" \
   -DPython3_EXECUTABLE="$PYTHON_EXEC" \
   -DPython3_INCLUDE_DIR="$PYTHON3_INCLUDE_DIR" \
@@ -377,9 +386,19 @@ else
     echo "Symlinked into venv:"
     echo "  $VENV_SITEPKG/adios2 -> $FOUND"
   else
-    echo "❌ Could not locate ADIOS2 python package."
-    printf '  - %s\n' "${CANDIDATES[@]}"
-    exit 1
+    echo "Standard paths not found. Searching ADIOS2 install tree..."
+    FOUND="$(find "$ADIOS2_INSTALL" -type d -path '*/site-packages/adios2' 2>/dev/null | head -n 1 || true)"
+
+    if [[ -n "$FOUND" ]]; then
+      rm -rf "$VENV_SITEPKG/adios2" 2>/dev/null || true
+      ln -s "$FOUND" "$VENV_SITEPKG/adios2"
+      echo "Symlinked into venv from discovered path:"
+      echo "  $VENV_SITEPKG/adios2 -> $FOUND"
+    else
+      echo "❌ Could not locate ADIOS2 python package."
+      printf '  - %s\n' "${CANDIDATES[@]}"
+      exit 1
+    fi
   fi
 fi
 
