@@ -138,7 +138,31 @@ def setup_ddp(use_deepspeed=False):
 
     ## Default setting
     master_addr = "127.0.0.1"
-    master_port = os.getenv("HYDRAGNN_MASTER_PORT", "8889")
+    master_port = os.getenv("HYDRAGNN_MASTER_PORT", "8892")
+    
+    # Find an available port if the default is not available
+    import socket
+    def is_port_available(port):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((master_addr, int(port)))
+                return True
+            except OSError:
+                return False
+    
+    if not is_port_available(master_port):
+        # Try to find an available port starting from the default
+        base_port = int(master_port)
+        for port_offset in range(100):  # Try up to 100 ports
+            candidate_port = str(base_port + port_offset)
+            if is_port_available(candidate_port):
+                master_port = candidate_port
+                break
+        else:
+            # If no port found in range, let the system assign one
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind((master_addr, 0))
+                master_port = str(s.getsockname()[1])
 
     if os.getenv("HYDRAGNN_MASTER_ADDR") is not None:
         master_addr = os.environ["HYDRAGNN_MASTER_ADDR"]

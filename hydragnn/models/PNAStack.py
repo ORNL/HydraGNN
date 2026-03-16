@@ -56,6 +56,7 @@ class PNAStack(Base):
             self.input_args,
             [
                 (pna, self.conv_args + " -> inv_node_feat"),
+                # (lambda inv_node_feat: F.dropout(inv_node_feat, p=0.1, training=self.training), "inv_node_feat -> inv_node_feat"),
                 (
                     lambda inv_node_feat, equiv_node_feat: [
                         inv_node_feat,

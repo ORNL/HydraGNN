@@ -41,6 +41,8 @@ def activation_function_selection(activation_function_string: str):
         return torch.nn.LeakyReLU(0.25)
     elif activation_function_string == "lrelu_05":
         return torch.nn.LeakyReLU(0.5)
+    elif activation_function_string == "lrelu_001":
+        return torch.nn.LeakyReLU(0.01)
     elif activation_function_string == "sigmoid":
         return torch.nn.Sigmoid()
 
@@ -56,6 +58,8 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
     elif loss_function_string == "GaussianNLLLoss":
         return torch.nn.GaussianNLLLoss()
+    elif loss_function_string == "huber":
+        return torch.nn.HuberLoss()
     else:
         ImportError
 
@@ -135,13 +139,40 @@ def load_existing_model(
         print_master("Load existing model:", path_name)
         checkpoint = torch.load(path_name, map_location=map_location)
         state_dict = checkpoint["model_state_dict"]
-        ## To be compatible with old checkpoint which was not written as a ddp model
-        if not next(iter(state_dict)).startswith("module"):
-            ddp_state_dict = OrderedDict()
-            for k, v in state_dict.items():
-                k = "module." + k
-                ddp_state_dict[k] = v
-            state_dict = ddp_state_dict
+
+        def _state_dict_has_prefix(sd, prefix: str) -> bool:
+            # Robust to empty dicts and mixed-prefix dicts (treat as "has" if any key has it)
+            for k in sd.keys():
+                return k.startswith(prefix)
+            return False
+
+        def _strip_prefix(sd, prefix: str) -> OrderedDict:
+            out = OrderedDict()
+            for k, v in sd.items():
+                if k.startswith(prefix):
+                    out[k[len(prefix) :]] = v
+                else:
+                    out[k] = v
+            return out
+
+        def _add_prefix(sd, prefix: str) -> OrderedDict:
+            out = OrderedDict()
+            for k, v in sd.items():
+                if k.startswith(prefix):
+                    out[k] = v
+                else:
+                    out[prefix + k] = v
+            return out
+
+        # Normalize common wrapper prefixes (e.g., DDP/DataParallel "module.") so inference can
+        # load checkpoints regardless of whether the current model is wrapped.
+        ckpt_has_module = _state_dict_has_prefix(state_dict, "module.")
+        model_has_module = _state_dict_has_prefix(model.state_dict(), "module.")
+        if ckpt_has_module and not model_has_module:
+            state_dict = _strip_prefix(state_dict, "module.")
+        elif (not ckpt_has_module) and model_has_module:
+            state_dict = _add_prefix(state_dict, "module.")
+
         model.load_state_dict(state_dict)
         if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
             optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

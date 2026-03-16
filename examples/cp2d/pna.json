@@ -1,0 +1,52 @@
+{
+    "Verbosity": {
+        "level": 1
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "global_attn_engine": "",
+            "global_attn_type": "",
+            "mpnn_type": "PNA",
+            "radius": 7,
+            "max_neighbours": 5,
+            "periodic_boundary_conditions": false,
+            "pe_dim": 2,
+            "global_attn_heads": 8,
+            "hidden_dim": 96,
+            "num_conv_layers": 4,
+            "output_heads": {
+                "graph":{
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 96,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [128,64]
+                }
+            },
+            "task_weights": [1.0,1.0],
+            "activation_function": "lrelu_001"
+        },
+        "Variables_of_interest": {
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 300,
+            "perc_train": 0.9,
+            "loss_function_type": "huber",
+            "batch_size": 256,
+            "continue": 0,
+            "EarlyStopping": true,
+            "patience": 80,
+            "Checkpoint": false,
+            "checkpoint_warmup": 100,
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 5e-4
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": true,
+        "plot_hist_solution": true,
+        "create_plots": true
+    }
+}

@@ -10,7 +10,7 @@
 ##############################################################################
 
 import torch
-from torch.nn import ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
+from torch.nn import Dropout, ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
 from torch_geometric.nn import global_mean_pool, BatchNorm
 from torch_geometric.nn import Sequential as PyGSequential
@@ -50,7 +50,8 @@ class Base(Module):
         ilossweights_nll: int = 0,  # if =1, using the scalar uncertainty as weights, as in paper# https://openaccess.thecvf.com/content_cvpr_2018/papers/Kendall_Multi-Task_Learning_Using_CVPR_2018_paper.pdf
         freeze_conv=False,
         initial_bias=None,
-        dropout: float = 0.25,
+        dropout: float = 0.0,
+        global_attn_dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
     ):
@@ -64,8 +65,8 @@ class Base(Module):
         self.pe_dim = pe_dim
         self.global_attn_heads = global_attn_heads
         self.hidden_dim = hidden_dim
-        self.dropout = dropout
-        self.global_attn_dropout = dropout
+        self.dropout = float(dropout)
+        self.global_attn_dropout = float(global_attn_dropout)
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -86,6 +87,7 @@ class Base(Module):
         self.activation_function = activation_function_selection(
             activation_function_type
         )
+        self.dropout_layer = Dropout(self.dropout)
 
         # output variance for Gaussian negative log likelihood loss
         self.var_output = 0
@@ -203,6 +205,7 @@ class Base(Module):
                 )
             )
         )
+        # self.graph_convs.append(torch.nn.Dropout(0.1))
         self.feature_layers.append(BatchNorm(self.hidden_dim))
         for _ in range(self.num_conv_layers - 1):
             self.graph_convs.append(
@@ -212,6 +215,7 @@ class Base(Module):
                     )
                 )
             )
+            # self.graph_convs.append(torch.nn.Dropout(0.1))
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def _embedding(self, data):
@@ -296,6 +300,7 @@ class Base(Module):
                 convs_node_hidden.append(
                     self.get_conv(self.hidden_dim, hidden_dim_node[0])
                 )
+            # convs_node_hidden.append(torch.nn.Dropout(self.dropout))
             batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[0]))
             for ilayer in range(num_conv_layers_node - 1):
                 # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
@@ -313,6 +318,7 @@ class Base(Module):
                             hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1]
                         )
                     )
+                # convs_node_hidden.append(torch.nn.Dropout(self.dropout))
                 batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[ilayer + 1]))
             for ihead in node_feature_ind:
                 # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
@@ -334,6 +340,7 @@ class Base(Module):
                 batch_norms_node_output.append(
                     BatchNorm(self.head_dims[ihead] * (1 + self.var_output))
                 )
+                # convs_node_output.append(torch.nn.Dropout(self.dropout))
             self.convs_node_hidden[branchtype] = convs_node_hidden
             self.batch_norms_node_hidden[branchtype] = batch_norms_node_hidden
             self.convs_node_output[branchtype] = convs_node_output
@@ -356,9 +363,11 @@ class Base(Module):
                 dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
                 denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
                 denselayers.append(self.activation_function)
+                denselayers.append(Dropout(self.dropout))
                 for ishare in range(branchdict["architecture"]["num_sharedlayers"] - 1):
                     denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
                     denselayers.append(self.activation_function)
+                    denselayers.append(Dropout(self.dropout))
                 self.graph_shared[branchdict["type"]] = Sequential(*denselayers)
 
         if "node" in self.config_heads:
@@ -378,11 +387,13 @@ class Base(Module):
                     denselayers = []
                     denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                     denselayers.append(self.activation_function)
+                    denselayers.append(Dropout(self.dropout))
                     for ilayer in range(num_head_hidden - 1):
                         denselayers.append(
                             Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
                         )
                         denselayers.append(self.activation_function)
+                        denselayers.append(Dropout(self.dropout))
                     denselayers.append(
                         Linear(
                             dim_head_hidden[-1],
@@ -464,6 +475,7 @@ class Base(Module):
                     **conv_args,
                 )
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
+            inv_node_feat = self.dropout_layer(inv_node_feat)
 
         x = inv_node_feat
         tr.stop("enc_forward")

@@ -22,6 +22,7 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
+from hydragnn.utils.model.uq import enable_dropout_modules
 
 import os
 
@@ -194,7 +195,8 @@ def train_validate_test(
             return_samples=plot_hist_solution,
             compute_grad_energy=compute_grad_energy,
         )
-        scheduler.step(val_loss)
+        if scheduler is not None:
+            scheduler.step(val_loss)
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
@@ -317,10 +319,11 @@ def get_head_indices(model, data):
     """In data.y (the true value here), all feature variables for a mini-batch are concatenated together as a large list.
     To calculate loss function, we need to know true value for each feature in every head.
     This function is to get the feature/head index/location in the large list."""
-    if all(ele == "graph" for ele in model.module.head_type):
-        return get_head_indices_graph(model, data)
+    base_model = model.module if hasattr(model, "module") else model
+    if all(ele == "graph" for ele in base_model.head_type):
+        return get_head_indices_graph(base_model, data)
     else:
-        return get_head_indices_node_or_mixed(model, data)
+        return get_head_indices_node_or_mixed(base_model, data)
 
 
 def get_head_indices_graph(model, data):
@@ -328,16 +331,16 @@ def get_head_indices_graph(model, data):
     # total length
     nsize = data.y.shape[0]
     # feature index for all heads
-    head_index = [None] * model.module.num_heads
-    if model.module.num_heads == 1:
+    head_index = [None] * model.num_heads
+    if model.num_heads == 1:
         head_index[0] = torch.arange(nsize)
         return head_index
     # dimensions of all heads
-    head_dims = model.module.head_dims
+    head_dims = model.head_dims
     head_dimsum = sum(head_dims)
 
     batch_size = data.batch.max() + 1
-    for ihead in range(model.module.num_heads):
+    for ihead in range(model.num_heads):
         head_each = torch.arange(head_dims[ihead])
         head_ind_temporary = head_each.repeat(batch_size)
         head_shift_temporary = sum(head_dims[:ihead]) + torch.repeat_interleave(
@@ -354,8 +357,8 @@ def get_head_indices_node_or_mixed(model, data):
     # head size for each sample
     total_size = y_loc[:, -1]
     # feature index for all heads
-    head_index = [None] * model.module.num_heads
-    if model.module.num_heads == 1:
+    head_index = [None] * model.num_heads
+    if model.num_heads == 1:
         head_index[0] = torch.arange(data.y.shape[0])
         return head_index
     # intermediate work list
@@ -369,7 +372,7 @@ def get_head_indices_node_or_mixed(model, data):
 
     # a large index tensor pool for all element in data.y
     index_range = torch.arange(0, end_index[-1, -1], device=y_loc.device)
-    for ihead in range(model.module.num_heads):
+    for ihead in range(model.num_heads):
         for isample in range(batch_size):
             head_ind_temporary[isample] = index_range[
                 start_index[isample, ihead] : end_index[isample, ihead]
@@ -746,3 +749,116 @@ def test(
                 predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
 
     return test_error, tasks_error, true_values, predicted_values
+
+
+@torch.no_grad()
+def mc_dropout_predict(
+    loader,
+    model,
+    verbosity,
+    *,
+    n_samples: int = 20,
+    percentiles: tuple[float, float] = (5.0, 95.0),
+    reduce_ranks: bool = True,
+    compute_grad_energy: bool = False,
+):
+    if compute_grad_energy:
+        raise NotImplementedError(
+            "MC Dropout inference does not support compute_grad_energy yet."
+        )
+
+    enable_dropout_modules(model)
+    base_model = model.module if hasattr(model, "module") else model
+    use_ddstore = (
+        hasattr(loader.dataset, "ddstore")
+        and hasattr(loader.dataset.ddstore, "epoch_begin")
+        and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
+    )
+    nbatch = get_nbatch(loader)
+
+    num_heads = base_model.num_heads
+    true_values = [[] for _ in range(num_heads)]
+    pred_means = [[] for _ in range(num_heads)]
+    pred_stds = [[] for _ in range(num_heads)]
+    pred_percentiles = [[] for _ in range(num_heads)]
+
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_begin()
+
+    for ibatch, data in iterate_tqdm(
+        enumerate(loader), verbosity, desc="MC Dropout", total=nbatch
+    ):
+        if ibatch >= nbatch:
+            break
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_end()
+
+        head_index = get_head_indices(model, data)
+        data = data.to(get_device())
+        if hasattr(data, "batch") and data.batch is not None:
+            data.dataset_name = data.batch.unique() * 0
+        ytrue = data.y
+
+        sample_preds = [[] for _ in range(num_heads)]
+        for _ in range(int(n_samples)):
+            pred = model(data)
+            if base_model.var_output:
+                pred = pred[0]
+            for ihead in range(num_heads):
+                head_pre = pred[ihead]
+                if head_pre.dim() == 1:
+                    head_pre = head_pre.view(-1, 1)
+                sample_preds[ihead].append(head_pre)
+
+        q = torch.tensor(
+            [p / 100.0 for p in percentiles],
+            dtype=torch.float32,
+            device=get_device(),
+        )
+        for ihead in range(num_heads):
+            preds = torch.stack(sample_preds[ihead], dim=0)
+            mean = preds.mean(dim=0)
+            std = preds.std(dim=0, unbiased=False)
+            perc_vals = torch.quantile(preds, q=q, dim=0)
+
+            head_val = ytrue[head_index[ihead]]
+            if head_val.numel() == mean.numel():
+                head_val = head_val.view_as(mean)
+            else:
+                head_val = head_val.view(-1, 1)
+            true_values[ihead].append(head_val)
+            pred_means[ihead].append(mean)
+            pred_stds[ihead].append(std)
+            pred_percentiles[ihead].append(perc_vals)
+
+        if use_ddstore:
+            loader.dataset.ddstore.epoch_begin()
+
+    if use_ddstore:
+        loader.dataset.ddstore.epoch_end()
+
+    for ihead in range(num_heads):
+        if true_values[ihead]:
+            true_values[ihead] = torch.cat(true_values[ihead], dim=0)
+            pred_means[ihead] = torch.cat(pred_means[ihead], dim=0)
+            pred_stds[ihead] = torch.cat(pred_stds[ihead], dim=0)
+            pred_percentiles[ihead] = torch.cat(pred_percentiles[ihead], dim=1)
+
+    if reduce_ranks:
+        if len(true_values[0]) > 0:
+            for ihead in range(num_heads):
+                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
+                pred_means[ihead] = gather_tensor_ranks(pred_means[ihead])
+                pred_stds[ihead] = gather_tensor_ranks(pred_stds[ihead])
+                perc = pred_percentiles[ihead].permute(1, 0, 2)
+                perc = gather_tensor_ranks(perc)
+                pred_percentiles[ihead] = perc.permute(1, 0, 2)
+
+    pred_percentiles = {
+        "percentiles": list(percentiles),
+        "values": pred_percentiles,
+    }
+
+    return true_values, pred_means, pred_stds, pred_percentiles
+
+

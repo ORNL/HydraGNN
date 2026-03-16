@@ -119,7 +119,7 @@ class Visualizer:
 
         ax.scatter(x, y, s=s, edgecolor="b", marker=marker, facecolor="none")
 
-        ax.set_title(title + ", number of samples =" + str(len(x)))
+        ax.set_title(title)
         ax.set_xlabel(x_label)
         ax.set_ylabel(y_label)
         if xylim_equal:
@@ -134,43 +134,51 @@ class Visualizer:
     def create_plot_global_analysis(
         self, varname, true_values, predicted_values, save_plot=True
     ):
+        import sklearn.metrics
         """Creates scatter/condmean/error pdf plots for the true and predicted values of variable varname."""
         nshape = np.asarray(predicted_values).shape
         if nshape[1] == 1:
-            fig, axs = plt.subplots(1, 3, figsize=(15, 4.5))
-            plt.subplots_adjust(
-                left=0.08, bottom=0.15, right=0.95, top=0.925, wspace=0.35, hspace=0.1
-            )
-            ax = axs[0]
+            fig, axs = plt.subplots(1, 1, figsize=(5.5, 5.5))
+            # plt.subplots_adjust(
+            #     left=0.08, bottom=0.15, right=0.95, top=0.925, wspace=0.35, hspace=0.1
+            # )
+            ax = axs
             self.__scatter_impl(
                 ax,
                 true_values,
                 predicted_values,
-                title="Scalar output",
+                title="{} | R2 score = {:.3f}".format(
+                    varname,
+                    sklearn.metrics.r2_score(
+                        np.array(true_values).flatten(),
+                        np.array(predicted_values).flatten()
+                    )
+                ),
                 x_label="True",
                 y_label="Predicted",
                 xylim_equal=True,
             )
+            plt.tight_layout()
 
-            ax = axs[1]
-            xtrue, error = self.__err_condmean(
-                true_values, predicted_values, weight=1.0
-            )
-            ax.plot(xtrue, error, "ro")
-            ax.set_title("Conditional mean abs. error")
-            ax.set_xlabel("True")
-            ax.set_ylabel("abs. error")
+            # ax = axs[1]
+            # xtrue, error = self.__err_condmean(
+            #     true_values, predicted_values, weight=1.0
+            # )
+            # ax.plot(xtrue, error, "ro")
+            # ax.set_title("Conditional mean abs. error")
+            # ax.set_xlabel("True")
+            # ax.set_ylabel("abs. error")
 
-            ax = axs[2]
-            hist1d, bin_edges = np.histogram(
-                np.array(predicted_values) - np.array(true_values),
-                bins=40,
-                density=True,
-            )
-            ax.plot(0.5 * (bin_edges[:-1] + bin_edges[1:]), hist1d, "ro")
-            ax.set_title("Scalar output: error PDF")
-            ax.set_xlabel("Error")
-            ax.set_ylabel("PDF")
+            # ax = axs[2]
+            # hist1d, bin_edges = np.histogram(
+            #     np.array(predicted_values) - np.array(true_values),
+            #     bins=40,
+            #     density=True,
+            # )
+            # ax.plot(0.5 * (bin_edges[:-1] + bin_edges[1:]), hist1d, "ro")
+            # ax.set_title("Scalar output: error PDF")
+            # ax.set_xlabel("Error")
+            # ax.set_ylabel("PDF")
         else:
             fig, axs = plt.subplots(3, 3, figsize=(18, 16))
             vlen_true = []
@@ -269,11 +277,22 @@ class Visualizer:
             )
 
         if save_plot:
-            fig.savefig(
-                f"./logs/{self.model_with_config_name}/"
-                + varname
-                + "_scatter_condm_err.png"
-            )
+            save_dir = f"./logs/{self.model_with_config_name}/"
+            save_path = save_dir + varname + "_scatter_condm_err.png"
+            import os
+            os.makedirs(save_dir, exist_ok=True)
+            fig.savefig(save_path)
+            # Also save pickle of results (true & predicted values)
+            pickle_path = save_dir + varname + "_scatter_condm_err.pkl"
+            with open(pickle_path, "wb") as f:
+                pickle.dump(
+                    {
+                        "varname": varname,
+                        "true_values": true_values,
+                        "predicted_values": predicted_values,
+                    },
+                    f,
+                )
             plt.close()
         else:
             plt.show()
@@ -479,7 +498,7 @@ class Visualizer:
         true_vec = np.reshape(np.asarray(true_values), (-1, head_dim))
         num_samples = true_vec.shape[0]
 
-        markers_vec = ["o", "s", "d"]  # different markers for three vector components
+        # markers_vec = ["o", "s", "d"]  # different markers for three vector components
         nrow = floor(sqrt(head_dim))
         ncol = ceil(head_dim / nrow)
         fig, axs = plt.subplots(nrow, ncol, figsize=(ncol * 4, nrow * 4))
@@ -492,7 +511,7 @@ class Visualizer:
                 predicted_vec[:, icomp],
                 s=6,
                 c="b",
-                marker=markers_vec[icomp],
+                # marker=markers_vec[icomp],
                 title="comp:" + str(icomp),
                 xylim_equal=True,
             )

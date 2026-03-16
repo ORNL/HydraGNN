@@ -11,3 +11,4 @@ from .model import (
     print_model,
     update_multibranch_heads,
 )
+from .uq import enable_dropout_modules
