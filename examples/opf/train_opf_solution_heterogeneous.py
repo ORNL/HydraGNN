@@ -129,6 +129,8 @@ from opf_solution_utils import (
     resolve_node_target_type as _resolve_node_target_type,
 )
 
+from hydragnn.utils.datasets.hdf5dataset import HDF5Writer, HDF5Dataset
+
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
@@ -431,6 +433,7 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--adios", action="store_const", dest="format", const="adios")
     group.add_argument("--pickle", action="store_const", dest="format", const="pickle")
+    group.add_argument("--hdf5", action="store_const", dest="format", const="hdf5")
     parser.set_defaults(format="pickle")
 
     args = parser.parse_args()
@@ -480,12 +483,12 @@ if __name__ == "__main__":
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     requested_num_groups = data_ops.parse_num_groups(args.num_groups)
-    adios_training_only = args.format == "adios" and not args.preonly
-    if adios_training_only:
+    serialized_training_only = args.format in ("adios", "hdf5") and not args.preonly
+    if serialized_training_only:
         case_names = []
         if rank == 0:
             info(
-                "ADIOS training mode: skipping OPF case discovery/download/split preparation."
+                f"{args.format.upper()} training mode: skipping OPF case discovery/download/split preparation."
             )
     else:
         parsed_case_names = _parse_case_list(args.case_name)
@@ -506,9 +509,8 @@ if __name__ == "__main__":
     case_num_groups = {}
     shared_datadir = datadir
     active_datadir = datadir
-    serialized_target = (
-        f"{args.modelname}.bp" if args.format == "adios" else f"{args.modelname}.pickle"
-    )
+    _fmt_ext = {"adios": ".bp", "hdf5": ".h5", "pickle": ".pickle"}
+    serialized_target = f"{args.modelname}{_fmt_ext[args.format]}"
     preonly_pipeline = args.preonly and args.max_samples is None
     if preonly_pipeline:
         store_homogeneous = args.format == "adios"
@@ -695,8 +697,8 @@ if __name__ == "__main__":
             f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
         )
 
+        t_write = time.perf_counter()
         if args.format == "adios":
-            t_write = time.perf_counter()
             if AdiosWriter is None:
                 raise RuntimeError("adios2 is not available in this environment.")
             serialize_datadir = shared_datadir
@@ -712,24 +714,27 @@ if __name__ == "__main__":
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
             adwriter.save()
-            _log_phase_time(
-                comm,
-                rank,
-                f"phase=serialize format=adios model={args.modelname}",
-                time.perf_counter() - t_write,
-            )
+        elif args.format == "hdf5":
+            basedir = os.path.join(datadir, f"{args.modelname}.h5")
+            if rank == 0 and os.path.exists(basedir):
+                shutil.rmtree(basedir, ignore_errors=True)
+            comm.Barrier()
+            h5writer = HDF5Writer(basedir, comm)
+            h5writer.add("trainset", trainset)
+            h5writer.add("valset", valset)
+            h5writer.add("testset", testset)
+            h5writer.save()
         else:
-            t_write = time.perf_counter()
             basedir = os.path.join(datadir, f"{args.modelname}.pickle")
             SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
             SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
             SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
-            _log_phase_time(
-                comm,
-                rank,
-                f"phase=serialize format=pickle model={args.modelname}",
-                time.perf_counter() - t_write,
-            )
+        _log_phase_time(
+            comm,
+            rank,
+            f"phase=serialize format={args.format} model={args.modelname}",
+            time.perf_counter() - t_write,
+        )
 
         comm.Barrier()
         if dist.is_initialized():
@@ -916,8 +921,8 @@ if __name__ == "__main__":
             f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
         )
 
+        t_write = time.perf_counter()
         if args.format == "adios":
-            t_write = time.perf_counter()
             if AdiosWriter is None:
                 raise RuntimeError("adios2 is not available in this environment.")
             serialize_datadir = shared_datadir
@@ -933,24 +938,27 @@ if __name__ == "__main__":
             adwriter.add("valset", valset)
             adwriter.add("testset", testset)
             adwriter.save()
-            _log_phase_time(
-                comm,
-                rank,
-                f"phase=serialize format=adios model={args.modelname}",
-                time.perf_counter() - t_write,
-            )
+        elif args.format == "hdf5":
+            basedir = os.path.join(datadir, f"{args.modelname}.h5")
+            if rank == 0 and os.path.exists(basedir):
+                shutil.rmtree(basedir, ignore_errors=True)
+            comm.Barrier()
+            h5writer = HDF5Writer(basedir, comm)
+            h5writer.add("trainset", trainset)
+            h5writer.add("valset", valset)
+            h5writer.add("testset", testset)
+            h5writer.save()
         else:
-            t_write = time.perf_counter()
             basedir = os.path.join(datadir, f"{args.modelname}.pickle")
             SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
             SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
             SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
-            _log_phase_time(
-                comm,
-                rank,
-                f"phase=serialize format=pickle model={args.modelname}",
-                time.perf_counter() - t_write,
-            )
+        _log_phase_time(
+            comm,
+            rank,
+            f"phase=serialize format={args.format} model={args.modelname}",
+            time.perf_counter() - t_write,
+        )
 
         comm.Barrier()
         if dist.is_initialized():
@@ -961,7 +969,7 @@ if __name__ == "__main__":
         if AdiosDataset is None:
             raise RuntimeError("adios2 is not available in this environment.")
         fname = os.path.join(datadir, f"{args.modelname}.bp")
-        if adios_training_only and not os.path.isdir(fname):
+        if serialized_training_only and not os.path.isdir(fname):
             raise RuntimeError(
                 f"Expected preprocessed ADIOS dataset at '{fname}' for training-only mode. "
                 "Run with --preonly --adios first."
@@ -972,6 +980,16 @@ if __name__ == "__main__":
         trainset = HeteroFromHomogeneousDataset(train_base, edge_dim=edge_dim)
         valset = HeteroFromHomogeneousDataset(val_base, edge_dim=edge_dim)
         testset = HeteroFromHomogeneousDataset(test_base, edge_dim=edge_dim)
+    elif args.format == "hdf5":
+        basedir = os.path.join(datadir, f"{args.modelname}.h5")
+        if serialized_training_only and not os.path.isdir(basedir):
+            raise RuntimeError(
+                f"Expected preprocessed HDF5 dataset at '{basedir}' for training-only mode. "
+                "Run with --preonly --hdf5 first."
+            )
+        trainset = HDF5Dataset(basedir, "trainset")
+        valset = HDF5Dataset(basedir, "valset")
+        testset = HDF5Dataset(basedir, "testset")
     else:
         basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = SimplePickleDataset(

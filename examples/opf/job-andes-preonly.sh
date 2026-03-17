@@ -38,4 +38,4 @@ export HYDRAGNN_VALTEST=1
 cd $HYDRAGNN_ROOT/examples/opf
 
 # 2) Rebuild processed files once (single rank; safest)
-srun -N1 -n1 -c7 python -u train_opf_solution_heterogeneous.py --preonly --adios --num_groups 20 --case_name pglib_opf_case118_ieee pglib_opf_case14_ieee pglib_opf_case2000_goc pglib_opf_case30_ieee pglib_opf_case500_goc pglib_opf_case57_ieee pglib_opf_case6470_rte pglib_opf_case4661_sdet pglib_opf_case10000_goc pglib_opf_case13659_pegase
+srun -N1 -n1 -c7 python -u train_opf_solution_heterogeneous.py --preonly --hdf5 --num_groups 20 --case_name pglib_opf_case118_ieee pglib_opf_case14_ieee pglib_opf_case2000_goc pglib_opf_case30_ieee pglib_opf_case500_goc pglib_opf_case57_ieee pglib_opf_case6470_rte pglib_opf_case4661_sdet pglib_opf_case10000_goc pglib_opf_case13659_pegase
