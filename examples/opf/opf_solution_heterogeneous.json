@@ -4,11 +4,15 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "mpnn_type": "HeteroGIN",
+            "mpnn_type": "HeteroPNA",
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
             "max_neighbours": 100,
+            "edge_dim": {
+                "ac_line": 9,
+                "transformer": 11
+            },
             "node_input_dims": {
                 "bus": 4,
                 "generator": 11,
