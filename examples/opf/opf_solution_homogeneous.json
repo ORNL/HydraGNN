@@ -4,7 +4,7 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "mpnn_type": "HeteroGIN",
+            "mpnn_type": "PNA",
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
@@ -18,7 +18,8 @@
             },
             "task_weights": [1.0],
             "hetero_pooling_mode": "sum",
-            "node_target_type": "bus"
+            "node_target_type": "bus",
+            "edge_dim": 11
         },
         "Variables_of_interest": {
             "input_node_features": [0, 1, 2, 3],

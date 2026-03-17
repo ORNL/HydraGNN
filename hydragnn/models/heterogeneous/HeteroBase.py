@@ -229,25 +229,49 @@ class HeteroBase(Module):
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
+            edge_dim = self._resolve_edge_dim_for_type(edge_type)
             if self.share_relation_weights:
                 if shared_conv is None:
-                    shared_conv = self.get_conv(input_dim, output_dim)
+                    shared_conv = self.get_conv(
+                        input_dim, output_dim, edge_dim=edge_dim
+                    )
                 conv_dict[edge_type] = shared_conv
             else:
-                conv_dict[edge_type] = self.get_conv(input_dim, output_dim)
+                conv_dict[edge_type] = self.get_conv(
+                    input_dim, output_dim, edge_dim=edge_dim
+                )
         return HeteroConv(conv_dict, aggr="sum")
 
     def _build_hetero_conv_node_head(self, input_dim: int, output_dim: int):
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
+            edge_dim = self._resolve_edge_dim_for_type(edge_type)
             if self.share_relation_weights:
                 if shared_conv is None:
-                    shared_conv = self.get_conv(input_dim, output_dim)
+                    shared_conv = self.get_conv(
+                        input_dim, output_dim, edge_dim=edge_dim
+                    )
                 conv_dict[edge_type] = shared_conv
             else:
-                conv_dict[edge_type] = self.get_conv(input_dim, output_dim)
+                conv_dict[edge_type] = self.get_conv(
+                    input_dim, output_dim, edge_dim=edge_dim
+                )
         return HeteroConv(conv_dict, aggr="sum")
+
+    def _resolve_edge_dim_for_type(self, edge_type):
+        """Return the edge_dim for a specific edge type.
+
+        When ``self.edge_dim`` is a dict mapping relation names to widths,
+        look up the relation (middle element of the triple).  Returns ``None``
+        for featureless edge types.  When ``self.edge_dim`` is an int (or
+        absent), return it unchanged for all edge types.
+        """
+        edge_dim = getattr(self, "edge_dim", None)
+        if isinstance(edge_dim, dict):
+            _, rel, _ = edge_type
+            return edge_dim.get(rel)
+        return edge_dim
 
     def _init_conv(self):
         self.graph_convs = ModuleList()

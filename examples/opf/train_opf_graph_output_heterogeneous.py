@@ -13,6 +13,25 @@ from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
 from __init__ import data_ops
 from opf_nvme_utils import stage_case_to_nvme
+from opf_solution_utils import (
+    EdgeAttrDatasetAdapter,
+    HeteroFromHomogeneousDataset,
+    assemble_edge_attr,
+    compute_pna_deg_for_hetero_dataset,
+    info,
+    resolve_edge_feature_schema,
+    validate_voi_node_features,
+)
+
+
+def _to_jsonable(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.item() if obj.numel() == 1 else obj.tolist()
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
 
 
 def _patch_fast_tar_extraction():
@@ -87,17 +106,24 @@ except ImportError:
     AdiosDataset = None
 
 
-def info(*args, logtype="info", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def _prepare_sample(data, to_homogeneous: bool):
+def _prepare_sample(
+    data,
+    to_homogeneous: bool,
+    edge_dim=None,
+    edge_feature_schema=None,
+):
     data.y = data.objective.view(1, 1).to(torch.float32)
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
+    data, _ = assemble_edge_attr(
+        data, edge_dim=edge_dim, feature_schema=edge_feature_schema
+    )
     if not to_homogeneous:
         return data
     data_h = data.to_homogeneous(
-        node_attrs=["x"], add_node_type=True, add_edge_type=True
+        node_attrs=["x"],
+        edge_attrs=["edge_attr"],
+        add_node_type=True,
+        add_edge_type=True,
     )
     data_h.y = data.y
     data_h.graph_attr = data.graph_attr
@@ -202,23 +228,6 @@ def _resolve_preonly_case_names(args, datadir):
     return case_names
 
 
-class HeteroFromHomogeneousDataset:
-    def __init__(self, base):
-        self.base = base
-
-    def __len__(self):
-        return len(self.base)
-
-    def __getitem__(self, idx):
-        data = self.base[idx]
-        hetero = data.to_heterogeneous()
-        if hasattr(data, "y"):
-            hetero.y = data.y
-        if hasattr(data, "graph_attr"):
-            hetero.graph_attr = data.graph_attr
-        return hetero
-
-
 if __name__ == "__main__":
     _patch_fast_tar_extraction()
     parser = argparse.ArgumentParser(
@@ -282,6 +291,22 @@ if __name__ == "__main__":
 
     with open(input_filename, "r") as f:
         config = json.load(f)
+
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    raw_edge_dim = arch_config.get("edge_dim")
+    if isinstance(raw_edge_dim, dict):
+        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
+        edge_feature_schema = None
+    elif raw_edge_dim is not None:
+        edge_dim = int(raw_edge_dim)
+        names = arch_config.get("edge_feature_names")
+        if names:
+            edge_feature_schema = resolve_edge_feature_schema(names, edge_dim)
+        else:
+            edge_feature_schema = None
+    else:
+        raise RuntimeError("edge_dim must be specified in config.")
+    arch_config["edge_dim"] = edge_dim
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -421,7 +446,15 @@ if __name__ == "__main__":
 
             t_pre = time.perf_counter()
             train_subset = _subset_for_rank(train_raw, rank, comm_size)
-            trainset.extend(_prepare_sample(d, store_homogeneous) for d in train_subset)
+            trainset.extend(
+                _prepare_sample(
+                    d,
+                    store_homogeneous,
+                    edge_dim=edge_dim,
+                    edge_feature_schema=edge_feature_schema,
+                )
+                for d in train_subset
+            )
             _log_phase_time(
                 comm,
                 rank,
@@ -431,7 +464,15 @@ if __name__ == "__main__":
 
             t_pre = time.perf_counter()
             val_subset = _subset_for_rank(val_raw, rank, comm_size)
-            valset.extend(_prepare_sample(d, store_homogeneous) for d in val_subset)
+            valset.extend(
+                _prepare_sample(
+                    d,
+                    store_homogeneous,
+                    edge_dim=edge_dim,
+                    edge_feature_schema=edge_feature_schema,
+                )
+                for d in val_subset
+            )
             _log_phase_time(
                 comm,
                 rank,
@@ -441,7 +482,15 @@ if __name__ == "__main__":
 
             t_pre = time.perf_counter()
             test_subset = _subset_for_rank(test_raw, rank, comm_size)
-            testset.extend(_prepare_sample(d, store_homogeneous) for d in test_subset)
+            testset.extend(
+                _prepare_sample(
+                    d,
+                    store_homogeneous,
+                    edge_dim=edge_dim,
+                    edge_feature_schema=edge_feature_schema,
+                )
+                for d in test_subset
+            )
             _log_phase_time(
                 comm,
                 rank,
@@ -569,14 +618,16 @@ if __name__ == "__main__":
             args.topological_perturbations,
         )
 
-        sample = _prepare_sample(train_raw[0], to_homogeneous=False)
-        input_dim = max(
-            data.x.size(-1) for data in sample.node_stores if hasattr(data, "x")
-        )
+        # Validate var_config from config — no auto-fill from data
         var_config = config["NeuralNetwork"]["Variables_of_interest"]
-        var_config["input_node_features"] = list(range(input_dim))
-        var_config["node_feature_dims"] = [input_dim]
-        var_config["graph_feature_dims"] = [1]
+        validate_voi_node_features(config)
+        if (
+            not isinstance(var_config.get("graph_feature_dims"), list)
+            or len(var_config["graph_feature_dims"]) == 0
+        ):
+            raise RuntimeError(
+                "'graph_feature_dims' must be an explicit non-empty list in the config."
+            )
 
     if args.format == "adios":
         if AdiosDataset is None:
@@ -590,9 +641,9 @@ if __name__ == "__main__":
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HeteroFromHomogeneousDataset(train_base)
-        valset = HeteroFromHomogeneousDataset(val_base)
-        testset = HeteroFromHomogeneousDataset(test_base)
+        trainset = HeteroFromHomogeneousDataset(train_base, edge_dim=edge_dim)
+        valset = HeteroFromHomogeneousDataset(val_base, edge_dim=edge_dim)
+        testset = HeteroFromHomogeneousDataset(test_base, edge_dim=edge_dim)
     else:
         basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = SimplePickleDataset(
@@ -606,11 +657,25 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+
+    trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
+    valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
+    testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
+
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    if arch_config.get("mpnn_type") == "HeteroPNA" and not arch_config.get("pna_deg"):
+        info("Computing pna_deg for HeteroPNA from training dataset")
+        pna_deg = compute_pna_deg_for_hetero_dataset(trainset, verbosity=2)
+        arch_config["pna_deg"] = pna_deg
+        arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
+
+    config = _to_jsonable(config)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")

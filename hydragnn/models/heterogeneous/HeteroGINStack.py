@@ -20,7 +20,7 @@ class HeteroGINStack(HeteroBase):
         self.is_edge_model = False
         super().__init__(*args, **kwargs)
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
         gin = GINConv(
             nn.Sequential(
                 nn.Linear(input_dim, output_dim),

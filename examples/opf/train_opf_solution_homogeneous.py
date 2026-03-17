@@ -28,6 +28,24 @@ from torch_geometric.datasets import OPFDataset
 import torch_geometric.datasets.opf as tg_opf
 from __init__ import data_ops
 from opf_nvme_utils import stage_case_to_nvme
+from opf_solution_utils import (
+    assemble_edge_attr,
+    build_solution_target as _build_solution_target,
+    ensure_node_y_loc as _ensure_node_y_loc,
+    info,
+    resolve_edge_feature_schema,
+    resolve_node_target_type as _resolve_node_target_type,
+)
+
+
+def _to_jsonable(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.item() if obj.numel() == 1 else obj.tolist()
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
 
 
 _DEFAULT_CASE_NAMES = [
@@ -114,83 +132,36 @@ except ImportError:
     AdiosDataset = None
 
 
-def info(*args, logtype="info", sep=" "):
-    getattr(logging, logtype)(sep.join(map(str, args)))
-
-
-def _build_solution_target(data, node_target_type: str):
-    if hasattr(data, "node_types") and node_target_type in data.node_types:
-        node_store = data[node_target_type]
-        if not hasattr(node_store, "y") or node_store.y is None:
-            raise RuntimeError(
-                f"No targets found for node type '{node_target_type}' in OPF sample."
-            )
-        return node_store.y.to(torch.float32)
-
-    if hasattr(data, "_node_type_names") and hasattr(data, "node_type"):
-        if node_target_type not in data._node_type_names:
-            raise RuntimeError(
-                f"Node type '{node_target_type}' not found in OPF sample."
-            )
-        type_index = data._node_type_names.index(node_target_type)
-        if not hasattr(data, "y") or data.y is None:
-            raise RuntimeError(
-                f"No homogeneous targets found for node type '{node_target_type}'."
-            )
-        mask = data.node_type == type_index
-        return data.y[mask].to(torch.float32)
-
-    raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
-
-
-def _ensure_node_y_loc(data):
-    if not hasattr(data, "y") or data.y is None:
-        raise RuntimeError("Missing node targets (data.y) for OPF sample.")
-    if data.y.dim() == 1:
-        data.y = data.y.unsqueeze(-1)
-    num_nodes = int(data.y.shape[0])
-    target_dim = int(data.y.shape[1])
-    data.y_num_nodes = torch.tensor(num_nodes, dtype=torch.int64, device=data.y.device)
-    data.y_loc = torch.tensor(
-        [[0, num_nodes * target_dim]],
-        dtype=torch.int64,
-        device=data.y.device,
-    )
-
-
 def _prepare_sample(
-    data, node_target_type: str, case_name: str, to_homogeneous: bool = True
+    data,
+    node_target_type: str,
+    case_name: str,
+    to_homogeneous: bool = True,
+    edge_dim=None,
+    edge_feature_schema=None,
 ):
     data.y = _build_solution_target(data, node_target_type)
     _ensure_node_y_loc(data)
     data.graph_attr = data.x.view(1, -1).to(torch.float32)
     data.case_name = case_name
+    data, _ = assemble_edge_attr(
+        data, edge_dim=edge_dim, feature_schema=edge_feature_schema
+    )
     if not to_homogeneous:
         return data
     data_h = data.to_homogeneous(
-        node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
+        node_attrs=["x", "y"],
+        edge_attrs=["edge_attr"],
+        add_node_type=True,
+        add_edge_type=True,
     )
+    # to_homogeneous fills y with NaN for node types without targets (load, shunt).
+    # Replace NaN with 0 so the loss doesn't blow up.
+    if hasattr(data_h, "y") and data_h.y is not None:
+        data_h.y = torch.nan_to_num(data_h.y, nan=0.0)
     data_h.graph_attr = data.graph_attr
     data_h.case_name = case_name
     return data_h
-
-
-def _resolve_node_target_type(data, requested: str) -> str:
-    if hasattr(data, "node_types"):
-        if requested in data.node_types:
-            return requested
-        if hasattr(data, "_node_type_names") and requested in data._node_type_names:
-            idx = data._node_type_names.index(requested)
-            if idx < len(data.node_types):
-                return data.node_types[idx]
-        for name in data.node_types:
-            if str(name).lower() == requested.lower():
-                return name
-        if len(data.node_types) > 0:
-            return data.node_types[0]
-    if hasattr(data, "_node_type_names") and requested in data._node_type_names:
-        return requested
-    return requested
 
 
 def _load_split(root, split, case_name, num_groups, topological_perturbations):
@@ -320,7 +291,10 @@ class HomogeneousDatasetAdapter:
         data = self.base[idx]
         if hasattr(data, "node_types"):
             data = data.to_homogeneous(
-                node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
+                node_attrs=["x", "y"],
+                edge_attrs=["edge_attr"],
+                add_node_type=True,
+                add_edge_type=True,
             )
         if not hasattr(data, "node_type") or not hasattr(data, "_node_type_names"):
             raise RuntimeError("Expected homogeneous OPF sample with node_type.")
@@ -332,11 +306,10 @@ class HomogeneousDatasetAdapter:
             raise RuntimeError(
                 f"No targets found for node type '{self.node_target_type}' in OPF sample."
             )
-        type_index = data._node_type_names.index(self.node_target_type)
-        mask = data.node_type == type_index
-        data.y = data.y[mask]
-        if hasattr(data, "batch"):
-            data.batch = data.batch[mask]
+        # Keep y for ALL nodes — the model predicts for all nodes in the
+        # homogeneous graph.  Non-target node types (load, shunt) have NaN
+        # from to_homogeneous; replace with 0 so the loss stays finite.
+        data.y = torch.nan_to_num(data.y, nan=0.0)
         _ensure_node_y_loc(data)
         return data
 
@@ -424,7 +397,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
-    parser.add_argument("--modelname", type=str, default="OPF_Solution")
+    parser.add_argument("--modelname", type=str, default="OPF_Solution_Homo")
     parser.add_argument(
         "--nvme",
         action="store_true",
@@ -450,6 +423,22 @@ if __name__ == "__main__":
 
     with open(input_filename, "r") as f:
         config = json.load(f)
+
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    raw_edge_dim = arch_config.get("edge_dim")
+    if isinstance(raw_edge_dim, dict):
+        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
+        edge_feature_schema = None
+    elif raw_edge_dim is not None:
+        edge_dim = int(raw_edge_dim)
+        names = arch_config.get("edge_feature_names")
+        if names:
+            edge_feature_schema = resolve_edge_feature_schema(names, edge_dim)
+        else:
+            edge_feature_schema = None
+    else:
+        raise RuntimeError("edge_dim must be specified in config.")
+    arch_config["edge_dim"] = edge_dim
 
     if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
@@ -597,7 +586,14 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess train {case_name}", leave=False
             ):
                 trainset.append(
-                    _prepare_sample(d, args.node_target_type, case_name, True)
+                    _prepare_sample(
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        True,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
+                    )
                 )
             _log_phase_time(
                 comm,
@@ -627,7 +623,14 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
             ):
                 valset.append(
-                    _prepare_sample(d, args.node_target_type, case_name, True)
+                    _prepare_sample(
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        True,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
+                    )
                 )
             _log_phase_time(
                 comm,
@@ -657,7 +660,14 @@ if __name__ == "__main__":
                 subset, verbosity, desc=f"Preprocess test {case_name}", leave=False
             ):
                 testset.append(
-                    _prepare_sample(d, args.node_target_type, case_name, True)
+                    _prepare_sample(
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        True,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
+                    )
                 )
             _log_phase_time(
                 comm,
@@ -798,6 +808,19 @@ if __name__ == "__main__":
         )
         args.node_target_type = resolved_node_target_type
 
+    # Sync input_node_features with the actual homogeneous data feature dim.
+    # After to_homogeneous(), x is zero-padded to the max feature dim across
+    # all node types, which is typically larger than the config's original
+    # input_node_features list.
+    actual_x_dim = trainset[0].x.shape[1]
+    voi = config["NeuralNetwork"]["Variables_of_interest"]
+    if len(voi["input_node_features"]) != actual_x_dim:
+        info(
+            f"Updating input_node_features: config has {len(voi['input_node_features'])} "
+            f"features but homogeneous data has {actual_x_dim} (zero-padded)."
+        )
+        voi["input_node_features"] = list(range(actual_x_dim))
+
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
@@ -812,6 +835,7 @@ if __name__ == "__main__":
     test_loader = HomogeneousBatchAdapter(test_loader)
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    config = _to_jsonable(config)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")

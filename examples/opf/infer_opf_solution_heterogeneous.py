@@ -26,7 +26,10 @@ from opf_solution_utils import (
     HeteroFromHomogeneousDataset,
     NodeBatchAdapter,
     NodeTargetDatasetAdapter,
+    compute_pna_deg_for_hetero_dataset,
+    validate_voi_node_features,
     info,
+    resolve_edge_feature_schema,
     resolve_node_target_type,
 )
 
@@ -79,6 +82,80 @@ def _plot_parity_per_dim(
         plt.close(fig)
 
 
+def _compute_mae_per_quantity(true_values, predicted_values, output_name, output_dim):
+    true_arr = true_values.detach().cpu().numpy()
+    pred_arr = predicted_values.detach().cpu().numpy()
+    if true_arr.ndim == 1:
+        true_arr = true_arr.reshape(-1, 1)
+    if pred_arr.ndim == 1:
+        pred_arr = pred_arr.reshape(-1, 1)
+
+    if output_dim is None:
+        output_dim = true_arr.shape[1]
+
+    total = true_arr.shape[0]
+    if total % output_dim != 0:
+        output_dim = true_arr.shape[1]
+
+    true_arr = true_arr.reshape(-1, output_dim)
+    pred_arr = pred_arr.reshape(-1, output_dim)
+
+    abs_err = np.abs(pred_arr - true_arr)
+    mae_per_dim = abs_err.mean(axis=0)
+    return {
+        "quantity": output_name,
+        "mae_overall": float(abs_err.mean()),
+        "mae_per_dim": [float(v) for v in mae_per_dim],
+    }
+
+
+def _compute_diagnostics_per_quantity(
+    true_values, predicted_values, output_name, output_dim
+):
+    true_arr = true_values.detach().cpu().numpy()
+    pred_arr = predicted_values.detach().cpu().numpy()
+    if true_arr.ndim == 1:
+        true_arr = true_arr.reshape(-1, 1)
+    if pred_arr.ndim == 1:
+        pred_arr = pred_arr.reshape(-1, 1)
+
+    if output_dim is None:
+        output_dim = true_arr.shape[1]
+
+    total = true_arr.shape[0]
+    if total % output_dim != 0:
+        output_dim = true_arr.shape[1]
+
+    true_arr = true_arr.reshape(-1, output_dim)
+    pred_arr = pred_arr.reshape(-1, output_dim)
+
+    residual = pred_arr - true_arr
+    abs_err = np.abs(residual)
+
+    bias_per_dim = residual.mean(axis=0)
+    p50_per_dim = np.percentile(abs_err, 50, axis=0)
+    p90_per_dim = np.percentile(abs_err, 90, axis=0)
+    p99_per_dim = np.percentile(abs_err, 99, axis=0)
+
+    high_true_bias_per_dim = []
+    for dim in range(output_dim):
+        threshold = float(np.percentile(true_arr[:, dim], 90))
+        mask = true_arr[:, dim] >= threshold
+        if np.any(mask):
+            high_true_bias_per_dim.append(float(residual[mask, dim].mean()))
+        else:
+            high_true_bias_per_dim.append(0.0)
+
+    return {
+        "quantity": output_name,
+        "bias_per_dim": [float(v) for v in bias_per_dim],
+        "abs_error_p50_per_dim": [float(v) for v in p50_per_dim],
+        "abs_error_p90_per_dim": [float(v) for v in p90_per_dim],
+        "abs_error_p99_per_dim": [float(v) for v in p99_per_dim],
+        "high_true_bias_per_dim": high_true_bias_per_dim,
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -127,10 +204,27 @@ if __name__ == "__main__":
         with open(input_filename, "r") as f:
             config = json.load(f)
 
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    raw_edge_dim = arch_config.get("edge_dim")
+    if isinstance(raw_edge_dim, dict):
+        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
+        edge_feature_schema = None
+    elif raw_edge_dim is not None:
+        edge_dim = int(raw_edge_dim)
+        names = arch_config.get("edge_feature_names")
+        if names:
+            edge_feature_schema = resolve_edge_feature_schema(names, edge_dim)
+        else:
+            edge_feature_schema = None
+    else:
+        raise RuntimeError("edge_dim must be specified in config.")
+    arch_config["edge_dim"] = edge_dim
+
     if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
             "node_target_type"
         ]
+    validate_voi_node_features(config, args.node_target_type)
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -144,9 +238,9 @@ if __name__ == "__main__":
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HeteroFromHomogeneousDataset(train_base)
-        valset = HeteroFromHomogeneousDataset(val_base)
-        testset = HeteroFromHomogeneousDataset(test_base)
+        trainset = HeteroFromHomogeneousDataset(train_base, edge_dim=edge_dim)
+        valset = HeteroFromHomogeneousDataset(val_base, edge_dim=edge_dim)
+        testset = HeteroFromHomogeneousDataset(test_base, edge_dim=edge_dim)
     else:
         basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
         if not os.path.isdir(basedir):
@@ -168,20 +262,35 @@ if __name__ == "__main__":
     config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})[
         "node_target_type"
     ] = args.node_target_type
+    validate_voi_node_features(config, args.node_target_type)
 
-    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
-    valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
-    testset = NodeTargetDatasetAdapter(testset, args.node_target_type)
+    trainset = NodeTargetDatasetAdapter(
+        trainset, args.node_target_type, edge_dim=edge_dim
+    )
+    valset = NodeTargetDatasetAdapter(valset, args.node_target_type, edge_dim=edge_dim)
+    testset = NodeTargetDatasetAdapter(
+        testset, args.node_target_type, edge_dim=edge_dim
+    )
 
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    train_loader = NodeBatchAdapter(train_loader, args.node_target_type)
-    val_loader = NodeBatchAdapter(val_loader, args.node_target_type)
-    test_loader = NodeBatchAdapter(test_loader, args.node_target_type)
+    train_loader = NodeBatchAdapter(
+        train_loader, args.node_target_type, edge_dim=edge_dim
+    )
+    val_loader = NodeBatchAdapter(val_loader, args.node_target_type, edge_dim=edge_dim)
+    test_loader = NodeBatchAdapter(
+        test_loader, args.node_target_type, edge_dim=edge_dim
+    )
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    if arch_config.get("mpnn_type") == "HeteroPNA" and not arch_config.get("pna_deg"):
+        info("Computing pna_deg for HeteroPNA from inference dataset")
+        pna_deg = compute_pna_deg_for_hetero_dataset(trainset, verbosity=2)
+        arch_config["pna_deg"] = pna_deg
+        arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
 
     metadata = None
     try:
@@ -230,16 +339,77 @@ if __name__ == "__main__":
     if rank == 0:
         out_dir = os.path.join("./logs", args.modelname)
         os.makedirs(out_dir, exist_ok=True)
+        var_config = config["NeuralNetwork"]["Variables_of_interest"]
+        output_names = var_config.get("output_names", None)
+        output_dims = var_config.get("output_dim", None)
+
+        mae_metrics = []
+        diagnostics_metrics = []
+        for ihead in range(num_tasks):
+            name = output_names[ihead] if output_names else f"head{ihead}"
+            dim = output_dims[ihead] if output_dims else None
+            mae_metrics.append(
+                _compute_mae_per_quantity(
+                    true_values[ihead],
+                    predicted_values[ihead],
+                    name,
+                    dim,
+                )
+            )
+            diagnostics_metrics.append(
+                _compute_diagnostics_per_quantity(
+                    true_values[ihead],
+                    predicted_values[ihead],
+                    name,
+                    dim,
+                )
+            )
+
         metrics = {
             "test_error": float(test_error.detach().cpu().item()),
             "task_errors": task_errors.detach().cpu().tolist(),
+            "mae": mae_metrics,
+            "diagnostics": diagnostics_metrics,
         }
         with open(os.path.join(out_dir, "test_metrics.json"), "w") as f:
             json.dump(metrics, f, indent=2)
 
-        var_config = config["NeuralNetwork"]["Variables_of_interest"]
-        output_names = var_config.get("output_names", None)
-        output_dims = var_config.get("output_dim", None)
+        # Print key metrics to stdout so they are visible in batch job logs.
+        print(f"Inference test_error: {metrics['test_error']}", flush=True)
+        print(f"Inference task_errors: {metrics['task_errors']}", flush=True)
+
+        for mae_entry in mae_metrics:
+            info(
+                "Inference MAE %s: overall=%g per_dim=%s"
+                % (
+                    mae_entry["quantity"],
+                    mae_entry["mae_overall"],
+                    mae_entry["mae_per_dim"],
+                )
+            )
+            print(
+                "Inference MAE %s: overall=%g per_dim=%s"
+                % (
+                    mae_entry["quantity"],
+                    mae_entry["mae_overall"],
+                    mae_entry["mae_per_dim"],
+                ),
+                flush=True,
+            )
+
+        for diag_entry in diagnostics_metrics:
+            print(
+                "Inference diagnostics %s: bias=%s p90_abs=%s p99_abs=%s high_true_bias=%s"
+                % (
+                    diag_entry["quantity"],
+                    diag_entry["bias_per_dim"],
+                    diag_entry["abs_error_p90_per_dim"],
+                    diag_entry["abs_error_p99_per_dim"],
+                    diag_entry["high_true_bias_per_dim"],
+                ),
+                flush=True,
+            )
+
         for ihead in range(num_tasks):
             name = output_names[ihead] if output_names else f"head{ihead}"
             dim = output_dims[ihead] if output_dims else None
