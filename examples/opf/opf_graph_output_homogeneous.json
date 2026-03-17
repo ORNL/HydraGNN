@@ -17,7 +17,9 @@
                     "dim_headlayers": [32, 16]
                 }
             },
-            "task_weights": [1.0]
+            "task_weights": [1.0],
+            "edge_dim": 15,
+            "edge_feature_names": ["r", "x", "b", "g", "b_fr", "b_to", "g_fr", "g_to", "rate_a", "rate_b", "rate_c", "tap", "shift", "angmin", "angmax"]
         },
         "Variables_of_interest": {
             "input_node_features": [0],

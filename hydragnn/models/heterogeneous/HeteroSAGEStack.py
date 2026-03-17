@@ -19,7 +19,7 @@ class HeteroSAGEStack(HeteroBase):
         self.is_edge_model = False
         super().__init__(*args, **kwargs)
 
-    def get_conv(self, input_dim, output_dim):
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
         return SAGEConv(in_channels=input_dim, out_channels=output_dim)
 
     def __str__(self):

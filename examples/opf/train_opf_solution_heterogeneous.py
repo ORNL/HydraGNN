@@ -115,11 +115,17 @@ from hydragnn.utils.print import iterate_tqdm
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 
 from opf_solution_utils import (
+    EdgeAttrDatasetAdapter,
     HeteroFromHomogeneousDataset,
     NodeBatchAdapter,
     NodeTargetDatasetAdapter,
+    assemble_edge_attr,
+    build_solution_target as _build_solution_target,
+    compute_pna_deg_for_hetero_dataset,
+    validate_voi_node_features,
     ensure_node_y_loc as _ensure_node_y_loc,
     info,
+    resolve_edge_feature_schema,
     resolve_node_target_type as _resolve_node_target_type,
 )
 
@@ -128,48 +134,6 @@ try:
 except ImportError:
     AdiosWriter = None
     AdiosDataset = None
-
-
-def _build_solution_target(data, node_target_type: str):
-    if hasattr(data, "node_types") and node_target_type in data.node_types:
-        node_store = data[node_target_type]
-        if not hasattr(node_store, "y") or node_store.y is None:
-            raise RuntimeError(
-                f"No targets found for node type '{node_target_type}' in OPF sample."
-            )
-        return node_store.y.to(torch.float32)
-
-    if hasattr(data, "_node_type_names") and hasattr(data, "node_type"):
-        if node_target_type not in data._node_type_names:
-            raise RuntimeError(
-                f"Node type '{node_target_type}' not found in OPF sample."
-            )
-        type_index = data._node_type_names.index(node_target_type)
-        if not hasattr(data, "y") or data.y is None:
-            raise RuntimeError(
-                f"No homogeneous targets found for node type '{node_target_type}'."
-            )
-        mask = data.node_type == type_index
-        return data.y[mask].to(torch.float32)
-
-    raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
-
-
-def _ensure_node_y_loc(data):
-    if not hasattr(data, "y") or data.y is None:
-        raise RuntimeError("Missing node targets (data.y) for OPF sample.")
-    if data.y.dim() == 1:
-        data.y = data.y.unsqueeze(-1)
-    num_nodes = int(data.y.shape[0])
-    target_dim = int(data.y.shape[1])
-    data.y_num_nodes = torch.tensor(
-        [num_nodes], dtype=torch.int64, device=data.y.device
-    )
-    data.y_loc = torch.tensor(
-        [[0, num_nodes * target_dim]],
-        dtype=torch.int64,
-        device=data.y.device,
-    )
 
 
 def _ensure_non_scalar_attrs(data):
@@ -192,94 +156,24 @@ def _ensure_non_scalar_attrs(data):
     return data
 
 
-def _to_int_num_nodes(value):
-    if value is None:
-        return None
-    if isinstance(value, torch.Tensor):
-        if value.numel() == 1:
-            return int(value.item())
-        return None
-    if isinstance(value, np.ndarray):
-        if value.size == 1:
-            return int(value.reshape(1)[0])
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _infer_num_nodes_from_edges(data):
-    inferred = {}
-    if not hasattr(data, "edge_types"):
-        return inferred
-    for edge_type in data.edge_types:
-        edge_store = data[edge_type]
-        if not hasattr(edge_store, "edge_index") or edge_store.edge_index is None:
-            continue
-        edge_index = edge_store.edge_index
-        if not isinstance(edge_index, torch.Tensor) or edge_index.numel() == 0:
-            continue
-        src_type, _, dst_type = edge_type
-        src_max = int(edge_index[0].max().item()) + 1
-        dst_max = int(edge_index[1].max().item()) + 1
-        inferred[src_type] = max(inferred.get(src_type, 0), src_max)
-        inferred[dst_type] = max(inferred.get(dst_type, 0), dst_max)
-    return inferred
-
-
-def _ensure_node_store_metadata(data, target_dim: int):
+def _validate_node_stores_for_homogeneous(data):
+    """Crash if any node type is missing 'x' or 'y' — no silent zero-fill."""
     if not hasattr(data, "node_types"):
-        return data
-    inferred = _infer_num_nodes_from_edges(data)
-    for node_type in data.node_types:
-        store = data[node_type]
-        num_nodes = None
-        if "num_nodes" in store:
-            num_nodes = store["num_nodes"]
-        if num_nodes is None and hasattr(data, "num_nodes_dict"):
-            num_nodes = data.num_nodes_dict.get(node_type)
-        if num_nodes is None:
-            num_nodes = inferred.get(node_type)
-        if num_nodes is None:
-            if hasattr(store, "x") and store.x is not None:
-                num_nodes = store.x.shape[0]
-            elif hasattr(store, "y") and store.y is not None:
-                num_nodes = store.y.shape[0]
-        num_nodes = _to_int_num_nodes(num_nodes)
-        if num_nodes is None:
-            num_nodes = 0
-        store.num_nodes = num_nodes
-        if not hasattr(store, "y") or store.y is None:
-            store.y = torch.zeros(
-                (int(num_nodes), int(target_dim)),
-                dtype=torch.float32,
-                device=data.y.device,
-            )
-    return data
-
-
-def _ensure_node_store_features(data):
-    if not hasattr(data, "node_types"):
-        return data
-    default_x_dim = None
-    for node_type in data.node_types:
-        store = data[node_type]
-        if hasattr(store, "x") and store.x is not None:
-            default_x_dim = int(store.x.shape[1]) if store.x.dim() > 1 else 1
-            break
-    if default_x_dim is None:
-        return data
+        return
     for node_type in data.node_types:
         store = data[node_type]
         if not hasattr(store, "x") or store.x is None:
-            num_nodes = int(getattr(store, "num_nodes", 0))
-            store.x = torch.zeros(
-                (num_nodes, default_x_dim),
-                dtype=torch.float32,
-                device=data.y.device,
+            raise RuntimeError(
+                f"Node type '{node_type}' is missing feature tensor 'x'. "
+                "All node types must have predetermined features for "
+                "homogeneous conversion. Refusing to auto-create zeros."
             )
-    return data
+        if not hasattr(store, "y") or store.y is None:
+            raise RuntimeError(
+                f"Node type '{node_type}' is missing target tensor 'y'. "
+                "All node types must have predetermined targets for "
+                "homogeneous conversion. Refusing to auto-create zeros."
+            )
 
 
 def _to_jsonable(obj):
@@ -297,7 +191,12 @@ def _to_jsonable(obj):
 
 
 def _prepare_sample(
-    data, node_target_type: str, case_name: str, to_homogeneous: bool = False
+    data,
+    node_target_type: str,
+    case_name: str,
+    to_homogeneous: bool = False,
+    edge_dim=None,
+    edge_feature_schema=None,
 ):
     data.y = _build_solution_target(data, node_target_type)
     _ensure_node_y_loc(data)
@@ -306,12 +205,17 @@ def _prepare_sample(
     _ensure_non_scalar_attrs(data)
     if hasattr(data, "num_nodes_dict"):
         delattr(data, "num_nodes_dict")
+    data, _ = assemble_edge_attr(
+        data, edge_dim=edge_dim, feature_schema=edge_feature_schema
+    )
     if not to_homogeneous:
         return data
-    _ensure_node_store_metadata(data, target_dim=int(data.y.shape[1]))
-    _ensure_node_store_features(data)
+    _validate_node_stores_for_homogeneous(data)
     data_h = data.to_homogeneous(
-        node_attrs=["x", "y"], add_node_type=True, add_edge_type=True
+        node_attrs=["x", "y"],
+        edge_attrs=["edge_attr"],
+        add_node_type=True,
+        add_edge_type=True,
     )
     data_h.graph_attr = data.graph_attr
     data_h.case_name = case_name
@@ -319,24 +223,6 @@ def _prepare_sample(
     if hasattr(data_h, "num_nodes_dict"):
         delattr(data_h, "num_nodes_dict")
     return data_h
-
-
-def _resolve_node_target_type(data, requested: str) -> str:
-    if hasattr(data, "node_types"):
-        if requested in data.node_types:
-            return requested
-        if hasattr(data, "_node_type_names") and requested in data._node_type_names:
-            idx = data._node_type_names.index(requested)
-            if idx < len(data.node_types):
-                return data.node_types[idx]
-        for name in data.node_types:
-            if str(name).lower() == requested.lower():
-                return name
-        if len(data.node_types) > 0:
-            return data.node_types[0]
-    if hasattr(data, "_node_type_names") and requested in data._node_type_names:
-        return requested
-    return requested
 
 
 def _load_split(root, split, case_name, num_groups, topological_perturbations):
@@ -529,7 +415,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
-    parser.add_argument("--modelname", type=str, default="OPF_Solution")
+    parser.add_argument("--modelname", type=str, default="OPF_Solution_Hetero")
     parser.add_argument(
         "--nvme",
         action="store_true",
@@ -556,10 +442,29 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
 
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    raw_edge_dim = arch_config.get("edge_dim")
+    if isinstance(raw_edge_dim, dict):
+        # Heterogeneous route: per-edge-type widths from pre-assembled tensors.
+        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
+        edge_feature_schema = None
+    elif raw_edge_dim is not None:
+        # Homogeneous route: uniform width, optional named-column schema.
+        edge_dim = int(raw_edge_dim)
+        names = arch_config.get("edge_feature_names")
+        if names:
+            edge_feature_schema = resolve_edge_feature_schema(names, edge_dim)
+        else:
+            edge_feature_schema = None
+    else:
+        raise RuntimeError("edge_dim must be specified in config.")
+    arch_config["edge_dim"] = edge_dim
+
     if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
             "node_target_type"
         ]
+    validate_voi_node_features(config, args.node_target_type)
 
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
@@ -694,7 +599,12 @@ if __name__ == "__main__":
             ):
                 trainset.append(
                     _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        store_homogeneous,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
                     )
                 )
             _log_phase_time(
@@ -726,7 +636,12 @@ if __name__ == "__main__":
             ):
                 valset.append(
                     _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        store_homogeneous,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
                     )
                 )
             _log_phase_time(
@@ -758,7 +673,12 @@ if __name__ == "__main__":
             ):
                 testset.append(
                     _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        store_homogeneous,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
                     )
                 )
             _log_phase_time(
@@ -915,7 +835,12 @@ if __name__ == "__main__":
             ):
                 trainset.append(
                     _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        store_homogeneous,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
                     )
                 )
             if remaining_caps["train"] is not None:
@@ -939,7 +864,12 @@ if __name__ == "__main__":
             ):
                 valset.append(
                     _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        store_homogeneous,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
                     )
                 )
             if remaining_caps["val"] is not None:
@@ -963,7 +893,12 @@ if __name__ == "__main__":
             ):
                 testset.append(
                     _prepare_sample(
-                        d, args.node_target_type, case_name, store_homogeneous
+                        d,
+                        args.node_target_type,
+                        case_name,
+                        store_homogeneous,
+                        edge_dim=edge_dim,
+                        edge_feature_schema=edge_feature_schema,
                     )
                 )
             if remaining_caps["test"] is not None:
@@ -1034,9 +969,9 @@ if __name__ == "__main__":
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HeteroFromHomogeneousDataset(train_base)
-        valset = HeteroFromHomogeneousDataset(val_base)
-        testset = HeteroFromHomogeneousDataset(test_base)
+        trainset = HeteroFromHomogeneousDataset(train_base, edge_dim=edge_dim)
+        valset = HeteroFromHomogeneousDataset(val_base, edge_dim=edge_dim)
+        testset = HeteroFromHomogeneousDataset(test_base, edge_dim=edge_dim)
     else:
         basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = SimplePickleDataset(
@@ -1056,10 +991,21 @@ if __name__ == "__main__":
     config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})[
         "node_target_type"
     ] = args.node_target_type
+    validate_voi_node_features(config, args.node_target_type)
 
-    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type)
-    valset = NodeTargetDatasetAdapter(valset, args.node_target_type)
-    testset = NodeTargetDatasetAdapter(testset, args.node_target_type)
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+
+    trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
+    valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
+    testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
+
+    trainset = NodeTargetDatasetAdapter(
+        trainset, args.node_target_type, edge_dim=edge_dim
+    )
+    valset = NodeTargetDatasetAdapter(valset, args.node_target_type, edge_dim=edge_dim)
+    testset = NodeTargetDatasetAdapter(
+        testset, args.node_target_type, edge_dim=edge_dim
+    )
 
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -1070,11 +1016,22 @@ if __name__ == "__main__":
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
-    train_loader = NodeBatchAdapter(train_loader, args.node_target_type)
-    val_loader = NodeBatchAdapter(val_loader, args.node_target_type)
-    test_loader = NodeBatchAdapter(test_loader, args.node_target_type)
+    train_loader = NodeBatchAdapter(
+        train_loader, args.node_target_type, edge_dim=edge_dim
+    )
+    val_loader = NodeBatchAdapter(val_loader, args.node_target_type, edge_dim=edge_dim)
+    test_loader = NodeBatchAdapter(
+        test_loader, args.node_target_type, edge_dim=edge_dim
+    )
 
     config = update_config(config, train_loader, val_loader, test_loader)
+    arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    if arch_config.get("mpnn_type") == "HeteroPNA" and not arch_config.get("pna_deg"):
+        info("Computing pna_deg for HeteroPNA from training dataset")
+        pna_deg = compute_pna_deg_for_hetero_dataset(trainset, verbosity=2)
+        arch_config["pna_deg"] = pna_deg
+        arch_config["max_neighbours"] = max(0, len(pna_deg) - 1)
+
     config = _to_jsonable(config)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 

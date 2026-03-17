@@ -9,6 +9,24 @@
             "num_conv_layers": 4,
             "pe_dim": 0,
             "max_neighbours": 100,
+            "edge_dim": 15,
+            "edge_feature_names": [
+                "r",
+                "x",
+                "b",
+                "g",
+                "b_fr",
+                "b_to",
+                "g_fr",
+                "g_to",
+                "rate_a",
+                "rate_b",
+                "rate_c",
+                "tap",
+                "shift",
+                "angmin",
+                "angmax"
+            ],
             "output_heads": {
                 "graph": {
                     "num_sharedlayers": 1,
