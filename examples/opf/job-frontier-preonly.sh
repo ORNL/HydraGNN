@@ -78,6 +78,6 @@ cd $HYDRAGNN_ROOT/examples/opf
 srun --export=ALL,HYDRAGNN_DIAG=1,HYDRAGNN_DIAG_RANK=1 \
   -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 \
   --gpus-per-task=1 --gpu-bind=closest \
-  python -u train_opf_solution_heterogeneous.py --nvme --num_groups all --no_num_groups_probe --preonly --adios --case_name \
+  python -u train_opf_solution_heterogeneous.py --nvme --num_groups all --no_num_groups_probe --preonly --hdf5 --case_name \
   pglib_opf_case14_ieee
 
