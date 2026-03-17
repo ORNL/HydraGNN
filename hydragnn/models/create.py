@@ -12,7 +12,7 @@
 import os
 import torch
 from torch_geometric.data import Data
-from typing import List, Union
+from typing import Dict, List, Union
 
 import torch_scatter
 
@@ -143,7 +143,7 @@ def create_model(
     initial_bias: float = None,
     num_nodes: int = None,
     max_neighbours: int = None,
-    edge_dim: int = None,
+    edge_dim: Union[int, Dict[str, int], None] = None,
     pna_deg: torch.tensor = None,
     num_before_skip: int = None,
     num_after_skip: int = None,
