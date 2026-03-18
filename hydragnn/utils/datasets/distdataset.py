@@ -77,13 +77,13 @@ class DistDataset(AbstractBaseDataset):
         ## set total before set subset
         if self.local:
             local_ns = len(data)
-            local_ns_list = self.comm.allgather(local_ns)
+            local_ns_list = self.ddstore_comm.allgather(local_ns)
             maxrank = np.argmax(local_ns_list).item()
             for i in tqdm(
                 range(local_ns), desc="Loading", disable=(self.rank != maxrank)
             ):
                 self.dataset.append(data[i])
-            self.total_ns = self.comm.allreduce(local_ns, op=MPI.SUM)
+            self.total_ns = self.ddstore_comm.allreduce(local_ns, op=MPI.SUM)
         else:
             self.total_ns = len(data)
             rx = list(nsplit(range(len(data)), self.ddstore_comm_size))[
@@ -134,7 +134,7 @@ class DistDataset(AbstractBaseDataset):
             if len(vdims) > 0:
                 vdim = vdims[0]
             ## vdim should be globally equal
-            vdim = self.comm.allreduce(vdim, op=MPI.MAX)
+            vdim = self.ddstore_comm.allreduce(vdim, op=MPI.MAX)
             val = np.concatenate(arr_list, axis=vdim)
             if not val.flags["C_CONTIGUOUS"]:
                 val = np.ascontiguousarray(val)
@@ -181,7 +181,7 @@ class DistDataset(AbstractBaseDataset):
             buf = BytesIO()
             if self.local:
                 ## local_ns_list is a list of local_ns from all ranks, which is calculated in the above.
-                start_idx = int(np.sum(local_ns_list[: self.rank]))
+                start_idx = int(np.sum(local_ns_list[: self.ddstore_comm_rank]))
                 rx = list(range(start_idx, start_idx + local_ns))
             else:
                 rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
@@ -228,7 +228,7 @@ class DistDataset(AbstractBaseDataset):
                 local_record_count.append(dtype.itemsize)
                 buf.write(record_array.tobytes())
 
-            record_count = self.comm.allgather(local_record_count)
+            record_count = self.ddstore_comm.allgather(local_record_count)
             self.record_count = np.hstack(record_count)
             self.record_offset = self.record_count.cumsum()
 
