@@ -45,6 +45,7 @@ import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 from hydragnn.models import MultiTaskModelMP, DualOptimizer
 from contextlib import nullcontext
+import re
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -169,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("--node_max_ell", type=int, help="node_max_ell", default=None)
     parser.add_argument("--correlation", type=int, help="correlation", default=None)
     parser.add_argument("--nvme", action="store_true", help="use NVME")
+    parser.add_argument("--startfrom", type=str, help="startfrom", default=None)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -325,6 +327,22 @@ if __name__ == "__main__":
 
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+
+    if args.startfrom is not None:
+        path = os.path.join("logs", args.startfrom, f"{args.startfrom}.pk")
+        if os.path.exists(path):
+            config["NeuralNetwork"]["Training"]["continue"] = 1
+            config["NeuralNetwork"]["Training"]["startfrom"] = args.startfrom
+
+            if os.path.islink(path):
+                match = re.search(r"epoch_(\d+)", os.path.realpath(path))
+                if match:
+                    last_epoch = int(match.group(1))
+                    config["NeuralNetwork"]["Training"]["epoch_start"] = last_epoch + 1
+        else:
+            logging.warning(f"Checkpoint {path} not found. Starting from scratch.")
+            config["NeuralNetwork"]["Training"]["continue"] = 0
+            config["NeuralNetwork"]["Training"]["startfrom"] = None
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
