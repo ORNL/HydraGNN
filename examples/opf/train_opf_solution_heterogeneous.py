@@ -192,6 +192,96 @@ def _to_jsonable(obj):
     return obj
 
 
+def _raw_json_to_heterodata(filepath):
+    """Load a single raw OPF JSON and build a HeteroData (same as OPFDataset.process)."""
+    from torch_geometric.data import HeteroData
+
+    with open(filepath) as f:
+        obj = json.load(f)
+
+    grid = obj["grid"]
+    solution = obj["solution"]
+    metadata = obj["metadata"]
+
+    data = HeteroData()
+    data.x = torch.tensor(grid["context"]).view(-1)
+    data.objective = torch.tensor(metadata["objective"])
+
+    data["bus"].x = torch.tensor(grid["nodes"]["bus"])
+    data["bus"].y = torch.tensor(solution["nodes"]["bus"])
+    data["generator"].x = torch.tensor(grid["nodes"]["generator"])
+    data["generator"].y = torch.tensor(solution["nodes"]["generator"])
+    data["load"].x = torch.tensor(grid["nodes"]["load"])
+    data["shunt"].x = torch.tensor(grid["nodes"]["shunt"])
+
+    data["bus", "ac_line", "bus"].edge_index = tg_opf.extract_edge_index(obj, "ac_line")
+    data["bus", "ac_line", "bus"].edge_attr = torch.tensor(grid["edges"]["ac_line"]["features"])
+    data["bus", "ac_line", "bus"].edge_label = torch.tensor(solution["edges"]["ac_line"]["features"])
+
+    data["bus", "transformer", "bus"].edge_index = tg_opf.extract_edge_index(obj, "transformer")
+    data["bus", "transformer", "bus"].edge_attr = torch.tensor(grid["edges"]["transformer"]["features"])
+    data["bus", "transformer", "bus"].edge_label = torch.tensor(solution["edges"]["transformer"]["features"])
+
+    data["generator", "generator_link", "bus"].edge_index = tg_opf.extract_edge_index(obj, "generator_link")
+    data["bus", "generator_link", "generator"].edge_index = tg_opf.extract_edge_index_rev(obj, "generator_link")
+    data["load", "load_link", "bus"].edge_index = tg_opf.extract_edge_index(obj, "load_link")
+    data["bus", "load_link", "load"].edge_index = tg_opf.extract_edge_index_rev(obj, "load_link")
+    data["shunt", "shunt_link", "bus"].edge_index = tg_opf.extract_edge_index(obj, "shunt_link")
+    data["bus", "shunt_link", "shunt"].edge_index = tg_opf.extract_edge_index_rev(obj, "shunt_link")
+
+    return data
+
+
+def _iter_raw_split_for_rank(
+    datadir,
+    case_name,
+    num_groups,
+    topological_perturbations,
+    split,
+    rank,
+    world_size,
+):
+    """Yield HeteroData samples from raw JSON files for *split*, only those
+    assigned to *rank*.  Reads one file at a time — never holds more than
+    one sample in memory.
+    """
+    release = "dataset_release_1"
+    if topological_perturbations:
+        release += "_nminusone"
+    raw_dir = os.path.join(datadir, release, case_name, "raw")
+    tmp_root = os.path.join(raw_dir, "gridopt-dataset-tmp", release, case_name)
+
+    total_samples = 15_000 * num_groups
+    train_limit = int(total_samples * 0.9)
+    val_limit = train_limit + int(total_samples * 0.05)
+
+    # Collect all (global_index, filepath) for the requested split
+    split_files = []
+    for group in range(num_groups):
+        group_dir = os.path.join(tmp_root, f"group_{group}")
+        for name in sorted(os.listdir(group_dir)):
+            i = int(name.split(".")[0].split("_")[1])
+            if split == "train" and i < train_limit:
+                split_files.append((i, os.path.join(group_dir, name)))
+            elif split == "val" and train_limit <= i < val_limit:
+                split_files.append((i, os.path.join(group_dir, name)))
+            elif split == "test" and i >= val_limit:
+                split_files.append((i, os.path.join(group_dir, name)))
+
+    # Sort by index for deterministic ordering
+    split_files.sort(key=lambda x: x[0])
+
+    # Select only this rank's share
+    n = len(split_files)
+    chunk = n // world_size
+    remainder = n % world_size
+    start = rank * chunk + min(rank, remainder)
+    end = start + chunk + (1 if rank < remainder else 0)
+
+    for _, filepath in split_files[start:end]:
+        yield _raw_json_to_heterodata(filepath)
+
+
 def _prepare_sample(
     data,
     node_target_type: str,
@@ -515,9 +605,24 @@ if __name__ == "__main__":
     if preonly_pipeline:
         store_homogeneous = args.format == "adios"
         verbosity = config["Verbosity"]["level"]
-        trainset = []
-        valset = []
-        testset = []
+        # For HDF5 streaming mode we write samples as they are processed,
+        # so no large lists are needed.  For other formats we still
+        # accumulate.
+        hdf5_streaming = args.format == "hdf5"
+        if hdf5_streaming:
+            serialize_datadir = shared_datadir
+            basedir = os.path.join(serialize_datadir, f"{args.modelname}.h5")
+            if rank == 0 and os.path.exists(basedir):
+                shutil.rmtree(basedir, ignore_errors=True)
+            comm.Barrier()
+            h5writer = HDF5Writer(basedir, comm)
+            trainset_count = 0
+            valset_count = 0
+            testset_count = 0
+        else:
+            trainset = []
+            valset = []
+            testset = []
 
     for case_name in case_names:
         t_case = time.perf_counter()
@@ -579,126 +684,81 @@ if __name__ == "__main__":
         )
 
         if preonly_pipeline:
-            t_load = time.perf_counter()
-            train_split = _load_split(
-                active_datadir,
-                "train",
-                case_name,
-                num_groups,
-                args.topological_perturbations,
-            )
-            _log_phase_time(
-                comm,
-                rank,
-                f"case={case_name} split=train phase=load groups={num_groups}",
-                time.perf_counter() - t_load,
-            )
-
-            t_pre = time.perf_counter()
-            subset = _subset_for_rank(train_split, rank, comm_size, None)
-            for d in iterate_tqdm(
-                subset, verbosity, desc=f"Preprocess train {case_name}", leave=False
-            ):
-                trainset.append(
-                    _prepare_sample(
-                        d,
-                        args.node_target_type,
-                        case_name,
-                        store_homogeneous,
-                        edge_dim=edge_dim,
-                        edge_feature_schema=edge_feature_schema,
-                    )
+            for split_name, label in [("train", "trainset"), ("val", "valset"), ("test", "testset")]:
+                t_pre = time.perf_counter()
+                sample_iter = _iter_raw_split_for_rank(
+                    active_datadir,
+                    case_name,
+                    num_groups,
+                    args.topological_perturbations,
+                    split_name,
+                    rank,
+                    comm_size,
                 )
-            _log_phase_time(
-                comm,
-                rank,
-                f"case={case_name} split=train phase=preprocess local_samples={len(subset)}",
-                time.perf_counter() - t_pre,
-            )
-
-            t_load = time.perf_counter()
-            val_split = _load_split(
-                active_datadir,
-                "val",
-                case_name,
-                num_groups,
-                args.topological_perturbations,
-            )
-            _log_phase_time(
-                comm,
-                rank,
-                f"case={case_name} split=val phase=load groups={num_groups}",
-                time.perf_counter() - t_load,
-            )
-
-            t_pre = time.perf_counter()
-            subset = _subset_for_rank(val_split, rank, comm_size, None)
-            for d in iterate_tqdm(
-                subset, verbosity, desc=f"Preprocess val {case_name}", leave=False
-            ):
-                valset.append(
-                    _prepare_sample(
-                        d,
-                        args.node_target_type,
-                        case_name,
-                        store_homogeneous,
-                        edge_dim=edge_dim,
-                        edge_feature_schema=edge_feature_schema,
-                    )
+                local_count = 0
+                if hdf5_streaming:
+                    h5writer.begin(label)
+                    for d in iterate_tqdm(
+                        sample_iter, verbosity, desc=f"Preprocess {split_name} {case_name}", leave=False
+                    ):
+                        h5writer.put(
+                            _prepare_sample(
+                                d,
+                                args.node_target_type,
+                                case_name,
+                                store_homogeneous,
+                                edge_dim=edge_dim,
+                                edge_feature_schema=edge_feature_schema,
+                            )
+                        )
+                        local_count += 1
+                    h5writer.end_label()
+                    if label == "trainset":
+                        trainset_count += local_count
+                    elif label == "valset":
+                        valset_count += local_count
+                    else:
+                        testset_count += local_count
+                else:
+                    target_list = trainset if label == "trainset" else (valset if label == "valset" else testset)
+                    for d in iterate_tqdm(
+                        sample_iter, verbosity, desc=f"Preprocess {split_name} {case_name}", leave=False
+                    ):
+                        target_list.append(
+                            _prepare_sample(
+                                d,
+                                args.node_target_type,
+                                case_name,
+                                store_homogeneous,
+                                edge_dim=edge_dim,
+                                edge_feature_schema=edge_feature_schema,
+                            )
+                        )
+                        local_count += 1
+                _log_phase_time(
+                    comm,
+                    rank,
+                    f"case={case_name} split={split_name} phase=preprocess local_samples={local_count}",
+                    time.perf_counter() - t_pre,
                 )
-            _log_phase_time(
-                comm,
-                rank,
-                f"case={case_name} split=val phase=preprocess local_samples={len(subset)}",
-                time.perf_counter() - t_pre,
-            )
-
-            t_load = time.perf_counter()
-            test_split = _load_split(
-                active_datadir,
-                "test",
-                case_name,
-                num_groups,
-                args.topological_perturbations,
-            )
-            _log_phase_time(
-                comm,
-                rank,
-                f"case={case_name} split=test phase=load groups={num_groups}",
-                time.perf_counter() - t_load,
-            )
-
-            t_pre = time.perf_counter()
-            subset = _subset_for_rank(test_split, rank, comm_size, None)
-            for d in iterate_tqdm(
-                subset, verbosity, desc=f"Preprocess test {case_name}", leave=False
-            ):
-                testset.append(
-                    _prepare_sample(
-                        d,
-                        args.node_target_type,
-                        case_name,
-                        store_homogeneous,
-                        edge_dim=edge_dim,
-                        edge_feature_schema=edge_feature_schema,
-                    )
-                )
-            _log_phase_time(
-                comm,
-                rank,
-                f"case={case_name} split=test phase=preprocess local_samples={len(subset)}",
-                time.perf_counter() - t_pre,
-            )
 
     datadir = active_datadir
 
     if preonly_pipeline:
-        info(
-            f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
-        )
+        if hdf5_streaming:
+            info(
+                f"Local split sizes: train={trainset_count}, val={valset_count}, test={testset_count}"
+            )
+        else:
+            info(
+                f"Local split sizes: train={len(trainset)}, val={len(valset)}, test={len(testset)}"
+            )
 
         t_write = time.perf_counter()
-        if args.format == "adios":
+        if hdf5_streaming:
+            # Samples already written; just finalize metadata.
+            h5writer.save()
+        elif args.format == "adios":
             if AdiosWriter is None:
                 raise RuntimeError("adios2 is not available in this environment.")
             serialize_datadir = shared_datadir
@@ -715,7 +775,8 @@ if __name__ == "__main__":
             adwriter.add("testset", testset)
             adwriter.save()
         elif args.format == "hdf5":
-            basedir = os.path.join(datadir, f"{args.modelname}.h5")
+            serialize_datadir = shared_datadir
+            basedir = os.path.join(serialize_datadir, f"{args.modelname}.h5")
             if rank == 0 and os.path.exists(basedir):
                 shutil.rmtree(basedir, ignore_errors=True)
             comm.Barrier()
@@ -939,7 +1000,8 @@ if __name__ == "__main__":
             adwriter.add("testset", testset)
             adwriter.save()
         elif args.format == "hdf5":
-            basedir = os.path.join(datadir, f"{args.modelname}.h5")
+            serialize_datadir = shared_datadir
+            basedir = os.path.join(serialize_datadir, f"{args.modelname}.h5")
             if rank == 0 and os.path.exists(basedir):
                 shutil.rmtree(basedir, ignore_errors=True)
             comm.Barrier()
