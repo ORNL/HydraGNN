@@ -103,15 +103,21 @@ class HDF5Writer:
             )
             self._fh = h5py.File(self._shard_path, "w")
 
-        vlen_dt = h5py.vlen_dtype(np.dtype("uint8"))
-        # Use a resizable (chunked) dataset so we can append without
-        # knowing the total count up-front.
-        self._stream_ds = self._fh.create_dataset(
-            label, shape=(0,), maxshape=(None,), dtype=vlen_dt, chunks=(self.batch_size,)
-        )
+        if label in self._fh:
+            # Resume appending to an existing dataset (e.g. second case
+            # writing more samples into the same "trainset" dataset).
+            self._stream_ds = self._fh[label]
+            self._stream_offset = self._stream_ds.shape[0]
+        else:
+            vlen_dt = h5py.vlen_dtype(np.dtype("uint8"))
+            # Use a resizable (chunked) dataset so we can append without
+            # knowing the total count up-front.
+            self._stream_ds = self._fh.create_dataset(
+                label, shape=(0,), maxshape=(None,), dtype=vlen_dt, chunks=(self.batch_size,)
+            )
+            self._stream_offset = 0
         self._stream_label = label
         self._stream_buf = []
-        self._stream_offset = 0
 
     def put(self, sample):
         """Add a single sample.  Automatically flushes to disk every
