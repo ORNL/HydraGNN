@@ -95,9 +95,7 @@ class HDF5Writer:
             self.end_label()
 
         if self._fh is None:
-            if self.rank == 0:
-                os.makedirs(self.basedir, exist_ok=True)
-            self.comm.Barrier()
+            os.makedirs(self.basedir, exist_ok=True)
             self._shard_path = os.path.join(
                 self.basedir, f"shard-{self.rank:04d}.h5"
             )
