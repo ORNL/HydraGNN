@@ -21,6 +21,7 @@ from hydragnn.utils.input_config_parsing.config_utils import update_config
 from hydragnn.utils.model import load_existing_model
 
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
+from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 
 from opf_solution_utils import (
     HeteroFromHomogeneousDataset,
@@ -182,6 +183,7 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--adios", action="store_const", dest="format", const="adios")
     group.add_argument("--pickle", action="store_const", dest="format", const="pickle")
+    group.add_argument("--hdf5", action="store_const", dest="format", const="hdf5")
     parser.set_defaults(format="pickle")
 
     args = parser.parse_args()
@@ -241,6 +243,13 @@ if __name__ == "__main__":
         trainset = HeteroFromHomogeneousDataset(train_base, edge_dim=edge_dim)
         valset = HeteroFromHomogeneousDataset(val_base, edge_dim=edge_dim)
         testset = HeteroFromHomogeneousDataset(test_base, edge_dim=edge_dim)
+    elif args.format == "hdf5":
+        basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.h5")
+        if not os.path.isdir(basedir):
+            raise FileNotFoundError(f"Missing HDF5 dataset dir: {basedir}")
+        trainset = HDF5Dataset(basedir, "trainset")
+        valset = HDF5Dataset(basedir, "valset")
+        testset = HDF5Dataset(basedir, "testset")
     else:
         basedir = os.path.join(dirpwd, "dataset", f"{args.modelname}.pickle")
         if not os.path.isdir(basedir):
