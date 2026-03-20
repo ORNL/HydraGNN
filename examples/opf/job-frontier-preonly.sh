@@ -6,7 +6,7 @@
 #SBATCH -t 02:00:00
 #SBATCH -p batch 
 #SBATCH -q debug
-#SBATCH -N 2 #16 
+#SBATCH -N 16
 #SBATCH -C nvme
 ##SBATCH -S 1
  
@@ -79,5 +79,5 @@ srun --export=ALL,HYDRAGNN_DIAG=1,HYDRAGNN_DIAG_RANK=1 \
   -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 \
   --gpus-per-task=1 --gpu-bind=closest \
   python -u train_opf_solution_heterogeneous.py --nvme --num_groups all --no_num_groups_probe --preonly --hdf5 --case_name \
-  pglib_opf_case14_ieee
+  pglib_opf_case14_ieee pglib_opf_case30_ieee pglib_opf_case57_ieee pglib_opf_case118_ieee pglib_opf_case500_goc pglib_opf_case2000_goc pglib_opf_case4661_sdet pglib_opf_case6470_rte pglib_opf_case10000_goc pglib_opf_case13659_pegase
 
