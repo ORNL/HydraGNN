@@ -45,6 +45,7 @@ import torch.distributed as dist
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 from hydragnn.models import MultiTaskModelMP, DualOptimizer
 from contextlib import nullcontext
+import re
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -69,6 +70,11 @@ def build_optimizer(parameters, optimizer_cfg):
     )
 
 
+def set_param_value(param, group="Architecture"):
+    if args.parameters[param] is not None:
+        config["NeuralNetwork"][group][param] = args.parameters[param]
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -76,14 +82,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="gfm_mlip.json"
     )
-    parser.add_argument("--mpnn_type", help="mpnn_type", default="MACE")
-    parser.add_argument("--hidden_dim", type=int, help="hidden_dim", default=866)
+    parser.add_argument("--mpnn_type", help="mpnn_type", default=None)
+    parser.add_argument("--hidden_dim", type=int, help="hidden_dim", default=None)
     parser.add_argument(
-        "--num_conv_layers", type=int, help="num_conv_layers", default=4
+        "--num_conv_layers", type=int, help="num_conv_layers", default=None
     )
-    parser.add_argument("--num_headlayers", type=int, help="num_headlayers", default=3)
+    ## For output_heads construction
     parser.add_argument(
-        "--dim_headlayers", type=int, help="dim_headlayers", default=889
+        "--num_headlayers", type=int, help="num_headlayers", default=None
+    )
+    parser.add_argument(
+        "--dim_headlayers", type=int, help="dim_headlayers", default=None
     )
     parser.add_argument("--ddstore", action="store_true", help="ddstore dataset")
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
@@ -161,6 +170,7 @@ if __name__ == "__main__":
     parser.add_argument("--node_max_ell", type=int, help="node_max_ell", default=None)
     parser.add_argument("--correlation", type=int, help="correlation", default=None)
     parser.add_argument("--nvme", action="store_true", help="use NVME")
+    parser.add_argument("--startfrom", type=str, help="startfrom", default=None)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -209,97 +219,11 @@ if __name__ == "__main__":
     # Force use of atomic number only; MACE stack expects this
     var_config["input_node_features"] = [0]
 
-    # Update the config dictionary with the suggested hyperparameters
-    config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.parameters["mpnn_type"]
-    config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters[
-        "hidden_dim"
-    ]
-    config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = args.parameters[
-        "num_conv_layers"
-    ]
-    if args.force_weight is not None:
-        config["NeuralNetwork"]["Architecture"]["force_weight"] = args.force_weight
-    if args.learning_rate is not None:
-        config["NeuralNetwork"]["Training"]["Optimizer"][
-            "learning_rate"
-        ] = args.learning_rate
-
-    dim_headlayers = [
-        args.parameters["dim_headlayers"]
-        for i in range(args.parameters["num_headlayers"])
-    ]
-
-    for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
-        head_cfg = config["NeuralNetwork"]["Architecture"]["output_heads"][head_type]
-
-        # Require one template per head type; replicate for each dataset/model.
-        if isinstance(head_cfg, dict):
-            template = head_cfg
-        elif isinstance(head_cfg, (list, tuple)) and len(head_cfg) >= 1:
-            if len(head_cfg) > 1:
-                logging.warning(
-                    "output_heads.%s provides %d entries; using the first as template and ignoring the rest",
-                    head_type,
-                    len(head_cfg),
-                )
-            template = head_cfg[0]
-        else:
-            raise ValueError(
-                f"output_heads.{head_type} must define at least one branch template"
-            )
-
-        if not args.multi_model_list or args.multi_model_list.strip() == "":
-            logging.warning(
-                "--multi_model_list not provided; defaulting to a single branch named 'default'"
-            )
-            modellist = ["default"]
-        else:
-            modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
-        n_models = len(modellist)
-        if n_models == 0:
-            raise ValueError(
-                "--multi_model_list resulted in zero entries; provide at least one dataset/model name"
-            )
-        print("modellist:", n_models)
-
-        # Replicate the template once per model.
-        head_branches = [copy.deepcopy(template) for _ in range(n_models)]
-
-        for i in range(len(head_branches)):
-            branch = head_branches[i]
-            branch_type = f"branch-{i}"
-
-            # Normalize to the multibranch schema required by update_multibranch_heads:
-            # each branch must have a 'type' label and an 'architecture' dictionary, and
-            # branch names must follow branch-<index> to match dataset_name IDs.
-            if "architecture" not in branch:
-                architecture = {k: v for k, v in branch.items() if k != "type"}
-                branch.clear()
-                branch["architecture"] = architecture
-            branch["type"] = branch_type
-
-            branch["architecture"]["num_headlayers"] = args.parameters["num_headlayers"]
-            branch["architecture"]["dim_headlayers"] = dim_headlayers
-
-        # Write back the expanded branch list
-        config["NeuralNetwork"]["Architecture"]["output_heads"][
-            head_type
-        ] = head_branches
-
-    equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
-    assert (
-        args.parameters["mpnn_type"] in equivariant_models
-    ), f"mpnn_type must be one of {equivariant_models} for this workflow"
-
-    if args.batch_size is not None:
-        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
-
-    if args.num_epoch is not None:
-        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
-
-    def set_param_value(param):
-        if args.parameters[param] is not None:
-            config["NeuralNetwork"]["Architecture"][param] = args.parameters[param]
+    ## If command line argument is given, it will override. Otherwise, use values in the config file.
+    set_param_value("mpnn_type")
+    set_param_value("hidden_dim")
+    set_param_value("num_conv_layers")
+    set_param_value("force_weight")
 
     set_param_value("num_filters")
     set_param_value("num_gaussians")
@@ -316,6 +240,109 @@ if __name__ == "__main__":
     set_param_value("max_ell")
     set_param_value("node_max_ell")
     set_param_value("correlation")
+
+    if not args.multi_model_list or args.multi_model_list.strip() == "":
+        logging.warning(
+            "--multi_model_list not provided; defaulting to a single branch named 'default'"
+        )
+        modellist = ["default"]
+    else:
+        modellist = [m for m in args.multi_model_list.split(",") if m.strip()]
+    n_models = len(modellist)
+    if n_models == 0:
+        raise ValueError(
+            "--multi_model_list resulted in zero entries; provide at least one dataset/model name"
+        )
+    print("modellist:", n_models)
+
+    ## We construct output_heads if provided via command line Otherwise, use the config file
+    if (
+        args.parameters["dim_headlayers"] is not None
+        and args.parameters["num_headlayers"] is not None
+    ):
+        dim_headlayers = [
+            args.parameters["dim_headlayers"]
+            for i in range(args.parameters["num_headlayers"])
+        ]
+
+        for head_type in config["NeuralNetwork"]["Architecture"]["output_heads"]:
+            head_cfg = config["NeuralNetwork"]["Architecture"]["output_heads"][
+                head_type
+            ]
+
+            # Require one template per head type; replicate for each dataset/model.
+            if isinstance(head_cfg, dict):
+                template = head_cfg
+            elif isinstance(head_cfg, (list, tuple)) and len(head_cfg) >= 1:
+                if len(head_cfg) > 1:
+                    logging.warning(
+                        "output_heads.%s provides %d entries; using the first as template and ignoring the rest",
+                        head_type,
+                        len(head_cfg),
+                    )
+                template = head_cfg[0]
+            else:
+                raise ValueError(
+                    f"output_heads.{head_type} must define at least one branch template"
+                )
+
+            # Replicate the template once per model.
+            head_branches = [copy.deepcopy(template) for _ in range(n_models)]
+
+            for i in range(len(head_branches)):
+                branch = head_branches[i]
+                branch_type = f"branch-{i}"
+
+                # Normalize to the multibranch schema required by update_multibranch_heads:
+                # each branch must have a 'type' label and an 'architecture' dictionary, and
+                # branch names must follow branch-<index> to match dataset_name IDs.
+                if "architecture" not in branch:
+                    architecture = {k: v for k, v in branch.items() if k != "type"}
+                    branch.clear()
+                    branch["architecture"] = architecture
+                branch["type"] = branch_type
+
+                branch["architecture"]["num_headlayers"] = args.parameters[
+                    "num_headlayers"
+                ]
+                branch["architecture"]["dim_headlayers"] = dim_headlayers
+
+            # Write back the expanded branch list
+            config["NeuralNetwork"]["Architecture"]["output_heads"][
+                head_type
+            ] = head_branches
+
+    equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
+    assert (
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"] in equivariant_models
+    ), f"mpnn_type must be one of {equivariant_models} for this workflow"
+
+    if args.learning_rate is not None:
+        config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ] = args.learning_rate
+
+    if args.batch_size is not None:
+        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+
+    if args.startfrom is not None:
+        path = os.path.join("logs", args.startfrom, f"{args.startfrom}.pk")
+        if os.path.exists(path):
+            config["NeuralNetwork"]["Training"]["continue"] = 1
+            config["NeuralNetwork"]["Training"]["startfrom"] = args.startfrom
+
+            if os.path.islink(path):
+                match = re.search(r"epoch_(\d+)", os.path.realpath(path))
+                if match:
+                    last_epoch = int(match.group(1))
+                    config["NeuralNetwork"]["Training"]["epoch_start"] = last_epoch + 1
+        else:
+            logging.warning(f"Checkpoint {path} not found. Starting from scratch.")
+            config["NeuralNetwork"]["Training"]["continue"] = 0
+            config["NeuralNetwork"]["Training"]["startfrom"] = None
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
@@ -405,15 +432,6 @@ if __name__ == "__main__":
                     ndata_list.append(ndata)
                     pna_deg_list.append(pna_deg)
 
-            # ## Proportional split
-            # ndata_list = np.array(ndata_list, dtype=np.float32)
-            # process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
-            #     np.int32
-            # )
-            # imax = np.argmax(process_list)
-            # process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
-            # process_list = process_list.tolist()
-
             ## Process split
             ## - DeviceMesh task-parallel currently requires uniform group sizes.
             ## - Non-DeviceMesh task-parallel can use non-uniform group sizes; prefer proportional split by dataset size.
@@ -421,15 +439,11 @@ if __name__ == "__main__":
                 int(os.getenv("HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT", "1"))
             )
             print(
-                "Task-parallel split mode:",
+                "Split mode:",
                 "proportional" if proportional_tp_split else "uniform",
                 f"(HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT={int(proportional_tp_split)})",
             )
-            if (
-                args.task_parallel
-                and (not args.use_devicemesh)
-                and proportional_tp_split
-            ):
+            if proportional_tp_split:
                 nmodels = len(modellist)
                 if comm_size < nmodels:
                     raise ValueError(
