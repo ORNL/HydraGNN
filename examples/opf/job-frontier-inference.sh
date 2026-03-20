@@ -89,4 +89,4 @@ python -c "import numpy; print(numpy.__version__)"
 #srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u train_mlip.py --preonly --hdf5 --ddstore
 #srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u train_opf_heterogeneous.py --preonly --hdf5 
 #srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u train_opf_solution_heterogeneous.py --preonly --hdf5 --case_name pglib_opf_case118_ieee pglib_opf_case14_ieee pglib_opf_case2000_goc pglib_opf_case30_ieee pglib_opf_case500_goc pglib_opf_case57_ieee
-srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u infer_opf_solution_heterogeneous.py --hdf5 
+srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest python -u infer_opf_solution_heterogeneous.py --hdf5 --modelname OPF_Solution_Hetero
