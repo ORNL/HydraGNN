@@ -624,7 +624,34 @@ if __name__ == "__main__":
             valset = []
             testset = []
 
-    for case_name in case_names:
+    # Task-parallel: partition cases across rank groups so each group
+    # processes a subset of cases concurrently (embarrassingly parallel).
+    _task_parallel = preonly_pipeline and len(case_names) > 1 and comm_size > 1
+    _task_cases = case_names
+    _saved_comm, _saved_rank, _saved_size = comm, rank, comm_size
+    _case_sub_comm = None
+    if _task_parallel:
+        _n_cases = len(case_names)
+        _n_groups = min(_n_cases, comm_size)
+        _group_id = min(rank * _n_groups // comm_size, _n_groups - 1)
+        _case_sub_comm = comm.Split(_group_id, rank)
+        _task_cases = [
+            case_names[i]
+            for i in range(_n_cases)
+            if min(i * _n_groups // _n_cases, _n_groups - 1) == _group_id
+        ]
+        if rank == 0:
+            info(
+                f"Task-parallel preprocessing: {_n_cases} cases across "
+                f"{_n_groups} groups of {comm_size} total ranks"
+            )
+        # Shadow comm/rank/comm_size so the loop body uses the sub-communicator
+        # for barriers, broadcasts, and work splitting within each case.
+        comm = _case_sub_comm
+        rank = _case_sub_comm.Get_rank()
+        comm_size = _case_sub_comm.Get_size()
+
+    for case_name in _task_cases:
         t_case = time.perf_counter()
         num_groups = data_ops.resolve_num_groups(
             requested_num_groups,
@@ -743,6 +770,11 @@ if __name__ == "__main__":
                 )
 
     datadir = active_datadir
+
+    # Restore original communicator after task-parallel loop.
+    comm, rank, comm_size = _saved_comm, _saved_rank, _saved_size
+    if _case_sub_comm is not None:
+        _case_sub_comm.Free()
 
     if preonly_pipeline:
         if hdf5_streaming:
