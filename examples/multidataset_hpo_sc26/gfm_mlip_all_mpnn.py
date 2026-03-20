@@ -432,15 +432,6 @@ if __name__ == "__main__":
                     ndata_list.append(ndata)
                     pna_deg_list.append(pna_deg)
 
-            # ## Proportional split
-            # ndata_list = np.array(ndata_list, dtype=np.float32)
-            # process_list = np.ceil(ndata_list / sum(ndata_list) * comm_size).astype(
-            #     np.int32
-            # )
-            # imax = np.argmax(process_list)
-            # process_list[imax] = process_list[imax] - (np.sum(process_list) - comm_size)
-            # process_list = process_list.tolist()
-
             ## Process split
             ## - DeviceMesh task-parallel currently requires uniform group sizes.
             ## - Non-DeviceMesh task-parallel can use non-uniform group sizes; prefer proportional split by dataset size.
@@ -448,15 +439,11 @@ if __name__ == "__main__":
                 int(os.getenv("HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT", "1"))
             )
             print(
-                "Task-parallel split mode:",
+                "Split mode:",
                 "proportional" if proportional_tp_split else "uniform",
                 f"(HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT={int(proportional_tp_split)})",
             )
-            if (
-                args.task_parallel
-                and (not args.use_devicemesh)
-                and proportional_tp_split
-            ):
+            if proportional_tp_split:
                 nmodels = len(modellist)
                 if comm_size < nmodels:
                     raise ValueError(
