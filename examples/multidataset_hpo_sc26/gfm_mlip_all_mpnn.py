@@ -50,6 +50,15 @@ import re
 ## FIMME
 torch.backends.cudnn.enabled = False
 
+## Set "ulimit -n" as max
+try:
+    import resource
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print("resource.RLIMIT_NOFILE:", soft, hard)
+except ImportError:
+    pass
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
