@@ -57,7 +57,7 @@ try:
     resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     print("resource.RLIMIT_NOFILE:", soft, hard)
-except ImportError:
+except:
     pass
 
 def info(*args, logtype="info", sep=" "):
