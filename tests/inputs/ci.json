@@ -64,10 +64,18 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["sum_x_x2_x3"],
-            "output_index": [0],
-            "type": ["graph"],
+            "node_features": {
+                "x": {
+                    "dim": 1,
+                    "role": "input"
+                }
+            },
+            "graph_features": {
+                "sum_x_x2_x3": {
+                    "dim": 1,
+                    "role": "output"
+                }
+            },
             "denormalize_output": false
         },
         "Training": {
