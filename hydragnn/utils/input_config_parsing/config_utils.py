@@ -37,6 +37,22 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
 
+    # Always sync node_input_dims from heterogeneous data.
+    arch_cfg = config["NeuralNetwork"].setdefault("Architecture", {})
+    data_sample = train_loader.dataset[0]
+    if hasattr(data_sample, "node_types"):
+        node_input_dims = {}
+        for node_type in data_sample.node_types:
+            node_store = data_sample[node_type]
+            if hasattr(node_store, "x") and node_store.x is not None:
+                node_input_dims[str(node_type)] = int(node_store.x.shape[1])
+        if node_input_dims:
+            if arch_cfg.get("node_input_dims") not in (None, node_input_dims):
+                warnings.warn(
+                    "Overriding node_input_dims with dataset-derived sizes for hetero model."
+                )
+            arch_cfg["node_input_dims"] = node_input_dims
+
     # Set default values for GPS variables
     if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = None
@@ -177,32 +193,40 @@ def update_config_equivariance(config):
 
 
 def update_config_edge_dim(config):
-    config["edge_dim"] = None
-    edge_models = [
-        "GAT",
-        "PNA",
-        "PNAPlus",
-        "PAINN",
-        "PNAEq",
-        "CGCNN",
-        "SchNet",
-        "EGNN",
-        "DimeNet",
-        "MACE",
-    ]
-    if "edge_features" in config and config["edge_features"]:
-        assert (
-            config["mpnn_type"] in edge_models
-        ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
-        config["edge_dim"] = len(config["edge_features"])
-        if "enable_interatomic_potential" in config:
-            assert not config[
-                "enable_interatomic_potential"
-            ], "Edge features cannot be used with interatomic potentials as the model builds its own specialized features for force computation."
-    elif config["mpnn_type"] == "CGCNN":
-        # CG always needs an integer edge_dim
-        # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
-        config["edge_dim"] = 0
+    def _normalize_edge_dim(value):
+        if value is None:
+            return None
+        if isinstance(value, dict):
+            # Per-edge-type widths (heterogeneous route).
+            return {str(k): int(v) for k, v in value.items()}
+        try:
+            edge_dim = int(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"edge_dim must be an integer or dict, got: {value}"
+            ) from exc
+        if edge_dim < 0:
+            raise ValueError(f"edge_dim must be >= 0, got: {edge_dim}")
+        return edge_dim
+
+    explicit_edge_dim = _normalize_edge_dim(config.get("edge_dim"))
+    if explicit_edge_dim is None:
+        raise ValueError(
+            "NeuralNetwork.Architecture.edge_dim is required. "
+            "Set edge_dim explicitly in the input config."
+        )
+
+    if isinstance(explicit_edge_dim, int):
+        feature_names = config.get("edge_feature_names")
+        if feature_names:
+            names_len = len(feature_names)
+            if names_len != explicit_edge_dim:
+                raise ValueError(
+                    "NeuralNetwork.Architecture.edge_feature_names length "
+                    f"({names_len}) must match edge_dim ({explicit_edge_dim})."
+                )
+
+    config["edge_dim"] = explicit_edge_dim
     return config
 
 
@@ -247,9 +271,14 @@ def update_config_NN_outputs(config, data, graph_size_variable):
                     raise ValueError(
                         '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
                     )
+                denom_nodes = (
+                    data.y_num_nodes
+                    if hasattr(data, "y_num_nodes") and data.y_num_nodes is not None
+                    else data.num_nodes
+                )
                 dim_item = (
                     data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-                ) // data.num_nodes
+                ) // denom_nodes
             else:
                 raise ValueError("Unknown output type", output_type[ihead])
             dims_list.append(dim_item)

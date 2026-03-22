@@ -9,17 +9,17 @@ function cmd() {
     time $@
 } 
 
-HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/Supercomputing2026/HydraGNN
+HYDRAGNN_ROOT=/lustre/orion/lrn078/proj-shared/HydraGNN
 
 # Load conda environemnt
 source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm640.sh
-source activate /lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier/hydragnn_venv
+source activate /lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
  
 #export python path to HydragNN
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 #export python path to use ADIOS2 v.2.10.2
-export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
+export PYTHONPATH=/lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
  
 which python
 python -c "import adios2; print(adios2.__version__, adios2.__file__)"
@@ -45,23 +45,38 @@ export HYDRAGNN_VALTEST=1
 ## Getting error without these after 20 nodes
 export NCCL_P2P_LEVEL=NVL
 export NCCL_P2P_DISABLE=1
-export FI_MR_CACHE_MONITOR=disabled
 
 ## aws-ofi-rccl plugin settings
-export TORCH_NCCL_HIGH_PRIORITY=1
-export FI_CXI_RDV_PROTO=alt_read
+export PLUGIN_PATH=/ccs/sw/crusher/amdsw/aws-ofi-nccl/aws-ofi-nccl
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${PLUGIN_PATH}/lib
 
-export PATH_TO_THE_PLUGIN_DIRECTORY=/lustre/orion/lrn070/world-shared/mlupopa/AWI_OFI_RCCL_ROCm631/aws-ofi-rccl/lib
-export LD_LIBRARY_PATH=${PATH_TO_THE_PLUGIN_DIRECTORY}:$LD_LIBRARY_PATH
- 
 export FI_MR_CACHE_MONITOR=kdreg2     # Required to avoid a deadlock.
 export FI_CXI_DEFAULT_CQ_SIZE=131072  # Ask the network stack to allocate additional space to process message completions.
 export FI_CXI_DEFAULT_TX_SIZE=2048    # Ask the network stack to allocate additional space to hold pending outgoing messages.
 export FI_CXI_RX_MATCH_MODE=hybrid    # Allow the network stack to transition to software mode if necessary.
- 
-export NCCL_NET_GDR_LEVEL=3           # Typically improves performance, but remove this setting if you encounter a hang/crash.
+export FI_CXI_RDV_PROTO=alt_read
+export FI_CXI_DISABLE_HOST_REGISTER=1
+
+export NCCL_NET_PLUGIN=${PLUGIN_PATH}/lib/librccl-net.so
+export NCCL_NET_GDR_LEVEL="PHB"       # Typically improves performance, but remove this setting if you encounter a hang/crash.
 export NCCL_CROSS_NIC=1               # On large systems, this NCCL setting has been found to improve performance
 export NCCL_SOCKET_IFNAME=hsn0        # NCCL/RCCL will use the high speed network to coordinate startup.
+export NCCL_NET="AWS Libfabric"
+
+export TORCH_NCCL_HIGH_PRIORITY=1     # Use high priority stream for the NCCL/RCCL Communicator.
+export GPU_MAX_HW_QUEUES=2
+
+export HSA_FORCE_FINE_GRAIN_PCIE=1
+
+# below are optional to debug RCCL stuff
+# export NCCL_DEBUG=INFO
+# export NCCL_DEBUG_SUBSYS=INIT
+
+# The following have been found to help avoid hangs, but are not yet
+# documented elsewhere
+export FI_CXI_RDZV_EAGER_SIZE=0
+export FI_CXI_RDZV_GET_MIN=0
+export FI_CXI_RDZV_THRESHOLD=0
 
 
 ## Checking
