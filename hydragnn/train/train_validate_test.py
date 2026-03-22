@@ -668,7 +668,8 @@ def train(
     fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
     fsdp2_workaround_available = True
 
-    nbatch = get_nbatch(loader)
+    local_nbatch = get_nbatch(loader)
+    nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
     syncopt = {"cudasync": False}
     ## 0: default (no detailed tracing), 1: sync tracing
     trace_level = int(os.getenv("HYDRAGNN_TRACE_LEVEL", "0"))

@@ -16,6 +16,7 @@ import random
 
 import torch
 import torch.distributed as dist
+from mpi4py import MPI
 
 # FIXME: deprecated in torch_geometric 2.0
 try:
@@ -250,8 +251,15 @@ def create_dataloaders(
 
             if group is None:
                 group = dist.group.WORLD
-            group_size = dist.get_world_size(group=group)
-            group_rank = dist.get_rank(group=group)
+
+            if isinstance(group, dist.ProcessGroup):
+                group_size = dist.get_world_size(group=group)
+                group_rank = dist.get_rank(group=group)
+            elif isinstance(group, MPI.Comm):
+                group_size = group.Get_size()
+                group_rank = group.Get_rank()
+            else:
+                raise ValueError("Unsupported group type for distributed sampling")
 
             train_sampler = torch.utils.data.distributed.DistributedSampler(
                 trainset,

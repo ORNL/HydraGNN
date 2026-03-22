@@ -196,7 +196,7 @@ class DistDataset(AbstractBaseDataset):
             assert len(vcount) == len(self.dataset)
             vcount_list = self.ddstore_comm.allgather(vcount)
             # vcount_list = allgatherv_numpy(vcount, comm=self.ddstore_comm)
-            vcount = np.hstack(vcount_list)
+            vcount = np.hstack(vcount_list).astype(np.int64)
             self.variable_count[k] = vcount
 
             offset_arr = np.zeros_like(vcount)

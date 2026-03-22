@@ -53,12 +53,14 @@ torch.backends.cudnn.enabled = False
 ## Set "ulimit -n" as max
 try:
     import resource
+
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     print("resource.RLIMIT_NOFILE:", soft, hard)
 except:
     pass
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -854,13 +856,19 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
+    group = None
+    if args.task_parallel:
+        group = branch_group
+    elif args.ddstore and args.ddstore_width is not None:
+        group = trainset.ddstore_comm
+
     (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
         test_sampler_shuffle=False,
-        group=branch_group if args.task_parallel else None,
+        group=group,
         oversampling=args.oversampling,
         num_samples=num_samples_list,
     )
