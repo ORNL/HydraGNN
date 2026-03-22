@@ -21,6 +21,54 @@ from io import BytesIO
 import os
 
 
+def allgatherv_numpy(send: np.ndarray, comm=MPI.COMM_WORLD):
+    """
+    Allgatherv for 1D NumPy arrays with variable lengths.
+
+    Parameters
+    ----------
+    send : np.ndarray
+        Local array (1D, contiguous)
+    comm : MPI.Comm
+        MPI communicator
+
+    Returns
+    -------
+    recv : np.ndarray
+        Concatenated array from all ranks
+    counts : np.ndarray
+        Number of elements from each rank
+    displs : np.ndarray
+        Displacements for each rank
+    """
+
+    # ensure contiguous
+    send = np.ascontiguousarray(send)
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    # map dtype to MPI type
+    mpi_dtype = MPI._typedict[send.dtype.char]
+
+    # gather lengths
+    sendcount = np.array(send.size, dtype=np.int32)
+    recvcounts = np.empty(size, dtype=np.int32)
+    comm.Allgather([sendcount, MPI.INT], [recvcounts, MPI.INT])
+
+    # displacements
+    displs = np.zeros(size, dtype=np.int32)
+    displs[1:] = np.cumsum(recvcounts[:-1])
+
+    # allocate receive buffer
+    recv = np.empty(recvcounts.sum(), dtype=send.dtype)
+
+    # allgatherv
+    comm.Allgatherv([send, mpi_dtype], [recv, recvcounts, displs, mpi_dtype])
+
+    return recv
+
+
 class DistDataset(AbstractBaseDataset):
     """Distributed datasets class"""
 
@@ -144,10 +192,11 @@ class DistDataset(AbstractBaseDataset):
             self.variable_dim[k] = vdim
             self.variable_dtype[k] = val.dtype
 
-            vcount = np.array([x.shape[vdim] for x in arr_list])
+            vcount = np.array([x.shape[vdim] for x in arr_list], dtype=np.int32)
             assert len(vcount) == len(self.dataset)
             vcount_list = self.ddstore_comm.allgather(vcount)
-            vcount = np.hstack(vcount_list)
+            # vcount_list = allgatherv_numpy(vcount, comm=self.ddstore_comm)
+            vcount = np.hstack(vcount_list).astype(np.int64)
             self.variable_count[k] = vcount
 
             offset_arr = np.zeros_like(vcount)
