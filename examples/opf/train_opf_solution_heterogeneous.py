@@ -278,8 +278,15 @@ def _iter_raw_split_for_rank(
     start = rank * chunk + min(rank, remainder)
     end = start + chunk + (1 if rank < remainder else 0)
 
+    skipped = 0
     for _, filepath in split_files[start:end]:
-        yield _raw_json_to_heterodata(filepath)
+        try:
+            yield _raw_json_to_heterodata(filepath)
+        except (json.JSONDecodeError, KeyError, ValueError) as exc:
+            skipped += 1
+            logging.warning("Skipping corrupt file %s: %s", filepath, exc)
+    if skipped:
+        logging.warning("Rank skipped %d corrupt JSON file(s) in this split", skipped)
 
 
 def _prepare_sample(

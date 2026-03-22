@@ -6,8 +6,8 @@
 #SBATCH -t 02:00:00
 #SBATCH -p batch 
 #SBATCH -q debug
-#SBATCH -N 20 #16 
-#SBATCH -C nvme
+#SBATCH -N 16
+##SBATCH -C nvme
 ##SBATCH -S 1
  
 export all_proxy=socks://proxy.ccs.ornl.gov:3128/

@@ -3,7 +3,7 @@
 #SBATCH -J HydraGNN
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/job-hydragnn-grid-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/job-hydragnn-grid-%j.out
-#SBATCH -t 01:00:00
+#SBATCH -t 02:00:00
 #SBATCH -p batch 
 #SBATCH -q debug
 #SBATCH -N 5 #16 
