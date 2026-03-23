@@ -823,7 +823,8 @@ def validate(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    nbatch = get_nbatch(loader)
+    local_nbatch = get_nbatch(loader)
+    nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
 
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
@@ -900,7 +901,8 @@ def test(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    nbatch = get_nbatch(loader)
+    local_nbatch = get_nbatch(loader)
+    nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
     _, rank = get_comm_size_and_rank()
 
     if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
