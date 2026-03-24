@@ -39,7 +39,11 @@ from hydragnn.utils.distributed import get_device
 def _find_checkpoint(logdir: str, checkpoint: str = None) -> str:
     """Locate a checkpoint file inside logdir."""
     if checkpoint is not None:
-        path = checkpoint if os.path.isabs(checkpoint) else os.path.join(logdir, checkpoint)
+        path = (
+            checkpoint
+            if os.path.isabs(checkpoint)
+            else os.path.join(logdir, checkpoint)
+        )
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Checkpoint not found: {path}")
         return path
@@ -116,12 +120,33 @@ def main():
         default=None,
         help="Checkpoint filename or path (defaults to latest .pk in --logdir)",
     )
-    parser.add_argument("--num_structures", type=int, default=10, help="Number of random structures to generate")
-    parser.add_argument("--min_atoms", type=int, default=2, help="Minimum atoms per structure")
-    parser.add_argument("--max_atoms", type=int, default=20, help="Maximum atoms per structure")
-    parser.add_argument("--box_size", type=float, default=10.0, help="Side length of the cubic box for random positions (Angstrom)")
-    parser.add_argument("--max_atomic_number", type=int, default=94, help="Maximum atomic number for random atom types")
-    parser.add_argument("--batch_size", type=int, default=32, help="Inference batch size")
+    parser.add_argument(
+        "--num_structures",
+        type=int,
+        default=10,
+        help="Number of random structures to generate",
+    )
+    parser.add_argument(
+        "--min_atoms", type=int, default=2, help="Minimum atoms per structure"
+    )
+    parser.add_argument(
+        "--max_atoms", type=int, default=20, help="Maximum atoms per structure"
+    )
+    parser.add_argument(
+        "--box_size",
+        type=float,
+        default=10.0,
+        help="Side length of the cubic box for random positions (Angstrom)",
+    )
+    parser.add_argument(
+        "--max_atomic_number",
+        type=int,
+        default=94,
+        help="Maximum atomic number for random atom types",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=32, help="Inference batch size"
+    )
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--branch_id",
@@ -129,7 +154,12 @@ def main():
         default=0,
         help="Branch index to use for multi-branch models (default: 0)",
     )
-    parser.add_argument("--precision", type=str, default=None, help="Override precision (fp32, fp64, bf16)")
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default=None,
+        help="Override precision (fp32, fp64, bf16)",
+    )
     args = parser.parse_args()
 
     # ----- Load config -----
@@ -140,7 +170,9 @@ def main():
         config = json.load(f)
 
     # Resolve precision
-    precision_str = args.precision or config["NeuralNetwork"]["Training"].get("precision", "fp32")
+    precision_str = args.precision or config["NeuralNetwork"]["Training"].get(
+        "precision", "fp32"
+    )
     precision, param_dtype, _ = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
@@ -170,7 +202,9 @@ def main():
     # ----- Generate random structures -----
     rng = np.random.default_rng(args.seed)
     structures = [
-        _build_random_structure(args.min_atoms, args.max_atoms, args.box_size, args.max_atomic_number, rng)
+        _build_random_structure(
+            args.min_atoms, args.max_atoms, args.box_size, args.max_atomic_number, rng
+        )
         for _ in range(args.num_structures)
     ]
     structures = _add_edges(structures, radius, max_neighbours)
@@ -179,11 +213,13 @@ def main():
     for s in structures:
         s.dataset_name = torch.tensor([[args.branch_id]], dtype=torch.long)
 
-    print(f"Generated {len(structures)} random structures (atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)")
+    print(
+        f"Generated {len(structures)} random structures (atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
+    )
 
     # ----- Run inference in batches -----
     all_energies = []
-    all_forces = []    # list of per-structure force tensors
+    all_forces = []  # list of per-structure force tensors
     all_natoms = []
 
     for start in range(0, len(structures), args.batch_size):
@@ -222,7 +258,9 @@ def main():
         # Collect per-structure results
         num_graphs = batch.num_graphs
         for i in range(num_graphs):
-            all_energies.append(energy_pred[i].item() if energy_pred.numel() > 1 else energy_pred.item())
+            all_energies.append(
+                energy_pred[i].item() if energy_pred.numel() > 1 else energy_pred.item()
+            )
             mask = batch.batch == i
             n = int(mask.sum().item())
             all_natoms.append(n)
@@ -233,7 +271,9 @@ def main():
 
     # ----- Print results -----
     print("\n" + "=" * 70)
-    print(f"{'Struct':>6} | {'Atoms':>5} | {'Energy':>16} | {'Energy/atom':>16} | {'|F|_mean':>12}")
+    print(
+        f"{'Struct':>6} | {'Atoms':>5} | {'Energy':>16} | {'Energy/atom':>16} | {'|F|_mean':>12}"
+    )
     print("-" * 70)
     for i in range(len(all_energies)):
         e = all_energies[i]
