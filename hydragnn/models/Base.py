@@ -370,6 +370,15 @@ class Base(Module):
                 dtype=inv_node_feat.dtype,
             )
             graph_attr_b = graph_attr[batch]
+            if inv_node_feat.size(0) != graph_attr_b.size(0):
+                raise RuntimeError(
+                    f"Graph conditioning dimension mismatch: inv_node_feat has "
+                    f"{inv_node_feat.size(0)} rows but batch has {graph_attr_b.size(0)} "
+                    f"nodes. This typically means the MPNN dropped isolated nodes "
+                    f"(nodes with no edges within the radius cutoff). "
+                    f"inv_node_feat.shape={list(inv_node_feat.shape)}, "
+                    f"graph_attr_b.shape={list(graph_attr_b.shape)}"
+                )
             fused = torch.cat([inv_node_feat, graph_attr_b], dim=-1)
             return self.graph_concat_projector(fused)
 
