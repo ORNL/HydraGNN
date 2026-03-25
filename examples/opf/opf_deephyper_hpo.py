@@ -103,19 +103,43 @@ def run(trial, dequed=None):
                 nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
                 # nums[0] is the rank prefix (e.g. "0:"), nums[1] is the actual loss
                 if len(nums) >= 2:
-                    output = -to_float(nums[1])
+                    val = -to_float(nums[1])
                     print(
-                        f"Val loss: {-output}",
+                        f"Val loss: {-val}",
                         flush=True,
                         file=f,
                     )
+                    # Keep the best (minimum) val loss across epochs
+                    if val > output:
+                        output = val
             if not line:
                 break
         fout.close()
+    except subprocess.CalledProcessError as cpe:
+        # If the trial was killed by walltime, epochs may have completed.
+        # Try to extract the best val loss from whatever was logged.
+        print(f"Trial failed with exit code {cpe.returncode}", flush=True, file=f)
+        error_file = f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt"
+        if os.path.exists(error_file):
+            fout = open(error_file, "r")
+            for line in fout:
+                if "Tasks Val Loss:" in line:
+                    nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
+                    if len(nums) >= 2:
+                        val = -to_float(nums[1])
+                        print(
+                            f"Val loss (from partial run): {-val}",
+                            flush=True,
+                            file=f,
+                        )
+                        if val > output:
+                            output = val
+            fout.close()
     except Exception as excp:
         print(excp, flush=True, file=f)
         output = -math.inf
 
+    print(f"Best val loss (min across epochs): {-output}", flush=True, file=f)
     print("Output:", output, flush=True, file=f)
     objective = output
     print(objective, flush=True, file=f)
