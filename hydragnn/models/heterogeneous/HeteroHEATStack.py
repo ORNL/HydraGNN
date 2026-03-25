@@ -29,12 +29,12 @@ class HeteroHEATStack(HeteroBase):
         self.attention_heads = attention_heads
         self.edge_type_emb_dim = edge_type_emb_dim
         self.edge_attr_emb_dim = edge_attr_emb_dim
-        self.edge_lin_dict = ModuleDict()
         self.node_types = None
         self.edge_types = None
         self._heat_edge_dim = None
         self.is_edge_model = True
         super().__init__(*args, **kwargs)
+        self.edge_lin_dict = ModuleDict()
 
     def _init_conv(self):
         self.graph_convs = ModuleList()
@@ -47,7 +47,7 @@ class HeteroHEATStack(HeteroBase):
         for _ in range(self.num_conv_layers):
             self.graph_convs.append(
                 HEATConv(
-                    in_channels=-1,
+                    in_channels=self.hidden_dim,
                     out_channels=self.hidden_dim,
                     num_node_types=len(self.node_types),
                     num_edge_types=len(self.edge_types),

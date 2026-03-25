@@ -89,4 +89,4 @@ python -c "import numpy; print(numpy.__version__)"
 srun --export=ALL,HYDRAGNN_DIAG=1,HYDRAGNN_DIAG_RANK=0 \
     -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 \
     --gpus-per-task=1 --gpu-bind=closest \
-    python -u train_opf_solution_heterogeneous.py --hdf5 --inputfile opf_solution_heterogeneous_heat.json --modelname OPF_Solution_HeteroHEAT
+    python -u train_opf_solution_heterogeneous.py --hdf5 --inputfile opf_solution_heterogeneous_heat.json --modelname OPF_Solution_Hetero
