@@ -34,6 +34,7 @@ class HeteroGATStack(HeteroBase):
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
+            resolved_edge_dim = self._resolve_edge_dim_for_type(edge_type)
             if self.share_relation_weights:
                 if shared_conv is None:
                     shared_conv = GATv2Conv(
@@ -43,7 +44,7 @@ class HeteroGATStack(HeteroBase):
                         negative_slope=self.negative_slope,
                         dropout=self.dropout,
                         add_self_loops=False,
-                        edge_dim=self.edge_dim,
+                        edge_dim=resolved_edge_dim,
                         concat=concat,
                     )
                 conv_dict[edge_type] = shared_conv
@@ -55,7 +56,7 @@ class HeteroGATStack(HeteroBase):
                     negative_slope=self.negative_slope,
                     dropout=self.dropout,
                     add_self_loops=False,
-                    edge_dim=self.edge_dim,
+                    edge_dim=resolved_edge_dim,
                     concat=concat,
                 )
         return HeteroConv(conv_dict, aggr="sum")
