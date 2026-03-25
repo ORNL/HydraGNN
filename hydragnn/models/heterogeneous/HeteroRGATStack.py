@@ -34,6 +34,7 @@ class HeteroRGATStack(HeteroBase):
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
+            edge_dim = self._resolve_edge_dim_for_type(edge_type)
             if self.share_relation_weights:
                 if shared_conv is None:
                     shared_conv = GATConv(
@@ -43,7 +44,7 @@ class HeteroRGATStack(HeteroBase):
                         negative_slope=self.negative_slope,
                         dropout=self.dropout,
                         add_self_loops=False,
-                        edge_dim=self.edge_dim,
+                        edge_dim=edge_dim,
                         concat=concat,
                     )
                 conv_dict[edge_type] = shared_conv
@@ -55,7 +56,7 @@ class HeteroRGATStack(HeteroBase):
                     negative_slope=self.negative_slope,
                     dropout=self.dropout,
                     add_self_loops=False,
-                    edge_dim=self.edge_dim,
+                    edge_dim=edge_dim,
                     concat=concat,
                 )
         return HeteroConv(conv_dict, aggr="sum")
@@ -96,6 +97,8 @@ class HeteroRGATStack(HeteroBase):
             for node_type in self._metadata[0]:
                 node_norms[node_type] = BatchNorm(self.hidden_dim)
             self.feature_layers.append(node_norms)
+
+        self._initialized = True
 
     def _init_node_conv(self):
         nodeconfiglist = self.config_heads["node"]

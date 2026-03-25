@@ -97,7 +97,7 @@ class HeteroGATStack(HeteroBase):
                 node_norms[node_type] = BatchNorm(self.hidden_dim)
             self.feature_layers.append(node_norms)
 
-    def _init_node_conv(self):
+        self._initialized = True
         nodeconfiglist = self.config_heads["node"]
         assert (
             self.num_branches == len(nodeconfiglist) or self.num_branches == 1

@@ -1124,6 +1124,8 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
         )
     elif mpnn_type == "HeteroHGT":
         model = HeteroHGTStack(
@@ -1151,6 +1153,8 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
         )
     elif mpnn_type == "HeteroHEAT":
         model = HeteroHEATStack(
@@ -1180,6 +1184,8 @@ def create_model(
             hetero_pooling_mode=hetero_pooling_mode,
             node_target_type=node_target_type,
             share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
         )
 
     else:
