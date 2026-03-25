@@ -3,9 +3,9 @@
 #SBATCH -J OPF-DeepHyper
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/job-opf-hpo-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/job-opf-hpo-%j.out
-#SBATCH -t 02:00:00
+#SBATCH -t 06:00:00
 #SBATCH -p batch
-#SBATCH -N 16
+#SBATCH -N 128
 
 function cmd() {
     echo "$@"
@@ -75,7 +75,7 @@ env | grep ^MPICH
 env | grep ^HYDRA
 
 ## OPF HPO settings
-export NUM_EPOCH=30
+export NUM_EPOCH=10
 export BATCH_SIZE=32
 
 # DeepHyper configuration
