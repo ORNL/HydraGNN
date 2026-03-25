@@ -215,19 +215,41 @@ def _raw_json_to_heterodata(filepath):
     data["shunt"].x = torch.tensor(grid["nodes"]["shunt"])
 
     data["bus", "ac_line", "bus"].edge_index = tg_opf.extract_edge_index(obj, "ac_line")
-    data["bus", "ac_line", "bus"].edge_attr = torch.tensor(grid["edges"]["ac_line"]["features"])
-    data["bus", "ac_line", "bus"].edge_label = torch.tensor(solution["edges"]["ac_line"]["features"])
+    data["bus", "ac_line", "bus"].edge_attr = torch.tensor(
+        grid["edges"]["ac_line"]["features"]
+    )
+    data["bus", "ac_line", "bus"].edge_label = torch.tensor(
+        solution["edges"]["ac_line"]["features"]
+    )
 
-    data["bus", "transformer", "bus"].edge_index = tg_opf.extract_edge_index(obj, "transformer")
-    data["bus", "transformer", "bus"].edge_attr = torch.tensor(grid["edges"]["transformer"]["features"])
-    data["bus", "transformer", "bus"].edge_label = torch.tensor(solution["edges"]["transformer"]["features"])
+    data["bus", "transformer", "bus"].edge_index = tg_opf.extract_edge_index(
+        obj, "transformer"
+    )
+    data["bus", "transformer", "bus"].edge_attr = torch.tensor(
+        grid["edges"]["transformer"]["features"]
+    )
+    data["bus", "transformer", "bus"].edge_label = torch.tensor(
+        solution["edges"]["transformer"]["features"]
+    )
 
-    data["generator", "generator_link", "bus"].edge_index = tg_opf.extract_edge_index(obj, "generator_link")
-    data["bus", "generator_link", "generator"].edge_index = tg_opf.extract_edge_index_rev(obj, "generator_link")
-    data["load", "load_link", "bus"].edge_index = tg_opf.extract_edge_index(obj, "load_link")
-    data["bus", "load_link", "load"].edge_index = tg_opf.extract_edge_index_rev(obj, "load_link")
-    data["shunt", "shunt_link", "bus"].edge_index = tg_opf.extract_edge_index(obj, "shunt_link")
-    data["bus", "shunt_link", "shunt"].edge_index = tg_opf.extract_edge_index_rev(obj, "shunt_link")
+    data["generator", "generator_link", "bus"].edge_index = tg_opf.extract_edge_index(
+        obj, "generator_link"
+    )
+    data[
+        "bus", "generator_link", "generator"
+    ].edge_index = tg_opf.extract_edge_index_rev(obj, "generator_link")
+    data["load", "load_link", "bus"].edge_index = tg_opf.extract_edge_index(
+        obj, "load_link"
+    )
+    data["bus", "load_link", "load"].edge_index = tg_opf.extract_edge_index_rev(
+        obj, "load_link"
+    )
+    data["shunt", "shunt_link", "bus"].edge_index = tg_opf.extract_edge_index(
+        obj, "shunt_link"
+    )
+    data["bus", "shunt_link", "shunt"].edge_index = tg_opf.extract_edge_index_rev(
+        obj, "shunt_link"
+    )
 
     return data
 
@@ -718,7 +740,11 @@ if __name__ == "__main__":
         )
 
         if preonly_pipeline:
-            for split_name, label in [("train", "trainset"), ("val", "valset"), ("test", "testset")]:
+            for split_name, label in [
+                ("train", "trainset"),
+                ("val", "valset"),
+                ("test", "testset"),
+            ]:
                 t_pre = time.perf_counter()
                 sample_iter = _iter_raw_split_for_rank(
                     active_datadir,
@@ -733,7 +759,10 @@ if __name__ == "__main__":
                 if hdf5_streaming:
                     h5writer.begin(label)
                     for d in iterate_tqdm(
-                        sample_iter, verbosity, desc=f"Preprocess {split_name} {case_name}", leave=False
+                        sample_iter,
+                        verbosity,
+                        desc=f"Preprocess {split_name} {case_name}",
+                        leave=False,
                     ):
                         h5writer.put(
                             _prepare_sample(
@@ -754,9 +783,16 @@ if __name__ == "__main__":
                     else:
                         testset_count += local_count
                 else:
-                    target_list = trainset if label == "trainset" else (valset if label == "valset" else testset)
+                    target_list = (
+                        trainset
+                        if label == "trainset"
+                        else (valset if label == "valset" else testset)
+                    )
                     for d in iterate_tqdm(
-                        sample_iter, verbosity, desc=f"Preprocess {split_name} {case_name}", leave=False
+                        sample_iter,
+                        verbosity,
+                        desc=f"Preprocess {split_name} {case_name}",
+                        leave=False,
                     ):
                         target_list.append(
                             _prepare_sample(
