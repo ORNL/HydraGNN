@@ -101,9 +101,9 @@ def run(trial, dequed=None):
             line = fout.readline()
             if "Tasks Val Loss:" in line:
                 nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
-                if nums:
-                    # OPF has a single task; use the first (and only) val loss
-                    output = -to_float(nums[0])
+                # nums[0] is the rank prefix (e.g. "0:"), nums[1] is the actual loss
+                if len(nums) >= 2:
+                    output = -to_float(nums[1])
                     print(
                         f"Val loss: {-output}",
                         flush=True,
