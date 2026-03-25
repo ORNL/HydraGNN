@@ -4,7 +4,7 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "mpnn_type": "HeteroRGAT",
+            "mpnn_type": "HeteroHEAT",
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
@@ -23,24 +23,52 @@
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [32, 16],
+                    "dim_headlayers": [
+                        32,
+                        16
+                    ],
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0],
+            "task_weights": [
+                1.0
+            ],
             "hetero_pooling_mode": "sum",
-            "node_target_type": "bus"
+            "node_target_type": "bus",
+            "hetero_edge_type_emb_dim": 16,
+            "hetero_edge_attr_emb_dim": 16
         },
         "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
-            "graph_feature_names": ["context"],
-            "graph_feature_dims": [1],
-            "node_feature_names": ["node_features"],
-            "node_feature_dims": [4],
-            "output_names": ["bus_solution"],
-            "output_index": [0],
-            "output_dim": [2],
-            "type": ["node"],
+            "input_node_features": [
+                0,
+                1,
+                2,
+                3
+            ],
+            "graph_feature_names": [
+                "context"
+            ],
+            "graph_feature_dims": [
+                1
+            ],
+            "node_feature_names": [
+                "node_features"
+            ],
+            "node_feature_dims": [
+                4
+            ],
+            "output_names": [
+                "bus_solution"
+            ],
+            "output_index": [
+                0
+            ],
+            "output_dim": [
+                2
+            ],
+            "type": [
+                "node"
+            ],
             "denormalize_output": false
         },
         "Training": {
@@ -54,7 +82,7 @@
             "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             }
         }
     },

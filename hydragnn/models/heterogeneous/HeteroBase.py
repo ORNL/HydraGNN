@@ -220,6 +220,10 @@ class HeteroBase(Module):
             self._metadata = data.metadata()
         if not self._initialized:
             self._init_conv()
+            # Move lazily-created conv modules to the same device as the model.
+            device = next(self.parameters()).device
+            self.graph_convs.to(device)
+            self.feature_layers.to(device)
         if self._pending_node_conv_init:
             self._init_node_conv()
             self._finalize_node_conv_heads()
@@ -724,7 +728,6 @@ class HeteroBase(Module):
 
     def _decode_from_x_dict(self, x_dict, batch_dict, data, edge_attr_dict):
         x_graph = self._pool_hetero_graph_features(x_dict, batch_dict)
-        x_graph = x_graph.to(device)
         x_graph = self._apply_graph_pool_conditioning(x_graph, data)
 
         # Prepare dataset_name for multi-branch heads
