@@ -417,7 +417,7 @@ def create_model(
         assert num_spherical is not None, "DimeNet requires num_spherical input."
         assert radius is not None, "DimeNet requires radius input."
         model = DIMEStack(
-            "inv_node_feat, equiv_node_feat, rbf, sbf, i, j, idx_kj, idx_ji",  # input_args
+            "inv_node_feat, equiv_node_feat, rbf, sbf, i, j, idx_kj, idx_ji, num_nodes",  # input_args
             "",  # conv_args
             basis_emb_size,
             envelope_exponent,

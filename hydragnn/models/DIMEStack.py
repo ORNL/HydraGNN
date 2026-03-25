@@ -134,7 +134,7 @@ class DIMEStack(Base):
                     (lin, "inv_node_feat -> inv_node_feat"),
                     (emb, "inv_node_feat, rbf, i, j, edge_attr -> x1"),
                     (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                    (dec, "x2, rbf, i -> inv_node_feat"),
+                    (dec, "x2, rbf, i, num_nodes -> inv_node_feat"),
                     (
                         lambda inv_node_feat, equiv_node_feat: [
                             inv_node_feat,
@@ -151,7 +151,7 @@ class DIMEStack(Base):
                     (lin, "inv_node_feat -> inv_node_feat"),
                     (emb, "inv_node_feat, rbf, i, j -> x1"),
                     (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                    (dec, "x2, rbf, i -> inv_node_feat"),
+                    (dec, "x2, rbf, i, num_nodes -> inv_node_feat"),
                     (
                         lambda x, pos: [x, pos],
                         "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
@@ -196,6 +196,7 @@ class DIMEStack(Base):
             "j": j,
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
+            "num_nodes": data.x.size(0),
         }
 
         if self.use_edge_attr:
