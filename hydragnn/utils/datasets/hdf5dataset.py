@@ -66,13 +66,13 @@ class HDF5Writer:
         self._labels = {}  # label -> list[data]
 
         # Streaming-mode state
-        self._fh = None            # open h5py.File handle
+        self._fh = None  # open h5py.File handle
         self._shard_path = None
         self._stream_label = None  # active label being streamed
-        self._stream_ds = None     # active HDF5 dataset
-        self._stream_buf = []      # pending samples not yet flushed
-        self._stream_offset = 0    # next write position in the dataset
-        self._label_counts = {}    # label -> final count (for metadata)
+        self._stream_ds = None  # active HDF5 dataset
+        self._stream_buf = []  # pending samples not yet flushed
+        self._stream_offset = 0  # next write position in the dataset
+        self._label_counts = {}  # label -> final count (for metadata)
         self._streaming_used = False
 
     # ── batch-mode API (backward compatible) ──────────────────────────
@@ -96,9 +96,7 @@ class HDF5Writer:
 
         if self._fh is None:
             os.makedirs(self.basedir, exist_ok=True)
-            self._shard_path = os.path.join(
-                self.basedir, f"shard-{self.rank:04d}.h5"
-            )
+            self._shard_path = os.path.join(self.basedir, f"shard-{self.rank:04d}.h5")
             self._fh = h5py.File(self._shard_path, "w")
 
         if label in self._fh:
@@ -111,7 +109,11 @@ class HDF5Writer:
             # Use a resizable (chunked) dataset so we can append without
             # knowing the total count up-front.
             self._stream_ds = self._fh.create_dataset(
-                label, shape=(0,), maxshape=(None,), dtype=vlen_dt, chunks=(self.batch_size,)
+                label,
+                shape=(0,),
+                maxshape=(None,),
+                dtype=vlen_dt,
+                chunks=(self.batch_size,),
             )
             self._stream_offset = 0
         self._stream_label = label
