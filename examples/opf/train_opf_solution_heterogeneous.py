@@ -537,6 +537,11 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
     parser.add_argument("--modelname", type=str, default="OPF_Solution_Hetero")
+    parser.add_argument("--mpnn_type", type=str, default=None)
+    parser.add_argument("--hidden_dim", type=int, default=None)
+    parser.add_argument("--num_conv_layers", type=int, default=None)
+    parser.add_argument("--learning_rate", type=float, default=None)
+    parser.add_argument("--log", type=str, default=None)
     parser.add_argument(
         "--nvme",
         action="store_true",
@@ -565,6 +570,21 @@ if __name__ == "__main__":
         config = json.load(f)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+
+    # CLI overrides for HPO
+    for param in ("mpnn_type", "hidden_dim", "num_conv_layers"):
+        val = getattr(args, param, None)
+        if val is not None:
+            arch_config[param] = val
+    if args.learning_rate is not None:
+        config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ] = args.learning_rate
+    if args.batch_size is not None:
+        config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+
     raw_edge_dim = arch_config.get("edge_dim")
     if isinstance(raw_edge_dim, dict):
         # Heterogeneous route: per-edge-type widths from pre-assembled tensors.
@@ -597,7 +617,7 @@ if __name__ == "__main__":
         datefmt="%H:%M:%S",
     )
 
-    log_name = args.modelname
+    log_name = args.log if args.log is not None else args.modelname
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
