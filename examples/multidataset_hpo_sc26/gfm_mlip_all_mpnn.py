@@ -109,6 +109,7 @@ if __name__ == "__main__":
     parser.add_argument("--ddstore_width", type=int, help="ddstore width", default=None)
     parser.add_argument("--shmem", action="store_true", help="shmem")
     parser.add_argument("--log", help="log name")
+    parser.add_argument("--logfilename", help="log filename", default="run.log")
     parser.add_argument("--num_epoch", type=int, help="num_epoch", default=None)
     parser.add_argument("--batch_size", type=int, help="batch_size", default=None)
     parser.add_argument("--everyone", action="store_true", help="gptimer")
@@ -379,7 +380,7 @@ if __name__ == "__main__":
     )
 
     log_name = "GFM" if args.log is None else args.log
-    hydragnn.utils.print.setup_log(log_name)
+    hydragnn.utils.print.setup_log(log_name, filename=args.logfilename)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
 
     log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
