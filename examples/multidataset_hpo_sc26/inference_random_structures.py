@@ -240,12 +240,12 @@ def main():
             outputs = model(batch)
 
         # First head is energy for interatomic-potential models
-        energy_pred = outputs[0].detach().squeeze()
+        energy_pred = outputs[0].squeeze()
         if energy_pred.dim() == 0:
             energy_pred = energy_pred.unsqueeze(0)
 
         # Compute forces via autograd if interatomic potential is enabled
-        if enable_ip and batch.pos.grad_fn is not None:
+        if enable_ip and batch.pos.requires_grad:
             forces_pred = -torch.autograd.grad(
                 energy_pred.sum(),
                 batch.pos,
@@ -254,6 +254,8 @@ def main():
             )[0].detach()
         else:
             forces_pred = None
+
+        energy_pred = energy_pred.detach()
 
         # Collect per-structure results
         num_graphs = batch.num_graphs
