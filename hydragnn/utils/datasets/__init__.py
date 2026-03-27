@@ -21,7 +21,10 @@ from .compositional_data_splitting import (
     compositional_stratified_splitting,
 )
 from .distdataset import DistDataset
-from .hdf5dataset import HDF5Dataset, HDF5Writer
+try:
+    from .hdf5dataset import HDF5Dataset, HDF5Writer
+except ImportError:
+    pass
 from .pickledataset import SimplePickleDataset, SimplePickleWriter
 from .pyg_cache import mark_pyg_cache_current, prepare_pyg_cache
 from .serializeddataset import SerializedDataset, SerializedWriter
