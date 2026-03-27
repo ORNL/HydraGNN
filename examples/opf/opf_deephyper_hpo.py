@@ -165,6 +165,24 @@ if __name__ == "__main__":
         default=100,
         help="Number of max evaluations for HPO search",
     )
+    parser.add_argument(
+        "--hidden_dim_range",
+        type=str,
+        default="32,256",
+        help="min,max for hidden_dim (e.g. '32,64')",
+    )
+    parser.add_argument(
+        "--num_conv_layers_range",
+        type=str,
+        default="2,6",
+        help="min,max for num_conv_layers (e.g. '2,4')",
+    )
+    parser.add_argument(
+        "--learning_rate_range",
+        type=str,
+        default="1e-5,1e-2",
+        help="min,max for learning_rate (e.g. '1e-4,1e-2')",
+    )
     args = parser.parse_args()
     mpnn_type_list = args.mpnn_type.split(",")
 
@@ -176,11 +194,15 @@ if __name__ == "__main__":
     from deephyper.evaluator import ProcessPoolEvaluator, queued
     from hydragnn.utils.hpo.deephyper import read_node_list
 
+    hd_min, hd_max = (int(x) for x in args.hidden_dim_range.split(","))
+    cl_min, cl_max = (int(x) for x in args.num_conv_layers_range.split(","))
+    lr_min, lr_max = (float(x) for x in args.learning_rate_range.split(","))
+
     hyperparameters = dict()
     hyperparameters["mpnn_type"] = mpnn_type_list
-    hyperparameters["learning_rate"] = (1e-5, 1e-2)
-    hyperparameters["hidden_dim"] = (32, 256)
-    hyperparameters["num_conv_layers"] = (2, 6)
+    hyperparameters["learning_rate"] = (lr_min, lr_max)
+    hyperparameters["hidden_dim"] = (hd_min, hd_max)
+    hyperparameters["num_conv_layers"] = (cl_min, cl_max)
 
     ## Create HPO problem with the defined hyperparameters
     problem = HpProblem()
