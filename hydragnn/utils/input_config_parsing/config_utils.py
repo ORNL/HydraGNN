@@ -58,9 +58,15 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     config = normalize_output_config(config)
 
-    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
-        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
-    )
+    # Use actual node feature dimension from data so model matches data.x.shape[1].
+    # (len(input_node_features) can disagree when e.g. multidataset or transforms change columns.)
+    sample = train_loader.dataset[0]
+    if hasattr(sample, "x") and getattr(sample, "x", None) is not None:
+        config["NeuralNetwork"]["Architecture"]["input_dim"] = sample.x.shape[1]
+    else:
+        config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
+            config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+        )
     PNA_models = ["PNA", "PNAPlus", "PNAEq"]
     if config["NeuralNetwork"]["Architecture"]["mpnn_type"] in PNA_models:
         if hasattr(train_loader.dataset, "pna_deg"):

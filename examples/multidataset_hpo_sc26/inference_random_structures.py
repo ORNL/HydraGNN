@@ -27,7 +27,11 @@ from torch_geometric.data import Data, Batch
 from torch_geometric.transforms import RadiusGraph
 
 from hydragnn.models.create import create_model_config
-from hydragnn.train.train_validate_test import resolve_precision
+from hydragnn.train.train_validate_test import (
+    resolve_precision,
+    move_batch_to_device,
+    get_autocast_and_scaler,
+)
 from hydragnn.utils.distributed import get_device
 
 
@@ -67,8 +71,9 @@ def _build_random_structure(
     # Random 3-D positions inside a cubic box
     positions = rng.uniform(0.0, box_size, size=(n_atoms, 3))
 
-    x = torch.tensor(atomic_numbers, dtype=torch.float64).unsqueeze(1)  # (N, 1)
-    pos = torch.tensor(positions, dtype=torch.float64)
+    dtype = torch.get_default_dtype()
+    x = torch.tensor(atomic_numbers, dtype=dtype).unsqueeze(1)  # (N, 1)
+    pos = torch.tensor(positions, dtype=dtype)
 
     # Chemical composition histogram (118 elements)
     hist, _ = np.histogram(atomic_numbers, bins=range(1, 118 + 2))
@@ -179,11 +184,14 @@ def main():
     device = get_device()
     print(f"Device: {device}, precision: {precision}")
 
+    autocast_ctx, _ = get_autocast_and_scaler(precision)
+
     # ----- Build and load model -----
     model = create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
-    ).to(device)
+    )
+    model = model.to(dtype=param_dtype, device=device)
 
     ckpt_path = _find_checkpoint(args.logdir, args.checkpoint)
     ckpt = torch.load(ckpt_path, map_location=device)
@@ -225,18 +233,10 @@ def main():
     for start in range(0, len(structures), args.batch_size):
         batch_list = structures[start : start + args.batch_size]
         batch = Batch.from_data_list(batch_list)
-
-        # Move to device and cast floating-point tensors
-        for key, val in batch.items():
-            if isinstance(val, torch.Tensor) and torch.is_floating_point(val):
-                batch[key] = val.to(device=device, dtype=param_dtype)
-            elif isinstance(val, torch.Tensor):
-                batch[key] = val.to(device=device)
-
-        # Enable gradient on positions for force computation
+        batch = move_batch_to_device(batch, param_dtype)
         batch.pos.requires_grad_(True)
 
-        with torch.enable_grad():
+        with torch.enable_grad(), autocast_ctx:
             outputs = model(batch)
 
         # First head is energy for interatomic-potential models
@@ -256,7 +256,6 @@ def main():
             forces_pred = None
 
         energy_pred = energy_pred.detach()
-
         # Collect per-structure results
         num_graphs = batch.num_graphs
         for i in range(num_graphs):
