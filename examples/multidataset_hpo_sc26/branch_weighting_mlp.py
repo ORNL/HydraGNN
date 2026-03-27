@@ -238,13 +238,10 @@ def train_epoch(
             energy_preds, forces_preds, weights, data.batch
         )
 
-        # [Ashwin]: did not find these functions in the codebase
-        # dataset_ids = extract_dataset_ids(data, num_branches)
-        # energy_true, forces_true = teacher_from_dataset_id(
-        #     energy_preds, forces_preds, data.batch, dataset_ids
-        # )
-        energy_true = data.energy.squeeze().to(dtype=param_dtype)
-        forces_true = data.forces.to(dtype=param_dtype)
+        dataset_ids = extract_dataset_ids(data, num_branches)
+        energy_true, forces_true = teacher_from_dataset_id(
+            energy_preds, forces_preds, data.batch, dataset_ids
+        )
 
         loss_energy = loss_fn(weighted_energy, energy_true)
         loss_forces = loss_fn(weighted_forces, forces_true)
@@ -325,13 +322,10 @@ def validate_epoch(
             energy_preds, forces_preds, weights, data.batch
         )
 
-        # [Ashwin]: did not find these functions in the codebase
-        # dataset_ids = extract_dataset_ids(data, num_branches)
-        # energy_true, forces_true = teacher_from_dataset_id(
-        #     energy_preds, forces_preds, data.batch, dataset_ids
-        # )
-        energy_true = data.energy.squeeze().to(dtype=param_dtype)
-        forces_true = data.forces.to(dtype=param_dtype)
+        dataset_ids = extract_dataset_ids(data, num_branches)
+        energy_true, forces_true = teacher_from_dataset_id(
+            energy_preds, forces_preds, data.batch, dataset_ids
+        )
 
         loss_energy = loss_fn(weighted_energy, energy_true)
         loss_forces = loss_fn(weighted_forces, forces_true)
@@ -538,18 +532,6 @@ def main():
 
     hydragnn.utils.distributed.setup_ddp()
 
-    try:
-        _run_training(args, config, var_config)
-    finally:
-        if dist.is_initialized():
-            try:
-                dist.barrier()
-                dist.destroy_process_group()
-            except Exception:
-                pass
-
-
-def _run_training(args, config, var_config):
     if args.multi_model_list:
         train_loader, val_loader, _ = load_multidataset_dataloaders(
             args, config, var_config
@@ -586,7 +568,6 @@ def _run_training(args, config, var_config):
 
     ckpt = torch.load(args.checkpoint, map_location=device)
     model.load_state_dict(ckpt["model_state_dict"], strict=False)
-    model = model.to(dtype=param_dtype)
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
