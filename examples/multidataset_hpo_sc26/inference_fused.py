@@ -379,6 +379,8 @@ def main():
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
     )
+    # Restore default dtype: create_model_config overwrites it with the training precision.
+    torch.set_default_dtype(param_dtype)
     model = model.to(dtype=param_dtype, device=device)
 
     ckpt_path = _find_checkpoint(args.logdir, args.checkpoint)

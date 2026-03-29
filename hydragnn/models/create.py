@@ -103,9 +103,12 @@ def create_model_config(
     ## Set precision: bf16, fp32, fp64
     training_cfg = config["Training"]
     precision, param_dtype, _ = resolve_precision(training_cfg.get("precision", "fp32"))
+    prev_dtype = torch.get_default_dtype()
     torch.set_default_dtype(param_dtype)
+    model = model.to(dtype=param_dtype)
+    torch.set_default_dtype(prev_dtype)
 
-    return model.to(dtype=param_dtype)
+    return model
 
 
 # FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
