@@ -13,7 +13,9 @@ pytestmark = pytest.mark.mpi_skip()
 def pytest_resolve_precision_aliases():
     prec, param_dtype, autocast_dtype = tvt.resolve_precision("bfloat16")
     assert prec == "bf16"
-    assert param_dtype == torch.float32  # master params stay fp32; autocast handles bf16 compute
+    assert (
+        param_dtype == torch.float32
+    )  # master params stay fp32; autocast handles bf16 compute
     assert autocast_dtype == torch.bfloat16
 
     prec, param_dtype, autocast_dtype = tvt.resolve_precision("float32")
