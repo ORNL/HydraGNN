@@ -14,6 +14,11 @@ Usage:
 
 The --logdir should contain a config.json and a .pk checkpoint file produced
 by a prior HydraGNN training run.
+
+The public functions in this module (find_checkpoint, build_random_structure,
+add_edges, build_argument_parser, load_config_and_model,
+generate_structures, run_inference) can be imported and reused by other
+scripts.
 """
 
 import argparse
@@ -40,8 +45,8 @@ from hydragnn.utils.distributed import get_device
 # ---------------------------------------------------------------------------
 
 
-def _find_checkpoint(logdir: str, checkpoint: str = None) -> str:
-    """Locate a checkpoint file inside logdir."""
+def find_checkpoint(logdir: str, checkpoint: str = None) -> str:
+    """Locate a checkpoint file inside *logdir*."""
     if checkpoint is not None:
         path = (
             checkpoint
@@ -57,7 +62,7 @@ def _find_checkpoint(logdir: str, checkpoint: str = None) -> str:
     return candidates[-1]
 
 
-def _build_random_structure(
+def build_random_structure(
     min_atoms: int,
     max_atoms: int,
     box_size: float,
@@ -92,8 +97,8 @@ def _build_random_structure(
     return data
 
 
-def _add_edges(data_list, radius, max_neighbours):
-    """Add radius-graph edges to each structure and batch them."""
+def add_edges(data_list, radius, max_neighbours):
+    """Add radius-graph edges to each structure."""
     transform = RadiusGraph(r=radius, loop=False, max_num_neighbors=max_neighbours)
     processed = []
     for data in data_list:
@@ -107,13 +112,19 @@ def _add_edges(data_list, radius, max_neighbours):
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Reusable building blocks
 # ---------------------------------------------------------------------------
 
 
-def main():
+def build_argument_parser(description=None):
+    """Return an :class:`argparse.ArgumentParser` with the common arguments.
+
+    Callers can extend the returned parser with additional arguments before
+    calling ``parse_args()``.
+    """
     parser = argparse.ArgumentParser(
-        description="HydraGNN inference on randomly generated atomistic structures"
+        description=description
+        or "HydraGNN inference on randomly generated atomistic structures"
     )
     parser.add_argument(
         "--logdir",
@@ -165,28 +176,35 @@ def main():
         default=None,
         help="Override precision (fp32, fp64, bf16)",
     )
-    args = parser.parse_args()
+    return parser
 
-    # ----- Load config -----
-    config_path = os.path.join(args.logdir, "config.json")
+
+def load_config_and_model(logdir, checkpoint=None, precision_override=None):
+    """Load config, build the model, and restore a checkpoint.
+
+    Returns
+    -------
+    model : torch.nn.Module
+    config : dict
+    device : torch.device
+    autocast_ctx : context-manager
+    param_dtype : torch.dtype
+    """
+    config_path = os.path.join(logdir, "config.json")
     if not os.path.isfile(config_path):
-        raise FileNotFoundError(f"config.json not found in {args.logdir}")
+        raise FileNotFoundError(f"config.json not found in {logdir}")
     with open(config_path, "r") as f:
         config = json.load(f)
 
-    # Resolve precision
-    precision_str = args.precision or config["NeuralNetwork"]["Training"].get(
+    precision_str = precision_override or config["NeuralNetwork"]["Training"].get(
         "precision", "fp32"
     )
     precision, param_dtype, _ = resolve_precision(precision_str)
     torch.set_default_dtype(param_dtype)
 
     device = get_device()
-    print(f"Device: {device}, precision: {precision}")
-
     autocast_ctx, _ = get_autocast_and_scaler(precision)
 
-    # ----- Build and load model -----
     model = create_model_config(
         config=config["NeuralNetwork"],
         verbosity=config["Verbosity"]["level"],
@@ -195,45 +213,57 @@ def main():
     torch.set_default_dtype(param_dtype)
     model = model.to(dtype=param_dtype, device=device)
 
-    ckpt_path = _find_checkpoint(args.logdir, args.checkpoint)
+    ckpt_path = find_checkpoint(logdir, checkpoint)
     ckpt = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(ckpt["model_state_dict"], strict=False)
     model.eval()
     for p in model.parameters():
         p.requires_grad_(False)
+
     print(f"Loaded checkpoint: {ckpt_path}")
+    print(f"Device: {device}, precision: {precision}")
 
-    # ----- Read architecture parameters needed for graph construction -----
-    arch = config["NeuralNetwork"]["Architecture"]
-    radius = arch.get("radius", 5.0)
-    max_neighbours = arch.get("max_neighbours", 20)
-    enable_ip = arch.get("enable_interatomic_potential", False)
+    return model, config, device, autocast_ctx, param_dtype
 
-    # ----- Generate random structures -----
-    rng = np.random.default_rng(args.seed)
+
+def generate_structures(
+    num_structures, min_atoms, max_atoms, box_size, max_atomic_number,
+    radius, max_neighbours, branch_id, seed,
+):
+    """Generate random atomistic structures with edges and branch labels.
+
+    Returns
+    -------
+    structures : list[Data]
+    """
+    rng = np.random.default_rng(seed)
     structures = [
-        _build_random_structure(
-            args.min_atoms, args.max_atoms, args.box_size, args.max_atomic_number, rng
-        )
-        for _ in range(args.num_structures)
+        build_random_structure(min_atoms, max_atoms, box_size, max_atomic_number, rng)
+        for _ in range(num_structures)
     ]
-    structures = _add_edges(structures, radius, max_neighbours)
-
-    # Assign branch ID (for multi-branch models)
+    structures = add_edges(structures, radius, max_neighbours)
     for s in structures:
-        s.dataset_name = torch.tensor([[args.branch_id]], dtype=torch.long)
+        s.dataset_name = torch.tensor([[branch_id]], dtype=torch.long)
+    return structures
 
-    print(
-        f"Generated {len(structures)} random structures (atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
-    )
 
-    # ----- Run inference in batches -----
+def run_inference(model, structures, batch_size, param_dtype, autocast_ctx, enable_ip):
+    """Run batched inference and return per-structure energies and forces.
+
+    Returns
+    -------
+    all_energies : list[float]
+    all_forces : list[torch.Tensor | None]
+        Each entry is an (N_atoms, 3) CPU tensor, or *None* when forces are
+        unavailable.
+    all_natoms : list[int]
+    """
     all_energies = []
-    all_forces = []  # list of per-structure force tensors
+    all_forces = []
     all_natoms = []
 
-    for start in range(0, len(structures), args.batch_size):
-        batch_list = structures[start : start + args.batch_size]
+    for start in range(0, len(structures), batch_size):
+        batch_list = structures[start : start + batch_size]
         batch = Batch.from_data_list(batch_list)
         batch = move_batch_to_device(batch, param_dtype)
         batch.pos.requires_grad_(True)
@@ -272,7 +302,11 @@ def main():
             else:
                 all_forces.append(None)
 
-    # ----- Print results -----
+    return all_energies, all_forces, all_natoms
+
+
+def print_results(all_energies, all_forces, all_natoms):
+    """Print a table of inference results to stdout."""
     print("\n" + "=" * 70)
     print(
         f"{'Struct':>6} | {'Atoms':>5} | {'Energy':>16} | {'Energy/atom':>16} | {'|F|_mean':>12}"
@@ -290,6 +324,39 @@ def main():
             f_str = "       N/A"
         print(f"{i:6d} | {n:5d} | {e:16.6f} | {e_per_atom:16.6f} | {f_str}")
     print("=" * 70)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main():
+    args = build_argument_parser().parse_args()
+
+    model, config, device, autocast_ctx, param_dtype = load_config_and_model(
+        args.logdir, args.checkpoint, args.precision,
+    )
+
+    arch = config["NeuralNetwork"]["Architecture"]
+    radius = arch.get("radius", 5.0)
+    max_neighbours = arch.get("max_neighbours", 20)
+    enable_ip = arch.get("enable_interatomic_potential", False)
+
+    structures = generate_structures(
+        args.num_structures, args.min_atoms, args.max_atoms, args.box_size,
+        args.max_atomic_number, radius, max_neighbours, args.branch_id, args.seed,
+    )
+    print(
+        f"Generated {len(structures)} random structures "
+        f"(atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
+    )
+
+    all_energies, all_forces, all_natoms = run_inference(
+        model, structures, args.batch_size, param_dtype, autocast_ctx, enable_ip,
+    )
+
+    print_results(all_energies, all_forces, all_natoms)
 
 
 if __name__ == "__main__":
