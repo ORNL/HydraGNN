@@ -219,23 +219,47 @@ def update_config_edge_dim(config):
         return edge_dim
 
     explicit_edge_dim = _normalize_edge_dim(config.get("edge_dim"))
-    if explicit_edge_dim is None:
-        raise ValueError(
-            "NeuralNetwork.Architecture.edge_dim is required. "
-            "Set edge_dim explicitly in the input config."
-        )
+    if explicit_edge_dim is not None:
+        # Explicit edge_dim provided — validate against feature names if any.
+        if isinstance(explicit_edge_dim, int):
+            feature_names = config.get("edge_feature_names")
+            if feature_names:
+                names_len = len(feature_names)
+                if names_len != explicit_edge_dim:
+                    raise ValueError(
+                        "NeuralNetwork.Architecture.edge_feature_names length "
+                        f"({names_len}) must match edge_dim ({explicit_edge_dim})."
+                    )
+        config["edge_dim"] = explicit_edge_dim
+    else:
+        # Backward-compatible auto-computation from edge_features.
+        edge_models = [
+            "GAT",
+            "PNA",
+            "PNAPlus",
+            "PAINN",
+            "PNAEq",
+            "CGCNN",
+            "SchNet",
+            "EGNN",
+            "DimeNet",
+            "MACE",
+        ]
+        config["edge_dim"] = None
+        if "edge_features" in config and config["edge_features"]:
+            assert (
+                config["mpnn_type"] in edge_models
+            ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
+            config["edge_dim"] = len(config["edge_features"])
+            if "enable_interatomic_potential" in config:
+                assert not config[
+                    "enable_interatomic_potential"
+                ], "Edge features cannot be used with interatomic potentials as the model builds its own specialized features for force computation."
+        elif config["mpnn_type"] == "CGCNN":
+            # CG always needs an integer edge_dim
+            # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
+            config["edge_dim"] = 0
 
-    if isinstance(explicit_edge_dim, int):
-        feature_names = config.get("edge_feature_names")
-        if feature_names:
-            names_len = len(feature_names)
-            if names_len != explicit_edge_dim:
-                raise ValueError(
-                    "NeuralNetwork.Architecture.edge_feature_names length "
-                    f"({names_len}) must match edge_dim ({explicit_edge_dim})."
-                )
-
-    config["edge_dim"] = explicit_edge_dim
     return config
 
 

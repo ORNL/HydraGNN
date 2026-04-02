@@ -99,6 +99,8 @@ class HeteroGATStack(HeteroBase):
             self.feature_layers.append(node_norms)
 
         self._initialized = True
+        if "node" not in self.config_heads:
+            return
         nodeconfiglist = self.config_heads["node"]
         assert (
             self.num_branches == len(nodeconfiglist) or self.num_branches == 1
@@ -164,6 +166,18 @@ class HeteroGATStack(HeteroBase):
             self.batch_norms_node_hidden[branchtype] = batch_norms_node_hidden
             self.convs_node_output[branchtype] = convs_node_output
             self.batch_norms_node_output[branchtype] = batch_norms_node_output
+
+    def get_conv(self, input_dim, output_dim, edge_dim=None):
+        return GATv2Conv(
+            in_channels=input_dim,
+            out_channels=output_dim,
+            heads=self.heads,
+            negative_slope=self.negative_slope,
+            dropout=self.dropout,
+            add_self_loops=False,
+            edge_dim=edge_dim,
+            concat=False,
+        )
 
     def __str__(self):
         return "HeteroGATStack"
