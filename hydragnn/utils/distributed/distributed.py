@@ -494,30 +494,10 @@ def distributed_model_wrapper(
     precision="fp32",
 ):
 
-    normalized_precision = str(precision).lower()
-    if normalized_precision == "bfloat16":
-        normalized_precision = "bf16"
-    elif normalized_precision in ["float", "float32"]:
-        normalized_precision = "fp32"
-    elif normalized_precision in ["double", "float64"]:
-        normalized_precision = "fp64"
-
-    use_ipex_optimize = (
-        hasattr(torch, "xpu")
-        and torch.xpu.is_available()
-        and not bf16
-        and normalized_precision == "fp32"
-    )
-
-    if use_ipex_optimize:
-        print_distributed(verbosity, "Using ipex.optimize wrapper")
-        import intel_extension_for_pytorch as ipex
-
-        model, optimizer = ipex.optimize(model, optimizer=optimizer)
-    elif hasattr(torch, "xpu") and torch.xpu.is_available():
+    if hasattr(torch, "xpu") and torch.xpu.is_available():
         print_distributed(
             verbosity,
-            f"Skipping ipex.optimize for precision={normalized_precision}; using native optimizer path.",
+            "Using native torch optimizer path for XPU.",
         )
     else:
         print_distributed(
