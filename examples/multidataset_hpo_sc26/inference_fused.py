@@ -7,58 +7,48 @@ produces a weighted-average prediction of energy and forces. Includes detailed
 latency and throughput measurements.
 
 Usage:
-    python inference_fused.py \
-        --logdir <path_to_training_log_dir> \
-        --num_structures 100 \
+    python inference_fused.py \\
+        --logdir <path_to_training_log_dir> \\
+        --num_structures 100 \\
         --batch_size 32
 
 The --logdir should contain config.json, a .pk HydraGNN checkpoint, and a
 mlp_weights/ subdirectory with .pt MLP checkpoints.  The script auto-selects
 the most recent checkpoint of each type unless overridden.
+
+Public API for reuse (e.g. ``inference_fused_write_json.py``):
+``add_fused_cli_arguments``, ``load_fused_stack``, ``generate_structures``,
+``run_fused_inference`` (optional ``mlp_device`` / ``profile_stages``), ``print_fused_results``.
 """
 
-import argparse
 import glob
 import json
 import os
 import time
-from typing import Tuple
+from contextlib import nullcontext
+from typing import List, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.data import Data, Batch
-from torch_geometric.transforms import RadiusGraph
+from torch_geometric.data import Batch
 
-from hydragnn.models.create import create_model_config
 from hydragnn.train.train_validate_test import (
+    move_batch_to_device,
     resolve_precision,
-    get_autocast_and_scaler,
 )
-from hydragnn.utils.distributed import get_device
 
+from inference_random_structures import (
+    add_edges,
+    build_argument_parser,
+    build_random_structure,
+    load_config_and_model,
+)
 
 # ---------------------------------------------------------------------------
-# Helpers: checkpoint discovery
+# Helpers: MLP checkpoint discovery
 # ---------------------------------------------------------------------------
-
-
-def _find_checkpoint(logdir: str, checkpoint: str = None) -> str:
-    """Locate a .pk HydraGNN checkpoint inside *logdir*."""
-    if checkpoint is not None:
-        path = (
-            checkpoint
-            if os.path.isabs(checkpoint)
-            else os.path.join(logdir, checkpoint)
-        )
-        if not os.path.isfile(path):
-            raise FileNotFoundError(f"Checkpoint not found: {path}")
-        return path
-    candidates = sorted(glob.glob(os.path.join(logdir, "*.pk")))
-    if not candidates:
-        raise FileNotFoundError(f"No .pk checkpoint found in {logdir}")
-    return candidates[-1]
 
 
 def _find_mlp_checkpoint(logdir: str, mlp_checkpoint: str = None) -> str:
@@ -116,51 +106,189 @@ def _reconstruct_mlp_from_state_dict(state_dict: dict) -> BranchWeightMLP:
 
 
 # ---------------------------------------------------------------------------
-# Helpers: random structure generation
+# CLI
 # ---------------------------------------------------------------------------
 
 
-def _build_random_structure(
-    min_atoms: int,
-    max_atoms: int,
-    box_size: float,
-    max_atomic_number: int,
-    rng: np.random.Generator,
-) -> Data:
-    """Create a single random atomistic graph (no edges yet)."""
-    n_atoms = rng.integers(min_atoms, max_atoms + 1)
-    atomic_numbers = rng.integers(1, max_atomic_number + 1, size=n_atoms)
-    positions = rng.uniform(0.0, box_size, size=(n_atoms, 3))
-
-    dtype = torch.get_default_dtype()
-    x = torch.tensor(atomic_numbers, dtype=dtype).unsqueeze(1)
-    pos = torch.tensor(positions, dtype=dtype)
-
-    hist, _ = np.histogram(atomic_numbers, bins=range(1, 118 + 2))
-    chemical_composition = torch.tensor(hist, dtype=torch.float32).unsqueeze(1)
-
-    graph_attr = torch.tensor([0.0, 0.0], dtype=torch.float32)
-
-    return Data(
-        x=x,
-        pos=pos,
-        chemical_composition=chemical_composition,
-        graph_attr=graph_attr,
-        natoms=torch.tensor([n_atoms], dtype=torch.long),
+def add_fused_cli_arguments(parser):
+    """Add fused-inference-only arguments to a parser from ``build_argument_parser``."""
+    parser.add_argument(
+        "--mlp_checkpoint",
+        default=None,
+        help="MLP checkpoint path (defaults to newest .pt in <logdir>/mlp_weights/)",
+    )
+    parser.add_argument(
+        "--mlp_precision",
+        type=str,
+        default=None,
+        help="MLP parameter dtype (fp32, fp64, bf16). Default: same as --precision / config.",
+    )
+    parser.add_argument(
+        "--mlp_device",
+        type=str,
+        choices=["cuda", "cpu"],
+        default="cuda",
+        help="Device for BranchWeightMLP (default cuda = same as HydraGNN).",
+    )
+    parser.add_argument(
+        "--profile_stages",
+        action="store_true",
+        help="Per-batch timing for MLP, branch forwards, and combine (synced on CUDA).",
+    )
+    parser.add_argument(
+        "--num_warmup",
+        type=int,
+        default=1,
+        help="Number of warmup batches excluded from timing",
     )
 
 
-def _add_edges(data_list, radius, max_neighbours):
-    """Add radius-graph edges to each structure."""
-    transform = RadiusGraph(r=radius, loop=False, max_num_neighbors=max_neighbours)
-    processed = []
-    for data in data_list:
-        data = transform(data)
-        if not hasattr(data, "edge_shifts") or data.edge_shifts is None:
-            n_edges = data.edge_index.size(1)
-            data.edge_shifts = torch.zeros(n_edges, 3, dtype=data.pos.dtype)
-        processed.append(data)
-    return processed
+# ---------------------------------------------------------------------------
+# Loading
+# ---------------------------------------------------------------------------
+
+
+def load_mlp(logdir, mlp_checkpoint, mlp_dtype, mlp_device: torch.device):
+    """Load BranchWeightMLP from checkpoint.
+
+    Returns
+    -------
+    mlp : BranchWeightMLP
+    mlp_path : str
+    mlp_ckpt : dict
+    """
+    mlp_path = _find_mlp_checkpoint(logdir, mlp_checkpoint)
+    mlp_ckpt = torch.load(mlp_path, map_location=mlp_device)
+    mlp = _reconstruct_mlp_from_state_dict(mlp_ckpt["mlp_state_dict"])
+    mlp = mlp.to(dtype=mlp_dtype, device=mlp_device)
+    mlp.eval()
+    for p in mlp.parameters():
+        p.requires_grad_(False)
+    return mlp, mlp_path, mlp_ckpt
+
+
+def _mlp_bf16_autocast(mlp_device: torch.device):
+    """Autocast context for bf16 MLP forward when GNN uses a different precision."""
+    if mlp_device.type == "cuda":
+        return torch.autocast("cuda", dtype=torch.bfloat16)
+    if mlp_device.type == "cpu" and getattr(torch.backends.cpu, "has_bf16", False):
+        return torch.autocast("cpu", dtype=torch.bfloat16)
+    return nullcontext()
+
+
+def _mlp_forward_autocast(mlp_device: torch.device, mlp_prec_str: str):
+    prec, _, _ = resolve_precision(mlp_prec_str)
+    if prec == "bf16":
+        return _mlp_bf16_autocast(mlp_device)
+    return nullcontext()
+
+
+def load_fused_stack(
+    logdir,
+    checkpoint=None,
+    mlp_checkpoint=None,
+    precision_override=None,
+    mlp_precision_override=None,
+    mlp_device_str: str = "cuda",
+):
+    """Load HydraGNN (via ``load_config_and_model``) and BranchWeightMLP.
+
+    Returns
+    -------
+    model, mlp, config, device, autocast_ctx, param_dtype, num_branches,
+    mlp_device, mlp_autocast_ctx, unified_mlp_gnn_stack, gnn_prec_str, mlp_prec_str
+    """
+    config_path = os.path.join(logdir, "config.json")
+    if not os.path.isfile(config_path):
+        raise FileNotFoundError(f"config.json not found in {logdir}")
+    with open(config_path, "r") as f:
+        config_pre = json.load(f)
+
+    gnn_prec_str = precision_override or config_pre["NeuralNetwork"]["Training"].get(
+        "precision", "fp32"
+    )
+    mlp_prec_str = (
+        mlp_precision_override
+        if mlp_precision_override is not None
+        else gnn_prec_str
+    )
+    _, mlp_dtype, _ = resolve_precision(mlp_prec_str)
+
+    model, config, device, autocast_ctx, param_dtype = load_config_and_model(
+        logdir, checkpoint, precision_override
+    )
+
+    num_branches = getattr(model, "num_branches", 1)
+    print(f"HydraGNN num_branches = {num_branches}")
+
+    mlp_dev = device if mlp_device_str == "cuda" else torch.device("cpu")
+    mlp, mlp_path, mlp_ckpt = load_mlp(logdir, mlp_checkpoint, mlp_dtype, mlp_dev)
+
+    unified_mlp_gnn_stack = (mlp_dev == device) and (mlp_prec_str == gnn_prec_str)
+    mlp_autocast_ctx = (
+        nullcontext()
+        if unified_mlp_gnn_stack
+        else _mlp_forward_autocast(mlp_dev, mlp_prec_str)
+    )
+
+    linear_keys = sorted(
+        k for k in mlp_ckpt["mlp_state_dict"] if k.endswith(".weight") and "net." in k
+    )
+    sd = mlp_ckpt["mlp_state_dict"]
+    input_dim = sd[linear_keys[0]].shape[1]
+    hidden_dims = [sd[k].shape[0] for k in linear_keys[:-1]]
+    mlp_out = sd[linear_keys[-1]].shape[0]
+    print(f"MLP checkpoint: {mlp_path}")
+    print(f"  architecture: {input_dim} -> {' -> '.join(map(str, hidden_dims))} -> {mlp_out}")
+    print(f"  device: {mlp_dev}, dtype: {mlp_dtype}, prec_str: {mlp_prec_str}")
+    print(f"  unified_mlp_gnn_stack (single autocast path): {unified_mlp_gnn_stack}")
+
+    if mlp_out != num_branches:
+        print(
+            f"WARNING: MLP output dim ({mlp_out}) != HydraGNN num_branches "
+            f"({num_branches}). Results may be incorrect."
+        )
+
+    return (
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        mlp_dev,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        gnn_prec_str,
+        mlp_prec_str,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Structure generation (no dataset_name; fused sets branch per forward)
+# ---------------------------------------------------------------------------
+
+
+def generate_structures(
+    num_structures,
+    min_atoms,
+    max_atoms,
+    box_size,
+    max_atomic_number,
+    radius,
+    max_neighbours,
+    seed,
+):
+    """Generate random structures with radius edges (no ``dataset_name`` set)."""
+    rng = np.random.default_rng(seed)
+    structures = [
+        build_random_structure(
+            min_atoms, max_atoms, box_size, max_atomic_number, rng
+        )
+        for _ in range(num_structures)
+    ]
+    return add_edges(structures, radius, max_neighbours)
 
 
 # ---------------------------------------------------------------------------
@@ -291,163 +419,50 @@ def _make_timer(device):
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Inference and reporting
 # ---------------------------------------------------------------------------
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Fused HydraGNN + BranchWeightMLP inference on random structures"
-    )
-    parser.add_argument(
-        "--logdir",
-        required=True,
-        help="Training log directory (config.json, .pk checkpoint, mlp_weights/)",
-    )
-    parser.add_argument(
-        "--checkpoint",
-        default=None,
-        help="HydraGNN checkpoint filename or path (defaults to latest .pk in --logdir)",
-    )
-    parser.add_argument(
-        "--mlp_checkpoint",
-        default=None,
-        help="MLP checkpoint path (defaults to newest .pt in <logdir>/mlp_weights/)",
-    )
-    parser.add_argument(
-        "--num_structures",
-        type=int,
-        default=100,
-        help="Number of random structures to generate",
-    )
-    parser.add_argument(
-        "--min_atoms", type=int, default=2, help="Minimum atoms per structure"
-    )
-    parser.add_argument(
-        "--max_atoms", type=int, default=20, help="Maximum atoms per structure"
-    )
-    parser.add_argument(
-        "--box_size",
-        type=float,
-        default=10.0,
-        help="Side length of the cubic box for random positions (Angstrom)",
-    )
-    parser.add_argument(
-        "--max_atomic_number",
-        type=int,
-        default=94,
-        help="Maximum atomic number for random atom types",
-    )
-    parser.add_argument(
-        "--batch_size", type=int, default=32, help="Inference batch size"
-    )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument(
-        "--precision",
-        type=str,
-        default=None,
-        help="Override precision (fp32, fp64, bf16)",
-    )
-    parser.add_argument(
-        "--num_warmup",
-        type=int,
-        default=1,
-        help="Number of warmup batches excluded from timing",
-    )
-    args = parser.parse_args()
+def _sync_device(dev: torch.device):
+    if dev.type == "cuda":
+        torch.cuda.synchronize()
 
-    # ---- Load config ----
-    config_path = os.path.join(args.logdir, "config.json")
-    if not os.path.isfile(config_path):
-        raise FileNotFoundError(f"config.json not found in {args.logdir}")
-    with open(config_path, "r") as f:
-        config = json.load(f)
 
-    precision_str = args.precision or config["NeuralNetwork"]["Training"].get(
-        "precision", "fp32"
-    )
-    precision, param_dtype, _ = resolve_precision(precision_str)
-    torch.set_default_dtype(param_dtype)
+def run_fused_inference(
+    model,
+    mlp,
+    structures,
+    batch_size,
+    param_dtype,
+    autocast_ctx,
+    device,
+    num_branches,
+    num_warmup,
+    mlp_device: torch.device,
+    mlp_autocast_ctx,
+    unified_mlp_gnn_stack: bool = True,
+    profile_stages: bool = False,
+):
+    """Run batched fused inference with timing (excludes warmup batches).
 
-    device = get_device()
-    print(f"Device: {device}, precision: {precision_str}")
-
-    autocast_ctx, _ = get_autocast_and_scaler(precision)
-
-    # ---- Load HydraGNN model ----
-    model = create_model_config(
-        config=config["NeuralNetwork"],
-        verbosity=config["Verbosity"]["level"],
-    )
-    # Restore default dtype: create_model_config overwrites it with the training precision.
-    torch.set_default_dtype(param_dtype)
-    model = model.to(dtype=param_dtype, device=device)
-
-    ckpt_path = _find_checkpoint(args.logdir, args.checkpoint)
-    ckpt = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(ckpt["model_state_dict"], strict=False)
-    model.eval()
-    for p in model.parameters():
-        p.requires_grad_(False)
-
-    num_branches = getattr(model, "num_branches", 1)
-    print(f"HydraGNN checkpoint: {ckpt_path}")
-    print(f"  num_branches = {num_branches}")
-
-    # ---- Load BranchWeightMLP ----
-    mlp_path = _find_mlp_checkpoint(args.logdir, args.mlp_checkpoint)
-    mlp_ckpt = torch.load(mlp_path, map_location=device)
-    mlp = _reconstruct_mlp_from_state_dict(mlp_ckpt["mlp_state_dict"])
-    mlp = mlp.to(dtype=param_dtype, device=device)
-    mlp.eval()
-    for p in mlp.parameters():
-        p.requires_grad_(False)
-
-    linear_keys = sorted(
-        k for k in mlp_ckpt["mlp_state_dict"] if k.endswith(".weight") and "net." in k
-    )
-    sd = mlp_ckpt["mlp_state_dict"]
-    input_dim = sd[linear_keys[0]].shape[1]
-    hidden_dims = [sd[k].shape[0] for k in linear_keys[:-1]]
-    mlp_out = sd[linear_keys[-1]].shape[0]
-    print(f"MLP checkpoint: {mlp_path}")
-    print(f"  architecture: {input_dim} -> {' -> '.join(map(str, hidden_dims))} -> {mlp_out}")
-
-    if mlp_out != num_branches:
-        print(
-            f"WARNING: MLP output dim ({mlp_out}) != HydraGNN num_branches "
-            f"({num_branches}). Results may be incorrect."
-        )
-
-    # ---- Architecture parameters for graph construction ----
-    arch = config["NeuralNetwork"]["Architecture"]
-    radius = arch.get("radius", 5.0)
-    max_neighbours = arch.get("max_neighbours", 20)
-
-    # ---- Generate random structures ----
-    rng = np.random.default_rng(args.seed)
-    structures = [
-        _build_random_structure(
-            args.min_atoms, args.max_atoms, args.box_size, args.max_atomic_number, rng
-        )
-        for _ in range(args.num_structures)
-    ]
-    structures = _add_edges(structures, radius, max_neighbours)
-
-    print(
-        f"Generated {len(structures)} random structures "
-        f"(atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
-    )
-
-    # ---- Prepare batches ----
+    Returns
+    -------
+    all_energies : list[float]
+    all_forces : list[torch.Tensor]
+    all_natoms : list[int]
+    all_weights : list[torch.Tensor]
+    batch_latencies_ms : list[float]
+        Latencies for batches after warmup only.
+    total_timed_structures : int
+        Number of structures in timed batches (excludes warmup).
+    stage_stats : dict | None
+        If profile_stages, keys mlp_ms, branches_ms, combine_ms (lists per timed batch).
+    """
     batches = []
-    for start in range(0, len(structures), args.batch_size):
-        batches.append(structures[start : start + args.batch_size])
+    for start in range(0, len(structures), batch_size):
+        batches.append(structures[start : start + batch_size])
 
-    num_warmup = min(args.num_warmup, len(batches))
-    print(f"Total batches: {len(batches)} (warmup: {num_warmup}, timed: {len(batches) - num_warmup})")
-
-    # ---- Fused inference ----
+    num_warmup_effective = min(num_warmup, len(batches))
     timer_start, timer_stop_ms = _make_timer(device)
 
     all_energies = []
@@ -455,38 +470,93 @@ def main():
     all_natoms = []
     all_weights = []
     batch_latencies_ms = []
+    stage_mlp_ms: List[float] = []
+    stage_branches_ms: List[float] = []
+    stage_combine_ms: List[float] = []
+
+    mlp_param_dtype = next(mlp.parameters()).dtype
 
     for batch_idx, batch_list in enumerate(batches):
-        is_warmup = batch_idx < num_warmup
+        is_warmup = batch_idx < num_warmup_effective
 
         batch = Batch.from_data_list(batch_list)
-        for key, val in batch.items():
-            if isinstance(val, torch.Tensor) and torch.is_floating_point(val):
-                batch[key] = val.to(device=device, dtype=param_dtype)
-            elif isinstance(val, torch.Tensor):
-                batch[key] = val.to(device=device)
+        batch = move_batch_to_device(batch, param_dtype)
         batch.pos.requires_grad_(True)
 
         timer_start()
 
-        with torch.enable_grad(), autocast_ctx:
-            comp = _reshape_composition(batch).to(device=device, dtype=param_dtype)
-            logits = mlp(comp)
-            weights = F.softmax(logits, dim=-1)
-
-            energy_preds = []
-            forces_preds = []
-            for branch_id in range(num_branches):
-                e, f = _predict_branch_energy_forces(model, batch, branch_id)
-                energy_preds.append(e)
-                forces_preds.append(f)
-
-            energy_preds_t = torch.stack(energy_preds, dim=0)
-            forces_preds_t = torch.stack(forces_preds, dim=0)
-
-            weighted_energy, weighted_forces = _weighted_average(
-                energy_preds_t, forces_preds_t, weights, batch.batch
-            )
+        with torch.enable_grad():
+            if unified_mlp_gnn_stack:
+                with autocast_ctx:
+                    comp = _reshape_composition(batch).to(
+                        device=device, dtype=param_dtype
+                    )
+                    if profile_stages:
+                        _sync_device(device)
+                        t_mlp0 = time.perf_counter()
+                    logits = mlp(comp)
+                    weights = F.softmax(logits, dim=-1)
+                    if profile_stages:
+                        _sync_device(device)
+                        t_mlp1 = time.perf_counter()
+                    energy_preds = []
+                    forces_preds = []
+                    for branch_id in range(num_branches):
+                        e, f = _predict_branch_energy_forces(model, batch, branch_id)
+                        energy_preds.append(e)
+                        forces_preds.append(f)
+                    if profile_stages:
+                        _sync_device(device)
+                        t_br0 = time.perf_counter()
+                    energy_preds_t = torch.stack(energy_preds, dim=0)
+                    forces_preds_t = torch.stack(forces_preds, dim=0)
+                    weighted_energy, weighted_forces = _weighted_average(
+                        energy_preds_t, forces_preds_t, weights, batch.batch
+                    )
+                    if profile_stages:
+                        _sync_device(device)
+                        t_cb0 = time.perf_counter()
+                if profile_stages and not is_warmup:
+                    stage_mlp_ms.append((t_mlp1 - t_mlp0) * 1000.0)
+                    stage_branches_ms.append((t_br0 - t_mlp1) * 1000.0)
+                    stage_combine_ms.append((t_cb0 - t_br0) * 1000.0)
+            else:
+                comp = _reshape_composition(batch).to(device=device, dtype=param_dtype)
+                comp_m = comp.to(device=mlp_device, dtype=mlp_param_dtype)
+                if profile_stages:
+                    _sync_device(mlp_device)
+                    _sync_device(device)
+                    t_mlp0 = time.perf_counter()
+                with mlp_autocast_ctx:
+                    logits = mlp(comp_m)
+                weights = F.softmax(logits, dim=-1).to(
+                    device=device, dtype=param_dtype
+                )
+                if profile_stages:
+                    _sync_device(device)
+                    t_mlp1 = time.perf_counter()
+                with autocast_ctx:
+                    energy_preds = []
+                    forces_preds = []
+                    for branch_id in range(num_branches):
+                        e, f = _predict_branch_energy_forces(model, batch, branch_id)
+                        energy_preds.append(e)
+                        forces_preds.append(f)
+                    if profile_stages:
+                        _sync_device(device)
+                        t_br0 = time.perf_counter()
+                    energy_preds_t = torch.stack(energy_preds, dim=0)
+                    forces_preds_t = torch.stack(forces_preds, dim=0)
+                    weighted_energy, weighted_forces = _weighted_average(
+                        energy_preds_t, forces_preds_t, weights, batch.batch
+                    )
+                    if profile_stages:
+                        _sync_device(device)
+                        t_cb0 = time.perf_counter()
+                if profile_stages and not is_warmup:
+                    stage_mlp_ms.append((t_mlp1 - t_mlp0) * 1000.0)
+                    stage_branches_ms.append((t_br0 - t_mlp1) * 1000.0)
+                    stage_combine_ms.append((t_cb0 - t_br0) * 1000.0)
 
         elapsed_ms = timer_stop_ms()
 
@@ -510,7 +580,40 @@ def main():
             all_forces.append(weighted_forces[mask].cpu())
             all_weights.append(weights_cpu[i])
 
-    # ---- Per-structure results ----
+    total_timed_structures = sum(
+        len(batches[i]) for i in range(num_warmup_effective, len(batches))
+    )
+
+    stage_stats = None
+    if profile_stages and stage_mlp_ms:
+        stage_stats = {
+            "mlp_ms": stage_mlp_ms,
+            "branches_ms": stage_branches_ms,
+            "combine_ms": stage_combine_ms,
+        }
+
+    return (
+        all_energies,
+        all_forces,
+        all_natoms,
+        all_weights,
+        batch_latencies_ms,
+        total_timed_structures,
+        stage_stats,
+    )
+
+
+def print_fused_results(
+    all_energies,
+    all_forces,
+    all_natoms,
+    all_weights,
+    num_branches,
+    batch_latencies_ms,
+    total_timed_structures,
+    stage_stats=None,
+):
+    """Print per-structure table, branch-weight summary, and timing."""
     print("\n" + "=" * 80)
     print("PER-STRUCTURE PREDICTIONS")
     print("=" * 80)
@@ -524,7 +627,6 @@ def main():
     num_results = len(all_energies)
     show_limit = 10
     if num_results > 20:
-        show_indices = list(range(show_limit)) + list(range(num_results - show_limit, num_results))
         for i in range(num_results):
             if i == show_limit:
                 print(" " * 5 + "..." + " " * (len(header) - 8) + "...")
@@ -556,7 +658,6 @@ def main():
                 f"{f_mean:10.6f} | {top_branch:10d} | {top_wt:8.4f}"
             )
 
-    # ---- Branch weight distribution summary ----
     print("\n" + "=" * 80)
     print("BRANCH WEIGHT DISTRIBUTION (averaged over all structures)")
     print("=" * 80)
@@ -569,16 +670,14 @@ def main():
         print(f"{b:8d} | {mean_w[b].item():10.6f} | {std_w[b].item():10.6f}")
 
     dominant_counts = all_w.argmax(dim=1)
-    print(f"\nDominant branch frequency:")
+    print("\nDominant branch frequency:")
     for b in range(num_branches):
         count = int((dominant_counts == b).sum().item())
         if count > 0:
-            print(f"  branch-{b}: {count}/{len(all_weights)} ({100.0 * count / len(all_weights):.1f}%)")
-
-    # ---- Timing statistics ----
-    total_timed_structures = sum(
-        len(batches[i]) for i in range(num_warmup, len(batches))
-    )
+            print(
+                f"  branch-{b}: {count}/{len(all_weights)} "
+                f"({100.0 * count / len(all_weights):.1f}%)"
+            )
 
     print("\n" + "=" * 80)
     print("TIMING SUMMARY")
@@ -590,8 +689,10 @@ def main():
         print(f"  Timed batches:       {len(lat)}")
         print(f"  Timed structures:    {total_timed_structures}")
         print(f"  Total wall time:     {total_ms:.1f} ms ({total_ms / 1000:.3f} s)")
-        print(f"  Batch latency (ms):  mean={lat.mean():.1f}  std={lat.std():.1f}  "
-              f"min={lat.min():.1f}  max={lat.max():.1f}")
+        print(
+            f"  Batch latency (ms):  mean={lat.mean():.1f}  std={lat.std():.1f}  "
+            f"min={lat.min():.1f}  max={lat.max():.1f}"
+        )
         per_struct_ms = total_ms / total_timed_structures
         print(f"  Per-structure:       {per_struct_ms:.2f} ms")
         throughput = total_timed_structures / (total_ms / 1000.0)
@@ -599,8 +700,120 @@ def main():
     else:
         print("  No timed batches (all batches used for warmup).")
 
+    if stage_stats:
+        print("\n" + "=" * 80)
+        print("STAGE TIMING (--profile_stages, mean over timed batches, ms)")
+        print("=" * 80)
+        for key, label in (
+            ("mlp_ms", "MLP + softmax"),
+            ("branches_ms", "Branch forwards"),
+            ("combine_ms", "Stack + weighted average"),
+        ):
+            arr = np.array(stage_stats[key])
+            print(
+                f"  {label:22s}  mean={arr.mean():.2f}  std={arr.std():.2f}  "
+                f"min={arr.min():.2f}  max={arr.max():.2f}"
+            )
+
     print("\n" + "=" * 80)
     print("Done.")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main():
+    parser = build_argument_parser(
+        description="Fused HydraGNN + BranchWeightMLP inference on random structures"
+    )
+    add_fused_cli_arguments(parser)
+    parser.set_defaults(num_structures=100)
+    args = parser.parse_args()
+
+    (
+        model,
+        mlp,
+        config,
+        device,
+        autocast_ctx,
+        param_dtype,
+        num_branches,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        _gnn_prec_str,
+        _mlp_prec_str,
+    ) = load_fused_stack(
+        args.logdir,
+        args.checkpoint,
+        args.mlp_checkpoint,
+        args.precision,
+        args.mlp_precision,
+        args.mlp_device,
+    )
+
+    arch = config["NeuralNetwork"]["Architecture"]
+    radius = arch.get("radius", 5.0)
+    max_neighbours = arch.get("max_neighbours", 20)
+
+    structures = generate_structures(
+        args.num_structures,
+        args.min_atoms,
+        args.max_atoms,
+        args.box_size,
+        args.max_atomic_number,
+        radius,
+        max_neighbours,
+        args.seed,
+    )
+    print(
+        f"Generated {len(structures)} random structures "
+        f"(atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
+    )
+
+    n_batches = (len(structures) + args.batch_size - 1) // args.batch_size
+    num_warmup_eff = min(args.num_warmup, n_batches)
+    print(
+        f"Total batches: {n_batches} "
+        f"(warmup: {num_warmup_eff}, timed: {n_batches - num_warmup_eff})"
+    )
+
+    (
+        all_energies,
+        all_forces,
+        all_natoms,
+        all_weights,
+        batch_latencies_ms,
+        total_timed_structures,
+        stage_stats,
+    ) = run_fused_inference(
+        model,
+        mlp,
+        structures,
+        args.batch_size,
+        param_dtype,
+        autocast_ctx,
+        device,
+        num_branches,
+        args.num_warmup,
+        mlp_device,
+        mlp_autocast_ctx,
+        unified_mlp_gnn_stack,
+        args.profile_stages,
+    )
+
+    print_fused_results(
+        all_energies,
+        all_forces,
+        all_natoms,
+        all_weights,
+        num_branches,
+        batch_latencies_ms,
+        total_timed_structures,
+        stage_stats,
+    )
 
 
 if __name__ == "__main__":
