@@ -465,9 +465,7 @@ class Base(Module):
     def _embedding(self, data):
         if not hasattr(data, "edge_shifts"):
             data.edge_shifts = torch.zeros(
-                (data.edge_index.size(1), 3),
-                device=data.edge_index.device,
-                dtype=data.pos.dtype,
+                (data.edge_index.size(1), 3), device=data.edge_index.device
             )
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
         if self.use_edge_attr:
@@ -481,7 +479,7 @@ class Base(Module):
             x = self.pos_emb(data.pe)
             # if node features are available, generate mebeddings, concatenate with positional embeddings and map to hidden dim
             if self.input_dim:
-                x = torch.cat((self.node_emb(data.x), x), 1)
+                x = torch.cat((self.node_emb(data.x.float()), x), 1)
                 x = self.node_lin(x)
             # repeat for edge features and relative edge encodings
             if self.is_edge_model:
