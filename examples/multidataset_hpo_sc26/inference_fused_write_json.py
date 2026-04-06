@@ -113,7 +113,11 @@ def main():
         mlp_device,
         mlp_autocast_ctx,
         unified_mlp_gnn_stack,
-        False,
+        args.profile_stages,
+        encoder_reuse=args.encoder_reuse,
+        num_streams=args.num_streams,
+        weight_threshold=args.weight_threshold,
+        fused_energy_grad=args.fused_energy_grad,
     )
 
     json_entries = []

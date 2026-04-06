@@ -2,9 +2,11 @@
 """Fused inference: HydraGNN (multi-branch) + BranchWeightMLP.
 
 Loads a pretrained multi-branch HydraGNN model and a trained BranchWeightMLP,
-generates random atomistic structures, runs all branches in parallel, and
-produces a weighted-average prediction of energy and forces. Includes detailed
-latency and throughput measurements.
+generates random atomistic structures, evaluates all branches, and produces a
+weighted-average prediction of energy and forces.  With ``--encoder_reuse`` the
+GNN encoder runs once per batch and only the decoder heads are repeated,
+avoiding B-1 redundant encoder passes.  Includes detailed latency and
+throughput measurements.
 
 Usage:
     python inference_fused.py \\
@@ -21,6 +23,7 @@ Public API for reuse (e.g. ``inference_fused_write_json.py``):
 ``run_fused_inference`` (optional ``mlp_device`` / ``profile_stages``), ``print_fused_results``.
 """
 
+import copy
 import glob
 import json
 import os
@@ -38,6 +41,8 @@ from hydragnn.train.train_validate_test import (
     move_batch_to_device,
     resolve_precision,
 )
+
+from torch.utils.checkpoint import checkpoint as torch_checkpoint
 
 from inference_random_structures import (
     add_edges,
@@ -140,6 +145,34 @@ def add_fused_cli_arguments(parser):
         type=int,
         default=1,
         help="Number of warmup batches excluded from timing",
+    )
+    parser.add_argument(
+        "--encoder_reuse",
+        action="store_true",
+        help="Run GNN encoder once per batch, then only decoder heads B times "
+        "(avoids redundant encoder passes).",
+    )
+    parser.add_argument(
+        "--num_streams",
+        type=int,
+        default=1,
+        help="Number of HIP/CUDA streams for parallel branch dispatch. "
+        "1 = sequential (default). Set to 16 to run all branches concurrently.",
+    )
+    parser.add_argument(
+        "--weight_threshold",
+        type=float,
+        default=0.0,
+        help="Skip backward pass for branches whose mean weight (across the "
+        "batch) is below this value. Energy is still computed (forward-only) "
+        "but forces are zeroed for skipped branches. 0.0 = no skipping.",
+    )
+    parser.add_argument(
+        "--fused_energy_grad",
+        action="store_true",
+        help="Compute weighted energy sum first, then ONE autograd.grad call "
+        "for forces (instead of 16 separate backward passes). Mathematically "
+        "equivalent when all branches are included.",
     )
 
 
@@ -363,6 +396,101 @@ def _predict_branch_energy_forces(
     return energy_pred.detach(), forces_pred.detach()
 
 
+def _predict_branch_energy_forces_decoder(
+    model, data, encoded_feats, branch_id: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Predict energy/forces for one branch using pre-computed encoder features."""
+    original_dataset_name = getattr(data, "dataset_name", None)
+    data.dataset_name = _build_dataset_name(data, branch_id)
+
+    pred = _decode_branch(model, data, encoded_feats)
+    energy_pred = _energy_from_pred(pred)
+    forces_pred = torch.autograd.grad(
+        energy_pred,
+        data.pos,
+        grad_outputs=torch.ones_like(energy_pred),
+        retain_graph=True,
+        create_graph=False,
+    )[0]
+    forces_pred = -forces_pred
+
+    if original_dataset_name is None and hasattr(data, "dataset_name"):
+        delattr(data, "dataset_name")
+    else:
+        data.dataset_name = original_dataset_name
+
+    return energy_pred.detach(), forces_pred.detach()
+
+
+def _predict_branch_energy_only(
+    model, data, branch_id: int
+) -> torch.Tensor:
+    """Forward-only energy for the no-reuse path (gradient still attached)."""
+    original_dataset_name = getattr(data, "dataset_name", None)
+    data.dataset_name = _build_dataset_name(data, branch_id)
+    pred = model(data)
+    energy_pred = _energy_from_pred(pred)
+    if original_dataset_name is None and hasattr(data, "dataset_name"):
+        delattr(data, "dataset_name")
+    else:
+        data.dataset_name = original_dataset_name
+    return energy_pred
+
+
+def _predict_branch_energy_only_decoder(
+    model, data, encoded_feats, branch_id: int
+) -> torch.Tensor:
+    """Forward-only energy for the encoder-reuse path (gradient still attached)."""
+    original_dataset_name = getattr(data, "dataset_name", None)
+    data.dataset_name = _build_dataset_name(data, branch_id)
+    pred = _decode_branch(model, data, encoded_feats)
+    energy_pred = _energy_from_pred(pred)
+    if original_dataset_name is None and hasattr(data, "dataset_name"):
+        delattr(data, "dataset_name")
+    else:
+        data.dataset_name = original_dataset_name
+    return energy_pred
+
+
+def _fused_energy_forces(
+    live_energies: list,
+    live_weights: list,
+    skip_energies: list,
+    skip_weights: list,
+    batch_pos: torch.Tensor,
+    batch_index: torch.Tensor,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Compute weighted energy then ONE autograd.grad for forces.
+
+    *live_energies* have gradients attached; *skip_energies* are detached
+    (their force contribution is zero by construction).
+    """
+    weighted_e = torch.zeros(
+        live_energies[0].shape if live_energies else skip_energies[0].shape,
+        device=batch_pos.device,
+        dtype=batch_pos.dtype,
+    )
+    for e, w in zip(live_energies, live_weights):
+        weighted_e = weighted_e + w * e
+    skip_e_sum = torch.zeros_like(weighted_e)
+    for e, w in zip(skip_energies, skip_weights):
+        skip_e_sum = skip_e_sum + w * e.detach()
+    total_weighted_e = weighted_e + skip_e_sum
+
+    if live_energies:
+        forces = -torch.autograd.grad(
+            weighted_e,
+            batch_pos,
+            grad_outputs=torch.ones_like(weighted_e),
+            retain_graph=False,
+            create_graph=False,
+        )[0]
+    else:
+        forces = torch.zeros_like(batch_pos)
+
+    return total_weighted_e.detach(), forces.detach()
+
+
 def _weighted_average(
     energy_preds: torch.Tensor,
     forces_preds: torch.Tensor,
@@ -380,6 +508,256 @@ def _weighted_average(
         )
 
     return weighted_energy, weighted_forces
+
+
+# ---------------------------------------------------------------------------
+# Stream-parallel branch dispatch
+# ---------------------------------------------------------------------------
+
+
+def _run_branches_parallel_streams(
+    model,
+    batch,
+    num_branches: int,
+    num_streams: int,
+    device: torch.device,
+) -> Tuple[list, list]:
+    """Dispatch full forward+backward for each branch across multiple streams.
+
+    Used when ``encoder_reuse`` is **False**: each branch runs the complete
+    ``model(data)`` call on its assigned stream.
+    """
+    streams = [torch.cuda.Stream(device=device) for _ in range(num_streams)]
+    default_stream = torch.cuda.current_stream(device)
+
+    energy_preds: list = [None] * num_branches
+    forces_preds: list = [None] * num_branches
+
+    for branch_id in range(num_branches):
+        s = streams[branch_id % num_streams]
+        with torch.cuda.stream(s):
+            s.wait_stream(default_stream)
+            batch_copy = copy.copy(batch)
+            batch_copy.dataset_name = _build_dataset_name(batch, branch_id)
+            pred = model(batch_copy)
+            energy_pred = _energy_from_pred(pred)
+            forces_pred = -torch.autograd.grad(
+                energy_pred,
+                batch.pos,
+                grad_outputs=torch.ones_like(energy_pred),
+                retain_graph=True,
+                create_graph=False,
+            )[0]
+            energy_preds[branch_id] = energy_pred.detach()
+            forces_preds[branch_id] = forces_pred.detach()
+
+    for s in streams:
+        default_stream.wait_stream(s)
+
+    return energy_preds, forces_preds
+
+
+def _run_branches_parallel_streams_decoder(
+    model,
+    batch,
+    encoded_feats,
+    num_branches: int,
+    num_streams: int,
+    device: torch.device,
+) -> Tuple[list, list]:
+    """Dispatch decoder-only forward+backward for each branch across streams.
+
+    Used when ``encoder_reuse`` is **True**: the encoder has already run on the
+    default stream and *encoded_feats* are shared (read-only) across branches.
+    """
+    streams = [torch.cuda.Stream(device=device) for _ in range(num_streams)]
+    default_stream = torch.cuda.current_stream(device)
+
+    energy_preds: list = [None] * num_branches
+    forces_preds: list = [None] * num_branches
+
+    for branch_id in range(num_branches):
+        s = streams[branch_id % num_streams]
+        with torch.cuda.stream(s):
+            s.wait_stream(default_stream)
+            batch_copy = copy.copy(batch)
+            batch_copy.dataset_name = _build_dataset_name(batch, branch_id)
+            pred = _decode_branch(model, batch_copy, encoded_feats)
+            energy_pred = _energy_from_pred(pred)
+            forces_pred = -torch.autograd.grad(
+                energy_pred,
+                batch.pos,
+                grad_outputs=torch.ones_like(energy_pred),
+                retain_graph=True,
+                create_graph=False,
+            )[0]
+            energy_preds[branch_id] = energy_pred.detach()
+            forces_preds[branch_id] = forces_pred.detach()
+
+    for s in streams:
+        default_stream.wait_stream(s)
+
+    return energy_preds, forces_preds
+
+
+# ---------------------------------------------------------------------------
+# Encoder-reuse: local encoder / decoder split (matches Base.forward exactly)
+# ---------------------------------------------------------------------------
+
+
+def _encode_once(model, data):
+    """Run the encoder portion of ``Base.forward`` and return cached features.
+
+    Reproduces ``Base.forward`` lines 688-719 including the
+    ``_apply_graph_conditioning`` call that ``EncoderModel`` (non-MACE path)
+    omits.  The returned tensors are **not** detached so that
+    ``torch.autograd.grad`` can trace back through the encoder to ``data.pos``.
+    """
+    inv_node_feat, equiv_node_feat, conv_args = model._embedding(data)
+    batch_for_cond = (
+        data.batch if hasattr(data, "batch") and data.batch is not None else None
+    )
+    for conv, feat_layer in zip(model.graph_convs, model.feature_layers):
+        if not model.conv_checkpointing:
+            inv_node_feat, equiv_node_feat = conv(
+                inv_node_feat=inv_node_feat,
+                equiv_node_feat=equiv_node_feat,
+                **conv_args,
+            )
+        else:
+            inv_node_feat, equiv_node_feat = torch_checkpoint(
+                conv,
+                use_reentrant=False,
+                inv_node_feat=inv_node_feat,
+                equiv_node_feat=equiv_node_feat,
+                **conv_args,
+            )
+        inv_node_feat = model._apply_graph_conditioning(
+            inv_node_feat, batch_for_cond, data
+        )
+        inv_node_feat = model.activation_function(feat_layer(inv_node_feat))
+    return inv_node_feat, equiv_node_feat, conv_args
+
+
+def _decode_branch(model, data, encoded_feats):
+    """Run the decoder portion of ``Base.forward`` with pre-computed features.
+
+    Reproduces ``Base.forward`` lines 721-837 including the
+    ``_apply_graph_pool_conditioning`` call that ``DecoderModel`` omits.
+    """
+    inv_node_feat, equiv_node_feat, conv_args = encoded_feats
+    x = inv_node_feat
+
+    if data.batch is None:
+        x_graph = model._pool_graph_features(x, None)
+        data.batch = data.x * 0
+    else:
+        x_graph = model._pool_graph_features(x, data.batch)
+
+    x_graph = model._apply_graph_pool_conditioning(x_graph, data)
+
+    outputs = []
+    outputs_var = []
+    if not hasattr(data, "dataset_name"):
+        setattr(data, "dataset_name", data.batch.unique() * 0)
+    datasetIDs = data.dataset_name.unique()
+    unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
+
+    for head_dim, headloc, type_head in zip(
+        model.head_dims, model.heads_NN, model.head_type
+    ):
+        if type_head == "graph":
+            out_dtype = x_graph.dtype
+            head = torch.zeros(
+                (len(data.dataset_name), head_dim),
+                device=x.device,
+                dtype=out_dtype,
+            )
+            headvar = torch.zeros(
+                (len(data.dataset_name), head_dim * model.var_output),
+                device=x.device,
+                dtype=out_dtype,
+            )
+            if model.num_branches == 1:
+                x_graph_head = model.graph_shared["branch-0"](x_graph)
+                output_head = headloc["branch-0"](x_graph_head)
+                head = output_head[:, :head_dim]
+                headvar = output_head[:, head_dim:] ** 2
+            else:
+                for ID in datasetIDs:
+                    mask = data.dataset_name == ID
+                    mask = mask[:, 0]
+                    branchtype = f"branch-{ID.item()}"
+                    x_graph_head = model.graph_shared[branchtype](x_graph[mask, :])
+                    output_head = headloc[branchtype](x_graph_head)
+                    head[mask] = output_head[:, :head_dim]
+                    headvar[mask] = (output_head[:, head_dim:] ** 2).to(
+                        dtype=out_dtype
+                    )
+            outputs.append(head)
+            outputs_var.append(headvar)
+        else:
+            node_NN_type = model.config_heads["node"][0]["architecture"]["type"]
+            out_dtype = x.dtype
+            head = torch.zeros(
+                (x.shape[0], head_dim), device=x.device, dtype=out_dtype
+            )
+            headvar = torch.zeros(
+                (x.shape[0], head_dim * model.var_output),
+                device=x.device,
+                dtype=out_dtype,
+            )
+            if model.num_branches == 1:
+                branchtype = "branch-0"
+                if node_NN_type == "conv":
+                    inv_nf = x
+                    equiv_nf = equiv_node_feat
+                    for cnv, bn in zip(
+                        headloc[branchtype][0::2], headloc[branchtype][1::2]
+                    ):
+                        inv_nf, equiv_nf = cnv(
+                            inv_node_feat=inv_nf,
+                            equiv_node_feat=equiv_nf,
+                            **conv_args,
+                        )
+                        inv_nf = bn(inv_nf)
+                        inv_nf = model.activation_function(inv_nf)
+                    x_node = inv_nf
+                else:
+                    x_node = headloc[branchtype](x=x, batch=data.batch)
+                head = x_node[:, :head_dim]
+                headvar = x_node[:, head_dim:] ** 2
+            else:
+                for ID in datasetIDs:
+                    mask = data.dataset_name == ID
+                    mask_nodes = torch.repeat_interleave(mask, node_counts)
+                    branchtype = f"branch-{ID.item()}"
+                    if node_NN_type == "conv":
+                        inv_nf = x[mask_nodes, :]
+                        equiv_nf = equiv_node_feat[mask_nodes, :]
+                        for cnv, bn in zip(
+                            headloc[branchtype][0::2], headloc[branchtype][1::2]
+                        ):
+                            inv_nf, equiv_nf = cnv(
+                                inv_node_feat=inv_nf,
+                                equiv_node_feat=equiv_nf,
+                                **conv_args,
+                            )
+                            inv_nf = bn(inv_nf)
+                            inv_nf = model.activation_function(inv_nf)
+                        x_node = inv_nf
+                    else:
+                        x_node = headloc[branchtype](
+                            x=x[mask_nodes, :], batch=data.batch[mask_nodes]
+                        )
+                    head[mask_nodes] = x_node[:, :head_dim]
+                    headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+            outputs.append(head)
+            outputs_var.append(headvar)
+
+    if model.var_output:
+        return outputs, outputs_var
+    return outputs
 
 
 # ---------------------------------------------------------------------------
@@ -440,8 +818,27 @@ def run_fused_inference(
     mlp_autocast_ctx,
     unified_mlp_gnn_stack: bool = True,
     profile_stages: bool = False,
+    encoder_reuse: bool = False,
+    num_streams: int = 1,
+    weight_threshold: float = 0.0,
+    fused_energy_grad: bool = False,
 ):
     """Run batched fused inference with timing (excludes warmup batches).
+
+    When *encoder_reuse* is True, the GNN encoder runs once per batch and only
+    the branch-specific decoder heads are evaluated B times, avoiding B-1
+    redundant encoder passes.
+
+    When *num_streams* > 1, branch forward+backward passes are dispatched
+    across multiple HIP/CUDA streams for GPU-level overlap.
+
+    When *weight_threshold* > 0, branches whose batch-mean softmax weight is
+    below the threshold are skipped for backward (forces zeroed, energy still
+    computed forward-only).
+
+    When *fused_energy_grad* is True, all branch energies are weighted-summed
+    first, then a single ``autograd.grad`` computes forces, replacing 16
+    separate backward passes.
 
     Returns
     -------
@@ -454,7 +851,8 @@ def run_fused_inference(
     total_timed_structures : int
         Number of structures in timed batches (excludes warmup).
     stage_stats : dict | None
-        If profile_stages, keys mlp_ms, branches_ms, combine_ms (lists per timed batch).
+        If profile_stages, keys mlp_ms, branches_ms, combine_ms (lists per
+        timed batch).  With encoder_reuse, also includes encoder_ms.
     """
     batches = []
     for start in range(0, len(structures), batch_size):
@@ -469,10 +867,41 @@ def run_fused_inference(
     all_weights = []
     batch_latencies_ms = []
     stage_mlp_ms: List[float] = []
+    stage_encoder_ms: List[float] = []
     stage_branches_ms: List[float] = []
     stage_combine_ms: List[float] = []
 
     mlp_param_dtype = next(mlp.parameters()).dtype
+
+    use_parallel_streams = num_streams > 1 and device.type == "cuda"
+    if use_parallel_streams:
+        print(
+            f"Stream parallelism: {num_streams} HIP/CUDA streams for "
+            f"{num_branches} branches"
+        )
+
+    _base_model = None
+    if encoder_reuse:
+        _base_model = model.module if hasattr(model, "module") else model
+        print(
+            f"Encoder-reuse enabled: 1 encoder pass + {num_branches} decoder "
+            f"passes per batch (trades memory for compute — encoder graph is "
+            f"pinned across all decoder calls)"
+        )
+
+    if weight_threshold > 0:
+        print(
+            f"Branch skipping: branches with mean weight < {weight_threshold:.4f} "
+            f"get forward-only energy (zero forces)"
+        )
+    if fused_energy_grad:
+        print(
+            "Fused energy gradient: single autograd.grad from weighted energy "
+            "sum (replaces per-branch backward passes)"
+        )
+
+    num_skipped_total = 0
+    num_evaluated_total = 0
 
     for batch_idx, batch_list in enumerate(batches):
         is_warmup = batch_idx < num_warmup_effective
@@ -497,26 +926,142 @@ def run_fused_inference(
                     if profile_stages:
                         _sync_device(device)
                         t_mlp1 = time.perf_counter()
+                    mean_weights = weights.mean(dim=0)
+
                     energy_preds = []
                     forces_preds = []
-                    for branch_id in range(num_branches):
-                        e, f = _predict_branch_energy_forces(model, batch, branch_id)
-                        energy_preds.append(e)
-                        forces_preds.append(f)
+                    live_energies: list = []
+                    live_weights_list: list = []
+                    skip_energies: list = []
+                    skip_weights_list: list = []
+
+                    if encoder_reuse:
+                        if profile_stages:
+                            _sync_device(device)
+                            t_enc0 = time.perf_counter()
+                        encoded_feats = _encode_once(_base_model, batch)
+                        if profile_stages:
+                            _sync_device(device)
+                            t_enc1 = time.perf_counter()
+                        if use_parallel_streams and not fused_energy_grad:
+                            energy_preds, forces_preds = (
+                                _run_branches_parallel_streams_decoder(
+                                    _base_model,
+                                    batch,
+                                    encoded_feats,
+                                    num_branches,
+                                    num_streams,
+                                    device,
+                                )
+                            )
+                        else:
+                            for branch_id in range(num_branches):
+                                is_skipped = (
+                                    weight_threshold > 0
+                                    and mean_weights[branch_id].item() < weight_threshold
+                                )
+                                if fused_energy_grad:
+                                    e = _predict_branch_energy_only_decoder(
+                                        _base_model, batch, encoded_feats, branch_id
+                                    )
+                                    if is_skipped:
+                                        skip_energies.append(e)
+                                        skip_weights_list.append(weights[:, branch_id])
+                                    else:
+                                        live_energies.append(e)
+                                        live_weights_list.append(weights[:, branch_id])
+                                elif is_skipped:
+                                    e = _predict_branch_energy_only_decoder(
+                                        _base_model, batch, encoded_feats, branch_id
+                                    )
+                                    energy_preds.append(e.detach())
+                                    forces_preds.append(torch.zeros_like(batch.pos))
+                                else:
+                                    e, f = _predict_branch_energy_forces_decoder(
+                                        _base_model, batch, encoded_feats, branch_id
+                                    )
+                                    energy_preds.append(e)
+                                    forces_preds.append(f)
+                    else:
+                        if use_parallel_streams and not fused_energy_grad:
+                            energy_preds, forces_preds = (
+                                _run_branches_parallel_streams(
+                                    model,
+                                    batch,
+                                    num_branches,
+                                    num_streams,
+                                    device,
+                                )
+                            )
+                        else:
+                            for branch_id in range(num_branches):
+                                is_skipped = (
+                                    weight_threshold > 0
+                                    and mean_weights[branch_id].item() < weight_threshold
+                                )
+                                if fused_energy_grad:
+                                    e = _predict_branch_energy_only(
+                                        model, batch, branch_id
+                                    )
+                                    if is_skipped:
+                                        skip_energies.append(e)
+                                        skip_weights_list.append(weights[:, branch_id])
+                                    else:
+                                        live_energies.append(e)
+                                        live_weights_list.append(weights[:, branch_id])
+                                elif is_skipped:
+                                    e = _predict_branch_energy_only(
+                                        model, batch, branch_id
+                                    )
+                                    energy_preds.append(e.detach())
+                                    forces_preds.append(torch.zeros_like(batch.pos))
+                                else:
+                                    e, f = _predict_branch_energy_forces(
+                                        model, batch, branch_id
+                                    )
+                                    energy_preds.append(e)
+                                    forces_preds.append(f)
+
                     if profile_stages:
                         _sync_device(device)
                         t_br0 = time.perf_counter()
-                    energy_preds_t = torch.stack(energy_preds, dim=0)
-                    forces_preds_t = torch.stack(forces_preds, dim=0)
-                    weighted_energy, weighted_forces = _weighted_average(
-                        energy_preds_t, forces_preds_t, weights, batch.batch
-                    )
+
+                    if fused_energy_grad:
+                        weighted_energy, weighted_forces = _fused_energy_forces(
+                            live_energies,
+                            live_weights_list,
+                            skip_energies,
+                            skip_weights_list,
+                            batch.pos,
+                            batch.batch,
+                        )
+                        num_skipped_total += len(skip_energies)
+                        num_evaluated_total += len(live_energies)
+                    else:
+                        energy_preds_t = torch.stack(energy_preds, dim=0)
+                        forces_preds_t = torch.stack(forces_preds, dim=0)
+                        weighted_energy, weighted_forces = _weighted_average(
+                            energy_preds_t, forces_preds_t, weights, batch.batch
+                        )
+                        n_skip = sum(
+                            1
+                            for b in range(num_branches)
+                            if weight_threshold > 0
+                            and mean_weights[b].item() < weight_threshold
+                        )
+                        num_skipped_total += n_skip
+                        num_evaluated_total += num_branches - n_skip
+
                     if profile_stages:
                         _sync_device(device)
                         t_cb0 = time.perf_counter()
                 if profile_stages and not is_warmup:
                     stage_mlp_ms.append((t_mlp1 - t_mlp0) * 1000.0)
-                    stage_branches_ms.append((t_br0 - t_mlp1) * 1000.0)
+                    if encoder_reuse:
+                        stage_encoder_ms.append((t_enc1 - t_enc0) * 1000.0)
+                        stage_branches_ms.append((t_br0 - t_enc1) * 1000.0)
+                    else:
+                        stage_branches_ms.append((t_br0 - t_mlp1) * 1000.0)
                     stage_combine_ms.append((t_cb0 - t_br0) * 1000.0)
             else:
                 comp = _reshape_composition(batch).to(device=device, dtype=param_dtype)
@@ -532,26 +1077,142 @@ def run_fused_inference(
                     _sync_device(device)
                     t_mlp1 = time.perf_counter()
                 with autocast_ctx:
+                    mean_weights = weights.mean(dim=0)
+
                     energy_preds = []
                     forces_preds = []
-                    for branch_id in range(num_branches):
-                        e, f = _predict_branch_energy_forces(model, batch, branch_id)
-                        energy_preds.append(e)
-                        forces_preds.append(f)
+                    live_energies = []
+                    live_weights_list = []
+                    skip_energies = []
+                    skip_weights_list = []
+
+                    if encoder_reuse:
+                        if profile_stages:
+                            _sync_device(device)
+                            t_enc0 = time.perf_counter()
+                        encoded_feats = _encode_once(_base_model, batch)
+                        if profile_stages:
+                            _sync_device(device)
+                            t_enc1 = time.perf_counter()
+                        if use_parallel_streams and not fused_energy_grad:
+                            energy_preds, forces_preds = (
+                                _run_branches_parallel_streams_decoder(
+                                    _base_model,
+                                    batch,
+                                    encoded_feats,
+                                    num_branches,
+                                    num_streams,
+                                    device,
+                                )
+                            )
+                        else:
+                            for branch_id in range(num_branches):
+                                is_skipped = (
+                                    weight_threshold > 0
+                                    and mean_weights[branch_id].item() < weight_threshold
+                                )
+                                if fused_energy_grad:
+                                    e = _predict_branch_energy_only_decoder(
+                                        _base_model, batch, encoded_feats, branch_id
+                                    )
+                                    if is_skipped:
+                                        skip_energies.append(e)
+                                        skip_weights_list.append(weights[:, branch_id])
+                                    else:
+                                        live_energies.append(e)
+                                        live_weights_list.append(weights[:, branch_id])
+                                elif is_skipped:
+                                    e = _predict_branch_energy_only_decoder(
+                                        _base_model, batch, encoded_feats, branch_id
+                                    )
+                                    energy_preds.append(e.detach())
+                                    forces_preds.append(torch.zeros_like(batch.pos))
+                                else:
+                                    e, f = _predict_branch_energy_forces_decoder(
+                                        _base_model, batch, encoded_feats, branch_id
+                                    )
+                                    energy_preds.append(e)
+                                    forces_preds.append(f)
+                    else:
+                        if use_parallel_streams and not fused_energy_grad:
+                            energy_preds, forces_preds = (
+                                _run_branches_parallel_streams(
+                                    model,
+                                    batch,
+                                    num_branches,
+                                    num_streams,
+                                    device,
+                                )
+                            )
+                        else:
+                            for branch_id in range(num_branches):
+                                is_skipped = (
+                                    weight_threshold > 0
+                                    and mean_weights[branch_id].item() < weight_threshold
+                                )
+                                if fused_energy_grad:
+                                    e = _predict_branch_energy_only(
+                                        model, batch, branch_id
+                                    )
+                                    if is_skipped:
+                                        skip_energies.append(e)
+                                        skip_weights_list.append(weights[:, branch_id])
+                                    else:
+                                        live_energies.append(e)
+                                        live_weights_list.append(weights[:, branch_id])
+                                elif is_skipped:
+                                    e = _predict_branch_energy_only(
+                                        model, batch, branch_id
+                                    )
+                                    energy_preds.append(e.detach())
+                                    forces_preds.append(torch.zeros_like(batch.pos))
+                                else:
+                                    e, f = _predict_branch_energy_forces(
+                                        model, batch, branch_id
+                                    )
+                                    energy_preds.append(e)
+                                    forces_preds.append(f)
+
                     if profile_stages:
                         _sync_device(device)
                         t_br0 = time.perf_counter()
-                    energy_preds_t = torch.stack(energy_preds, dim=0)
-                    forces_preds_t = torch.stack(forces_preds, dim=0)
-                    weighted_energy, weighted_forces = _weighted_average(
-                        energy_preds_t, forces_preds_t, weights, batch.batch
-                    )
+
+                    if fused_energy_grad:
+                        weighted_energy, weighted_forces = _fused_energy_forces(
+                            live_energies,
+                            live_weights_list,
+                            skip_energies,
+                            skip_weights_list,
+                            batch.pos,
+                            batch.batch,
+                        )
+                        num_skipped_total += len(skip_energies)
+                        num_evaluated_total += len(live_energies)
+                    else:
+                        energy_preds_t = torch.stack(energy_preds, dim=0)
+                        forces_preds_t = torch.stack(forces_preds, dim=0)
+                        weighted_energy, weighted_forces = _weighted_average(
+                            energy_preds_t, forces_preds_t, weights, batch.batch
+                        )
+                        n_skip = sum(
+                            1
+                            for b in range(num_branches)
+                            if weight_threshold > 0
+                            and mean_weights[b].item() < weight_threshold
+                        )
+                        num_skipped_total += n_skip
+                        num_evaluated_total += num_branches - n_skip
+
                     if profile_stages:
                         _sync_device(device)
                         t_cb0 = time.perf_counter()
                 if profile_stages and not is_warmup:
                     stage_mlp_ms.append((t_mlp1 - t_mlp0) * 1000.0)
-                    stage_branches_ms.append((t_br0 - t_mlp1) * 1000.0)
+                    if encoder_reuse:
+                        stage_encoder_ms.append((t_enc1 - t_enc0) * 1000.0)
+                        stage_branches_ms.append((t_br0 - t_enc1) * 1000.0)
+                    else:
+                        stage_branches_ms.append((t_br0 - t_mlp1) * 1000.0)
                     stage_combine_ms.append((t_cb0 - t_br0) * 1000.0)
 
         elapsed_ms = timer_stop_ms()
@@ -580,6 +1241,15 @@ def run_fused_inference(
         len(batches[i]) for i in range(num_warmup_effective, len(batches))
     )
 
+    if weight_threshold > 0 or fused_energy_grad:
+        total_branches = num_skipped_total + num_evaluated_total
+        print(
+            f"Optimization summary: {num_evaluated_total}/{total_branches} "
+            f"branch evaluations had full backward, "
+            f"{num_skipped_total}/{total_branches} skipped "
+            f"(threshold={weight_threshold}, fused_grad={fused_energy_grad})"
+        )
+
     stage_stats = None
     if profile_stages and stage_mlp_ms:
         stage_stats = {
@@ -587,6 +1257,8 @@ def run_fused_inference(
             "branches_ms": stage_branches_ms,
             "combine_ms": stage_combine_ms,
         }
+        if encoder_reuse and stage_encoder_ms:
+            stage_stats["encoder_ms"] = stage_encoder_ms
 
     return (
         all_energies,
@@ -698,16 +1370,23 @@ def print_fused_results(
 
     if stage_stats:
         print("\n" + "=" * 80)
-        print("STAGE TIMING (--profile_stages, mean over timed batches, ms)")
+        has_encoder = "encoder_ms" in stage_stats
+        mode_label = "encoder-reuse" if has_encoder else "baseline"
+        print(
+            f"STAGE TIMING (--profile_stages, {mode_label}, mean over timed batches, ms)"
+        )
         print("=" * 80)
-        for key, label in (
-            ("mlp_ms", "MLP + softmax"),
-            ("branches_ms", "Branch forwards"),
-            ("combine_ms", "Stack + weighted average"),
-        ):
+        stage_keys = [("mlp_ms", "MLP + softmax")]
+        if has_encoder:
+            stage_keys.append(("encoder_ms", "Encoder (1x)"))
+            stage_keys.append(("branches_ms", "Decoders (Bx)"))
+        else:
+            stage_keys.append(("branches_ms", "Branch forwards (Bx full)"))
+        stage_keys.append(("combine_ms", "Stack + weighted average"))
+        for key, label in stage_keys:
             arr = np.array(stage_stats[key])
             print(
-                f"  {label:22s}  mean={arr.mean():.2f}  std={arr.std():.2f}  "
+                f"  {label:26s}  mean={arr.mean():.2f}  std={arr.std():.2f}  "
                 f"min={arr.min():.2f}  max={arr.max():.2f}"
             )
 
@@ -798,6 +1477,10 @@ def main():
         mlp_autocast_ctx,
         unified_mlp_gnn_stack,
         args.profile_stages,
+        encoder_reuse=args.encoder_reuse,
+        num_streams=args.num_streams,
+        weight_threshold=args.weight_threshold,
+        fused_energy_grad=args.fused_energy_grad,
     )
 
     print_fused_results(
