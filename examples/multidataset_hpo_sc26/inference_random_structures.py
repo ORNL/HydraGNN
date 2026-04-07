@@ -227,8 +227,15 @@ def load_config_and_model(logdir, checkpoint=None, precision_override=None):
 
 
 def generate_structures(
-    num_structures, min_atoms, max_atoms, box_size, max_atomic_number,
-    radius, max_neighbours, branch_id, seed,
+    num_structures,
+    min_atoms,
+    max_atoms,
+    box_size,
+    max_atomic_number,
+    radius,
+    max_neighbours,
+    branch_id,
+    seed,
 ):
     """Generate random atomistic structures with edges and branch labels.
 
@@ -335,7 +342,9 @@ def main():
     args = build_argument_parser().parse_args()
 
     model, config, device, autocast_ctx, param_dtype = load_config_and_model(
-        args.logdir, args.checkpoint, args.precision,
+        args.logdir,
+        args.checkpoint,
+        args.precision,
     )
 
     arch = config["NeuralNetwork"]["Architecture"]
@@ -344,8 +353,15 @@ def main():
     enable_ip = arch.get("enable_interatomic_potential", False)
 
     structures = generate_structures(
-        args.num_structures, args.min_atoms, args.max_atoms, args.box_size,
-        args.max_atomic_number, radius, max_neighbours, args.branch_id, args.seed,
+        args.num_structures,
+        args.min_atoms,
+        args.max_atoms,
+        args.box_size,
+        args.max_atomic_number,
+        radius,
+        max_neighbours,
+        args.branch_id,
+        args.seed,
     )
     print(
         f"Generated {len(structures)} random structures "
@@ -353,7 +369,12 @@ def main():
     )
 
     all_energies, all_forces, all_natoms = run_inference(
-        model, structures, args.batch_size, param_dtype, autocast_ctx, enable_ip,
+        model,
+        structures,
+        args.batch_size,
+        param_dtype,
+        autocast_ctx,
+        enable_ip,
     )
 
     print_results(all_energies, all_forces, all_natoms)

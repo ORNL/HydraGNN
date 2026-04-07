@@ -84,7 +84,9 @@ def main():
     local_gpu_id = get_local_rank()
 
     model, config, device, autocast_ctx, param_dtype = load_config_and_model(
-        args.logdir, args.checkpoint, args.precision,
+        args.logdir,
+        args.checkpoint,
+        args.precision,
     )
     print(f"[rank {world_rank}] local GPU id: {local_gpu_id}")
 
@@ -95,8 +97,14 @@ def main():
 
     # Use (seed + world_rank) so each GPU gets different random structures
     structures = generate_structures(
-        args.num_structures, args.min_atoms, args.max_atoms, args.box_size,
-        args.max_atomic_number, radius, max_neighbours, args.branch_id,
+        args.num_structures,
+        args.min_atoms,
+        args.max_atoms,
+        args.box_size,
+        args.max_atomic_number,
+        radius,
+        max_neighbours,
+        args.branch_id,
         args.seed + world_rank,
     )
     print(
@@ -105,7 +113,12 @@ def main():
     )
 
     all_energies, all_forces, all_natoms = run_inference(
-        model, structures, args.batch_size, param_dtype, autocast_ctx, enable_ip,
+        model,
+        structures,
+        args.batch_size,
+        param_dtype,
+        autocast_ctx,
+        enable_ip,
     )
 
     # ----- Build per-structure JSON entries -----
@@ -152,7 +165,7 @@ def main():
         fx = np.array(entry["forces_x"])
         fy = np.array(entry["forces_y"])
         fz = np.array(entry["forces_z"])
-        f_norms = np.sqrt(fx**2 + fy**2 + fz**2)
+        f_norms = np.sqrt(fx ** 2 + fy ** 2 + fz ** 2)
         f_mean = f_norms.mean()
         print(
             f"[rank {world_rank}] {idx:6d} | {n:5d} | {e:16.6f} | "

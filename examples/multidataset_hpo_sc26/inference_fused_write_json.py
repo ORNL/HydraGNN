@@ -141,9 +141,7 @@ def main():
     with open(nvme_path, "w") as f:
         f.write(json_payload)
 
-    print(
-        f"[rank {world_rank}] Wrote {len(json_entries)} structures to {nvme_path}"
-    )
+    print(f"[rank {world_rank}] Wrote {len(json_entries)} structures to {nvme_path}")
 
     print_fused_results(
         all_energies,

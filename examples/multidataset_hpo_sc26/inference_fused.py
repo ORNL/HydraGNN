@@ -208,9 +208,7 @@ def load_fused_stack(
         "precision", "fp32"
     )
     mlp_prec_str = (
-        mlp_precision_override
-        if mlp_precision_override is not None
-        else gnn_prec_str
+        mlp_precision_override if mlp_precision_override is not None else gnn_prec_str
     )
     _, mlp_dtype, _ = resolve_precision(mlp_prec_str)
 
@@ -239,7 +237,9 @@ def load_fused_stack(
     hidden_dims = [sd[k].shape[0] for k in linear_keys[:-1]]
     mlp_out = sd[linear_keys[-1]].shape[0]
     print(f"MLP checkpoint: {mlp_path}")
-    print(f"  architecture: {input_dim} -> {' -> '.join(map(str, hidden_dims))} -> {mlp_out}")
+    print(
+        f"  architecture: {input_dim} -> {' -> '.join(map(str, hidden_dims))} -> {mlp_out}"
+    )
     print(f"  device: {mlp_dev}, dtype: {mlp_dtype}, prec_str: {mlp_prec_str}")
     print(f"  unified_mlp_gnn_stack (single autocast path): {unified_mlp_gnn_stack}")
 
@@ -283,9 +283,7 @@ def generate_structures(
     """Generate random structures with radius edges (no ``dataset_name`` set)."""
     rng = np.random.default_rng(seed)
     structures = [
-        build_random_structure(
-            min_atoms, max_atoms, box_size, max_atomic_number, rng
-        )
+        build_random_structure(min_atoms, max_atoms, box_size, max_atomic_number, rng)
         for _ in range(num_structures)
     ]
     return add_edges(structures, radius, max_neighbours)
@@ -529,9 +527,7 @@ def run_fused_inference(
                     t_mlp0 = time.perf_counter()
                 with mlp_autocast_ctx:
                     logits = mlp(comp_m)
-                weights = F.softmax(logits, dim=-1).to(
-                    device=device, dtype=param_dtype
-                )
+                weights = F.softmax(logits, dim=-1).to(device=device, dtype=param_dtype)
                 if profile_stages:
                     _sync_device(device)
                     t_mlp1 = time.perf_counter()
