@@ -161,17 +161,23 @@ def _collect_records(
             energy_preds_stacked, forces_preds_stacked, data.batch, dataset_ids
         )
 
-        records.append({
-            "comp": comp.detach().to(dtype=cache_dtype).cpu(),
-            "dataset_ids": dataset_ids.detach().to(dtype=torch.long).cpu(),
-            "energy_target": energy_target.detach().to(dtype=cache_dtype).cpu(),
-            "forces_target": forces_target.detach().to(dtype=cache_dtype).cpu(),
-            "batch": data.batch.detach().to(dtype=torch.long).cpu(),
-            "energy_preds": energy_preds_stacked.detach().to(dtype=cache_dtype).cpu(),
-            "forces_preds": forces_preds_stacked.detach().to(dtype=cache_dtype).cpu(),
-            "num_graphs": int(data.num_graphs),
-            "num_branches": int(num_branches),
-        })
+        records.append(
+            {
+                "comp": comp.detach().to(dtype=cache_dtype).cpu(),
+                "dataset_ids": dataset_ids.detach().to(dtype=torch.long).cpu(),
+                "energy_target": energy_target.detach().to(dtype=cache_dtype).cpu(),
+                "forces_target": forces_target.detach().to(dtype=cache_dtype).cpu(),
+                "batch": data.batch.detach().to(dtype=torch.long).cpu(),
+                "energy_preds": energy_preds_stacked.detach()
+                .to(dtype=cache_dtype)
+                .cpu(),
+                "forces_preds": forces_preds_stacked.detach()
+                .to(dtype=cache_dtype)
+                .cpu(),
+                "num_graphs": int(data.num_graphs),
+                "num_branches": int(num_branches),
+            }
+        )
 
     return records
 
@@ -414,13 +420,17 @@ def main():
     args_tiny.num_samples = 100
     args_tiny.preload = False
     first_train_loader, first_val_loader, _ = load_single_dataset_dataloaders(
-        args_tiny, config, var_config,
+        args_tiny,
+        config,
+        var_config,
         model_name=modellist[0],
         model_index=0,
         modellist=modellist,
         pna_deg=pna_deg,
     )
-    config = update_config(config, first_train_loader, first_val_loader, first_val_loader)
+    config = update_config(
+        config, first_train_loader, first_val_loader, first_val_loader
+    )
     del first_train_loader, first_val_loader
     gc.collect()
 
@@ -460,24 +470,34 @@ def main():
     total_train_cached = 0
     total_val_cached = 0
 
-    chunk_size = args.chunk_size or (args.num_samples or 10**9)
+    chunk_size = args.chunk_size or (args.num_samples or 10 ** 9)
 
     for model_index, model_name in enumerate(modellist):
         if rank == 0:
             print(f"Caching dataset {model_index + 1}/{len(modellist)}: {model_name}")
 
         dataset_cache_dir = os.path.join(args.cache_dir, model_name)
-        out_train = os.path.join(dataset_cache_dir, "train", f"rank{rank:05d}", "batches.pkl")
-        out_val   = os.path.join(dataset_cache_dir, "val",   f"rank{rank:05d}", "batches.pkl")
+        out_train = os.path.join(
+            dataset_cache_dir, "train", f"rank{rank:05d}", "batches.pkl"
+        )
+        out_val = os.path.join(
+            dataset_cache_dir, "val", f"rank{rank:05d}", "batches.pkl"
+        )
 
         # Skip entirely if both splits already cached
-        if (not args.rebuild_cache) and os.path.exists(out_train) and os.path.exists(out_val):
+        if (
+            (not args.rebuild_cache)
+            and os.path.exists(out_train)
+            and os.path.exists(out_val)
+        ):
             n_train = _count_chunks(out_train)
-            n_val   = _count_chunks(out_val)
+            n_val = _count_chunks(out_val)
             if rank == 0:
-                print(f"  Already cached ({n_train} train chunks, {n_val} val chunks), skipping")
+                print(
+                    f"  Already cached ({n_train} train chunks, {n_val} val chunks), skipping"
+                )
             total_train_cached += n_train
-            total_val_cached   += n_val
+            total_val_cached += n_val
             if dist.is_available() and dist.is_initialized():
                 dist.barrier()
             continue
@@ -489,18 +509,20 @@ def main():
                     os.remove(p)
 
         os.makedirs(os.path.dirname(out_train), exist_ok=True)
-        os.makedirs(os.path.dirname(out_val),   exist_ok=True)
+        os.makedirs(os.path.dirname(out_val), exist_ok=True)
 
-        num_samples = args.num_samples or 10**9
+        num_samples = args.num_samples or 10 ** 9
         train_batches_written = 0
-        val_batches_written   = 0
+        val_batches_written = 0
 
         for chunk_start in range(0, num_samples, chunk_size):
             if rank == 0:
                 print(f"  Chunk [{chunk_start} : {chunk_start + chunk_size}]")
 
             train_loader, val_loader, _ = load_single_dataset_chunk(
-                args, config, var_config,
+                args,
+                config,
+                var_config,
                 model_name=model_name,
                 model_index=model_index,
                 modellist=modellist,
@@ -510,13 +532,25 @@ def main():
             )
 
             train_records = _collect_records(
-                model, train_loader, num_branches, precision, cache_dtype, param_dtype, device
+                model,
+                train_loader,
+                num_branches,
+                precision,
+                cache_dtype,
+                param_dtype,
+                device,
             )
             _append_records(out_train, train_records)
             train_batches_written += len(train_records)
 
             val_records = _collect_records(
-                model, val_loader, num_branches, precision, cache_dtype, param_dtype, device
+                model,
+                val_loader,
+                num_branches,
+                precision,
+                cache_dtype,
+                param_dtype,
+                device,
             )
             _append_records(out_val, val_records)
             val_batches_written += len(val_records)
@@ -528,10 +562,12 @@ def main():
                 dist.barrier()
 
         if rank == 0:
-            print(f"  Saved {train_batches_written} train, {val_batches_written} val batches")
+            print(
+                f"  Saved {train_batches_written} train, {val_batches_written} val batches"
+            )
 
         total_train_cached += train_batches_written
-        total_val_cached   += val_batches_written
+        total_val_cached += val_batches_written
 
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
@@ -553,12 +589,14 @@ def main():
     # MLP training
     # ------------------------------------------------------------------
     train_cache_files = _get_rank_cache_files(args.cache_dir, split="train")
-    val_cache_files   = _get_rank_cache_files(args.cache_dir, split="val")
+    val_cache_files = _get_rank_cache_files(args.cache_dir, split="val")
     if len(train_cache_files) == 0 or len(val_cache_files) == 0:
         raise RuntimeError("Cache files are missing; run with --rebuild_cache")
 
     if rank == 0:
-        print(f"MLP training on {len(train_cache_files)} train files, {len(val_cache_files)} val files per rank")
+        print(
+            f"MLP training on {len(train_cache_files)} train files, {len(val_cache_files)} val files per rank"
+        )
 
     hidden_dims = tuple(int(x) for x in args.hidden_dims.split(",") if x.strip())
     mlp = BranchWeightMLP(None, hidden_dims, num_branches).to(
@@ -624,7 +662,9 @@ def main():
             with open(timing_path, "r") as f:
                 timing_history = json.load(f)
             if rank == 0:
-                print(f"Loaded timing history ({len(timing_history)} epochs) from {timing_path}")
+                print(
+                    f"Loaded timing history ({len(timing_history)} epochs) from {timing_path}"
+                )
         except Exception:
             timing_history = []
 
@@ -639,23 +679,34 @@ def main():
         random.shuffle(train_cache_files)
 
         train_loss, train_timing = _train_epoch_from_cache(
-            mlp, train_cache_files, optimizer, loss_fn,
-            energy_weight, force_weight, top_k, precision,
+            mlp,
+            train_cache_files,
+            optimizer,
+            loss_fn,
+            energy_weight,
+            force_weight,
+            top_k,
+            precision,
         )
 
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
 
         val_loss, val_timing = _validate_epoch_from_cache(
-            mlp, val_cache_files, loss_fn,
-            energy_weight, force_weight, top_k, precision,
+            mlp,
+            val_cache_files,
+            loss_fn,
+            energy_weight,
+            force_weight,
+            top_k,
+            precision,
         )
 
         if dist.is_available() and dist.is_initialized():
             dist.barrier()
 
         train_loss_global = _allreduce_mean(train_loss)
-        val_loss_global   = _allreduce_mean(val_loss)
+        val_loss_global = _allreduce_mean(val_loss)
 
         scheduler.step(val_loss_global)
 
@@ -669,7 +720,7 @@ def main():
                 "train_loss": float(train_loss_global),
                 "val_loss": float(val_loss_global),
                 "train_timing": {k: float(v) for k, v in train_timing.items()},
-                "val_timing":   {k: float(v) for k, v in val_timing.items()},
+                "val_timing": {k: float(v) for k, v in val_timing.items()},
             }
         )
 

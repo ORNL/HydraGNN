@@ -86,8 +86,12 @@ class NormalizedDataset:
         if hasattr(data, "atomic_numbers") and torch.is_tensor(data.atomic_numbers):
             data.atomic_numbers = data.atomic_numbers.to(dtype=torch.long)
 
-        if hasattr(data, "chemical_composition") and torch.is_tensor(data.chemical_composition):
-            data.chemical_composition = data.chemical_composition.to(dtype=torch.float32)
+        if hasattr(data, "chemical_composition") and torch.is_tensor(
+            data.chemical_composition
+        ):
+            data.chemical_composition = data.chemical_composition.to(
+                dtype=torch.float32
+            )
 
         if hasattr(data, "energy") and torch.is_tensor(data.energy):
             data.energy = data.energy.to(dtype=torch.float32)
@@ -135,7 +139,9 @@ def configure_variable_names(config):
     var_config["input_node_features"] = [0]
 
 
-def resolve_selected_precision(args_precision: Optional[str], config: dict) -> Tuple[str, str]:
+def resolve_selected_precision(
+    args_precision: Optional[str], config: dict
+) -> Tuple[str, str]:
     cfg_precision = (
         config.get("NeuralNetwork", {}).get("Training", {}).get("precision", None)
     )
@@ -214,7 +220,9 @@ def load_multidataset_dataloaders(args, config, var_config):
                 x = np.linspace(0, 1, num=len(p))
                 intp = np.interp(np.linspace(0, 1, num=mlen), x, p)
                 intp_list.append(intp)
-            pna_deg = np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+            pna_deg = (
+                np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+            )
     else:
         pna_deg = None
 
@@ -257,7 +265,11 @@ def load_multidataset_dataloaders(args, config, var_config):
             dataset_len = len(dataset)
             subset_len = dataset_len
             if args.num_samples is not None:
-                requested = args.num_samples if split_index == 0 else max(args.num_samples // 10, 1)
+                requested = (
+                    args.num_samples
+                    if split_index == 0
+                    else max(args.num_samples // 10, 1)
+                )
                 subset_len = min(requested, dataset_len)
 
             dataset.setkeys(common_variable_names)
@@ -265,7 +277,9 @@ def load_multidataset_dataloaders(args, config, var_config):
             datasets.append(NormalizedDataset(dataset))
 
             if rank == 0:
-                print(f"Mixed {split_label}: include {model_name} with {subset_len} samples")
+                print(
+                    f"Mixed {split_label}: include {model_name} with {subset_len} samples"
+                )
 
         if len(datasets) == 1:
             return datasets[0]
@@ -353,7 +367,7 @@ def load_single_dataset_chunk(
         # For val, chunk_size is scaled down proportionally
         this_chunk_size = chunk_size if split_index == 0 else max(chunk_size // 10, 1)
         start = min(chunk_start if split_index == 0 else chunk_start // 10, dataset_len)
-        end   = min(start + this_chunk_size, dataset_len)
+        end = min(start + this_chunk_size, dataset_len)
 
         if start >= end:
             start = 0
@@ -363,18 +377,20 @@ def load_single_dataset_chunk(
         dataset.setsubset(start, end, preload=args.preload)
 
         if rank == 0:
-            print(f"  {split_label}: {model_name} chunk [{start}:{end}] ({end - start} samples)")
+            print(
+                f"  {split_label}: {model_name} chunk [{start}:{end}] ({end - start} samples)"
+            )
 
         return NormalizedDataset(dataset)
 
     trainset = build_split("trainset", 0)
-    valset   = build_split("valset",   1)
-    testset  = build_split("testset",  2)
+    valset = build_split("valset", 1)
+    testset = build_split("testset", 2)
 
     if pna_deg is not None:
         trainset.pna_deg = pna_deg
-        valset.pna_deg   = pna_deg
-        testset.pna_deg  = pna_deg
+        valset.pna_deg = pna_deg
+        testset.pna_deg = pna_deg
 
     train_loader, val_loader, test_loader = create_dataloaders(
         trainset,
@@ -388,14 +404,24 @@ def load_single_dataset_chunk(
     return train_loader, val_loader, test_loader
 
 
-def load_single_dataset_dataloaders(args, config, var_config, model_name: str, model_index: int, modellist: list, pna_deg):
+def load_single_dataset_dataloaders(
+    args,
+    config,
+    var_config,
+    model_name: str,
+    model_index: int,
+    modellist: list,
+    pna_deg,
+):
     """Load a full dataset (no chunking). Kept for backward compatibility and tiny loaders."""
     num_samples = getattr(args, "num_samples", None)
     chunk_start = 0
-    chunk_size  = num_samples if num_samples is not None else 10**9  # effectively all
+    chunk_size = num_samples if num_samples is not None else 10 ** 9  # effectively all
 
     return load_single_dataset_chunk(
-        args, config, var_config,
+        args,
+        config,
+        var_config,
         model_name=model_name,
         model_index=model_index,
         modellist=modellist,
@@ -444,7 +470,9 @@ def get_modellist_and_pna_deg(args, var_config):
                 x = np.linspace(0, 1, num=len(p))
                 intp = np.interp(np.linspace(0, 1, num=mlen), x, p)
                 intp_list.append(intp)
-            pna_deg = np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+            pna_deg = (
+                np.sum(np.stack(intp_list, axis=0), axis=0).astype(np.int64).tolist()
+            )
     else:
         pna_deg = None
 
@@ -455,7 +483,9 @@ def get_modellist_and_pna_deg(args, var_config):
 def build_dataset_name(data, branch_id: int) -> torch.Tensor:
     if hasattr(data, "dataset_name"):
         return torch.full_like(data.dataset_name, branch_id)
-    return torch.full((data.num_graphs, 1), branch_id, dtype=torch.long, device=data.x.device)
+    return torch.full(
+        (data.num_graphs, 1), branch_id, dtype=torch.long, device=data.x.device
+    )
 
 
 def energy_from_pred(pred) -> torch.Tensor:
@@ -468,7 +498,9 @@ def energy_from_pred(pred) -> torch.Tensor:
     return energy.squeeze(-1)
 
 
-def predict_branch_energy_forces(model, data, branch_id: int) -> Tuple[torch.Tensor, torch.Tensor]:
+def predict_branch_energy_forces(
+    model, data, branch_id: int
+) -> Tuple[torch.Tensor, torch.Tensor]:
     original_dataset_name = getattr(data, "dataset_name", None)
     data.dataset_name = build_dataset_name(data, branch_id)
 
@@ -505,7 +537,7 @@ def weighted_average(
     # forces_preds: [num_branches, num_atoms, 3]
     # output:       [num_atoms, 3]
     node_weights = weights[batch]  # [num_atoms, num_branches]
-    weighted_forces = torch.einsum('ab,bac->ac', node_weights, forces_preds)
+    weighted_forces = torch.einsum("ab,bac->ac", node_weights, forces_preds)
 
     return weighted_energy, weighted_forces
 
@@ -516,7 +548,9 @@ def extract_dataset_ids(data, num_branches: int) -> torch.Tensor:
 
     dataset_ids = data.dataset_name
     if not torch.is_tensor(dataset_ids):
-        dataset_ids = torch.tensor(dataset_ids, dtype=torch.long, device=data.batch.device)
+        dataset_ids = torch.tensor(
+            dataset_ids, dtype=torch.long, device=data.batch.device
+        )
 
     dataset_ids = dataset_ids.to(device=data.batch.device, dtype=torch.long)
 
@@ -527,7 +561,9 @@ def extract_dataset_ids(data, num_branches: int) -> torch.Tensor:
     elif dataset_ids.dim() > 2:
         dataset_ids = dataset_ids.view(dataset_ids.size(0), -1)
         if dataset_ids.size(1) != 1:
-            raise ValueError(f"Unsupported dataset_name shape {tuple(data.dataset_name.shape)}")
+            raise ValueError(
+                f"Unsupported dataset_name shape {tuple(data.dataset_name.shape)}"
+            )
         dataset_ids = dataset_ids.squeeze(-1)
 
     if dataset_ids.numel() == 1 and data.num_graphs > 1:
@@ -555,5 +591,7 @@ def teacher_from_dataset_id(
     dataset_ids: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     num_branches = energy_preds.size(0)
-    target_weights = F.one_hot(dataset_ids, num_classes=num_branches).to(dtype=energy_preds.dtype)
+    target_weights = F.one_hot(dataset_ids, num_classes=num_branches).to(
+        dtype=energy_preds.dtype
+    )
     return weighted_average(energy_preds, forces_preds, target_weights, batch)
