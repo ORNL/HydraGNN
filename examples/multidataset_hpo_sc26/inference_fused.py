@@ -174,6 +174,17 @@ def add_fused_cli_arguments(parser):
         "for forces (instead of 16 separate backward passes). Mathematically "
         "equivalent when all branches are included.",
     )
+    parser.add_argument(
+        "--omnistat_fom",
+        action="store_true",
+        help="POST per-batch throughput FOM to the local Omnistat collector.",
+    )
+    parser.add_argument(
+        "--omnistat_fom_port",
+        type=int,
+        default=8001,
+        help="Port for the Omnistat FOM HTTP endpoint (default: 8001).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -794,6 +805,22 @@ def _make_timer(device):
     return start, stop
 
 
+def _post_omnistat_fom(fom_url: str, gpu_id: int, throughput: float):
+    """POST per-batch throughput FOM to the local Omnistat collector."""
+    import requests
+
+    payload = {
+        "name": f"throughput_structs_per_sec_gpu{gpu_id}",
+        "value": throughput,
+    }
+    try:
+        res = requests.post(fom_url, json=payload, timeout=2)
+        if not res.ok:
+            print(f"  [omnistat-fom] POST failed: {res.status_code}")
+    except Exception as exc:
+        print(f"  [omnistat-fom] POST error: {exc}")
+
+
 # ---------------------------------------------------------------------------
 # Inference and reporting
 # ---------------------------------------------------------------------------
@@ -823,6 +850,8 @@ def run_fused_inference(
     weight_threshold: float = 0.0,
     fused_energy_grad: bool = False,
     per_batch_callback=None,
+    omnistat_fom_url: str = None,
+    omnistat_fom_gpu_id: int = 0,
 ):
     """Run batched fused inference with timing (excludes warmup batches).
 
@@ -916,6 +945,12 @@ def run_fused_inference(
 
     for batch_idx, batch_list in enumerate(batches):
         is_warmup = batch_idx < num_warmup_effective
+        tag = "warmup" if is_warmup else "timed"
+        print(
+            f"  batch {batch_idx + 1}/{len(batches)} ({tag}, "
+            f"{len(batch_list)} structs)",
+            flush=True,
+        )
 
         batch = Batch.from_data_list(batch_list)
         batch = move_batch_to_device(batch, param_dtype)
@@ -1240,6 +1275,10 @@ def run_fused_inference(
 
         elapsed_ms = timer_stop_ms()
 
+        if omnistat_fom_url is not None:
+            batch_throughput = len(batch_list) / (elapsed_ms / 1000.0)
+            _post_omnistat_fom(omnistat_fom_url, omnistat_fom_gpu_id, batch_throughput)
+
         if not is_warmup:
             batch_latencies_ms.append(elapsed_ms)
 
@@ -1490,6 +1529,16 @@ def main():
         f"(warmup: {num_warmup_eff}, timed: {n_batches - num_warmup_eff})"
     )
 
+    omnistat_fom_url = None
+    if args.omnistat_fom:
+        omnistat_fom_url = f"http://localhost:{args.omnistat_fom_port}/fom"
+    local_gpu_id = int(
+        os.environ.get(
+            "SLURM_LOCALID",
+            os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", "0"),
+        )
+    )
+
     (
         all_energies,
         all_forces,
@@ -1516,6 +1565,8 @@ def main():
         num_streams=args.num_streams,
         weight_threshold=args.weight_threshold,
         fused_energy_grad=args.fused_energy_grad,
+        omnistat_fom_url=omnistat_fom_url,
+        omnistat_fom_gpu_id=local_gpu_id,
     )
 
     print_fused_results(

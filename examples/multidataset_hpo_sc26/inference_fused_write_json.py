@@ -178,6 +178,10 @@ def main():
         f"background thread will stream results to {nvme_path}"
     )
 
+    omnistat_fom_url = None
+    if args.omnistat_fom:
+        omnistat_fom_url = f"http://localhost:{args.omnistat_fom_port}/fom"
+
     (
         all_energies,
         all_forces,
@@ -205,6 +209,8 @@ def main():
         weight_threshold=args.weight_threshold,
         fused_energy_grad=args.fused_energy_grad,
         per_batch_callback=_on_batch,
+        omnistat_fom_url=omnistat_fom_url,
+        omnistat_fom_gpu_id=local_gpu_id,
     )
 
     # --- Wait for all background NVMe writes, close the JSON file ---
