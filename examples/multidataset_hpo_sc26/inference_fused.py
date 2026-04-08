@@ -182,8 +182,9 @@ def add_fused_cli_arguments(parser):
     parser.add_argument(
         "--omnistat_fom_port",
         type=int,
-        default=8001,
-        help="Port for the Omnistat FOM HTTP endpoint (default: 8001).",
+        default=8002,
+        help="Port for the Omnistat FOM HTTP endpoint (default: 8002, "
+        "matching [omnistat.collectors] port in omnihub.config).",
     )
 
 
