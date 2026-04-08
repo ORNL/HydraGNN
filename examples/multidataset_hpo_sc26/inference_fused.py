@@ -975,6 +975,7 @@ def run_fused_inference(
                                         _base_model, batch, encoded_feats, branch_id
                                     )
                                     energy_preds.append(e.detach())
+                                    del e
                                     forces_preds.append(torch.zeros_like(batch.pos))
                                 else:
                                     e, f = _predict_branch_energy_forces_decoder(
@@ -1014,6 +1015,7 @@ def run_fused_inference(
                                         model, batch, branch_id
                                     )
                                     energy_preds.append(e.detach())
+                                    del e
                                     forces_preds.append(torch.zeros_like(batch.pos))
                                 else:
                                     e, f = _predict_branch_energy_forces(
@@ -1126,6 +1128,7 @@ def run_fused_inference(
                                         _base_model, batch, encoded_feats, branch_id
                                     )
                                     energy_preds.append(e.detach())
+                                    del e
                                     forces_preds.append(torch.zeros_like(batch.pos))
                                 else:
                                     e, f = _predict_branch_energy_forces_decoder(
@@ -1165,6 +1168,7 @@ def run_fused_inference(
                                         model, batch, branch_id
                                     )
                                     energy_preds.append(e.detach())
+                                    del e
                                     forces_preds.append(torch.zeros_like(batch.pos))
                                 else:
                                     e, f = _predict_branch_energy_forces(
