@@ -350,7 +350,7 @@ def _predict_branch_energy_forces(
         energy_pred,
         data.pos,
         grad_outputs=torch.ones_like(energy_pred),
-        retain_graph=True,
+        retain_graph=False,
         create_graph=False,
     )[0]
     forces_pred = -forces_pred
