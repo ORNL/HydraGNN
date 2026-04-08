@@ -822,6 +822,7 @@ def run_fused_inference(
     num_streams: int = 1,
     weight_threshold: float = 0.0,
     fused_energy_grad: bool = False,
+    per_batch_callback=None,
 ):
     """Run batched fused inference with timing (excludes warmup batches).
 
@@ -839,6 +840,16 @@ def run_fused_inference(
     When *fused_energy_grad* is True, all branch energies are weighted-summed
     first, then a single ``autograd.grad`` computes forces, replacing 16
     separate backward passes.
+
+    When *per_batch_callback* is not None it is called after each batch's
+    results are extracted to CPU (but before the next batch starts on the
+    GPU).  Signature::
+
+        per_batch_callback(batch_idx, batch_energies, batch_forces,
+                           batch_natoms, batch_weights)
+
+    This enables the caller to pipeline I/O (e.g. NVMe writes) with GPU
+    inference.
 
     Returns
     -------
@@ -1236,18 +1247,30 @@ def run_fused_inference(
         weighted_forces = weighted_forces.detach()
         weights_cpu = weights.detach().cpu()
 
+        batch_e: list = []
+        batch_f: list = []
+        batch_n: list = []
+        batch_w: list = []
         num_graphs = batch.num_graphs
         for i in range(num_graphs):
-            all_energies.append(
+            batch_e.append(
                 weighted_energy[i].item()
                 if weighted_energy.numel() > 1
                 else weighted_energy.item()
             )
             mask = batch.batch == i
             n = int(mask.sum().item())
-            all_natoms.append(n)
-            all_forces.append(weighted_forces[mask].cpu())
-            all_weights.append(weights_cpu[i])
+            batch_n.append(n)
+            batch_f.append(weighted_forces[mask].cpu())
+            batch_w.append(weights_cpu[i])
+
+        all_energies.extend(batch_e)
+        all_forces.extend(batch_f)
+        all_natoms.extend(batch_n)
+        all_weights.extend(batch_w)
+
+        if per_batch_callback is not None:
+            per_batch_callback(batch_idx, batch_e, batch_f, batch_n, batch_w)
 
     total_timed_structures = sum(
         len(batches[i]) for i in range(num_warmup_effective, len(batches))
