@@ -6,9 +6,8 @@ energy, forces, and per-structure branch softmax weights. Output paths use the
 local GPU id to avoid collisions on multi-GPU nodes (e.g. OLCF Frontier
 ``/mnt/bb/$USER``).
 
-NVMe writes are **pipelined** with GPU inference: a single-threaded
-``ThreadPoolExecutor`` serialises and flushes each batch's results to NVMe
-while the next batch is already being processed on the GPU.
+JSON output is written **after** inference completes so that serialization
+does not contend with the GPU inference loop for CPU/GIL time.
 
 Usage:
     srun ... python inference_fused_write_json.py \\
@@ -21,8 +20,7 @@ The --logdir should contain config.json, a .pk HydraGNN checkpoint, and
 
 import json
 import os
-from concurrent.futures import Future, ThreadPoolExecutor
-from typing import IO, List
+import time
 
 from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
 
@@ -37,36 +35,6 @@ from inference_fused import (
 )
 
 from inference_random_structures_write_json import structure_to_dict
-
-
-# ---------------------------------------------------------------------------
-# Background NVMe writer
-# ---------------------------------------------------------------------------
-
-
-def _write_batch_entries(
-    fh: IO[str],
-    structs: list,
-    energies: list,
-    forces: list,
-    weights: list,
-    global_offset: int,
-    need_leading_comma: bool,
-) -> None:
-    """Serialise one batch's results and stream them to the open file handle.
-
-    Runs in a background thread so that NVMe I/O overlaps with the next
-    batch's GPU inference.
-    """
-    for i in range(len(energies)):
-        entry = structure_to_dict(structs[i], energies[i], forces[i])
-        entry["structure_index"] = global_offset + i
-        entry["branch_weights"] = weights[i].tolist()
-
-        prefix = ",\n    " if (need_leading_comma or i > 0) else "    "
-        fh.write(prefix)
-        json.dump(entry, fh)
-    fh.flush()
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +101,6 @@ def main():
         f"(atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
     )
 
-    # --- Open NVMe output and begin streaming JSON ---
     nvme_base = args.nvme_dir
     if nvme_base is None:
         user = os.environ.get("USER", "unknown")
@@ -142,41 +109,6 @@ def main():
     os.makedirs(nvme_base, exist_ok=True)
     filename = f"inference_fused_results_gpu{local_gpu_id}.json"
     nvme_path = os.path.join(nvme_base, filename)
-
-    fh = open(nvme_path, "w")
-    fh.write('{"structures": [\n')
-
-    executor = ThreadPoolExecutor(max_workers=1)
-    futures: List[Future] = []
-    struct_offset = [0]
-
-    def _on_batch(batch_idx, batch_energies, batch_forces, batch_natoms, batch_weights):
-        """Called from run_fused_inference after each batch is extracted to CPU.
-
-        Submits the serialisation + NVMe write to the background thread so
-        that it overlaps with GPU processing of the next batch.
-        """
-        offset = struct_offset[0]
-        n = len(batch_energies)
-        structs_slice = structures[offset : offset + n]
-        struct_offset[0] += n
-
-        fut = executor.submit(
-            _write_batch_entries,
-            fh,
-            structs_slice,
-            batch_energies,
-            batch_forces,
-            batch_weights,
-            offset,
-            need_leading_comma=(offset > 0),
-        )
-        futures.append(fut)
-
-    print(
-        f"[rank {world_rank}] NVMe write pipeline enabled – "
-        f"background thread will stream results to {nvme_path}"
-    )
 
     omnistat_fom_url = None
     if args.omnistat_fom:
@@ -208,23 +140,28 @@ def main():
         num_streams=args.num_streams,
         weight_threshold=args.weight_threshold,
         fused_energy_grad=args.fused_energy_grad,
-        per_batch_callback=_on_batch,
         omnistat_fom_url=omnistat_fom_url,
         omnistat_fom_gpu_id=local_gpu_id,
     )
 
-    # --- Wait for all background NVMe writes, close the JSON file ---
-    for fut in futures:
-        fut.result()
-    executor.shutdown(wait=True)
+    # --- Write JSON to NVMe after inference completes ---
+    t_write_start = time.perf_counter()
+    with open(nvme_path, "w") as fh:
+        fh.write('{"structures": [\n')
+        for i in range(len(all_energies)):
+            entry = structure_to_dict(structures[i], all_energies[i], all_forces[i])
+            entry["structure_index"] = i
+            entry["branch_weights"] = all_weights[i].tolist()
 
-    total_written = struct_offset[0]
-    fh.write(f'\n], "num_structures": {total_written}}}\n')
-    fh.close()
+            prefix = ",\n    " if i > 0 else "    "
+            fh.write(prefix)
+            json.dump(entry, fh)
+        fh.write(f'\n], "num_structures": {len(all_energies)}}}\n')
+    t_write_elapsed = time.perf_counter() - t_write_start
 
     print(
-        f"[rank {world_rank}] Wrote {total_written} structures to {nvme_path} "
-        f"(pipelined with GPU inference)"
+        f"[rank {world_rank}] Wrote {len(all_energies)} structures to {nvme_path} "
+        f"({t_write_elapsed:.1f}s, post-hoc)"
     )
 
     print_fused_results(
