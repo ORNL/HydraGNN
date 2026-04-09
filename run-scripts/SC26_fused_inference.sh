@@ -177,34 +177,30 @@ echo "RESULTS_DIR=$RESULTS_DIR"
 # ============================================================================
 
 _omnistat_started=0
-if [ -n "${OMNISTAT_WRAPPER:-}" ]; then
-    export HSA_TOOLS_LIB=/opt/rocm-7.2.0/lib/librocprofiler64.so
+_omnistat_config="${HYDRAGNN_ROOT}/omnistat.hydragnn-external.config"
 
-    _omnistat_config="${HYDRAGNN_ROOT}/omnihub.config"
+if [ -n "${OMNISTAT_WRAPPER:-}" ]; then
     if [ -f "$_omnistat_config" ]; then
         export OMNISTAT_CONFIG="$_omnistat_config"
+        ${OMNISTAT_WRAPPER} usermode --start --interval 15.0 --pushinterval 3
+        _omnistat_started=1
+    else
+        echo "WARNING: Omnistat configuration file not found: ${_omnistat_config}"
     fi
-
-    export OMNISTAT_VICTORIA_DATADIR=/tmp/omnistat/${SLURM_JOB_ID}
-    mkdir -p "$RESULTS_DIR/tools/omnistat"
-
-    ${OMNISTAT_WRAPPER} usermode --start --interval 1.0
-    _omnistat_started=1
-    echo "Omnistat started (VICTORIA_DATADIR=$OMNISTAT_VICTORIA_DATADIR)"
 else
     echo "WARNING: OMNISTAT_WRAPPER not set — omnistat-wrapper module not loaded?"
 fi
 
 # ============================================================================
-# Omnistat FOM (figure of merit) — parse collector port from config
+# Omnistat FOM (figure of merit)
 # ============================================================================
 
 _fom_args=""
-if [ -f "${OMNISTAT_CONFIG:-}" ]; then
-    _fom_port=$(awk -F= '/^\[omnistat\.collectors\]/{found=1} found && /^port/{gsub(/[[:space:]]/, "", $2); print $2; exit}' "$OMNISTAT_CONFIG")
-    _fom_port=${_fom_port:-8002}
+_fom_port=8001
+
+if [ "$_omnistat_started" = "1" ]; then
     _fom_args="--omnistat_fom --omnistat_fom_port ${_fom_port}"
-    echo "OMNISTAT_FOM: port=${_fom_port} (from $OMNISTAT_CONFIG)"
+    echo "OMNISTAT Figure of Merit (FOM): port=${_fom_port}"
 fi
 
 # ============================================================================
@@ -314,18 +310,8 @@ fi
 # ============================================================================
 
 if [ "$_omnistat_started" = "1" ]; then
-    ${OMNISTAT_WRAPPER} usermode --stopexporters
-    ${OMNISTAT_WRAPPER} query --interval 1.0 --job "${SLURM_JOB_ID}" \
-        --export "$RESULTS_DIR/tools/omnistat" \
-        > "$RESULTS_DIR/tools/omnistat/report.txt"
-    ${OMNISTAT_WRAPPER} query --interval 1.0 --job "${SLURM_JOB_ID}" \
-        --pdf "$RESULTS_DIR/tools/omnistat/omnistat.${SLURM_JOB_ID}.pdf" 2>/dev/null || true
-    ${OMNISTAT_WRAPPER} usermode --stopserver
-
-    if [ -d "$OMNISTAT_VICTORIA_DATADIR" ]; then
-        cp -r "$OMNISTAT_VICTORIA_DATADIR" "$RESULTS_DIR/tools/omnistat/data" 2>/dev/null || true
-    fi
-    echo "Omnistat data saved to $RESULTS_DIR/tools/omnistat/"
+    ${OMNISTAT_WRAPPER} usermode --stop
+    echo "Omnistat data saved to external database"
 fi
 
 # ============================================================================
@@ -338,7 +324,6 @@ echo "Results:       $RESULTS_DIR"
 if [ -n "$NVME_DIR" ]; then
     echo "JSON output:   $RESULTS_DIR/json/"
 fi
-echo "Omnistat:      $RESULTS_DIR/tools/omnistat/"
 echo "============================================================"
 
 exit "$_srun_exit"
