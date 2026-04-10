@@ -332,6 +332,12 @@ def main():
         per_batch_callback=_on_batch,
         omnistat_fom_url=omnistat_fom_url,
         omnistat_fom_gpu_id=local_gpu_id,
+        disable_param_grad=args.disable_param_grad,
+        batched_decoder=args.batched_decoder,
+        compile_encoder=args.compile_encoder,
+        compile_decoder=args.compile_decoder,
+        compile_full=args.compile_full,
+        compile_backend=args.compile_backend,
     )
 
     # --- Drain the thread pool before closing the writer ---
