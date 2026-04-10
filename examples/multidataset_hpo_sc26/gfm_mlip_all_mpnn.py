@@ -355,6 +355,8 @@ if __name__ == "__main__":
             logging.warning(f"Checkpoint {path} not found. Starting from scratch.")
             config["NeuralNetwork"]["Training"]["continue"] = 0
             config["NeuralNetwork"]["Training"]["startfrom"] = None
+            if "epoch_start" in config["NeuralNetwork"]["Training"]:
+                del config["NeuralNetwork"]["Training"]["epoch_start"]
 
     ##################################################################################################################
     # Always initialize for multi-rank training.
