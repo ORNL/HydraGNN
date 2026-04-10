@@ -189,14 +189,14 @@ def add_fused_cli_arguments(parser):
         help="Vectorize the 16 branch decoder heads into batched matrix "
         "multiplications instead of sequential per-branch forward calls. "
         "Only applies to the fused-reuse path with graph-level heads. "
-        "(default: enabled; use --no-batched-decoder to disable)",
+        "(default: enabled; use --no-batched_decoder to disable)",
     )
     parser.add_argument(
         "--compile_encoder",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Apply torch.compile to each PAINN conv block in the encoder. "
-        "(default: enabled; use --no-compile-encoder to disable)",
+        "(default: enabled; use --no-compile_encoder to disable)",
     )
     parser.add_argument(
         "--compile_decoder",
