@@ -142,6 +142,12 @@ def main():
         fused_energy_grad=args.fused_energy_grad,
         omnistat_fom_url=omnistat_fom_url,
         omnistat_fom_gpu_id=local_gpu_id,
+        disable_param_grad=args.disable_param_grad,
+        batched_decoder=args.batched_decoder,
+        compile_encoder=args.compile_encoder,
+        compile_decoder=args.compile_decoder,
+        compile_full=args.compile_full,
+        compile_backend=args.compile_backend,
     )
 
     # --- Write JSON to NVMe after inference completes ---

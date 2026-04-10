@@ -23,6 +23,7 @@ Public API for reuse (e.g. ``inference_fused_write_json.py``):
 ``run_fused_inference`` (optional ``mlp_device`` / ``profile_stages``), ``print_fused_results``.
 """
 
+import argparse
 import copy
 import glob
 import json
@@ -173,6 +174,47 @@ def add_fused_cli_arguments(parser):
         help="Compute weighted energy sum first, then ONE autograd.grad call "
         "for forces (instead of 16 separate backward passes). Mathematically "
         "equivalent when all branches are included.",
+    )
+    parser.add_argument(
+        "--disable_param_grad",
+        action="store_true",
+        help="Set requires_grad=False on all model parameters before inference. "
+        "Only data.pos retains gradients (needed for forces). Reduces backward "
+        "computation by skipping parameter gradient accumulation.",
+    )
+    parser.add_argument(
+        "--batched_decoder",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Vectorize the 16 branch decoder heads into batched matrix "
+        "multiplications instead of sequential per-branch forward calls. "
+        "Only applies to the fused-reuse path with graph-level heads. "
+        "(default: enabled; use --no-batched-decoder to disable)",
+    )
+    parser.add_argument(
+        "--compile_encoder",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Apply torch.compile to each PAINN conv block in the encoder. "
+        "(default: enabled; use --no-compile-encoder to disable)",
+    )
+    parser.add_argument(
+        "--compile_decoder",
+        action="store_true",
+        help="Apply torch.compile to each branch decoder head (graph_shared + heads_NN).",
+    )
+    parser.add_argument(
+        "--compile_full",
+        action="store_true",
+        help="Apply torch.compile to the full model (fullgraph=False). "
+        "Uses dynamo.allow_in_graph(autograd.grad) so the backward pass "
+        "can also be compiled.",
+    )
+    parser.add_argument(
+        "--compile_backend",
+        type=str,
+        default="inductor",
+        help="torch.compile backend (default: inductor). Use 'eager' for debugging.",
     )
     parser.add_argument(
         "--omnistat_fom",
@@ -823,6 +865,166 @@ def _post_omnistat_fom(fom_url: str, gpu_id: int, throughput: float):
 
 
 # ---------------------------------------------------------------------------
+# Batched decoder: vectorize 16 identical-architecture branch heads
+# ---------------------------------------------------------------------------
+
+
+def _build_batched_decoder(model, device):
+    """Stack weights from all B branch decoder heads into batched tensors.
+
+    All branches must share the same architecture (same layer sizes).
+    Returns a dict with stacked weights/biases for graph_shared and heads_NN,
+    plus activation function reference.
+
+    The SC26 config has: graph_shared = Linear(337,50)+ReLU+Linear(50,50)+ReLU
+                         heads_NN     = Linear(50,776)+ReLU+Linear(776,776)+ReLU+Linear(776,1)
+    """
+    num_branches = model.num_branches
+    branch_keys = [f"branch-{i}" for i in range(num_branches)]
+
+    def _extract_linear_params(sequential):
+        """Extract (weight, bias) pairs from a Sequential of Linear+Act layers."""
+        params = []
+        for m in sequential:
+            if isinstance(m, nn.Linear):
+                params.append((m.weight.data, m.bias.data))
+        return params
+
+    shared_params = [_extract_linear_params(model.graph_shared[k]) for k in branch_keys]
+    head_NN_dict = model.heads_NN[0]
+    head_params = [_extract_linear_params(head_NN_dict[k]) for k in branch_keys]
+
+    num_shared_layers = len(shared_params[0])
+    num_head_layers = len(head_params[0])
+
+    stacked_shared_W = []
+    stacked_shared_b = []
+    for li in range(num_shared_layers):
+        W = torch.stack([shared_params[b][li][0] for b in range(num_branches)])
+        b = torch.stack([shared_params[b][li][1] for b in range(num_branches)])
+        stacked_shared_W.append(W)
+        stacked_shared_b.append(b)
+
+    stacked_head_W = []
+    stacked_head_b = []
+    for li in range(num_head_layers):
+        W = torch.stack([head_params[b][li][0] for b in range(num_branches)])
+        b = torch.stack([head_params[b][li][1] for b in range(num_branches)])
+        stacked_head_W.append(W)
+        stacked_head_b.append(b)
+
+    return {
+        "num_branches": num_branches,
+        "shared_W": stacked_shared_W,
+        "shared_b": stacked_shared_b,
+        "head_W": stacked_head_W,
+        "head_b": stacked_head_b,
+        "act_fn": model.activation_function,
+    }
+
+
+def _batched_decode_all_branches(model, data, encoded_feats, batched_dec):
+    """Run all B branch decoders in a single batched pass.
+
+    Instead of B sequential forward calls through separate nn.Module instances,
+    this broadcasts the pooled graph features across all B branches and uses
+    batched matrix multiplications.
+
+    Returns a list of B energy tensors (with gradients attached for autograd.grad).
+    """
+    inv_node_feat, equiv_node_feat, conv_args = encoded_feats
+
+    if data.batch is None:
+        x_graph = model._pool_graph_features(inv_node_feat, None)
+        data.batch = data.x * 0
+    else:
+        x_graph = model._pool_graph_features(inv_node_feat, data.batch)
+
+    x_graph = model._apply_graph_pool_conditioning(x_graph, data)
+
+    B = batched_dec["num_branches"]
+    act_fn = batched_dec["act_fn"]
+
+    # x_graph: [G, H] -> [B, G, H] for batched matmul
+    x = x_graph.unsqueeze(0).expand(B, -1, -1)
+
+    for W, b in zip(batched_dec["shared_W"], batched_dec["shared_b"]):
+        # W: [B, out, in], x: [B, G, in] -> bmm needs x @ W^T
+        x = torch.bmm(x, W.transpose(1, 2)) + b.unsqueeze(1)
+        x = act_fn(x)
+
+    for i, (W, b) in enumerate(zip(batched_dec["head_W"], batched_dec["head_b"])):
+        x = torch.bmm(x, W.transpose(1, 2)) + b.unsqueeze(1)
+        if i < len(batched_dec["head_W"]) - 1:
+            x = act_fn(x)
+
+    # x: [B, G, output_dim] -- for energy, output_dim=1
+    energies = [x[branch_id, :, 0] for branch_id in range(B)]
+    return energies
+
+
+# ---------------------------------------------------------------------------
+# torch.compile helpers
+# ---------------------------------------------------------------------------
+
+
+def _apply_torch_compile(model, compile_encoder, compile_decoder, compile_full, backend):
+    """Apply torch.compile to model submodules or the full model.
+
+    Returns the (possibly compiled) model.
+    """
+    import time as _time
+
+    _base = model.module if hasattr(model, "module") else model
+
+    if compile_full:
+        try:
+            import torch._dynamo as dynamo
+            dynamo.allow_in_graph(torch.autograd.grad)
+        except Exception:
+            pass
+        print(f"torch.compile: compiling full model (backend={backend}, fullgraph=False)")
+        t0 = _time.perf_counter()
+        model = torch.compile(model, dynamic=True, fullgraph=False, backend=backend)
+        print(f"  compile setup: {(_time.perf_counter() - t0)*1000:.0f} ms")
+        return model
+
+    if compile_encoder:
+        n_compiled = 0
+        t0 = _time.perf_counter()
+        for i, conv in enumerate(_base.graph_convs):
+            _base.graph_convs[i] = torch.compile(
+                conv, dynamic=True, backend=backend
+            )
+            n_compiled += 1
+        print(
+            f"torch.compile: {n_compiled} encoder conv blocks compiled "
+            f"(backend={backend}, {(_time.perf_counter() - t0)*1000:.0f} ms)"
+        )
+
+    if compile_decoder:
+        n_compiled = 0
+        t0 = _time.perf_counter()
+        for branch_key in _base.graph_shared:
+            _base.graph_shared[branch_key] = torch.compile(
+                _base.graph_shared[branch_key], dynamic=True, backend=backend
+            )
+            n_compiled += 1
+        for head_dict in _base.heads_NN:
+            for branch_key in head_dict:
+                head_dict[branch_key] = torch.compile(
+                    head_dict[branch_key], dynamic=True, backend=backend
+                )
+                n_compiled += 1
+        print(
+            f"torch.compile: {n_compiled} decoder head modules compiled "
+            f"(backend={backend}, {(_time.perf_counter() - t0)*1000:.0f} ms)"
+        )
+
+    return model
+
+
+# ---------------------------------------------------------------------------
 # Inference and reporting
 # ---------------------------------------------------------------------------
 
@@ -853,6 +1055,12 @@ def run_fused_inference(
     per_batch_callback=None,
     omnistat_fom_url: str = None,
     omnistat_fom_gpu_id: int = 0,
+    disable_param_grad: bool = False,
+    batched_decoder: bool = False,
+    compile_encoder: bool = False,
+    compile_decoder: bool = False,
+    compile_full: bool = False,
+    compile_backend: str = "inductor",
 ):
     """Run batched fused inference with timing (excludes warmup batches).
 
@@ -930,6 +1138,17 @@ def run_fused_inference(
             f"pinned across all decoder calls)"
         )
 
+    if disable_param_grad:
+        n_disabled = 0
+        for p in model.parameters():
+            if p.requires_grad:
+                p.requires_grad_(False)
+                n_disabled += 1
+        print(
+            f"Parameter grad disabled: {n_disabled} model parameters set to "
+            f"requires_grad=False (only data.pos retains grad for forces)"
+        )
+
     if weight_threshold > 0:
         print(
             f"Branch skipping: branches with mean weight < {weight_threshold:.4f} "
@@ -940,6 +1159,32 @@ def run_fused_inference(
             "Fused energy gradient: single autograd.grad from weighted energy "
             "sum (replaces per-branch backward passes)"
         )
+
+    batched_dec = None
+    if batched_decoder and encoder_reuse and fused_energy_grad:
+        batched_dec = _build_batched_decoder(_base_model, device)
+        print(
+            f"Batched decoder: {batched_dec['num_branches']} branches vectorized "
+            f"into batched matrix multiplications"
+        )
+    elif batched_decoder:
+        print(
+            "WARNING: --batched_decoder requires --encoder_reuse and "
+            "--fused_energy_grad; falling back to sequential decoder"
+        )
+
+    if compile_encoder or compile_decoder or compile_full:
+        if compile_decoder and batched_dec is not None:
+            print(
+                "NOTE: --compile_decoder skipped (batched decoder uses "
+                "pre-stacked weights, not nn.Module forward calls)"
+            )
+            compile_decoder = False
+        model = _apply_torch_compile(
+            model, compile_encoder, compile_decoder, compile_full, compile_backend
+        )
+        if encoder_reuse:
+            _base_model = model.module if hasattr(model, "module") else model
 
     num_skipped_total = 0
     num_evaluated_total = 0
@@ -990,7 +1235,23 @@ def run_fused_inference(
                         if profile_stages:
                             _sync_device(device)
                             t_enc1 = time.perf_counter()
-                        if use_parallel_streams and not fused_energy_grad:
+                        if batched_dec is not None and fused_energy_grad:
+                            all_energies_b = _batched_decode_all_branches(
+                                _base_model, batch, encoded_feats, batched_dec
+                            )
+                            for branch_id in range(num_branches):
+                                is_skipped = (
+                                    weight_threshold > 0
+                                    and mean_weights[branch_id].item() < weight_threshold
+                                )
+                                e = all_energies_b[branch_id]
+                                if is_skipped:
+                                    skip_energies.append(e)
+                                    skip_weights_list.append(weights[:, branch_id])
+                                else:
+                                    live_energies.append(e)
+                                    live_weights_list.append(weights[:, branch_id])
+                        elif use_parallel_streams and not fused_energy_grad:
                             energy_preds, forces_preds = (
                                 _run_branches_parallel_streams_decoder(
                                     _base_model,
@@ -1147,7 +1408,23 @@ def run_fused_inference(
                         if profile_stages:
                             _sync_device(device)
                             t_enc1 = time.perf_counter()
-                        if use_parallel_streams and not fused_energy_grad:
+                        if batched_dec is not None and fused_energy_grad:
+                            all_energies_b = _batched_decode_all_branches(
+                                _base_model, batch, encoded_feats, batched_dec
+                            )
+                            for branch_id in range(num_branches):
+                                is_skipped = (
+                                    weight_threshold > 0
+                                    and mean_weights[branch_id].item() < weight_threshold
+                                )
+                                e = all_energies_b[branch_id]
+                                if is_skipped:
+                                    skip_energies.append(e)
+                                    skip_weights_list.append(weights[:, branch_id])
+                                else:
+                                    live_energies.append(e)
+                                    live_weights_list.append(weights[:, branch_id])
+                        elif use_parallel_streams and not fused_energy_grad:
                             energy_preds, forces_preds = (
                                 _run_branches_parallel_streams_decoder(
                                     _base_model,
@@ -1568,6 +1845,12 @@ def main():
         fused_energy_grad=args.fused_energy_grad,
         omnistat_fom_url=omnistat_fom_url,
         omnistat_fom_gpu_id=local_gpu_id,
+        disable_param_grad=args.disable_param_grad,
+        batched_decoder=args.batched_decoder,
+        compile_encoder=args.compile_encoder,
+        compile_decoder=args.compile_decoder,
+        compile_full=args.compile_full,
+        compile_backend=args.compile_backend,
     )
 
     print_fused_results(
