@@ -6,6 +6,9 @@ energy, forces, and per-structure branch softmax weights. Output paths use the
 local GPU id to avoid collisions on multi-GPU nodes (e.g. OLCF Frontier
 ``/mnt/bb/$USER``).
 
+JSON output is written **after** inference completes so that serialization
+does not contend with the GPU inference loop for CPU/GIL time.
+
 Usage:
     srun ... python inference_fused_write_json.py \\
         --logdir <path_to_training_log_dir> \\
@@ -17,6 +20,7 @@ The --logdir should contain config.json, a .pk HydraGNN checkpoint, and
 
 import json
 import os
+import time
 
 from hydragnn.utils.distributed import get_comm_size_and_rank, get_local_rank
 
@@ -31,6 +35,11 @@ from inference_fused import (
 )
 
 from inference_random_structures_write_json import structure_to_dict
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 
 def main():
@@ -92,6 +101,19 @@ def main():
         f"(atoms: {args.min_atoms}-{args.max_atoms}, box: {args.box_size} A)"
     )
 
+    nvme_base = args.nvme_dir
+    if nvme_base is None:
+        user = os.environ.get("USER", "unknown")
+        nvme_base = f"/mnt/bb/{user}"
+
+    os.makedirs(nvme_base, exist_ok=True)
+    filename = f"inference_fused_results_gpu{local_gpu_id}.json"
+    nvme_path = os.path.join(nvme_base, filename)
+
+    omnistat_fom_url = None
+    if args.omnistat_fom:
+        omnistat_fom_url = f"http://localhost:{args.omnistat_fom_port}/fom"
+
     (
         all_energies,
         all_forces,
@@ -113,35 +135,40 @@ def main():
         mlp_device,
         mlp_autocast_ctx,
         unified_mlp_gnn_stack,
-        False,
+        args.profile_stages,
+        encoder_reuse=args.encoder_reuse,
+        num_streams=args.num_streams,
+        weight_threshold=args.weight_threshold,
+        fused_energy_grad=args.fused_energy_grad,
+        omnistat_fom_url=omnistat_fom_url,
+        omnistat_fom_gpu_id=local_gpu_id,
+        disable_param_grad=args.disable_param_grad,
+        batched_decoder=args.batched_decoder,
+        compile_encoder=args.compile_encoder,
+        compile_decoder=args.compile_decoder,
+        compile_full=args.compile_full,
+        compile_backend=args.compile_backend,
     )
 
-    json_entries = []
-    for i in range(len(all_energies)):
-        entry = structure_to_dict(structures[i], all_energies[i], all_forces[i])
-        entry["structure_index"] = i
-        entry["branch_weights"] = all_weights[i].tolist()
-        json_entries.append(entry)
+    # --- Write JSON to NVMe after inference completes ---
+    t_write_start = time.perf_counter()
+    with open(nvme_path, "w") as fh:
+        fh.write('{"structures": [\n')
+        for i in range(len(all_energies)):
+            entry = structure_to_dict(structures[i], all_energies[i], all_forces[i])
+            entry["structure_index"] = i
+            entry["branch_weights"] = all_weights[i].tolist()
 
-    json_payload = json.dumps(
-        {"num_structures": len(json_entries), "structures": json_entries},
-        indent=2,
+            prefix = ",\n    " if i > 0 else "    "
+            fh.write(prefix)
+            json.dump(entry, fh)
+        fh.write(f'\n], "num_structures": {len(all_energies)}}}\n')
+    t_write_elapsed = time.perf_counter() - t_write_start
+
+    print(
+        f"[rank {world_rank}] Wrote {len(all_energies)} structures to {nvme_path} "
+        f"({t_write_elapsed:.1f}s, post-hoc)"
     )
-
-    nvme_base = args.nvme_dir
-    if nvme_base is None:
-        user = os.environ.get("USER", "unknown")
-        nvme_base = f"/mnt/bb/{user}"
-
-    os.makedirs(nvme_base, exist_ok=True)
-
-    filename = f"inference_fused_results_gpu{local_gpu_id}.json"
-    nvme_path = os.path.join(nvme_base, filename)
-
-    with open(nvme_path, "w") as f:
-        f.write(json_payload)
-
-    print(f"[rank {world_rank}] Wrote {len(json_entries)} structures to {nvme_path}")
 
     print_fused_results(
         all_energies,

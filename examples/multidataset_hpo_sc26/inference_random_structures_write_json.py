@@ -42,16 +42,16 @@ from inference_random_structures import (
 
 def structure_to_dict(data, energy, forces):
     """Convert a single PyG Data object + predictions into a JSON-serialisable dict."""
-    pos_np = data.pos.cpu().numpy()
+    pos_np = data.pos.cpu().float().numpy()
     entry = {
-        "atom_types": data.x.squeeze(1).cpu().numpy().astype(int).tolist(),
+        "atom_types": data.x.squeeze(1).cpu().float().numpy().astype(int).tolist(),
         "coordinates_x": pos_np[:, 0].tolist(),
         "coordinates_y": pos_np[:, 1].tolist(),
         "coordinates_z": pos_np[:, 2].tolist(),
         "formation energy": energy,
     }
     if forces is not None:
-        forces_np = forces.cpu().numpy()
+        forces_np = forces.cpu().float().numpy()
         entry["forces_x"] = forces_np[:, 0].tolist()
         entry["forces_y"] = forces_np[:, 1].tolist()
         entry["forces_z"] = forces_np[:, 2].tolist()
