@@ -193,10 +193,11 @@ def add_fused_cli_arguments(parser):
     )
     parser.add_argument(
         "--compile_encoder",
-        action=argparse.BooleanOptionalAction,
-        default=True,
+        action="store_true",
+        default=False,
         help="Apply torch.compile to each PAINN conv block in the encoder. "
-        "(default: enabled; use --no-compile_encoder to disable)",
+        "Requires a compatible PyTorch/ROCm/Triton stack; may cause SIGILL "
+        "on environments where Inductor codegen targets unsupported instructions.",
     )
     parser.add_argument(
         "--compile_decoder",
