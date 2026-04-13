@@ -477,9 +477,7 @@ def _predict_branch_energy_forces_decoder(
     return energy_pred.detach(), forces_pred.detach()
 
 
-def _predict_branch_energy_only(
-    model, data, branch_id: int
-) -> torch.Tensor:
+def _predict_branch_energy_only(model, data, branch_id: int) -> torch.Tensor:
     """Forward-only energy for the no-reuse path (gradient still attached)."""
     original_dataset_name = getattr(data, "dataset_name", None)
     data.dataset_name = _build_dataset_name(data, branch_id)
@@ -746,17 +744,13 @@ def _decode_branch(model, data, encoded_feats):
                     x_graph_head = model.graph_shared[branchtype](x_graph[mask, :])
                     output_head = headloc[branchtype](x_graph_head)
                     head[mask] = output_head[:, :head_dim]
-                    headvar[mask] = (output_head[:, head_dim:] ** 2).to(
-                        dtype=out_dtype
-                    )
+                    headvar[mask] = (output_head[:, head_dim:] ** 2).to(dtype=out_dtype)
             outputs.append(head)
             outputs_var.append(headvar)
         else:
             node_NN_type = model.config_heads["node"][0]["architecture"]["type"]
             out_dtype = x.dtype
-            head = torch.zeros(
-                (x.shape[0], head_dim), device=x.device, dtype=out_dtype
-            )
+            head = torch.zeros((x.shape[0], head_dim), device=x.device, dtype=out_dtype)
             headvar = torch.zeros(
                 (x.shape[0], head_dim * model.var_output),
                 device=x.device,
@@ -969,7 +963,9 @@ def _batched_decode_all_branches(model, data, encoded_feats, batched_dec):
 # ---------------------------------------------------------------------------
 
 
-def _apply_torch_compile(model, compile_encoder, compile_decoder, compile_full, backend):
+def _apply_torch_compile(
+    model, compile_encoder, compile_decoder, compile_full, backend
+):
     """Apply torch.compile to model submodules or the full model.
 
     Returns the (possibly compiled) model.
@@ -981,10 +977,13 @@ def _apply_torch_compile(model, compile_encoder, compile_decoder, compile_full, 
     if compile_full:
         try:
             import torch._dynamo as dynamo
+
             dynamo.allow_in_graph(torch.autograd.grad)
         except Exception:
             pass
-        print(f"torch.compile: compiling full model (backend={backend}, fullgraph=False)")
+        print(
+            f"torch.compile: compiling full model (backend={backend}, fullgraph=False)"
+        )
         t0 = _time.perf_counter()
         model = torch.compile(model, dynamic=True, fullgraph=False, backend=backend)
         print(f"  compile setup: {(_time.perf_counter() - t0)*1000:.0f} ms")
@@ -994,9 +993,7 @@ def _apply_torch_compile(model, compile_encoder, compile_decoder, compile_full, 
         n_compiled = 0
         t0 = _time.perf_counter()
         for i, conv in enumerate(_base.graph_convs):
-            _base.graph_convs[i] = torch.compile(
-                conv, dynamic=True, backend=backend
-            )
+            _base.graph_convs[i] = torch.compile(conv, dynamic=True, backend=backend)
             n_compiled += 1
         print(
             f"torch.compile: {n_compiled} encoder conv blocks compiled "
@@ -1243,7 +1240,8 @@ def run_fused_inference(
                             for branch_id in range(num_branches):
                                 is_skipped = (
                                     weight_threshold > 0
-                                    and mean_weights[branch_id].item() < weight_threshold
+                                    and mean_weights[branch_id].item()
+                                    < weight_threshold
                                 )
                                 e = all_energies_b[branch_id]
                                 if is_skipped:
@@ -1253,21 +1251,23 @@ def run_fused_inference(
                                     live_energies.append(e)
                                     live_weights_list.append(weights[:, branch_id])
                         elif use_parallel_streams and not fused_energy_grad:
-                            energy_preds, forces_preds = (
-                                _run_branches_parallel_streams_decoder(
-                                    _base_model,
-                                    batch,
-                                    encoded_feats,
-                                    num_branches,
-                                    num_streams,
-                                    device,
-                                )
+                            (
+                                energy_preds,
+                                forces_preds,
+                            ) = _run_branches_parallel_streams_decoder(
+                                _base_model,
+                                batch,
+                                encoded_feats,
+                                num_branches,
+                                num_streams,
+                                device,
                             )
                         else:
                             for branch_id in range(num_branches):
                                 is_skipped = (
                                     weight_threshold > 0
-                                    and mean_weights[branch_id].item() < weight_threshold
+                                    and mean_weights[branch_id].item()
+                                    < weight_threshold
                                 )
                                 if fused_energy_grad:
                                     e = _predict_branch_energy_only_decoder(
@@ -1289,27 +1289,29 @@ def run_fused_inference(
                                 else:
                                     is_last = branch_id == num_branches - 1
                                     e, f = _predict_branch_energy_forces_decoder(
-                                        _base_model, batch, encoded_feats, branch_id,
+                                        _base_model,
+                                        batch,
+                                        encoded_feats,
+                                        branch_id,
                                         retain_graph=not is_last,
                                     )
                                     energy_preds.append(e)
                                     forces_preds.append(f)
                     else:
                         if use_parallel_streams and not fused_energy_grad:
-                            energy_preds, forces_preds = (
-                                _run_branches_parallel_streams(
-                                    model,
-                                    batch,
-                                    num_branches,
-                                    num_streams,
-                                    device,
-                                )
+                            energy_preds, forces_preds = _run_branches_parallel_streams(
+                                model,
+                                batch,
+                                num_branches,
+                                num_streams,
+                                device,
                             )
                         else:
                             for branch_id in range(num_branches):
                                 is_skipped = (
                                     weight_threshold > 0
-                                    and mean_weights[branch_id].item() < weight_threshold
+                                    and mean_weights[branch_id].item()
+                                    < weight_threshold
                                 )
                                 if fused_energy_grad:
                                     e = _predict_branch_energy_only(
@@ -1331,7 +1333,9 @@ def run_fused_inference(
                                 else:
                                     is_last = branch_id == num_branches - 1
                                     e, f = _predict_branch_energy_forces(
-                                        model, batch, branch_id,
+                                        model,
+                                        batch,
+                                        branch_id,
                                         retain_graph=not is_last,
                                     )
                                     energy_preds.append(e)
@@ -1416,7 +1420,8 @@ def run_fused_inference(
                             for branch_id in range(num_branches):
                                 is_skipped = (
                                     weight_threshold > 0
-                                    and mean_weights[branch_id].item() < weight_threshold
+                                    and mean_weights[branch_id].item()
+                                    < weight_threshold
                                 )
                                 e = all_energies_b[branch_id]
                                 if is_skipped:
@@ -1426,21 +1431,23 @@ def run_fused_inference(
                                     live_energies.append(e)
                                     live_weights_list.append(weights[:, branch_id])
                         elif use_parallel_streams and not fused_energy_grad:
-                            energy_preds, forces_preds = (
-                                _run_branches_parallel_streams_decoder(
-                                    _base_model,
-                                    batch,
-                                    encoded_feats,
-                                    num_branches,
-                                    num_streams,
-                                    device,
-                                )
+                            (
+                                energy_preds,
+                                forces_preds,
+                            ) = _run_branches_parallel_streams_decoder(
+                                _base_model,
+                                batch,
+                                encoded_feats,
+                                num_branches,
+                                num_streams,
+                                device,
                             )
                         else:
                             for branch_id in range(num_branches):
                                 is_skipped = (
                                     weight_threshold > 0
-                                    and mean_weights[branch_id].item() < weight_threshold
+                                    and mean_weights[branch_id].item()
+                                    < weight_threshold
                                 )
                                 if fused_energy_grad:
                                     e = _predict_branch_energy_only_decoder(
@@ -1462,27 +1469,29 @@ def run_fused_inference(
                                 else:
                                     is_last = branch_id == num_branches - 1
                                     e, f = _predict_branch_energy_forces_decoder(
-                                        _base_model, batch, encoded_feats, branch_id,
+                                        _base_model,
+                                        batch,
+                                        encoded_feats,
+                                        branch_id,
                                         retain_graph=not is_last,
                                     )
                                     energy_preds.append(e)
                                     forces_preds.append(f)
                     else:
                         if use_parallel_streams and not fused_energy_grad:
-                            energy_preds, forces_preds = (
-                                _run_branches_parallel_streams(
-                                    model,
-                                    batch,
-                                    num_branches,
-                                    num_streams,
-                                    device,
-                                )
+                            energy_preds, forces_preds = _run_branches_parallel_streams(
+                                model,
+                                batch,
+                                num_branches,
+                                num_streams,
+                                device,
                             )
                         else:
                             for branch_id in range(num_branches):
                                 is_skipped = (
                                     weight_threshold > 0
-                                    and mean_weights[branch_id].item() < weight_threshold
+                                    and mean_weights[branch_id].item()
+                                    < weight_threshold
                                 )
                                 if fused_energy_grad:
                                     e = _predict_branch_energy_only(
@@ -1504,7 +1513,9 @@ def run_fused_inference(
                                 else:
                                     is_last = branch_id == num_branches - 1
                                     e, f = _predict_branch_energy_forces(
-                                        model, batch, branch_id,
+                                        model,
+                                        batch,
+                                        branch_id,
                                         retain_graph=not is_last,
                                     )
                                     energy_preds.append(e)
