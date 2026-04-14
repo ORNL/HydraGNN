@@ -12,10 +12,13 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 <img src="images/HydraGNN-Overview.png" alt="HydraGNN Overview" width="1100" />
 
 - **Multi-headed Prediction** for graph and node-level properties  
-- **Distributed Data Parallelism** at supercomputing level
+- **Distributed Training** via DDP, FSDP (v1/v2), and DeepSpeed at supercomputing scale
 - **Convolutional Layers** as a hyperparameter  
-- **Geometric Equivariance** in convolution and prediction  
-- **Global Attention**
+- **Geometric Equivariance** in convolution and prediction (EGNN, PaiNN, PNAEq, MACE, DimeNet)
+- **Global Attention** (GPS)
+- **Multiple Precision Training** (FP32, BF16, FP64)
+- **Machine-Learned Interatomic Potentials** with energy-conserving force prediction
+- **Gradient Checkpointing** for memory-efficient training
 
 ### Optional graph-level conditioning
 - Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning` (off by default) and choose mode via `graph_attr_conditioning_mode` (`"concat_node"` default, `"film"`, or `"fuse_pool"`).
@@ -88,10 +91,10 @@ Or, simply type the following in the HydraGNN directory:
 export PYTHONPATH=$PWD:$PYTHONPATH
 ```
 
-Alternatively, if you have no plane to update, you can install
+Alternatively, if you have no plan to update, you can install
 HydraGNN in your python tree as a static package:
 ```bash
-python setup.py install
+python -m pip install .
 ```
 
 ## Quick Start
@@ -160,8 +163,9 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
     - `["global_attn_heads"]`
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["hidden_dim"]`  
-      Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None" 
-            
+      Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
+    - `["enable_interatomic_potential"]`  
+      Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
 
   - `["Variables of Interest"]`
     - `["input_node_features"]`  
@@ -182,6 +186,10 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Examples: `2e-3`, `0.005` (float)
     - `["compute_grad_energy"]`  
       Use the gradient of energy to predict forces (bool)
+    - `["precision"]`  
+      Training precision: `"fp32"`, `"bf16"`, `"fp64"` (str, default `"fp32"`)
+    - `["conv_checkpointing"]`  
+      Enable gradient checkpointing to reduce memory usage (bool, default `false`)
 
 
 ### Citations

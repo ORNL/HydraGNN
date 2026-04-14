@@ -95,7 +95,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 #### Static Installation
 ```bash
 # For production environments
-python setup.py install
+python -m pip install .
 ```
 
 ### Verification
@@ -103,6 +103,16 @@ python setup.py install
 Test your installation:
 ```bash
 python -c "import hydragnn; print('HydraGNN installed successfully')"
+```
+
+### DOE Supercomputer Installation
+
+Tested installation scripts are provided for major leadership-class machines in the `installation_DOE_supercomputers/` directory:
+
+- **Frontier** (AMD, ROCm 6.4 and 7.1)
+- **Aurora** (Intel XPU)
+- **Perlmutter** (NVIDIA)
+- **Andes** (NVIDIA)
 ```
 
 ---
@@ -196,6 +206,15 @@ For materials datasets with varying compositions:
     }
 }
 ```
+
+#### Energy Linear Regression
+A preprocessing tool for computing element-wise energy linear regression baselines before training:
+```bash
+# Example usage
+cd examples/multidataset
+python energy_linear_regression.py --notestset OMat24
+```
+The regression coefficients are stored in the ADIOS dataset under `energy_linear_regression_coeff`.
 
 ### Custom Data Preprocessing
 
@@ -520,6 +539,8 @@ HydraGNN provides a complete training pipeline with extensive configuration opti
             "num_epoch": 100,
             "batch_size": 32,
             "loss_function_type": "mse",
+            "precision": "fp32",
+            "conv_checkpointing": false,
             "EarlyStopping": true,
             "patience": 10,
             "Optimizer": {
@@ -582,6 +603,34 @@ export MIOPEN_DISABLE_CACHE=1
 
 ### Advanced Training Features
 
+#### Precision Control
+
+HydraGNN supports multiple training precisions:
+
+- **`"fp32"`** (default): Standard single-precision training.
+- **`"bf16"`**: Mixed-precision with BF16 compute and FP32 master parameters, using `torch.autocast`.
+- **`"fp64"`**: Double-precision training for high-accuracy applications.
+
+```json
+{
+    "Training": {
+        "precision": "bf16"
+    }
+}
+```
+
+#### Gradient Checkpointing
+
+Enable activation recomputation to reduce GPU memory at the cost of extra compute:
+
+```json
+{
+    "Training": {
+        "conv_checkpointing": true
+    }
+}
+```
+
 #### Loss Function Options
 
 ```json
@@ -607,14 +656,22 @@ scheduler = ReduceLROnPlateau(
 )
 ```
 
-#### Gradient Computation for Forces
+#### Machine-Learned Interatomic Potentials (MLIP)
+
+HydraGNN supports energy-conserving interatomic potential workflows. When enabled, the model dynamically constructs the radius graph at each forward pass and computes forces as the negative gradient of predicted energy with respect to atomic positions.
 
 ```json
 {
+    "Architecture": {
+        "enable_interatomic_potential": true
+    },
     "Training": {
-        "compute_grad_energy": true  // Compute forces from energy gradients
+        "compute_grad_energy": true
     }
 }
+```
+
+With `enable_interatomic_potential`, the training loss includes energy, per-atom energy, and force components. Set `compute_grad_energy` to `true` to derive forces via automatic differentiation of the energy prediction.
 ```
 
 ### Training Execution
@@ -804,15 +861,25 @@ python examples/multibranch/train.py \
 
 ### Hyperparameter Optimization
 
-#### Ray Tune Integration
+HydraGNN supports HPO through **DeepHyper** (distributed, scalable) and **Optuna** (TPE, random, CMA-ES samplers). Both are optional dependencies (see `requirements-optional.txt`).
 
-```python
-# HPO configuration example
-from hydragnn.utils.hpo import run_hpo
+#### DeepHyper
 
-# Run hyperparameter optimization
-run_hpo(config_file="hpo_config.json")
+```bash
+# Example: multi-dataset HPO with DeepHyper
+cd examples/multidataset_hpo
+python gfm_deephyper_multi.py
 ```
+
+#### Optuna
+
+```bash
+# Example: QM9 HPO with Optuna
+cd examples/qm9_hpo
+python qm9_optuna.py
+```
+
+See the `examples/qm9_hpo/`, `examples/multidataset_hpo/`, and `examples/multidataset_hpo_sc26/` directories for working HPO examples.
 
 ### Global Attention with Transformers
 
@@ -832,7 +899,13 @@ run_hpo(config_file="hpo_config.json")
 
 ### Geometric Equivariance
 
-#### EGNN for Equivariant Predictions
+Several architectures support geometric equivariance:
+
+- **EGNN**: E(n)-equivariant GNN (also supports periodic boundary conditions)
+- **PaiNN**: Equivariant message passing with scalar and vector channels
+- **PNAEq**: Equivariant variant of PNA
+- **MACE**: E(3)-equivariant multi-atomic cluster expansion
+- **DimeNet**: Directional message passing with angular information
 
 ```json
 {
@@ -844,6 +917,8 @@ run_hpo(config_file="hpo_config.json")
     }
 }
 ```
+
+Equivariance is automatically configured based on the selected `mpnn_type`.
 
 ---
 
@@ -1064,9 +1139,9 @@ opt = {"preload": True, "shmem": True}
 
 **Solutions**:
 ```python
-# Validate configuration
-from hydragnn.utils.input_config_parsing.config_utils import validate_config
-validate_config(config)
+# Update configuration with defaults for missing fields
+from hydragnn.utils.input_config_parsing.config_utils import update_config
+update_config(config, train_loader, val_loader, test_loader)
 
 # Check required fields
 required_fields = ["Dataset", "NeuralNetwork", "Verbosity"]
@@ -1134,8 +1209,9 @@ timer.stop()
 
 | Dataset Type | Recommended Architecture | Key Parameters |
 |--------------|-------------------------|----------------|
-| Molecules | EGNN, SchNet, PAINN | equivariance=true |
-| Crystals | CGCNN, MACE | periodic_boundary_conditions=true |
+| Molecules | EGNN, SchNet, PaiNN, DimeNet | equivariance=true |
+| Crystals | CGCNN, MACE, EGNN | periodic_boundary_conditions=true |
+| Interatomic Potentials | MACE, PaiNN, SchNet | enable_interatomic_potential=true |
 | General | PNA, PNAPlus | Balanced performance |
 | Large graphs | GPS with attention | global_attn_engine="GPS" |
 
@@ -1264,5 +1340,5 @@ HydraGNN continues to evolve with new features and optimizations. Stay updated w
 
 ---
 
-*Last updated: [Current Date]*
-*Version: Compatible with HydraGNN v1.x*
+*Last updated: April 2026*
+*Version: Compatible with HydraGNN v4.0*
