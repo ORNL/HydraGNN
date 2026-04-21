@@ -52,6 +52,14 @@
             "checkpoint_warmup": 1,
             "continue": 0,
             "startfrom": "existing_model",
+            "DomainLoss": {
+                "enabled": true,
+                "smoothness_weight": 0.001,
+                "transformer_smoothness_weight": 0.001,
+                "voltage_bound_weight": 0.01,
+                "voltage_bound_feature_indices": [2, 3],
+                "voltage_output_index": -1
+            },
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 1e-3

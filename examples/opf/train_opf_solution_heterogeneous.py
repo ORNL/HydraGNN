@@ -20,6 +20,7 @@ import os
 import json
 import logging
 import argparse
+import copy
 import shutil
 import subprocess
 import sys
@@ -116,9 +117,11 @@ from hydragnn.utils.input_config_parsing.config_utils import update_config
 
 from opf_solution_utils import (
     EdgeAttrDatasetAdapter,
+    OPFEnhancedModelWrapper,
     HeteroFromHomogeneousDataset,
     NodeBatchAdapter,
     NodeTargetDatasetAdapter,
+    OPFDomainLoss,
     assemble_edge_attr,
     build_solution_target as _build_solution_target,
     compute_pna_deg_for_hetero_dataset,
@@ -542,6 +545,73 @@ if __name__ == "__main__":
     parser.add_argument("--num_conv_layers", type=int, default=None)
     parser.add_argument("--learning_rate", type=float, default=None)
     parser.add_argument("--log", type=str, default=None)
+    domain_group = parser.add_mutually_exclusive_group()
+    domain_group.add_argument(
+        "--enable_domain_loss",
+        action="store_true",
+        help="Enable OPF domain-informed auxiliary loss regardless of config default.",
+    )
+    domain_group.add_argument(
+        "--disable_domain_loss",
+        action="store_true",
+        help="Disable OPF domain-informed auxiliary loss regardless of config default.",
+    )
+    parser.add_argument(
+        "--domain_loss_smoothness_weight",
+        type=float,
+        default=None,
+        help="Override DomainLoss.smoothness_weight.",
+    )
+    parser.add_argument(
+        "--domain_loss_transformer_smoothness_weight",
+        type=float,
+        default=None,
+        help="Override DomainLoss.transformer_smoothness_weight.",
+    )
+    parser.add_argument(
+        "--domain_loss_voltage_bound_weight",
+        type=float,
+        default=None,
+        help="Override DomainLoss.voltage_bound_weight.",
+    )
+    parser.add_argument(
+        "--domain_loss_voltage_bound_feature_indices",
+        nargs=2,
+        type=int,
+        default=None,
+        metavar=("VMIN_IDX", "VMAX_IDX"),
+        help="Override DomainLoss.voltage_bound_feature_indices.",
+    )
+    parser.add_argument(
+        "--domain_loss_voltage_output_index",
+        type=int,
+        default=None,
+        help="Override DomainLoss.voltage_output_index (index of Vm in bus_pred; default 1).",
+    )
+    parser.add_argument(
+        "--domain_loss_va_output_index",
+        type=int,
+        default=None,
+        help="Override DomainLoss.va_output_index (index of Va in bus_pred; default 0).",
+    )
+    parser.add_argument(
+        "--domain_loss_angle_diff_weight",
+        type=float,
+        default=None,
+        help="Override DomainLoss.angle_diff_weight (angle-difference-limit penalty).",
+    )
+    parser.add_argument(
+        "--domain_loss_line_flow_weight",
+        type=float,
+        default=None,
+        help="Override DomainLoss.line_flow_weight (DC thermal-limit penalty).",
+    )
+    parser.add_argument(
+        "--domain_loss_ema_momentum",
+        type=float,
+        default=None,
+        help="Override DomainLoss.ema_momentum for per-term EMA normalization (default 0.1).",
+    )
     parser.add_argument(
         "--nvme",
         action="store_true",
@@ -584,6 +654,33 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
+
+    training_config = config.setdefault("NeuralNetwork", {}).setdefault("Training", {})
+
+    # Apply CLI overrides for domain loss.  Any CLI flag takes precedence over
+    # whatever is stored in the input config.
+    _domain_cli_overrides = {
+        "enabled": True if args.enable_domain_loss else (False if args.disable_domain_loss else None),
+        "smoothness_weight": args.domain_loss_smoothness_weight,
+        "transformer_smoothness_weight": args.domain_loss_transformer_smoothness_weight,
+        "voltage_bound_weight": args.domain_loss_voltage_bound_weight,
+        "voltage_bound_feature_indices": (
+            list(args.domain_loss_voltage_bound_feature_indices)
+            if args.domain_loss_voltage_bound_feature_indices is not None
+            else None
+        ),
+        "voltage_output_index": args.domain_loss_voltage_output_index,
+        "va_output_index": args.domain_loss_va_output_index,
+        "angle_diff_weight": args.domain_loss_angle_diff_weight,
+        "line_flow_weight": args.domain_loss_line_flow_weight,
+        "ema_momentum": args.domain_loss_ema_momentum,
+    }
+    if any(v is not None for v in _domain_cli_overrides.values()):
+        domain_loss_config = copy.deepcopy(training_config.get("DomainLoss", {}))
+        for key, val in _domain_cli_overrides.items():
+            if val is not None:
+                domain_loss_config[key] = val
+        training_config["DomainLoss"] = domain_loss_config
 
     raw_edge_dim = arch_config.get("edge_dim")
     if isinstance(raw_edge_dim, dict):
@@ -1230,6 +1327,28 @@ if __name__ == "__main__":
         metadata=metadata,
         node_input_dims=node_input_dims,
     )
+
+    domain_loss_config = config["NeuralNetwork"]["Training"].get("DomainLoss")
+    if domain_loss_config is not None:
+        dl_enabled = domain_loss_config.get("enabled", False)
+        if rank == 0:
+            info(
+                f"[DomainLoss] config (enabled={dl_enabled}): "
+                + ", ".join(
+                    f"{k}={v}"
+                    for k, v in domain_loss_config.items()
+                    if k != "enabled"
+                )
+            )
+        if dl_enabled and rank == 0:
+            info("[DomainLoss] Wrapping model with OPFEnhancedModelWrapper.")
+        model = OPFEnhancedModelWrapper(
+            model,
+            OPFDomainLoss(
+                domain_loss_config,
+                node_target_type=args.node_target_type,
+            ),
+        )
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
