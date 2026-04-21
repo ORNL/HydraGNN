@@ -1,13 +1,255 @@
 """Shared utilities for OPF solution workflows (heterogeneous and homogeneous)."""
 
+import copy
 import logging
 import torch
 import torch.distributed as dist
+import torch.nn.functional as F
 from torch_geometric.utils import degree
 
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
+
+
+class OPFDomainLoss:
+    """Domain-informed regularization for OPF bus-level targets.
+
+    First-stage penalties (bus outputs only):
+      - smoothness_weight              : L2 smoothness of bus predictions across ac_line edges.
+      - transformer_smoothness_weight  : Same across transformer edges.
+      - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
+      - angle_diff_weight              : Penalty for predicted Va angle-difference outside line [theta_min, theta_max].
+      - line_flow_weight               : Penalty for DC-approximate branch flow (DeltaVa / x_ij) exceeding rate_a.
+
+    Each raw penalty is normalized by a per-term exponential moving average (EMA)
+    before the weight is applied.  This keeps every term near unit scale and makes
+    the weights directly comparable to the task loss, regardless of the raw
+    physical magnitudes (radians, per-unit power, etc.).
+      - ema_momentum  (default 0.1): EMA decay.  Smaller = slower adaptation.
+
+    Feature-index conventions (derived from the gridopt/PyG OPFDataset schema):
+      bus targets  : [Va (0), Vm (1)]
+      ac_line attrs: [theta_min(0), theta_max(1), r_from(2), r_to(3), b_sh(4), x(5), rate_a(6), ...]
+      transformer  : [theta_min(0), theta_max(1), r(2), x(3), rate_a(4), ...]
+    """
+
+    def __init__(self, config: dict | None = None, node_target_type: str = "bus"):
+        cfg = copy.deepcopy(config or {})
+        self.enabled = bool(cfg.get("enabled", False))
+        self.node_target_type = node_target_type
+        self.smoothness_weight = float(cfg.get("smoothness_weight", 0.0))
+        self.transformer_smoothness_weight = float(
+            cfg.get("transformer_smoothness_weight", self.smoothness_weight)
+        )
+        self.voltage_bound_weight = float(cfg.get("voltage_bound_weight", 0.0))
+        self.voltage_bound_feature_indices = cfg.get(
+            "voltage_bound_feature_indices", None
+        )
+        # vm_output_index: index in bus_pred corresponding to voltage magnitude (Vm).
+        # Default is 1 — bus targets are [Va, Vm] in the OPFDataset schema.
+        self.voltage_output_index = int(cfg.get("voltage_output_index", 1))
+        # va_output_index: index in bus_pred corresponding to voltage angle (Va).
+        self.va_output_index = int(cfg.get("va_output_index", 0))
+        self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
+        self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
+        # EMA state for per-term scale normalization.
+        self._ema_momentum = float(cfg.get("ema_momentum", 0.1))
+        self._penalty_ema: dict[str, float] = {}
+
+        if self.voltage_bound_feature_indices is not None:
+            if len(self.voltage_bound_feature_indices) != 2:
+                raise RuntimeError(
+                    "DomainLoss.voltage_bound_feature_indices must be [vmin_idx, vmax_idx]."
+                )
+            self.voltage_bound_feature_indices = tuple(
+                int(v) for v in self.voltage_bound_feature_indices
+            )
+
+
+    def _normalize(self, name: str, raw: torch.Tensor) -> torch.Tensor:
+        """Normalize *raw* by its EMA so that the effective scale ≈ 1.0 on average.
+
+        On the first call the EMA is seeded with the raw value, returning 1.0
+        (or near-1.0 for non-zero values).  Subsequent calls use the smoothed
+        estimate so the normalization adapts gradually as training progresses.
+        """
+        val = float(raw.detach())
+        if name not in self._penalty_ema:
+            # Seed: ema = raw value, normalized output = 1.0 on first step.
+            self._penalty_ema[name] = max(val, 1e-8)
+        else:
+            m = self._ema_momentum
+            self._penalty_ema[name] = max(
+                m * val + (1.0 - m) * self._penalty_ema[name], 1e-8
+            )
+        return raw / self._penalty_ema[name]
+
+    @staticmethod
+    def _edge_smoothness(node_pred, edge_index):
+        if edge_index is None or edge_index.numel() == 0:
+            return node_pred.new_zeros(())
+        src, dst = edge_index
+        return (node_pred[src] - node_pred[dst]).pow(2).mean()
+
+    def __call__(self, pred, value, head_index, data):
+        if not self.enabled or data is None:
+            return value.new_zeros(()), {}
+
+        if self.node_target_type != "bus":
+            return value.new_zeros(()), {}
+        if not hasattr(data, "node_types") or "bus" not in data.node_types:
+            return value.new_zeros(()), {}
+        if len(pred) == 0:
+            return value.new_zeros(()), {}
+
+        bus_pred = pred[0]
+        if bus_pred.dim() == 1:
+            bus_pred = bus_pred.unsqueeze(-1)
+        bus_true = value[head_index[0]]
+        if bus_true.shape != bus_pred.shape:
+            bus_true = bus_true.reshape_as(bus_pred)
+        bus_true = bus_true.to(bus_pred.device)
+
+        total_penalty = bus_pred.new_zeros(())
+        metrics = {}
+
+        if (
+            self.smoothness_weight > 0.0
+            and ("bus", "ac_line", "bus") in data.edge_types
+        ):
+            ac_penalty = self._edge_smoothness(
+                bus_pred,
+                data["bus", "ac_line", "bus"].edge_index,
+            )
+            total_penalty = total_penalty + self.smoothness_weight * self._normalize("ac_smoothness", ac_penalty)
+            metrics["opf_ac_smoothness"] = ac_penalty.detach()
+
+        if (
+            self.transformer_smoothness_weight > 0.0
+            and ("bus", "transformer", "bus") in data.edge_types
+        ):
+            tr_penalty = self._edge_smoothness(
+                bus_pred,
+                data["bus", "transformer", "bus"].edge_index,
+            )
+            total_penalty = (
+                total_penalty + self.transformer_smoothness_weight * self._normalize("tr_smoothness", tr_penalty)
+            )
+            metrics["opf_transformer_smoothness"] = tr_penalty.detach()
+
+        if (
+            self.voltage_bound_weight > 0.0
+            and self.voltage_bound_feature_indices is not None
+            and hasattr(data["bus"], "x")
+        ):
+            vmin_idx, vmax_idx = self.voltage_bound_feature_indices
+            bus_x = data["bus"].x
+            if bus_x.dim() >= 2 and bus_x.shape[1] > max(vmin_idx, vmax_idx):
+                lower = bus_x[:, vmin_idx].reshape(-1)
+                upper = bus_x[:, vmax_idx].reshape(-1)
+                voltage = bus_pred[:, self.voltage_output_index].reshape(-1)
+                bound_penalty = torch.mean(
+                    F.relu(lower - voltage).pow(2)
+                    + F.relu(voltage - upper).pow(2)
+                )
+                total_penalty = (
+                    total_penalty + self.voltage_bound_weight * self._normalize("voltage_bound", bound_penalty)
+                )
+                metrics["opf_voltage_bound"] = bound_penalty.detach()
+
+        # ── Angle difference limit penalty ──────────────────────────────────
+        # Penalise predicted Va angle-differences that violate per-line bounds.
+        #   ac_line  edge_attr: [theta_min(0), theta_max(1), ...]
+        #   transformer edge_attr: [theta_min(0), theta_max(1), ...]
+        if self.angle_diff_weight > 0.0 and bus_pred.shape[-1] > self.va_output_index:
+            Va = bus_pred[:, self.va_output_index].reshape(-1)
+            for rel, rel_tag in [
+                (("bus", "ac_line", "bus"), "ac"),
+                (("bus", "transformer", "bus"), "tr"),
+            ]:
+                if rel not in data.edge_types:
+                    continue
+                ea = getattr(data[rel], "edge_attr", None)
+                ei = getattr(data[rel], "edge_index", None)
+                if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] < 2:
+                    continue
+                theta_min = ea[:, 0].to(Va.device)
+                theta_max = ea[:, 1].to(Va.device)
+                src, dst = ei
+                delta_theta = Va[src] - Va[dst]
+                angdiff_p = torch.mean(
+                    F.relu(delta_theta - theta_max).pow(2)
+                    + F.relu(theta_min - delta_theta).pow(2)
+                )
+                total_penalty = total_penalty + self.angle_diff_weight * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
+
+        # ── DC thermal limit penalty ─────────────────────────────────────────
+        # Penalise approximate DC branch flows that exceed the thermal limit.
+        #   P_ij = (Va_i - Va_j) / x_ij   (DC power flow approximation)
+        #   ac_line:     x = edge_attr[:,5], rate_a = edge_attr[:,6]
+        #   transformer: x = edge_attr[:,3], rate_a = edge_attr[:,4]
+        if self.line_flow_weight > 0.0 and bus_pred.shape[-1] > self.va_output_index:
+            Va = bus_pred[:, self.va_output_index].reshape(-1)
+            for rel, x_idx, ra_idx, rel_tag in [
+                (("bus", "ac_line", "bus"),    5, 6, "ac"),
+                (("bus", "transformer", "bus"), 3, 4, "tr"),
+            ]:
+                if rel not in data.edge_types:
+                    continue
+                ea = getattr(data[rel], "edge_attr", None)
+                ei = getattr(data[rel], "edge_index", None)
+                if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(x_idx, ra_idx):
+                    continue
+                x_ij   = ea[:, x_idx].to(Va.device).clamp(min=1e-6)
+                rate_a = ea[:, ra_idx].to(Va.device).clamp(min=0.0)
+                src, dst = ei
+                P_ij = (Va[src] - Va[dst]) / x_ij
+                flow_p = torch.mean(F.relu(P_ij.abs() - rate_a).pow(2))
+                total_penalty = total_penalty + self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
+
+        metrics["opf_domain_total"] = total_penalty.detach()
+        return total_penalty, metrics
+
+
+class OPFEnhancedModelWrapper(torch.nn.Module):
+    """Compose OPF-specific auxiliary loss around an existing HydraGNN model."""
+
+    def __init__(self, original_model, domain_loss: OPFDomainLoss):
+        super().__init__()
+        self.model = original_model
+        self.domain_loss = domain_loss
+        self._last_batch = None
+        self.last_extra_loss_metrics = {}
+
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.model, name)
+
+    def forward(self, data):
+        self._last_batch = data
+        return self.model(data)
+
+    def loss(self, pred, value, head_index):
+        total_loss, tasks_loss = self.model.loss(pred, value, head_index)
+        if self._last_batch is None:
+            info(
+                "[OPFEnhancedModelWrapper] loss() called before forward(); "
+                "domain penalty will be zero for this batch.",
+                logtype="warning",
+            )
+        extra_loss, extra_metrics = self.domain_loss(
+            pred,
+            value,
+            head_index,
+            self._last_batch,
+        )
+        self.last_extra_loss_metrics = extra_metrics
+        return total_loss + extra_loss, tasks_loss
 
 
 def build_solution_target(data, node_target_type: str):
