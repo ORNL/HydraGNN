@@ -613,6 +613,18 @@ if __name__ == "__main__":
         help="Override DomainLoss.ema_momentum for per-term EMA normalization (default 0.1).",
     )
     parser.add_argument(
+        "--domain_loss_warmup_epochs",
+        type=int,
+        default=None,
+        help="Override DomainLoss.warmup_epochs: epochs with zero domain-loss weight (default 0).",
+    )
+    parser.add_argument(
+        "--domain_loss_ramp_epochs",
+        type=int,
+        default=None,
+        help="Override DomainLoss.ramp_epochs: epochs to linearly ramp from 0 to full weight (default 0).",
+    )
+    parser.add_argument(
         "--nvme",
         action="store_true",
         help="Stage selected OPF case(s) onto node-local NVMe/scratch if available",
@@ -674,6 +686,8 @@ if __name__ == "__main__":
         "angle_diff_weight": args.domain_loss_angle_diff_weight,
         "line_flow_weight": args.domain_loss_line_flow_weight,
         "ema_momentum": args.domain_loss_ema_momentum,
+        "warmup_epochs": args.domain_loss_warmup_epochs,
+        "ramp_epochs": args.domain_loss_ramp_epochs,
     }
     if any(v is not None for v in _domain_cli_overrides.values()):
         domain_loss_config = copy.deepcopy(training_config.get("DomainLoss", {}))
