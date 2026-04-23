@@ -2,6 +2,7 @@
 
 import copy
 import logging
+import os
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -27,6 +28,14 @@ class OPFDomainLoss:
     the weights directly comparable to the task loss, regardless of the raw
     physical magnitudes (radians, per-unit power, etc.).
       - ema_momentum  (default 0.1): EMA decay.  Smaller = slower adaptation.
+
+    Curriculum scheduling: domain-loss weights are ramped up gradually so the
+    model first converges on the task loss before physics constraints are enforced.
+      - warmup_epochs  (default 0): epochs with zero domain-loss weight.
+      - ramp_epochs    (default 0): epochs over which weights linearly increase
+                                    from 0 to their configured values.
+    Example: warmup_epochs=3, ramp_epochs=3 with num_epoch=10 means:
+      epochs 0-2: no domain loss, epochs 3-5: linear ramp, epochs 6-9: full weight.
 
     Feature-index conventions (derived from the gridopt/PyG OPFDataset schema):
       bus targets  : [Va (0), Vm (1)]
@@ -56,6 +65,9 @@ class OPFDomainLoss:
         # EMA state for per-term scale normalization.
         self._ema_momentum = float(cfg.get("ema_momentum", 0.1))
         self._penalty_ema: dict[str, float] = {}
+        # Curriculum scheduling.
+        self.warmup_epochs = int(cfg.get("warmup_epochs", 0))
+        self.ramp_epochs = int(cfg.get("ramp_epochs", 0))
 
         if self.voltage_bound_feature_indices is not None:
             if len(self.voltage_bound_feature_indices) != 2:
@@ -66,6 +78,28 @@ class OPFDomainLoss:
                 int(v) for v in self.voltage_bound_feature_indices
             )
 
+
+    def _curriculum_scale(self) -> float:
+        """Return a [0, 1] multiplier for domain-loss weights based on current epoch.
+
+        Reads os.environ["HYDRAGNN_EPOCH"] set by the HydraGNN training loop each
+        epoch — no changes to shared training code are needed.
+          - epoch < warmup_epochs          -> 0.0  (task-loss only)
+          - warmup_epochs <= epoch < warmup + ramp -> linear ramp 0.0 -> 1.0
+          - epoch >= warmup + ramp_epochs  -> 1.0  (full weight)
+        """
+        if self.warmup_epochs == 0 and self.ramp_epochs == 0:
+            return 1.0
+        try:
+            epoch = int(os.environ.get("HYDRAGNN_EPOCH", "0"))
+        except (ValueError, TypeError):
+            return 1.0
+        if epoch < self.warmup_epochs:
+            return 0.0
+        if self.ramp_epochs <= 0:
+            return 1.0
+        progress = (epoch - self.warmup_epochs) / self.ramp_epochs
+        return float(min(progress, 1.0))
 
     def _normalize(self, name: str, raw: torch.Tensor) -> torch.Tensor:
         """Normalize *raw* by its EMA so that the effective scale ≈ 1.0 on average.
@@ -113,6 +147,12 @@ class OPFDomainLoss:
 
         total_penalty = bus_pred.new_zeros(())
         metrics = {}
+        curriculum = self._curriculum_scale()
+        metrics["opf_curriculum_scale"] = torch.tensor(curriculum)
+
+        if curriculum == 0.0:
+            metrics["opf_domain_total"] = total_penalty.detach()
+            return total_penalty, metrics
 
         if (
             self.smoothness_weight > 0.0
@@ -122,7 +162,7 @@ class OPFDomainLoss:
                 bus_pred,
                 data["bus", "ac_line", "bus"].edge_index,
             )
-            total_penalty = total_penalty + self.smoothness_weight * self._normalize("ac_smoothness", ac_penalty)
+            total_penalty = total_penalty + curriculum * self.smoothness_weight * self._normalize("ac_smoothness", ac_penalty)
             metrics["opf_ac_smoothness"] = ac_penalty.detach()
 
         if (
@@ -134,7 +174,7 @@ class OPFDomainLoss:
                 data["bus", "transformer", "bus"].edge_index,
             )
             total_penalty = (
-                total_penalty + self.transformer_smoothness_weight * self._normalize("tr_smoothness", tr_penalty)
+                total_penalty + curriculum * self.transformer_smoothness_weight * self._normalize("tr_smoothness", tr_penalty)
             )
             metrics["opf_transformer_smoothness"] = tr_penalty.detach()
 
@@ -154,7 +194,7 @@ class OPFDomainLoss:
                     + F.relu(voltage - upper).pow(2)
                 )
                 total_penalty = (
-                    total_penalty + self.voltage_bound_weight * self._normalize("voltage_bound", bound_penalty)
+                    total_penalty + curriculum * self.voltage_bound_weight * self._normalize("voltage_bound", bound_penalty)
                 )
                 metrics["opf_voltage_bound"] = bound_penalty.detach()
 
@@ -182,7 +222,7 @@ class OPFDomainLoss:
                     F.relu(delta_theta - theta_max).pow(2)
                     + F.relu(theta_min - delta_theta).pow(2)
                 )
-                total_penalty = total_penalty + self.angle_diff_weight * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                total_penalty = total_penalty + curriculum * self.angle_diff_weight * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
                 metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
 
         # ── DC thermal limit penalty ─────────────────────────────────────────
@@ -207,7 +247,7 @@ class OPFDomainLoss:
                 src, dst = ei
                 P_ij = (Va[src] - Va[dst]) / x_ij
                 flow_p = torch.mean(F.relu(P_ij.abs() - rate_a).pow(2))
-                total_penalty = total_penalty + self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                total_penalty = total_penalty + curriculum * self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
                 metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
 
         metrics["opf_domain_total"] = total_penalty.detach()
