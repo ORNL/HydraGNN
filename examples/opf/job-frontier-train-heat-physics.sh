@@ -22,8 +22,6 @@ MODELNAME=${MODELNAME:-OPF_Solution_Hetero}
 PHYSICS_LOG_NAME=${PHYSICS_LOG_NAME:-opf_heat_hpo_best_physics}
 
 # Domain-loss weights.
-DOMAIN_SMOOTHNESS_WEIGHT=${DOMAIN_SMOOTHNESS_WEIGHT:-0.001}
-DOMAIN_TRANSFORMER_SMOOTHNESS_WEIGHT=${DOMAIN_TRANSFORMER_SMOOTHNESS_WEIGHT:-0.001}
 DOMAIN_VOLTAGE_BOUND_WEIGHT=${DOMAIN_VOLTAGE_BOUND_WEIGHT:-0.01}
 VMIN_IDX=${VMIN_IDX:-2}
 VMAX_IDX=${VMAX_IDX:-3}
@@ -77,9 +75,7 @@ echo "====================================================================="
 echo "  STARTING physics-informed run"
 echo "  INPUTFILE=$INPUTFILE  MODELNAME=$MODELNAME  LOG=$PHYSICS_LOG_NAME"
 echo "  $(date)"
-echo "  Penalties: smoothness=$DOMAIN_SMOOTHNESS_WEIGHT"
-echo "             transformer_smoothness=$DOMAIN_TRANSFORMER_SMOOTHNESS_WEIGHT"
-echo "             voltage_bound=$DOMAIN_VOLTAGE_BOUND_WEIGHT (Vm@idx $DOMAIN_VOLTAGE_OUTPUT_INDEX, [vmin@$VMIN_IDX, vmax@$VMAX_IDX])"
+echo "  Penalties: voltage_bound=$DOMAIN_VOLTAGE_BOUND_WEIGHT (Vm@idx $DOMAIN_VOLTAGE_OUTPUT_INDEX, [vmin@$VMIN_IDX, vmax@$VMAX_IDX])"
 echo "             angle_diff=$DOMAIN_ANGLE_DIFF_WEIGHT (Va@idx $DOMAIN_VA_OUTPUT_INDEX)"
 echo "             line_flow=$DOMAIN_LINE_FLOW_WEIGHT"  echo "  Curriculum: warmup=$DOMAIN_WARMUP_EPOCHS epochs, ramp=$DOMAIN_RAMP_EPOCHS epochs"echo "====================================================================="
 
@@ -92,8 +88,6 @@ srun --export=ALL,HYDRAGNN_DIAG=1,HYDRAGNN_DIAG_RANK=0 \
     --modelname "$MODELNAME" \
     --log "$PHYSICS_LOG_NAME" \
     --enable_domain_loss \
-    --domain_loss_smoothness_weight "$DOMAIN_SMOOTHNESS_WEIGHT" \
-    --domain_loss_transformer_smoothness_weight "$DOMAIN_TRANSFORMER_SMOOTHNESS_WEIGHT" \
     --domain_loss_voltage_bound_weight "$DOMAIN_VOLTAGE_BOUND_WEIGHT" \
     --domain_loss_voltage_bound_feature_indices "$VMIN_IDX" "$VMAX_IDX" \
     --domain_loss_voltage_output_index "$DOMAIN_VOLTAGE_OUTPUT_INDEX" \
