@@ -33,6 +33,10 @@ DOMAIN_VOLTAGE_OUTPUT_INDEX=${DOMAIN_VOLTAGE_OUTPUT_INDEX:-1}
 DOMAIN_VA_OUTPUT_INDEX=${DOMAIN_VA_OUTPUT_INDEX:-0}
 DOMAIN_ANGLE_DIFF_WEIGHT=${DOMAIN_ANGLE_DIFF_WEIGHT:-0.001}
 DOMAIN_LINE_FLOW_WEIGHT=${DOMAIN_LINE_FLOW_WEIGHT:-0.001}
+# Curriculum scheduling: warmup then linear ramp before full domain-loss weight.
+# With num_epoch=10: epochs 0-2 task-loss only, 3-5 linear ramp, 6-9 full weight.
+DOMAIN_WARMUP_EPOCHS=${DOMAIN_WARMUP_EPOCHS:-3}
+DOMAIN_RAMP_EPOCHS=${DOMAIN_RAMP_EPOCHS:-3}
 
 source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm711.sh
 source activate /lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
@@ -77,8 +81,7 @@ echo "  Penalties: smoothness=$DOMAIN_SMOOTHNESS_WEIGHT"
 echo "             transformer_smoothness=$DOMAIN_TRANSFORMER_SMOOTHNESS_WEIGHT"
 echo "             voltage_bound=$DOMAIN_VOLTAGE_BOUND_WEIGHT (Vm@idx $DOMAIN_VOLTAGE_OUTPUT_INDEX, [vmin@$VMIN_IDX, vmax@$VMAX_IDX])"
 echo "             angle_diff=$DOMAIN_ANGLE_DIFF_WEIGHT (Va@idx $DOMAIN_VA_OUTPUT_INDEX)"
-echo "             line_flow=$DOMAIN_LINE_FLOW_WEIGHT"
-echo "====================================================================="
+echo "             line_flow=$DOMAIN_LINE_FLOW_WEIGHT"  echo "  Curriculum: warmup=$DOMAIN_WARMUP_EPOCHS epochs, ramp=$DOMAIN_RAMP_EPOCHS epochs"echo "====================================================================="
 
 srun --export=ALL,HYDRAGNN_DIAG=1,HYDRAGNN_DIAG_RANK=0 \
     -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 \
@@ -96,7 +99,9 @@ srun --export=ALL,HYDRAGNN_DIAG=1,HYDRAGNN_DIAG_RANK=0 \
     --domain_loss_voltage_output_index "$DOMAIN_VOLTAGE_OUTPUT_INDEX" \
     --domain_loss_va_output_index "$DOMAIN_VA_OUTPUT_INDEX" \
     --domain_loss_angle_diff_weight "$DOMAIN_ANGLE_DIFF_WEIGHT" \
-    --domain_loss_line_flow_weight "$DOMAIN_LINE_FLOW_WEIGHT"
+    --domain_loss_line_flow_weight "$DOMAIN_LINE_FLOW_WEIGHT" \
+    --domain_loss_warmup_epochs "$DOMAIN_WARMUP_EPOCHS" \
+    --domain_loss_ramp_epochs "$DOMAIN_RAMP_EPOCHS"
 
 echo ""
 echo "====================================================================="
