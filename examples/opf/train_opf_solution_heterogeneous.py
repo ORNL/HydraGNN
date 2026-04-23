@@ -557,18 +557,6 @@ if __name__ == "__main__":
         help="Disable OPF domain-informed auxiliary loss regardless of config default.",
     )
     parser.add_argument(
-        "--domain_loss_smoothness_weight",
-        type=float,
-        default=None,
-        help="Override DomainLoss.smoothness_weight.",
-    )
-    parser.add_argument(
-        "--domain_loss_transformer_smoothness_weight",
-        type=float,
-        default=None,
-        help="Override DomainLoss.transformer_smoothness_weight.",
-    )
-    parser.add_argument(
         "--domain_loss_voltage_bound_weight",
         type=float,
         default=None,
@@ -673,8 +661,6 @@ if __name__ == "__main__":
     # whatever is stored in the input config.
     _domain_cli_overrides = {
         "enabled": True if args.enable_domain_loss else (False if args.disable_domain_loss else None),
-        "smoothness_weight": args.domain_loss_smoothness_weight,
-        "transformer_smoothness_weight": args.domain_loss_transformer_smoothness_weight,
         "voltage_bound_weight": args.domain_loss_voltage_bound_weight,
         "voltage_bound_feature_indices": (
             list(args.domain_loss_voltage_bound_feature_indices)
