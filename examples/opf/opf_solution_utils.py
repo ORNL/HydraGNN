@@ -16,9 +16,7 @@ def info(*args, logtype="info", sep=" "):
 class OPFDomainLoss:
     """Domain-informed regularization for OPF bus-level targets.
 
-    First-stage penalties (bus outputs only):
-      - smoothness_weight              : L2 smoothness of bus predictions across ac_line edges.
-      - transformer_smoothness_weight  : Same across transformer edges.
+    Feasibility penalties (all zero on any strictly feasible OPF solution):
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
       - angle_diff_weight              : Penalty for predicted Va angle-difference outside line [theta_min, theta_max].
       - line_flow_weight               : Penalty for DC-approximate branch flow (DeltaVa / x_ij) exceeding rate_a.
@@ -47,10 +45,6 @@ class OPFDomainLoss:
         cfg = copy.deepcopy(config or {})
         self.enabled = bool(cfg.get("enabled", False))
         self.node_target_type = node_target_type
-        self.smoothness_weight = float(cfg.get("smoothness_weight", 0.0))
-        self.transformer_smoothness_weight = float(
-            cfg.get("transformer_smoothness_weight", self.smoothness_weight)
-        )
         self.voltage_bound_weight = float(cfg.get("voltage_bound_weight", 0.0))
         self.voltage_bound_feature_indices = cfg.get(
             "voltage_bound_feature_indices", None
@@ -119,13 +113,6 @@ class OPFDomainLoss:
             )
         return raw / self._penalty_ema[name]
 
-    @staticmethod
-    def _edge_smoothness(node_pred, edge_index):
-        if edge_index is None or edge_index.numel() == 0:
-            return node_pred.new_zeros(())
-        src, dst = edge_index
-        return (node_pred[src] - node_pred[dst]).pow(2).mean()
-
     def __call__(self, pred, value, head_index, data):
         if not self.enabled or data is None:
             return value.new_zeros(()), {}
@@ -153,30 +140,6 @@ class OPFDomainLoss:
         if curriculum == 0.0:
             metrics["opf_domain_total"] = total_penalty.detach()
             return total_penalty, metrics
-
-        if (
-            self.smoothness_weight > 0.0
-            and ("bus", "ac_line", "bus") in data.edge_types
-        ):
-            ac_penalty = self._edge_smoothness(
-                bus_pred,
-                data["bus", "ac_line", "bus"].edge_index,
-            )
-            total_penalty = total_penalty + curriculum * self.smoothness_weight * self._normalize("ac_smoothness", ac_penalty)
-            metrics["opf_ac_smoothness"] = ac_penalty.detach()
-
-        if (
-            self.transformer_smoothness_weight > 0.0
-            and ("bus", "transformer", "bus") in data.edge_types
-        ):
-            tr_penalty = self._edge_smoothness(
-                bus_pred,
-                data["bus", "transformer", "bus"].edge_index,
-            )
-            total_penalty = (
-                total_penalty + curriculum * self.transformer_smoothness_weight * self._normalize("tr_smoothness", tr_penalty)
-            )
-            metrics["opf_transformer_smoothness"] = tr_penalty.detach()
 
         if (
             self.voltage_bound_weight > 0.0
