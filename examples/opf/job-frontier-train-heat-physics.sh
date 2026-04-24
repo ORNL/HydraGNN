@@ -22,15 +22,19 @@ MODELNAME=${MODELNAME:-OPF_Solution_Hetero}
 PHYSICS_LOG_NAME=${PHYSICS_LOG_NAME:-opf_heat_hpo_best_physics}
 
 # Domain-loss weights.
-DOMAIN_VOLTAGE_BOUND_WEIGHT=${DOMAIN_VOLTAGE_BOUND_WEIGHT:-0.01}
+# Weights are set to ~10% of the expected converged task loss (~0.009) divided
+# by the number of active penalty terms, so the total physics contribution
+# stays well below the data-driven MSE and acts as a soft regulariser rather
+# than a competing objective.
+DOMAIN_VOLTAGE_BOUND_WEIGHT=${DOMAIN_VOLTAGE_BOUND_WEIGHT:-0.001}
 VMIN_IDX=${VMIN_IDX:-2}
 VMAX_IDX=${VMAX_IDX:-3}
 # voltage_output_index=1: Vm is at bus_pred[:,1] (Va=0, Vm=1 in OPFDataset schema)
 DOMAIN_VOLTAGE_OUTPUT_INDEX=${DOMAIN_VOLTAGE_OUTPUT_INDEX:-1}
 # va_output_index=0: Va is at bus_pred[:,0]
 DOMAIN_VA_OUTPUT_INDEX=${DOMAIN_VA_OUTPUT_INDEX:-0}
-DOMAIN_ANGLE_DIFF_WEIGHT=${DOMAIN_ANGLE_DIFF_WEIGHT:-0.001}
-DOMAIN_LINE_FLOW_WEIGHT=${DOMAIN_LINE_FLOW_WEIGHT:-0.001}
+DOMAIN_ANGLE_DIFF_WEIGHT=${DOMAIN_ANGLE_DIFF_WEIGHT:-0.0001}
+DOMAIN_LINE_FLOW_WEIGHT=${DOMAIN_LINE_FLOW_WEIGHT:-0.0001}
 # Curriculum scheduling: warmup then linear ramp before full domain-loss weight.
 # With num_epoch=10: epochs 0-2 task-loss only, 3-5 linear ramp, 6-9 full weight.
 DOMAIN_WARMUP_EPOCHS=${DOMAIN_WARMUP_EPOCHS:-3}
