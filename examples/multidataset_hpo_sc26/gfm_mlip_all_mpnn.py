@@ -178,6 +178,7 @@ if __name__ == "__main__":
     parser.add_argument("--correlation", type=int, help="correlation", default=None)
     parser.add_argument("--nvme", action="store_true", help="use NVME")
     parser.add_argument("--startfrom", type=str, help="startfrom", default=None)
+    parser.add_argument("--datadir", type=str, help="path to directory containing .bp dataset files", default=None)
 
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -210,7 +211,7 @@ if __name__ == "__main__":
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
-    datadir = os.path.join(dirpwd, "dataset")
+    datadir = args.datadir if args.datadir is not None else os.path.join(dirpwd, "dataset")
     ##################################################################################################################
     input_filename = os.path.join(dirpwd, args.inputfile)
     ##################################################################################################################
@@ -428,9 +429,7 @@ if __name__ == "__main__":
             ndata_list = list()
             pna_deg_list = list()
             for model in modellist:
-                fname = os.path.join(
-                    os.path.dirname(__file__), "./dataset/%s-v2.bp" % model
-                )
+                fname = os.path.join(datadir, "%s-v2.bp" % model)
                 with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
@@ -598,7 +597,7 @@ if __name__ == "__main__":
         local_comm_rank = local_comm.Get_rank()
         local_comm_size = local_comm.Get_size()
 
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s-v2.bp" % mymodel)
+        fname = os.path.join(datadir, "%s-v2.bp" % mymodel)
 
         ## FIXME: only for Frontier NVME
         bbpath = f"/mnt/bb/{os.getenv('USER')}"
@@ -826,9 +825,7 @@ if __name__ == "__main__":
         ## No DDStore. Each process opens multiple adios files.
         filename_list = list()
         for model in modellist:
-            fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s-v2.bp" % model
-            )
+            fname = os.path.join(datadir, "%s-v2.bp" % model)
             filename_list.append(fname)
 
         kwargs = {"var_config": var_config, "keys": common_variable_names}
