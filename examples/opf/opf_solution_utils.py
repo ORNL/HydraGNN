@@ -339,7 +339,9 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             label = _key_labels.get(key, key.removeprefix("opf_"))
             parts.append(f"{label}={mean_val:.8f}")
 
-        logging.info("LossBreakdown " + "  ".join(parts))
+        # Use print rather than logging.info so the line is always visible in
+        # run.log regardless of the logging level configured by HydraGNN.
+        print("0: LossBreakdown " + "  ".join(parts), flush=True)
 
         # Reset accumulators for the next epoch.
         self._epoch_accum.clear()
