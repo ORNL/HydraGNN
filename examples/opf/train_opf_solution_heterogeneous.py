@@ -595,6 +595,15 @@ if __name__ == "__main__":
         help="Override DomainLoss.line_flow_weight (DC thermal-limit penalty).",
     )
     parser.add_argument(
+        "--domain_loss_line_flow_slack",
+        type=float,
+        default=None,
+        help=(
+            "Override DomainLoss.line_flow_slack: tolerance subtracted from rate_a before "
+            "penalising, absorbing DC-approximation linearisation error (default 1e-4)."
+        ),
+    )
+    parser.add_argument(
         "--domain_loss_ema_momentum",
         type=float,
         default=None,
@@ -671,6 +680,7 @@ if __name__ == "__main__":
         "va_output_index": args.domain_loss_va_output_index,
         "angle_diff_weight": args.domain_loss_angle_diff_weight,
         "line_flow_weight": args.domain_loss_line_flow_weight,
+        "line_flow_slack": args.domain_loss_line_flow_slack,
         "ema_momentum": args.domain_loss_ema_momentum,
         "warmup_epochs": args.domain_loss_warmup_epochs,
         "ramp_epochs": args.domain_loss_ramp_epochs,
@@ -1389,6 +1399,15 @@ if __name__ == "__main__":
         precision=precision,
     )
     _diag("Exited train_validate_test")
+
+    # Flush the final epoch's LossBreakdown line.  The wrapper only flushes on
+    # epoch *transitions* detected inside loss(), so the last epoch's stats would
+    # otherwise never be written (no subsequent epoch triggers the flush).
+    if isinstance(model, OPFEnhancedModelWrapper):
+        model._flush_epoch_log(model._last_seen_epoch)
+    elif hasattr(model, "module") and isinstance(model.module, OPFEnhancedModelWrapper):
+        # DDP wraps the model in model.module
+        model.module._flush_epoch_log(model.module._last_seen_epoch)
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])
