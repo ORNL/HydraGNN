@@ -85,3 +85,43 @@ def pytest_examples_grad_forces(example, mpnn_type):
 
     # Check the file ran without error.
     assert return_code == 0
+
+
+@pytest.mark.parametrize(
+    "mpnn_type",
+    [
+        "TemporalGCN",
+        "TemporalGIN",
+        "TemporalGAT",
+        "TemporalSAGE",
+    ],
+)
+@pytest.mark.parametrize(
+    "temporal_mode",
+    ["post_gcn", "pre_gcn"],
+)
+@pytest.mark.mpi_skip()
+def pytest_synthetic_temporal_anomaly_detection(mpnn_type, temporal_mode):
+    """CI test for the self-supervised temporal anomaly detection example.
+
+    Uses a small synthetic signal (400 steps, 6 nodes, 8-step lookback) so
+    the test completes in a few seconds on CPU.
+    """
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "examples", "synthetic_temporal_anomaly_detection"
+    )
+    file_path = os.path.join(path, "synthetic_temporal_anomaly_detection.py")
+    return_code = subprocess.call(
+        [
+            "python",
+            file_path,
+            "--mpnn_type", mpnn_type,
+            "--mode", temporal_mode,
+            "--T", "400",
+            "--num_nodes", "6",
+            "--t_event", "30.0",
+            "--lookback", "8",
+            "--cpu",
+        ]
+    )
+    assert return_code == 0

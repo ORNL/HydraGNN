@@ -1,0 +1,54 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "TemporalGCN",
+            "temporal_backbone": "gru",
+            "temporal_mode": "post_gcn",
+            "temporal_num_layers": 1,
+            "hidden_dim": 32,
+            "num_conv_layers": 2,
+            "max_neighbours": 10,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [32, 16],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0]
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0, 1],
+            "output_names": ["r_next"],
+            "output_index": [0],
+            "output_dim": [1],
+            "type": ["node"],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 30,
+            "perc_train": 0.7,
+            "EarlyStopping": true,
+            "patience": 8,
+            "Checkpoint": true,
+            "checkpoint_warmup": 5,
+            "loss_function_type": "mse",
+            "batch_size": 32,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "use_zero_redundancy": false,
+                "learning_rate": 1e-3
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": true
+    }
+}

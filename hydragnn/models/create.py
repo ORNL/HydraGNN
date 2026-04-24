@@ -18,6 +18,7 @@ import torch_scatter
 
 from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
+from hydragnn.models.GCNStack import GCNStack
 from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.PNAPlusStack import PNAPlusStack
 from hydragnn.models.GATStack import GATStack
@@ -30,6 +31,11 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+from hydragnn.models.TemporalGINStack import TemporalGINStack
+from hydragnn.models.TemporalGCNStack import TemporalGCNStack
+from hydragnn.models.TemporalPNAStack import TemporalPNAStack
+from hydragnn.models.TemporalGATStack import TemporalGATStack
+from hydragnn.models.TemporalSAGEStack import TemporalSAGEStack
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -96,6 +102,10 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        temporal_backbone=config["Architecture"].get("temporal_backbone", "gru"),
+        temporal_hidden_dim=config["Architecture"].get("temporal_hidden_dim", None),
+        temporal_num_layers=config["Architecture"].get("temporal_num_layers", 1),
+        temporal_mode=config["Architecture"].get("temporal_mode", "post_gcn"),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -156,6 +166,10 @@ def create_model(
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    temporal_backbone: str = "gru",
+    temporal_hidden_dim: int = None,
+    temporal_num_layers: int = 1,
+    temporal_mode: str = "post_gcn",
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -168,6 +182,32 @@ def create_model(
     # Note: model-specific inputs must come first.
     if mpnn_type == "GIN":
         model = GINStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
+    elif mpnn_type == "GCN":
+        model = GCNStack(
             "inv_node_feat, equiv_node_feat, edge_index",
             "inv_node_feat, edge_index",
             input_dim,
@@ -580,6 +620,112 @@ def create_model(
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
+
+    elif mpnn_type == "TemporalGIN":
+        model = TemporalGINStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            input_dim, hidden_dim, output_dim, pe_dim,
+            global_attn_engine, global_attn_type, global_attn_heads,
+            output_type, output_heads, activation_function,
+            loss_function_type, equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv, initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers, num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            temporal_backbone=temporal_backbone,
+            temporal_hidden_dim=temporal_hidden_dim,
+            temporal_num_layers=temporal_num_layers,
+            temporal_mode=temporal_mode,
+        )
+
+    elif mpnn_type == "TemporalPNA":
+        assert pna_deg is not None, "TemporalPNA requires degree input."
+        model = TemporalPNAStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            pna_deg, edge_dim,
+            input_dim, hidden_dim, output_dim, pe_dim,
+            global_attn_engine, global_attn_type, global_attn_heads,
+            output_type, output_heads, activation_function,
+            loss_function_type, equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv, initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers, num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            temporal_backbone=temporal_backbone,
+            temporal_hidden_dim=temporal_hidden_dim,
+            temporal_num_layers=temporal_num_layers,
+            temporal_mode=temporal_mode,
+        )
+
+    elif mpnn_type == "TemporalGAT":
+        heads = 6
+        negative_slope = 0.05
+        model = TemporalGATStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            heads, negative_slope, edge_dim,
+            input_dim, hidden_dim, output_dim, pe_dim,
+            global_attn_engine, global_attn_type, global_attn_heads,
+            output_type, output_heads, activation_function,
+            loss_function_type, equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv, initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers, num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            temporal_backbone=temporal_backbone,
+            temporal_hidden_dim=temporal_hidden_dim,
+            temporal_num_layers=temporal_num_layers,
+            temporal_mode=temporal_mode,
+        )
+
+    elif mpnn_type == "TemporalSAGE":
+        model = TemporalSAGEStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            input_dim, hidden_dim, output_dim, pe_dim,
+            global_attn_engine, global_attn_type, global_attn_heads,
+            output_type, output_heads, activation_function,
+            loss_function_type, equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv, initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers, num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            temporal_backbone=temporal_backbone,
+            temporal_hidden_dim=temporal_hidden_dim,
+            temporal_num_layers=temporal_num_layers,
+            temporal_mode=temporal_mode,
+        )
+
+    elif mpnn_type == "TemporalGCN":
+        model = TemporalGCNStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            input_dim, hidden_dim, output_dim, pe_dim,
+            global_attn_engine, global_attn_type, global_attn_heads,
+            output_type, output_heads, activation_function,
+            loss_function_type, equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv, initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers, num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            temporal_backbone=temporal_backbone,
+            temporal_hidden_dim=temporal_hidden_dim,
+            temporal_num_layers=temporal_num_layers,
+            temporal_mode=temporal_mode,
+        )
+
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 

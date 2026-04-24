@@ -147,6 +147,7 @@ def unittest_train_model(
         "PNAPlus": [0.20, 0.20],
         "MFC": [0.20, 0.30],
         "GIN": [0.25, 0.20],
+        "GCN": [0.25, 0.20],
         "GAT": [0.60, 0.70],
         "CGCNN": [0.50, 0.40],
         "SchNet": [0.20, 0.20],
@@ -207,6 +208,7 @@ def unittest_train_model(
     [
         "SAGE",
         "GIN",
+        "GCN",
         "GAT",
         "MFC",
         "PNA",
@@ -293,6 +295,7 @@ def pytest_train_model_vectoroutput(mpnn_type, overwrite_data=False):
     [
         "SAGE",
         "GIN",
+        "GCN",
         "GAT",
         "MFC",
         "PNA",
