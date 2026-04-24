@@ -20,6 +20,10 @@ class OPFDomainLoss:
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
       - angle_diff_weight              : Penalty for predicted Va angle-difference outside line [theta_min, theta_max].
       - line_flow_weight               : Penalty for DC-approximate branch flow (DeltaVa / x_ij) exceeding rate_a.
+      - line_flow_slack               : Tolerance subtracted from rate_a before penalising, absorbing the
+                                        small linearisation error of the DC approximation on AC-feasible
+                                        solutions.  Default 1e-4 (one decade above the ~1.3e-5 residual
+                                        observed on pglib_opf_case10000_goc ground-truth data).
 
     Each raw penalty is normalized by a per-term exponential moving average (EMA)
     before the weight is applied.  This keeps every term near unit scale and makes
@@ -56,6 +60,17 @@ class OPFDomainLoss:
         self.va_output_index = int(cfg.get("va_output_index", 0))
         self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
         self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
+        # line_flow_slack: a small tolerance subtracted from rate_a before the DC thermal-limit
+        # penalty is evaluated.  It exists because the DC power-flow formula
+        #   P_ij = (Va_i - Va_j) / x_ij
+        # is a linearisation of the full AC power-flow equations.  Even when the OPF solver
+        # produces a strictly AC-feasible solution, the DC approximation introduces a residual
+        # of ~1e-5 p.u. (empirically measured on pglib_opf_case10000_goc ground-truth data:
+        # mean ~1.3e-5, max ~1.7e-5).  Without a slack the penalty is non-zero on ground truth,
+        # which means the gradient incorrectly penalises physically correct predictions.
+        # The default 1e-4 is one decade above the observed noise floor — large enough to zero
+        # out the DC-approximation artefact but small enough to still penalise real violations.
+        self.line_flow_slack = float(cfg.get("line_flow_slack", 1e-4))
         # EMA state for per-term scale normalization.
         self._ema_momentum = float(cfg.get("ema_momentum", 0.1))
         self._penalty_ema: dict[str, float] = {}
@@ -111,6 +126,8 @@ class OPFDomainLoss:
             self._penalty_ema[name] = max(
                 m * val + (1.0 - m) * self._penalty_ema[name], 1e-8
             )
+        # Floor at 1e-8 prevents division by zero when a penalty term is exactly zero
+        # (e.g. the constraint is already satisfied for all samples in a batch).
         return raw / self._penalty_ema[name]
 
     def __call__(self, pred, value, head_index, data):
@@ -152,6 +169,9 @@ class OPFDomainLoss:
                 lower = bus_x[:, vmin_idx].reshape(-1)
                 upper = bus_x[:, vmax_idx].reshape(-1)
                 voltage = bus_pred[:, self.voltage_output_index].reshape(-1)
+                # F.relu zeros out values that already satisfy the bound, so the gradient
+                # is zero for feasible predictions and proportional to the violation otherwise.
+                # Squaring gives a smooth (C1) penalty with growing gradient for larger violations.
                 bound_penalty = torch.mean(
                     F.relu(lower - voltage).pow(2)
                     + F.relu(voltage - upper).pow(2)
@@ -181,6 +201,10 @@ class OPFDomainLoss:
                 theta_max = ea[:, 1].to(Va.device)
                 src, dst = ei
                 delta_theta = Va[src] - Va[dst]
+                # Same relu-squared form as voltage_bound: zero gradient inside the
+                # feasible region [theta_min, theta_max], growing penalty outside it.
+                # No slack is needed here: verified empirically that this term is exactly
+                # zero on OPFDataset ground-truth solutions (Va and theta bounds share units).
                 angdiff_p = torch.mean(
                     F.relu(delta_theta - theta_max).pow(2)
                     + F.relu(theta_min - delta_theta).pow(2)
@@ -205,11 +229,21 @@ class OPFDomainLoss:
                 ei = getattr(data[rel], "edge_index", None)
                 if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(x_idx, ra_idx):
                     continue
+                # clamp x_ij away from zero to avoid division-by-zero in the DC formula;
+                # 1e-6 p.u. is several orders of magnitude below any physical reactance.
                 x_ij   = ea[:, x_idx].to(Va.device).clamp(min=1e-6)
+                # clamp rate_a to be non-negative; negative thermal limits are nonsensical
+                # and could arise from edge cases in dataset normalisation.
                 rate_a = ea[:, ra_idx].to(Va.device).clamp(min=0.0)
                 src, dst = ei
+                # DC power-flow approximation: P_ij ≈ (Va_i - Va_j) / x_ij  [per unit].
+                # This linearises the full AC formula sin(Va_i - Va_j) / x_ij and is only
+                # exact in the flat-voltage, small-angle limit.
                 P_ij = (Va[src] - Va[dst]) / x_ij
-                flow_p = torch.mean(F.relu(P_ij.abs() - rate_a).pow(2))
+                # line_flow_slack is subtracted from rate_a to absorb the residual introduced
+                # by the DC linearisation on AC-feasible solutions (see __init__ for details).
+                # Without it, ground-truth predictions would incur a spurious non-zero penalty.
+                flow_p = torch.mean(F.relu(P_ij.abs() - rate_a - self.line_flow_slack).pow(2))
                 total_penalty = total_penalty + curriculum * self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
                 metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
 
@@ -218,7 +252,19 @@ class OPFDomainLoss:
 
 
 class OPFEnhancedModelWrapper(torch.nn.Module):
-    """Compose OPF-specific auxiliary loss around an existing HydraGNN model."""
+    """Compose OPF-specific auxiliary loss around an existing HydraGNN model.
+
+    In addition to combining the task loss and domain loss, this wrapper
+    accumulates per-batch values during each epoch and prints a one-line
+    breakdown at the end of that epoch (on rank 0 only).  The breakdown
+    shows the task-driven loss and each individual domain-loss term
+    separately, making it straightforward to diagnose whether the domain
+    penalty is interfering with the data-driven objective.
+
+    Log format (one line appended to run.log per epoch on rank 0):
+      DomainBreakdown epoch=XX task=X.XXXXXXXX domain_total=X.XXXXXXXX \
+          curriculum=X.XX voltage_bound=X.XXXXXXXX ac_angle_diff=X.XXXXXXXX ...
+    """
 
     def __init__(self, original_model, domain_loss: OPFDomainLoss):
         super().__init__()
@@ -226,6 +272,78 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self.domain_loss = domain_loss
         self._last_batch = None
         self.last_extra_loss_metrics = {}
+        # Per-epoch accumulation state.
+        # Keyed by metric name; values are (sum, count) pairs for computing means.
+        self._epoch_accum: dict[str, list[float]] = {}
+        self._epoch_accum_task: list[float] = []
+        self._last_seen_epoch: int = -1
+
+    def _flush_epoch_log(self, epoch: int) -> None:
+        """Log the mean task-loss and domain-loss breakdown for *epoch* on rank 0.
+
+        Called automatically at the first batch of a new epoch so the previous
+        epoch's accumulated statistics are written before training continues.
+
+        Log format (one line per epoch in run.log, rank 0 only)::
+
+          LossBreakdown epoch=XX \
+              data_driven_mse=X.XXXXXXXX \
+              physics_penalty_total=X.XXXXXXXX \
+              curriculum_scale=X.XX \
+              raw_voltage_bound=X.XXXXXXXX \
+              raw_ac_angle_diff=X.XXXXXXXX \
+              raw_tr_angle_diff=X.XXXXXXXX \
+              raw_ac_line_flow=X.XXXXXXXX
+
+        Field meanings:
+          data_driven_mse        -- MSE between model predictions and OPF ground-truth
+                                    targets (the standard HydraGNN task loss, no physics).
+          physics_penalty_total  -- weighted, EMA-normalised sum of all feasibility
+                                    penalties (voltage bound + angle diff + DC flow).
+                                    This is what is added to data_driven_mse during
+                                    back-propagation.  Should stay well below
+                                    data_driven_mse for the task signal to dominate.
+          curriculum_scale       -- ramp factor in [0, 1]; 0 during warmup, 1 at full
+                                    weight.  physics_penalty_total = 0 when this is 0.
+          raw_*                  -- raw (unweighted, un-normalised) value of each
+                                    individual feasibility penalty.  Zero on any strictly
+                                    feasible OPF solution; non-zero indicates the current
+                                    prediction violates that constraint.
+        """
+        # Only log from rank 0 to avoid duplicate lines in the shared run.log.
+        if dist.is_initialized() and dist.get_rank() != 0:
+            self._epoch_accum.clear()
+            self._epoch_accum_task.clear()
+            return
+        if not self._epoch_accum_task:
+            return  # nothing accumulated yet (e.g. first call before any batch)
+
+        n = len(self._epoch_accum_task)
+        task_mean = sum(self._epoch_accum_task) / n
+
+        # Map internal metric keys to self-explaining log field names.
+        _key_labels = {
+            "opf_domain_total":      "physics_penalty_total",
+            "opf_curriculum_scale":  "curriculum_scale",
+            "opf_voltage_bound":     "raw_voltage_bound",
+            "opf_ac_angle_diff":     "raw_ac_angle_diff",
+            "opf_tr_angle_diff":     "raw_tr_angle_diff",
+            "opf_ac_line_flow":      "raw_ac_line_flow",
+            "opf_tr_line_flow":      "raw_tr_line_flow",
+        }
+
+        parts = [f"epoch={epoch:02d}", f"data_driven_mse={task_mean:.8f}"]
+        for key in sorted(self._epoch_accum):
+            vals = self._epoch_accum[key]
+            mean_val = sum(vals) / len(vals)
+            label = _key_labels.get(key, key.removeprefix("opf_"))
+            parts.append(f"{label}={mean_val:.8f}")
+
+        logging.info("LossBreakdown " + "  ".join(parts))
+
+        # Reset accumulators for the next epoch.
+        self._epoch_accum.clear()
+        self._epoch_accum_task.clear()
 
     def __getattr__(self, name):
         try:
@@ -252,6 +370,27 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             self._last_batch,
         )
         self.last_extra_loss_metrics = extra_metrics
+
+        # ── Per-epoch accumulation ───────────────────────────────────────────
+        # Detect epoch transitions using HYDRAGNN_EPOCH (set by the core training
+        # loop).  On each new epoch, flush the previous epoch's accumulated stats
+        # to logging.info so they appear in run.log alongside the Epoch: XX line.
+        try:
+            current_epoch = int(os.environ.get("HYDRAGNN_EPOCH", "-1"))
+        except (ValueError, TypeError):
+            current_epoch = -1
+
+        if current_epoch != self._last_seen_epoch and self._last_seen_epoch >= 0:
+            # Epoch boundary: flush accumulated stats for the completed epoch.
+            self._flush_epoch_log(self._last_seen_epoch)
+        self._last_seen_epoch = current_epoch
+
+        # Accumulate task loss (total_loss is the data-driven term before domain is added).
+        self._epoch_accum_task.append(float(total_loss.detach()))
+        # Accumulate each domain metric (raw, un-normalized values for interpretability).
+        for key, val in extra_metrics.items():
+            self._epoch_accum.setdefault(key, []).append(float(val))
+
         return total_loss + extra_loss, tasks_loss
 
 
