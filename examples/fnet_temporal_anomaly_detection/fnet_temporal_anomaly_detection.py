@@ -520,11 +520,21 @@ def train_stage(args, cache_dir: Path):
         config["NeuralNetwork"]["Architecture"]["temporal_backbone"] = args.backbone
     if args.mode:
         config["NeuralNetwork"]["Architecture"]["temporal_mode"] = args.mode
+    if args.hidden_dim is not None:
+        config["NeuralNetwork"]["Architecture"]["hidden_dim"] = int(args.hidden_dim)
+    if args.num_conv_layers is not None:
+        config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = int(args.num_conv_layers)
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = int(args.num_epoch)
+    if args.batch_size is not None:
+        config["NeuralNetwork"]["Training"]["batch_size"] = int(args.batch_size)
+    if args.learning_rate is not None:
+        config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"] = float(args.learning_rate)
     verbosity = config["Verbosity"]["level"]
 
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
     mpnn_label = config["NeuralNetwork"]["Architecture"]["mpnn_type"]
-    log_name = f"fnet_temporal_{args.date}_{mpnn_label}"
+    log_name = args.log if args.log else f"fnet_temporal_{args.date}_{mpnn_label}"
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
     print(f"[cache] reading splits ({args.format}) from {cache_dir}")
@@ -630,8 +640,10 @@ def build_argparser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # Data
-    p.add_argument("--data_root", type=str, required=True,
-                   help="Path to GRID-UTK-data root containing date subfolders")
+    p.add_argument("--data_root", type=str, default=None,
+                   help="Path to GRID-UTK-data root containing date subfolders "
+                        "(required for --preonly / --do_all; ignored when "
+                        "training from an existing cache)")
     p.add_argument("--date", type=str, default="2024-06-01",
                    help="Date subfolder to load (e.g. 2024-06-01)")
     p.add_argument("--limit_devices", type=int, default=None,
@@ -670,13 +682,26 @@ def build_argparser() -> argparse.ArgumentParser:
                    help="Z-score threshold for arrival detection")
     p.add_argument("--persist_s", type=float, default=2.0,
                    help="Required sustained exceedance duration (s)")
-    # Model overrides
+    # Model overrides (also used as HPO knobs)
     p.add_argument("--mpnn_type", type=str, default=None,
                    help="Override mpnn_type from JSON")
     p.add_argument("--backbone", type=str, default=None,
                    help="Override temporal_backbone (gru / lstm)")
     p.add_argument("--mode", type=str, default=None,
                    help="Override temporal_mode (post_gcn / pre_gcn / interleaved)")
+    p.add_argument("--hidden_dim", type=int, default=None,
+                   help="Override Architecture.hidden_dim")
+    p.add_argument("--num_conv_layers", type=int, default=None,
+                   help="Override Architecture.num_conv_layers")
+    # Training overrides (also used as HPO knobs)
+    p.add_argument("--num_epoch", type=int, default=None,
+                   help="Override Training.num_epoch")
+    p.add_argument("--batch_size", type=int, default=None,
+                   help="Override Training.batch_size")
+    p.add_argument("--learning_rate", type=float, default=None,
+                   help="Override Training.Optimizer.learning_rate")
+    p.add_argument("--log", type=str, default=None,
+                   help="Override the log-name prefix used for outputs / writer")
     # Misc
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--cpu", action="store_true",
@@ -696,6 +721,10 @@ def main():
         raise SystemExit("--preonly and --do_all are mutually exclusive.")
 
     if args.preonly or args.do_all:
+        if args.data_root is None:
+            raise SystemExit(
+                "--data_root is required when running --preonly or --do_all"
+            )
         preprocess_stage(args, cache_dir)
         if args.preonly:
             print("[done]  pre-processing finished; re-run without --preonly to train.")
