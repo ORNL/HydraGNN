@@ -87,6 +87,7 @@ try:
     from mpi4py import MPI
     import adios2  # noqa: F401  (verifies adios2 is importable)
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+
     ADIOS_AVAILABLE = True
 except ImportError:
     ADIOS_AVAILABLE = False
@@ -95,6 +96,7 @@ except ImportError:
 # ─────────────────────────────────────────────────────────────────────────────
 # Reproducibility helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def set_seed(seed: int = 42) -> None:
     random.seed(seed)
@@ -165,7 +167,9 @@ def preprocess_device(df: pd.DataFrame) -> pd.DataFrame:
     df.attrs["dt"] = dt
     # Residuals.
     df["r"] = (df["frequency_hz"] - 60.0).astype(np.float32)
-    df["roc"] = (df["r"].diff().fillna(0.0) / (dt if np.isfinite(dt) and dt > 0 else 1.0)).astype(np.float32)
+    df["roc"] = (
+        df["r"].diff().fillna(0.0) / (dt if np.isfinite(dt) and dt > 0 else 1.0)
+    ).astype(np.float32)
     return df
 
 
@@ -217,6 +221,7 @@ def estimate_event_time(data: dict, percentile: float = 15.0) -> float:
 # 2.  Multi-device alignment + feature stacking
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def stack_node_features(sites, data, feature_cols=("r", "roc")):
     """Inner-merge all device timelines on timestamp; return tvec, X[T,N,F]."""
     ref = data[sites[0]][["timestamp", "t"]].rename(columns={"t": "tref"})
@@ -233,7 +238,11 @@ def stack_node_features(sites, data, feature_cols=("r", "roc")):
         )
     tvec = M["tref"].to_numpy(dtype=np.float32)
     ordered = [f"{sid}:{c}" for sid in sites for c in feature_cols]
-    X = M[ordered].to_numpy(dtype=np.float32).reshape(len(tvec), len(sites), len(feature_cols))
+    X = (
+        M[ordered]
+        .to_numpy(dtype=np.float32)
+        .reshape(len(tvec), len(sites), len(feature_cols))
+    )
     return tvec, X
 
 
@@ -241,8 +250,10 @@ def stack_node_features(sites, data, feature_cols=("r", "roc")):
 # 3.  Signal-driven correlation graph
 # ─────────────────────────────────────────────────────────────────────────────
 
-def build_signal_graph(X, tvec, t_event, pre_window=120.0, guard=10.0,
-                       k=6, lag_lambda=2.0, dt=0.1):
+
+def build_signal_graph(
+    X, tvec, t_event, pre_window=120.0, guard=10.0, k=6, lag_lambda=2.0, dt=0.1
+):
     """Pearson similarity x exp(-|lag|/lambda), k-NN sparsified."""
     T, N, _ = X.shape
     t_lo = max(0.0, t_event - pre_window)
@@ -291,6 +302,7 @@ def build_signal_graph(X, tvec, t_event, pre_window=120.0, guard=10.0,
 # 4.  Sliding-window dataset
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def make_dataset(X, tvec, edge_index, lookback=30, horizon=1, t_max=None):
     T, N, F = X.shape
     pos = torch.zeros(N, 3)
@@ -299,14 +311,22 @@ def make_dataset(X, tvec, edge_index, lookback=30, horizon=1, t_max=None):
     for s in range(lookback - 1, T - horizon):
         if t_max is not None and tvec[s] > t_max:
             break
-        x_seq = torch.from_numpy(X[s - lookback + 1 : s + 1]).permute(1, 0, 2)  # [N,L,F]
-        x_last = torch.from_numpy(X[s])                                          # [N,F]
-        y_next = torch.from_numpy(X[s + 1, :, 0:1])                              # [N,1]
+        x_seq = torch.from_numpy(X[s - lookback + 1 : s + 1]).permute(
+            1, 0, 2
+        )  # [N,L,F]
+        x_last = torch.from_numpy(X[s])  # [N,F]
+        y_next = torch.from_numpy(X[s + 1, :, 0:1])  # [N,1]
         y_loc = torch.tensor([[0, N]], dtype=torch.int64)
         dataset.append(
             Data(
-                x=x_last, x_seq=x_seq, edge_index=edge_index.clone(),
-                y=y_next, y_loc=y_loc, pos=pos, batch=batch, num_nodes=N,
+                x=x_last,
+                x_seq=x_seq,
+                edge_index=edge_index.clone(),
+                y=y_next,
+                y_loc=y_loc,
+                pos=pos,
+                batch=batch,
+                num_nodes=N,
             )
         )
     return dataset
@@ -315,6 +335,7 @@ def make_dataset(X, tvec, edge_index, lookback=30, horizon=1, t_max=None):
 # ─────────────────────────────────────────────────────────────────────────────
 # 5.  Anomaly scoring (full-day rollout)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def score_signal(model, X, tvec, edge_index, lookback, device, horizon=1):
     T, N, F = X.shape
@@ -326,11 +347,19 @@ def score_signal(model, X, tvec, edge_index, lookback, device, horizon=1):
     model.eval()
     with torch.no_grad():
         for s in range(lookback - 1, T - horizon):
-            x_seq = torch.from_numpy(X[s - lookback + 1 : s + 1]).permute(1, 0, 2).to(device)
+            x_seq = (
+                torch.from_numpy(X[s - lookback + 1 : s + 1])
+                .permute(1, 0, 2)
+                .to(device)
+            )
             x_last = torch.from_numpy(X[s]).to(device)
             data = Data(
-                x=x_last, x_seq=x_seq, edge_index=edge_index_dev,
-                pos=pos, batch=batch, num_nodes=N,
+                x=x_last,
+                x_seq=x_seq,
+                edge_index=edge_index_dev,
+                pos=pos,
+                batch=batch,
+                num_nodes=N,
             )
             outputs = model(data)
             r_pred = outputs[0].cpu().numpy().reshape(N)
@@ -367,6 +396,7 @@ def estimate_arrival_times(z, tvec, tau=3.0, persist_s=2.0, dt=0.1):
 # 6.  Cache I/O (pickle / ADIOS)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _cache_basename(date: str, fmt: str) -> str:
     return f"fnet_{date}.{'pickle' if fmt == 'pickle' else 'bp'}"
 
@@ -376,14 +406,15 @@ def _meta_path(cache_dir: Path, date: str) -> Path:
     return cache_dir / f"fnet_{date}_meta.pkl"
 
 
-def write_cache(cache_dir: Path, date: str, fmt: str,
-                trainset, valset, testset, meta: dict):
+def write_cache(
+    cache_dir: Path, date: str, fmt: str, trainset, valset, testset, meta: dict
+):
     cache_dir.mkdir(parents=True, exist_ok=True)
     if fmt == "pickle":
         basedir = str(cache_dir / _cache_basename(date, fmt))
         SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
-        SimplePickleWriter(valset,   basedir, "valset",   use_subdir=True)
-        SimplePickleWriter(testset,  basedir, "testset",  use_subdir=True)
+        SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
+        SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
         print(f"[cache] pickle splits saved under {basedir}/")
     elif fmt == "adios":
         if not ADIOS_AVAILABLE:
@@ -409,14 +440,16 @@ def write_cache(cache_dir: Path, date: str, fmt: str,
 def read_cache(cache_dir: Path, date: str, fmt: str):
     meta_p = _meta_path(cache_dir, date)
     if not meta_p.exists():
-        raise FileNotFoundError(f"Missing metadata cache: {meta_p}. Run with --preonly first.")
+        raise FileNotFoundError(
+            f"Missing metadata cache: {meta_p}. Run with --preonly first."
+        )
     with open(meta_p, "rb") as f:
         meta = pickle.load(f)
     if fmt == "pickle":
         basedir = str(cache_dir / _cache_basename(date, fmt))
         trainset = SimplePickleDataset(basedir=basedir, label="trainset")
-        valset   = SimplePickleDataset(basedir=basedir, label="valset")
-        testset  = SimplePickleDataset(basedir=basedir, label="testset")
+        valset = SimplePickleDataset(basedir=basedir, label="valset")
+        testset = SimplePickleDataset(basedir=basedir, label="testset")
     elif fmt == "adios":
         if not ADIOS_AVAILABLE:
             raise RuntimeError(
@@ -426,8 +459,8 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
         fname = str(cache_dir / _cache_basename(date, fmt))
         opt = {"preload": True, "shmem": False}
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
-        valset   = AdiosDataset(fname, "valset",   comm, **opt)
-        testset  = AdiosDataset(fname, "testset",  comm, **opt)
+        valset = AdiosDataset(fname, "valset", comm, **opt)
+        testset = AdiosDataset(fname, "testset", comm, **opt)
     else:
         raise ValueError(f"Unknown --format: {fmt}")
     return trainset, valset, testset, meta
@@ -436,6 +469,7 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
 # ─────────────────────────────────────────────────────────────────────────────
 # 7.  Pipeline stages
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def preprocess_stage(args, cache_dir: Path):
     """Steps 1-5 + cache write."""
@@ -463,16 +497,25 @@ def preprocess_stage(args, cache_dir: Path):
     print(f"[align] X shape = {(T, N, F)} after timestamp inner-join")
 
     edge_index, edge_weight, A_hat = build_signal_graph(
-        X, tvec, t_event,
-        pre_window=args.pre_window, guard=args.guard,
-        k=args.k, lag_lambda=args.lag_lambda, dt=dt,
+        X,
+        tvec,
+        t_event,
+        pre_window=args.pre_window,
+        guard=args.guard,
+        k=args.k,
+        lag_lambda=args.lag_lambda,
+        dt=dt,
     )
     print(f"[graph] {N} nodes  |  {edge_index.shape[1]} directed edges  (k={args.k})")
 
     t_train_max = t_event - args.guard
     full_dataset = make_dataset(
-        X, tvec, edge_index,
-        lookback=args.lookback, horizon=1, t_max=t_train_max,
+        X,
+        tvec,
+        edge_index,
+        lookback=args.lookback,
+        horizon=1,
+        t_max=t_train_max,
     )
     print(
         f"[ds]    {len(full_dataset)} pre-event windows  "
@@ -493,16 +536,24 @@ def preprocess_stage(args, cache_dir: Path):
     train_data, val_data, test_data = hydragnn.preprocess.split_dataset(
         full_dataset, perc_train, False
     )
-    print(f"[split] train/val/test = {len(train_data)}/{len(val_data)}/{len(test_data)}")
+    print(
+        f"[split] train/val/test = {len(train_data)}/{len(val_data)}/{len(test_data)}"
+    )
 
     meta = {
-        "sites": sites, "tvec": tvec, "X": X, "dt": float(dt),
-        "t_event": float(t_event), "edge_index": edge_index,
-        "edge_weight": edge_weight, "A_hat": A_hat,
+        "sites": sites,
+        "tvec": tvec,
+        "X": X,
+        "dt": float(dt),
+        "t_event": float(t_event),
+        "edge_index": edge_index,
+        "edge_weight": edge_weight,
+        "A_hat": A_hat,
         "lookback": int(args.lookback),
     }
-    write_cache(cache_dir, args.date, args.format,
-                train_data, val_data, test_data, meta)
+    write_cache(
+        cache_dir, args.date, args.format, train_data, val_data, test_data, meta
+    )
 
 
 def train_stage(args, cache_dir: Path):
@@ -523,13 +574,17 @@ def train_stage(args, cache_dir: Path):
     if args.hidden_dim is not None:
         config["NeuralNetwork"]["Architecture"]["hidden_dim"] = int(args.hidden_dim)
     if args.num_conv_layers is not None:
-        config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = int(args.num_conv_layers)
+        config["NeuralNetwork"]["Architecture"]["num_conv_layers"] = int(
+            args.num_conv_layers
+        )
     if args.num_epoch is not None:
         config["NeuralNetwork"]["Training"]["num_epoch"] = int(args.num_epoch)
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = int(args.batch_size)
     if args.learning_rate is not None:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"] = float(args.learning_rate)
+        config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"] = float(
+            args.learning_rate
+        )
     verbosity = config["Verbosity"]["level"]
 
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
@@ -546,7 +601,9 @@ def train_stage(args, cache_dir: Path):
     )
 
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset,
+        trainset,
+        valset,
+        testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
     )
     config = hydragnn.utils.input_config_parsing.update_config(
@@ -554,7 +611,8 @@ def train_stage(args, cache_dir: Path):
     )
 
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"], verbosity=verbosity,
+        config=config["NeuralNetwork"],
+        verbosity=verbosity,
     )
     lr = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
@@ -567,7 +625,8 @@ def train_stage(args, cache_dir: Path):
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
-    tr.initialize(); tr.disable()
+    tr.initialize()
+    tr.disable()
 
     print(
         f"\n[train] Self-supervised pre-event training "
@@ -575,19 +634,35 @@ def train_stage(args, cache_dir: Path):
         f"{config['NeuralNetwork']['Training']['num_epoch']} epochs) ..."
     )
     hydragnn.train.train_validate_test(
-        model, optimizer, train_loader, val_loader, test_loader,
-        writer, scheduler, config["NeuralNetwork"], log_name, verbosity,
+        model,
+        optimizer,
+        train_loader,
+        val_loader,
+        test_loader,
+        writer,
+        scheduler,
+        config["NeuralNetwork"],
+        log_name,
+        verbosity,
     )
 
     raw_model = (model.module if hasattr(model, "module") else model).to(device)
     print("\n[score] Scoring full day (pre + post-event windows) ...")
     pred_r, err = score_signal(
-        raw_model, meta["X"], meta["tvec"], meta["edge_index"],
-        meta["lookback"], device,
+        raw_model,
+        meta["X"],
+        meta["tvec"],
+        meta["edge_index"],
+        meta["lookback"],
+        device,
     )
     z, mu, sd = fit_z_scores(err, meta["tvec"], meta["t_event"], guard=args.guard)
     arrivals = estimate_arrival_times(
-        z, meta["tvec"], tau=args.tau, persist_s=args.persist_s, dt=meta["dt"],
+        z,
+        meta["tvec"],
+        tau=args.tau,
+        persist_s=args.persist_s,
+        dt=meta["dt"],
     )
     print("\n[arrivals] Estimated disturbance arrival times (s):")
     detected = 0
@@ -616,8 +691,11 @@ def train_stage(args, cache_dir: Path):
     np.save(out_dir / "arrivals.npy", arrivals)
     np.save(out_dir / "A_hat.npy", meta["A_hat"])
     pd.DataFrame(
-        {"site": meta["sites"], "arrival_sec": arrivals,
-         "delay_sec": arrivals - meta["t_event"]}
+        {
+            "site": meta["sites"],
+            "arrival_sec": arrivals,
+            "delay_sec": arrivals - meta["t_event"],
+        }
     ).to_csv(out_dir / "arrival_times.csv", index=False)
     with open(out_dir / "sites.txt", "w") as f:
         f.writelines(s + "\n" for s in meta["sites"])
@@ -634,87 +712,171 @@ def train_stage(args, cache_dir: Path):
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="HydraGNN T-GCN on real FNET data (parquet)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # Data
-    p.add_argument("--data_root", type=str, default=None,
-                   help="Path to GRID-UTK-data root containing date subfolders "
-                        "(required for --preonly / --do_all; ignored when "
-                        "training from an existing cache)")
-    p.add_argument("--date", type=str, default="2024-06-01",
-                   help="Date subfolder to load (e.g. 2024-06-01)")
-    p.add_argument("--limit_devices", type=int, default=None,
-                   help="If set, load at most this many parquet files (smoke tests)")
-    p.add_argument("--min_samples", type=int, default=1000,
-                   help="Skip devices with fewer rows than this")
-    p.add_argument("--stride", type=int, default=1,
-                   help="Temporal subsampling stride applied after alignment "
-                        "(e.g. 10 turns 10 Hz data into 1 Hz)")
+    p.add_argument(
+        "--data_root",
+        type=str,
+        default=None,
+        help="Path to GRID-UTK-data root containing date subfolders "
+        "(required for --preonly / --do_all; ignored when "
+        "training from an existing cache)",
+    )
+    p.add_argument(
+        "--date",
+        type=str,
+        default="2024-06-01",
+        help="Date subfolder to load (e.g. 2024-06-01)",
+    )
+    p.add_argument(
+        "--limit_devices",
+        type=int,
+        default=None,
+        help="If set, load at most this many parquet files (smoke tests)",
+    )
+    p.add_argument(
+        "--min_samples",
+        type=int,
+        default=1000,
+        help="Skip devices with fewer rows than this",
+    )
+    p.add_argument(
+        "--stride",
+        type=int,
+        default=1,
+        help="Temporal subsampling stride applied after alignment "
+        "(e.g. 10 turns 10 Hz data into 1 Hz)",
+    )
     # Cache
-    p.add_argument("--format", type=str, choices=["pickle", "adios"], default="pickle",
-                   help="On-disk format for cached pre-processed splits")
-    p.add_argument("--cache_dir", type=str, default=None,
-                   help="Directory to write/read cached splits "
-                        "(default: <example_dir>/dataset)")
-    p.add_argument("--preonly", action="store_true",
-                   help="Pre-process + cache only; skip training")
-    p.add_argument("--do_all", action="store_true",
-                   help="Pre-process, cache, and immediately train in one run")
+    p.add_argument(
+        "--format",
+        type=str,
+        choices=["pickle", "adios"],
+        default="pickle",
+        help="On-disk format for cached pre-processed splits",
+    )
+    p.add_argument(
+        "--cache_dir",
+        type=str,
+        default=None,
+        help="Directory to write/read cached splits "
+        "(default: <example_dir>/dataset)",
+    )
+    p.add_argument(
+        "--preonly", action="store_true", help="Pre-process + cache only; skip training"
+    )
+    p.add_argument(
+        "--do_all",
+        action="store_true",
+        help="Pre-process, cache, and immediately train in one run",
+    )
     # Graph
-    p.add_argument("--pre_window", type=float, default=120.0,
-                   help="Pre-event seconds used to build the correlation graph")
-    p.add_argument("--guard", type=float, default=10.0,
-                   help="Exclude last N seconds before event (anti-leakage)")
+    p.add_argument(
+        "--pre_window",
+        type=float,
+        default=120.0,
+        help="Pre-event seconds used to build the correlation graph",
+    )
+    p.add_argument(
+        "--guard",
+        type=float,
+        default=10.0,
+        help="Exclude last N seconds before event (anti-leakage)",
+    )
     p.add_argument("--k", type=int, default=6, help="k in k-NN graph sparsification")
-    p.add_argument("--lag_lambda", type=float, default=2.0,
-                   help="Lag-penalty decay constant (s)")
+    p.add_argument(
+        "--lag_lambda", type=float, default=2.0, help="Lag-penalty decay constant (s)"
+    )
     # Sequence
-    p.add_argument("--lookback", type=int, default=30,
-                   help="Lookback window length (steps)")
-    p.add_argument("--max_windows", type=int, default=None,
-                   help="Cap total pre-event windows (evenly spaced subset). "
-                        "Useful for fast iteration on large days.")
+    p.add_argument(
+        "--lookback", type=int, default=30, help="Lookback window length (steps)"
+    )
+    p.add_argument(
+        "--max_windows",
+        type=int,
+        default=None,
+        help="Cap total pre-event windows (evenly spaced subset). "
+        "Useful for fast iteration on large days.",
+    )
     # Detection
-    p.add_argument("--tau", type=float, default=3.0,
-                   help="Z-score threshold for arrival detection")
-    p.add_argument("--persist_s", type=float, default=2.0,
-                   help="Required sustained exceedance duration (s)")
+    p.add_argument(
+        "--tau", type=float, default=3.0, help="Z-score threshold for arrival detection"
+    )
+    p.add_argument(
+        "--persist_s",
+        type=float,
+        default=2.0,
+        help="Required sustained exceedance duration (s)",
+    )
     # Model overrides (also used as HPO knobs)
-    p.add_argument("--mpnn_type", type=str, default=None,
-                   help="Override mpnn_type from JSON")
-    p.add_argument("--backbone", type=str, default=None,
-                   help="Override temporal_backbone (gru / lstm)")
-    p.add_argument("--mode", type=str, default=None,
-                   help="Override temporal_mode (post_gcn / pre_gcn / interleaved)")
-    p.add_argument("--hidden_dim", type=int, default=None,
-                   help="Override Architecture.hidden_dim")
-    p.add_argument("--num_conv_layers", type=int, default=None,
-                   help="Override Architecture.num_conv_layers")
+    p.add_argument(
+        "--mpnn_type", type=str, default=None, help="Override mpnn_type from JSON"
+    )
+    p.add_argument(
+        "--backbone",
+        type=str,
+        default=None,
+        help="Override temporal_backbone (gru / lstm)",
+    )
+    p.add_argument(
+        "--mode",
+        type=str,
+        default=None,
+        help="Override temporal_mode (post_gcn / pre_gcn / interleaved)",
+    )
+    p.add_argument(
+        "--hidden_dim", type=int, default=None, help="Override Architecture.hidden_dim"
+    )
+    p.add_argument(
+        "--num_conv_layers",
+        type=int,
+        default=None,
+        help="Override Architecture.num_conv_layers",
+    )
     # Training overrides (also used as HPO knobs)
-    p.add_argument("--num_epoch", type=int, default=None,
-                   help="Override Training.num_epoch")
-    p.add_argument("--batch_size", type=int, default=None,
-                   help="Override Training.batch_size")
-    p.add_argument("--learning_rate", type=float, default=None,
-                   help="Override Training.Optimizer.learning_rate")
-    p.add_argument("--log", type=str, default=None,
-                   help="Override the log-name prefix used for outputs / writer")
+    p.add_argument(
+        "--num_epoch", type=int, default=None, help="Override Training.num_epoch"
+    )
+    p.add_argument(
+        "--batch_size", type=int, default=None, help="Override Training.batch_size"
+    )
+    p.add_argument(
+        "--learning_rate",
+        type=float,
+        default=None,
+        help="Override Training.Optimizer.learning_rate",
+    )
+    p.add_argument(
+        "--log",
+        type=str,
+        default=None,
+        help="Override the log-name prefix used for outputs / writer",
+    )
     # Misc
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--cpu", action="store_true",
-                   help="Force CPU even if CUDA is available")
-    p.add_argument("--out_dir", type=str, default="outputs_fnet_temporal",
-                   help="Directory for saved numpy outputs (post-training)")
+    p.add_argument(
+        "--cpu", action="store_true", help="Force CPU even if CUDA is available"
+    )
+    p.add_argument(
+        "--out_dir",
+        type=str,
+        default="outputs_fnet_temporal",
+        help="Directory for saved numpy outputs (post-training)",
+    )
     return p
 
 
 def main():
     args = build_argparser().parse_args()
-    cache_dir = Path(args.cache_dir) if args.cache_dir else (
-        Path(__file__).resolve().parent / "dataset"
+    cache_dir = (
+        Path(args.cache_dir)
+        if args.cache_dir
+        else (Path(__file__).resolve().parent / "dataset")
     )
 
     if args.preonly and args.do_all:

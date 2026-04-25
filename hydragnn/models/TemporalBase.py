@@ -113,7 +113,9 @@ class TemporalBase(Base):
         #   pre_gcn  → project back to input_dim so the GCN can run normally
         #   post_gcn / interleaved → project to hidden_dim for the decoder
         proj_output_dim = self.input_dim if mode == "pre_gcn" else self.hidden_dim
-        t_hidden = temporal_hidden_dim if temporal_hidden_dim is not None else proj_output_dim
+        t_hidden = (
+            temporal_hidden_dim if temporal_hidden_dim is not None else proj_output_dim
+        )
 
         # ------------------------------------------------------------------ #
         # 4. Build the RNN module(s).                                         #
@@ -122,16 +124,18 @@ class TemporalBase(Base):
 
         if mode == "interleaved":
             # One RNN per GCN layer; each takes hidden_dim → t_hidden.
-            self.temporal_rnns = nn.ModuleList([
-                rnn_cls(
-                    self.hidden_dim,
-                    t_hidden,
-                    num_layers=temporal_num_layers,
-                    batch_first=True,
-                    dropout=self.dropout if temporal_num_layers > 1 else 0.0,
-                )
-                for _ in range(self.num_conv_layers)
-            ])
+            self.temporal_rnns = nn.ModuleList(
+                [
+                    rnn_cls(
+                        self.hidden_dim,
+                        t_hidden,
+                        num_layers=temporal_num_layers,
+                        batch_first=True,
+                        dropout=self.dropout if temporal_num_layers > 1 else 0.0,
+                    )
+                    for _ in range(self.num_conv_layers)
+                ]
+            )
             self.temporal_rnn = None
         else:
             self.temporal_rnn = rnn_cls(
@@ -164,9 +168,7 @@ class TemporalBase(Base):
             _, h_n = rnn(H)
         return h_n[-1]  # [N, t_hidden]
 
-    def _spatial_encode_step(
-        self, data, x_t: torch.Tensor, conv_args: dict = None
-    ):
+    def _spatial_encode_step(self, data, x_t: torch.Tensor, conv_args: dict = None):
         """Run Base's full spatial encoder for a single timestep.
 
         Temporarily replaces data.x with x_t so that Base._embedding() and
@@ -190,16 +192,12 @@ class TemporalBase(Base):
             conv_args = c_args
 
         batch_fc = (
-            data.batch
-            if hasattr(data, "batch") and data.batch is not None
-            else None
+            data.batch if hasattr(data, "batch") and data.batch is not None else None
         )
 
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
-                inv, equiv = conv(
-                    inv_node_feat=inv, equiv_node_feat=equiv, **conv_args
-                )
+                inv, equiv = conv(inv_node_feat=inv, equiv_node_feat=equiv, **conv_args)
             else:
                 inv, equiv = checkpoint(
                     conv,
@@ -225,7 +223,7 @@ class TemporalBase(Base):
         return self._forward_temporal(data)
 
     def _forward_temporal(self, data):
-        x_seq = data.x_seq          # [N_total, T, F]
+        x_seq = data.x_seq  # [N_total, T, F]
         T = x_seq.shape[1]
 
         tr.start("enc_forward")
@@ -245,20 +243,20 @@ class TemporalBase(Base):
                 inv, equiv, conv_args = self._spatial_encode_step(
                     data, x_seq[:, t, :], conv_args
                 )
-                steps.append(inv)                           # [N_total, hidden]
+                steps.append(inv)  # [N_total, hidden]
 
-            H = torch.stack(steps, dim=1)                  # [N_total, T, hidden]
+            H = torch.stack(steps, dim=1)  # [N_total, T, hidden]
             h = self._rnn_last_hidden(self.temporal_rnn, H)  # [N_total, t_hidden]
-            x = self.temporal_proj(h)                      # [N_total, hidden]
+            x = self.temporal_proj(h)  # [N_total, hidden]
             equiv_final = equiv
 
         # ------------------------------------------------------------------ #
         # pre_gcn: RNN over raw features → summary → GCN once.               #
         # ------------------------------------------------------------------ #
         elif self._temporal_mode == "pre_gcn":
-            H_in = x_seq.float()                           # [N_total, T, F]
+            H_in = x_seq.float()  # [N_total, T, F]
             h = self._rnn_last_hidden(self.temporal_rnn, H_in)  # [N_total, t_hidden]
-            x_summary = self.temporal_proj(h)              # [N_total, input_dim]
+            x_summary = self.temporal_proj(h)  # [N_total, input_dim]
             x, equiv_final, conv_args = self._spatial_encode_step(data, x_summary)
 
         # ------------------------------------------------------------------ #
@@ -282,7 +280,7 @@ class TemporalBase(Base):
             for t in range(T):
                 saved_x = data.x
                 data.x = x_seq[:, t, :].float()
-                inv_t, _, _ = self._embedding(data)        # [N_total, embed_dim]
+                inv_t, _, _ = self._embedding(data)  # [N_total, embed_dim]
                 data.x = saved_x
                 step_inputs.append(inv_t)
 
@@ -316,13 +314,13 @@ class TemporalBase(Base):
                     inv_t = self.activation_function(feat_layer(inv_t))
                     gcn_outs.append(inv_t)
 
-                H_l = torch.stack(gcn_outs, dim=1)         # [N_total, T, hidden]
-                h_l = self._rnn_last_hidden(rnn_l, H_l)    # [N_total, t_hidden]
-                x_l = self.temporal_proj(h_l)              # [N_total, hidden]
+                H_l = torch.stack(gcn_outs, dim=1)  # [N_total, T, hidden]
+                h_l = self._rnn_last_hidden(rnn_l, H_l)  # [N_total, t_hidden]
+                x_l = self.temporal_proj(h_l)  # [N_total, hidden]
                 # Broadcast single summary back to T copies for the next layer.
                 current = [x_l] * T
 
-            x = current[0]                                 # [N_total, hidden]
+            x = current[0]  # [N_total, hidden]
             equiv_final = data.pos
 
         tr.stop("enc_forward")
@@ -358,9 +356,7 @@ class TemporalBase(Base):
         if not hasattr(data, "dataset_name"):
             setattr(data, "dataset_name", data.batch.unique() * 0)
         datasetIDs = data.dataset_name.unique()
-        unique, node_counts = torch.unique_consecutive(
-            data.batch, return_counts=True
-        )
+        unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
 
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
@@ -369,11 +365,13 @@ class TemporalBase(Base):
                 out_dtype = x_graph.dtype
                 head = torch.zeros(
                     (len(data.dataset_name), head_dim),
-                    device=x.device, dtype=out_dtype,
+                    device=x.device,
+                    dtype=out_dtype,
                 )
                 headvar = torch.zeros(
                     (len(data.dataset_name), head_dim * self.var_output),
-                    device=x.device, dtype=out_dtype,
+                    device=x.device,
+                    dtype=out_dtype,
                 )
                 if self.num_branches == 1:
                     x_graph_head = self.graph_shared["branch-0"](x_graph)
@@ -384,9 +382,7 @@ class TemporalBase(Base):
                     for ID in datasetIDs:
                         mask = (data.dataset_name == ID)[:, 0]
                         branchtype = f"branch-{ID.item()}"
-                        x_graph_head = self.graph_shared[branchtype](
-                            x_graph[mask, :]
-                        )
+                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
                         output_head = headloc[branchtype](x_graph_head)
                         head[mask] = output_head[:, :head_dim]
                         headvar[mask] = (output_head[:, head_dim:] ** 2).to(
@@ -403,7 +399,8 @@ class TemporalBase(Base):
                 )
                 headvar = torch.zeros(
                     (x.shape[0], head_dim * self.var_output),
-                    device=x.device, dtype=out_dtype,
+                    device=x.device,
+                    dtype=out_dtype,
                 )
                 if self.num_branches == 1:
                     branchtype = "branch-0"

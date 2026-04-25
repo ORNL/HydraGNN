@@ -128,9 +128,7 @@ def run(trial, dequed=None):
     ]
 
     # Hyperparameter args from DeepHyper (forwarded verbatim as --{key}={val}).
-    param_args = [
-        f"--{k}={v}" for k, v in trial.parameters.items() if k != "id"
-    ]
+    param_args = [f"--{k}={v}" for k, v in trial.parameters.items() if k != "id"]
 
     command = " ".join(
         [prefix, python_exe, "-u", python_script] + fixed_args + param_args

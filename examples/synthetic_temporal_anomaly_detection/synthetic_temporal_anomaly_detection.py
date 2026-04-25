@@ -65,6 +65,7 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 # Reproducibility helper
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def set_seed(seed: int = 42) -> None:
     random.seed(seed)
     np.random.seed(seed)
@@ -76,6 +77,7 @@ def set_seed(seed: int = 42) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # 1.  Synthetic correlated time-series data
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def generate_synthetic_signal(
     N: int = 20,
@@ -109,10 +111,9 @@ def generate_synthetic_signal(
     base_freq = 0.08 + 0.005 * np.arange(N)
     r = np.zeros((T, N), dtype=np.float32)
     for n in range(N):
-        r[:, n] = (
-            0.05 * np.sin(2 * np.pi * base_freq[n] * tvec)
-            + noise_std * rng.standard_normal(T).astype(np.float32)
-        )
+        r[:, n] = 0.05 * np.sin(
+            2 * np.pi * base_freq[n] * tvec
+        ) + noise_std * rng.standard_normal(T).astype(np.float32)
 
     # Post-event: decaying step disturbance travels from node 0 to node N-1.
     # Grid traversal time: 30 s  →  delay per node = 30/N seconds.
@@ -131,6 +132,7 @@ def generate_synthetic_signal(
 # 2.  Signal-driven correlation graph
 #     (mirrors build_signal_graph in the standalone gcn_pipeline.py)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def build_signal_graph(
     X: np.ndarray,
@@ -171,9 +173,7 @@ def build_signal_graph(
             full_corr = correlate(xi, xj, mode="full")
             lags = correlation_lags(len(xi), len(xj), mode="full")
             lag_sec = float(lags[np.argmax(full_corr)] * dt)
-            W[i, j] = W[j, i] = max(0.0, rho) ** 2 * np.exp(
-                -abs(lag_sec) / lag_lambda
-            )
+            W[i, j] = W[j, i] = max(0.0, rho) ** 2 * np.exp(-abs(lag_sec) / lag_lambda)
 
     # k-NN sparsify: keep only the k strongest connections per row.
     for i in range(N):
@@ -199,6 +199,7 @@ def build_signal_graph(
 # ─────────────────────────────────────────────────────────────────────────────
 # 3.  Sliding-window dataset
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_dataset(
     X: np.ndarray,
@@ -234,12 +235,12 @@ def make_dataset(
         if t_max is not None and tvec[s] > t_max:
             break
         x_seq = torch.from_numpy(
-            X[s - lookback + 1 : s + 1]   # [lookback, N, F]
-        ).permute(1, 0, 2)                 # → [N, lookback, F]
-        x_last = torch.from_numpy(X[s])    # [N, F]
-        y_next = torch.from_numpy(         # [N, 1]  self-supervised target
-            X[s + 1, :, 0:1]
-        )
+            X[s - lookback + 1 : s + 1]  # [lookback, N, F]
+        ).permute(
+            1, 0, 2
+        )  # → [N, lookback, F]
+        x_last = torch.from_numpy(X[s])  # [N, F]
+        y_next = torch.from_numpy(X[s + 1, :, 0:1])  # [N, 1]  self-supervised target
 
         # y_loc stores cumulative element offsets into data.y per output head.
         # For 1 node-level head outputting 1 value per node: y[0..N] = head 0.
@@ -262,6 +263,7 @@ def make_dataset(
 # ─────────────────────────────────────────────────────────────────────────────
 # 4.  Post-training anomaly scoring
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def score_signal(
     model: torch.nn.Module,
@@ -292,7 +294,7 @@ def score_signal(
         for s in range(lookback - 1, T - horizon):
             x_seq = (
                 torch.from_numpy(X[s - lookback + 1 : s + 1])
-                .permute(1, 0, 2)               # [N, lookback, F]
+                .permute(1, 0, 2)  # [N, lookback, F]
                 .to(device)
             )
             x_last = torch.from_numpy(X[s]).to(device)  # [N, F]
@@ -330,7 +332,7 @@ def fit_z_scores(
     sd : np.ndarray [N]     per-node baseline std
     """
     baseline = tvec <= (t_event - guard)
-    mu = np.nanmean(err[baseline], axis=0)   # [N]
+    mu = np.nanmean(err[baseline], axis=0)  # [N]
     sd = np.nanstd(err[baseline], axis=0) + 1e-9
     z = (err - mu) / sd
     return z, mu, sd
@@ -364,6 +366,7 @@ def estimate_arrival_times(
 # 5.  Main
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def main(args):
     set_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
@@ -371,7 +374,8 @@ def main(args):
 
     # ── Load JSON config ──────────────────────────────────────────────────────
     cfg_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "synthetic_temporal_anomaly_detection.json"
+        os.path.dirname(os.path.abspath(__file__)),
+        "synthetic_temporal_anomaly_detection.json",
     )
     with open(cfg_path) as f:
         config = json.load(f)
@@ -508,9 +512,7 @@ def main(args):
     raw_model = raw_model.to(device)
 
     print("\n[score] Scoring full signal (pre- and post-event) …")
-    pred_r, err = score_signal(
-        raw_model, X, tvec, edge_index, args.lookback, device
-    )
+    pred_r, err = score_signal(raw_model, X, tvec, edge_index, args.lookback, device)
 
     z, mu, sd = fit_z_scores(err, tvec, t_event, guard=args.guard)
     arrivals = estimate_arrival_times(
@@ -559,12 +561,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_nodes", type=int, default=20, help="Number of sensor nodes"
     )
-    parser.add_argument(
-        "--T", type=int, default=3000, help="Total time-steps"
-    )
-    parser.add_argument(
-        "--dt", type=float, default=0.1, help="Sampling interval (s)"
-    )
+    parser.add_argument("--T", type=int, default=3000, help="Total time-steps")
+    parser.add_argument("--dt", type=float, default=0.1, help="Sampling interval (s)")
     parser.add_argument(
         "--t_event", type=float, default=200.0, help="Event onset time (s)"
     )
@@ -631,7 +629,9 @@ if __name__ == "__main__":
     )
     # Misc
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--cpu", action="store_true", help="Force CPU even if CUDA available")
+    parser.add_argument(
+        "--cpu", action="store_true", help="Force CPU even if CUDA available"
+    )
     parser.add_argument(
         "--out_dir",
         type=str,

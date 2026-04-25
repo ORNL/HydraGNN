@@ -108,19 +108,28 @@ def pytest_synthetic_temporal_anomaly_detection(mpnn_type, temporal_mode):
     the test completes in a few seconds on CPU.
     """
     path = os.path.join(
-        os.path.dirname(__file__), "..", "examples", "synthetic_temporal_anomaly_detection"
+        os.path.dirname(__file__),
+        "..",
+        "examples",
+        "synthetic_temporal_anomaly_detection",
     )
     file_path = os.path.join(path, "synthetic_temporal_anomaly_detection.py")
     return_code = subprocess.call(
         [
             "python",
             file_path,
-            "--mpnn_type", mpnn_type,
-            "--mode", temporal_mode,
-            "--T", "400",
-            "--num_nodes", "6",
-            "--t_event", "30.0",
-            "--lookback", "8",
+            "--mpnn_type",
+            mpnn_type,
+            "--mode",
+            temporal_mode,
+            "--T",
+            "400",
+            "--num_nodes",
+            "6",
+            "--t_event",
+            "30.0",
+            "--lookback",
+            "8",
             "--cpu",
         ]
     )
