@@ -153,6 +153,10 @@ def _read_device_file(path: Path) -> pd.DataFrame:
     for col in ("frequency_hz", "voltage_angle", "voltage_magnitude"):
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Drop rows with any NaN in the feature columns *before* computing
+    # finite differences / unwrap so RoCoF and Delta-theta are well defined,
+    # and so the multi-device timestamp inner-join below cannot leak NaNs
+    # into the loss tensor.
     df = df.dropna(
         subset=["timestamp", "frequency_hz", "voltage_angle", "voltage_magnitude"]
     ).sort_values("timestamp")
@@ -245,14 +249,23 @@ def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def stack_node_features(fdr_ids, data):
+def stack_node_features(fdr_ids, data, dt: float):
     """Inner-merge all device timelines on timestamp.
+
+    PMU streams are not phase-locked across sensors, so positional stacking
+    (row i of sensor A vs row i of sensor B) would silently desynchronize
+    nodes whenever any device drops samples. We instead inner-join on the
+    parsed timestamp so every column of ``X[t, :, :]`` is the same instant.
+
+    The ``dt`` argument is unused but kept for signature symmetry with
+    callers that may want to fall back to positional alignment.
 
     Returns
     -------
     tvec : np.ndarray  (T,)        seconds since first common timestamp
     X    : np.ndarray  (T, N, 4)   dynamic features per node per timestep
     """
+    del dt  # see docstring
     feats = ("freq_dev", "rocof", "angle_delta", "volt_dev")
     M = data[fdr_ids[0]][["timestamp"]].copy()
     for fid in fdr_ids:
@@ -550,7 +563,7 @@ def preprocess_stage(args, cache_dir: Path):
         )
     print(f"[meta]  {len(fdr_ids)} devices retained after metadata filtering")
 
-    tvec, X = stack_node_features(fdr_ids, data)
+    tvec, X = stack_node_features(fdr_ids, data, dt)
     if args.stride > 1:
         tvec = tvec[:: args.stride]
         X = X[:: args.stride]
