@@ -13,28 +13,33 @@
 fnet_temporal_anomaly_detection.py
 ==================================
 
-Reproduces the data pre-processing, loading, and self-supervised training
-pipeline of the original standalone T-GCN-FNET repository, but built on
-the HydraGNN framework using TemporalGCN (and any other Temporal* backbone).
+Multi-feature spatiotemporal forecasting on FNET PMU data, mirroring the
+``fnet-multi-features`` branch of the standalone T-GCN-FNET repository, but
+built on HydraGNN with TemporalGCN (or any other Temporal* backbone).
 
 Pipeline
 --------
 1. Load one day of FNET parquet files from GRID-UTK-data
-   (one file per device: ``[ID]-[device_name]-[date].parquet``).
-2. Per-device preprocessing: extract frequency, compute residual r = f-60,
-   rate-of-change roc, align all devices on a common timestamp grid,
-   and drop devices that are too sparse / misaligned.
-3. Estimate global disturbance onset time t_event from per-device |roc|
-   peaks (15th-percentile across devices, as in the original repo).
-4. Build a signal-driven correlation graph from the pre-event window
-   (Pearson correlation x exp(-|lag|/lambda), k-NN sparsified).
-5. Build sliding-window torch_geometric Data objects with
-   ``data.x_seq = [N, lookback, F]`` and self-supervised label
-   ``data.y = r(t+1)``.
-6. Optionally cache pre-processed splits to disk (pickle or ADIOS) so
-   training can resume without re-running steps 1-5.
-7. Train HydraGNN's TemporalGCN on pre-event windows only.
-8. Score the full day, fit per-node z-scores, estimate arrival times.
+   (one file per device: ``[FDRID]-[device_name]-[date].parquet``).
+2. Per-device dynamic feature extraction (4 channels):
+     - freq_dev    = Frequency - 60
+     - rocof       = first difference of freq_dev
+     - angle_delta = first difference of unwrap(VoltageAngle)
+     - volt_dev    = VoltageMagnitude - per-sensor mean
+3. Multi-device timestamp inner-join -> X[T, N, F_dyn=4].
+4. Geographic k-NN graph from FDRLocation.xlsx using haversine distance
+   with edge weights ``exp(-d_km / sigma_km)``, symmetrized.
+5. Static node features (4-dim grid embedding):
+     - look up GridName per device from FDRLocation.xlsx
+     - assign each unique GridName a fixed 4-dim random projection vector
+       (deterministic via numpy seed)
+6. Sliding-window torch_geometric Data objects:
+     - x_seq = [N, Tin, F_dyn + F_static = 8]   (static features tiled in time)
+     - y     = [N, H * F_out]                   (multi-step, F_out=3 per step)
+7. Time-ordered 80/10/10 train/val/test split.
+8. Optionally cache pre-processed splits (pickle or ADIOS).
+9. Train HydraGNN's Temporal* model.
+10. Score val + test windows; save predictions and ground-truth tensors.
 
 Usage
 -----
@@ -43,26 +48,18 @@ Pre-process and cache (pickle):
         --data_root ../../../GRID-UTK-data/dataset/FNETDATAforOrnl \\
         --date 2024-06-01
 
-Pre-process and cache (ADIOS, requires mpi4py + adios2):
-    python fnet_temporal_anomaly_detection.py --preonly --format adios \\
-        --data_root ../../../GRID-UTK-data/dataset/FNETDATAforOrnl \\
-        --date 2024-06-01
-
 Train from cache:
     python fnet_temporal_anomaly_detection.py --format pickle \\
-        --data_root ../../../GRID-UTK-data/dataset/FNETDATAforOrnl \\
         --date 2024-06-01
 
 End-to-end (preprocess -> cache -> train) in one shot:
-    python fnet_temporal_anomaly_detection.py --format pickle --do_all \\
+    python fnet_temporal_anomaly_detection.py --do_all \\
         --data_root ../../../GRID-UTK-data/dataset/FNETDATAforOrnl \\
         --date 2024-06-01 --limit_devices 30
 """
 
 import os
-import sys
 import json
-import glob
 import pickle
 import random
 import argparse
@@ -72,7 +69,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.distributed as dist
-from scipy.signal import correlate, correlation_lags
+from sklearn.neighbors import NearestNeighbors
 from torch_geometric.data import Data
 
 import hydragnn
@@ -93,6 +90,11 @@ except ImportError:
     ADIOS_AVAILABLE = False
 
 
+EARTH_RADIUS_KM = 6371.0
+F_DYN = 4  # freq_dev, rocof, angle_delta, volt_dev
+F_OUT = 3  # freq_dev, angle_delta, volt_dev (RoCoF is input-only)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Reproducibility helper
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,16 +109,8 @@ def set_seed(seed: int = 42) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1.  FNET parquet loader  (mirrors GRID-UTK-data/read_fnet_data.py)
+# 1.  FNET parquet loader
 # ─────────────────────────────────────────────────────────────────────────────
-
-COLUMN_RENAMES = {
-    "DateTime": "timestamp",
-    "Frequency": "frequency_hz",
-    "VoltageAngle": "voltage_angle_rad",
-    "VoltageMagnitude": "voltage_magnitude_v",
-    "ReceivedTime": "received_time",
-}
 
 
 def _read_parquet(path: Path) -> pd.DataFrame:
@@ -127,12 +121,12 @@ def _read_parquet(path: Path) -> pd.DataFrame:
 
 
 def _parse_file_name(path: Path):
-    """``[ID]-[device_name]-[date].parquet`` -> dict."""
+    """``[FDRID]-[device_name]-[date].parquet`` -> dict."""
     parts = path.stem.split("-")
     if len(parts) < 3:
         raise ValueError(f"Unexpected file name: {path.name}")
     return {
-        "device_id": parts[0],
+        "fdr_id": int(parts[0]),
         "device_name": "-".join(parts[1:-1]),
         "date_str": parts[-1],
     }
@@ -144,33 +138,65 @@ def _read_device_file(path: Path) -> pd.DataFrame:
     # Timestamps are stored as the DataFrame index (not a column).
     if "DateTime" not in df.columns and "timestamp" not in df.columns:
         df = df.reset_index().rename(columns={df.index.name or "index": "DateTime"})
-    df = df.rename(columns=COLUMN_RENAMES)
+    df = df.rename(
+        columns={
+            "DateTime": "timestamp",
+            "Frequency": "frequency_hz",
+            "VoltageAngle": "voltage_angle",
+            "VoltageMagnitude": "voltage_magnitude",
+            "ReceivedTime": "received_time",
+        }
+    )
     if "received_time" in df.columns:
         df = df.drop(columns=["received_time"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-    df["frequency_hz"] = pd.to_numeric(df["frequency_hz"], errors="coerce")
-    df = df.dropna(subset=["timestamp", "frequency_hz"]).sort_values("timestamp")
-    df["device_id"] = meta["device_id"]
+    for col in ("frequency_hz", "voltage_angle", "voltage_magnitude"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df = df.dropna(
+        subset=["timestamp", "frequency_hz", "voltage_angle", "voltage_magnitude"]
+    ).sort_values("timestamp")
+    df["fdr_id"] = meta["fdr_id"]
     df["device_name"] = meta["device_name"]
     return df
 
 
-def preprocess_device(df: pd.DataFrame) -> pd.DataFrame:
-    """Compute residual r = f - 60 Hz and rate-of-change roc."""
+def compute_dynamic_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Compute 4 dynamic features per timestamp.
+
+    Returns columns: timestamp, freq_dev, rocof, angle_delta, volt_dev.
+    """
     df = df.copy()
-    # Reference time = first sample; relative seconds.
-    t0 = df["timestamp"].iloc[0]
-    df["t"] = (df["timestamp"] - t0).dt.total_seconds().astype(np.float64)
-    # Sampling interval (median for robustness against missing samples).
-    dt_s = df["timestamp"].diff().dt.total_seconds().dropna()
-    dt = float(np.median(dt_s)) if len(dt_s) else np.nan
-    df.attrs["dt"] = dt
-    # Residuals.
-    df["r"] = (df["frequency_hz"] - 60.0).astype(np.float32)
-    df["roc"] = (
-        df["r"].diff().fillna(0.0) / (dt if np.isfinite(dt) and dt > 0 else 1.0)
-    ).astype(np.float32)
-    return df
+    freq = df["frequency_hz"].to_numpy(dtype=np.float64)
+    angle = df["voltage_angle"].to_numpy(dtype=np.float64)
+    volt = df["voltage_magnitude"].to_numpy(dtype=np.float64)
+
+    freq_dev = freq - 60.0
+
+    rocof = np.zeros_like(freq_dev)
+    rocof[1:] = np.diff(freq_dev)
+    if len(rocof) > 1:
+        rocof[0] = rocof[1]
+
+    angle_unwrap = np.unwrap(angle)
+    angle_delta = np.zeros_like(angle_unwrap)
+    angle_delta[1:] = np.diff(angle_unwrap)
+    if len(angle_delta) > 1:
+        angle_delta[0] = angle_delta[1]
+
+    volt_baseline = float(np.nanmean(volt))
+    volt_dev = volt - volt_baseline
+
+    out = pd.DataFrame(
+        {
+            "timestamp": df["timestamp"].values,
+            "freq_dev": freq_dev.astype(np.float32),
+            "rocof": rocof.astype(np.float32),
+            "angle_delta": angle_delta.astype(np.float32),
+            "volt_dev": volt_dev.astype(np.float32),
+        }
+    )
+    return out
 
 
 def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
@@ -178,12 +204,13 @@ def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
 
     Returns
     -------
-    sites   : list[str]               site identifiers in load order
-    data    : dict[str, pd.DataFrame] preprocessed dataframes per site
-    dt      : float                   median sampling interval (s)
+    fdr_ids : list[int]                ordered FDR ids
+    sites   : list[str]                "{fdr_id}-{device_name}" labels
+    data    : dict[int, pd.DataFrame]  per-device feature dataframes
+    dt      : float                    median sampling interval (s)
     """
     files = sorted(date_dir.glob("*.parquet"))
-    sites, data, dt_list = [], {}, []
+    fdr_ids, sites, data, dt_list = [], [], {}, []
     for i, f in enumerate(files):
         if limit is not None and i >= limit:
             break
@@ -195,26 +222,22 @@ def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
         if len(raw) < min_samples:
             print(f"[skip] {f.name}: only {len(raw)} rows")
             continue
-        dfp = preprocess_device(raw)
-        sid = f"{dfp['device_id'].iloc[0]}-{dfp['device_name'].iloc[0]}"
-        sites.append(sid)
-        data[sid] = dfp
-        dt_list.append(dfp.attrs.get("dt", np.nan))
-    if not sites:
+        feats = compute_dynamic_features(raw)
+        fid = int(raw["fdr_id"].iloc[0])
+        site = f"{fid}-{raw['device_name'].iloc[0]}"
+        fdr_ids.append(fid)
+        sites.append(site)
+        data[fid] = feats
+        dt_s = pd.Series(feats["timestamp"]).diff().dt.total_seconds().dropna()
+        if len(dt_s):
+            dt_list.append(float(np.median(dt_s)))
+    if not fdr_ids:
         raise FileNotFoundError(
-            f"No usable parquet files under {date_dir} (with >= {min_samples} samples each)."
+            f"No usable parquet files under {date_dir} "
+            f"(with >= {min_samples} samples each)."
         )
     dt = float(np.nanmedian(dt_list))
-    return sites, data, dt
-
-
-def estimate_event_time(data: dict, percentile: float = 15.0) -> float:
-    """Per-device |roc| argmax -> percentile across devices."""
-    times = []
-    for sid, df in data.items():
-        idx = df["roc"].abs().idxmax()
-        times.append(float(df.loc[idx, "t"]))
-    return float(np.percentile(times, percentile))
+    return fdr_ids, sites, data, dt
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,108 +245,185 @@ def estimate_event_time(data: dict, percentile: float = 15.0) -> float:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def stack_node_features(sites, data, feature_cols=("r", "roc")):
-    """Inner-merge all device timelines on timestamp; return tvec, X[T,N,F]."""
-    ref = data[sites[0]][["timestamp", "t"]].rename(columns={"t": "tref"})
-    M = ref
-    for sid in sites:
-        cols = ["timestamp"] + list(feature_cols)
-        sub = data[sid][cols].copy()
-        sub.columns = ["timestamp"] + [f"{sid}:{c}" for c in feature_cols]
+def stack_node_features(fdr_ids, data):
+    """Inner-merge all device timelines on timestamp.
+
+    Returns
+    -------
+    tvec : np.ndarray  (T,)        seconds since first common timestamp
+    X    : np.ndarray  (T, N, 4)   dynamic features per node per timestep
+    """
+    feats = ("freq_dev", "rocof", "angle_delta", "volt_dev")
+    M = data[fdr_ids[0]][["timestamp"]].copy()
+    for fid in fdr_ids:
+        sub = data[fid][["timestamp", *feats]].copy()
+        sub.columns = ["timestamp"] + [f"{fid}:{c}" for c in feats]
         M = M.merge(sub, on="timestamp", how="inner")
     if len(M) == 0:
         raise RuntimeError(
             "No common timestamps across devices after inner-join. "
             "Check that the selected day has overlapping data."
         )
-    tvec = M["tref"].to_numpy(dtype=np.float32)
-    ordered = [f"{sid}:{c}" for sid in sites for c in feature_cols]
+    M = M.sort_values("timestamp").reset_index(drop=True)
+    t0 = M["timestamp"].iloc[0]
+    tvec = (M["timestamp"] - t0).dt.total_seconds().to_numpy(dtype=np.float32)
+    ordered = [f"{fid}:{c}" for fid in fdr_ids for c in feats]
     X = (
         M[ordered]
         .to_numpy(dtype=np.float32)
-        .reshape(len(tvec), len(sites), len(feature_cols))
+        .reshape(len(tvec), len(fdr_ids), len(feats))
     )
     return tvec, X
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 3.  Signal-driven correlation graph
+# 3.  Geographic k-NN graph + static node embeddings
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def build_signal_graph(
-    X, tvec, t_event, pre_window=120.0, guard=10.0, k=6, lag_lambda=2.0, dt=0.1
-):
-    """Pearson similarity x exp(-|lag|/lambda), k-NN sparsified."""
-    T, N, _ = X.shape
-    t_lo = max(0.0, t_event - pre_window)
-    t_hi = max(0.0, t_event - guard)
-    seg = (tvec >= t_lo) & (tvec <= t_hi)
-    if seg.sum() < 16:
-        raise RuntimeError(
-            f"Pre-event window too short: only {seg.sum()} samples in "
-            f"[{t_lo:.1f}, {t_hi:.1f}] s. Try a larger --pre_window or smaller --guard."
+def load_metadata(metadata_file: Path) -> pd.DataFrame:
+    df = pd.read_excel(metadata_file)
+    needed = {"FDRID", "GridName", "Latitude", "Longitude"}
+    missing = needed - set(df.columns)
+    if missing:
+        raise ValueError(f"FDRLocation.xlsx missing columns: {missing}")
+    df["FDRID"] = df["FDRID"].astype(int)
+    return df[["FDRID", "GridName", "Latitude", "Longitude"]].copy()
+
+
+def filter_to_active(meta_df: pd.DataFrame, fdr_ids: list):
+    """Restrict metadata to FDR ids present in `fdr_ids` and report unmatched."""
+    matched = meta_df[meta_df["FDRID"].isin(fdr_ids)].drop_duplicates("FDRID")
+    unmatched = sorted(set(fdr_ids) - set(matched["FDRID"]))
+    if unmatched:
+        print(
+            f"[meta] WARNING: {len(unmatched)} sensor(s) have no metadata; "
+            f"dropping them. First: {unmatched[:5]}"
         )
-    X_pre = X[seg, :, 0]  # 'r' only
-    L = X_pre.shape[0]
+    matched = matched.set_index("FDRID")
+    kept = [fid for fid in fdr_ids if fid in matched.index]
+    return kept, matched.loc[kept].reset_index()
 
-    W = np.zeros((N, N), dtype=np.float64)
-    for i in range(N):
-        xi = X_pre[:, i] - X_pre[:, i].mean()
-        for j in range(i + 1, N):
-            xj = X_pre[:, j] - X_pre[:, j].mean()
-            denom = (xi.std() * xj.std() + 1e-12) * L
-            rho = float(np.dot(xi, xj) / denom)
-            full_corr = correlate(xi, xj, mode="full")
-            lags = correlation_lags(len(xi), len(xj), mode="full")
-            lag_sec = float(lags[np.argmax(full_corr)] * dt)
-            W[i, j] = W[j, i] = max(0.0, rho) ** 2 * np.exp(-abs(lag_sec) / lag_lambda)
 
-    for i in range(N):
-        order = np.argsort(W[i])[::-1]
-        kill = np.ones(N, dtype=bool)
-        kill[order[:k]] = False
-        kill[i] = False
-        W[i, kill] = 0.0
-    W = np.maximum(W, W.T)
+def build_geo_knn_graph(meta_active: pd.DataFrame, k: int, sigma_km: float):
+    """k-NN haversine graph with weights exp(-d / sigma_km).
 
-    A = W + np.eye(N)
-    d = A.sum(axis=1)
-    D_inv_sqrt = np.diag(1.0 / np.sqrt(np.clip(d, 1e-12, None)))
-    A_hat = D_inv_sqrt @ A @ D_inv_sqrt
+    Returns
+    -------
+    edge_index  : LongTensor [2, E]   directed (symmetric) edges
+    edge_weight : FloatTensor [E]
+    A_hat       : np.ndarray [N, N]   GCN-normalized adjacency (D^-0.5 (A+I) D^-0.5)
+    """
+    coords = meta_active[["Latitude", "Longitude"]].to_numpy(dtype=np.float64)
+    coords_rad = np.radians(coords)
+    n = len(coords_rad)
 
-    src, dst = np.nonzero(W)
+    nbrs = NearestNeighbors(
+        n_neighbors=min(k + 1, n), algorithm="ball_tree", metric="haversine"
+    )
+    nbrs.fit(coords_rad)
+    dists_rad, indices = nbrs.kneighbors(coords_rad)
+    dists_km = dists_rad * EARTH_RADIUS_KM
+
+    A = np.zeros((n, n), dtype=np.float64)
+    for i in range(n):
+        # Skip first neighbor (self).
+        for j_idx in range(1, indices.shape[1]):
+            j = int(indices[i, j_idx])
+            d = float(dists_km[i, j_idx])
+            A[i, j] = np.exp(-d / sigma_km)
+    A = np.maximum(A, A.T)
+    np.fill_diagonal(A, 0.0)
+
+    src, dst = np.nonzero(A)
     edge_index = torch.tensor(np.stack([src, dst]), dtype=torch.long)
-    edge_weight = torch.tensor(W[src, dst], dtype=torch.float32)
+    edge_weight = torch.tensor(A[src, dst], dtype=torch.float32)
+
+    # GCN-normalized adjacency for downstream tools that expect A_hat.
+    A_self = A + np.eye(n)
+    deg = A_self.sum(axis=1)
+    D_inv_sqrt = np.diag(1.0 / np.sqrt(np.clip(deg, 1e-12, None)))
+    A_hat = D_inv_sqrt @ A_self @ D_inv_sqrt
     return edge_index, edge_weight, A_hat
 
 
+def build_grid_embeddings(
+    meta_active: pd.DataFrame, embed_dim: int = 4, seed: int = 42
+):
+    """Deterministic random projection per unique GridName.
+
+    Returns
+    -------
+    grid_embed       : np.ndarray [N, embed_dim]   per-node static features
+    grid_name_to_idx : dict[str, int]
+    grid_names       : list[str]                   per-node grid names
+    """
+    grid_names = meta_active["GridName"].astype(str).tolist()
+    unique = sorted(set(grid_names))
+    rng = np.random.RandomState(seed)
+    table = rng.normal(0.0, 1.0, size=(len(unique), embed_dim)).astype(np.float32)
+    name_to_idx = {g: i for i, g in enumerate(unique)}
+    embed = np.stack([table[name_to_idx[g]] for g in grid_names], axis=0)
+    return embed, name_to_idx, grid_names
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# 4.  Sliding-window dataset
+# 4.  Sliding-window dataset (multi-step targets, time-ordered split)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def make_dataset(X, tvec, edge_index, lookback=30, horizon=1, t_max=None):
+def make_window_dataset(X, grid_embed, edge_index, Tin: int, H: int):
+    """Build sliding-window torch_geometric Data objects.
+
+    Per window:
+      data.x_seq : [N, Tin, F_dyn + F_static]   (static features tiled across time)
+      data.y     : [N, H * F_out]               (multi-step target per node, flat)
+      data.y_loc : [[0, N]]                     single output head spans all N nodes
+    """
     T, N, F = X.shape
+    assert F == F_DYN
+    assert grid_embed.shape == (N, grid_embed.shape[1])
+    F_static = grid_embed.shape[1]
+
+    # Pre-tiled static features as a torch tensor [N, Tin, F_static].
+    static_t = (
+        torch.from_numpy(grid_embed).float().unsqueeze(1).expand(N, Tin, F_static)
+    )
     pos = torch.zeros(N, 3)
     batch = torch.zeros(N, dtype=torch.long)
+    target_dim = H * F_OUT
+    # HydraGNN uses y_loc to slice y per output head; for a node-level head with
+    # `output_dim` channels per node, dim_item = (y_loc[0,1] - y_loc[0,0]) / N,
+    # so y_loc must span N * output_dim entries.
+    y_loc = torch.tensor([[0, N * target_dim]], dtype=torch.int64)
+    # Output indices: freq_dev (0), angle_delta (2), volt_dev (3)
+    out_idx = np.array([0, 2, 3], dtype=np.int64)
+
     dataset = []
-    for s in range(lookback - 1, T - horizon):
-        if t_max is not None and tvec[s] > t_max:
-            break
-        x_seq = torch.from_numpy(X[s - lookback + 1 : s + 1]).permute(
-            1, 0, 2
-        )  # [N,L,F]
-        x_last = torch.from_numpy(X[s])  # [N,F]
-        y_next = torch.from_numpy(X[s + 1, :, 0:1])  # [N,1]
-        y_loc = torch.tensor([[0, N]], dtype=torch.int64)
+    for s in range(Tin - 1, T - H):
+        # Dynamic input: shape [Tin, N, F_dyn] -> [N, Tin, F_dyn]
+        x_dyn = torch.from_numpy(X[s - Tin + 1 : s + 1]).permute(1, 0, 2).contiguous()
+        x_seq = torch.cat(
+            [x_dyn, static_t], dim=-1
+        ).contiguous()  # [N, Tin, F_dyn+F_static]
+
+        # Multi-step target: shape [H, N, F_out] -> [N, H*F_out]
+        y_block = X[s + 1 : s + 1 + H][:, :, out_idx]  # [H, N, F_out]
+        y = (
+            torch.from_numpy(y_block)
+            .permute(1, 0, 2)  # [N, H, F_out]
+            .reshape(N, H * F_OUT)
+            .contiguous()
+        )
+
+        x_last = torch.from_numpy(X[s]).contiguous()  # [N, F_dyn]
         dataset.append(
             Data(
                 x=x_last,
                 x_seq=x_seq,
                 edge_index=edge_index.clone(),
-                y=y_next,
-                y_loc=y_loc,
+                y=y,
+                y_loc=y_loc.clone(),
                 pos=pos,
                 batch=batch,
                 num_nodes=N,
@@ -332,68 +432,18 @@ def make_dataset(X, tvec, edge_index, lookback=30, horizon=1, t_max=None):
     return dataset
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 5.  Anomaly scoring (full-day rollout)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-def score_signal(model, X, tvec, edge_index, lookback, device, horizon=1):
-    T, N, F = X.shape
-    pos = torch.zeros(N, 3, device=device)
-    batch = torch.zeros(N, dtype=torch.long, device=device)
-    pred_r = np.full((T, N), np.nan, dtype=np.float32)
-    err = np.full((T, N), np.nan, dtype=np.float32)
-    edge_index_dev = edge_index.to(device)
-    model.eval()
-    with torch.no_grad():
-        for s in range(lookback - 1, T - horizon):
-            x_seq = (
-                torch.from_numpy(X[s - lookback + 1 : s + 1])
-                .permute(1, 0, 2)
-                .to(device)
-            )
-            x_last = torch.from_numpy(X[s]).to(device)
-            data = Data(
-                x=x_last,
-                x_seq=x_seq,
-                edge_index=edge_index_dev,
-                pos=pos,
-                batch=batch,
-                num_nodes=N,
-            )
-            outputs = model(data)
-            r_pred = outputs[0].cpu().numpy().reshape(N)
-            pred_r[s + 1] = r_pred
-            err[s + 1] = np.abs(r_pred - X[s + 1, :, 0])
-    return pred_r, err
-
-
-def fit_z_scores(err, tvec, t_event, guard=10.0):
-    baseline = tvec <= (t_event - guard)
-    if baseline.sum() < 8:
-        # Fallback: use first quartile of pre-event samples.
-        baseline = tvec <= (tvec[0] + 0.25 * (t_event - tvec[0]))
-    mu = np.nanmean(err[baseline], axis=0)
-    sd = np.nanstd(err[baseline], axis=0) + 1e-9
-    return (err - mu) / sd, mu, sd
-
-
-def estimate_arrival_times(z, tvec, tau=3.0, persist_s=2.0, dt=0.1):
-    persist_steps = max(1, int(persist_s / dt))
-    T, N = z.shape
-    arrivals = np.full(N, np.nan)
-    for n in range(N):
-        seq = np.nan_to_num(z[:, n], nan=0.0)
-        above = (seq > tau).astype(np.int32)
-        roll = np.convolve(above, np.ones(persist_steps, dtype=np.int32), mode="same")
-        idx = np.where(roll >= persist_steps)[0]
-        if len(idx) > 0:
-            arrivals[n] = tvec[idx[0]]
-    return arrivals
+def time_ordered_split(dataset, train_frac: float, val_frac: float):
+    n = len(dataset)
+    n_train = int(n * train_frac)
+    n_val = int(n * val_frac)
+    train = dataset[:n_train]
+    val = dataset[n_train : n_train + n_val]
+    test = dataset[n_train + n_val :]
+    return train, val, test
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6.  Cache I/O (pickle / ADIOS)
+# 5.  Cache I/O (pickle / ADIOS)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -431,7 +481,6 @@ def write_cache(
         print(f"[cache] adios splits saved to {fname}")
     else:
         raise ValueError(f"Unknown --format: {fmt}")
-    # Always pickle the small auxiliary metadata.
     with open(_meta_path(cache_dir, date), "wb") as f:
         pickle.dump(meta, f)
     print(f"[cache] metadata saved to {_meta_path(cache_dir, date)}")
@@ -467,89 +516,105 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7.  Pipeline stages
+# 6.  Pipeline stages
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def preprocess_stage(args, cache_dir: Path):
-    """Steps 1-5 + cache write."""
+    """Steps 1-7 + cache write."""
     # SimplePickleWriter / AdiosWriter call dist.get_rank(); init the group.
     hydragnn.utils.distributed.setup_ddp()
 
-    print(f"[load]  reading day folder: {Path(args.data_root) / args.date}")
-    sites, data, dt = load_day_folder(
-        Path(args.data_root) / args.date,
-        limit=args.limit_devices,
-        min_samples=args.min_samples,
+    data_root = Path(args.data_root)
+    date_dir = data_root / args.date
+    metadata_file = (
+        Path(args.metadata_file)
+        if args.metadata_file
+        else (data_root / "FDRLocation.xlsx")
     )
-    print(f"[load]  {len(sites)} devices loaded, dt = {dt:.4f} s")
 
-    t_event = estimate_event_time(data)
-    print(f"[event] estimated onset at t = {t_event:.2f} s")
+    print(f"[load]  reading day folder: {date_dir}")
+    fdr_ids, sites, data, dt = load_day_folder(
+        date_dir, limit=args.limit_devices, min_samples=args.min_samples
+    )
+    print(f"[load]  {len(fdr_ids)} devices loaded, dt = {dt:.4f} s")
 
-    tvec, X = stack_node_features(sites, data, feature_cols=("r", "roc"))
+    print(f"[meta]  loading metadata: {metadata_file}")
+    meta_df = load_metadata(metadata_file)
+    fdr_ids, meta_active = filter_to_active(meta_df, fdr_ids)
+    sites = [s for s in sites if int(s.split("-", 1)[0]) in set(fdr_ids)]
+    if len(fdr_ids) < 2:
+        raise RuntimeError(
+            f"Only {len(fdr_ids)} device(s) have both data and metadata; "
+            f"need >= 2 to build a graph."
+        )
+    print(f"[meta]  {len(fdr_ids)} devices retained after metadata filtering")
+
+    tvec, X = stack_node_features(fdr_ids, data)
     if args.stride > 1:
         tvec = tvec[:: args.stride]
         X = X[:: args.stride]
         dt = dt * args.stride
         print(f"[align] applied stride={args.stride}: dt -> {dt:.4f} s")
     T, N, F = X.shape
-    print(f"[align] X shape = {(T, N, F)} after timestamp inner-join")
+    print(f"[align] X shape = {(T, N, F)} (after timestamp inner-join)")
 
-    edge_index, edge_weight, A_hat = build_signal_graph(
-        X,
-        tvec,
-        t_event,
-        pre_window=args.pre_window,
-        guard=args.guard,
-        k=args.k,
-        lag_lambda=args.lag_lambda,
-        dt=dt,
-    )
-    print(f"[graph] {N} nodes  |  {edge_index.shape[1]} directed edges  (k={args.k})")
-
-    t_train_max = t_event - args.guard
-    full_dataset = make_dataset(
-        X,
-        tvec,
-        edge_index,
-        lookback=args.lookback,
-        horizon=1,
-        t_max=t_train_max,
+    edge_index, edge_weight, A_hat = build_geo_knn_graph(
+        meta_active, k=args.k, sigma_km=args.sigma_km
     )
     print(
-        f"[ds]    {len(full_dataset)} pre-event windows  "
-        f"(lookback={args.lookback}, guard={args.guard} s)"
+        f"[graph] {N} nodes  |  {edge_index.shape[1]} directed edges  "
+        f"(k={args.k}, sigma_km={args.sigma_km})"
+    )
+
+    grid_embed, grid_name_to_idx, grid_names = build_grid_embeddings(
+        meta_active, embed_dim=args.grid_embed_dim, seed=args.seed
+    )
+    print(
+        f"[embed] grid embedding shape = {grid_embed.shape}, "
+        f"unique grids = {len(grid_name_to_idx)}"
+    )
+
+    full_dataset = make_window_dataset(
+        X, grid_embed, edge_index, Tin=args.Tin, H=args.horizon
+    )
+    print(
+        f"[ds]    {len(full_dataset)} windows  " f"(Tin={args.Tin}, H={args.horizon})"
     )
     if args.max_windows is not None and len(full_dataset) > args.max_windows:
-        # Take an evenly-spaced subset to retain temporal coverage.
         idx = np.linspace(0, len(full_dataset) - 1, args.max_windows, dtype=int)
         full_dataset = [full_dataset[i] for i in idx]
         print(f"[ds]    capped to {len(full_dataset)} windows via --max_windows")
     if len(full_dataset) < 8:
         raise RuntimeError(
-            "Too few pre-event windows; reduce --lookback or pick a day "
-            "with later disturbance onset."
+            "Too few windows; reduce --Tin/--horizon or use a longer day."
         )
 
-    perc_train = 0.7
-    train_data, val_data, test_data = hydragnn.preprocess.split_dataset(
-        full_dataset, perc_train, False
+    train_data, val_data, test_data = time_ordered_split(
+        full_dataset, train_frac=args.train_frac, val_frac=args.val_frac
     )
     print(
-        f"[split] train/val/test = {len(train_data)}/{len(val_data)}/{len(test_data)}"
+        f"[split] train/val/test = {len(train_data)}/{len(val_data)}/{len(test_data)}  "
+        f"(time-ordered)"
     )
 
     meta = {
+        "fdr_ids": fdr_ids,
         "sites": sites,
         "tvec": tvec,
         "X": X,
         "dt": float(dt),
-        "t_event": float(t_event),
         "edge_index": edge_index,
         "edge_weight": edge_weight,
         "A_hat": A_hat,
-        "lookback": int(args.lookback),
+        "grid_embed": grid_embed,
+        "grid_name_to_idx": grid_name_to_idx,
+        "grid_names": grid_names,
+        "Tin": int(args.Tin),
+        "horizon": int(args.horizon),
+        "F_dyn": F_DYN,
+        "F_out": F_OUT,
+        "F_static": int(grid_embed.shape[1]),
     }
     write_cache(
         cache_dir, args.date, args.format, train_data, val_data, test_data, meta
@@ -557,7 +622,7 @@ def preprocess_stage(args, cache_dir: Path):
 
 
 def train_stage(args, cache_dir: Path):
-    """Steps 6-8: load cache, train HydraGNN, score, save outputs."""
+    """Steps 8-10: load cache, train HydraGNN, score val/test, save outputs."""
     set_seed(args.seed)
     device = "cuda" if torch.cuda.is_available() and not args.cpu else "cpu"
     os.environ.setdefault("SERIALIZED_DATA_PATH", os.getcwd())
@@ -565,6 +630,8 @@ def train_stage(args, cache_dir: Path):
     cfg_path = Path(__file__).resolve().parent / "fnet_temporal_anomaly_detection.json"
     with open(cfg_path) as f:
         config = json.load(f)
+
+    # CLI overrides (also used as HPO knobs).
     if args.mpnn_type:
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.mpnn_type
     if args.backbone:
@@ -585,6 +652,7 @@ def train_stage(args, cache_dir: Path):
         config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"] = float(
             args.learning_rate
         )
+
     verbosity = config["Verbosity"]["level"]
 
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
@@ -596,9 +664,17 @@ def train_stage(args, cache_dir: Path):
     trainset, valset, testset, meta = read_cache(cache_dir, args.date, args.format)
     print(
         f"[cache] train/val/test = {len(trainset)}/{len(valset)}/{len(testset)}  "
-        f"| sites={len(meta['sites'])}, lookback={meta['lookback']}, "
-        f"t_event={meta['t_event']:.2f}s"
+        f"| sites={len(meta['sites'])}, Tin={meta['Tin']}, H={meta['horizon']}, "
+        f"F_dyn={meta['F_dyn']}, F_static={meta['F_static']}, F_out={meta['F_out']}"
     )
+
+    # Patch JSON config to match cached tensor shapes.
+    F_total = meta["F_dyn"] + meta["F_static"]
+    target_dim = meta["horizon"] * meta["F_out"]
+    config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"] = list(
+        range(F_total)
+    )
+    config["NeuralNetwork"]["Variables_of_interest"]["output_dim"] = [target_dim]
 
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
@@ -611,8 +687,7 @@ def train_stage(args, cache_dir: Path):
     )
 
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
-        verbosity=verbosity,
+        config=config["NeuralNetwork"], verbosity=verbosity
     )
     lr = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
@@ -629,8 +704,8 @@ def train_stage(args, cache_dir: Path):
     tr.disable()
 
     print(
-        f"\n[train] Self-supervised pre-event training "
-        f"({mpnn_label}, lookback={meta['lookback']}, "
+        f"\n[train] Multi-feature spatiotemporal forecasting "
+        f"({mpnn_label}, Tin={meta['Tin']}, H={meta['horizon']}, "
         f"{config['NeuralNetwork']['Training']['num_epoch']} epochs) ..."
     )
     hydragnn.train.train_validate_test(
@@ -647,58 +722,31 @@ def train_stage(args, cache_dir: Path):
     )
 
     raw_model = (model.module if hasattr(model, "module") else model).to(device)
-    print("\n[score] Scoring full day (pre + post-event windows) ...")
-    pred_r, err = score_signal(
-        raw_model,
-        meta["X"],
-        meta["tvec"],
-        meta["edge_index"],
-        meta["lookback"],
-        device,
-    )
-    z, mu, sd = fit_z_scores(err, meta["tvec"], meta["t_event"], guard=args.guard)
-    arrivals = estimate_arrival_times(
-        z,
-        meta["tvec"],
-        tau=args.tau,
-        persist_s=args.persist_s,
-        dt=meta["dt"],
-    )
-    print("\n[arrivals] Estimated disturbance arrival times (s):")
-    detected = 0
-    for n, t_arr in enumerate(arrivals):
-        if np.isnan(t_arr):
-            continue
-        detected += 1
-        delay = t_arr - meta["t_event"]
-        if detected <= 20:
-            print(
-                f"  {meta['sites'][n]:40s}  t = {t_arr:8.2f} s  "
-                f"(delay {delay:+.2f} s)"
-            )
-    print(
-        f"[arrivals] {detected}/{len(arrivals)} sites exceeded "
-        f"tau={args.tau} for >= {args.persist_s}s"
-    )
+    print("\n[score] Scoring val + test windows ...")
+    preds_val, ys_val = _score_split(raw_model, val_loader, meta, device)
+    preds_test, ys_test = _score_split(raw_model, test_loader, meta, device)
+    val_mse = float(np.mean((preds_val - ys_val) ** 2))
+    test_mse = float(np.mean((preds_test - ys_test) ** 2))
+    print(f"[score] val MSE = {val_mse:.6e}")
+    print(f"[score] test MSE = {test_mse:.6e}")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     np.save(out_dir / "tvec.npy", meta["tvec"])
     np.save(out_dir / "X.npy", meta["X"])
-    np.save(out_dir / "pred_r.npy", pred_r)
-    np.save(out_dir / "err.npy", err)
-    np.save(out_dir / "z.npy", z)
-    np.save(out_dir / "arrivals.npy", arrivals)
     np.save(out_dir / "A_hat.npy", meta["A_hat"])
+    np.save(out_dir / "grid_embed.npy", meta["grid_embed"])
+    np.save(out_dir / "preds_val.npy", preds_val)
+    np.save(out_dir / "ys_val.npy", ys_val)
+    np.save(out_dir / "preds_test.npy", preds_test)
+    np.save(out_dir / "ys_test.npy", ys_test)
     pd.DataFrame(
         {
             "site": meta["sites"],
-            "arrival_sec": arrivals,
-            "delay_sec": arrivals - meta["t_event"],
+            "fdr_id": meta["fdr_ids"],
+            "grid_name": meta["grid_names"],
         }
-    ).to_csv(out_dir / "arrival_times.csv", index=False)
-    with open(out_dir / "sites.txt", "w") as f:
-        f.writelines(s + "\n" for s in meta["sites"])
+    ).to_csv(out_dir / "sites.csv", index=False)
     print(f"[save]  outputs written to {out_dir}/")
 
     tr.save(log_name)
@@ -708,6 +756,37 @@ def train_stage(args, cache_dir: Path):
         dist.destroy_process_group()
 
 
+def _score_split(model, loader, meta, device):
+    """Run model over a dataloader and return stacked (preds, ys).
+
+    Each window's per-node output is reshaped back to [N, H, F_out].
+    Returns arrays of shape [num_windows, N, H, F_out].
+    """
+    N = len(meta["fdr_ids"])
+    H = meta["horizon"]
+    Fo = meta["F_out"]
+    preds, ys = [], []
+    model.eval()
+    with torch.no_grad():
+        for data in loader:
+            data = data.to(device)
+            outputs = model(data)
+            # Single-head per-node output -> [B*N, H*Fo]
+            y_pred = outputs[0].cpu().numpy()
+            y_true = data.y.cpu().numpy()
+            # Reshape to [B, N, H, Fo]
+            B = y_pred.shape[0] // N
+            y_pred = y_pred.reshape(B, N, H, Fo)
+            y_true = y_true.reshape(B, N, H, Fo)
+            preds.append(y_pred)
+            ys.append(y_true)
+    if not preds:
+        return np.zeros((0, N, H, Fo), dtype=np.float32), np.zeros(
+            (0, N, H, Fo), dtype=np.float32
+        )
+    return np.concatenate(preds, axis=0), np.concatenate(ys, axis=0)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -715,7 +794,7 @@ def train_stage(args, cache_dir: Path):
 
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="HydraGNN T-GCN on real FNET data (parquet)",
+        description="HydraGNN multi-feature T-GCN on real FNET data (parquet)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     # Data
@@ -724,14 +803,19 @@ def build_argparser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Path to GRID-UTK-data root containing date subfolders "
-        "(required for --preonly / --do_all; ignored when "
-        "training from an existing cache)",
+        "(required for --preonly / --do_all)",
     )
     p.add_argument(
         "--date",
         type=str,
         default="2024-06-01",
         help="Date subfolder to load (e.g. 2024-06-01)",
+    )
+    p.add_argument(
+        "--metadata_file",
+        type=str,
+        default=None,
+        help="Path to FDRLocation.xlsx (default: <data_root>/FDRLocation.xlsx)",
     )
     p.add_argument(
         "--limit_devices",
@@ -749,8 +833,7 @@ def build_argparser() -> argparse.ArgumentParser:
         "--stride",
         type=int,
         default=1,
-        help="Temporal subsampling stride applied after alignment "
-        "(e.g. 10 turns 10 Hz data into 1 Hz)",
+        help="Temporal subsampling stride applied after alignment",
     )
     # Cache
     p.add_argument(
@@ -776,43 +859,35 @@ def build_argparser() -> argparse.ArgumentParser:
         help="Pre-process, cache, and immediately train in one run",
     )
     # Graph
+    p.add_argument("--k", type=int, default=5, help="k in geographic k-NN graph")
     p.add_argument(
-        "--pre_window",
+        "--sigma_km",
         type=float,
-        default=120.0,
-        help="Pre-event seconds used to build the correlation graph",
+        default=100.0,
+        help="Haversine bandwidth (km) for edge weight exp(-d/sigma)",
     )
     p.add_argument(
-        "--guard",
-        type=float,
-        default=10.0,
-        help="Exclude last N seconds before event (anti-leakage)",
+        "--grid_embed_dim",
+        type=int,
+        default=4,
+        help="Dimensionality of the per-grid static embedding",
     )
-    p.add_argument("--k", type=int, default=6, help="k in k-NN graph sparsification")
+    # Sliding window
     p.add_argument(
-        "--lag_lambda", type=float, default=2.0, help="Lag-penalty decay constant (s)"
+        "--Tin", type=int, default=100, help="Input history window length (steps)"
     )
-    # Sequence
     p.add_argument(
-        "--lookback", type=int, default=30, help="Lookback window length (steps)"
+        "--horizon", type=int, default=10, help="Forecast horizon length (steps)"
     )
     p.add_argument(
         "--max_windows",
         type=int,
         default=None,
-        help="Cap total pre-event windows (evenly spaced subset). "
-        "Useful for fast iteration on large days.",
+        help="Cap total windows (evenly spaced subset). Useful for fast iteration.",
     )
-    # Detection
-    p.add_argument(
-        "--tau", type=float, default=3.0, help="Z-score threshold for arrival detection"
-    )
-    p.add_argument(
-        "--persist_s",
-        type=float,
-        default=2.0,
-        help="Required sustained exceedance duration (s)",
-    )
+    # Split
+    p.add_argument("--train_frac", type=float, default=0.8)
+    p.add_argument("--val_frac", type=float, default=0.1)
     # Model overrides (also used as HPO knobs)
     p.add_argument(
         "--mpnn_type", type=str, default=None, help="Override mpnn_type from JSON"
@@ -838,7 +913,7 @@ def build_argparser() -> argparse.ArgumentParser:
         default=None,
         help="Override Architecture.num_conv_layers",
     )
-    # Training overrides (also used as HPO knobs)
+    # Training overrides
     p.add_argument(
         "--num_epoch", type=int, default=None, help="Override Training.num_epoch"
     )

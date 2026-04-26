@@ -212,11 +212,11 @@ if __name__ == "__main__":
     hyperparameters["mpnn_type"] = mpnn_type_list
     hyperparameters["backbone"] = ["gru", "lstm"]
     hyperparameters["mode"] = ["post_gcn", "pre_gcn", "interleaved"]
+    # Note: --Tin, --horizon, --k, --sigma_km are *not* in the search space
+    # because they change the cached dataset shape. Set them once at
+    # pre-processing time. Only model + optimizer knobs are tuned here.
     hyperparameters["hidden_dim"] = (16, 128)
     hyperparameters["num_conv_layers"] = (1, 4)
-    hyperparameters["lookback"] = (8, 64)
-    hyperparameters["k"] = (2, 10)
-    hyperparameters["lag_lambda"] = (0.5, 10.0)
     hyperparameters["learning_rate"] = (1e-5, 1e-2)
 
     problem = HpProblem()
