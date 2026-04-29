@@ -92,11 +92,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Graph-level spin used for graph_attr conditioning",
     )
     parser.add_argument(
-        "--optimizer",
+        "--ase-structure-optimizer",
         type=str,
         choices=["FIRE", "BFGS", "BFGSLineSearch"],
         default="FIRE",
-        help="ASE optimizer",
+        help="ASE structure optimizer",
     )
     parser.add_argument(
         "--maxstep",
@@ -109,6 +109,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=200,
         help="Maximum optimization steps",
+    )
+    parser.add_argument(
+        "--fmax",
+        type=float,
+        default=0.02,
+        help="Stop when the maximum force component drops below this value (eV/Å). Default: 0.02",
     )
     parser.add_argument(
         "--relative_increase_threshold",
@@ -363,7 +369,7 @@ def main():
     traj_writer = Trajectory(trajectory_path, mode="w", atoms=atoms)
     traj_writer.write()
 
-    optimizer = build_optimizer(args.optimizer, atoms, args.maxstep)
+    optimizer = build_optimizer(args.ase_structure_optimizer, atoms, args.maxstep)
 
     num_branches_for_log = int(num_branches)
     csv_header = [
@@ -422,6 +428,10 @@ def main():
                     )
                     atoms.set_positions(prev_positions)
                     break
+
+            if max_force < args.fmax:
+                print(f"Converged at step {step + 1}: max force {max_force:.6f} eV/Å < fmax {args.fmax} eV/Å")
+                break
 
             prev_max_force = max_force
             prev_positions = deepcopy(atoms.get_positions())
