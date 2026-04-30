@@ -108,6 +108,36 @@ try:
 except:
     pass
 
+
+try:
+    import hydragnn.utils.profiling_and_tracing.craypmTracer as ct
+
+    class CRAYPMTracer(Tracer):
+        def __init__(self, **kwargs):
+            ct.initialize()
+
+        def start(self, name):
+            ct.start(name)
+
+        def stop(self, name):
+            ct.stop(name)
+
+        def enable(self):
+            ct.enable()
+
+        def disable(self):
+            ct.disable()
+
+        def reset(self):
+            ct.reset()
+
+        def pr_file(self,file_path):
+            ct.pr_file(file_path)
+            print(f"Saving crayLogs")
+except:
+    print(f"Error importing CRAYPMTracer")
+    pass
+
 try:
     from pynvml import *
 
@@ -208,7 +238,7 @@ try:
             self.energyTracer = defaultdict(list)
             self.enabled = True
             self.rank = MPI.COMM_WORLD.Get_rank()
-
+            self.func_list = ['train','dataload','forward','backward']
             if os.getenv("ROCR_VISIBLE_DEVICES"):
                 device_list = [
                     int(x) for x in os.getenv("ROCR_VISIBLE_DEVICES").split(",")
@@ -239,15 +269,18 @@ try:
                 return np.nan
 
         def start(self, name):
+            
             if not self.enabled:
                 return
-            self.energyCounters[name] = self.get_energy()
+            if name!="get":
+                self.energyCounters[name] = self.get_energy()
 
         def stop(self, name):
             if not self.enabled:
                 return
-            self.energyCounters[name] = self.get_energy() - self.energyCounters[name]
-            self.energyTracer[name].append(self.energyCounters[name])
+            if name!="get":
+                self.energyCounters[name] = self.get_energy() - self.energyCounters[name]
+                self.energyTracer[name].append(self.energyCounters[name])
 
         def enable(self):
             self.enabled = True
@@ -286,10 +319,7 @@ try:
     class XPUTracer:
         def __init__(self, **kwargs):
             self.rank = MPI.COMM_WORLD.Get_rank()
-            self.device = int(os.environ.get("PALS_LOCAL_RANKID", "0"))
-            group = self.device // 2
-            counter_id = group * 3 + self.device % 2 + 1  ## 0: cpu, 1,2: gpu
-
+            self.device = torch.xpu.current_device()
             group = self.device // 2
             counter_id = group * 3 + self.device % 2 + 1
             counter = f"/sys/class/hwmon/hwmon{counter_id}/energy1_input"
@@ -299,17 +329,12 @@ try:
             self.energyTracer = defaultdict(list)
             self.enabled = True
 
-            print(
-                f"XPUTracer initalized: rank={self.rank}, device={self.device}, counter_id={counter_id}"
-            )
+            print(f"XPUTracer initalized: rank={self.rank}, device={self.device}")
 
         def get_energy_read(self):
             ## Cumulative energy used (uJ)
-            try:
-                self.f.seek(0)
-                energy_uj = float(self.f.read().strip())
-            except:
-                energy_uj = np.nan
+            self.f.seek(0)
+            energy_uj = float(self.f.read().strip())
             return energy_uj
 
         def start(self, name):
@@ -366,7 +391,7 @@ def has(name):
 
 
 def initialize(
-    trlist=["GPTLTracer", "SCOREPTracer", "NVMLTracer", "ROCMTracer", "XPUTracer"],
+    trlist=["GPTLTracer", "SCOREPTracer", "NVMLTracer", "ROCMTracer", "XPUTracer", "CRAYPMTracer"],
     verbose=False,
     **kwargs,
 ):
@@ -448,10 +473,16 @@ def save(log_name):
     if has("NVMLTracer"):
         tx = __tracer_list__["NVMLTracer"]
         tx.pr_file(os.path.join("logs", log_name, "nvml_energy.p%d" % rank))
+        print("Saved NVML TRACER")
 
     if has("ROCMTracer"):
         tx = __tracer_list__["ROCMTracer"]
         tx.pr_file(os.path.join("logs", log_name, "rocm_energy.p%d" % rank))
+        print("Saved ROCM Tracer")
+
+    if has("CRAYPMTracer"):
+        tx = __tracer_list__["CRAYPMTracer"]
+        tx.pr_file(os.path.join("logs", log_name, "cray"))
 
     if has("XPUTracer"):
         tx = __tracer_list__["XPUTracer"]
