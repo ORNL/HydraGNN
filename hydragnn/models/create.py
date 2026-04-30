@@ -30,6 +30,8 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+from hydragnn.models.AllScAIPStack import AllScAIPStack
+from hydragnn.models.UMAStack import UMAStack
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -96,6 +98,23 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        # AllScAIP-specific
+        allscaip_num_heads=config["Architecture"]["allscaip_num_heads"],
+        allscaip_freq_list=config["Architecture"]["allscaip_freq_list"],
+        allscaip_atten_name=config["Architecture"]["allscaip_atten_name"],
+        allscaip_use_node_path=config["Architecture"]["allscaip_use_node_path"],
+        allscaip_use_sincx_mask=config["Architecture"]["allscaip_use_sincx_mask"],
+        allscaip_use_freq_mask=config["Architecture"]["allscaip_use_freq_mask"],
+        allscaip_max_num_elements=config["Architecture"]["allscaip_max_num_elements"],
+        # UMA-specific
+        uma_mmax=config["Architecture"]["uma_mmax"],
+        uma_grid_resolution=config["Architecture"]["uma_grid_resolution"],
+        uma_edge_channels=config["Architecture"]["uma_edge_channels"],
+        uma_hidden_channels=config["Architecture"]["uma_hidden_channels"],
+        uma_norm_type=config["Architecture"]["uma_norm_type"],
+        uma_ff_type=config["Architecture"]["uma_ff_type"],
+        uma_use_chg_spin=config["Architecture"]["uma_use_chg_spin"],
+        uma_max_num_elements=config["Architecture"]["uma_max_num_elements"],
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -156,6 +175,23 @@ def create_model(
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    # AllScAIP-specific
+    allscaip_num_heads: int = 8,
+    allscaip_freq_list: List[int] = None,
+    allscaip_atten_name: str = "math",
+    allscaip_use_node_path: bool = True,
+    allscaip_use_sincx_mask: bool = True,
+    allscaip_use_freq_mask: bool = True,
+    allscaip_max_num_elements: int = 119,
+    # UMA-specific
+    uma_mmax: int = 2,
+    uma_grid_resolution: int = None,
+    uma_edge_channels: int = 128,
+    uma_hidden_channels: int = None,
+    uma_norm_type: str = "rms_norm_sh",
+    uma_ff_type: str = "grid",
+    uma_use_chg_spin: bool = False,
+    uma_max_num_elements: int = 100,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -580,6 +616,88 @@ def create_model(
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
+    elif mpnn_type == "AllScAIP":
+        assert radius is not None, "AllScAIP requires radius input."
+        assert max_neighbours is not None, "AllScAIP requires max_neighbours input."
+        model = AllScAIPStack(
+            # input_args / conv_args are consumed by Base.__init__ but are
+            # unused at runtime because AllScAIP performs its own message
+            # passing. We pass canonical strings for consistency.
+            "inv_node_feat, equiv_node_feat",
+            "inv_node_feat",
+            radius,
+            max_neighbours,
+            allscaip_num_heads,
+            allscaip_freq_list,
+            allscaip_atten_name,
+            allscaip_use_node_path,
+            allscaip_use_sincx_mask,
+            allscaip_use_freq_mask,
+            allscaip_max_num_elements,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+    elif mpnn_type == "UMA":
+        assert radius is not None, "UMA requires radius input."
+        assert max_neighbours is not None, "UMA requires max_neighbours input."
+        assert max_ell is not None, "UMA requires max_ell input."
+        assert num_radial is not None, "UMA requires num_radial input."
+        model = UMAStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            radius,
+            max_neighbours,
+            max_ell,
+            num_radial,
+            uma_mmax,
+            uma_grid_resolution,
+            uma_edge_channels,
+            uma_hidden_channels,
+            uma_norm_type,
+            uma_ff_type,
+            uma_use_chg_spin,
+            uma_max_num_elements,
+            False,  # periodic_boundary_conditions; CI/default is non-periodic.
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 

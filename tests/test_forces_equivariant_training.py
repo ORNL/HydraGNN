@@ -21,7 +21,7 @@ import subprocess
 
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.parametrize(
-    "mpnn_type", ["SchNet", "EGNN", "DimeNet", "PAINN", "PNAPlus", "MACE"]
+    "mpnn_type", ["SchNet", "EGNN", "DimeNet", "PAINN", "PNAPlus", "MACE", "UMA"]
 )
 @pytest.mark.mpi_skip()
 def pytest_examples(example, mpnn_type):
@@ -54,6 +54,9 @@ def pytest_examples(example, mpnn_type):
         ("DimeNet", "graph", None, "add"),
         ("PAINN", "graph", None, "add"),
         ("MACE", "graph", None, "add"),
+        # UMA is a graph-level model; its energy = sum of L=0 (invariant)
+        # node features, and forces come from autograd of that energy.
+        ("UMA", "graph", None, "add"),
     ],
 )
 @pytest.mark.mpi_skip()

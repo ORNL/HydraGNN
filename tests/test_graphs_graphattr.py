@@ -87,6 +87,18 @@ def unittest_train_model_graphattr(
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode
 
+    # AllScAIP requires hidden_dim divisible by allscaip_num_heads; the unit-test
+    # configs use hidden_dim=8, so override the default (8) to a value that fits.
+    if mpnn_type == "AllScAIP":
+        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 2
+
+    # UMA's eSCNMDBackbone allocates large irrep blocks; clamp the
+    # bookkeeping channels to keep the unit test cheap.
+    if mpnn_type == "UMA":
+        config["NeuralNetwork"]["Architecture"]["max_ell"] = 2
+        config["NeuralNetwork"]["Architecture"]["num_radial"] = 6
+        config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 16
+
     # Overwrite config settings if provided
     if overwrite_config:
         config = merge_config(config, overwrite_config)
@@ -178,6 +190,8 @@ def unittest_train_model_graphattr(
         "PNAEq": [0.60, 0.60],
         "PAINN": [0.60, 0.60],
         "MACE": [0.60, 0.70],
+        "AllScAIP": [0.20, 0.20],
+        "UMA": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -226,6 +240,8 @@ def unittest_train_model_graphattr(
         "PNAEq",
         "PAINN",
         "MACE",
+        "AllScAIP",
+        "UMA",
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
