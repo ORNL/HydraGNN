@@ -430,7 +430,9 @@ def main():
                     break
 
             if max_force < args.fmax:
-                print(f"Converged at step {step + 1}: max force {max_force:.6f} eV/Å < fmax {args.fmax} eV/Å")
+                print(
+                    f"Converged at step {step + 1}: max force {max_force:.6f} eV/Å < fmax {args.fmax} eV/Å"
+                )
                 break
 
             prev_max_force = max_force
