@@ -53,7 +53,7 @@ def get_node_direction_expansion_neighbor(
     node_boo = masked_sh.sum(dim=1) / neighbor_count
 
     # Compute final BOO with proper normalization
-    node_boo_squared = node_boo**2
+    node_boo_squared = node_boo ** 2
     # node_boo = scatter(node_boo_squared, sh_index, dim=-1, reduce="sum").sqrt()
     node_boo = compilable_scatter(
         node_boo_squared, sh_index, dim_size=lmax + 1, dim=-1, reduce="sum"
@@ -404,10 +404,13 @@ def get_displacement_and_cell(data, regress_stress, regress_forces, direct_force
         if data["pos"].requires_grad is False:
             data["pos"].requires_grad = True
         data["pos_original"] = data["pos"]
-        data["pos"] = data["pos"] + torch.bmm(
-            data["pos"].unsqueeze(-2),
-            torch.index_select(symmetric_displacement, 0, data["batch"]),
-        ).squeeze(-2)
+        data["pos"] = (
+            data["pos"]
+            + torch.bmm(
+                data["pos"].unsqueeze(-2),
+                torch.index_select(symmetric_displacement, 0, data["batch"]),
+            ).squeeze(-2)
+        )
 
         orig_cell = data["cell"]
         data["cell"] = data["cell"] + torch.bmm(data["cell"], symmetric_displacement)

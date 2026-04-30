@@ -187,7 +187,7 @@ def get_node_direction_expansion_neighbor(
     node_boo = masked_sh.sum(dim=1) / neighbor_count
 
     # Compute final BOO with proper normalization
-    node_boo_squared = node_boo**2
+    node_boo_squared = node_boo ** 2
     # node_boo = scatter(node_boo_squared, sh_index, dim=-1, reduce="sum").sqrt()
     node_boo = compilable_scatter(
         node_boo_squared, sh_index, dim_size=lmax + 1, dim=-1, reduce="sum"
@@ -366,6 +366,5 @@ def data_preprocess_radius_graph(
         neighbor_index=neighbor_index,
         node_batch=node_batch,
     )
-
 
     return x

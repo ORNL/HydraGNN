@@ -137,9 +137,7 @@ class _FairChemAdapter:
 
     def get_batch_stats(self):
         # natoms per graph in the batch
-        natoms_list = (
-            torch.bincount(self.batch, minlength=self.num_graphs).tolist()
-        )
+        natoms_list = torch.bincount(self.batch, minlength=self.num_graphs).tolist()
         # cumulative offsets for ``pos`` -> matches what FairChem's
         # ``slices["pos"]`` provides downstream.
         offsets = torch.zeros(
