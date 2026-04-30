@@ -9,4 +9,5 @@ orjson # needed to use FAIRChem functionalities released by the Meta Research AI
 pandas==2.3.3 # needed for HPO examples and FAIRChem functionalities
 PyYAML # needed for FAIRChem configuration files
 wandb # needed for FAIRChem logging functionalities
+fairchem-core # needed by hydragnn.models.UMAStack (FairChem UMA backbone)
 
