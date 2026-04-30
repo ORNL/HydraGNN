@@ -30,6 +30,7 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+from hydragnn.models.AllScAIPStack import AllScAIPStack
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -115,6 +116,14 @@ def create_model_config(
         equivariant_attn_coupling_mode=config["Architecture"].get(
             "equivariant_attn_coupling_mode", "parallel"
         ),
+        # AllScAIP-specific
+        allscaip_num_heads=config["Architecture"]["allscaip_num_heads"],
+        allscaip_freq_list=config["Architecture"]["allscaip_freq_list"],
+        allscaip_atten_name=config["Architecture"]["allscaip_atten_name"],
+        allscaip_use_node_path=config["Architecture"]["allscaip_use_node_path"],
+        allscaip_use_sincx_mask=config["Architecture"]["allscaip_use_sincx_mask"],
+        allscaip_use_freq_mask=config["Architecture"]["allscaip_use_freq_mask"],
+        allscaip_max_num_elements=config["Architecture"]["allscaip_max_num_elements"],
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -182,6 +191,14 @@ def create_model(
     equivariant_attn_require_tensor_coupling: bool = True,
     equivariant_attn_chunk_size: int | None = 512,
     equivariant_attn_coupling_mode: str = "parallel",
+    # AllScAIP-specific
+    allscaip_num_heads: int = 8,
+    allscaip_freq_list: List[int] = None,
+    allscaip_atten_name: str = "math",
+    allscaip_use_node_path: bool = True,
+    allscaip_use_sincx_mask: bool = True,
+    allscaip_use_freq_mask: bool = True,
+    allscaip_max_num_elements: int = 119,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -661,6 +678,46 @@ def create_model(
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
+    elif mpnn_type == "AllScAIP":
+        assert radius is not None, "AllScAIP requires radius input."
+        assert max_neighbours is not None, "AllScAIP requires max_neighbours input."
+        model = AllScAIPStack(
+            # input_args / conv_args are consumed by Base.__init__ but are
+            # unused at runtime because AllScAIP performs its own message
+            # passing. We pass canonical strings for consistency.
+            "inv_node_feat, equiv_node_feat",
+            "inv_node_feat",
+            radius,
+            max_neighbours,
+            allscaip_num_heads,
+            allscaip_freq_list,
+            allscaip_atten_name,
+            allscaip_use_node_path,
+            allscaip_use_sincx_mask,
+            allscaip_use_freq_mask,
+            allscaip_max_num_elements,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 
