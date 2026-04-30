@@ -11,7 +11,6 @@
 
 from tqdm import tqdm
 import numpy as np
-import pdb
 import torch
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
@@ -23,30 +22,151 @@ from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 
-import os,subprocess
+import os
 
 from torch.profiler import record_function
 
-from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.distributed import get_comm_size_and_rank, print_peak_memory
 import torch.distributed as dist
 import pickle
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 import time
 from mpi4py import MPI
+from contextlib import nullcontext
 
-import subprocess
+try:
+    from torch.amp import GradScaler
+except (ImportError, ModuleNotFoundError):
+    GradScaler = None
 
-def set_gpu_power_cap(gpu_index: int, power_watts: int):
-    cmd = ["sudo", "gpu_power_cap", str(gpu_index), str(power_watts)]
-    
-    try:
-        # Capture output and errors
-        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        print("Command output:", result.stdout.strip())
-    except subprocess.CalledProcessError as e:
-        print("An error occurred:")
-        print(e.stderr.strip())
+PRECISION_MAP = {
+    # Keep optimizer/master parameters in FP32 for BF16 runs and use autocast for compute.
+    # This avoids backend-specific optimizer paths that require FP32 parameters.
+    "bf16": {"param_dtype": torch.float32, "autocast_dtype": torch.bfloat16},
+    "fp32": {"param_dtype": torch.float32, "autocast_dtype": None},
+    "fp64": {"param_dtype": torch.float64, "autocast_dtype": None},
+}
+
+
+def resolve_precision(precision: str):
+    """Normalize precision string and return parameter/autocast dtypes."""
+
+    if precision is None:
+        precision = "fp32"
+    prec = str(precision).lower()
+    aliases = {
+        "bfloat16": "bf16",
+        "float32": "fp32",
+        "float": "fp32",
+        "float64": "fp64",
+        "double": "fp64",
+    }
+    prec = aliases.get(prec, prec)
+    if prec not in PRECISION_MAP:
+        raise ValueError(
+            f"Unsupported precision {precision}. Choose from {list(PRECISION_MAP.keys())}."
+        )
+    info = PRECISION_MAP[prec]
+    return prec, info["param_dtype"], info["autocast_dtype"]
+
+
+def move_batch_to_device(data, param_dtype):
+    device = get_device()
+
+    if isinstance(data, torch.Tensor):
+        data = data.to(dtype=param_dtype)
+    else:
+        for key, value in data.items():
+            if isinstance(value, torch.Tensor) and torch.is_floating_point(value):
+                data[key] = value.to(dtype=param_dtype)
+
+    return data.to(device)
+
+
+def get_autocast_and_scaler(precision):
+    precision, _, autocast_dtype = resolve_precision(precision)
+
+    if precision == "bf16":
+        device_type = str(get_device())
+        cpu_bf16 = bool(getattr(torch.backends.cpu, "has_bf16", False))
+        use_bf16 = (
+            torch.cuda.is_available() and torch.cuda.get_device_properties(0).major >= 7
+        ) or (hasattr(torch, "xpu") and torch.xpu.is_available())
+        use_bf16 = use_bf16 or (device_type == "cpu" and cpu_bf16)
+        if not use_bf16:
+            print(
+                f"Requested bf16 but unsupported on {device_type}; falling back to full precision."
+            )
+
+        autocast = (
+            torch.autocast(device_type=device_type, dtype=autocast_dtype)
+            if use_bf16
+            else nullcontext()
+        )
+        return autocast, None
+
+    return nullcontext(), None
+
+
+def _first_float_tensor_dtype(obj):
+    if torch.is_tensor(obj):
+        return obj.dtype if torch.is_floating_point(obj) else None
+
+    if isinstance(obj, dict):
+        values = obj.values()
+    elif hasattr(obj, "items"):
+        values = (value for _, value in obj.items())
+    else:
+        values = []
+
+    for value in values:
+        dtype = _first_float_tensor_dtype(value)
+        if dtype is not None:
+            return dtype
+
+    return None
+
+
+def _first_optimizer_state_dtype(optimizer):
+    if optimizer is None:
+        return None
+
+    if hasattr(optimizer, "optimizer1") and hasattr(optimizer, "optimizer2"):
+        for subopt in (optimizer.optimizer1, optimizer.optimizer2):
+            dtype = _first_optimizer_state_dtype(subopt)
+            if dtype is not None:
+                return dtype
+        return None
+
+    for state in optimizer.state.values():
+        for value in state.values():
+            if torch.is_tensor(value) and torch.is_floating_point(value):
+                return value.dtype
+
+    return None
+
+
+def _is_fsdp2_enabled():
+    return (
+        bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        and int(os.getenv("HYDRAGNN_FSDP_VERSION", "1")) == 2
+    )
+
+
+def _set_reshard_after_backward(model, enabled):
+    setter = getattr(model, "set_reshard_after_backward", None)
+    if callable(setter):
+        setter(enabled)
+        return True
+
+    wrapped = getattr(model, "module", None)
+    setter = getattr(wrapped, "set_reshard_after_backward", None)
+    if callable(setter):
+        setter(enabled)
+        return True
+
+    return False
 
 
 def get_nbatch(loader):
@@ -78,6 +198,7 @@ def train_validate_test(
     create_plots=False,
     use_deepspeed=False,
     compute_grad_energy=False,
+    precision="fp32",
 ):
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
@@ -98,15 +219,36 @@ def train_validate_test(
         else False
     )
 
+    precision, _, _ = resolve_precision(precision)
+
     device = get_device()
+    if compute_grad_energy:
+        num_tasks = 3  # [energy, energy per atom, forces]
+        task_dims = [1, 1, 1]
+        task_weights = [
+            model.module.energy_weight,
+            model.module.energy_peratom_weight,
+            model.module.force_weight,
+        ]
+        output_names = [
+            config["Variables_of_interest"]["output_names"][0],
+            "energy_peratom",
+            "forces",
+        ]
+    else:
+        num_tasks = model.module.num_heads
+        task_dims = model.module.head_dims
+        task_weights = model.module.loss_weights
+        output_names = config["Variables_of_interest"]["output_names"]
+
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
     total_loss_val = torch.zeros(num_epoch, device=device)
     total_loss_test = torch.zeros(num_epoch, device=device)
     # loss tracking for each head/task
-    task_loss_train = torch.zeros((num_epoch, model.module.num_heads), device=device)
-    task_loss_test = torch.zeros((num_epoch, model.module.num_heads), device=device)
-    task_loss_val = torch.zeros((num_epoch, model.module.num_heads), device=device)
+    task_loss_train = torch.zeros((num_epoch, num_tasks), device=device)
+    task_loss_test = torch.zeros((num_epoch, num_tasks), device=device)
+    task_loss_val = torch.zeros((num_epoch, num_tasks), device=device)
 
     # preparing for results visualization
     ## collecting node feature
@@ -123,18 +265,25 @@ def train_validate_test(
         visualizer = Visualizer(
             model_with_config_name,
             node_feature=node_feature,
-            num_heads=model.module.num_heads,
-            head_dims=model.module.head_dims,
+            num_heads=num_tasks,
+            head_dims=task_dims,
             num_nodes_list=nodes_num_list,
         )
         visualizer.num_nodes_plot()
 
     if create_plots and plot_init_solution:  # visualizing of initial conditions
-        _, _, true_values, predicted_values = test(test_loader, model, verbosity)
+        _, _, true_values, predicted_values = test(
+            test_loader,
+            model,
+            verbosity,
+            compute_grad_energy=compute_grad_energy,
+            num_tasks=num_tasks,
+        )
+
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
             iepoch=-1,
         )
 
@@ -162,7 +311,9 @@ def train_validate_test(
     timer = Timer("train_validate_test")
     timer.start()
 
-    for epoch in range(0, num_epoch):
+    epoch_start = config["Training"].get("epoch_start", 0)
+    for epoch in range(epoch_start, num_epoch):
+        os.environ["HYDRAGNN_EPOCH"] = str(epoch)
         ## timer per epoch
         t0 = time.time()
         profiler.set_current_epoch(epoch)
@@ -171,46 +322,57 @@ def train_validate_test(
                 dataloader.sampler.set_epoch(epoch)
 
         with profiler as prof:
-            #tr.enable()
+            tr.enable()
             tr.start("train")
             train_loss, train_taskserr = train(
                 train_loader,
                 model,
                 optimizer,
                 verbosity,
+                num_tasks=num_tasks,
                 profiler=prof,
                 use_deepspeed=use_deepspeed,
                 compute_grad_energy=compute_grad_energy,
+                precision=precision,
             )
             tr.stop("train")
-            #tr.disable()
+            tr.disable()
             if epoch == 0:
                 tr.reset()
 
         if int(os.getenv("HYDRAGNN_VALTEST", "1")) == 0:
             continue
 
+        try:
+            optimizer.zero_grad(set_to_none=True)
+        except TypeError:
+            optimizer.zero_grad()
+
         val_loss, val_taskserr = validate(
             val_loader,
             model,
             verbosity,
+            num_tasks=num_tasks,
             reduce_ranks=True,
             compute_grad_energy=compute_grad_energy,
+            precision=precision,
         )
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
             model,
             verbosity,
+            num_tasks=num_tasks,
             reduce_ranks=True,
             return_samples=plot_hist_solution,
             compute_grad_energy=compute_grad_energy,
+            precision=precision,
         )
         scheduler.step(val_loss)
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(model.module.num_heads):
+            for ivar in range(num_tasks):
                 writer.add_scalar(
                     "train error of task" + str(ivar), train_taskserr[ivar], epoch
                 )
@@ -243,7 +405,7 @@ def train_validate_test(
             visualizer.create_scatter_plots(
                 true_values,
                 predicted_values,
-                output_names=config["Variables_of_interest"]["output_names"],
+                output_names=output_names,
                 iepoch=epoch,
             )
 
@@ -287,7 +449,12 @@ def train_validate_test(
 
         # At the end of training phase, do the one test run for visualizer to get latest predictions
         test_loss, test_taskserr, true_values, predicted_values = test(
-            test_loader, model, verbosity
+            test_loader,
+            model,
+            verbosity,
+            precision=precision,
+            compute_grad_energy=compute_grad_energy,
+            num_tasks=num_tasks,
         )
 
         ##output predictions with unit/not normalized
@@ -304,12 +471,12 @@ def train_validate_test(
         visualizer.create_plot_global(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         visualizer.create_scatter_plots(
             true_values,
             predicted_values,
-            output_names=config["Variables_of_interest"]["output_names"],
+            output_names=output_names,
         )
         ######plot loss history#####
         visualizer.plot_history(
@@ -319,8 +486,8 @@ def train_validate_test(
             task_loss_train,
             task_loss_val,
             task_loss_test,
-            model.module.loss_weights,
-            config["Variables_of_interest"]["output_names"],
+            task_weights,
+            output_names,
         )
 
 
@@ -464,25 +631,45 @@ def train(
     model,
     opt,
     verbosity,
+    num_tasks=None,
     profiler=None,
     use_deepspeed=False,
     compute_grad_energy=False,
+    precision="fp32",
 ):
     if profiler is None:
         profiler = Profiler()
 
+    precision, param_dtype, _ = resolve_precision(precision)
+    autocast_context, scaler = get_autocast_and_scaler(precision)
+
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.train()
+
+    rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
+    model_param_dtype = None
+    for parameter in model.parameters():
+        model_param_dtype = parameter.dtype
+        break
+    if rank0:
+        print(
+            f"[precision-diagnostic] requested={precision} model_param_dtype={model_param_dtype}"
+        )
+    batch_dtype_logged = False
+    optimizer_state_dtype_logged = False
 
     use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
+    fsdp2_force_workaround = compute_grad_energy and _is_fsdp2_enabled()
+    fsdp2_workaround_available = True
 
-    nbatch = get_nbatch(loader)
+    local_nbatch = get_nbatch(loader)
+    nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
     syncopt = {"cudasync": False}
     ## 0: default (no detailed tracing), 1: sync tracing
     trace_level = int(os.getenv("HYDRAGNN_TRACE_LEVEL", "0"))
@@ -515,23 +702,38 @@ def train(
                 opt.zero_grad()
         tr.stop("zero_grad")
         tr.start("get_head_indices")
-        with record_function("get_head_indices"):
-            head_index = get_head_indices(model, data)
+        if not compute_grad_energy:
+            with record_function("get_head_indices"):
+                head_index = get_head_indices(model, data)
         tr.stop("get_head_indices")
         tr.start("forward", **syncopt)
         with record_function("forward"):
             if trace_level > 0:
                 tr.start("h2d", **syncopt)
-            data = data.to(get_device())
+            data = move_batch_to_device(data, param_dtype)
+            if rank0 and not batch_dtype_logged:
+                batch_float_dtype = _first_float_tensor_dtype(data)
+                print(
+                    f"[precision-diagnostic] first_batch_float_dtype={batch_float_dtype}"
+                )
+                batch_dtype_logged = True
             if trace_level > 0:
                 tr.stop("h2d", **syncopt)
             if compute_grad_energy:  # for force and energy prediction
                 data.pos.requires_grad = True
-                pred = model(data)
-                loss, tasks_loss = model.module.energy_force_loss(pred, data)
+                if fsdp2_force_workaround and fsdp2_workaround_available:
+                    fsdp2_workaround_available = _set_reshard_after_backward(
+                        model, False
+                    )
+                # Perform forward pass and backward pass under autocast
+                with autocast_context:
+                    pred = model(data)
+                    loss, tasks_loss = model.module.energy_force_loss(pred, data)
             else:
-                pred = model(data)
-                loss, tasks_loss = model.module.loss(pred, data.y, head_index)
+                # Perform forward pass and backward pass under autocast
+                with autocast_context:
+                    pred = model(data)
+                    loss, tasks_loss = model.module.loss(pred, data.y, head_index)
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -539,10 +741,17 @@ def train(
         tr.stop("forward", **syncopt)
         tr.start("backward", **syncopt)
         with record_function("backward"):
+            if fsdp2_force_workaround and fsdp2_workaround_available:
+                _set_reshard_after_backward(model, True)
             if use_deepspeed:
                 model.backward(loss)
             else:
-                loss.backward()
+                if scaler is not None:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
+            if fsdp2_force_workaround and fsdp2_workaround_available:
+                _set_reshard_after_backward(model, True)
             if trace_level > 0:
                 tr.start("backward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -553,8 +762,18 @@ def train(
         if use_deepspeed:
             model.step()
         else:
-            opt.step()
-        # print_peak_memory(verbosity, "Max memory allocated after optimizer step")
+            if scaler is not None:
+                scaler.step(opt)
+                scaler.update()
+            else:
+                opt.step()
+        if rank0 and not optimizer_state_dtype_logged:
+            optimizer_state_dtype = _first_optimizer_state_dtype(opt)
+            print(
+                f"[precision-diagnostic] first_optimizer_state_float_dtype={optimizer_state_dtype}"
+            )
+            optimizer_state_dtype_logged = True
+        print_peak_memory(verbosity, "Max memory allocated after optimizer step")
         tr.stop("opt_step", **syncopt)
         profiler.step()
         with torch.no_grad():
@@ -575,14 +794,28 @@ def train(
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
+
+    train_error = reduce_values_ranks(train_error)
+    tasks_error = reduce_values_ranks(tasks_error)
+
     return train_error, tasks_error
 
 
 @torch.no_grad()
-def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=False):
+def validate(
+    loader,
+    model,
+    verbosity,
+    num_tasks=None,
+    reduce_ranks=True,
+    compute_grad_energy=False,
+    precision="fp32",
+):
+    precision, param_dtype, _ = resolve_precision(precision)
+    autocast_context, scaler = get_autocast_and_scaler(precision)
 
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
     use_ddstore = (
@@ -590,7 +823,8 @@ def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=Fa
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    nbatch = get_nbatch(loader)
+    local_nbatch = get_nbatch(loader)
+    nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
 
     if use_ddstore:
         loader.dataset.ddstore.epoch_begin()
@@ -601,16 +835,26 @@ def validate(loader, model, verbosity, reduce_ranks=True, compute_grad_energy=Fa
             break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        head_index = get_head_indices(model, data)
-        data = data.to(get_device())
+        data = move_batch_to_device(data, param_dtype)
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
                 data.pos.requires_grad = True
-                pred = model(data)
-                error, tasks_loss = model.module.energy_force_loss(pred, data)
+                with autocast_context:
+                    pred = model(data)
+                    error, tasks_loss = model.module.energy_force_loss(
+                        pred, data, create_graph=False
+                    )
         else:
-            pred = model(data)
-            error, tasks_loss = model.module.loss(pred, data.y, head_index)
+            with autocast_context:
+                head_index = get_head_indices(model, data)
+                pred = model(data)
+                error, tasks_loss = model.module.loss(pred, data.y, head_index)
+        error = error.detach()
+        if torch.is_tensor(tasks_loss):
+            tasks_loss = tasks_loss.detach()
+        else:
+            tasks_loss = [task.detach() for task in tasks_loss]
+
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -633,13 +877,23 @@ def test(
     loader,
     model,
     verbosity,
+    num_tasks=None,
     reduce_ranks=True,
     return_samples=True,
     compute_grad_energy=False,
+    precision="fp32",
 ):
+    precision, param_dtype, _ = resolve_precision(precision)
+    autocast_context, scaler = get_autocast_and_scaler(precision)
+
+    if compute_grad_energy:
+        import torch_scatter
+
+    if num_tasks is None:
+        num_tasks = 3 if compute_grad_energy else model.module.num_heads
 
     total_error = torch.tensor(0.0, device=get_device())
-    tasks_error = torch.zeros(model.module.num_heads, device=get_device())
+    tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
     use_ddstore = (
@@ -647,7 +901,8 @@ def test(
         and hasattr(loader.dataset.ddstore, "epoch_begin")
         and bool(int(os.getenv("HYDRAGNN_USE_ddstore", "0")))
     )
-    nbatch = get_nbatch(loader)
+    local_nbatch = get_nbatch(loader)
+    nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
     _, rank = get_comm_size_and_rank()
 
     if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
@@ -661,16 +916,20 @@ def test(
             break
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        head_index = get_head_indices(model, data)
-        data = data.to(get_device())
+        data = move_batch_to_device(data, param_dtype)
         if compute_grad_energy:  # for force and energy prediction
             with torch.enable_grad():
                 data.pos.requires_grad = True
-                pred = model(data)
-                error, tasks_loss = model.module.energy_force_loss(pred, data)
+                with autocast_context:
+                    pred = model(data)
+                    error, tasks_loss = model.module.energy_force_loss(
+                        pred, data, create_graph=False
+                    )
         else:
-            pred = model(data)
-            error, tasks_loss = model.module.loss(pred, data.y, head_index)
+            with autocast_context:
+                head_index = get_head_indices(model, data)
+                pred = model(data)
+                error, tasks_loss = model.module.loss(pred, data.y, head_index)
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
             if model.module.var_output:
@@ -703,6 +962,12 @@ def test(
                     )
                 offset += n
 
+        error = error.detach()
+        if torch.is_tensor(tasks_loss):
+            tasks_loss = tasks_loss.detach()
+        else:
+            tasks_loss = [task.detach() for task in tasks_loss]
+
         total_error += error * data.num_graphs
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
@@ -717,8 +982,10 @@ def test(
 
     test_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local
-    true_values = [[] for _ in range(model.module.num_heads)]
-    predicted_values = [[] for _ in range(model.module.num_heads)]
+
+    true_values = [[] for _ in range(num_tasks)]
+    predicted_values = [[] for _ in range(num_tasks)]
+
     if return_samples:
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
@@ -729,31 +996,95 @@ def test(
                 break
             if use_ddstore:
                 loader.dataset.ddstore.epoch_end()
-            head_index = get_head_indices(model, data)
-            data = data.to(get_device())
-            ytrue = data.y
-            pred = model(data)
-            if model.module.var_output:
-                pred = pred[0]
-            for ihead in range(model.module.num_heads):
-                head_pre = pred[ihead].reshape(-1, 1)
-                head_val = ytrue[head_index[ihead]]
-                true_values[ihead].append(head_val)
-                predicted_values[ihead].append(head_pre)
+            data = move_batch_to_device(data, param_dtype)
+            if compute_grad_energy:
+                with torch.enable_grad():
+                    data.pos.requires_grad = True
+                    with autocast_context:
+                        pred = model(data)
+                        # Support both node and graph heads; enforce sum pooling for graph heads
+                        if model.module.head_type[0] == "node":
+                            node_energy_pred = pred[0]
+                            graph_energy_pred = (
+                                torch_scatter.scatter_add(
+                                    node_energy_pred, data.batch, dim=0
+                                )
+                                .squeeze()
+                                .float()
+                            )
+                        elif model.module.head_type[0] == "graph":
+                            if getattr(
+                                model.module.model, "graph_pooling", "mean"
+                            ) not in ["add"]:
+                                raise ValueError(
+                                    "Graph head force loss requires sum pooling (graph_pooling='add')."
+                                )
+                            if isinstance(pred, dict) and "graph" in pred:
+                                graph_energy_pred = pred["graph"][0].squeeze().float()
+                            elif isinstance(pred, (list, tuple)):
+                                graph_energy_pred = pred[0].squeeze().float()
+                            else:
+                                graph_energy_pred = pred.squeeze().float()
+                        else:
+                            raise ValueError(
+                                "Force predictions are only supported for node or graph energy heads."
+                            )
+
+                        graph_energy_true = data.energy.squeeze().float()
+
+                        ncount = torch.bincount(data.batch)
+                        graph_energy_peratom_pred = graph_energy_pred / ncount
+                        graph_energy_peratom_true = graph_energy_true / ncount
+
+                        forces_true = data.forces.float()
+                        forces_pred = torch.autograd.grad(
+                            graph_energy_pred,
+                            data.pos,
+                            grad_outputs=torch.ones_like(graph_energy_pred),
+                            retain_graph=graph_energy_pred.requires_grad,
+                            create_graph=False,
+                        )[0].float()
+                        assert (
+                            forces_pred is not None
+                        ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                        forces_pred = -forces_pred
+                        forces_true = forces_true.flatten()
+                        forces_pred = forces_pred.flatten()
+                        true_values[0].append(graph_energy_true.reshape(-1, 1))
+                        true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
+                        true_values[2].append(forces_true.reshape(-1, 1))
+                        predicted_values[0].append(graph_energy_pred.reshape(-1, 1))
+                        predicted_values[1].append(
+                            graph_energy_peratom_pred.reshape(-1, 1)
+                        )
+                        predicted_values[2].append(forces_pred.reshape(-1, 1))
+            else:
+                head_index = get_head_indices(model, data)
+                ytrue = data.y
+                pred = model(data)
+                if model.module.var_output:
+                    pred = pred[0]
+                for ihead in range(model.module.num_heads):
+                    head_pre = pred[ihead].reshape(-1, 1)
+                    head_val = ytrue[head_index[ihead]]
+                    true_values[ihead].append(head_val)
+                    predicted_values[ihead].append(head_pre)
             if use_ddstore:
                 loader.dataset.ddstore.epoch_begin()
         if use_ddstore:
             loader.dataset.ddstore.epoch_end()
-        for ihead in range(model.module.num_heads):
-            predicted_values[ihead] = torch.cat(predicted_values[ihead], dim=0)
-            true_values[ihead] = torch.cat(true_values[ihead], dim=0)
+        for itask in range(
+            num_tasks
+        ):  ###More general for both MLIP and non-conservative model
+            predicted_values[itask] = torch.cat(predicted_values[itask], dim=0)
+            true_values[itask] = torch.cat(true_values[itask], dim=0)
 
     if reduce_ranks:
         test_error = reduce_values_ranks(test_error)
         tasks_error = reduce_values_ranks(tasks_error)
         if len(true_values[0]) > 0:
-            for ihead in range(model.module.num_heads):
-                true_values[ihead] = gather_tensor_ranks(true_values[ihead])
-                predicted_values[ihead] = gather_tensor_ranks(predicted_values[ihead])
+            for itask in range(num_tasks):
+                true_values[itask] = gather_tensor_ranks(true_values[itask])
+                predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
 
     return test_error, tasks_error, true_values, predicted_values

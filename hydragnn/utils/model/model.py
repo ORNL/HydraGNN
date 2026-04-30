@@ -24,6 +24,7 @@ from hydragnn.utils.distributed import (
     get_device_name,
 )
 from collections import OrderedDict
+from torch.distributed.optim import ZeroRedundancyOptimizer
 
 
 def activation_function_selection(activation_function_string: str):
@@ -60,21 +61,131 @@ def loss_function_selection(loss_function_string: str):
         ImportError
 
 
+def multitask_optim_state_dict(model, optimizer):
+    """Custom optimizer state dict for MultiTaskModelMP with FSDP"""
+
+    from hydragnn.models import MultiTaskModelMP, DualOptimizer
+
+    assert isinstance(model, MultiTaskModelMP)
+    assert isinstance(optimizer, DualOptimizer)
+
+    ## Need a patch to fix dist.broadcast_object_list
+    import torch.distributed as dist
+
+    _orig = dist.broadcast_object_list
+
+    ## pytorch is not handling correctly with a custom group
+    def _patch_broadcast_object_list(obj_list, src=0, group=None, device=None):
+        # e.g., add debug logging
+        # print(f"[rank {dist.get_rank()}] broadcasting from {src}")
+        return _orig(obj_list, group_src=src, group=group, device=device)
+
+    dist.broadcast_object_list = _patch_broadcast_object_list
+
+    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+    optimizer_state_dict1 = FSDP.full_optim_state_dict(
+        model.encoder, optimizer.optimizer1, rank0_only=False, group=model.shared_pg
+    )
+    optimizer_state_dict2 = FSDP.full_optim_state_dict(
+        model.decoder, optimizer.optimizer2, rank0_only=False, group=model.head_pg
+    )
+    optimizer_state_dict = {
+        "optimizer1": optimizer_state_dict1,
+        "optimizer2": optimizer_state_dict2,
+    }
+
+    ## rollback
+    dist.broadcast_object_list = _orig
+
+    return optimizer_state_dict
+
+
 def save_model(model, optimizer, name, path="./logs/", use_deepspeed=False):
     """Save both model and optimizer state in a single checkpoint file"""
     if not use_deepspeed:
         _, world_rank = get_comm_size_and_rank()
         if hasattr(optimizer, "consolidate_state_dict"):
             optimizer.consolidate_state_dict()
-        if world_rank == 0:
-            path_name = os.path.join(path, name, name + ".pk")
+
+        from hydragnn.models import MultiTaskModelMP
+
+        use_multitask = isinstance(model, MultiTaskModelMP)
+        if use_multitask:
+            eligible = model.head_pg_rank == 0
+        else:
+            eligible = world_rank == 0
+
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if use_fsdp and fsdp_version == 1:
+            from torch.distributed.fsdp import (
+                FullyShardedDataParallel as FSDP,
+                StateDictType,
+                FullStateDictConfig,
+                FullOptimStateDictConfig,
+            )
+
+            if use_multitask:
+                model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=False)
+                optim_cfg = FullOptimStateDictConfig(
+                    offload_to_cpu=True, rank0_only=False
+                )
+            else:
+                model_cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                optim_cfg = FullOptimStateDictConfig(
+                    offload_to_cpu=True, rank0_only=True
+                )
+
+            with FSDP.state_dict_type(
+                model, StateDictType.FULL_STATE_DICT, model_cfg, optim_cfg
+            ):
+                model_state_dict = model.state_dict()
+                optimizer_state_dict = (
+                    multitask_optim_state_dict(model, optimizer)
+                    if use_multitask
+                    else optimizer.state_dict()
+                )
+        else:
+            model_state_dict = model.state_dict()
+            if isinstance(optimizer, ZeroRedundancyOptimizer):
+                if world_rank == 0:
+                    ## Only rank 0 have the full optimizer state for ZeroRedundancyOptimizer
+                    optimizer_state_dict = optimizer.state_dict()
+                else:
+                    optimizer_state_dict = None
+            else:
+                optimizer_state_dict = optimizer.state_dict()
+
+        if eligible:
+            epoch = os.getenv("HYDRAGNN_EPOCH", None)  ## str or None
+            if epoch is not None:
+                fname = f"{name}_epoch_{epoch}"
+            else:
+                fname = f"{name}"
+
+            if use_multitask:
+                fname = fname + f"_branch{model.branch_id}"
+
+            fname = fname + ".pk"
+            path_name = os.path.join(path, name, fname)
             torch.save(
                 {
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
+                    "model_state_dict": model_state_dict,
+                    "optimizer_state_dict": optimizer_state_dict,
                 },
                 path_name,
             )
+            if epoch is not None:
+                link = os.path.join(path, name, f"{name}.pk")
+                if use_multitask:
+                    link = os.path.join(
+                        path, name, f"{name}_branch{model.branch_id}.pk"
+                    )
+                if os.path.lexists(link):
+                    os.remove(link)
+                os.symlink(fname, link)
+        dist.barrier()
     else:
         model.save_checkpoint(os.path.join(path, name), name)
 
@@ -103,23 +214,139 @@ def load_existing_model(
 ):
     """Load both model and optimizer state from a single checkpoint file"""
     if not use_deepspeed:
-        path_name = os.path.join(path, model_name, model_name + ".pk")
+        from hydragnn.models import MultiTaskModelMP
+
+        use_multitask = isinstance(model, MultiTaskModelMP)
+        fname = (
+            model_name + f"_branch{model.branch_id}" if use_multitask else model_name
+        )
+        path_name = os.path.join(path, model_name, fname + ".pk")
+
         map_location = {"cuda:%d" % 0: get_device_name()}
         print_master("Load existing model:", path_name)
         checkpoint = torch.load(path_name, map_location=map_location)
         state_dict = checkpoint["model_state_dict"]
         ## To be compatible with old checkpoint which was not written as a ddp model
-        if not next(iter(state_dict)).startswith("module"):
+        if next(iter(model.state_dict())).startswith("module") and not next(
+            iter(state_dict)
+        ).startswith("module"):
             ddp_state_dict = OrderedDict()
             for k, v in state_dict.items():
                 k = "module." + k
                 ddp_state_dict[k] = v
             state_dict = ddp_state_dict
-        model.load_state_dict(state_dict)
-        if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
-            optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        # Ensure optional graph conditioner modules exist before strict load.
+        target_model = model.module if hasattr(model, "module") else model
+        graph_cond_key = None
+        concat_cond_key = None
+        pool_cond_key = None
+        for key in state_dict.keys():
+            if key.endswith("graph_conditioner.0.weight"):
+                graph_cond_key = key
+            if key.endswith("graph_concat_projector.weight") or key.endswith(
+                "graph_concat_projector.0.weight"
+            ):
+                concat_cond_key = key
+            if key.endswith("graph_pool_projector.0.weight"):
+                pool_cond_key = key
+        if graph_cond_key and hasattr(target_model, "_ensure_graph_conditioner"):
+            if getattr(target_model, "graph_conditioner", None) is None:
+                graph_attr_dim = state_dict[graph_cond_key].shape[1]
+                # Toggle conditioning on to align with checkpoint contents.
+                target_model.use_graph_attr_conditioning = True
+                target_model._ensure_graph_conditioner(
+                    graph_attr_dim, target_model.device
+                )
+        if concat_cond_key and hasattr(target_model, "_ensure_graph_concat_projector"):
+            if getattr(target_model, "graph_concat_projector", None) is None:
+                in_features = state_dict[concat_cond_key].shape[1]
+                channel_dim = getattr(target_model, "hidden_dim", in_features)
+                graph_attr_dim = max(in_features - channel_dim, 1)
+                target_model.use_graph_attr_conditioning = True
+                target_model.graph_attr_conditioning_mode = "concat_node"
+                target_model._ensure_graph_concat_projector(
+                    graph_attr_dim=graph_attr_dim,
+                    channel_dim=channel_dim,
+                    device=target_model.device,
+                )
+        if pool_cond_key and hasattr(target_model, "_ensure_graph_pool_projector"):
+            if getattr(target_model, "graph_pool_projector", None) is None:
+                in_features = state_dict[pool_cond_key].shape[1]
+                channel_dim = getattr(target_model, "hidden_dim", in_features)
+                graph_attr_dim = max(in_features - channel_dim, 1)
+                target_model.use_graph_attr_conditioning = True
+                target_model.graph_attr_conditioning_mode = "fuse_pool"
+                target_model._ensure_graph_pool_projector(
+                    graph_attr_dim=graph_attr_dim,
+                    channel_dim=channel_dim,
+                    device=target_model.device,
+                )
+
+        ## Load with FSDP
+        use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
+        fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
+        if use_fsdp and fsdp_version == 1:
+            from torch.distributed.fsdp import (
+                FullyShardedDataParallel as FSDP,
+                StateDictType,
+            )
+
+            with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT):
+                model.load_state_dict(state_dict)
+                if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+                    if use_multitask:
+                        ## MultiTaskModelMP uses standard optimizer
+                        optimizer_state_dict = checkpoint["optimizer_state_dict"]
+
+                    else:
+                        optimizer_state_dict = FSDP.optim_state_dict_to_load(
+                            model, optimizer, checkpoint["optimizer_state_dict"]
+                        )
+                    optimizer.load_state_dict(optimizer_state_dict)
+        else:
+            model.load_state_dict(state_dict)
+            if (optimizer is not None) and ("optimizer_state_dict" in checkpoint):
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
     else:
         model.load_checkpoint(os.path.join(path, model_name), model_name)
+
+
+def update_multibranch_heads(output_heads):
+    """
+    #convert the config for hydragnn heads from old to new ones with multibranch
+     "output_heads": {
+                "graph": [
+                    {
+                        "type": "branch-0",
+                        "architecture": {
+                            "num_sharedlayers": 2,
+                            "dim_sharedlayers": 50,
+                            "num_headlayers": 1,
+                            "dim_headlayers": [889]
+                        }
+                    }
+                ],
+            },
+    """
+    output_heads_updated = output_heads.copy()
+    for name, val in output_heads.items():
+        if isinstance(val, list):
+            for branch in val:
+                if not (
+                    isinstance(branch, dict)
+                    and "type" in branch
+                    and "architecture" in branch
+                ):
+                    raise ValueError(
+                        f"output_heads['{name}'] does not contain proper branch config, {val}."
+                    )
+        elif isinstance(val, dict):
+            # Legacy case ➜ wrap & inject branch label
+            output_heads_updated[name] = [{"type": "branch-0", "architecture": val}]
+        else:
+            raise ValueError("Unknown output_heads config!")
+
+    return output_heads_updated
 
 
 ## These functions may cause OOM if dataset is too large
@@ -224,12 +451,58 @@ def unsorted_segment_mean(data, segment_ids, num_segments):
 def print_model(model):
     """print model's parameter size layer by layer"""
     num_params = 0
+    num_bytes = 0
     for k, v in model.state_dict().items():
         print_master("%50s\t%20s\t%10d" % (k, list(v.shape), v.numel()))
         num_params += v.numel()
+        num_bytes += v.numel() * v.element_size()
     print_master("-" * 50)
     print_master("%50s\t%20s\t%10d" % ("Total", "", num_params))
-    print_master("All (total, MB): %d %g" % (num_params, num_params * 4 / 1024 / 1024))
+    print_master("All (total, MB): %d %g" % (num_params, num_bytes / 1024 / 1024))
+
+
+def print_optimizer(optimizer):
+    """print optimizer state size tensor by tensor"""
+    num_elems = 0
+    num_bytes = 0
+
+    for param_id, state in optimizer.state.items():
+        for name, v in state.items():
+            if not torch.is_tensor(v):
+                continue
+            elems = v.numel()
+            bytes_ = elems * v.element_size()
+            print_master("%50s\t%20s\t%10d" % (name, list(v.shape), elems))
+            num_elems += elems
+            num_bytes += bytes_
+
+    print("-" * 50)
+    print("%50s\t%20s\t%10d" % ("Total optimizer state", "", num_elems))
+    print(
+        "All optimizer state (total, MB): %d %g" % (num_elems, num_bytes / 1024 / 1024)
+    )
+
+
+def print_optimizer(optimizer):
+    """print optimizer state size tensor by tensor"""
+    num_elems = 0
+    num_bytes = 0
+
+    for param_id, state in optimizer.state.items():
+        for name, v in state.items():
+            if not torch.is_tensor(v):
+                continue
+            elems = v.numel()
+            bytes_ = elems * v.element_size()
+            print_master("%50s\t%20s\t%10d" % (name, list(v.shape), elems))
+            num_elems += elems
+            num_bytes += bytes_
+
+    print("-" * 50)
+    print("%50s\t%20s\t%10d" % ("Total optimizer state", "", num_elems))
+    print(
+        "All optimizer state (total, MB): %d %g" % (num_elems, num_bytes / 1024 / 1024)
+    )
 
 
 def tensor_divide(x1, x2):

@@ -10,9 +10,14 @@
 ##############################################################################
 
 import torch
-from torch.nn import ModuleList, Sequential, ReLU, Linear, Module
+from torch.nn import ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool, BatchNorm
+from torch_geometric.nn import (
+    BatchNorm,
+    global_add_pool,
+    global_max_pool,
+    global_mean_pool,
+)
 from torch_geometric.nn import Sequential as PyGSequential
 from torch.utils.checkpoint import checkpoint
 import torch_scatter
@@ -23,6 +28,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import GPSConv
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
 
@@ -52,6 +58,9 @@ class Base(Module):
         dropout: float = 0.25,
         num_conv_layers: int = 16,
         num_nodes: int = None,
+        graph_pooling: str = "mean",
+        use_graph_attr_conditioning: bool = False,
+        graph_attr_conditioning_mode: str = "concat_node",
     ):
         super().__init__()
         self.device = get_device()
@@ -77,14 +86,24 @@ class Base(Module):
         self.head_dims = output_dim
         self.num_heads = len(self.head_dims)
         ##convolutional layers for node level predictions
-        self.convs_node_hidden = ModuleList()
-        self.batch_norms_node_hidden = ModuleList()
-        self.convs_node_output = ModuleList()
-        self.batch_norms_node_output = ModuleList()
+        self.convs_node_hidden = ModuleDict({})
+        self.batch_norms_node_hidden = ModuleDict({})
+        self.convs_node_output = ModuleDict({})
+        self.batch_norms_node_output = ModuleDict({})
         self.equivariance = equivariance
         self.activation_function = activation_function_selection(
             activation_function_type
         )
+        self.use_graph_attr_conditioning = use_graph_attr_conditioning
+        self.graph_attr_conditioning_mode = graph_attr_conditioning_mode.lower()
+        if self.graph_attr_conditioning_mode not in (
+            "film",
+            "concat_node",
+            "fuse_pool",
+        ):
+            raise ValueError(
+                "graph_attr_conditioning_mode must be one of: 'film', 'concat_node', 'fuse_pool'."
+            )
 
         # output variance for Gaussian negative log likelihood loss
         self.var_output = 0
@@ -124,6 +143,31 @@ class Base(Module):
                 self.input_args += ", edge_attr"
             if "edge_attr" not in self.conv_args:
                 self.conv_args += ", edge_attr"
+
+        # Graph pooling policy
+        pool_mode = graph_pooling.lower()
+        if pool_mode == "sum":
+            pool_mode = "add"
+        pool_map = {
+            "mean": (global_mean_pool, "mean"),
+            "add": (global_add_pool, "sum"),
+            "max": (global_max_pool, "max"),
+        }
+        if pool_mode not in pool_map:
+            raise ValueError("Unsupported graph_pooling: " + graph_pooling)
+        self.graph_pooling = pool_mode
+        self.graph_pool_fn, self.graph_pool_reduction = pool_map[pool_mode]
+
+        def _pool_graph_features(x_tensor, batch_tensor):
+            if batch_tensor is None:
+                if self.graph_pool_reduction == "mean":
+                    return x_tensor.mean(dim=0, keepdim=True)
+                if self.graph_pool_reduction == "max":
+                    return x_tensor.max(dim=0, keepdim=True).values
+                return x_tensor.sum(dim=0, keepdim=True)
+            return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+
+        self._pool_graph_features = _pool_graph_features
 
         # Option to only train final property layers.
         self.freeze_conv = freeze_conv
@@ -170,6 +214,14 @@ class Base(Module):
                         2 * self.hidden_dim, self.hidden_dim, bias=False
                     )
 
+        # Optional FiLM-like conditioning with graph-level features (data.graph_attr).
+        # Lazily initialized on first use to avoid extra config wiring; only scalar (invariant) node channels are modulated.
+        self.graph_conditioner = None
+        self.graph_concat_projector = None
+        self.graph_concat_projector_in_dim = None
+        self.graph_pool_projector = None
+        self.graph_pool_projector_in_dim = None
+
         self._init_conv()
         if self.freeze_conv:
             self._freeze_conv()
@@ -193,6 +245,203 @@ class Base(Module):
                 )
         else:
             return mpnn
+
+    def _ensure_graph_conditioner(self, graph_attr_dim: int, device):
+        """Instantiate (or move) graph conditioner to the active device."""
+        if self.graph_conditioner is None:
+            hidden = max(self.hidden_dim, graph_attr_dim)
+            self.graph_conditioner = Sequential(
+                Linear(graph_attr_dim, hidden),
+                self.activation_function,
+                Linear(hidden, 2 * self.hidden_dim),
+            )
+        if self.graph_conditioner[0].weight.device != device:
+            self.graph_conditioner = self.graph_conditioner.to(device)
+
+    def _ensure_graph_concat_projector(
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
+    ):
+        """Instantiate (or move) concat projector used when conditioning_mode='concat_node'."""
+        in_dim = channel_dim + graph_attr_dim
+        if (self.graph_concat_projector is None) or (
+            self.graph_concat_projector_in_dim != in_dim
+        ):
+            self.graph_concat_projector = Linear(in_dim, channel_dim)
+            self.graph_concat_projector_in_dim = in_dim
+        if (self.graph_concat_projector.weight.device != device) or (
+            dtype is not None and self.graph_concat_projector.weight.dtype != dtype
+        ):
+            self.graph_concat_projector = self.graph_concat_projector.to(
+                device=device, dtype=dtype
+            )
+
+    def _ensure_graph_pool_projector(
+        self, graph_attr_dim: int, channel_dim: int, device, dtype=None
+    ):
+        """Instantiate (or move) projector used when conditioning_mode='fuse_pool'."""
+        in_dim = channel_dim + graph_attr_dim
+        if (self.graph_pool_projector is None) or (
+            self.graph_pool_projector_in_dim != in_dim
+        ):
+            self.graph_pool_projector = Sequential(
+                Linear(in_dim, channel_dim),
+                self.activation_function,
+                Linear(channel_dim, channel_dim),
+            )
+            self.graph_pool_projector_in_dim = in_dim
+        if (self.graph_pool_projector[0].weight.device != device) or (
+            dtype is not None and self.graph_pool_projector[0].weight.dtype != dtype
+        ):
+            self.graph_pool_projector = self.graph_pool_projector.to(
+                device=device, dtype=dtype
+            )
+
+    def _apply_graph_conditioning(self, inv_node_feat, batch, data):
+        """Apply graph_attr conditioning (FiLM, concat_node, or defer to fuse_pool) to invariant node channels."""
+        if not self.use_graph_attr_conditioning:
+            return inv_node_feat
+
+        if not hasattr(data, "graph_attr") or data.graph_attr is None:
+            raise ValueError(
+                "use_graph_attr_conditioning=True but data.graph_attr is missing."
+            )
+
+        graph_attr = data.graph_attr
+
+        graph_attr = graph_attr.to(
+            device=inv_node_feat.device, dtype=inv_node_feat.dtype
+        )
+
+        # Batch can be None for single-graph inputs; create a dummy batch in that case.
+        if batch is None:
+            batch = torch.zeros(
+                inv_node_feat.size(0), device=inv_node_feat.device, dtype=torch.long
+            )
+
+        num_graphs = int(batch.max().item() + 1)
+
+        # Normalize graph_attr to [num_graphs, feat_dim] for downstream broadcasting.
+        if graph_attr.dim() == 1:
+            if graph_attr.numel() % num_graphs == 0:
+                feat_dim = graph_attr.numel() // num_graphs
+                graph_attr = graph_attr.view(num_graphs, feat_dim)
+            else:
+                raise ValueError(
+                    f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
+                )
+        elif graph_attr.dim() == 2:
+            if graph_attr.size(0) != num_graphs:
+                raise ValueError(
+                    f"graph_attr first dim {graph_attr.size(0)} does not match num_graphs={num_graphs}."
+                )
+        else:
+            raise ValueError(
+                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
+            )
+
+        if self.graph_attr_conditioning_mode == "film":
+            self._ensure_graph_conditioner(graph_attr.size(-1), inv_node_feat.device)
+
+            # FiLM: inv = (1 + scale) * inv + shift, scale/shift are per-graph then broadcast by batch.
+            scale_shift = self.graph_conditioner(graph_attr)
+            scale, shift = scale_shift.split(self.hidden_dim, dim=-1)
+            scale = torch.tanh(scale)  # keep modulation bounded
+
+            channel_dim = inv_node_feat.size(-1)
+            scale_b = scale[batch]
+            shift_b = shift[batch]
+            if channel_dim != self.hidden_dim:
+                if channel_dim % self.hidden_dim != 0:
+                    raise ValueError(
+                        f"Graph conditioning expects channels divisible by hidden_dim (got {channel_dim} vs {self.hidden_dim})."
+                    )
+                factor = channel_dim // self.hidden_dim
+                scale_b = scale_b.repeat_interleave(factor, dim=-1)
+                shift_b = shift_b.repeat_interleave(factor, dim=-1)
+
+            return inv_node_feat * (1 + scale_b) + shift_b
+
+        if self.graph_attr_conditioning_mode == "concat_node":
+            channel_dim = inv_node_feat.size(-1)
+            self._ensure_graph_concat_projector(
+                graph_attr_dim=graph_attr.size(-1),
+                channel_dim=channel_dim,
+                device=inv_node_feat.device,
+                dtype=inv_node_feat.dtype,
+            )
+            graph_attr_b = graph_attr[batch]
+            if inv_node_feat.size(0) != graph_attr_b.size(0):
+                raise RuntimeError(
+                    f"Graph conditioning dimension mismatch: inv_node_feat has "
+                    f"{inv_node_feat.size(0)} rows but batch has {graph_attr_b.size(0)} "
+                    f"nodes. This typically means the MPNN dropped isolated nodes "
+                    f"(nodes with no edges within the radius cutoff). "
+                    f"inv_node_feat.shape={list(inv_node_feat.shape)}, "
+                    f"graph_attr_b.shape={list(graph_attr_b.shape)}"
+                )
+            fused = torch.cat([inv_node_feat, graph_attr_b], dim=-1)
+            return self.graph_concat_projector(fused)
+
+        if self.graph_attr_conditioning_mode == "fuse_pool":
+            # Pool-level fusion is applied later; leave node features unchanged here.
+            return inv_node_feat
+
+        raise ValueError(
+            f"Unsupported graph_attr_conditioning_mode: {self.graph_attr_conditioning_mode}"
+        )
+
+    def _apply_graph_pool_conditioning(self, x_graph, data):
+        """Fuse pooled graph embedding with graph_attr when conditioning_mode='fuse_pool'."""
+        if not self.use_graph_attr_conditioning:
+            return x_graph
+        if self.graph_attr_conditioning_mode != "fuse_pool":
+            return x_graph
+        if not hasattr(data, "graph_attr") or data.graph_attr is None:
+            raise ValueError(
+                "use_graph_attr_conditioning=True but data.graph_attr is missing."
+            )
+
+        graph_attr = data.graph_attr
+        num_graphs = x_graph.size(0)
+
+        if graph_attr.dim() == 1:
+            # If length matches num_graphs * feat_dim, reshape to [num_graphs, feat_dim].
+            if graph_attr.numel() % num_graphs == 0:
+                feat_dim = graph_attr.numel() // num_graphs
+                graph_attr = graph_attr.view(num_graphs, feat_dim)
+            else:
+                raise ValueError(
+                    f"One-dimensional graph attribute with graph_attr.numel()={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
+                )
+        elif graph_attr.dim() == 2:
+            if graph_attr.size(0) != num_graphs:
+                raise ValueError(
+                    f"graph_attr batch size does not match pooled graph embeddings: graph_attr={tuple(graph_attr.size())}, num_graphs={num_graphs}"
+                )
+        else:
+            raise ValueError(
+                f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
+            )
+
+        # Preserve the model/input dtype to avoid mixed precision mismatches under fp64 runs.
+        graph_attr = graph_attr.to(device=x_graph.device, dtype=x_graph.dtype)
+
+        self._ensure_graph_pool_projector(
+            graph_attr_dim=graph_attr.size(-1),
+            channel_dim=x_graph.size(-1),
+            device=x_graph.device,
+            dtype=x_graph.dtype,
+        )
+
+        # graph_attr is per-graph; assume batch aligns with x_graph rows
+        if graph_attr.size(0) != num_graphs:
+            raise ValueError(
+                f"graph_attr batch size does not match pooled graph embeddings: "
+                f"graph_attr={tuple(graph_attr.size())}, x_graph={tuple(x_graph.size())}, num_graphs={num_graphs}"
+            )
+
+        fused = torch.cat([x_graph, graph_attr], dim=-1)
+        return self.graph_pool_projector(fused)
 
     def _init_conv(self):
         self.graph_convs.append(
@@ -261,140 +510,178 @@ class Base(Module):
         # two ways to implement node features from here:
         # 1. one graph for all node features
         # 2. one graph for one node features (currently implemented)
-        if (
-            "node" not in self.config_heads
-            or self.config_heads["node"]["type"] != "conv"
-        ):
-            return
+        nodeconfiglist = self.config_heads["node"]
+        assert (
+            self.num_branches == len(nodeconfiglist) or self.num_branches == 1
+        ), "asumming node head has the same branches as graph head, if any"
+        for branchdict in nodeconfiglist:
+            # only support conv for all node branches
+            if branchdict["architecture"]["type"] != "conv":
+                return
         node_feature_ind = [
             i for i, head_type in enumerate(self.head_type) if head_type == "node"
         ]
         if len(node_feature_ind) == 0:
             return
-        # In this part, each head has same number of convolutional layers, but can have different output dimension
-        if "last_layer" in inspect.signature(self.get_conv).parameters:
-            self.convs_node_hidden.append(
-                self.get_conv(
-                    self.hidden_dim, self.hidden_dim_node[0], last_layer=False
-                )
-            )
-        else:
-            self.convs_node_hidden.append(
-                self.get_conv(self.hidden_dim, self.hidden_dim_node[0])
-            )
-        self.batch_norms_node_hidden.append(BatchNorm(self.hidden_dim_node[0]))
-        for ilayer in range(self.num_conv_layers_node - 1):
-            # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+
+        for branchdict in nodeconfiglist:
+            branchtype = branchdict["type"]
+            brancharct = branchdict["architecture"]
+            num_conv_layers_node = brancharct["num_headlayers"]
+            hidden_dim_node = brancharct["dim_headlayers"]
+
+            convs_node_hidden = ModuleList()
+            batch_norms_node_hidden = ModuleList()
+            convs_node_output = ModuleList()
+            batch_norms_node_output = ModuleList()
+
+            # In this part, each head has same number of convolutional layers, but can have different output dimension
             if "last_layer" in inspect.signature(self.get_conv).parameters:
-                self.convs_node_hidden.append(
-                    self.get_conv(
-                        self.hidden_dim_node[ilayer],
-                        self.hidden_dim_node[ilayer + 1],
-                        last_layer=False,
-                    )
+                convs_node_hidden.append(
+                    self.get_conv(self.hidden_dim, hidden_dim_node[0], last_layer=False)
                 )
             else:
-                self.convs_node_hidden.append(
-                    self.get_conv(
-                        self.hidden_dim_node[ilayer], self.hidden_dim_node[ilayer + 1]
-                    )
+                convs_node_hidden.append(
+                    self.get_conv(self.hidden_dim, hidden_dim_node[0])
                 )
-            self.batch_norms_node_hidden.append(
-                BatchNorm(self.hidden_dim_node[ilayer + 1])
-            )
-        for ihead in node_feature_ind:
-            # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
-            if "last_layer" in inspect.signature(self.get_conv).parameters:
-                self.convs_node_output.append(
-                    self.get_conv(
-                        self.hidden_dim_node[-1],
-                        self.head_dims[ihead] * (1 + self.var_output),
-                        last_layer=True,
+            batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[0]))
+            for ilayer in range(num_conv_layers_node - 1):
+                # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+                if "last_layer" in inspect.signature(self.get_conv).parameters:
+                    convs_node_hidden.append(
+                        self.get_conv(
+                            hidden_dim_node[ilayer],
+                            hidden_dim_node[ilayer + 1],
+                            last_layer=False,
+                        )
                     )
-                )
-            else:
-                self.convs_node_output.append(
-                    self.get_conv(
-                        self.hidden_dim_node[-1],
-                        self.head_dims[ihead] * (1 + self.var_output),
+                else:
+                    convs_node_hidden.append(
+                        self.get_conv(
+                            hidden_dim_node[ilayer], hidden_dim_node[ilayer + 1]
+                        )
                     )
+                batch_norms_node_hidden.append(BatchNorm(hidden_dim_node[ilayer + 1]))
+            for ihead in node_feature_ind:
+                # This check is needed because the "get_conv" method of SCFStack takes one additional argument called last_layer
+                if "last_layer" in inspect.signature(self.get_conv).parameters:
+                    convs_node_output.append(
+                        self.get_conv(
+                            hidden_dim_node[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                            last_layer=True,
+                        )
+                    )
+                else:
+                    convs_node_output.append(
+                        self.get_conv(
+                            hidden_dim_node[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                        )
+                    )
+                batch_norms_node_output.append(
+                    BatchNorm(self.head_dims[ihead] * (1 + self.var_output))
                 )
-            self.batch_norms_node_output.append(
-                BatchNorm(self.head_dims[ihead] * (1 + self.var_output))
-            )
+            self.convs_node_hidden[branchtype] = convs_node_hidden
+            self.batch_norms_node_hidden[branchtype] = batch_norms_node_hidden
+            self.convs_node_output[branchtype] = convs_node_output
+            self.batch_norms_node_output[branchtype] = batch_norms_node_output
 
     def _multihead(self):
+        # typename = config_heads_type["type"]
+        # self.multiheads[typename]=Module()
+        # self.multiheads[typename].heads_NN=ModuleList()
+
+        self.graph_shared = ModuleDict({})
         ############multiple heads/taks################
         # shared dense layers for heads with graph level output
         dim_sharedlayers = 0
+        self.num_branches = 1
         if "graph" in self.config_heads:
-            denselayers = []
-            dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
-            denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
-            denselayers.append(self.activation_function)
-            for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
-                denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+            self.num_branches = len(self.config_heads["graph"])
+            for branchdict in self.config_heads["graph"]:
+                denselayers = []
+                dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
+                denselayers.append(Linear(self.hidden_dim, dim_sharedlayers))
                 denselayers.append(self.activation_function)
-            self.graph_shared = Sequential(*denselayers)
+                for ishare in range(branchdict["architecture"]["num_sharedlayers"] - 1):
+                    denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+                    denselayers.append(self.activation_function)
+                self.graph_shared[branchdict["type"]] = Sequential(*denselayers)
 
         if "node" in self.config_heads:
-            self.num_conv_layers_node = self.config_heads["node"]["num_headlayers"]
-            self.hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
             self._init_node_conv()
 
         inode_feature = 0
         for ihead in range(self.num_heads):
             # mlp for each head output
+            head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                num_head_hidden = self.config_heads["graph"]["num_headlayers"]
-                dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
-                denselayers = []
-                denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
-                denselayers.append(self.activation_function)
-                for ilayer in range(num_head_hidden - 1):
-                    denselayers.append(
-                        Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
-                    )
+                for branchdict in self.config_heads["graph"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    dim_sharedlayers = brancharct["dim_sharedlayers"]
+                    num_head_hidden = brancharct["num_headlayers"]
+                    dim_head_hidden = brancharct["dim_headlayers"]
+                    denselayers = []
+                    denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                     denselayers.append(self.activation_function)
-                denselayers.append(
-                    Linear(
-                        dim_head_hidden[-1],
-                        self.head_dims[ihead] * (1 + self.var_output),
+                    for ilayer in range(num_head_hidden - 1):
+                        denselayers.append(
+                            Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
+                        )
+                        denselayers.append(self.activation_function)
+                    denselayers.append(
+                        Linear(
+                            dim_head_hidden[-1],
+                            self.head_dims[ihead] * (1 + self.var_output),
+                        )
                     )
-                )
-                head_NN = Sequential(*denselayers)
+                    head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                self.node_NN_type = self.config_heads["node"]["type"]
-                head_NN = ModuleList()
-                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
-                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
-                    assert (
-                        self.num_nodes is not None
-                    ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
-                    head_NN = MLPNode(
-                        self.hidden_dim,
-                        self.head_dims[ihead] * (1 + self.var_output),
-                        self.num_mlp,
-                        self.hidden_dim_node,
-                        self.config_heads["node"]["type"],
-                        self.activation_function,
-                    )
-                elif self.node_NN_type == "conv":
-                    for conv, batch_norm in zip(
-                        self.convs_node_hidden, self.batch_norms_node_hidden
-                    ):
-                        head_NN.append(conv)
-                        head_NN.append(batch_norm)
-                    head_NN.append(self.convs_node_output[inode_feature])
-                    head_NN.append(self.batch_norms_node_output[inode_feature])
-                    inode_feature += 1
-                else:
-                    raise ValueError(
-                        "Unknown head NN structure for node features"
-                        + self.node_NN_type
-                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
-                    )
+                for branchdict in self.config_heads["node"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    hidden_dim_node = brancharct["dim_headlayers"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        if node_NN_type == "mlp_per_node":
+                            assert (
+                                self.num_nodes is not None
+                            ), "num_nodes must be provided for mlp_per_node; use 'mlp' for variable-size graphs"
+                        head_NN[branchtype] = MLPNode(
+                            self.hidden_dim,
+                            self.head_dims[ihead] * (1 + self.var_output),
+                            self.num_mlp,
+                            hidden_dim_node,
+                            node_NN_type,
+                            self.activation_function,
+                            num_nodes=self.num_nodes
+                            if node_NN_type == "mlp_per_node"
+                            else None,
+                        )
+                    elif node_NN_type == "conv":
+                        head_NN[branchtype] = ModuleList()
+                        for conv, batch_norm in zip(
+                            self.convs_node_hidden[branchtype],
+                            self.batch_norms_node_hidden[branchtype],
+                        ):
+                            head_NN[branchtype].append(conv)
+                            head_NN[branchtype].append(batch_norm)
+                        head_NN[branchtype].append(
+                            self.convs_node_output[branchtype][inode_feature]
+                        )
+                        head_NN[branchtype].append(
+                            self.batch_norms_node_output[branchtype][inode_feature]
+                        )
+                        inode_feature += 1
+                    else:
+                        raise ValueError(
+                            "Unknown head NN structure for node features"
+                            + node_NN_type
+                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        )
             else:
                 raise ValueError(
                     "Unknown head type"
@@ -409,14 +696,20 @@ class Base(Module):
 
     def forward(self, data):
         ### encoder part ####
+        tr.start("enc_forward")
         inv_node_feat, equiv_node_feat, conv_args = self._embedding(data)
+
+        # Prepare batch indexing for graph conditioning (handles single-graph case gracefully).
+        batch_for_cond = (
+            data.batch if hasattr(data, "batch") and data.batch is not None else None
+        )
 
         for conv, feat_layer in zip(self.graph_convs, self.feature_layers):
             if not self.conv_checkpointing:
                 inv_node_feat, equiv_node_feat = conv(
                     inv_node_feat=inv_node_feat,
                     equiv_node_feat=equiv_node_feat,
-                    **conv_args
+                    **conv_args,
                 )
             else:
                 inv_node_feat, equiv_node_feat = checkpoint(
@@ -424,45 +717,130 @@ class Base(Module):
                     use_reentrant=False,
                     inv_node_feat=inv_node_feat,
                     equiv_node_feat=equiv_node_feat,
-                    **conv_args
+                    **conv_args,
                 )
+
+            inv_node_feat = self._apply_graph_conditioning(
+                inv_node_feat, batch_for_cond, data
+            )
             inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
 
         x = inv_node_feat
-
+        tr.stop("enc_forward")
+        tr.start("branch_forward")
         #### multi-head decoder part####
         # shared dense layers for graph level output
         if data.batch is None:
-            x_graph = x.mean(dim=0, keepdim=True)
+            x_graph = self._pool_graph_features(x, None)
+            # individual samplers
+            data.batch = data.x * 0
         else:
-            x_graph = global_mean_pool(x, data.batch.to(x.device))
+            x_graph = self._pool_graph_features(x, data.batch)
+
+        # Optional pool-level fusion of graph_attr into pooled embedding
+        x_graph = self._apply_graph_pool_conditioning(x_graph, data)
         outputs = []
         outputs_var = []
+        # if no dataset_name, set it to be 0
+        if not hasattr(data, "dataset_name"):
+            setattr(data, "dataset_name", data.batch.unique() * 0)
+        datasetIDs = data.dataset_name.unique()
+        unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         for head_dim, headloc, type_head in zip(
             self.head_dims, self.heads_NN, self.head_type
         ):
             if type_head == "graph":
-                x_graph_head = self.graph_shared(x_graph)
-                output_head = headloc(x_graph_head)
-                outputs.append(output_head[:, :head_dim])
-                outputs_var.append(output_head[:, head_dim:] ** 2)
-            else:
-                if self.node_NN_type == "conv":
-                    inv_node_feat = x
-                    for conv, batch_norm in zip(headloc[0::2], headloc[1::2]):
-                        inv_node_feat, equiv_node_feat = conv(
-                            inv_node_feat=inv_node_feat,
-                            equiv_node_feat=equiv_node_feat,
-                            **conv_args
-                        )
-                        inv_node_feat = batch_norm(inv_node_feat)
-                        inv_node_feat = self.activation_function(inv_node_feat)
-                    x_node = inv_node_feat
-                    x = inv_node_feat
+                out_dtype = x_graph.dtype
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim),
+                    device=x.device,
+                    dtype=out_dtype,
+                )
+                headvar = torch.zeros(
+                    (len(data.dataset_name), head_dim * self.var_output),
+                    device=x.device,
+                    dtype=out_dtype,
+                )
+                if self.num_branches == 1:
+                    x_graph_head = self.graph_shared["branch-0"](x_graph)
+                    output_head = headloc["branch-0"](x_graph_head)
+                    head = output_head[:, :head_dim]
+                    headvar = output_head[:, head_dim:] ** 2
                 else:
-                    x_node = headloc(x=x, batch=data.batch)
-                outputs.append(x_node[:, :head_dim])
-                outputs_var.append(x_node[:, head_dim:] ** 2)
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask = mask[:, 0]
+                        branchtype = f"branch-{ID.item()}"
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        x_graph_head = self.graph_shared[branchtype](x_graph[mask, :])
+                        output_head = headloc[branchtype](x_graph_head)
+                        head[mask] = output_head[:, :head_dim]
+                        headvar[mask] = (output_head[:, head_dim:] ** 2).to(
+                            dtype=out_dtype
+                        )
+                outputs.append(head)
+                outputs_var.append(headvar)
+            else:
+                # assuming all node types are the same
+                node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
+                out_dtype = x.dtype
+                head = torch.zeros(
+                    (x.shape[0], head_dim), device=x.device, dtype=out_dtype
+                )
+                headvar = torch.zeros(
+                    (x.shape[0], head_dim * self.var_output),
+                    device=x.device,
+                    dtype=out_dtype,
+                )
+                if self.num_branches == 1:
+                    branchtype = "branch-0"
+                    if node_NN_type == "conv":
+                        inv_node_feat = x
+                        equiv_node_feat_ = equiv_node_feat
+                        for conv, batch_norm in zip(
+                            headloc[branchtype][0::2], headloc[branchtype][1::2]
+                        ):
+                            inv_node_feat, equiv_node_feat_ = conv(
+                                inv_node_feat=inv_node_feat,
+                                equiv_node_feat=equiv_node_feat_,
+                                **conv_args,
+                            )
+                            inv_node_feat = batch_norm(inv_node_feat)
+                            inv_node_feat = self.activation_function(inv_node_feat)
+                        x_node = inv_node_feat
+                    else:
+                        x_node = headloc[branchtype](x=x, batch=data.batch)
+                    head = x_node[:, :head_dim]
+                    headvar = x_node[:, head_dim:] ** 2
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask_nodes = torch.repeat_interleave(mask, node_counts)
+                        branchtype = f"branch-{ID.item()}"
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        if node_NN_type == "conv":
+                            inv_node_feat = x[mask_nodes, :]
+                            equiv_node_feat_ = equiv_node_feat[mask_nodes, :]
+                            for conv, batch_norm in zip(
+                                headloc[branchtype][0::2], headloc[branchtype][1::2]
+                            ):
+                                inv_node_feat, equiv_node_feat_ = conv(
+                                    inv_node_feat=inv_node_feat,
+                                    equiv_node_feat=equiv_node_feat_,
+                                    **conv_args,
+                                )
+                                inv_node_feat = batch_norm(inv_node_feat)
+                                inv_node_feat = self.activation_function(inv_node_feat)
+                            x_node = inv_node_feat
+                        else:
+                            x_node = headloc[branchtype](
+                                x=x[mask_nodes, :], batch=data.batch[mask_nodes]
+                            )
+                        head[mask_nodes] = x_node[:, :head_dim]
+                        headvar[mask_nodes] = x_node[:, head_dim:] ** 2
+                outputs.append(head)
+                outputs_var.append(headvar)
+        tr.stop("branch_forward")
         if self.var_output:
             return outputs, outputs_var
         return outputs
@@ -476,62 +854,6 @@ class Base(Module):
             return self.loss_nll(pred, value, head_index, var=var)
         elif self.ilossweights_hyperp == 1:
             return self.loss_hpweighted(pred, value, head_index, var=var)
-
-    def energy_force_loss(self, pred, data):
-        # Asserts
-        assert (
-            data.pos is not None and data.energy is not None and data.forces is not None
-        ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
-        assert (
-            data.pos.requires_grad
-        ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
-        assert (
-            self.num_heads == 1 and self.head_type[0] == "node"
-        ), "Force predictions are only supported for models with one head that predict nodal energy. Check your num_heads and head_types."
-        # Initialize loss
-        tot_loss = 0
-        tasks_loss = []
-        # Energies
-        node_energy_pred = pred[0]
-        graph_energy_pred = (
-            torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
-            .squeeze()
-            .float()
-        )
-        graph_energy_true = data.energy.squeeze().float()
-        energy_loss_weight = self.loss_weights[
-            0
-        ]  # There should only be one loss-weight for energy
-        tot_loss += (
-            self.loss_function(graph_energy_pred, graph_energy_true)
-            * energy_loss_weight
-        )
-        tasks_loss.append(self.loss_function(graph_energy_pred, graph_energy_true))
-        # Forces
-        forces_true = data.forces.float()
-        forces_pred = torch.autograd.grad(
-            graph_energy_pred,
-            data.pos,
-            grad_outputs=torch.ones_like(graph_energy_pred),
-            retain_graph=graph_energy_pred.requires_grad,  # Retain graph only if needed (it will be needed during training, but not during validation/testing)
-            create_graph=True,
-        )[0].float()
-        assert (
-            forces_pred is not None
-        ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-        forces_pred = -forces_pred
-        force_loss_weight = (
-            energy_loss_weight
-            * torch.mean(torch.abs(graph_energy_true))
-            / (torch.mean(torch.abs(forces_true)) + 1e-8)
-        )  # Weight force loss and graph energy equally
-        tot_loss += (
-            self.loss_function(forces_pred, forces_true) * force_loss_weight
-        )  # Have force-weight be the complement to energy-weight
-        ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-        ##        so, we need to do loss calculation manually without calling the other functions.
-
-        return tot_loss, tasks_loss
 
     def loss_nll(self, pred, value, head_index, var=None):
         # negative log likelihood loss
@@ -596,12 +918,14 @@ class MLPNode(Module):
         hidden_dim_node,
         node_type,
         activation_function,
+        num_nodes=None,
     ):
         super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.node_type = node_type
         self.num_mlp = num_mlp
+        self.num_nodes = num_nodes
         self.activation_function = activation_function
 
         self.mlp = ModuleList()
@@ -619,6 +943,10 @@ class MLPNode(Module):
 
     def node_features_reshape(self, x, batch):
         """reshape x from [batch_size*num_nodes, num_features] to [batch_size, num_features, num_nodes]"""
+        if self.num_nodes is None:
+            raise ValueError(
+                "num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs"
+            )
         num_features = x.shape[1]
         batch_size = batch.max() + 1
         out = torch.zeros(
@@ -635,6 +963,10 @@ class MLPNode(Module):
         if self.node_type == "mlp":
             outs = self.mlp[0](x)
         else:
+            if self.num_nodes is None:
+                raise ValueError(
+                    "num_nodes is required for mlp_per_node; use 'mlp' for variable-size graphs"
+                )
             outs = torch.zeros(
                 (x.shape[0], self.output_dim),
                 dtype=x.dtype,

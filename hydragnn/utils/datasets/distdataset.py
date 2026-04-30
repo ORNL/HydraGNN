@@ -17,6 +17,56 @@ from hydragnn.preprocess import update_predicted_values, update_atom_features
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from tqdm import tqdm
+from io import BytesIO
+import os
+
+
+def allgatherv_numpy(send: np.ndarray, comm=MPI.COMM_WORLD):
+    """
+    Allgatherv for 1D NumPy arrays with variable lengths.
+
+    Parameters
+    ----------
+    send : np.ndarray
+        Local array (1D, contiguous)
+    comm : MPI.Comm
+        MPI communicator
+
+    Returns
+    -------
+    recv : np.ndarray
+        Concatenated array from all ranks
+    counts : np.ndarray
+        Number of elements from each rank
+    displs : np.ndarray
+        Displacements for each rank
+    """
+
+    # ensure contiguous
+    send = np.ascontiguousarray(send)
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    # map dtype to MPI type
+    mpi_dtype = MPI._typedict[send.dtype.char]
+
+    # gather lengths
+    sendcount = np.array(send.size, dtype=np.int32)
+    recvcounts = np.empty(size, dtype=np.int32)
+    comm.Allgather([sendcount, MPI.INT], [recvcounts, MPI.INT])
+
+    # displacements
+    displs = np.zeros(size, dtype=np.int32)
+    displs[1:] = np.cumsum(recvcounts[:-1])
+
+    # allocate receive buffer
+    recv = np.empty(recvcounts.sum(), dtype=send.dtype)
+
+    # allgatherv
+    comm.Allgatherv([send, mpi_dtype], [recv, recvcounts, displs, mpi_dtype])
+
+    return recv
 
 
 class DistDataset(AbstractBaseDataset):
@@ -30,31 +80,58 @@ class DistDataset(AbstractBaseDataset):
         ddstore_width=None,
         local=False,
         var_config=None,
+        ddstore_store_per_sample=True,  ## True for per-sample saving. False for feature-first saving
     ):
         super().__init__()
 
         self.label = label
+        self.local = local
         self.comm = comm
         self.rank = self.comm.Get_rank()
         self.comm_size = self.comm.Get_size()
         self.ddstore_width = (
             ddstore_width if ddstore_width is not None else self.comm_size
         )
+
+        ## FIXME
+        ddstore_method = int(os.getenv("HYDRAGNN_DDSTORE_METHOD", "0"))
+        print("DDStore method:", ddstore_method)
+        if ddstore_method == 1:
+            # Using libfabric. Need a map each rank to a network interface
+            iface = system = os.getenv("FABRIC_IFACE", None)
+            if iface is None:
+                system = os.getenv("LMOD_SYSTEM_NAME", None)
+                if system is None and os.getenv("PBS_O_HOST", "none")[:6] == "aurora":
+                    system = "aurora"
+
+                if system == "frontier":
+                    gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
+                    os.environ["FABRIC_IFACE"] = f"hsn{gpu_id//2}"
+                elif system == "perlmutter":
+                    gpu_id = int(os.getenv("SLURM_LOCALID", "0"))
+                    os.environ["FABRIC_IFACE"] = f"hsn{gpu_id}"
+                elif system == "aurora":
+                    gpu_id = int(os.getenv("PALS_LOCAL_RANKID", "0"))
+                    os.environ["FABRIC_IFACE"] = f"hsn{gpu_id//2}"
+
+            print("FABRIC_IFACE:", os.environ["FABRIC_IFACE"])
+
         self.ddstore_comm = self.comm.Split(self.rank // self.ddstore_width, self.rank)
         self.ddstore_comm_rank = self.ddstore_comm.Get_rank()
         self.ddstore_comm_size = self.ddstore_comm.Get_size()
-        self.ddstore = dds.PyDDStore(self.ddstore_comm)
+        self.ddstore = dds.PyDDStore(self.ddstore_comm, method=ddstore_method)
+        self.ddstore_store_per_sample = ddstore_store_per_sample
 
         ## set total before set subset
-        if local:
+        if self.local:
             local_ns = len(data)
-            local_ns_list = comm.allgather(local_ns)
+            local_ns_list = self.ddstore_comm.allgather(local_ns)
             maxrank = np.argmax(local_ns_list).item()
             for i in tqdm(
                 range(local_ns), desc="Loading", disable=(self.rank != maxrank)
             ):
                 self.dataset.append(data[i])
-            self.total_ns = comm.allreduce(local_ns, op=MPI.SUM)
+            self.total_ns = self.ddstore_comm.allreduce(local_ns, op=MPI.SUM)
         else:
             self.total_ns = len(data)
             rx = list(nsplit(range(len(data)), self.ddstore_comm_size))[
@@ -77,7 +154,22 @@ class DistDataset(AbstractBaseDataset):
         self.data = dict()
         nbytes = 0
         for k in self.keys:
-            arr_list = [data[k].cpu().numpy() for data in self.dataset]
+            arr_list = list()
+            for data in self.dataset:
+                if isinstance(data[k], torch.Tensor):
+                    arr_list.append(data[k].cpu().numpy())
+                elif isinstance(data[k], np.ndarray):
+                    arr_list.append(data[k])
+                elif isinstance(data[k], (np.floating, np.integer)):
+                    arr_list.append(np.array((data[k],)))
+                elif isinstance(data[k], str):
+                    arr = np.frombuffer(data[k].encode("utf-8"), dtype=np.uint8)
+                    arr_list.append(arr)
+                else:
+                    print("Error: type(data[k]):", label, k, type(data[k]))
+                    raise NotImplementedError(
+                        "Not supported: not tensor nor numpy array"
+                    )
             m0 = np.min([x.shape for x in arr_list], axis=0)
             m1 = np.max([x.shape for x in arr_list], axis=0)
             vdims = list()
@@ -90,7 +182,7 @@ class DistDataset(AbstractBaseDataset):
             if len(vdims) > 0:
                 vdim = vdims[0]
             ## vdim should be globally equal
-            vdim = self.comm.allreduce(vdim, op=MPI.MAX)
+            vdim = self.ddstore_comm.allreduce(vdim, op=MPI.MAX)
             val = np.concatenate(arr_list, axis=vdim)
             if not val.flags["C_CONTIGUOUS"]:
                 val = np.ascontiguousarray(val)
@@ -100,10 +192,11 @@ class DistDataset(AbstractBaseDataset):
             self.variable_dim[k] = vdim
             self.variable_dtype[k] = val.dtype
 
-            vcount = np.array([x.shape[vdim] for x in arr_list])
+            vcount = np.array([x.shape[vdim] for x in arr_list], dtype=np.int32)
             assert len(vcount) == len(self.dataset)
             vcount_list = self.ddstore_comm.allgather(vcount)
-            vcount = np.hstack(vcount_list)
+            # vcount_list = allgatherv_numpy(vcount, comm=self.ddstore_comm)
+            vcount = np.hstack(vcount_list).astype(np.int64)
             self.variable_count[k] = vcount
 
             offset_arr = np.zeros_like(vcount)
@@ -116,20 +209,83 @@ class DistDataset(AbstractBaseDataset):
             assert val.data.contiguous
             self.data[k] = val
 
-            vname = "%s/%s" % (label, k)
-            self.ddstore.add(vname, val)
-            log0(
-                "DDStore add:",
-                (
-                    vname,
-                    vdim,
-                    val.dtype,
-                    val.shape,
-                    val.sum(),
-                    (val.size * val.itemsize) / 1024 / 1024 / 1024,
-                ),
-            )
+            if not self.ddstore_store_per_sample:
+                vname = "%s/%s" % (label, k)
+                self.ddstore.add(vname, val)
+                log0(
+                    "DDStore add:",
+                    (
+                        vname,
+                        vdim,
+                        val.dtype,
+                        val.shape,
+                        val.sum(),
+                        (val.size * val.itemsize) / 1024 / 1024 / 1024,
+                    ),
+                )
             nbytes += val.size * val.itemsize
+
+        ## per-sample approach
+        if self.ddstore and self.ddstore_store_per_sample:
+            buf = BytesIO()
+            if self.local:
+                ## local_ns_list is a list of local_ns from all ranks, which is calculated in the above.
+                start_idx = int(np.sum(local_ns_list[: self.ddstore_comm_rank]))
+                rx = list(range(start_idx, start_idx + local_ns))
+            else:
+                rx = list(nsplit(list(range(self.total_ns)), self.ddstore_comm_size))[
+                    self.ddstore_comm_rank
+                ]
+            local_record_count = list()
+            for idx in rx:
+                data_object = dict()
+                for k in self.keys:
+                    count = list(self.variable_shape[k])
+                    start = [
+                        0,
+                    ] * len(count)
+                    vdim = self.variable_dim[k]
+                    dtype = self.variable_dtype[k]
+                    start[vdim] = (
+                        self.variable_offset[k][idx] - self.variable_offset[k][rx[0]]
+                    )
+                    count[vdim] = self.variable_count[k][idx]
+                    if vdim > 0:
+                        start.insert(0, start.pop(vdim))
+                        count.insert(0, count.pop(vdim))
+                    assert start[0] + count[0] <= (self.data[k].shape)[0], (
+                        start[0],
+                        count[0],
+                        (self.data[k].shape)[0],
+                    )
+
+                    slices = tuple(slice(s, s + c) for s, c in zip(start, count))
+                    data = self.data[k][slices]
+                    ## reset vdim
+                    if vdim > 0:
+                        data = np.moveaxis(data, 0, vdim)
+                    data_object[k] = data
+
+                dtype = np.dtype(
+                    [(k, v.dtype, v.shape) for k, v in data_object.items()]
+                )
+                data_tuples = [
+                    tuple([v.tolist() for v in data_object.values()]),
+                ]
+                record_array = np.array(data_tuples, dtype=dtype)
+                assert dtype.itemsize == record_array.nbytes
+                local_record_count.append(dtype.itemsize)
+                buf.write(record_array.tobytes())
+
+            record_count = self.ddstore_comm.allgather(local_record_count)
+            self.record_count = np.hstack(record_count)
+            self.record_offset = self.record_count.cumsum()
+
+            arr = np.frombuffer(buf.getvalue(), dtype=np.uint8)
+            vname = "%s/%s" % (label, "record_array")
+            self.ddstore.add(vname, arr)
+            nbytes += arr.nbytes
+
         log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
         ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
@@ -158,6 +314,34 @@ class DistDataset(AbstractBaseDataset):
 
     @tr.profile("get")
     def get(self, idx):
+        if self.ddstore_store_per_sample:
+            data_object = torch_geometric.data.Data()
+            dtype_list = list()
+            for k in self.keys:
+                count = list(self.variable_shape[k])
+                start = [
+                    0,
+                ] * len(count)
+                vdim = self.variable_dim[k]
+                dtype = self.variable_dtype[k]
+                start[vdim] = self.variable_offset[k][idx]
+                count[vdim] = self.variable_count[k][idx]
+
+                dtype_tuple = (k, dtype, count)
+                dtype_list.append(dtype_tuple)
+
+            dtype = np.dtype(dtype_list)
+            val = np.zeros(dtype.itemsize, dtype=np.uint8)
+            offset = 0 if idx == 0 else self.record_offset[idx - 1]
+            vname = "%s/%s" % (self.label, "record_array")
+            self.ddstore.get(vname, val, offset)
+            val = val.view(dtype)[0]
+            for k in val.dtype.names:
+                v = torch.tensor(val[k])
+                exec("data_object.%s = v" % (k))
+
+            return data_object
+
         data_object = torch_geometric.data.Data()
         for k in self.keys:
             count = list(self.variable_shape[k])

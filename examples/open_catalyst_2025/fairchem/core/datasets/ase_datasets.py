@@ -1,0 +1,854 @@
+"""
+Copyright (c) Meta, Inc. and its affiliates.
+
+This source code is licensed under the MIT license found in the
+LICENSE file in the root directory of this source tree.
+"""
+
+from __future__ import annotations
+
+import bisect
+import copy
+import logging
+import os
+import warnings
+from abc import ABC, abstractmethod
+from functools import cache
+from glob import glob
+from pathlib import Path
+from typing import Any, Callable
+
+import ase
+import numpy as np
+from torch import tensor
+from tqdm import tqdm
+
+from fairchem.core.common.registry import registry
+from fairchem.core.datasets._utils import rename_data_object_keys
+from fairchem.core.datasets.base_dataset import BaseDataset
+from fairchem.core.datasets.lmdb_database import LMDBDatabase
+from fairchem.core.datasets.target_metadata_guesser import guess_property_metadata
+from fairchem.core.modules.transforms import DataTransforms
+from fairchem.core.preprocessing import AtomsToGraphs
+
+
+def apply_one_tags(
+    atoms: ase.Atoms, skip_if_nonzero: bool = True, skip_always: bool = False
+):
+    """
+    This function will apply tags of 1 to an ASE atoms object.
+    It is used as an atoms_transform in the datasets contained in this file.
+
+    Certain models will treat atoms differently depending on their tags.
+    For example, GemNet-OC by default will only compute triplet and quadruplet interactions
+    for atoms with non-zero tags. This model throws an error if there are no tagged atoms.
+    For this reason, the default behavior is to tag atoms in structures with no tags.
+
+    args:
+        skip_if_nonzero (bool): If at least one atom has a nonzero tag, do not tag any atoms
+
+        skip_always (bool): Do not apply any tags. This arg exists so that this function can be disabled
+                without needing to pass a callable (which is currently difficult to do with main.py)
+    """
+    if skip_always:
+        return atoms
+
+    if np.all(atoms.get_tags() == 0) or not skip_if_nonzero:
+        atoms.set_tags(np.ones(len(atoms)))
+
+    return atoms
+
+
+class AseAtomsDataset(BaseDataset, ABC):
+    """
+    This is an abstract Dataset that includes helpful utilities for turning
+    ASE atoms objects into OCP-usable data objects. This should not be instantiated directly
+    as get_atoms_object and load_dataset_get_ids are not implemented in this base class.
+
+    Derived classes must add at least two things:
+        self.get_atoms_object(id): a function that takes an identifier and returns a corresponding atoms object
+
+        self.load_dataset_get_ids(config: dict): This function is responsible for any initialization/loads
+            of the dataset and importantly must return a list of all possible identifiers that can be passed into
+            self.get_atoms_object(id)
+
+    Identifiers need not be any particular type.
+    """
+
+    def __init__(
+        self,
+        config: dict,
+        atoms_transform: Callable[[ase.Atoms, Any, ...], ase.Atoms] = apply_one_tags,
+    ) -> None:
+        super().__init__(config)
+
+        a2g_args = config.get("a2g_args", {}) or {}
+
+        # set default to False if not set by user, assuming otf_graph will be used
+        if "r_edges" not in a2g_args:
+            a2g_args["r_edges"] = False
+
+        # Make sure we always include PBC info in the resulting atoms objects
+        a2g_args["r_pbc"] = True
+        self.a2g = AtomsToGraphs(**a2g_args)
+
+        self.key_mapping = self.config.get("key_mapping", None)
+        self.transforms = DataTransforms(self.config.get("transforms", {}))
+
+        self.atoms_transform = atoms_transform
+
+        if self.config.get("keep_in_memory", False):
+            self.__getitem__ = cache(self.__getitem__)
+
+        self.ids = self._load_dataset_get_ids(config)
+        self.num_samples = len(self.ids)
+
+        if len(self.ids) == 0:
+            raise ValueError(
+                rf"No valid ase data found! \n"
+                f"Double check that the src path and/or glob search pattern gives ASE compatible data: {config['src']}"
+            )
+
+    def __getitem__(self, idx):
+        # Handle slicing
+        if isinstance(idx, slice):
+            return [self[i] for i in range(*idx.indices(len(self)))]
+
+        # Get atoms object via derived class method
+        atoms = self.get_atoms(self.ids[idx])
+
+        # Transform atoms object
+        if self.atoms_transform is not None:
+            atoms = self.atoms_transform(
+                atoms, **self.config.get("atoms_transform_args", {})
+            )
+
+        sid = atoms.info.get("sid", self.ids[idx])
+        fid = atoms.info.get("fid", tensor([0]))
+
+        # Convert to data object
+        data_object = self.a2g.convert(atoms, sid)
+        data_object.fid = fid
+        data_object.natoms = len(atoms)
+
+        # apply linear reference
+        if self.a2g.r_energy is True and self.lin_ref is not None:
+            data_object.energy -= sum(self.lin_ref[data_object.atomic_numbers.long()])
+
+        # Transform data object
+        data_object = self.transforms(data_object)
+
+        if self.key_mapping is not None:
+            data_object = rename_data_object_keys(data_object, self.key_mapping)
+
+        if self.config.get("include_relaxed_energy", False):
+            data_object.energy_relaxed = self.get_relaxed_energy(self.ids[idx])
+
+        return data_object
+
+    @abstractmethod
+    def get_atoms(self, idx: str | int) -> ase.Atoms:
+        # This function should return an ASE atoms object.
+        raise NotImplementedError(
+            "Returns an ASE atoms object. Derived classes should implement this function."
+        )
+
+    @abstractmethod
+    def _load_dataset_get_ids(self, config):
+        # This function should return a list of ids that can be used to index into the database
+        raise NotImplementedError(
+            "Every ASE dataset needs to declare a function to load the dataset and return a list of ids."
+        )
+
+    def get_relaxed_energy(self, identifier):
+        raise NotImplementedError(
+            "Reading relaxed energy from trajectory or file is not implemented with this dataset. "
+            "If relaxed energies are saved with the atoms info dictionary, they can be used by passing the keys in "
+            "the r_data_keys argument under a2g_args."
+        )
+
+    def sample_property_metadata(self, num_samples: int = 100) -> dict:
+        metadata = {}
+
+        if num_samples < len(self):
+            metadata["targets"] = guess_property_metadata(
+                [
+                    self.get_atoms(self.ids[idx])
+                    for idx in np.random.choice(
+                        len(self), size=(num_samples,), replace=False
+                    )
+                ]
+            )
+        else:
+            metadata["targets"] = guess_property_metadata(
+                [self.get_atoms(self.ids[idx]) for idx in range(len(self))]
+            )
+
+        return metadata
+
+    def get_metadata(self, attr, idx):
+        # try the parent method
+        metadata = super().get_metadata(attr, idx)
+        if metadata is not None:
+            return metadata
+        # try to resolve it here
+        if attr != "natoms":
+            return None
+        if isinstance(idx, (list, np.ndarray)):
+            return np.array([self.get_metadata(attr, i) for i in idx])
+        return len(self.get_atoms(idx))
+
+
+@registry.register_dataset("ase_read")
+class AseReadDataset(AseAtomsDataset):
+    """
+    This Dataset uses ase.io.read to load data from a directory on disk.
+    This is intended for small-scale testing and demonstrations of OCP.
+    Larger datasets are better served by the efficiency of other dataset types
+    such as LMDB.
+
+    For a full list of ASE-readable filetypes, see
+    https://wiki.fysik.dtu.dk/ase/ase/io/io.html
+
+    args:
+        config (dict):
+            src (str): The source folder that contains your ASE-readable files
+
+            pattern (str): Filepath matching each file you want to read
+                    ex. "*/POSCAR", "*.cif", "*.xyz"
+                    search recursively with two wildcards: "**/POSCAR" or "**/*.cif"
+
+            a2g_args (dict): Keyword arguments for fairchem.core.preprocessing.AtomsToGraphs()
+                    default options will work for most users
+
+                    If you are using this for a training dataset, set
+                    "r_energy":True, "r_forces":True, and/or "r_stress":True as appropriate
+                    In that case, energy/forces must be in the files you read (ex. OUTCAR)
+
+            ase_read_args (dict): Keyword arguments for ase.io.read()
+
+            keep_in_memory (bool): Store data in memory. This helps avoid random reads if you need
+                    to iterate over a dataset many times (e.g. training for many epochs).
+                    Not recommended for large datasets.
+
+            include_relaxed_energy (bool): Include the relaxed energy in the resulting data object.
+                    The relaxed structure is assumed to be the final structure in the file
+                    (e.g. the last frame of a .traj).
+
+            atoms_transform_args (dict): Additional keyword arguments for the atoms_transform callable
+
+            transform_args (dict): Additional keyword arguments for the transform callable
+
+            key_mapping (dict[str, str]): Dictionary specifying a mapping between the name of a property used
+                in the model with the corresponding property as it was named in the dataset. Only need to use if
+                the name is different.
+
+        atoms_transform (callable, optional): Additional preprocessing function applied to the Atoms
+                    object. Useful for applying tags, for example.
+    """
+
+    def _load_dataset_get_ids(self, config) -> list[Path]:
+        self.ase_read_args = config.get("ase_read_args", {})
+
+        if ":" in self.ase_read_args.get("index", ""):
+            raise NotImplementedError(
+                "To read multiple structures from a single file, please use AseReadMultiStructureDataset."
+            )
+
+        self.path = Path(config["src"])
+        if self.path.is_file():
+            raise ValueError(
+                f"The specified src is not a directory: {self.config['src']}"
+            )
+
+        if self.config.get("include_relaxed_energy", False):
+            self.relaxed_ase_read_args = copy.deepcopy(self.ase_read_args)
+            self.relaxed_ase_read_args["index"] = "-1"
+
+        return list(self.path.glob(f'{config.get("pattern", "*")}'))
+
+    def get_atoms(self, idx: str | int) -> ase.Atoms:
+        try:
+            atoms = ase.io.read(idx, **self.ase_read_args)
+        except Exception as err:
+            warnings.warn(f"{err} occured for: {idx}", stacklevel=2)
+            raise err
+
+        return atoms
+
+    def get_relaxed_energy(self, identifier) -> float:
+        relaxed_atoms = ase.io.read(identifier, **self.relaxed_ase_read_args)
+        return relaxed_atoms.get_potential_energy(apply_constraint=False)
+
+
+@registry.register_dataset("ase_read_multi")
+class AseReadMultiStructureDataset(AseAtomsDataset):
+    """
+    This Dataset can read multiple structures from each file using ase.io.read.
+    The disadvantage is that all files must be read at startup.
+    This is a significant cost for large datasets.
+
+    This is intended for small-scale testing and demonstrations of OCP.
+    Larger datasets are better served by the efficiency of other dataset types
+    such as LMDB.
+
+    For a full list of ASE-readable filetypes, see
+    https://wiki.fysik.dtu.dk/ase/ase/io/io.html
+
+    args:
+        config (dict):
+            src (str): The source folder that contains your ASE-readable files
+
+            pattern (str): Filepath matching each file you want to read
+                    ex. "*.traj", "*.xyz"
+                    search recursively with two wildcards: "**/POSCAR" or "**/*.cif"
+
+            index_file (str): Filepath to an indexing file, which contains each filename
+                    and the number of structures contained in each file. For instance:
+
+                    /path/to/relaxation1.traj 200
+                    /path/to/relaxation2.traj 150
+
+                    This will overrule the src and pattern that you specify!
+
+            a2g_args (dict): Keyword arguments for fairchem.core.preprocessing.AtomsToGraphs()
+                    default options will work for most users
+
+                    If you are using this for a training dataset, set
+                    "r_energy":True, "r_forces":True, and/or "r_stress":True as appropriate
+                    In that case, energy/forces must be in the files you read (ex. OUTCAR)
+
+            ase_read_args (dict): Keyword arguments for ase.io.read()
+
+            keep_in_memory (bool): Store data in memory. This helps avoid random reads if you need
+                    to iterate over a dataset many times (e.g. training for many epochs).
+                    Not recommended for large datasets.
+
+            include_relaxed_energy (bool): Include the relaxed energy in the resulting data object.
+                    The relaxed structure is assumed to be the final structure in the file
+                    (e.g. the last frame of a .traj).
+
+            use_tqdm (bool): Use TQDM progress bar when initializing dataset
+
+            atoms_transform_args (dict): Additional keyword arguments for the atoms_transform callable
+
+            transform_args (dict): Additional keyword arguments for the transform callable
+
+            key_mapping (dict[str, str]): Dictionary specifying a mapping between the name of a property used
+                in the model with the corresponding property as it was named in the dataset. Only need to use if
+                the name is different.
+
+        atoms_transform (callable, optional): Additional preprocessing function applied to the Atoms
+            object. Useful for applying tags, for example.
+
+        transform (callable, optional): Additional preprocessing function for the Data object
+    """
+
+    def _load_dataset_get_ids(self, config) -> list[str]:
+        self.ase_read_args = config.get("ase_read_args", {})
+        if not hasattr(self.ase_read_args, "index"):
+            self.ase_read_args["index"] = ":"
+
+        if config.get("index_file", None) is not None:
+            with open(config["index_file"]) as f:
+                index = f.readlines()
+
+            ids = []
+            for line in index:
+                filename = line.split(" ", maxsplit=1)[0]
+                ids = [f"{filename} {i}" for i in range(int(line.split(" ")[1]))]
+
+            return ids
+
+        self.path = Path(config["src"])
+        if self.path.is_file():
+            raise ValueError(
+                f"The specified src is not a directory: {self.config['src']}"
+            )
+
+        filenames = list(self.path.glob(f'{config.get("pattern", "*")}'))
+
+        ids = []
+
+        if config.get("use_tqdm", True):
+            filenames = tqdm(filenames)
+        for filename in filenames:
+            try:
+                structures = ase.io.read(filename, **self.ase_read_args)
+            except Exception as err:
+                warnings.warn(f"{err} occured for: {filename}", stacklevel=2)
+            else:
+                for i, _ in enumerate(structures):
+                    ids.append(f"{filename} {i}")
+
+        return ids
+
+    def get_atoms(self, idx: str) -> ase.Atoms:
+        try:
+            identifiers = idx.split(" ")
+            atoms = ase.io.read("".join(identifiers[:-1]), **self.ase_read_args)[
+                int(identifiers[-1])
+            ]
+        except Exception as err:
+            warnings.warn(f"{err} occured for: {idx}", stacklevel=2)
+            raise err
+
+        if "sid" not in atoms.info:
+            atoms.info["sid"] = "".join(identifiers[:-1])
+        if "fid" not in atoms.info:
+            atoms.info["fid"] = int(identifiers[-1])
+
+        return atoms
+
+    def sample_property_metadata(self, num_samples: int = 100) -> dict:
+        return {}
+
+    def get_relaxed_energy(self, identifier) -> float:
+        relaxed_atoms = ase.io.read(
+            "".join(identifier.split(" ")[:-1]), **self.ase_read_args
+        )[-1]
+        return relaxed_atoms.get_potential_energy(apply_constraint=False)
+
+
+@registry.register_dataset("ase_db")
+class AseDBDataset(AseAtomsDataset):
+    """
+    This Dataset connects to an ASE Database, allowing the storage of atoms objects
+    with a variety of backends including JSON, SQLite, and database server options.
+
+    For more information, see:
+    https://databases.fysik.dtu.dk/ase/ase/db/db.html
+
+    args:
+        config (dict):
+            src (str): Either
+                    - the path an ASE DB,
+                    - the connection address of an ASE DB,
+                    - a folder with multiple ASE DBs,
+                    - a list of folders with ASE DBs
+                    - a glob string to use to find ASE DBs, or
+                    - a list of ASE db paths/addresses.
+                    If a folder, every file will be attempted as an ASE DB, and warnings
+                    are raised for any files that can't connect cleanly
+
+                    Note that for large datasets, ID loading can be slow and there can be many
+                    ids, so it's advised to make loading the id list as easy as possible. There is not
+                    an obvious way to get a full list of ids from most ASE dbs besides simply looping
+                    through the entire dataset. See the AseLMDBDataset which was written with this usecase
+                    in mind.
+
+            connect_args (dict): Keyword arguments for ase.db.connect()
+
+            select_args (dict): Keyword arguments for ase.db.select()
+                    You can use this to query/filter your database
+
+            a2g_args (dict): Keyword arguments for fairchem.core.preprocessing.AtomsToGraphs()
+                    default options will work for most users
+
+                    If you are using this for a training dataset, set
+                    "r_energy":True, "r_forces":True, and/or "r_stress":True as appropriate
+                    In that case, energy/forces must be in the database
+
+            keep_in_memory (bool): Store data in memory. This helps avoid random reads if you need
+                    to iterate over a dataset many times (e.g. training for many epochs).
+                    Not recommended for large datasets.
+
+            atoms_transform_args (dict): Additional keyword arguments for the atoms_transform callable
+
+            transforms (dict[str, dict]): Dictionary specifying data transforms as {transform_function: config}
+                    where config is a dictionary specifying arguments to the transform_function
+
+            key_mapping (dict[str, str]): Dictionary specifying a mapping between the name of a property used
+                in the model with the corresponding property as it was named in the dataset. Only need to use if
+                the name is different.
+
+        atoms_transform (callable, optional): Additional preprocessing function applied to the Atoms
+                    object. Useful for applying tags, for example.
+
+        transform (callable, optional): deprecated?
+    """
+
+    def _load_dataset_get_ids(self, config: dict) -> list[int]:
+        if isinstance(config["src"], list):
+            filepaths = []
+            for path in config["src"]:
+                if os.path.isdir(path):
+                    filepaths.extend(glob(f"{path}/*"))
+                elif os.path.isfile(path):
+                    filepaths.append(path)
+                else:
+                    raise RuntimeError(f"Error reading dataset in {path}!")
+        elif os.path.isfile(config["src"]):
+            filepaths = [config["src"]]
+        elif os.path.isdir(config["src"]):
+            filepaths = glob(f'{config["src"]}/*')
+        else:
+            filepaths = glob(config["src"])
+
+        self.dbs = []
+
+        for path in sorted(filepaths):
+            try:
+                self.dbs.append(self.connect_db(path, config.get("connect_args", {})))
+            except ValueError:
+                logging.debug(
+                    f"Tried to connect to {path} but it's not an ASE database!"
+                )
+
+        self.select_args = config.get("select_args", {})
+        if self.select_args is None:
+            self.select_args = {}
+
+        # In order to get all of the unique IDs using the default ASE db interface
+        # we have to load all the data and check ids using a select. This is extremely
+        # inefficient for large dataset. If the db we're using already presents a list of
+        # ids and there is no query, we can just use that list instead and save ourselves
+        # a lot of time!
+        self.db_ids = []
+        for db in self.dbs:
+            if hasattr(db, "ids") and self.select_args == {}:
+                self.db_ids.append(db.ids)
+            else:
+                # this is the slow alternative
+                self.db_ids.append([row.id for row in db.select(**self.select_args)])
+
+        idlens = [len(ids) for ids in self.db_ids]
+        self._idlen_cumulative = np.cumsum(idlens).tolist()
+
+        return list(range(sum(idlens)))
+
+    def get_atoms(self, idx: int) -> ase.Atoms:
+        """Get atoms object corresponding to datapoint idx. Useful to read other properties not in data object.
+        Args:
+            idx (int): index in dataset
+
+        Returns:
+            atoms: ASE atoms corresponding to datapoint idx
+        """
+        # Some legacy LMDB shards store numpy arrays as JSON-style dicts
+        # with a "__ndarray__" key. ASE's Row.toatoms cannot consume those
+        # and raises KeyError('__ndarray__'). Decode them proactively.
+        def _decode_ndarray(value):
+            if isinstance(value, dict) and "__ndarray__" in value:
+                raw = value["__ndarray__"]
+                try:
+                    arr = np.asarray(raw)
+                except (ValueError, TypeError):
+                    try:
+                        if isinstance(raw, list) and len(raw) > 0:
+                            if all(hasattr(x, "__len__") for x in raw):
+                                lengths = {len(x) for x in raw if hasattr(x, "__len__")}
+                                if len(lengths) == 1:
+                                    arr = np.stack(raw)
+                                else:
+                                    arr = np.array(raw, dtype=object)
+                            else:
+                                arr = np.array(raw, dtype=object)
+                        else:
+                            arr = raw
+                    except Exception:
+                        arr = raw
+
+                dtype = value.get("dtype")
+                if dtype is not None:
+                    try:
+                        arr = np.asarray(arr).astype(dtype)
+                    except Exception:
+                        pass
+                return arr
+            return value
+
+        def _normalize_numbers(value):
+            if value is None:
+                return value
+            scalars = []
+
+            def _collect(x):
+                if x is None:
+                    return
+                if isinstance(x, (list, tuple, np.ndarray)):
+                    for xi in x:
+                        _collect(xi)
+                else:
+                    scalars.append(x)
+
+            _collect(value)
+            cleaned = []
+            for s in scalars:
+                if isinstance(s, str) and s.lower() in {"int64", "int32", "int16"}:
+                    continue
+                cleaned.append(s)
+            try:
+                arr = np.array(cleaned, dtype=int)
+            except Exception:
+                raise ValueError("atomic numbers field is not convertible to 1D ints")
+            arr = np.asarray(arr).reshape(-1)
+            invalid = (arr < 1) | (arr > 118)
+            if np.any(invalid):
+                arr = arr.copy()
+                arr[invalid] = 1
+            return arr
+
+        def _normalize_matrix(value, dims=(3, 3), fill=None):
+            if value is None:
+                return None
+            try:
+                arr = np.array(value, dtype=float)
+            except Exception:
+                arr = np.array(value, dtype=object)
+            arr = np.squeeze(arr)
+            if arr.shape == dims:
+                return arr
+            if arr.ndim == 1 and arr.size == dims[0] * dims[1]:
+                return arr.reshape(dims)
+            if fill is not None:
+                return np.full(dims, fill, dtype=float)
+            raise ValueError(
+                f"matrix field has incompatible shape {arr.shape}, expected {dims}"
+            )
+
+        def _normalize_positions(value):
+            if value is None:
+                return None
+            scalars = []
+
+            def _collect_pos(x):
+                if x is None or isinstance(x, str):
+                    return
+                if isinstance(x, (list, tuple, np.ndarray)):
+                    for xi in x:
+                        _collect_pos(xi)
+                else:
+                    scalars.append(x)
+
+            try:
+                arr = np.array(value, dtype=float)
+                if arr.dtype == object:
+                    scalars = []
+                    _collect_pos(value)
+                else:
+                    scalars = None
+            except Exception:
+                scalars = []
+                _collect_pos(value)
+
+            if scalars is not None:
+                if len(scalars) == 0:
+                    raise ValueError("positions field has no numeric entries")
+                arr = np.array(scalars, dtype=float)
+
+            arr = np.squeeze(arr)
+            if arr.ndim == 1:
+                if arr.size % 3 != 0:
+                    pad = 3 - (arr.size % 3)
+                    arr = np.pad(arr, (0, pad), constant_values=0.0)
+                arr = arr.reshape(-1, 3)
+            elif arr.ndim == 2:
+                if arr.shape[1] == 3:
+                    pass
+                elif arr.shape[0] == 3:
+                    arr = arr.T
+                else:
+                    raise ValueError("positions field must be Nx3 or 3xN")
+            else:
+                raise ValueError("positions field has invalid dimensions")
+            return arr.astype(float)
+
+        # Figure out which db this should be indexed from.
+        db_idx = bisect.bisect(self._idlen_cumulative, idx)
+
+        # Extract index of element within that db
+        el_idx = idx
+        if db_idx != 0:
+            el_idx = idx - self._idlen_cumulative[db_idx - 1]
+        assert el_idx >= 0
+
+        atoms_row = self.dbs[db_idx]._get_row(self.db_ids[db_idx][el_idx])
+
+        # Sanitize fields before calling ASE conversion
+        def _try_normalize(name, value, func):
+            try:
+                return func(value)
+            except Exception as exc:
+                logging.debug(f"Normalization for {name} failed: {exc}")
+                return value
+
+        numbers = _decode_ndarray(getattr(atoms_row, "numbers", None))
+        numbers = _try_normalize("numbers", numbers, _normalize_numbers)
+
+        positions = _decode_ndarray(getattr(atoms_row, "positions", None))
+        positions = _try_normalize("positions", positions, _normalize_positions)
+
+        # Align lengths when possible to prevent downstream index errors
+        try:
+            if numbers is not None and positions is not None:
+                n_atoms = positions.shape[0]
+                if numbers.shape[0] < n_atoms:
+                    pad = np.full(
+                        n_atoms - numbers.shape[0],
+                        numbers[-1] if numbers.size else 1,
+                        dtype=int,
+                    )
+                    numbers = np.concatenate([numbers, pad])
+                elif numbers.shape[0] > n_atoms:
+                    numbers = numbers[:n_atoms]
+        except Exception:
+            logging.debug("Could not align numbers/positions length")
+
+        cell = _decode_ndarray(getattr(atoms_row, "cell", None))
+        cell = _try_normalize(
+            "cell", cell, lambda v: _normalize_matrix(v, dims=(3, 3), fill=0.0)
+        )
+
+        pbc = _decode_ndarray(getattr(atoms_row, "pbc", None))
+        if pbc is not None:
+            try:
+                pbc_arr = np.asarray(pbc).astype(bool).reshape(-1)
+                if pbc_arr.size == 0:
+                    pbc = None
+                elif pbc_arr.size == 3:
+                    pbc = pbc_arr
+                else:
+                    pbc = pbc_arr[:3]
+            except Exception:
+                logging.debug("Normalization for pbc failed")
+
+        # Try to update the underlying row so toatoms sees the decoded arrays
+        for target, value in (
+            ("numbers", numbers),
+            ("positions", positions),
+            ("cell", cell),
+            ("pbc", pbc),
+        ):
+            try:
+                if hasattr(atoms_row, "_row") and isinstance(atoms_row._row, dict):
+                    atoms_row._row[target] = value
+                elif hasattr(atoms_row, "_row") and hasattr(atoms_row._row, target):
+                    setattr(atoms_row._row, target, value)
+                else:
+                    setattr(atoms_row, target, value)
+            except Exception:
+                # If mutation fails, we will still try a manual fallback below
+                pass
+
+        try:
+            atoms = atoms_row.toatoms()
+        except (KeyError, ValueError, TypeError) as err:
+            # Fallback to manual construction when legacy encodings slip through or shapes are bad
+            if isinstance(err, KeyError) and "__ndarray__" not in str(err):
+                raise
+            atoms = ase.Atoms(numbers=numbers, positions=positions, cell=cell, pbc=pbc)
+
+        # Attach a calculator if energy/forces are stored in row data or atoms info
+        def _get_first(mapping, keys):
+            if not isinstance(mapping, dict):
+                return None
+            for k in keys:
+                if k in mapping:
+                    return mapping[k]
+            return None
+
+        def _to_scalar(val):
+            try:
+                arr = np.asarray(val, dtype=float).reshape(-1)
+                if arr.size > 0:
+                    return float(arr[0])
+            except Exception:
+                return None
+            return None
+
+        def _to_forces(val):
+            if val is None:
+                return None
+            try:
+                arr = np.asarray(val, dtype=float)
+            except Exception:
+                return None
+            arr = np.squeeze(arr)
+            if arr.ndim == 1:
+                if arr.size % 3 != 0:
+                    return None
+                arr = arr.reshape(-1, 3)
+            elif arr.ndim == 2:
+                if arr.shape[1] == 3:
+                    pass
+                elif arr.shape[0] == 3:
+                    arr = arr.T
+                else:
+                    return None
+            else:
+                return None
+            return arr
+
+        info_dict = atoms.info if isinstance(atoms.info, dict) else {}
+        data_dict = (
+            atoms_row.data if isinstance(getattr(atoms_row, "data", None), dict) else {}
+        )
+
+        energy_val = _get_first(
+            info_dict, ["energy", "total_energy", "potential_energy", "E"]
+        )
+        if energy_val is None:
+            energy_val = _get_first(
+                data_dict, ["energy", "total_energy", "potential_energy", "E"]
+            )
+        energy_val = _to_scalar(energy_val) if energy_val is not None else None
+
+        forces_val = _get_first(info_dict, ["forces", "force", "F"])
+        if forces_val is None:
+            forces_val = _get_first(data_dict, ["forces", "force", "F"])
+        forces_val = _to_forces(forces_val)
+
+        # Always attach a calculator so get_total_energy works downstream
+        if atoms.calc is None:
+            if forces_val is None and positions is not None:
+                try:
+                    forces_val = np.zeros_like(np.asarray(positions, dtype=float))
+                except Exception:
+                    forces_val = None
+            try:
+                from ase.calculators.singlepoint import SinglePointCalculator
+
+                calc = SinglePointCalculator(
+                    atoms,
+                    energy=energy_val if energy_val is not None else 0.0,
+                    forces=forces_val,
+                )
+                atoms.calc = calc
+            except Exception:
+                pass
+
+        # put data back into atoms info
+        if isinstance(atoms_row.data, dict):
+            atoms.info.update(atoms_row.data)
+
+        return atoms
+
+    @staticmethod
+    def connect_db(
+        address: str | Path, connect_args: dict | None = None
+    ) -> ase.db.core.Database:
+        if connect_args is None:
+            connect_args = {}
+        db_type = connect_args.get("type", "extract_from_name")
+        if db_type in ("lmdb", "aselmdb") or (
+            db_type == "extract_from_name"
+            and str(address).rsplit(".", maxsplit=1)[-1] in ("lmdb", "aselmdb")
+        ):
+            return LMDBDatabase(address, readonly=True, **connect_args)
+
+        return ase.db.connect(address, **connect_args)
+
+    def __del__(self):
+        for db in self.dbs:
+            if hasattr(db, "close"):
+                db.close()
+
+    def sample_property_metadata(self, num_samples: int = 100) -> dict:
+        logging.warning(
+            "You specific a folder of ASE dbs, so it's impossible to know which metadata to use. Using the first!"
+        )
+        if self.dbs[0].metadata == {}:
+            return super().sample_property_metadata(num_samples)
+
+        return copy.deepcopy(self.dbs[0].metadata)

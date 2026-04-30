@@ -10,17 +10,24 @@
 ##############################################################################
 
 import torch
+from torch_scatter import scatter
 from torch_geometric.transforms import RadiusGraph
 from torch_geometric.data import Data
 from torch_geometric.utils import remove_self_loops, degree
+from torch_geometric.data.datapipes import functional_transform
+from torch_geometric.transforms import LocalCartesian, Distance
+from torch_geometric.nn.models.schnet import RadiusInteractionGraph
 
 import ase
 import ase.neighborlist
 import numpy as np
 import os
+from typing import Tuple
 
 from .dataset_descriptors import AtomFeatures
 from hydragnn.utils.distributed import get_device
+
+import vesin
 
 
 ## This function can be slow if datasets is too large. Use with caution.
@@ -136,142 +143,207 @@ def get_radius_graph_pbc_config(config, loop=False):
 
 class RadiusGraphPBC(RadiusGraph):
     r"""Creates edges based on node positions :obj:`pos` to all points within a
-    given distance, including periodic images, and limits the number of neighbors per node.
+    given distance, including periodic images. Uses vesin for fast neighbor search.
     """
 
     def __call__(self, data):
-        # Checks for attributes and ensures data type and device consistency
-        data, device, dtype = self._check_and_standardize_data(
-            data
-        )  # dtype gives us whether to use float32 or float64
+        data, device, dtype = self._check_and_standardize_data(data)
 
-        ase_atom_object = ase.Atoms(
-            positions=data.pos,
-            cell=data.cell,
-            pbc=data.pbc,
-        )
-        # 'i' : first atom index
-        # 'j' : second atom index
-        # 'd' : absolute distance
-        # 'S' : shift vector
-        # https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.neighbor_list
-        (
-            edge_src,
-            edge_dst,
-            edge_length,
-            edge_cell_shifts,
-        ) = ase.neighborlist.neighbor_list(
-            "ijdS",
-            a=ase_atom_object,
-            cutoff=self.r,
-            self_interaction=True,  # We want self-interactions across periodic boundaries
+        pos_np = data.pos.cpu().numpy()
+        cell_np = data.cell.cpu().numpy()
+        pbc_list = data.pbc.cpu().tolist()
+
+        # vesin doesn't support mixed PBC (e.g., [True, True, False])
+        # Workaround: set non-periodic directions to a large cell size
+        # so no neighbors are found across those boundaries
+        cell_for_vesin, pbc_for_vesin = self._handle_mixed_pbc(
+            cell_np, pbc_list, pos_np, self.r
         )
 
-        # Eliminate true self-loops if desired
-        if not self.loop:
-            (
+        # Create ASE Atoms object for vesin
+        ase_atoms = ase.Atoms(positions=pos_np, cell=cell_for_vesin, pbc=pbc_for_vesin)
+
+        cutoff = self.r
+        cutoff_multiplier = 1.25
+        max_attempts = 3
+
+        for attempt_num in range(max_attempts):
+            # Use vesin for fast neighbor list computation (drop-in replacement for ASE)
+            edge_src, edge_dst, edge_cell_shifts = vesin.ase_neighbor_list(
+                "ijS",
+                a=ase_atoms,
+                cutoff=cutoff,
+            )
+
+            # Compute edge lengths from positions and shifts
+            # Use cell_for_vesin for consistency with what vesin used
+            edge_vec = (
+                pos_np[edge_dst] - pos_np[edge_src] + edge_cell_shifts @ cell_for_vesin
+            )
+            edge_length = np.linalg.norm(edge_vec, axis=1)
+
+            # Remove true self-loops if needed
+            if not self.loop:
+                (
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
+                ) = self._remove_true_self_loops(
+                    edge_src, edge_dst, edge_length, edge_cell_shifts
+                )
+
+            # Limit neighbors per node (vectorized)
+            edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
                 edge_src,
                 edge_dst,
                 edge_length,
                 edge_cell_shifts,
-            ) = self._remove_true_self_loops(
-                edge_src, edge_dst, edge_length, edge_cell_shifts
+                self.max_num_neighbors,
             )
 
-        # Limit neighbors per node
-        edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
-            edge_src, edge_dst, edge_length, edge_cell_shifts, self.max_num_neighbors
-        )
+            # Check if all nodes have at least one incoming edge
+            if np.unique(edge_dst).size == data.num_nodes:
+                break
+            elif attempt_num < max_attempts - 1:
+                print(
+                    f"Not all nodes receive an edge, expanding radius from {cutoff} -> {cutoff * cutoff_multiplier}",
+                    flush=True,
+                )
+                cutoff *= cutoff_multiplier
+            else:
+                (
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
+                ) = self._ensure_connected(
+                    data.num_nodes,
+                    cutoff,
+                    edge_src,
+                    edge_dst,
+                    edge_length,
+                    edge_cell_shifts,
+                )
 
-        # Assign to data
-        data.edge_index = torch.stack(
-            [
-                torch.tensor(edge_src, dtype=torch.long, device=device),
-                torch.tensor(edge_dst, dtype=torch.long, device=device),
-            ],
-            dim=0,  # Shape: [2, n_edges]
-        )
-        data.edge_attr = torch.tensor(
-            edge_length, dtype=dtype, device=device
-        ).unsqueeze(
-            1
-        )  # Shape: [n_edges, 1]
-        # ASE returns the integer number of cell shifts. Multiply by the cell size to get the shift vector.
-        data.edge_shifts = torch.matmul(
-            torch.tensor(edge_cell_shifts, dtype=dtype, device=device),
-            data.cell,
-        )  # Shape: [n_edges, 3]
+        # vesin never returns true self-loops (i→i with shift=[0,0,0])
+        # If loop=True, we need to add them manually
+        if self.loop:
+            n_atoms = data.num_nodes
+            self_src = np.arange(n_atoms, dtype=edge_src.dtype)
+            self_dst = np.arange(n_atoms, dtype=edge_dst.dtype)
+            self_length = np.zeros(n_atoms, dtype=edge_length.dtype)
+            self_shifts = np.zeros((n_atoms, 3), dtype=edge_cell_shifts.dtype)
+
+            edge_src = np.concatenate([edge_src, self_src])
+            edge_dst = np.concatenate([edge_dst, self_dst])
+            edge_length = np.concatenate([edge_length, self_length])
+            edge_cell_shifts = np.vstack([edge_cell_shifts, self_shifts])
+
+        # Convert to tensors efficiently
+        data.edge_index = torch.from_numpy(
+            np.stack([edge_src, edge_dst], axis=0).astype(np.int64)
+        ).to(device)
+
+        # Compute edge_shifts: multiply integer cell shifts by ORIGINAL cell vectors
+        # (not the modified cell used for vesin, which has large values in non-periodic directions)
+        data.edge_shifts = torch.from_numpy(
+            (edge_cell_shifts @ cell_np).astype(
+                np.float32 if dtype == torch.float32 else np.float64
+            )
+        ).to(device)
 
         return data
 
     def _remove_true_self_loops(
         self, edge_src, edge_dst, edge_length, edge_cell_shifts
     ):
-        # Create a mask to remove true self loops (i.e. the same source and destination node in the same cell)
-        true_self_edges = edge_src == edge_dst
-        true_self_edges &= np.all(edge_cell_shifts == 0, axis=1)
+        """Remove edges where src == dst and shift == [0,0,0]."""
+        true_self_edges = (edge_src == edge_dst) & np.all(edge_cell_shifts == 0, axis=1)
         mask = ~true_self_edges
-
-        # Apply the mask and return
-        return (
-            edge_src[mask],
-            edge_dst[mask],
-            edge_length[mask],
-            edge_cell_shifts[mask],
-        )
+        return edge_src[mask], edge_dst[mask], edge_length[mask], edge_cell_shifts[mask]
 
     def _limit_neighbors(
         self, edge_src, edge_dst, edge_length, edge_cell_shifts, max_num_neighbors
     ):
-        # Lexsort will sort primarily by edge_src, then by edge_dst within each src node
-        sorted_indices = np.lexsort((edge_length, edge_src))
-        edge_src, edge_dst, edge_length, edge_cell_shifts = [
-            edge_arg[sorted_indices]
-            for edge_arg in [edge_src, edge_dst, edge_length, edge_cell_shifts]
-        ]
+        """Vectorized neighbor limiting - no Python loops."""
+        # Sort by (dst, length) so closest neighbors come first within each dst
+        order = np.lexsort((edge_length, edge_dst))
+        edge_src = edge_src[order]
+        edge_dst = edge_dst[order]
+        edge_length = edge_length[order]
+        edge_cell_shifts = edge_cell_shifts[order]
 
-        # Create a mask to keep only `max_num_neighbors` per node
-        unique_src, counts = np.unique(edge_src, return_counts=True)
-        mask = np.zeros_like(edge_src, dtype=bool)
-        start_idx = 0
-        for src, count in zip(unique_src, counts):
-            end_idx = start_idx + count
-            # Keep only the first max_num_neighbors for this src
-            mask[start_idx : start_idx + min(count, max_num_neighbors)] = True
-            start_idx = end_idx
+        # Compute rank within each dst group using cumsum trick
+        n = len(edge_dst)
+        if n == 0:
+            return edge_src, edge_dst, edge_length, edge_cell_shifts
 
-        # Apply the mask and return
-        return (
-            edge_src[mask],
-            edge_dst[mask],
-            edge_length[mask],
-            edge_cell_shifts[mask],
-        )
+        # Detect where dst changes
+        dst_change = np.empty(n, dtype=bool)
+        dst_change[0] = True
+        dst_change[1:] = edge_dst[1:] != edge_dst[:-1]
+
+        # Compute cumulative position, reset at each dst change
+        cumpos = np.arange(n)
+        reset_vals = cumpos[dst_change]
+        reset_indices = np.flatnonzero(dst_change)
+
+        # Subtract the reset value for each group
+        group_ids = np.cumsum(dst_change) - 1
+        rank = cumpos - reset_vals[group_ids]
+
+        # Keep only first max_num_neighbors per dst
+        mask = rank < max_num_neighbors
+        return edge_src[mask], edge_dst[mask], edge_length[mask], edge_cell_shifts[mask]
+
+    def _ensure_connected(
+        self, num_nodes, cutoff, edge_src, edge_dst, edge_length, edge_cell_shifts
+    ):
+        """Ensure every node has at least one incoming edge."""
+        all_nodes = np.arange(num_nodes)
+        missing = np.setdiff1d(all_nodes, np.unique(edge_dst))
+
+        if len(missing) > 0:
+            print(
+                f"WARNING: {len(missing)} nodes missing in 'edge_dst'. Creating artificial connections.",
+                flush=True,
+            )
+            for mnode in missing:
+                if num_nodes > 1:
+                    src_node = np.random.choice(all_nodes[all_nodes != mnode])
+                else:
+                    src_node = 0
+                edge_src = np.append(edge_src, src_node)
+                edge_dst = np.append(edge_dst, mnode)
+                edge_length = np.append(edge_length, cutoff - 1e-8)
+                edge_cell_shifts = np.vstack([edge_cell_shifts, np.array([[0, 0, 0]])])
+
+        return edge_src, edge_dst, edge_length, edge_cell_shifts
 
     def _check_and_standardize_data(self, data):
-        assert (
-            "batch" not in data
-        ), "Periodic boundary conditions not currently supported on batches."
-        assert hasattr(
-            data, "cell"
-        ), "The data must contain data.cell as a 3x3 matrix to apply periodic boundary conditions."
-        assert hasattr(
-            data, "pbc"
-        ), "The data must contain data.pbc as a bool (True) or list of bools for the dimensions ([True, False, True]) to apply periodic boundary conditions."
+        """Validate and standardize data types/devices."""
+        assert "batch" not in data, "PBC not supported on batches."
+        assert hasattr(data, "cell"), "data.cell required for PBC."
+        assert hasattr(data, "pbc"), "data.pbc required for PBC."
 
-        # Ensure data consistency in terms of device and type
+        # Ensure pos is a tensor with correct dtype
         if not isinstance(data.pos, torch.Tensor):
             data.pos = torch.tensor(data.pos)
         if data.pos.dtype not in [torch.float32, torch.float64]:
             data.pos = data.pos.to(torch.get_default_dtype())
-        # Canonicalize based off data.pos, similar to PyG's default behavior
+
         device, dtype = data.pos.device, data.pos.dtype
+
+        # Standardize cell
         if not (
             isinstance(data.cell, torch.Tensor)
             and data.cell.dtype == dtype
             and data.cell.device == device
         ):
             data.cell = torch.tensor(data.cell, dtype=dtype, device=device)
+
+        # Standardize pbc
         if not (
             isinstance(data.pbc, torch.Tensor)
             and data.pbc.dtype == torch.bool
@@ -281,8 +353,174 @@ class RadiusGraphPBC(RadiusGraph):
 
         return data, device, dtype
 
+    def _handle_mixed_pbc(self, cell_np, pbc_list, pos_np, cutoff):
+        """
+        Handle mixed periodic boundary conditions for vesin compatibility.
+
+        vesin doesn't support mixed PBC (e.g., [True, True, False] for 2D slabs).
+        Workaround: For non-periodic directions, set cell vector large enough
+        that no neighbors will be found across that boundary, then use pbc=[True, True, True].
+
+        Note: We use geometry-based expansion values rather than fixed large values
+        (like 1e6) because vesin crashes with floating point exceptions when cell
+        aspect ratios exceed ~2500:1.
+
+        Parameters
+        ----------
+        cell_np : np.ndarray
+            3x3 cell matrix
+        pbc_list : list of bool
+            Original PBC flags [px, py, pz]
+        pos_np : np.ndarray
+            Atomic positions (N, 3)
+        cutoff : float
+            Neighbor search cutoff distance
+
+        Returns
+        -------
+        cell_modified : np.ndarray
+            Modified cell matrix with large values in non-periodic directions
+        pbc_for_vesin : list of bool
+            Always [True, True, True] if any PBC, otherwise original
+        """
+        # If fully periodic or fully non-periodic, no modification needed
+        if all(pbc_list) or not any(pbc_list):
+            return cell_np, pbc_list
+
+        # Mixed PBC case: need to expand non-periodic directions
+        cell_modified = cell_np.copy()
+
+        for i, is_periodic in enumerate(pbc_list):
+            if not is_periodic:
+                # Use a value based on actual geometry to avoid extreme aspect ratios
+                # Value = 2 * (position extent) + 4 * cutoff
+                # This ensures no neighbors are found across this "boundary"
+                pos_min = pos_np[:, i].min() if len(pos_np) > 0 else 0
+                pos_max = pos_np[:, i].max() if len(pos_np) > 0 else 0
+                extent = pos_max - pos_min
+                large_value = max(extent * 2 + cutoff * 4, 100.0)
+
+                # Set this cell vector to be large in its direction
+                # Preserve direction but scale magnitude
+                cell_vec = cell_modified[i]
+                vec_norm = np.linalg.norm(cell_vec)
+                if vec_norm > 1e-10:
+                    cell_modified[i] = cell_vec / vec_norm * large_value
+                else:
+                    # Cell vector is zero/tiny, create orthogonal large vector
+                    cell_modified[i] = np.zeros(3)
+                    cell_modified[i, i] = large_value
+
+        return cell_modified, [True, True, True]
+
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(r={self.r})"
+
+
+class RadiusInteractionGraphCPU(RadiusInteractionGraph):
+    """
+    A subclass of PyG's RadiusInteractionGraph that executes
+    on the CPU then moves the result back to the original device.
+    (helpful for hardware where PyG GPU operations are unsupported)
+    """
+
+    def forward(self, x, batch):
+        device = x.device
+
+        # Run the original forward method on CPU
+        x_cpu = x.cpu()
+        batch_cpu = None if batch is None else batch.cpu()
+        edge_index, edge_weight = super().forward(x_cpu, batch_cpu)
+
+        # Return on original device
+        return edge_index.to(device), edge_weight.to(device)
+
+
+@functional_transform("pbc_distance")
+class PBCDistance(Distance):
+    """
+    A PBC-aware version of the `Distance` transform from
+    Pytorch-Geometric that adds the effect of edge_shifts in PBC
+    """
+
+    def forward(self, data: Data) -> Data:
+        assert data.pos is not None, "'data.pos' is required."
+        assert data.edge_index is not None, "'data.edge_index' is required."
+        assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
+        (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
+
+        vec = (
+            pos[col] - pos[row] + data.edge_shifts
+        )  # The key change is adding edge_shifts
+        dist = torch.norm(vec, p=2, dim=-1).view(-1, 1)
+
+        if self.norm and dist.numel() > 0:
+            max_val = float(dist.max()) if self.max is None else self.max
+
+            length = self.interval[1] - self.interval[0]
+            dist = length * (dist / max_val) + self.interval[0]
+
+        if pseudo is not None and self.cat:
+            pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+            data.edge_attr = torch.cat([pseudo, dist.to(pseudo.dtype)], dim=-1)
+        else:
+            data.edge_attr = dist
+
+        return data
+
+
+@functional_transform("pbc_local_cartesian")
+class PBCLocalCartesian(LocalCartesian):
+    """
+    A PBC-aware version of the `LocalCartesian` transform from
+    Pytorch-Geometric that adds the effect of edge_shifts in PBC
+    """
+
+    def forward(self, data: Data) -> Data:
+        assert data.pos is not None, "'data.pos' is required."
+        assert data.edge_index is not None, "'data.edge_index' is required."
+        assert hasattr(data, "edge_shifts"), "'data.edge_shifts' is required for PBC."
+        (row, col), pos, pseudo = data.edge_index, data.pos, data.edge_attr
+
+        cart = (
+            pos[row] - pos[col]
+        ) - data.edge_shifts  # The key change is adding edge_shifts
+        cart = cart.view(-1, 1) if cart.dim() == 1 else cart
+
+        if self.norm:
+            max_value = scatter(
+                cart.abs(), col, dim=0, dim_size=pos.size(0), reduce="max"
+            )
+            max_value = max_value.max(dim=-1, keepdim=True)[0]
+
+            length = self.interval[1] - self.interval[0]
+            center = (self.interval[0] + self.interval[1]) / 2
+            cart = length * cart / (2 * max_value[col].clamp_min(1e-9)) + center
+
+        if pseudo is not None and self.cat:
+            pseudo = pseudo.view(-1, 1) if pseudo.dim() == 1 else pseudo
+            data.edge_attr = torch.cat([pseudo, cart.type_as(pseudo)], dim=-1)
+        else:
+            data.edge_attr = cart
+
+        return data
+
+
+def pbc_as_tensor(pbc):
+    # Function to convert pbc to a tensor of 3 booleans, regardless of input type
+    pbc_t = torch.as_tensor(pbc, dtype=torch.bool)
+    shape = pbc_t.shape
+
+    if shape == ():  # single bool
+        val = pbc_t.item()
+        return torch.tensor([val, val, val], dtype=torch.bool)
+    elif shape == (1,):  # list or array of one bool
+        val = pbc_t.item()
+        return torch.tensor([val, val, val], dtype=torch.bool)
+    elif shape == (3,):  # list or array of 3 bools
+        return pbc_t
+    else:
+        raise ValueError(f"Invalid PBC shape {shape}. Expect scalar, (1,), or (3,).")
 
 
 def gather_deg(dataset):
@@ -325,6 +563,24 @@ def gather_deg_dist(dataset):
     deg = deg.clone().detach().to(get_device())
     dist.all_reduce(deg, op=dist.ReduceOp.SUM)
     return deg.cpu().detach().numpy()
+
+
+def should_skip_self_loops(data_object, context=""):
+    """Return True if data_object contains self-loops in edge_index.
+
+    Optionally prints a context string to help identify the source.
+    """
+    if not hasattr(data_object, "edge_index") or data_object.edge_index is None:
+        return False
+
+    if torch.all(data_object.edge_attr > 1e-12):
+        return False
+
+    msg = "Skipping sample: self-loops detected in edge_index."
+    if context:
+        msg = f"{msg} Context: {context}"
+    print(msg, flush=True)
+    return True
 
 
 def gather_deg_mpi(dataset):

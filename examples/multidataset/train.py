@@ -24,12 +24,11 @@ from hydragnn.utils.print.print_utils import log, log0
 from hydragnn.utils.distributed import nsplit
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, adios2_open
 except ImportError:
     pass
 
 from scipy.interpolate import BSpline, make_interp_spline
-import adios2 as ad2
 
 ## FIMME
 torch.backends.cudnn.enabled = False
@@ -68,6 +67,13 @@ if __name__ == "__main__":
         type=int,
         help="set num test samples per process for weak-scaling test",
         default=None,
+    )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        choices=["fp32", "fp64", "bf16"],
+        default=None,
+        help="Override precision; defaults to fp32 when not set",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -196,7 +202,7 @@ if __name__ == "__main__":
                 fname = os.path.join(
                     os.path.dirname(__file__), "./dataset/%s.bp" % model
                 )
-                with ad2.open(fname, "r", MPI.COMM_SELF) as f:
+                with adios2_open(fname, "r", MPI.COMM_SELF) as f:
                     f.__next__()
                     ndata = f.read_attribute("trainset/ndata").item()
                     attrs = f.available_attributes()
@@ -256,6 +262,9 @@ if __name__ == "__main__":
             "x",
             "edge_index",
             "edge_attr",
+            "energy",
+            "energy_per_atom",
+            "forces",
             "pos",
             "y",
         ]
@@ -338,7 +347,7 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,
@@ -355,6 +364,9 @@ if __name__ == "__main__":
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
     timer.stop()
+
+    precision = args.precision.lower() if args.precision is not None else "fp32"
+    config["NeuralNetwork"]["Training"]["precision"] = precision
 
     model = hydragnn.models.create_model_config(
         config=config["NeuralNetwork"],
@@ -389,10 +401,13 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
+        precision=precision,
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp
@@ -402,25 +417,4 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
-    if tr.has("NVIDIATracer"):
-        print(f"NVIDIATracer exists")
-        import hydragnn.utils.profiling_and_tracing.nvidiaTracer as et
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            et.pr_file(f"./logs/{log_name}/gpuLogs", eligible)
-
-    if tr.has("AMDTracer"):
-        print(f"AMDTracer exists")
-        import hydragnn.utils.profiling_and_tracing.amdTracer as et
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            et.pr_file(f"./logs/{log_name}/gpuLogs", eligible)
-            
-    if tr.has("CRAYPMTracer"):
-        print(f"CRAYPMtracer exists")
-        import hydragnn.utils.profiling_and_tracing.craypmTracer as et
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            et.pr_file(f"./logs/{log_name}/crayLogs", eligible)
-            
     sys.exit(0)

@@ -17,6 +17,7 @@ import hydragnn
 
 num_samples = 1000
 
+
 # Update each sample prior to loading.
 def qm9_pre_transform(data, transform):
     # LPE
@@ -168,6 +169,8 @@ def run(trial):
 
     hydragnn.utils.model.model.save_model(model, optimizer, trial_log_name)
     hydragnn.utils.print.print_distributed(verbosity)
+    if writer is not None:
+        writer.close()
 
     # Return the metric to minimize (e.g., validation loss)
     validation_loss, tasks_loss = hydragnn.train.validate(

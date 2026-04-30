@@ -7,7 +7,7 @@
       "mpnn_type": "EGNN",
       "edge_features": ["bond_length"],
       "equivariance": true,
-      "max_neighbours": 20,
+      "max_neighbours": 50,
       "num_gaussians": 50,
       "num_filters": 50,
       "envelope_exponent": 5,
@@ -18,7 +18,7 @@
       "num_before_skip": 1,
       "num_radial": 6,
       "num_spherical": 7,
-      "radius": 5,
+      "radius": 5.0,
       "hidden_dim": 200,
       "num_conv_layers": 6,
       "output_heads": {
@@ -57,8 +57,7 @@
       "Checkpoint" : true,
       "num_epoch": 20,
       "batch_size": 32,
-      "continue": 1,
-      "startfrom": "/gpfs/alpine/lrn026/world-shared/HydraGNN_Max_QM7X/HydraGNN/logs/qm7x_fullx/qm7x_fullx",
+      "continue": 0,
       "Optimizer": {
         "learning_rate": 0.001
       }

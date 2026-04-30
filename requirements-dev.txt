@@ -1,6 +1,5 @@
 black==21.5b1
 pre-commit
-pytest
+pytest==8.4.2
 pytest-mpi
-mendeleev
-mpi4py
+mendeleev==0.16.0

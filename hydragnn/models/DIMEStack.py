@@ -134,7 +134,7 @@ class DIMEStack(Base):
                     (lin, "inv_node_feat -> inv_node_feat"),
                     (emb, "inv_node_feat, rbf, i, j, edge_attr -> x1"),
                     (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                    (dec, "x2, rbf, i -> inv_node_feat"),
+                    (dec, "x2, rbf, i, num_nodes -> inv_node_feat"),
                     (
                         lambda inv_node_feat, equiv_node_feat: [
                             inv_node_feat,
@@ -151,7 +151,7 @@ class DIMEStack(Base):
                     (lin, "inv_node_feat -> inv_node_feat"),
                     (emb, "inv_node_feat, rbf, i, j -> x1"),
                     (inter, "x1, rbf, sbf, idx_kj, idx_ji -> x2"),
-                    (dec, "x2, rbf, i -> inv_node_feat"),
+                    (dec, "x2, rbf, i, num_nodes -> inv_node_feat"),
                     (
                         lambda x, pos: [x, pos],
                         "inv_node_feat, equiv_node_feat -> inv_node_feat, equiv_node_feat",
@@ -183,7 +183,7 @@ class DIMEStack(Base):
             pos_kj + pos_ji
         )  # It's important to calculate the vectors separately and then add in case of periodic boundary conditions
         a = (pos_ji * pos_ki).sum(dim=-1)
-        b = torch.cross(pos_ji, pos_ki).norm(dim=-1)
+        b = torch.linalg.cross(pos_ji, pos_ki).norm(dim=-1)
         angle = torch.atan2(b, a)
 
         rbf = self.rbf(edge_dist.squeeze())
@@ -196,6 +196,7 @@ class DIMEStack(Base):
             "j": j,
             "idx_kj": idx_kj,
             "idx_ji": idx_ji,
+            "num_nodes": data.x.size(0),
         }
 
         if self.use_edge_attr:
@@ -233,27 +234,49 @@ def triplets(
     edge_index: Tensor,
     num_nodes: int,
 ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
-    row, col = edge_index  # j->i
+    src, dst = edge_index  # j -> i
 
-    value = torch.arange(row.size(0), device=row.device)
-    adj_t = SparseTensor(
-        row=col, col=row, value=value, sparse_sizes=(num_nodes, num_nodes)
+    # Workaround for torch_sparse bug on AMD GPUs (OLCF Frontier with ROCm):
+    # avoid SparseTensor indexing while keeping memory linear in number of triplets.
+    num_edges = src.size(0)
+    if num_edges == 0:
+        empty = src.new_empty(0)
+        return dst, src, empty, empty, empty, empty, empty
+
+    # Group edges by destination node to enumerate incoming edges k -> j.
+    counts_in = torch.bincount(dst, minlength=num_nodes)
+    perm_in = torch.argsort(dst)
+    ptr_in = torch.zeros(num_nodes + 1, device=src.device, dtype=torch.long)
+    ptr_in[1:] = torch.cumsum(counts_in, dim=0)
+
+    # For each edge j -> i (index ji), pair it with all edges k -> j.
+    deg_per_ji = counts_in[src]
+    idx_ji_all = torch.repeat_interleave(
+        torch.arange(num_edges, device=src.device, dtype=torch.long), deg_per_ji
     )
-    adj_t_row = adj_t[row]
-    num_triplets = adj_t_row.set_value(None).sum(dim=1).to(torch.long)
 
-    # Node indices (k->j->i) for triplets.
-    idx_i = col.repeat_interleave(num_triplets)
-    idx_j = row.repeat_interleave(num_triplets)
-    idx_k = adj_t_row.storage.col()
-    mask = idx_i != idx_k  # Remove i == k triplets.
-    idx_i, idx_j, idx_k = idx_i[mask], idx_j[mask], idx_k[mask]
+    if idx_ji_all.numel() == 0:
+        empty = src.new_empty(0)
+        return dst, src, empty, empty, empty, empty, empty
 
-    # Edge indices (k-j, j->i) for triplets.
-    idx_kj = adj_t_row.storage.value()[mask]
-    idx_ji = adj_t_row.storage.row()[mask]
+    seg_offsets = torch.cumsum(deg_per_ji, dim=0) - deg_per_ji
+    local_pos = torch.arange(idx_ji_all.numel(), device=src.device, dtype=torch.long)
+    local_pos = local_pos - torch.repeat_interleave(seg_offsets, deg_per_ji)
 
-    return col, row, idx_i, idx_j, idx_k, idx_kj, idx_ji
+    j_for_all = src[idx_ji_all]
+    start_for_all = ptr_in[j_for_all]
+    idx_kj_all = perm_in[start_for_all + local_pos]
+
+    # Exclude triplets with k == i.
+    valid = src[idx_kj_all] != dst[idx_ji_all]
+    idx_ji = idx_ji_all[valid]
+    idx_kj = idx_kj_all[valid]
+
+    idx_i = dst[idx_ji]
+    idx_j = src[idx_ji]
+    idx_k = src[idx_kj]
+
+    return dst, src, idx_i, idx_j, idx_k, idx_kj, idx_ji
 
 
 class HydraEmbeddingBlock(torch.nn.Module):

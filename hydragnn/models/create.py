@@ -14,6 +14,9 @@ import torch
 from torch_geometric.data import Data
 from typing import List, Union
 
+import torch_scatter
+
+from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.PNAPlusStack import PNAPlusStack
@@ -28,8 +31,11 @@ from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
 
+# InteratomicPotential functionality is now implemented via wrapper composition
+
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
+from hydragnn.train.train_validate_test import resolve_precision
 
 
 def create_model_config(
@@ -37,49 +43,69 @@ def create_model_config(
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
-    return create_model(
-        config["Architecture"]["mpnn_type"],
-        config["Architecture"]["input_dim"],
-        config["Architecture"]["hidden_dim"],
-        config["Architecture"]["output_dim"],
-        config["Architecture"]["pe_dim"],
-        config["Architecture"]["global_attn_engine"],
-        config["Architecture"]["global_attn_type"],
-        config["Architecture"]["global_attn_heads"],
-        config["Architecture"]["output_type"],
-        config["Architecture"]["output_heads"],
-        config["Architecture"]["activation_function"],
-        config["Training"]["loss_function_type"],
-        config["Architecture"]["task_weights"],
-        config["Architecture"]["num_conv_layers"],
-        config["Architecture"]["freeze_conv_layers"],
-        config["Architecture"]["initial_bias"],
-        config["Architecture"]["num_nodes"],
-        config["Architecture"]["max_neighbours"],
-        config["Architecture"]["edge_dim"],
-        config["Architecture"]["pna_deg"],
-        config["Architecture"]["num_before_skip"],
-        config["Architecture"]["num_after_skip"],
-        config["Architecture"]["num_radial"],
-        config["Architecture"]["radial_type"],
-        config["Architecture"]["distance_transform"],
-        config["Architecture"]["basis_emb_size"],
-        config["Architecture"]["int_emb_size"],
-        config["Architecture"]["out_emb_size"],
-        config["Architecture"]["envelope_exponent"],
-        config["Architecture"]["num_spherical"],
-        config["Architecture"]["num_gaussians"],
-        config["Architecture"]["num_filters"],
-        config["Architecture"]["radius"],
-        config["Architecture"]["equivariance"],
-        config["Architecture"]["correlation"],
-        config["Architecture"]["max_ell"],
-        config["Architecture"]["node_max_ell"],
-        config["Architecture"]["avg_num_neighbors"],
-        config["Training"]["conv_checkpointing"],
-        verbosity,
-        use_gpu,
+    model = create_model(
+        mpnn_type=config["Architecture"]["mpnn_type"],
+        input_dim=config["Architecture"]["input_dim"],
+        hidden_dim=config["Architecture"]["hidden_dim"],
+        output_dim=config["Architecture"]["output_dim"],
+        pe_dim=config["Architecture"]["pe_dim"],
+        global_attn_engine=config["Architecture"]["global_attn_engine"],
+        global_attn_type=config["Architecture"]["global_attn_type"],
+        global_attn_heads=config["Architecture"]["global_attn_heads"],
+        output_type=config["Architecture"]["output_type"],
+        output_heads=config["Architecture"]["output_heads"],
+        activation_function=config["Architecture"]["activation_function"],
+        loss_function_type=config["Training"]["loss_function_type"],
+        task_weights=config["Architecture"]["task_weights"],
+        num_conv_layers=config["Architecture"]["num_conv_layers"],
+        freeze_conv=config["Architecture"]["freeze_conv_layers"],
+        initial_bias=config["Architecture"]["initial_bias"],
+        num_nodes=config["Architecture"]["num_nodes"],
+        max_neighbours=config["Architecture"]["max_neighbours"],
+        edge_dim=config["Architecture"]["edge_dim"],
+        pna_deg=config["Architecture"]["pna_deg"],
+        num_before_skip=config["Architecture"]["num_before_skip"],
+        num_after_skip=config["Architecture"]["num_after_skip"],
+        num_radial=config["Architecture"]["num_radial"],
+        radial_type=config["Architecture"]["radial_type"],
+        distance_transform=config["Architecture"]["distance_transform"],
+        basis_emb_size=config["Architecture"]["basis_emb_size"],
+        int_emb_size=config["Architecture"]["int_emb_size"],
+        out_emb_size=config["Architecture"]["out_emb_size"],
+        envelope_exponent=config["Architecture"]["envelope_exponent"],
+        num_spherical=config["Architecture"]["num_spherical"],
+        num_gaussians=config["Architecture"]["num_gaussians"],
+        num_filters=config["Architecture"]["num_filters"],
+        radius=config["Architecture"]["radius"],
+        equivariance=config["Architecture"]["equivariance"],
+        correlation=config["Architecture"]["correlation"],
+        max_ell=config["Architecture"]["max_ell"],
+        node_max_ell=config["Architecture"]["node_max_ell"],
+        avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
+        conv_checkpointing=config["Training"]["conv_checkpointing"],
+        enable_interatomic_potential=config["Architecture"].get(
+            "enable_interatomic_potential", False
+        ),
+        energy_weight=config["Architecture"].get("energy_weight", 0.0),
+        energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
+        force_weight=config["Architecture"].get("force_weight", 0.0),
+        use_graph_attr_conditioning=config["Architecture"].get(
+            "use_graph_attr_conditioning", False
+        ),
+        graph_attr_conditioning_mode=config["Architecture"].get(
+            "graph_attr_conditioning_mode", "concat_node"
+        ),
+        graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        verbosity=verbosity,
+        use_gpu=use_gpu,
     )
+
+    ## Set precision: bf16, fp32, fp64
+    training_cfg = config["Training"]
+    precision, param_dtype, _ = resolve_precision(training_cfg.get("precision", "fp32"))
+    torch.set_default_dtype(param_dtype)
+
+    return model.to(dtype=param_dtype)
 
 
 # FIXME: interface does not include ilossweights_hyperp, ilossweights_nll, dropout
@@ -123,6 +149,13 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
+    enable_interatomic_potential: bool = False,
+    energy_weight: float = 0.0,
+    energy_peratom_weight: float = 0.0,
+    force_weight: float = 0.0,
+    use_graph_attr_conditioning: bool = False,
+    graph_attr_conditioning_mode: str = "fuse_pool",
+    graph_pooling: str = "mean",
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -154,6 +187,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNA":
@@ -180,6 +216,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -214,6 +253,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "GAT":
@@ -243,6 +285,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "MFC":
@@ -268,6 +313,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "CGCNN":
@@ -292,6 +340,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "SAGE":
@@ -314,6 +365,9 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "SchNet":
@@ -345,6 +399,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "DimeNet":
@@ -360,7 +417,7 @@ def create_model(
         assert num_spherical is not None, "DimeNet requires num_spherical input."
         assert radius is not None, "DimeNet requires radius input."
         model = DIMEStack(
-            "inv_node_feat, equiv_node_feat, rbf, sbf, i, j, idx_kj, idx_ji",  # input_args
+            "inv_node_feat, equiv_node_feat, rbf, sbf, i, j, idx_kj, idx_ji, num_nodes",  # input_args
             "",  # conv_args
             basis_emb_size,
             envelope_exponent,
@@ -390,11 +447,14 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "EGNN":
         model = EGCLStack(
-            "inv_node_feat, equiv_node_feat, edge_index, edge_attr",  # input_args
+            "inv_node_feat, equiv_node_feat, edge_index, edge_attr, edge_shifts",  # input_args
             "",  # conv_args
             edge_dim,
             input_dim,
@@ -415,6 +475,9 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PAINN":
@@ -441,6 +504,9 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "PNAEq":
@@ -468,6 +534,9 @@ def create_model(
             freeze_conv=freeze_conv,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
 
     elif mpnn_type == "MACE":
@@ -507,9 +576,187 @@ def create_model(
             initial_bias=initial_bias,
             num_conv_layers=num_conv_layers,
             num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
+
+    # Apply interatomic potential enhancement if requested
+    if enable_interatomic_potential:
+        # Instead of complex inheritance, use composition with delegation
+        # This avoids MRO issues and __init__ complications
+        class EnhancedModelWrapper(torch.nn.Module):
+            def __init__(self, original_model):
+                super().__init__()
+                self.model = original_model
+                self.energy_weight = energy_weight
+                self.energy_peratom_weight = energy_peratom_weight
+                self.force_weight = force_weight
+
+            def __getattr__(self, name):
+                # First try to get from the wrapper itself
+                try:
+                    return super().__getattr__(name)
+                except AttributeError:
+                    pass
+
+                # Then try to get from the wrapped model
+                try:
+                    return getattr(self.model, name)
+                except AttributeError:
+                    # Handle specific method names that may be expected for interatomic potentials
+                    if name in [
+                        "_compute_enhanced_geometric_features",
+                        "_compute_three_body_interactions",
+                        "_apply_atomic_environment_descriptors",
+                    ]:
+                        # Return placeholder methods that don't interfere with existing architectures
+                        return lambda *args, **kwargs: None
+                    raise AttributeError(
+                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
+                    )
+
+            # ---------- forward ----------
+            def forward(self, data):
+
+                return self.model(data)
+
+            def energy_force_loss(self, pred, data, create_graph=True):
+                """
+                Compute energy and force loss for MLIP training.
+
+                This method is specific to interatomic potentials and computes:
+                1. Energy loss between predicted and true total energies
+                2. Force loss between predicted and true forces (via autograd on positions)
+
+                Forces are computed as negative gradients of total energy with respect to positions.
+                """
+                # Asserts
+                assert (
+                    data.pos is not None
+                    and data.energy is not None
+                    and data.forces is not None
+                ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
+                assert (
+                    data.pos.requires_grad
+                ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
+
+                assert (
+                    self.num_heads == 1
+                ), "Force predictions require exactly one head."
+
+                # Support both node and graph heads; enforce sum pooling for graph heads
+                if self.head_type[0] == "node":
+                    node_energy_pred = pred[0]
+                    graph_energy_pred = (
+                        torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
+                        .squeeze()
+                        .float()
+                    )
+                elif self.head_type[0] == "graph":
+                    if getattr(self.model, "graph_pooling", "mean") not in ["add"]:
+                        raise ValueError(
+                            "Graph head force loss requires sum pooling (graph_pooling='add')."
+                        )
+                    if isinstance(pred, dict) and "graph" in pred:
+                        graph_energy_pred = pred["graph"][0].squeeze().float()
+                    elif isinstance(pred, (list, tuple)):
+                        graph_energy_pred = pred[0].squeeze().float()
+                    else:
+                        graph_energy_pred = pred.squeeze().float()
+                else:
+                    raise ValueError(
+                        "Force predictions are only supported for node or graph energy heads."
+                    )
+
+                graph_energy_true = data.energy.squeeze().float()
+                tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
+
+                energy_loss_weight = self.energy_weight
+                energy_peratom_loss_weight = self.energy_peratom_weight
+                force_loss_weight = self.force_weight
+
+                # Interatomic potential training requires at least one active loss term
+                if (
+                    energy_loss_weight <= 0
+                    and energy_peratom_loss_weight <= 0
+                    and force_loss_weight <= 0
+                ):
+                    raise ValueError(
+                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
+                    )
+
+                tot_loss = 0
+                if energy_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(graph_energy_pred, graph_energy_true)
+                        * energy_loss_weight
+                    )
+
+                # Energy per atom
+                natoms = torch.bincount(data.batch)
+                graph_energy_peratom_pred = graph_energy_pred / natoms
+                graph_energy_peratom_true = graph_energy_true / natoms
+                tasks_loss.append(
+                    self.loss_function(
+                        graph_energy_peratom_pred, graph_energy_peratom_true
+                    )
+                )
+
+                if energy_peratom_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(
+                            graph_energy_peratom_pred, graph_energy_peratom_true
+                        )
+                        * energy_peratom_loss_weight
+                    )
+
+                # Forces
+                forces_true = data.forces.float()
+                forces_pred = torch.autograd.grad(
+                    graph_energy_pred,
+                    data.pos,
+                    grad_outputs=torch.ones_like(graph_energy_pred),
+                    retain_graph=graph_energy_pred.requires_grad,
+                    create_graph=create_graph,
+                )[0].float()
+                assert (
+                    forces_pred is not None
+                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
+                forces_pred = -forces_pred
+                tasks_loss.append(self.loss_function(forces_pred, forces_true))
+
+                if force_loss_weight > 0:
+                    tot_loss += (
+                        self.loss_function(forces_pred, forces_true) * force_loss_weight
+                    )  # Have force-weight be the complement to energy-weight
+                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
+                    ##        so, we need to do loss calculation manually without calling the other functions.
+
+                return tot_loss, tasks_loss
+
+            def _compute_enhanced_geometric_features(self, data):
+                """
+                Placeholder for enhanced geometric feature computation (disabled by default).
+                """
+                return data
+
+            def _compute_three_body_interactions(self, data):
+                """
+                Placeholder for three-body interaction computation (disabled by default).
+                """
+                return data
+
+            def _apply_atomic_environment_descriptors(self, data):
+                """
+                Placeholder for atomic environment descriptor application (disabled by default).
+                """
+                return data
+
+        enhanced_model = EnhancedModelWrapper(model)
+        model = enhanced_model
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()

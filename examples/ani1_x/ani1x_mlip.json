@@ -1,0 +1,58 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "mpnn_type": "EGNN",
+      "enable_interatomic_potential": true,
+      "equivariance": true,
+      "max_neighbours": 50,
+      "num_gaussians": 50,
+      "num_filters": 50,
+      "envelope_exponent": 5,
+      "int_emb_size": 64,
+      "basis_emb_size": 8,
+      "out_emb_size": 128,
+      "num_after_skip": 2,
+      "num_before_skip": 1,
+      "num_radial": 6,
+      "num_spherical": 7,
+      "radius": 5.0,
+      "hidden_dim": 200,
+      "num_conv_layers": 4,
+      "output_heads": {
+        "node": {
+          "num_headlayers": 2,
+          "dim_headlayers": [100,100],
+          "type": "mlp"
+        }
+      },
+      "task_weights": [
+        1
+      ]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [0],
+      "output_index": [
+        1
+      ],
+      "type": [
+        "node"
+      ],
+      "output_dim": [1],
+      "output_names": ["graph_energy"],
+      "denormalize_output": false
+    },
+    "Training": {
+      "Checkpoint" : true,
+      "num_epoch": 20,
+      "batch_size": 32,
+      "continue": 0,
+      "startfrom": "ANI1x",
+      "Optimizer": {
+        "learning_rate": 0.001
+      }
+    }
+  }
+}

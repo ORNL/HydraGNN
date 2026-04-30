@@ -1,7 +1,9 @@
 import os
+import sys
 import pdb
 import json
 import torch
+import torch.distributed as dist
 import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
@@ -14,6 +16,9 @@ except ImportError:
 
 import hydragnn
 
+# charge and spin are constant across MD17 dataset
+charge = 0.0
+spin = 1.0
 
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
@@ -23,6 +28,7 @@ def md17_pre_transform(data, compute_edges, transform):
     data.y = data.energy / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
+    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     data = compute_edges(data)
     data = transform(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
@@ -106,12 +112,15 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+    )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
     )
 
     # Run training with the given model and md17 dataset.
@@ -129,7 +138,15 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config["NeuralNetwork"],
         log_name,
         verbosity,
+        create_plots=False,
+        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
+            "enable_interatomic_potential", False
+        ),
     )
+    if writer is not None:
+        writer.close()
+
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":
@@ -158,4 +175,10 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    main(mpnn_type=args.mpnn_type)
+    main(
+        mpnn_type=args.mpnn_type,
+        global_attn_engine=args.global_attn_engine,
+        global_attn_type=args.global_attn_type,
+    )
+
+    sys.exit(0)

@@ -2,6 +2,7 @@ import sys
 import os, json
 import pdb
 import torch
+import torch.distributed as dist
 import torch_geometric
 from torch_geometric.datasets import ZINC
 import torch_geometric.transforms as T
@@ -79,12 +80,14 @@ model = hydragnn.models.create_model_config(
     verbosity=verbosity,
 )
 
-model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
 learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
 optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+)
+
+model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer, verbosity
 )
 
 hydragnn.utils.model.model.load_existing_model_config(
@@ -107,3 +110,9 @@ hydragnn.train.train_validate_test(
     log_name,
     verbosity,
 )
+
+if writer is not None:
+    writer.close()
+
+dist.destroy_process_group()
+sys.exit(0)

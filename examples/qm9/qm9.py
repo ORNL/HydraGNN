@@ -1,15 +1,11 @@
 import os
-import subprocess
-import signal
 import pdb
 import json
 import torch
+import torch.distributed as dist
 import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
-from hydragnn.utils.model import print_model
-
-import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 # deprecated in torch_geometric 2.0
 try:
@@ -18,9 +14,14 @@ except ImportError:
     from torch_geometric.data import DataLoader
 
 import hydragnn
+import hydragnn.utils.profiling_and_tracing.tracer as tr
 
-num_samples = 130000
+num_samples = 1000
 
+
+# charge and spin are constant across QM9 dataset
+charge = 0.0
+spin = 1.0
 
 # Update each sample prior to loading.
 def qm9_pre_transform(data, transform):
@@ -32,6 +33,7 @@ def qm9_pre_transform(data, transform):
     data.y = data.y[:, 10] / len(data.x)
     graph_features_dim = [1]
     node_feature_dim = [1]
+    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
     target_pe = data.pe[data.edge_index[1]]
@@ -75,10 +77,9 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     var_config = config["NeuralNetwork"]["Variables_of_interest"]
 
     # Always initialize for multi-rank training.
-    size, rank = hydragnn.utils.distributed.setup_ddp()
+    world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
 
-    log_name = "qm9_test" if args.log is None else args.log
-    tr.initialize(['NVIDIATracer','TIMETracer'])
+    log_name = f"qm9_test_{mpnn_type}" if mpnn_type else "qm9_test"
     # Enable print to log file.
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
@@ -114,8 +115,6 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-    print_model(model)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -123,15 +122,17 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
 
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
+    )
+
     # Run training with the given model and qm9 datasets.
     writer = hydragnn.utils.model.model.get_summary_writer(log_name)
     hydragnn.utils.input_config_parsing.save_config(config, log_name)
 
-    #nvidia-smi --query-gpu=index,timestamp,name,power.draw --format=csv -lms 100
+    tr.initialize()
+    tr.disable()
 
-    cmd = f"nvidia-smi --query-gpu=index,timestamp,name,power.draw --format=csv,nounits -lms 1000 > logs/{log_name}/nvidiaPowerDraw/nvidia_{rank}.csv"
-    if rank == 0:
-        process = subprocess.Popen(cmd, shell=True)
     hydragnn.train.train_validate_test(
         model,
         optimizer,
@@ -144,47 +145,12 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         log_name,
         verbosity,
     )
-    
 
-    if tr.has("GPTLTracer"):
-        import gptl4py as gp
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
-        gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
-        gp.finalize()
-    if tr.has("NVIDIATracer"):
-        print(f"NVIDIATracer exists")
-        import hydragnn.utils.profiling_and_tracing.nvidiaTracer as et
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            et.pr_file(f"./logs/{log_name}/gpuLogs", eligible)
+    tr.save(log_name)
+    if writer is not None:
+        writer.close()
 
-    if tr.has("TIMETracer"):
-        print(f"TIMETracer exists")
-        import hydragnn.utils.profiling_and_tracing.timeTracer as tt
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-           tt.pr_file(f"./logs/{log_name}/timeLogs", eligible)
-
-    if tr.has("AMDTracer"):
-        print(f"AMDTracer exists")
-        import hydragnn.utils.profiling_and_tracing.amdTracer as et
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            et.pr_file(f"./logs/{log_name}/gpuLogs", eligible)
-            
-    if tr.has("CRAYPMTracer"):
-        print(f"CRAYPMtracer exists")
-        import hydragnn.utils.profiling_and_tracing.craypmTracer as et
-        eligible = rank if args.everyone else 0
-        if rank == eligible:
-            et.pr_file(f"./logs/{log_name}/crayLogs", eligible)
-
-    if rank == 0:
-        os.killpg(os.getpgid(process.pid),signal.SIGTERM)
-        #process.kill()
-        #process.terminate()
+    dist.destroy_process_group()
 
 
 if __name__ == "__main__":
@@ -209,8 +175,10 @@ if __name__ == "__main__":
         default=None,
         help="Specify the global attention type (default: None).",
     )
-    parser.add_argument("--log", help="log name")
-    parser.add_argument("--everyone",type=bool,default=False, help="log name")
-    
     args = parser.parse_args()
-    main(mpnn_type=args.mpnn_type)
+
+    main(
+        mpnn_type=args.mpnn_type,
+        global_attn_engine=args.global_attn_engine,
+        global_attn_type=args.global_attn_type,
+    )

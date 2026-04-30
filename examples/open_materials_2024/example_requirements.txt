@@ -1,0 +1,3 @@
+fairchem-core
+lmdb
+orjson

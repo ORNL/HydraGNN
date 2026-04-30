@@ -64,7 +64,7 @@ class PNAEqStack(Base):
             "linear",
             "inverse_linear",
         ]
-        self.deg = torch.Tensor(deg)
+        self.deg = self._sanitize_degree(torch.Tensor(deg))
         self.edge_dim = edge_dim
         self.num_radial = num_radial
         self.radius = radius
@@ -72,6 +72,22 @@ class PNAEqStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
         self.rbf = rbf_BasisLayer(self.num_radial, self.radius)
+
+    @staticmethod
+    def _sanitize_degree(deg: torch.Tensor) -> torch.Tensor:
+        if deg.numel() == 0:
+            return deg.new_ones((1,), dtype=torch.float32)
+
+        deg = deg.to(dtype=torch.float32)
+
+        # Compute max over finite values (this is used to replace +inf)
+        finite = torch.isfinite(deg)
+        max_finite = deg[finite].max() if finite.any() else deg.new_tensor(1.0)
+
+        # Replace NaN/-inf with 1, +inf with max_finite
+        deg = torch.nan_to_num(deg, nan=1.0, neginf=1.0, posinf=max_finite.item())
+
+        return deg.clamp_min(1.0)
 
     def _init_conv(self):
         last_layer = 1 == self.num_conv_layers
@@ -317,6 +333,16 @@ class PainnMessage(MessagePassing):
         edge_attr: OptTensor = None,
     ) -> Tensor:
 
+        dtype = x.dtype
+        if v.dtype != dtype:
+            v = v.to(dtype=dtype)
+        if edge_rbf.dtype != dtype:
+            edge_rbf = edge_rbf.to(dtype=dtype)
+        if edge_vec.dtype != dtype:
+            edge_vec = edge_vec.to(dtype=dtype)
+        if edge_attr is not None and edge_attr.dtype != dtype:
+            edge_attr = edge_attr.to(dtype=dtype)
+
         src, dst = edge_index.t()
 
         if self.divide_input:
@@ -462,10 +488,29 @@ class rbf_BasisLayer(nn.Module):
 
         sin(n * pi * d / d_cut) / d
         """
-        n = torch.arange(self.num_radial, device=edge_dist.device) + 1
-        return torch.sin(
-            edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff
-        ) / edge_dist.unsqueeze(-1)
+        n = (
+            torch.arange(
+                self.num_radial, device=edge_dist.device, dtype=edge_dist.dtype
+            )
+            + 1
+        )
+        scaled = edge_dist.unsqueeze(-1) * n * torch.pi / self.cutoff
+
+        # Avoid division-by-zero when edges have zero length (e.g., self-loops or overlapping nodes).
+        eps = 1e-9
+        safe_edge_dist = edge_dist.unsqueeze(-1).clamp_min(eps)
+        sinc = torch.sin(scaled) / safe_edge_dist
+
+        # For very small distances, use the analytic limit sin(x)/x -> 1 so the ratio goes to (n*pi/d_cut).
+        small_mask = edge_dist.unsqueeze(-1).abs() < eps
+        if small_mask.any():
+            sinc = torch.where(
+                small_mask,
+                (n * torch.pi / self.cutoff),
+                sinc,
+            )
+
+        return sinc
 
     def cosine_cutoff(self, edge_dist: torch.Tensor) -> torch.Tensor:
         """

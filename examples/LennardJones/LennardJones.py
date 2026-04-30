@@ -17,6 +17,7 @@ import argparse
 
 # Torch
 import torch
+import torch.distributed as dist
 
 # torch.set_default_tensor_type(torch.DoubleTensor)
 # torch.set_default_dtype(torch.float64)
@@ -289,12 +290,15 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+    )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
     )
 
     hydragnn.utils.model.load_existing_model_config(
@@ -315,11 +319,15 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=True,
+        compute_grad_energy=config["NeuralNetwork"]["Architecture"][
+            "enable_interatomic_potential"
+        ],
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp
@@ -329,4 +337,6 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
+    dist.destroy_process_group()
     sys.exit(0)

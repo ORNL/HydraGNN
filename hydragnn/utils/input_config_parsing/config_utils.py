@@ -16,7 +16,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 )
 from hydragnn.utils.model.model import calculate_avg_deg
 from hydragnn.utils.distributed import get_comm_size_and_rank
+from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
+import warnings
 import json
 import torch
 
@@ -34,6 +36,21 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "Dataset" in config:
         check_output_dim_consistent(train_loader.dataset[0], config)
+
+    # Set default values for GPS variables
+    if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["global_attn_engine"] = None
+    if "global_attn_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["global_attn_type"] = None
+    if "global_attn_heads" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = 0
+    if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
+
+    # update output_heads with latest config rules
+    config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
+        config["NeuralNetwork"]["Architecture"]["output_heads"]
+    )
 
     config["NeuralNetwork"] = update_config_NN_outputs(
         config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
@@ -68,7 +85,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     if config["NeuralNetwork"]["Architecture"]["mpnn_type"] == "MACE":
         if hasattr(train_loader.dataset, "avg_num_neighbors"):
             ## Use avg neighbours used in the dataset.
-            avg_num_neighbors = torch.tensor(train_loader.dataset.avg_num_neighbors)
+            avg_num_neighbors = float(train_loader.dataset.avg_num_neighbors)
         else:
             avg_num_neighbors = float(calculate_avg_deg(train_loader.dataset))
         config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"] = avg_num_neighbors
@@ -109,6 +126,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_ell"] = None
     if "node_max_ell" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
+    if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
@@ -123,12 +142,6 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "initial_bias" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["initial_bias"] = None
 
-    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
-
-    if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
-
     if "activation_function" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["activation_function"] = "relu"
 
@@ -138,19 +151,28 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "conv_checkpointing" not in config["NeuralNetwork"]["Training"]:
         config["NeuralNetwork"]["Training"]["conv_checkpointing"] = False
 
-    if "compute_grad_energy" not in config["NeuralNetwork"]["Training"]:
-        config["NeuralNetwork"]["Training"]["compute_grad_energy"] = False
+    if "loss_function_type" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["loss_function_type"] = "mse"
+
+    if "Optimizer" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = "AdamW"
+
+    if "precision" not in config["NeuralNetwork"]["Training"]:
+        config["NeuralNetwork"]["Training"]["precision"] = "fp32"
+
     return config
 
 
 def update_config_equivariance(config):
-    equivariant_models = ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"]
-    if "equivariance" in config and config["equivariance"]:
-        assert (
-            config["mpnn_type"] in equivariant_models
-        ), "E(3) equivariance can only be ensured for EGNN, SchNet, PNAEq, PAINN, and MACE."
-    elif "equivariance" not in config:
-        config["equivariance"] = False
+    equivariance_toggled_models = ["EGNN"]
+    if "equivariance" in config:
+        if config["mpnn_type"] not in equivariance_toggled_models:
+            warnings.warn(
+                f"E(3) equivariance can only be toggled for EGNN. Setting it for {config['mpnn_type']} won't break anything,"
+                "but won't change anything either."
+            )
+    else:
+        config["equivariance"] = None
     return config
 
 
@@ -173,6 +195,10 @@ def update_config_edge_dim(config):
             config["mpnn_type"] in edge_models
         ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
         config["edge_dim"] = len(config["edge_features"])
+        if "enable_interatomic_potential" in config:
+            assert not config[
+                "enable_interatomic_potential"
+            ], "Edge features cannot be used with interatomic potentials as the model builds its own specialized features for force computation."
     elif config["mpnn_type"] == "CGCNN":
         # CG always needs an integer edge_dim
         # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr
@@ -202,15 +228,20 @@ def update_config_NN_outputs(config, data, graph_size_variable):
     """ "Extract architecture output dimensions and set node-level prediction architecture"""
 
     output_type = config["Variables_of_interest"]["type"]
-    if hasattr(data, "y_loc"):
+    if config["Architecture"].get("enable_interatomic_potential", False):
+        dims_list = config["Variables_of_interest"]["output_dim"]
+    elif hasattr(data, "y_loc"):
         dims_list = []
         for ihead in range(len(output_type)):
             if output_type[ihead] == "graph":
                 dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
             elif output_type[ihead] == "node":
+                # FIXME: check the first branch only, assuming all branches have the same type
                 if (
                     graph_size_variable
-                    and config["Architecture"]["output_heads"]["node"]["type"]
+                    and config["Architecture"]["output_heads"]["node"][0][
+                        "architecture"
+                    ]["type"]
                     == "mlp_per_node"
                 ):
                     raise ValueError(

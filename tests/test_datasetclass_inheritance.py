@@ -200,6 +200,9 @@ def unittest_train_model_dataset_class_inheritance(
         create_plots=True,
     )
 
+    if writer is not None:
+        writer.close()
+
 
 # Test vector output
 ## FIXME: this is temporarily disabled to avoid multiple instantiations of DDP

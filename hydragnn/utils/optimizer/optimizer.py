@@ -5,7 +5,7 @@ from torch.distributed.optim import ZeroRedundancyOptimizer
 deepspeed_available = True
 try:
     import deepspeed
-except ImportError:
+except:
     deepspeed_available = False
 
 

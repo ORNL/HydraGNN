@@ -15,9 +15,9 @@ from typing import Callable, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn.functional
-from torch.nn import ModuleList, Sequential, Linear
+from torch.nn import ModuleList, Sequential, Linear, ModuleDict
 from torch_scatter import scatter
-from torch_geometric.nn import global_mean_pool
+from torch_geometric.nn import global_add_pool, global_max_pool, global_mean_pool
 from e3nn import nn, o3
 from e3nn.util.jit import compile_mode
 
@@ -27,6 +27,21 @@ from hydragnn.utils.model.irreps_tools import (
     tp_out_irreps_with_instructions,
     create_irreps_string,
 )
+
+
+def _resolve_graph_pooling(graph_pooling: str):
+    mode = graph_pooling.lower()
+    if mode == "sum":
+        mode = "add"
+    pool_map = {
+        "mean": (global_mean_pool, "mean"),
+        "add": (global_add_pool, "sum"),
+        "max": (global_max_pool, "max"),
+    }
+    if mode not in pool_map:
+        raise ValueError("Unsupported graph_pooling: " + graph_pooling)
+    return mode, pool_map[mode]
+
 
 from .radial import (
     AgnesiTransform,
@@ -424,6 +439,7 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
         num_heads,
         activation_function,
         num_nodes,
+        graph_pooling: str = "mean",
     ):
         # NOTE The readouts of MACE take in irreps of higher order than just scalars. This is fed through o3.Linear
         #      to reduce to scalars. To implement this in HYDRAGNN, the first layer of the node output head
@@ -444,51 +460,65 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
+        self.graph_pooling, (
+            self.graph_pool_fn,
+            self.graph_pool_reduction,
+        ) = _resolve_graph_pooling(graph_pooling)
 
-        self.graph_shared = None
-        self.node_NN_type = None
+        self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
 
         self.input_scalar_dim = input_irreps.count(o3.Irrep(0, 1))
 
+        self.num_branches = 1
+        if "graph" in self.config_heads:
+            self.num_branches = len(self.config_heads["graph"])
+        elif "node" in self.config_heads:
+            self.num_branches = len(self.config_heads["node"])
+
         for ihead in range(self.num_heads):
             # mlp for each head output
+            head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                denselayers = []
-                denselayers.append(
-                    Linear(
-                        self.input_scalar_dim,
-                        self.head_dims[ihead],
+                for branchdict in self.config_heads["graph"]:
+                    branchtype = branchdict["type"]
+                    denselayers = []
+                    denselayers.append(
+                        Linear(
+                            self.input_scalar_dim,
+                            self.head_dims[ihead],
+                        )
                     )
-                )
-                head_NN = Sequential(*denselayers)
+                    head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                self.node_NN_type = self.config_heads["node"]["type"]
-                head_NN = ModuleList()
-                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
-                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
-                    assert (
-                        self.num_nodes is not None
-                    ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
-                    head_NN = LinearMLPNode(
-                        input_irreps,
-                        self.head_dims[ihead],
-                        self.num_mlp,
-                        self.config_heads["node"]["type"],
-                        self.activation_function,
-                        self.num_nodes,
-                    )
-                elif self.node_NN_type == "conv":
-                    raise ValueError(
-                        "Node-level convolutional layers are not supported in MACE"
-                    )
-                else:
-                    raise ValueError(
-                        "Unknown head NN structure for node features"
-                        + self.node_NN_type
-                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
-                    )
+                for branchdict in self.config_heads["node"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        assert (
+                            self.num_nodes is not None
+                        ), "num_nodes must be positive integer for MLP"
+                        # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                        head_NN[branchtype] = LinearMLPNode(
+                            input_irreps,
+                            self.head_dims[ihead],
+                            self.num_mlp,
+                            node_NN_type,
+                            self.activation_function,
+                            self.num_nodes,
+                        )
+                    elif node_NN_type == "conv":
+                        raise ValueError(
+                            "Node-level convolutional layers are not supported in MACE"
+                        )
+                    else:
+                        raise ValueError(
+                            "Unknown head NN structure for node features"
+                            + node_NN_type
+                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        )
             else:
                 raise ValueError(
                     "Unknown head type"
@@ -497,29 +527,86 @@ class LinearMultiheadDecoderBlock(torch.nn.Module):
                 )
             self.heads_NN.append(head_NN)
 
+    def _pool_graph_features(self, x_tensor, batch_tensor):
+        if batch_tensor is None:
+            if self.graph_pool_reduction == "mean":
+                return x_tensor.mean(dim=0, keepdim=True)
+            if self.graph_pool_reduction == "max":
+                return x_tensor.max(dim=0, keepdim=True).values
+            return x_tensor.sum(dim=0, keepdim=True)
+        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+
     def forward(self, data, node_features):
         # Take only the type-0 irreps for graph aggregation
         if data.batch is None:
-            graph_features = node_features[:, : self.input_scalar_dim].mean(
-                dim=0, keepdim=True
+            graph_features = self._pool_graph_features(
+                node_features[:, : self.input_scalar_dim], None
             )
+            data.batch = data.x * 0
         else:
-            graph_features = global_mean_pool(
+            graph_features = self._pool_graph_features(
                 node_features[:, : self.input_scalar_dim],
-                data.batch.to(node_features.device),
+                data.batch,
             )
+        # if no dataset_name, set it to be 0
+        if not hasattr(data, "dataset_name"):
+            setattr(data, "dataset_name", data.batch.unique() * 0)
+        datasetIDs = data.dataset_name.unique()
+        unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         outputs = []
-        for headloc, type_head in zip(self.heads_NN, self.head_type):
+        for head_dim, headloc, type_head in zip(
+            self.head_dims, self.heads_NN, self.head_type
+        ):
             if type_head == "graph":
-                outputs.append(headloc(graph_features))
-            else:  # Node-level output
-                if self.node_NN_type == "conv":
-                    raise ValueError(
-                        "Node-level convolutional layers are not supported in MACE"
-                    )
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim),
+                    device=graph_features.device,
+                    dtype=graph_features.dtype,
+                )
+                if self.num_branches == 1:
+                    output_head = headloc["branch-0"](graph_features)
+                    head = output_head[:, :head_dim]
                 else:
-                    x_node = headloc(node_features, data.batch)
-                    outputs.append(x_node)
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask = mask[:, 0]
+                        branchtype = f"branch-{ID.item()}"
+                        output_head = headloc[branchtype](graph_features[mask, :])
+                        head[mask] = output_head[:, :head_dim]
+                outputs.append(head)
+            else:  # Node-level output
+                # assuming all node types are the same
+                node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
+                head = torch.zeros(
+                    (data.x.shape[0], head_dim),
+                    device=node_features.device,
+                    dtype=node_features.dtype,
+                )
+                if self.num_branches == 1:
+                    branchtype = "branch-0"
+                    if node_NN_type == "conv":
+                        raise ValueError(
+                            "Node-level convolutional layers are not supported in MACE"
+                        )
+                    else:
+                        x_node = headloc[branchtype](node_features, data.batch)
+                    head = x_node[:, :head_dim]
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask_nodes = torch.repeat_interleave(mask, node_counts)
+                        branchtype = f"branch-{ID.item()}"
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        if node_NN_type == "conv":
+                            raise ValueError(
+                                "Node-level convolutional layers are not supported in MACE"
+                            )
+                        else:
+                            x_node = headloc[branchtype](
+                                node_features[mask_nodes, :], data.batch[mask_nodes]
+                            )
+                        head[mask_nodes] = x_node[:, :head_dim]
+                outputs.append(head)
         return outputs
 
 
@@ -534,6 +621,7 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         num_heads,
         activation_function,
         num_nodes,
+        graph_pooling: str = "mean",
     ):
         # NOTE The readouts of MACE take in irreps of higher order than just scalars. This is fed through o3.Linear
         #      to reduce to scalars. To implement this in HYDRAGNN, the first layer of the node output head
@@ -554,75 +642,89 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
         self.num_heads = num_heads
         self.activation_function = activation_function
         self.num_nodes = num_nodes
+        self.graph_pooling, (
+            self.graph_pool_fn,
+            self.graph_pool_reduction,
+        ) = _resolve_graph_pooling(graph_pooling)
 
-        self.graph_shared = None
-        self.node_NN_type = None
+        self.graph_shared = ModuleDict({})
         self.heads_NN = ModuleList()
 
         self.input_scalar_dim = input_irreps.count(o3.Irrep(0, 1))
 
         # Create shared dense layers for graph-level output if applicable
+        dim_sharedlayers = 0
+        self.num_branches = 1
         if "graph" in self.config_heads:
-            denselayers = []
-            dim_sharedlayers = self.config_heads["graph"]["dim_sharedlayers"]
-            denselayers.append(
-                Linear(self.input_scalar_dim, dim_sharedlayers)
-            )  # Count scalar irreps for input
-            denselayers.append(self.activation_function)
-            for ishare in range(self.config_heads["graph"]["num_sharedlayers"] - 1):
-                denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+            self.num_branches = len(self.config_heads["graph"])
+            for branchdict in self.config_heads["graph"]:
+                denselayers = []
+                dim_sharedlayers = branchdict["architecture"]["dim_sharedlayers"]
+                denselayers.append(
+                    Linear(self.input_scalar_dim, dim_sharedlayers)
+                )  # Count scalar irreps for input
                 denselayers.append(self.activation_function)
-            self.graph_shared = Sequential(*denselayers)
+                for ishare in range(branchdict["architecture"]["num_sharedlayers"] - 1):
+                    denselayers.append(Linear(dim_sharedlayers, dim_sharedlayers))
+                    denselayers.append(self.activation_function)
+                self.graph_shared[branchdict["type"]] = Sequential(*denselayers)
 
         for ihead in range(self.num_heads):
             # mlp for each head output
+            head_NN = ModuleDict({})
             if self.head_type[ihead] == "graph":
-                num_head_hidden = self.config_heads["graph"]["num_headlayers"]
-                dim_head_hidden = self.config_heads["graph"]["dim_headlayers"]
-                denselayers = []
-                denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
-                denselayers.append(self.activation_function)
-                for ilayer in range(num_head_hidden - 1):
-                    denselayers.append(
-                        Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
-                    )
+                for branchdict in self.config_heads["graph"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    dim_sharedlayers = brancharct["dim_sharedlayers"]
+                    num_head_hidden = brancharct["num_headlayers"]
+                    dim_head_hidden = brancharct["dim_headlayers"]
+                    denselayers = []
+                    denselayers.append(Linear(dim_sharedlayers, dim_head_hidden[0]))
                     denselayers.append(self.activation_function)
-                denselayers.append(
-                    Linear(
-                        dim_head_hidden[-1],
-                        self.head_dims[ihead],
+                    for ilayer in range(num_head_hidden - 1):
+                        denselayers.append(
+                            Linear(dim_head_hidden[ilayer], dim_head_hidden[ilayer + 1])
+                        )
+                        denselayers.append(self.activation_function)
+                    denselayers.append(
+                        Linear(
+                            dim_head_hidden[-1],
+                            self.head_dims[ihead],
+                        )
                     )
-                )
-                head_NN = Sequential(*denselayers)
+                    head_NN[branchtype] = Sequential(*denselayers)
             elif self.head_type[ihead] == "node":
-                self.node_NN_type = self.config_heads["node"]["type"]
-                head_NN = ModuleList()
-                if self.node_NN_type == "mlp" or self.node_NN_type == "mlp_per_node":
-                    self.num_mlp = 1 if self.node_NN_type == "mlp" else self.num_nodes
-                    assert (
-                        self.num_nodes is not None
-                    ), "num_nodes must be positive integer for MLP"
-                    # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
-                    hidden_dim_node = self.config_heads["node"]["dim_headlayers"]
-                    head_NN = NonLinearMLPNode(
-                        input_irreps,
-                        self.head_dims[ihead],
-                        self.num_mlp,
-                        hidden_dim_node,
-                        self.config_heads["node"]["type"],
-                        self.activation_function,
-                        self.num_nodes,
-                    )
-                elif self.node_NN_type == "conv":
-                    raise ValueError(
-                        "Node-level convolutional layers are not supported in MACE"
-                    )
-                else:
-                    raise ValueError(
-                        "Unknown head NN structure for node features"
-                        + self.node_NN_type
-                        + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
-                    )
+                for branchdict in self.config_heads["node"]:
+                    branchtype = branchdict["type"]
+                    brancharct = branchdict["architecture"]
+                    hidden_dim_node = brancharct["dim_headlayers"]
+                    node_NN_type = brancharct["type"]
+                    if node_NN_type == "mlp" or node_NN_type == "mlp_per_node":
+                        self.num_mlp = 1 if node_NN_type == "mlp" else self.num_nodes
+                        assert (
+                            self.num_nodes is not None
+                        ), "num_nodes must be positive integer for MLP"
+                        # """if different graphs in the datasets have different size, one MLP is shared across all nodes """
+                        head_NN[branchtype] = NonLinearMLPNode(
+                            input_irreps,
+                            self.head_dims[ihead],
+                            self.num_mlp,
+                            hidden_dim_node,
+                            node_NN_type,
+                            self.activation_function,
+                            self.num_nodes,
+                        )
+                    elif node_NN_type == "conv":
+                        raise ValueError(
+                            "Node-level convolutional layers are not supported in MACE"
+                        )
+                    else:
+                        raise ValueError(
+                            "Unknown head NN structure for node features"
+                            + node_NN_type
+                            + "; currently only support 'mlp', 'mlp_per_node' or 'conv' (can be set with config['NeuralNetwork']['Architecture']['output_heads']['node']['type'], e.g., ./examples/ci_multihead.json)"
+                        )
             else:
                 raise ValueError(
                     "Unknown head type"
@@ -631,30 +733,91 @@ class NonLinearMultiheadDecoderBlock(torch.nn.Module):
                 )
             self.heads_NN.append(head_NN)
 
+    def _pool_graph_features(self, x_tensor, batch_tensor):
+        if batch_tensor is None:
+            if self.graph_pool_reduction == "mean":
+                return x_tensor.mean(dim=0, keepdim=True)
+            if self.graph_pool_reduction == "max":
+                return x_tensor.max(dim=0, keepdim=True).values
+            return x_tensor.sum(dim=0, keepdim=True)
+        return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+
     def forward(self, data, node_features):
         # Take only the type-0 irreps for graph aggregation
         if data.batch is None:
-            graph_features = node_features[:, : self.input_scalar_dim].mean(
-                dim=0, keepdim=True
+            graph_features = self._pool_graph_features(
+                node_features[:, : self.input_scalar_dim], None
             )
+            data.batch = data.x * 0
         else:
-            graph_features = global_mean_pool(
+            graph_features = self._pool_graph_features(
                 node_features[:, : self.input_scalar_dim],
-                data.batch.to(node_features.device),
+                data.batch,
             )
+        # if no dataset_name, set it to be 0
+        if not hasattr(data, "dataset_name"):
+            setattr(data, "dataset_name", data.batch.unique() * 0)
+        datasetIDs = data.dataset_name.unique()
+        unique, node_counts = torch.unique_consecutive(data.batch, return_counts=True)
         outputs = []
-        for headloc, type_head in zip(self.heads_NN, self.head_type):
+
+        for head_dim, headloc, type_head in zip(
+            self.head_dims, self.heads_NN, self.head_type
+        ):
             if type_head == "graph":
-                x_graph_head = self.graph_shared(graph_features)
-                outputs.append(headloc(x_graph_head))
-            else:  # Node-level output
-                if self.node_NN_type == "conv":
-                    raise ValueError(
-                        "Node-level convolutional layers are not supported in MACE"
-                    )
+                head = torch.zeros(
+                    (len(data.dataset_name), head_dim),
+                    device=graph_features.device,
+                    dtype=graph_features.dtype,
+                )
+                if self.num_branches == 1:
+                    x_graph_head = self.graph_shared["branch-0"](graph_features)
+                    output_head = headloc["branch-0"](x_graph_head)
+                    head = output_head[:, :head_dim]
                 else:
-                    x_node = headloc(node_features, data.batch)
-                    outputs.append(x_node)
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask = mask[:, 0]
+                        branchtype = f"branch-{ID.item()}"
+                        x_graph_head = self.graph_shared[branchtype](
+                            graph_features[mask, :]
+                        )
+                        output_head = headloc[branchtype](x_graph_head)
+                        head[mask] = output_head[:, :head_dim]
+                outputs.append(head)
+            else:  # Node-level output
+                # assuming all node types are the same
+                node_NN_type = self.config_heads["node"][0]["architecture"]["type"]
+                head = torch.zeros(
+                    (data.x.shape[0], head_dim),
+                    device=node_features.device,
+                    dtype=node_features.dtype,
+                )
+                if self.num_branches == 1:
+                    branchtype = "branch-0"
+                    if node_NN_type == "conv":
+                        raise ValueError(
+                            "Node-level convolutional layers are not supported in MACE"
+                        )
+                    else:
+                        x_node = headloc[branchtype](node_features, data.batch)
+                    head = x_node[:, :head_dim]
+                else:
+                    for ID in datasetIDs:
+                        mask = data.dataset_name == ID
+                        mask_nodes = torch.repeat_interleave(mask, node_counts)
+                        branchtype = f"branch-{ID.item()}"
+                        # print("Pei debugging:", branchtype, data.dataset_name, mask, data.dataset_name[mask])
+                        if node_NN_type == "conv":
+                            raise ValueError(
+                                "Node-level convolutional layers are not supported in MACE"
+                            )
+                        else:
+                            x_node = headloc[branchtype](
+                                node_features[mask_nodes, :], data.batch[mask_nodes]
+                            )
+                        head[mask_nodes] = x_node[:, :head_dim]
+                outputs.append(head)
         return outputs
 
 

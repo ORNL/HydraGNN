@@ -14,6 +14,9 @@ from mpi4py import MPI
 
 import argparse
 
+import torch
+import torch.distributed as dist
+
 import hydragnn
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
@@ -36,8 +39,6 @@ try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 except ImportError:
     pass
-
-import torch
 
 # FIX random seed
 random_state = 0
@@ -288,6 +289,8 @@ if __name__ == "__main__":
                 data = generate_graphdata_from_smilestr(
                     smilestr, ytarget, csce_node_types, var_config
                 )
+                data.dataset_name = "csce"
+                data.smiles = smilestr
                 dataset_lists[idataset].append(data)
 
         trainset = dataset_lists[0]
@@ -402,12 +405,15 @@ if __name__ == "__main__":
         config=config["NeuralNetwork"],
         verbosity=verbosity,
     )
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+    )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
     )
 
     hydragnn.utils.model.load_existing_model_config(
@@ -432,6 +438,8 @@ if __name__ == "__main__":
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.time_utils.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
     if args.mae:
         import matplotlib.pyplot as plt
@@ -485,4 +493,6 @@ if __name__ == "__main__":
             gp.pr_file(os.path.join("logs", log_name, "gp_timing.p%d" % rank))
         gp.pr_summary_file(os.path.join("logs", log_name, "gp_timing.summary"))
         gp.finalize()
+
+    dist.destroy_process_group()
     sys.exit(0)

@@ -190,13 +190,18 @@ if __name__ == "__main__":
         print_model(model)
     comm.Barrier()
 
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
     )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
+    )
+
+    # Print details of neural network architecture
+    print_model(model)
 
     log_name = get_log_name_config(config)
     writer = hydragnn.utils.model.get_summary_writer(log_name)
@@ -222,5 +227,8 @@ if __name__ == "__main__":
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
+    dist.destroy_process_group()
     sys.exit(0)

@@ -68,10 +68,15 @@ def unittest_periodic_boundary_conditions(
     assert data_periodic_no_self_loops.y == data.y
     assert data_periodic_with_self_loops.y == data.y
 
-    # FIXME: check lengths are at least reasonable
-    for n in range(expected_neighbors * num_nodes):
-        assert data_periodic_no_self_loops.edge_attr[n] < 5.0
-    # Test could also check each periodic shift
+    # FIXME: check lengths are within expected range
+    row, col = data_periodic_no_self_loops.edge_index
+    vec = (
+        data_periodic_no_self_loops.pos[col]
+        - data_periodic_no_self_loops.pos[row]
+        + data_periodic_no_self_loops.edge_shifts
+    )
+    dist = torch.norm(vec, p=2, dim=-1)
+    assert ((dist <= config["Architecture"]["radius"]) & (dist >= 0.0)).all()
 
 
 def pytest_periodic_h2():

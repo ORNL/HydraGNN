@@ -7,6 +7,7 @@ from tqdm import tqdm
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from hydragnn.utils.datasets.adiosdataset import adios2_open
 
 font = {"size": 12}
 matplotlib.rc("font", **font)
@@ -151,7 +152,7 @@ if __name__ == "__main__":
     for dataname in tqdm(dataname_list, desc="atom"):
         natom_list[dataname] = list()
         for label in ["trainset", "valset", "testset"]:
-            with ad2.open(os.path.join(prefix, dataname + ".bp"), "r") as f:
+            with adios2_open(os.path.join(prefix, dataname + ".bp"), "r") as f:
                 f.__next__()
                 natom = f.read(f"{label}/pos/variable_count")
                 natom_list[dataname].append(natom)
@@ -187,7 +188,7 @@ if __name__ == "__main__":
     for dataname in tqdm(dataname_list, desc="edge"):
         edge_list[dataname] = list()
         for label in ["trainset", "valset", "testset"]:
-            with ad2.open(os.path.join(prefix, dataname + ".bp"), "r") as f:
+            with adios2_open(os.path.join(prefix, dataname + ".bp"), "r") as f:
                 f.__next__()
                 nedge = f.read(f"{label}/edge_attr/variable_count")
                 edge_list[dataname].append(nedge)
@@ -223,7 +224,7 @@ if __name__ == "__main__":
     for dataname in tqdm(dataname_list, desc="energy"):
         energy_list[dataname] = list()
         for label in ["trainset", "valset", "testset"]:
-            with ad2.open(os.path.join(prefix, dataname + ".bp"), "r") as f:
+            with adios2_open(os.path.join(prefix, dataname + ".bp"), "r") as f:
                 f.__next__()
                 energy = f.read(f"{label}/energy")
                 energy_list[dataname].append(energy)
@@ -289,7 +290,7 @@ if __name__ == "__main__":
     for dataname in tqdm(dataname_list, desc="force"):
         force_list[dataname] = list()
         for label in ["trainset", "valset", "testset"]:
-            with ad2.open(os.path.join(prefix, dataname + ".bp"), "r") as f:
+            with adios2_open(os.path.join(prefix, dataname + ".bp"), "r") as f:
                 f.__next__()
                 force = f.read(f"{label}/force")
                 force_list[dataname].append(force)

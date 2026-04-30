@@ -60,7 +60,7 @@ def iterate_tqdm(iterator, verbosity_level, *args, **kwargs):
         return iterator
 
 
-def setup_log(prefix):
+def setup_log(prefix, filename="run.log"):
     """
     Setup logging to print messages for both screen and file.
     """
@@ -76,10 +76,7 @@ def setup_log(prefix):
     logger.setLevel(logging.DEBUG)
 
     os.makedirs("./logs/%s" % prefix, exist_ok=True)
-    os.makedirs("./logs/%s/gpuLogs" % prefix, exist_ok=True)
-    os.makedirs("./logs/%s/timeLogs" % prefix, exist_ok=True)
-    os.makedirs("./logs/%s/nvidiaPowerDraw" % prefix, exist_ok=True)
-    fname = "./logs/%s/run.log" % (prefix)
+    fname = "./logs/%s/%s" % (prefix, filename)
     fileHandler = logging.FileHandler(fname)
 
     if logger.hasHandlers():

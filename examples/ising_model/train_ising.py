@@ -157,7 +157,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cutoff",
         type=int,
-        default=1000,
+        default=10,
         help="configurational_histogram_cutoff",
     )
     parser.add_argument("--seed", type=int, help="seed", default=43)
@@ -273,8 +273,20 @@ if __name__ == "__main__":
             os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
         )
         attrs = dict()
-        attrs["minmax_node_feature"] = total.minmax_node_feature
-        attrs["minmax_graph_feature"] = total.minmax_graph_feature
+        if (
+            "normalize_features" in config["Dataset"]
+            and config["Dataset"]["normalize_features"]
+        ):
+            attrs["minmax_node_feature"] = total.minmax_node_feature
+        else:
+            attrs["minmax_node_feature"] = None
+        if (
+            "normalize_features" in config["Dataset"]
+            and config["Dataset"]["normalize_features"]
+        ):
+            attrs["minmax_graph_feature"] = total.minmax_graph_feature
+        else:
+            attrs["minmax_graph_feature"] = None
         attrs["pna_deg"] = deg
         SimplePickleWriter(
             trainset,
@@ -384,12 +396,14 @@ if __name__ == "__main__":
         print_model(model)
     comm.Barrier()
 
-    model = hydragnn.utils.distributed.get_distributed_model(model, verbosity)
-
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
+    )
+
+    model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+        model, optimizer, verbosity
     )
 
     writer = hydragnn.utils.model.get_summary_writer(log_name)
@@ -414,6 +428,8 @@ if __name__ == "__main__":
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(verbosity)
+    if writer is not None:
+        writer.close()
 
     if tr.has("GPTLTracer"):
         import gptl4py as gp

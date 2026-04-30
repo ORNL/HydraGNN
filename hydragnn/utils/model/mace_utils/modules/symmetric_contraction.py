@@ -215,6 +215,10 @@ class Contraction(torch.nn.Module):
             self.weights_max = weights[-1]
 
     def forward(self, x: torch.Tensor, y: torch.Tensor):
+        # Align inputs with stored CG tensor dtype/device to avoid mixed-dtype contractions under autocast.
+        target_dtype = self.U_tensors(self.correlation).dtype
+        x = x.to(dtype=target_dtype)
+        y = y.to(dtype=target_dtype)
         out = self.graph_opt_main(
             self.U_tensors(self.correlation),
             self.weights_max,

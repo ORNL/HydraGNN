@@ -140,8 +140,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data-path",
         type=str,
-        default="./datasets",
-        help="Specify path to save datasets. Defaults to './datasets'",
+        default="./dataset",
+        help="Specify path to save datasets. Defaults to './dataset'",
     )
 
     args, _ = parser.parse_known_args()
