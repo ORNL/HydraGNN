@@ -145,6 +145,25 @@ def update_config(config, train_loader, val_loader, test_loader):
     if "allscaip_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["allscaip_max_num_elements"] = 119
 
+    # UMA-specific defaults (used by UMAStack via create_model).
+    if "uma_mmax" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_mmax"] = 2
+    if "uma_grid_resolution" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_grid_resolution"] = None
+    if "uma_edge_channels" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 128
+    if "uma_hidden_channels" not in config["NeuralNetwork"]["Architecture"]:
+        # Default to None so UMAStack falls back to hidden_dim (sphere_channels).
+        config["NeuralNetwork"]["Architecture"]["uma_hidden_channels"] = None
+    if "uma_norm_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_norm_type"] = "rms_norm_sh"
+    if "uma_ff_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_ff_type"] = "grid"
+    if "uma_use_chg_spin" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_use_chg_spin"] = False
+    if "uma_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_max_num_elements"] = 100
+
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
     )
