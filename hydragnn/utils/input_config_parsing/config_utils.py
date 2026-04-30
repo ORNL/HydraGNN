@@ -128,6 +128,22 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
     if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
+    # AllScAIP-specific defaults (used by AllScAIPStack via create_model).
+    # Backbone depth is taken from the standard ``num_conv_layers`` key.
+    if "allscaip_num_heads" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 8
+    if "allscaip_freq_list" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_freq_list"] = None
+    if "allscaip_atten_name" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_atten_name"] = "math"
+    if "allscaip_use_node_path" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_node_path"] = True
+    if "allscaip_use_sincx_mask" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_sincx_mask"] = True
+    if "allscaip_use_freq_mask" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = True
+    if "allscaip_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_max_num_elements"] = 119
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]

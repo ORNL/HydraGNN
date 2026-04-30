@@ -1,5 +1,5 @@
 import os
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 # Note: setup() has access to cmd arguments of the setup.py script via sys.argv
 
@@ -50,7 +50,7 @@ setup(
     name="HydraGNN",
     version="4.0rc1",
     package_dir={"hydragnn": "hydragnn"},
-    packages=find_packages(),
+    packages=find_namespace_packages(include=["hydragnn", "hydragnn.*"]),
     install_requires=install_requires,
     extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph neural networks",

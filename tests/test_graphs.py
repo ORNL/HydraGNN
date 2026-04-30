@@ -84,6 +84,11 @@ def unittest_train_model(
     if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
         config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
 
+    # AllScAIP requires hidden_dim divisible by allscaip_num_heads; the unit-test
+    # configs use hidden_dim=8, so override the default (8) to a value that fits.
+    if mpnn_type == "AllScAIP":
+        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 2
+
     # Only run with edge lengths for models that support them.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
@@ -155,6 +160,7 @@ def unittest_train_model(
         "PNAEq": [0.60, 0.60],
         "PAINN": [0.60, 0.60],
         "MACE": [0.60, 0.70],
+        "AllScAIP": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -218,6 +224,7 @@ def unittest_train_model(
         "PNAEq",
         "PAINN",
         "MACE",
+        "AllScAIP",
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
