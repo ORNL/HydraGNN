@@ -170,9 +170,7 @@ def batched_radius_graph(
     disp = torch.cat(disp_list)
     env = torch.cat(env_list)
 
-    dist_pairwise = (
-        torch.block_diag(*dist_blocks) if compute_dist_pairwise else None
-    )
+    dist_pairwise = torch.block_diag(*dist_blocks) if compute_dist_pairwise else None
 
     # auto-size the per-node neighbor padding to the actual maximum
     knn_pad_size = int(max(index1_rank.max().item(), index2_rank.max().item())) + 1
@@ -257,17 +255,11 @@ def biknn_radius_graph(
         cross_a2a3 = torch.cross(data.cell[:, 1], data.cell[:, 2], dim=-1)
         cell_vol = torch.sum(data.cell[:, 0] * cross_a2a3, dim=-1, keepdim=True)
 
-        rep_a1 = torch.ceil(
-            cutoff * safe_norm(cross_a2a3 / cell_vol, dim=-1)
-        )
+        rep_a1 = torch.ceil(cutoff * safe_norm(cross_a2a3 / cell_vol, dim=-1))
         cross_a3a1 = torch.cross(data.cell[:, 2], data.cell[:, 0], dim=-1)
-        rep_a2 = torch.ceil(
-            cutoff * safe_norm(cross_a3a1 / cell_vol, dim=-1)
-        )
+        rep_a2 = torch.ceil(cutoff * safe_norm(cross_a3a1 / cell_vol, dim=-1))
         cross_a1a2 = torch.cross(data.cell[:, 0], data.cell[:, 1], dim=-1)
-        rep_a3 = torch.ceil(
-            cutoff * safe_norm(cross_a1a2 / cell_vol, dim=-1)
-        )
+        rep_a3 = torch.ceil(cutoff * safe_norm(cross_a1a2 / cell_vol, dim=-1))
 
         rep_a1 = rep_a1.masked_fill(data.pbc[:, 0] == 0, 0).tolist()
         rep_a2 = rep_a2.masked_fill(data.pbc[:, 1] == 0, 0).tolist()

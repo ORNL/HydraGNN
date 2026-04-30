@@ -27,9 +27,9 @@ class MolecularGraphConfigs:
     knn_soft: bool = True
     knn_sigmoid_scale: float = 0.2
     knn_lse_scale: float = 0.1
-    distance_function: Literal["gaussian", "sigmoid", "linearsigmoid", "silu"] = (
-        "gaussian"
-    )
+    distance_function: Literal[
+        "gaussian", "sigmoid", "linearsigmoid", "silu"
+    ] = "gaussian"
     use_envelope: bool = True
 
 
