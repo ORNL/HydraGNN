@@ -1,7 +1,7 @@
 # Base HydraGNN dependencies
 # Scientific computing, materials science, visualization, and utility packages
 # Install with: pip install -r requirements-base.txt
-click>=8.2.1,<9
+click==8.0.0
 matplotlib==3.10.6
 ase==3.26.0
 tqdm>=4.67.3,<5
