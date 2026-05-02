@@ -15,6 +15,7 @@ import numpy as np
 import torch
 from ase.calculators.calculator import Calculator, all_changes
 from ase.io import read, write
+from ase.io.trajectory import Trajectory
 from ase.optimize import BFGS, FIRE
 from ase.optimize.bfgslinesearch import BFGSLineSearch
 from torch_geometric.data import Data
@@ -91,11 +92,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Graph-level spin used for graph_attr conditioning",
     )
     parser.add_argument(
-        "--optimizer",
+        "--ase-structure-optimizer",
         type=str,
         choices=["FIRE", "BFGS", "BFGSLineSearch"],
         default="FIRE",
-        help="ASE optimizer",
+        help="ASE structure optimizer",
     )
     parser.add_argument(
         "--maxstep",
@@ -108,6 +109,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=int,
         default=200,
         help="Maximum optimization steps",
+    )
+    parser.add_argument(
+        "--fmax",
+        type=float,
+        default=0.02,
+        help="Stop when the maximum force component drops below this value (eV/Å). Default: 0.02",
     )
     parser.add_argument(
         "--relative_increase_threshold",
@@ -137,6 +144,24 @@ def build_argument_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         help="Optional output filename for the optimized structure",
+    )
+    parser.add_argument(
+        "--trajectory",
+        type=str,
+        default=None,
+        help=(
+            "Optional path for the ASE .traj trajectory. Defaults to "
+            "<structure>_optimization.traj next to the structure file."
+        ),
+    )
+    parser.add_argument(
+        "--log_csv",
+        type=str,
+        default=None,
+        help=(
+            "Optional path for a per-step CSV log (energy, max force, top branch, "
+            "top weight, all branch weights). Defaults to <structure>_optimization.csv."
+        ),
     )
     return parser
 
@@ -288,8 +313,8 @@ def main():
     )
 
     arch = config["NeuralNetwork"]["Architecture"]
-    radius = arch.get("radius", 5.0)
-    max_neighbours = arch.get("max_neighbours", 20)
+    radius = float(arch.get("radius", 5.0))
+    max_neighbours = int(arch.get("max_neighbours", 20))
 
     calculator = FusedHydraGNNCalculator(
         model,
@@ -325,38 +350,99 @@ def main():
         write(displaced_output, atoms)
         print(f"Wrote perturbed structure to {displaced_output}")
 
-    optimizer = build_optimizer(args.optimizer, atoms, args.maxstep)
+    structure_root, _ = os.path.splitext(structure_path)
+    trajectory_path = (
+        _resolve_path(script_dir, args.trajectory)
+        if args.trajectory is not None
+        else structure_root + "_optimization.traj"
+    )
+    log_csv_path = (
+        _resolve_path(script_dir, args.log_csv)
+        if args.log_csv is not None
+        else structure_root + "_optimization.csv"
+    )
+
+    # Write the initial (pre-step) frame so the trajectory captures step 0 as well.
+    # Trigger an evaluation first so the initial frame carries energy/forces.
+    atoms.get_potential_energy()
+    atoms.get_forces()
+    traj_writer = Trajectory(trajectory_path, mode="w", atoms=atoms)
+    traj_writer.write()
+
+    optimizer = build_optimizer(args.ase_structure_optimizer, atoms, args.maxstep)
+
+    num_branches_for_log = int(num_branches)
+    csv_header = [
+        "step",
+        "energy_eV",
+        "max_force_eV_per_A",
+        "top_branch",
+        "top_weight",
+    ] + [f"w_branch_{i}" for i in range(num_branches_for_log)]
+    csv_file = open(log_csv_path, "w")
+    csv_file.write(",".join(csv_header) + "\n")
 
     prev_max_force = None
     prev_positions = None
-    for step in range(args.maxiter):
-        optimizer.step()
+    try:
+        for step in range(args.maxiter):
+            optimizer.step()
 
-        energy = atoms.get_potential_energy()
-        forces = atoms.get_forces()
-        max_force = float(np.sqrt((forces ** 2).sum(axis=1).max()))
-        weights = calculator.last_branch_weights
-        top_branch = int(np.argmax(weights)) if weights is not None else -1
-        top_weight = float(weights[top_branch]) if weights is not None else float("nan")
+            energy = atoms.get_potential_energy()
+            forces = atoms.get_forces()
+            max_force = float(np.sqrt((forces ** 2).sum(axis=1).max()))
+            weights = calculator.last_branch_weights
+            top_branch = int(np.argmax(weights)) if weights is not None else -1
+            top_weight = (
+                float(weights[top_branch]) if weights is not None else float("nan")
+            )
 
-        print(
-            f"Step {step + 1}: Energy = {energy:.6f} eV, "
-            f"Max Force = {max_force:.6f} eV/Å, "
-            f"Top Branch = {top_branch}, Top Weight = {top_weight:.4f}"
-        )
+            traj_writer.write()
 
-        if prev_max_force is not None and prev_max_force > 0.0:
-            relative_increase = (max_force - prev_max_force) / prev_max_force
-            if relative_increase > args.relative_increase_threshold:
+            print(
+                f"Step {step + 1}: Energy = {energy:.6f} eV, "
+                f"Max Force = {max_force:.6f} eV/Å, "
+                f"Top Branch = {top_branch}, Top Weight = {top_weight:.4f}"
+            )
+
+            row = [
+                str(step + 1),
+                f"{energy:.8e}",
+                f"{max_force:.8e}",
+                str(top_branch),
+                f"{top_weight:.6f}",
+            ]
+            if weights is not None:
+                row += [f"{float(w):.6f}" for w in weights]
+            else:
+                row += ["nan"] * num_branches_for_log
+            csv_file.write(",".join(row) + "\n")
+            csv_file.flush()
+
+            if prev_max_force is not None and prev_max_force > 0.0:
+                relative_increase = (max_force - prev_max_force) / prev_max_force
+                if relative_increase > args.relative_increase_threshold:
+                    print(
+                        f"Reverting to previous step at step {step + 1} due to "
+                        f"a relative force increase of {relative_increase:.2%}."
+                    )
+                    atoms.set_positions(prev_positions)
+                    break
+
+            if max_force < args.fmax:
                 print(
-                    f"Reverting to previous step at step {step + 1} due to "
-                    f"a relative force increase of {relative_increase:.2%}."
+                    f"Converged at step {step + 1}: max force {max_force:.6f} eV/Å < fmax {args.fmax} eV/Å"
                 )
-                atoms.set_positions(prev_positions)
                 break
 
-        prev_max_force = max_force
-        prev_positions = deepcopy(atoms.get_positions())
+            prev_max_force = max_force
+            prev_positions = deepcopy(atoms.get_positions())
+    finally:
+        csv_file.close()
+        traj_writer.close()
+
+    print(f"Wrote trajectory to {trajectory_path}")
+    print(f"Wrote per-step log to {log_csv_path}")
 
     output_path = (
         _resolve_path(script_dir, args.output)
