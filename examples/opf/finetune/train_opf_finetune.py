@@ -351,8 +351,12 @@ if __name__ == "__main__":
     # Optionally truncate trainset for data-efficiency sweep
     if args.max_train_samples is not None and len(trainset) > args.max_train_samples:
         from torch.utils.data import Subset
+
         trainset = Subset(trainset, list(range(args.max_train_samples)))
-        info(f"Truncated trainset to {args.max_train_samples} samples for data-efficiency sweep.")
+        info(
+            f"Truncated trainset to {args.max_train_samples} samples "
+            "for data-efficiency sweep."
+        )
 
     info(
         "trainset / valset / testset sizes: %d / %d / %d"

@@ -27,6 +27,7 @@ import random
 import argparse
 
 import torch
+import torch.distributed as dist
 from mpi4py import MPI
 
 # Make examples/opf importable (for opf_solution_utils if ever needed)
@@ -220,6 +221,15 @@ def main():
 
     # ── Write HDF5 ─────────────────────────────────────────────────────────
     print(f"Writing dataset to {args.out_dir} ...")
+    # HydraGNN's iterate_tqdm calls dist.get_rank() unconditionally; initialise
+    # a single-rank CPU process group so it does not raise on a login node.
+    if not dist.is_initialized():
+        dist.init_process_group(
+            backend="gloo",
+            world_size=1,
+            rank=0,
+            init_method="tcp://127.0.0.1:29500",
+        )
     writer = HDF5Writer(args.out_dir, comm=MPI.COMM_SELF)
     for split_name, split_samples in splits.items():
         writer.add(split_name, split_samples)
