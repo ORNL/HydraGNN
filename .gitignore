@@ -8,3 +8,5 @@ logs/
 serialized_dataset/
 exporter.log
 installation_DOE_supercomputers/HydraGNN-Installation-Frontier*/
+*.doc
+*.docx
