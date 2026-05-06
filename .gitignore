@@ -7,3 +7,5 @@ dataset/
 logs/
 serialized_dataset/
 exporter.log
+*.doc
+*.docx

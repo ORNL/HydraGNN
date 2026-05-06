@@ -103,6 +103,30 @@ class Visualizer:
         )
         return xcen_pasr, mean1d_cond
 
+    def __point_density(self, x, y, bins=60):
+        x = np.asarray(x).ravel()
+        y = np.asarray(y).ravel()
+
+        mask = np.isfinite(x) & np.isfinite(y)
+        density = np.zeros_like(x, dtype=float)
+        if not np.any(mask):
+            return density
+
+        x_valid = x[mask]
+        y_valid = y[mask]
+        hist2d, xedges, yedges = np.histogram2d(x_valid, y_valid, bins=bins)
+
+        xbin = np.clip(np.digitize(x_valid, xedges) - 1, 0, hist2d.shape[0] - 1)
+        ybin = np.clip(np.digitize(y_valid, yedges) - 1, 0, hist2d.shape[1] - 1)
+        density_valid = hist2d[xbin, ybin]
+
+        max_density = np.max(density_valid)
+        if max_density > 0:
+            density_valid = density_valid / max_density
+
+        density[mask] = density_valid
+        return density
+
     def __scatter_impl(
         self,
         ax,
@@ -116,8 +140,26 @@ class Visualizer:
         y_label=None,
         xylim_equal=False,
     ):
+        x = np.asarray(x).ravel()
+        y = np.asarray(y).ravel()
+        marker = "o" if marker is None else marker
+        point_size = 18 if s is None else s
 
-        ax.scatter(x, y, s=s, edgecolor="b", marker=marker, facecolor="none")
+        density = self.__point_density(x, y)
+        plot_order = np.argsort(density)
+        scatter = ax.scatter(
+            x[plot_order],
+            y[plot_order],
+            s=point_size,
+            c=density[plot_order],
+            cmap="viridis",
+            marker=marker,
+            edgecolors="none",
+            alpha=0.85,
+        )
+
+        colorbar = ax.figure.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+        colorbar.set_label("Point concentration")
 
         ax.set_title(title + ", number of samples =" + str(len(x)))
         ax.set_xlabel(x_label)
