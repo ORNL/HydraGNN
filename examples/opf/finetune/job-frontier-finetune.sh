@@ -88,8 +88,10 @@ export FI_CXI_RDZV_THRESHOLD=0
 # -----------------------------------------------------------------------------
 FT_DIR=$HYDRAGNN_ROOT/examples/opf/finetune
 INPUTFILE=$FT_DIR/${FT_STRATEGY}/config_${FT_ARCH}_${FT_REGIME}.json
-LOG_NAME="finetune_${FT_STRATEGY}_${FT_ARCH}_${FT_REGIME}_${SLURM_JOB_ID}"
-DATA_MODELNAME="${FT_STRATEGY}_${FT_ARCH}_data"
+_n_tag=${MAX_TRAIN_SAMPLES:+_n${MAX_TRAIN_SAMPLES}}
+_scratch_tag=${NO_PRETRAINED:+_scratch}
+LOG_NAME="finetune_${FT_STRATEGY}_${FT_ARCH}_${FT_REGIME}${_scratch_tag}${_n_tag}"
+DATA_MODELNAME="${FT_STRATEGY}_data"
 
 # Read case/group metadata from the config (informational only)
 CASE_NAME=$(python3 -c "import json; c=json.load(open('$INPUTFILE')); print(c.get('_ft_case_name',''))" 2>/dev/null)
@@ -160,7 +162,8 @@ if [[ "$PHASES" == *"train"* ]]; then
             --pretrained_model_dir $HYDRAGNN_ROOT/examples/opf/pretrained_models \
             --pretrained_model_name $PRETRAINED_MODEL \
             --finetune_regime $FT_REGIME \
-            ${NO_PRETRAINED:+--no_pretrained}
+            ${NO_PRETRAINED:+--no_pretrained} \
+            ${MAX_TRAIN_SAMPLES:+--max_train_samples $MAX_TRAIN_SAMPLES}
     echo "--- Phase 2 complete ---"
 fi
 

@@ -5,7 +5,7 @@
     "_ft_num_groups": "20",
     "_ft_max_samples": null,
     "_ft_topological_perturbations": true,
-    "ft_data_modelname": "FT3_contingency_HeteroSAGE_data",
+    "ft_data_modelname": "FT3_contingency_data",
     "Verbosity": {
         "level": 2
     },

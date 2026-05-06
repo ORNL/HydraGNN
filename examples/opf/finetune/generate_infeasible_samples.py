@@ -152,27 +152,34 @@ def main():
             "generate a feasible-sample HDF5 dataset."
         )
 
-    all_feasible = []
+    # ── Reservoir-sample up to max_samples to avoid loading full dataset ───
+    reservoir = []
+    n_seen = 0
+    cap = args.max_samples  # None means no cap
+
     for split in ("trainset", "valset", "testset"):
         try:
             ds = HDF5Dataset(args.src_dir, split)
             for i in range(len(ds)):
                 sample = ds[i]
                 strip_node_targets(sample)
-                all_feasible.append(sample)
+                if cap is None or n_seen < cap:
+                    reservoir.append(sample)
+                else:
+                    j = random.randint(0, n_seen)
+                    if j < cap:
+                        reservoir[j] = sample
+                n_seen += 1
+                if (n_seen % 5000) == 0:
+                    print(f"  Scanned {n_seen} samples, kept {len(reservoir)}...")
         except Exception as exc:
             print(f"  Warning: could not load split '{split}' from {args.src_dir}: {exc}")
 
-    print(f"Loaded {len(all_feasible)} feasible samples from {args.src_dir}")
+    all_feasible = reservoir
+    print(f"Loaded {len(all_feasible)} feasible samples from {args.src_dir} (scanned {n_seen} total)")
 
     if len(all_feasible) == 0:
         raise RuntimeError("No feasible samples found in the source dataset.")
-
-    # ── Optionally subsample ────────────────────────────────────────────────
-    if args.max_samples is not None and len(all_feasible) > args.max_samples:
-        random.shuffle(all_feasible)
-        all_feasible = all_feasible[: args.max_samples]
-        print(f"Subsampled to {len(all_feasible)} feasible samples.")
 
     n_base = len(all_feasible)
 
