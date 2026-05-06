@@ -5,7 +5,7 @@
     "_ft_num_groups": "2",
     "_ft_max_samples": 5000,
     "_ft_topological_perturbations": false,
-    "ft_data_modelname": "FT2_operating_condition_HeteroSAGE_data",
+    "ft_data_modelname": "FT2_operating_condition_data",
     "Verbosity": {
         "level": 2
     },

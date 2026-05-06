@@ -5,7 +5,7 @@
     "_ft_num_groups": "20",
     "_ft_max_samples": null,
     "_ft_topological_perturbations": false,
-    "ft_data_modelname": "FT1_topology_HeteroHEAT_data",
+    "ft_data_modelname": "FT1_topology_data",
     "Verbosity": {
         "level": 2
     },

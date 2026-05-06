@@ -35,7 +35,7 @@ PHASES=${PHASES:-preonly,train}
 NO_PRETRAINED=${NO_PRETRAINED:-0}
 
 FT1_DATASET=FT1_feasibility_data
-SRC_DATASET=${SRC_DATASET:-FT3_contingency_HeteroSAGE_data}
+SRC_DATASET=${SRC_DATASET:-FT3_contingency_data}
 OVERLOAD_FACTOR=${OVERLOAD_FACTOR:-6.0}
 MAX_SAMPLES=${MAX_SAMPLES:-5000}
 
@@ -85,7 +85,9 @@ export FI_CXI_RDZV_THRESHOLD=0
 # -----------------------------------------------------------------------------
 FT_DIR=$HYDRAGNN_ROOT/examples/opf/finetune
 DATA_ROOT=$FT_DIR/../dataset
-LOG_NAME="FT1_feasibility_${FT_ARCH}_${FT_REGIME}_${SLURM_JOB_ID}"
+_n_tag=${MAX_TRAIN_SAMPLES:+_n${MAX_TRAIN_SAMPLES}}
+_scratch_tag=${NO_PRETRAINED:+_scratch}
+LOG_NAME="FT1_feasibility_${FT_ARCH}_${FT_REGIME}${_scratch_tag}${_n_tag}"
 
 SRC_DIR=$DATA_ROOT/${SRC_DATASET}.h5
 OUT_DIR=$DATA_ROOT/${FT1_DATASET}.h5
@@ -141,7 +143,8 @@ if [[ "$PHASES" == *"train"* ]]; then
             --pretrained_model_dir $HYDRAGNN_ROOT/examples/opf/pretrained_models \
             --pretrained_model_name $PRETRAINED_MODEL \
             --finetune_regime $FT_REGIME \
-            ${NO_PRETRAINED:+--no_pretrained}
+            ${NO_PRETRAINED:+--no_pretrained} \
+            ${MAX_TRAIN_SAMPLES:+--max_train_samples $MAX_TRAIN_SAMPLES}
     echo "--- Phase 2 complete ---"
 fi
 
