@@ -78,14 +78,8 @@ JOB_FT3_DATA_SAGE=$(_sbatch "FT3_data_HeteroSAGE" \
     --export=ALL,FT_STRATEGY=FT3_contingency,FT_ARCH=HeteroSAGE,FT_REGIME=full,PHASES=preonly \
     "$FT_DIR/FT3_contingency/job-frontier-HeteroSAGE.sh")
 
-JOB_FT3_DATA_HEAT=$(_sbatch "FT3_data_HeteroHEAT" \
-    --account=$PROJECT --partition=$PARTITION \
-    --job-name=FT3-data-HEAT \
-    --nodes=$N_DATA_NODES --time=$DATA_TIME \
-    --output="$SLURM_OUT_DIR/FT3-data-HEAT-%j.out" \
-    --error="$SLURM_OUT_DIR/FT3-data-HEAT-%j.out" \
-    --export=ALL,FT_STRATEGY=FT3_contingency,FT_ARCH=HeteroHEAT,FT_REGIME=full,PHASES=preonly \
-    "$FT_DIR/FT3_contingency/job-frontier-HeteroHEAT.sh")
+# FT3 HeteroHEAT reuses the same dataset as HeteroSAGE — no separate data job needed.
+JOB_FT3_DATA_HEAT=$JOB_FT3_DATA_SAGE
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 0b — Generate FT1 feasibility dataset
@@ -116,7 +110,7 @@ DATASET_DIR="$HYDRAGNN_ROOT/examples/opf/dataset"
 
 export PYTHONPATH=$HYDRAGNN_ROOT:$PYTHONPATH
 
-SRC_DIR="$DATASET_DIR/FT3_contingency_HeteroSAGE_data"
+SRC_DIR="$DATASET_DIR/FT3_contingency_data"
 OUT_DIR="$DATASET_DIR/FT1_feasibility_data"
 
 echo "[FT1 data] Generating infeasible samples..."
@@ -194,7 +188,7 @@ _submit_ft3() {
     local regime="$2"
     local no_pretrained="${3:-false}"
     local label="FT3_${arch}_${regime}"
-    local dep="afterok:$JOB_FT3_DATA_SAGE:$JOB_FT3_DATA_HEAT"
+    local dep="afterok:$JOB_FT3_DATA_SAGE"
     local export_str="FT_STRATEGY=FT3_contingency,FT_ARCH=$arch,FT_REGIME=$regime,PHASES=train"
 
     if [[ "$no_pretrained" == "true" ]]; then

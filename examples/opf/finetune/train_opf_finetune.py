@@ -269,6 +269,15 @@ if __name__ == "__main__":
             "(baseline comparison). Implies --finetune_regime full."
         ),
     )
+    parser.add_argument(
+        "--max_train_samples",
+        type=int,
+        default=None,
+        help=(
+            "Truncate the training split to this many samples before training. "
+            "Val/test splits are unchanged.  Used for data-efficiency sweeps."
+        ),
+    )
 
     args = parser.parse_args()
     if args.no_pretrained:
@@ -338,6 +347,12 @@ if __name__ == "__main__":
     trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type, edge_dim=edge_dim)
     valset   = NodeTargetDatasetAdapter(valset,   args.node_target_type, edge_dim=edge_dim)
     testset  = NodeTargetDatasetAdapter(testset,  args.node_target_type, edge_dim=edge_dim)
+
+    # Optionally truncate trainset for data-efficiency sweep
+    if args.max_train_samples is not None and len(trainset) > args.max_train_samples:
+        from torch.utils.data import Subset
+        trainset = Subset(trainset, list(range(args.max_train_samples)))
+        info(f"Truncated trainset to {args.max_train_samples} samples for data-efficiency sweep.")
 
     info(
         "trainset / valset / testset sizes: %d / %d / %d"
