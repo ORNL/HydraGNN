@@ -235,6 +235,15 @@ if __name__ == "__main__":
             "(baseline comparison). Implies --finetune_regime full."
         ),
     )
+    parser.add_argument(
+        "--max_train_samples",
+        type=int,
+        default=None,
+        help=(
+            "Truncate the training split to this many samples before training. "
+            "Val/test splits are unchanged.  Used for data-efficiency sweeps."
+        ),
+    )
 
     args = parser.parse_args()
     if args.no_pretrained:
@@ -288,6 +297,13 @@ if __name__ == "__main__":
     trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
     valset   = EdgeAttrDatasetAdapter(valset,   edge_dim=edge_dim)
     testset  = EdgeAttrDatasetAdapter(testset,  edge_dim=edge_dim)
+
+    # Optionally truncate trainset for data-efficiency sweep
+    if args.max_train_samples is not None and len(trainset) > args.max_train_samples:
+        from torch.utils.data import Subset
+        indices = list(range(args.max_train_samples))
+        trainset = Subset(trainset, indices)
+        info(f"Truncated trainset to {args.max_train_samples} samples for data-efficiency sweep.")
 
     info(
         "FT1 dataset sizes: train=%d  val=%d  test=%d"
