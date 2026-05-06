@@ -183,6 +183,12 @@ if __name__ == "__main__":
         default="1e-5,1e-2",
         help="min,max for learning_rate (e.g. '1e-4,1e-2')",
     )
+    parser.add_argument(
+        "--preload_dirs",
+        type=str,
+        default="",
+        help="Comma-separated list of DeepHyper log dirs to warm-start from (e.g. 'opf_hpo_HeteroSAGE-4466182')",
+    )
     args = parser.parse_args()
     mpnn_type_list = args.mpnn_type.split(",")
 
@@ -238,8 +244,16 @@ if __name__ == "__main__":
     if len(mpnn_type_list) == 1:
         opf_dir = f"opf_hpo_{mpnn_type_list[0]}"
 
+    # Build list of directories to search for prior results
+    preload_dirs = [opf_dir]
+    if args.preload_dirs:
+        preload_dirs += [d.strip() for d in args.preload_dirs.split(",") if d.strip()]
+    print(f"Warm-start: searching for prior results in: {preload_dirs}")
+
     df_list = list()
-    files = glob.glob(os.path.join(opf_dir, "*.csv"))
+    files = []
+    for d in preload_dirs:
+        files += glob.glob(os.path.join(d, "*.csv"))
     for fname in files:
         try:
             df = pd.read_csv(fname, header=0)

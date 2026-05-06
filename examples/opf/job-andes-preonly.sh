@@ -3,9 +3,9 @@
 #SBATCH -J HydraGNN
 #SBATCH -o job-hydragnn-grid-%j.out
 #SBATCH -e job-hydragnn-grid-%j.out
-#SBATCH -t 32:00:00
+#SBATCH -t 10:00:00
 #SBATCH -p batch 
-#SBATCH -N 1 #16 
+#SBATCH -N 32
 ##SBATCH -S 1
  
 export all_proxy=socks://proxy.ccs.ornl.gov:3128/
@@ -16,10 +16,10 @@ export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
  
 # Load conda environemnt
 source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-andes.sh
-source activate /lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Andes/hydragnn_venv
+source activate /lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Andes/hydragnn_venv
  
 #export python path to use ADIOS2 v.2.10.2
-export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Andes/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
+export PYTHONPATH=/lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Andes/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
  
 HYDRAGNN_ROOT=/lustre/orion/lrn078/proj-shared/HydraGNN
 
@@ -37,5 +37,5 @@ export HYDRAGNN_VALTEST=1
 
 cd $HYDRAGNN_ROOT/examples/opf
 
-# 2) Rebuild processed files once (single rank; safest)
-srun -N1 -n1 -c7 python -u train_opf_solution_heterogeneous.py --preonly --hdf5 --num_groups 20 --case_name pglib_opf_case118_ieee pglib_opf_case14_ieee pglib_opf_case2000_goc pglib_opf_case30_ieee pglib_opf_case500_goc pglib_opf_case57_ieee pglib_opf_case6470_rte pglib_opf_case4661_sdet pglib_opf_case10000_goc pglib_opf_case13659_pegase
+srun -N$SLURM_JOB_NUM_NODES -n128 -c7 python -u train_opf_solution_heterogeneous.py --num_groups all --preonly --hdf5 --case_name \
+  pglib_opf_case14_ieee pglib_opf_case30_ieee pglib_opf_case57_ieee pglib_opf_case118_ieee pglib_opf_case500_goc pglib_opf_case2000_goc pglib_opf_case4661_sdet pglib_opf_case6470_rte pglib_opf_case10000_goc pglib_opf_case13659_pegase
