@@ -31,8 +31,10 @@ SLURM_OUT_DIR="$HYDRAGNN_ROOT"
 
 PROJECT=${PROJECT:-LRN070}
 PARTITION=${PARTITION:-batch}
-N_NODES=${N_NODES:-8}
-WALL_TIME=${WALL_TIME:-04:00:00}
+# Nodes per individual training run; total allocation = 4 × N_PER_RUN
+N_PER_RUN=${N_PER_RUN:-8}
+N_NODES=$((N_PER_RUN * 4))
+WALL_TIME=${WALL_TIME:-02:00:00}
 
 # Progressively increasing number of feasible training samples.
 # Total training samples = 2 × N (balanced feasible + infeasible).
@@ -58,68 +60,31 @@ _sbatch() {
 }
 
 echo "========================================================"
-echo " FT1 data-efficiency sweep"
-echo "  Account    : $PROJECT"
-echo "  Partition  : $PARTITION"
-echo "  Nodes      : $N_NODES"
-echo "  Wall time  : $WALL_TIME"
-echo "  Sample sizes: ${SAMPLE_SIZES[*]}"
+echo " FT1 data-efficiency sweep (multi-method jobs)"
+echo "  Account      : $PROJECT"
+echo "  Partition    : $PARTITION"
+echo "  Nodes/run    : $N_PER_RUN  (total per job: $N_NODES)"
+echo "  Wall time    : $WALL_TIME"
+echo "  Sample sizes : ${SAMPLE_SIZES[*]}"
+echo "  Methods      : full / partial / head_only / scratch (packed per job)"
 echo "========================================================"
 
 for ARCH in HeteroSAGE HeteroHEAT; do
     for N in "${SAMPLE_SIZES[@]}"; do
         TOTAL=$((N * 2))
-
-        # ── full fine-tuning (all layers) ────────────────────────────────
-        LABEL="FT1_${ARCH}_FT_full_n${N}"
-        echo "--- $LABEL (total train=${TOTAL}) ---"
+        LABEL="FT1_${ARCH}_multi_n${N}"
+        echo "--- $LABEL (total train=${TOTAL}, 4 methods × ${N_PER_RUN} nodes) ---"
         _sbatch "$LABEL" \
             --account=$PROJECT --partition=$PARTITION \
             --job-name="$LABEL" \
             --nodes=$N_NODES --time=$WALL_TIME \
             --output="$SLURM_OUT_DIR/${LABEL}-%j.out" \
             --error="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --export=ALL,FT_REGIME=full,PHASES=train,MAX_TRAIN_SAMPLES=$TOTAL \
-            "$FT_DIR/FT1_feasibility_classification/job-frontier-FT1-${ARCH}.sh"
-
-        # ── partial fine-tuning (last conv + head) ───────────────────────
-        LABEL="FT1_${ARCH}_FT_partial_n${N}"
-        echo "--- $LABEL (total train=${TOTAL}) ---"
-        _sbatch "$LABEL" \
-            --account=$PROJECT --partition=$PARTITION \
-            --job-name="$LABEL" \
-            --nodes=$N_NODES --time=$WALL_TIME \
-            --output="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --error="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --export=ALL,FT_REGIME=partial,PHASES=train,MAX_TRAIN_SAMPLES=$TOTAL \
-            "$FT_DIR/FT1_feasibility_classification/job-frontier-FT1-${ARCH}.sh"
-
-        # ── head-only fine-tuning (linear probe) ─────────────────────────
-        LABEL="FT1_${ARCH}_FT_head_only_n${N}"
-        echo "--- $LABEL (total train=${TOTAL}) ---"
-        _sbatch "$LABEL" \
-            --account=$PROJECT --partition=$PARTITION \
-            --job-name="$LABEL" \
-            --nodes=$N_NODES --time=$WALL_TIME \
-            --output="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --error="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --export=ALL,FT_REGIME=head_only,PHASES=train,MAX_TRAIN_SAMPLES=$TOTAL \
-            "$FT_DIR/FT1_feasibility_classification/job-frontier-FT1-${ARCH}.sh"
-
-        # ── from scratch baseline (random init, full regime) ─────────────
-        LABEL="FT1_${ARCH}_scratch_n${N}"
-        echo "--- $LABEL (total train=${TOTAL}) ---"
-        _sbatch "$LABEL" \
-            --account=$PROJECT --partition=$PARTITION \
-            --job-name="$LABEL" \
-            --nodes=$N_NODES --time=$WALL_TIME \
-            --output="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --error="$SLURM_OUT_DIR/${LABEL}-%j.out" \
-            --export=ALL,FT_REGIME=full,PHASES=train,NO_PRETRAINED=1,MAX_TRAIN_SAMPLES=$TOTAL \
-            "$FT_DIR/FT1_feasibility_classification/job-frontier-FT1-${ARCH}.sh"
+            --export=ALL,FT_ARCH=$ARCH,N_PER_RUN=$N_PER_RUN,MAX_TRAIN_SAMPLES=$TOTAL \
+            "$FT_DIR/FT1_feasibility_classification/job-frontier-FT1-multi.sh"
     done
 done
 
 echo ""
 echo "All jobs submitted."
-echo "Total jobs: $((${#SAMPLE_SIZES[@]} * 4 * 2))  (${#SAMPLE_SIZES[@]} sizes × 4 methods × 2 archs)"
+echo "Total jobs: $((${#SAMPLE_SIZES[@]} * 2))  (${#SAMPLE_SIZES[@]} sizes × 2 archs, 4 methods packed per job)"
