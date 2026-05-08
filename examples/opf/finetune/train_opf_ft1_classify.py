@@ -275,6 +275,7 @@ if __name__ == "__main__":
     # ── Log name ───────────────────────────────────────────────────────────
     ft_tag = f"{args.pretrained_model_name}_{args.finetune_regime}"
     log_name = args.modelname if args.modelname is not None else f"FT1_classify_{ft_tag}"
+    hydragnn.utils.print.setup_log(log_name)
 
     # ── Load HDF5 dataset ──────────────────────────────────────────────────
     data_modelname = config.get("ft_data_modelname", "FT1_feasibility_data")

@@ -313,6 +313,7 @@ if __name__ == "__main__":
         log_name = args.modelname
     else:
         log_name = f"finetune_{ft_tag}"
+    hydragnn.utils.print.setup_log(log_name)
 
     # ── Load serialised datasets ───────────────────────────────────────────
     # The dataset is expected to have been serialised by the preprocessing
