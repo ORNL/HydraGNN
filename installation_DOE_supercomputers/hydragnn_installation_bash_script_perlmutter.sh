@@ -17,8 +17,8 @@
 #   VENV_PATH=/path/to/env
 #   PYTHON_VERSION=3.11
 #   RECREATE_ENV=1
-#   EXPECTED_CUDA_MM=12.4
-#   TORCH_CUDA_TAG=cu124
+#   EXPECTED_CUDA_MM=12.9
+#   TORCH_CUDA_TAG=cu129
 #   BUILD_PYG_LIB=0   # default 0 (skip pyg-lib). set 1 to try building from source.
 #   TORCH_CUDA_ARCH_LIST=8.0
 #   MAX_JOBS=16
@@ -72,7 +72,7 @@ ml cray-mpich/8.1.30
 ml craype-accel-nvidia80
 
 # CUDA toolkit (match PyTorch wheels tag below)
-EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.4}"
+EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 ml "cudatoolkit/${EXPECTED_CUDA_MM}"
 
 # Modern compiler toolchain for PyTorch C++ extensions
@@ -238,8 +238,8 @@ pip_retry vesin==0.4.2
 # ============================================================
 banner "Install CUDA PyTorch (Before PyG)"
 
-# Match cudatoolkit/12.4 => cu124 wheels
-TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu124}"
+# Match cudatoolkit/12.9 => cu129 wheels
+TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu129}"
 PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
 
 subbanner "Install PyTorch from ${PYTORCH_INDEX_URL}"
