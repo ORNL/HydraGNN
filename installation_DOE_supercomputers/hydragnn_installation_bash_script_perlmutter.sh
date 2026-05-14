@@ -16,7 +16,6 @@
 # Optional env vars:
 #   VENV_PATH=/path/to/env
 #   PYTHON_VERSION=3.11
-#   RECREATE_ENV=1
 #   EXPECTED_CUDA_MM=12.9
 #   TORCH_CUDA_TAG=cu129
 #   BUILD_PYG_LIB=0   # default 0 (skip pyg-lib). set 1 to try building from source.
@@ -39,51 +38,11 @@ banner "Starting HydraGNN environment setup on Perlmutter ($(date))"
 # Module initialization
 # ============================================================
 banner "Configure Perlmutter Modules"
-if ! command -v module >/dev/null 2>&1; then
-  if [[ -f /etc/profile.d/modules.sh ]]; then
-    source /etc/profile.d/modules.sh
-  elif [[ -f /usr/share/lmod/lmod/init/bash ]]; then
-    source /usr/share/lmod/lmod/init/bash
-  elif [[ -f /usr/share/Modules/init/bash ]]; then
-    source /usr/share/Modules/init/bash
-  fi
-fi
-
-if ! command -v module >/dev/null 2>&1; then
-  echo "❌ 'module' command not found. Ensure you're running on Perlmutter login/compute nodes."
-  exit 1
-fi
-
-# Cray "hard reset" (avoids warnings about module reset not fully restoring defaults)
-if [[ -f /opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.sh ]]; then
-  # shellcheck disable=SC1091
-  source /opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.sh || true
-fi
-
-module reset
-ml nersc-default/1.0 || true
-
-# Cray programming environment + MPI
-ml cpe/24.07
-ml PrgEnv-gnu/8.5.0
-ml cray-mpich/8.1.30
-
-# A100 target (SM80)
-ml craype-accel-nvidia80
-
-# CUDA toolkit (match PyTorch wheels tag below)
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
-ml "cudatoolkit/${EXPECTED_CUDA_MM}"
-
-# Modern compiler toolchain for PyTorch C++ extensions
-# (Fixes torch-sparse build failing with "too old version of GCC")
-ml gcc-native/13.2
-
-# Build helpers
-ml cmake/3.30.2 || ml cmake/3.24.3 || true
-
-# Conda
-ml conda/Miniforge3-24.11.3-0 || ml conda/Miniforge3-24.7.1-0 || true
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/module_loads_perlmutter.sh"
+load_perlmutter_modules "${EXPECTED_CUDA_MM}"
 
 # ============================================================
 # Installation root
@@ -115,23 +74,18 @@ fi
 
 VENV_PATH="${VENV_PATH:-${INSTALL_ROOT}/hydragnn_venv}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
-RECREATE_ENV="${RECREATE_ENV:-0}"
 
 echo "Virtual environment path: $VENV_PATH"
 echo "Python version: ${PYTHON_VERSION}"
 
-if [[ -d "$VENV_PATH" && "$RECREATE_ENV" -eq 1 ]]; then
+if [[ -d "$VENV_PATH" ]]; then
   echo "Removing existing conda environment at: $VENV_PATH"
   conda deactivate >/dev/null 2>&1 || true
   conda env remove -p "$VENV_PATH" -y || rm -rf "$VENV_PATH"
 fi
 
-if [[ -d "$VENV_PATH" ]]; then
-  echo "Conda environment already exists at $VENV_PATH"
-else
-  echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
-  conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
-fi
+echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
+conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
 
 conda activate "$VENV_PATH"
 echo "Python in use: $(which python)"
@@ -451,18 +405,5 @@ EOF
 
 echo "✅ HydraGNN-Installation-Perlmutter environment setup complete!"
 echo ""
-echo "Module load + activation (for future sessions):"
-cat <<EOF
-module reset
-ml nersc-default/1.0 || true
-ml cpe/24.07
-ml PrgEnv-gnu/8.5.0
-ml cray-mpich/8.1.30
-ml craype-accel-nvidia80
-ml cudatoolkit/${EXPECTED_CUDA_MM}
-ml gcc-native/13.2
-ml conda/Miniforge3-24.11.3-0 || ml conda/Miniforge3-24.7.1-0 || true
-source "\$(conda info --base)/etc/profile.d/conda.sh" 2>/dev/null || eval "\$(\"\$(conda info --base)/bin/conda\" shell.bash hook)"
-conda activate ${VENV_PATH}
-EOF
+print_perlmutter_activation_instructions "${EXPECTED_CUDA_MM}" "${VENV_PATH}"
 

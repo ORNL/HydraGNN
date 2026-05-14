@@ -12,45 +12,34 @@ hr() { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '='; }
 banner() { hr; echo ">>> $1"; hr; }
 subbanner() { echo "-- $1"; }
 
+# =========================
+# Config (env-overridable)
+# =========================
+FRONTIER_ROCM_MODULE_VERSION="${FRONTIER_ROCM_MODULE_VERSION:-7.1.1}"
+FRONTIER_AMD_MIXED_MODULE_VERSION="${FRONTIER_AMD_MIXED_MODULE_VERSION:-7.1.1}"
+EXPECTED_ROCM_MM="${EXPECTED_ROCM_MM:-7.1}"
+PYTORCH_ROCM_INDEX_URL="${PYTORCH_ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm${EXPECTED_ROCM_MM}}"
+PYTORCH_SCATTER_ROCM_REPO="${PYTORCH_SCATTER_ROCM_REPO:-https://github.com/Looong01/pytorch_scatter-rocm.git}"
+PYTORCH_SCATTER_ROCM_COMMIT="${PYTORCH_SCATTER_ROCM_COMMIT:-9799c51}"
+PYTORCH_SPARSE_ROCM_REPO="${PYTORCH_SPARSE_ROCM_REPO:-https://github.com/Looong01/pytorch_sparse-rocm.git}"
+PYTORCH_SPARSE_ROCM_COMMIT="${PYTORCH_SPARSE_ROCM_COMMIT:-2340737}"
+
 banner "Starting HydraGNN environment setup ($(date))"
 
 # ============================================================
 # Module initialization & Frontier stack
 # ============================================================
 banner "Configure Frontier Modules"
-if ! command -v module >/dev/null 2>&1; then
-  if [[ -f /etc/profile.d/modules.sh ]]; then
-    source /etc/profile.d/modules.sh
-  elif [[ -f /usr/share/lmod/lmod/init/bash ]]; then
-    source /usr/share/lmod/lmod/init/bash
-  elif [[ -f /usr/share/Modules/init/bash ]]; then
-    source /usr/share/Modules/init/bash
-  fi
-fi
-
-if ! command -v module >/dev/null 2>&1; then
-  echo "⚠️  'module' command not found. Ensure you're running on the target HPC system."
-else
-  module reset
-  ml cpe/24.07
-  ml cce/18.0.0
-
-  # --- ROCm 7.1 toolchain ---
-  ml rocm/7.1.1
-  ml amd-mixed/7.1.1
-
-  ml craype-accel-amd-gfx90a
-  ml PrgEnv-gnu
-  ml miniforge3/23.11.0-0
-  ml git-lfs
-  module unload darshan-runtime
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/module_loads_frontier.sh"
+load_frontier_modules "${FRONTIER_ROCM_MODULE_VERSION}" "${FRONTIER_AMD_MIXED_MODULE_VERSION}"
 
 # ============================================================
 # Installation root
 # ============================================================
 banner "Set Base Installation Directory"
-INSTALL_ROOT="${PWD}/HydraGNN-Installation-Frontier"
+INSTALL_ROOT="${INSTALL_ROOT:-${PWD}/HydraGNN-Installation-Frontier}"
 mkdir -p "$INSTALL_ROOT"
 echo "All installation components will be contained in: $INSTALL_ROOT"
 cd "$INSTALL_ROOT"
@@ -67,25 +56,19 @@ echo "Virtual environment path: $VENV_PATH"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 echo "Python version: ${PYTHON_VERSION}"
 
-RECREATE_ENV="${RECREATE_ENV:-0}"
-
 if ! command -v conda >/dev/null 2>&1; then
   echo "❌ Conda command not found. Ensure miniforge3 is properly loaded."
   exit 1
 fi
 
-if [[ -d "$VENV_PATH" && "$RECREATE_ENV" -eq 1 ]]; then
+if [[ -d "$VENV_PATH" ]]; then
   echo "Removing existing conda environment at: $VENV_PATH"
   source deactivate >/dev/null 2>&1 || true
   conda env remove -p "$VENV_PATH" -y || rm -rf "$VENV_PATH"
 fi
 
-if [[ -d "$VENV_PATH" ]]; then
-  echo "Conda environment already exists at $VENV_PATH"
-else
-  echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
-  conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
-fi
+echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
+conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
 
 # shellcheck disable=SC1091
 source activate "$VENV_PATH"
@@ -183,8 +166,6 @@ detect_rocm_mm() {
   echo "$v"
 }
 
-# ---- Updated expected ROCm major.minor ----
-EXPECTED_ROCM_MM="7.1"
 ROCM_MM="${ROCM_MM:-$(detect_rocm_mm)}"
 if [[ -z "$ROCM_MM" ]]; then
   echo "❌ Could not detect ROCm version. Ensure the rocm module is loaded."
@@ -196,8 +177,6 @@ if [[ "$ROCM_MM" != "$EXPECTED_ROCM_MM" ]]; then
   exit 1
 fi
 
-# ---- Updated PyTorch ROCm index URL (rocm7.1) ----
-PYTORCH_ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm7.1"
 subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
 pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" torch torchvision
 assert_numpy_1264
@@ -237,16 +216,16 @@ assert_numpy_1264
 popd >/dev/null
 
 # --- pytorch_scatter (ROCm fork pinned) ---
-subbanner "pytorch_scatter (ROCm fork pinned to 9799c51; temporary until upstream merges)"
+subbanner "pytorch_scatter (ROCm fork pinned to ${PYTORCH_SCATTER_ROCM_COMMIT}; temporary until upstream merges)"
 if [[ ! -d pytorch_scatter/.git ]]; then
   # Official upstream (kept for reference; will switch back after merge):
   # git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
   # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive https://github.com/Looong01/pytorch_scatter-rocm.git pytorch_scatter
+  git clone --recursive "${PYTORCH_SCATTER_ROCM_REPO}" pytorch_scatter
 fi
 pushd pytorch_scatter >/dev/null
 git fetch --all
-git checkout 9799c51
+git checkout "${PYTORCH_SCATTER_ROCM_COMMIT}"
 git submodule update --init --recursive
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
@@ -256,16 +235,16 @@ echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
 # --- pytorch_sparse (ROCm fork pinned) ---
-subbanner "pytorch_sparse (ROCm fork pinned to 2340737; temporary until upstream merges)"
+subbanner "pytorch_sparse (ROCm fork pinned to ${PYTORCH_SPARSE_ROCM_COMMIT}; temporary until upstream merges)"
 if [[ ! -d pytorch_sparse/.git ]]; then
   # Official upstream (kept for reference; will switch back after merge):
   # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
   # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive https://github.com/Looong01/pytorch_sparse-rocm.git pytorch_sparse
+  git clone --recursive "${PYTORCH_SPARSE_ROCM_REPO}" pytorch_sparse
 fi
 pushd pytorch_sparse >/dev/null
 git fetch --all
-git checkout 2340737
+git checkout "${PYTORCH_SPARSE_ROCM_COMMIT}"
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
@@ -417,8 +396,8 @@ cat <<EOF
 Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 PyTorch-Geometric:   $PYG_FRONTIER
-  - pytorch_scatter fork: https://github.com/Looong01/pytorch_scatter-rocm.git @ 9799c51 (temporary)
-  - pytorch_sparse fork:  https://github.com/Looong01/pytorch_sparse-rocm.git @ 2340737 (temporary)
+  - pytorch_scatter fork: ${PYTORCH_SCATTER_ROCM_REPO} @ ${PYTORCH_SCATTER_ROCM_COMMIT} (temporary)
+  - pytorch_sparse fork:  ${PYTORCH_SPARSE_ROCM_REPO} @ ${PYTORCH_SPARSE_ROCM_COMMIT} (temporary)
   - pytorch_cluster:      1.6.3-11-g4126a52
   - pytorch_spline_conv:  1.2.2-9-ga6d1020
 MPI4PY:              $MPI4PY_FRONTIER
@@ -429,15 +408,4 @@ EOF
 
 echo "✅ HydraGNN-Installation-Frontier environment setup complete!"
 echo ""
-echo "Use the following commands to activate the new HydraGNN python environment:"
-echo "  module reset"
-echo "  ml cpe/24.07"
-echo "  ml cce/18.0.0"
-echo "  ml rocm/7.1.1"
-echo "  ml amd-mixed/7.1.1"
-echo "  ml craype-accel-amd-gfx90a"
-echo "  ml PrgEnv-gnu"
-echo "  ml miniforge3/23.11.0-0"
-echo "  module unload darshan-runtime"
-echo ""
-echo "  source activate ${VENV_PATH}"
+print_frontier_activation_instructions "${FRONTIER_ROCM_MODULE_VERSION}" "${FRONTIER_AMD_MIXED_MODULE_VERSION}" "${VENV_PATH}"
