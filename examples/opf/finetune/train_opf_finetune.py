@@ -29,6 +29,8 @@ import sys
 import json
 import argparse
 import shutil
+import glob
+import re
 
 # Make examples/opf importable
 _OPF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
@@ -185,6 +187,29 @@ def load_pretrained_weights(model, pretrained_model_name: str, pretrained_model_
     info("[FT] Pretrained weights loaded successfully.")
 
 
+def detect_resume_state(log_name: str, logs_root: str = "./logs"):
+    """Detect whether a previous checkpoint exists and infer next epoch start."""
+    run_dir = os.path.join(logs_root, log_name)
+    latest_link = os.path.join(run_dir, f"{log_name}.pk")
+    has_checkpoint = os.path.isfile(latest_link)
+
+    epoch_ckpts = glob.glob(os.path.join(run_dir, f"{log_name}_epoch_*.pk"))
+    max_epoch = None
+    for ckpt in epoch_ckpts:
+        m = re.search(r"_epoch_(\d+)\.pk$", os.path.basename(ckpt))
+        if m:
+            e = int(m.group(1))
+            if max_epoch is None or e > max_epoch:
+                max_epoch = e
+
+    if max_epoch is None:
+        epoch_start = 0
+    else:
+        epoch_start = max_epoch + 1
+
+    return has_checkpoint, epoch_start, max_epoch
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -278,6 +303,32 @@ if __name__ == "__main__":
             "Val/test splits are unchanged.  Used for data-efficiency sweeps."
         ),
     )
+    parser.add_argument(
+        "--resume_if_exists",
+        action="store_true",
+        default=False,
+        help=(
+            "If logs/<modelname>/<modelname>.pk exists, resume model+optimizer "
+            "from checkpoint and continue from the next epoch."
+        ),
+    )
+    parser.add_argument(
+        "--ddp_find_unused_parameters",
+        dest="ddp_find_unused_parameters",
+        action="store_true",
+        help=(
+            "Enable DDP unused-parameter detection. This is safer for models "
+            "with conditional branches where not all parameters participate in "
+            "every step."
+        ),
+    )
+    parser.add_argument(
+        "--no_ddp_find_unused_parameters",
+        dest="ddp_find_unused_parameters",
+        action="store_false",
+        help="Disable DDP unused-parameter detection.",
+    )
+    parser.set_defaults(ddp_find_unused_parameters=True)
 
     args = parser.parse_args()
     if args.no_pretrained:
@@ -314,6 +365,24 @@ if __name__ == "__main__":
     else:
         log_name = f"finetune_{ft_tag}"
     hydragnn.utils.print.setup_log(log_name)
+
+    # Optional auto-resume from existing checkpoint for walltime-limited runs.
+    resume_exists = False
+    resume_epoch_start = 0
+    resume_max_epoch = None
+    if args.resume_if_exists:
+        resume_exists, resume_epoch_start, resume_max_epoch = detect_resume_state(log_name)
+        if resume_exists:
+            config["NeuralNetwork"]["Training"]["epoch_start"] = resume_epoch_start
+            if resume_max_epoch is None:
+                info(f"[FT] Found existing checkpoint for '{log_name}', resuming from epoch_start=0")
+            else:
+                info(
+                    f"[FT] Found existing checkpoint for '{log_name}' at epoch {resume_max_epoch}; "
+                    f"resuming from epoch_start={resume_epoch_start}"
+                )
+        else:
+            info(f"[FT] No existing checkpoint found for '{log_name}'; starting fresh")
 
     # ── Load serialised datasets ───────────────────────────────────────────
     # The dataset is expected to have been serialised by the preprocessing
@@ -434,11 +503,30 @@ if __name__ == "__main__":
     )
 
     # ── Wrap in DDP ────────────────────────────────────────────────────────
+    # Some FT3 configurations can leave a subset of parameters unused on a
+    # given step, which can trigger DDP reduction errors when this flag is off.
+    info(
+        "[FT] DDP find_unused_parameters="
+        f"{args.ddp_find_unused_parameters}"
+    )
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
         model, optimizer,
         config["Verbosity"]["level"],
-        find_unused_parameters=(args.finetune_regime != "full"),
+        find_unused_parameters=args.ddp_find_unused_parameters,
     )
+
+    if args.resume_if_exists and resume_exists:
+        try:
+            load_existing_model(model, log_name, path="./logs/", optimizer=optimizer)
+            info(f"[FT] Resume loaded from logs/{log_name}/{log_name}.pk")
+        except Exception as exc:
+            # Checkpoints can become incompatible after architecture/config changes.
+            # Fall back to fresh training for this run instead of exiting early.
+            config["NeuralNetwork"]["Training"]["epoch_start"] = 0
+            info(
+                "[FT] Resume checkpoint exists but failed to load; "
+                f"continuing fresh for this run. Error: {exc}"
+            )
 
     print_model(model)
 

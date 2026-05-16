@@ -29,7 +29,7 @@ set -euo pipefail
 HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-/lustre/orion/lrn078/proj-shared/HydraGNN}
 FT_DIR="$HYDRAGNN_ROOT/examples/opf/finetune"
 LOG_DIR="$HYDRAGNN_ROOT/logs"
-PROJECT=${PROJECT:-LRN078}
+PROJECT=${PROJECT:-eng164}
 PARTITION=${PARTITION:-batch}
 N_TRAIN_NODES=${N_TRAIN_NODES:-8}   # nodes per training job
 N_DATA_NODES=${N_DATA_NODES:-1}     # nodes for preprocessing

@@ -19,7 +19,7 @@
 #    sbatch --export=ALL,FT_ARCH=HeteroSAGE,FT_METHOD=full \
 #           job-frontier-FT1-single-method.sh
 # =============================================================================
-#SBATCH -A mat746
+#SBATCH -A eng164
 #SBATCH -J FT1-single
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT1-single-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT1-single-%j.out
