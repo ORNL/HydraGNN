@@ -1,16 +1,16 @@
 #!/bin/bash
 # =============================================================================
 #  Per-(arch, method, N) chained submission for OPF FT1 + FT3.
-#  Submits ONE 1-node debug job at a time, polls for completion, then submits
+#  Submits ONE 1-node job at a time, polls for completion, then submits
 #  the next.  Each job runs a single sample size for a single (arch, method)
-#  combination so that it fits comfortably inside the 2 h debug-QOS limit.
+#  combination so that it fits comfortably inside the selected QOS walltime.
 # =============================================================================
 set -u
 
 HYDRAGNN_ROOT=/lustre/orion/lrn078/proj-shared/HydraGNN
 FT_DIR=$HYDRAGNN_ROOT/examples/opf/finetune
 
-ACCOUNT=mat746
+ACCOUNT=eng164
 QOS=debug
 PARTITION=batch
 TIME=02:00:00
@@ -51,9 +51,9 @@ submit_one() {
         return 0
     fi
 
-    # Wait for debug QOS slot (only 1 submitted job allowed).
+    # Wait for selected QOS slot (only 1 submitted job allowed).
     while squeue -u "$USER" -h --qos=$QOS -o "%i" 2>/dev/null | grep -q .; do
-        echo "[$(date +%H:%M:%S)] debug QOS busy — waiting 30s before $jobname" >> "$LOG"
+        echo "[$(date +%H:%M:%S)] $QOS QOS busy — waiting 30s before $jobname" >> "$LOG"
         sleep 30
     done
 
