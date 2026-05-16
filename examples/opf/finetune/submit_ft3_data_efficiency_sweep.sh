@@ -28,7 +28,7 @@ HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-/lustre/orion/lrn078/proj-shared/HydraGNN}
 FT_DIR="$HYDRAGNN_ROOT/examples/opf/finetune"
 SLURM_OUT_DIR="$HYDRAGNN_ROOT"
 
-PROJECT=${PROJECT:-LRN070}
+PROJECT=${PROJECT:-eng164}
 PARTITION=${PARTITION:-batch}
 # Nodes per individual training run; total allocation = 4 × N_PER_RUN
 N_PER_RUN=${N_PER_RUN:-8}

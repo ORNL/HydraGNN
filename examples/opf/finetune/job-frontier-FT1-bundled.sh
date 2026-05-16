@@ -1,51 +1,38 @@
 #!/bin/bash
-set -euo pipefail
 # =============================================================================
-#  Frontier Slurm job — FT3 N-1 Contingency OPF Regression (single method)
+#  Frontier Slurm job — FT1 Feasibility Classification (bundled data-efficiency)
 #
-#  Runs ONE training method for all sample sizes sequentially.
-#  Uses only N_PER_RUN nodes (default: 8) — 4x smaller than the bundled job.
+#  Runs all sample sizes sequentially; within each sample size the 4 training
+#  methods (full / partial / head_only / scratch) run concurrently with srun.
 #
-#  Required env vars:
-#    FT_ARCH         HeteroSAGE | HeteroHEAT
-#    FT_METHOD       full | partial | head_only | scratch
+#  Required env vars (set via sbatch --export or environment):
+#    FT_ARCH             HeteroSAGE | HeteroHEAT
 #
 #  Optional env vars:
-#    N_PER_RUN       nodes (default: 8)
-#    PRETRAINED_MODEL
-#    SAMPLE_SIZES    space-separated list
-#                    (default: 100 500 1000 2500 5000 10000 25000 50000
-#                              100000 270000)
+#    N_PER_RUN           nodes per method (default: 8)
+#    PRETRAINED_MODEL    override pretrained model name
+#    SAMPLE_SIZES        space-separated list (default: 100 500 1000 2500 5000
+#                        10000 25000 50000 100000)
 #
-#  Usage:
-#    sbatch --export=ALL,FT_ARCH=HeteroSAGE,FT_METHOD=full \
-#           job-frontier-FT3-single-method.sh
+#  Usage (from examples/opf/finetune/):
+#    sbatch --export=ALL,FT_ARCH=HeteroSAGE \
+#           job-frontier-FT1-bundled.sh
 # =============================================================================
 #SBATCH -A eng164
-#SBATCH -J FT3-single
-#SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT3-single-%j.out
-#SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT3-single-%j.out
-#SBATCH -t 02:00:00
+#SBATCH -J FT1-bundled
+#SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT1-bundled-%j.out
+#SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT1-bundled-%j.out
+#SBATCH -t 12:00:00
 #SBATCH -p batch
-#SBATCH -q debug
-#SBATCH -N 1
+#SBATCH -N 32
 
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 FT_ARCH=${FT_ARCH:-HeteroSAGE}
-FT_METHOD=${FT_METHOD:-full}
-N_PER_RUN=${N_PER_RUN:-1}
+N_PER_RUN=${N_PER_RUN:-8}
 PRETRAINED_MODEL=${PRETRAINED_MODEL:-${FT_ARCH}_best}
-FT_STRATEGY=FT3_contingency
-read -ra SAMPLE_SIZES <<< "${SAMPLE_SIZES:-100 500 1000 2500 5000 10000 25000 50000 100000 270000}"
-
-SCRATCH_FLAG=""
-REGIME="$FT_METHOD"
-if [[ "$FT_METHOD" == "scratch" ]]; then
-    REGIME="full"
-    SCRATCH_FLAG="--no_pretrained"
-fi
+read -ra SAMPLE_SIZES <<< "${SAMPLE_SIZES:-100 500 1000 2500 5000 10000 25000 50000 100000}"
 
 # -----------------------------------------------------------------------------
 # Environment
@@ -86,72 +73,66 @@ export FI_CXI_RDZV_EAGER_SIZE=0
 export FI_CXI_RDZV_GET_MIN=0
 export FI_CXI_RDZV_THRESHOLD=0
 
-export OMP_NUM_THREADS=7
-export HYDRAGNN_AGGR_BACKEND=mpi
-export HYDRAGNN_VALTEST=1
-export MPICH_ENV_DISPLAY=0
-export MPICH_VERSION_DISPLAY=0
-export MIOPEN_DISABLE_CACHE=1
-export MIOPEN_USER_DB_PATH=/tmp
-export PYTHONNOUSERSITE=1
-
-# Single-node NCCL: AWS OFI / libfabric cxi plugin cannot bind without a remote
-# peer. Disable network plugin so NCCL uses intra-node xGMI/SHM only.
-if [[ "${N_PER_RUN:-1}" -le 1 ]]; then
-    unset NCCL_NET_PLUGIN NCCL_NET NCCL_NET_GDR_LEVEL NCCL_CROSS_NIC NCCL_SOCKET_IFNAME
-    export NCCL_P2P_LEVEL=SYS
-fi
-
 # -----------------------------------------------------------------------------
 # Derived
 # -----------------------------------------------------------------------------
 FT_DIR=$HYDRAGNN_ROOT/examples/opf/finetune
 DATA_ROOT=$FT_DIR/../dataset
-_scratch_tag=""
-[[ -n "$SCRATCH_FLAG" ]] && _scratch_tag="_scratch"
 
 echo "============================================================"
-echo " FT3 N-1 Contingency OPF — single method"
+echo " FT1 Feasibility Classification — bundled data-efficiency"
 echo "  Arch          : $FT_ARCH  (pretrained: $PRETRAINED_MODEL)"
-echo "  Method        : $FT_METHOD  (regime: $REGIME)"
-echo "  Nodes         : $N_PER_RUN"
+echo "  Methods       : full / partial / head_only / scratch (concurrent)"
+echo "  Nodes per run : $N_PER_RUN  (total: $((N_PER_RUN * 4)))"
 echo "  Sample sizes  : ${SAMPLE_SIZES[*]}"
 echo "  Job ID        : $SLURM_JOB_ID"
 echo "============================================================"
 
 cd $FT_DIR
 
-ROUND=0
-for N in "${SAMPLE_SIZES[@]}"; do
-    ROUND=$((ROUND + 1))
-    LOG_NAME="finetune_${FT_STRATEGY}_${FT_ARCH}_${REGIME}${_scratch_tag}_n${N}"
-    LOGFILE="$HYDRAGNN_ROOT/${LOG_NAME}-${SLURM_JOB_ID}.out"
+# Helper: launch one srun in the background for a given regime and sample size
+_launch() {
+    local REGIME="$1"
+    local MAX_TRAIN_SAMPLES="$2"
+    local SCRATCH_FLAG="${3:-}"
+    local _scratch_tag=""
+    [[ -n "$SCRATCH_FLAG" ]] && _scratch_tag="_scratch"
+    local LOG_NAME="FT1_feasibility_${FT_ARCH}_${REGIME}${_scratch_tag}_n${MAX_TRAIN_SAMPLES}"
+    local LOGFILE="$HYDRAGNN_ROOT/${LOG_NAME}-${SLURM_JOB_ID}.out"
 
-    echo ""
-    echo "── Round $ROUND / ${#SAMPLE_SIZES[@]}: N=$N → $LOGFILE"
+    echo "  Launching $LOG_NAME → $LOGFILE"
 
-    srun -N${N_PER_RUN} -n$((N_PER_RUN * 8)) -c7 \
+    srun --exact -N${N_PER_RUN} -n$((N_PER_RUN * 8)) -c7 \
         --gpus-per-task=1 --gpu-bind=closest \
-        python -u train_opf_finetune.py \
-            --inputfile ${FT_STRATEGY}/config_${FT_ARCH}_${REGIME}.json \
-            --hdf5 \
+        python -u train_opf_ft1_classify.py \
+            --inputfile FT1_feasibility_classification/config_${FT_ARCH}_${REGIME}.json \
             --modelname "$LOG_NAME" \
-            --resume_if_exists \
             --data_root $DATA_ROOT \
             --pretrained_model_dir $HYDRAGNN_ROOT/examples/opf/pretrained_models \
             --pretrained_model_name $PRETRAINED_MODEL \
             --finetune_regime $REGIME \
             $SCRATCH_FLAG \
-            --max_train_samples $N \
-        > "$LOGFILE" 2>&1
+            --max_train_samples $MAX_TRAIN_SAMPLES \
+        > "$LOGFILE" 2>&1 &
+}
 
-    RESULT_JSON="$FT_DIR/logs/$LOG_NAME/results.json"
-    if [[ ! -f "$RESULT_JSON" ]]; then
-        echo "ERROR: Missing expected result artifact: $RESULT_JSON"
-        echo "See round log: $LOGFILE"
-        exit 1
-    fi
+# -----------------------------------------------------------------------------
+# Main loop: iterate sample sizes sequentially, methods concurrently
+# -----------------------------------------------------------------------------
+ROUND=0
+for N in "${SAMPLE_SIZES[@]}"; do
+    ROUND=$((ROUND + 1))
+    TOTAL=$((N * 2))   # balanced: N feasible + N infeasible
+    echo ""
+    echo "── Round $ROUND / ${#SAMPLE_SIZES[@]}: N=$N (total train samples=$TOTAL) ──"
 
+    _launch full       "$TOTAL"
+    _launch partial    "$TOTAL"
+    _launch head_only  "$TOTAL"
+    _launch full       "$TOTAL" "--no_pretrained"   # scratch baseline
+
+    echo "  Waiting for round $ROUND to finish..."
+    wait
     echo "  Round $ROUND done."
 done
 
