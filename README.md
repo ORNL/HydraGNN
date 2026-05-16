@@ -32,6 +32,8 @@ To install required packages with only basic capability (`torch`,
 `torch_geometric`, and related packages)
 and to serialize+store the processed data for later sessions (`pickle5`):
 
+> **Python version:** Installation via `install_dependencies.sh` is currently tested and supported for **Python 3.10, 3.11, and 3.12** only.
+
 **Recommended approach - standard installation:**
 ```bash
 # Install all core dependencies (base + PyTorch + PyTorch Geometric)
@@ -193,8 +195,15 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
 
 
 ### Citations
+If you use this software, please cite both releases:
+
+**Original release:**
 "HydraGNN: Distributed PyTorch implementation of multi-headed graph convolutional neural networks", Copyright ID#: 81929619
 https://doi.org/10.11578/dc.20211019.2
+
+**Newest release:**
+Lupo Pasini, Massimiliano, Choi, Jong Youl, Mehta, Kshitij, Zhang, Pei, Weaver, Rylie, Messerly, Richard, Chowdhury, Arindam, Raman, Adithya, & Aji, Ashwin M. (2026). HydraGNN v5.0.
+https://doi.org/10.11578/dc.20260512.1
 
 ## Contributing
 

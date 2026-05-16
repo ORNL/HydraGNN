@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this software, please cite both the original release and the newest release as below."
 authors:
 - family-names: "Lupo Pasini"
   given-names: "Massimiliano"
@@ -18,3 +18,35 @@ version: 1.0.0
 doi: 10.11578/dc.20211019.2
 date-released: 2021-10-19
 url: "https://github.com/ORNL/HydraGNN"
+references:
+- type: software
+  title: "HydraGNN v5.0"
+  version: 5.0.0
+  doi: 10.11578/dc.20260512.1
+  date-released: 2026-05-12
+  url: "https://github.com/ORNL/HydraGNN/releases/tag/v5.0"
+  authors:
+  - family-names: "Lupo Pasini"
+    given-names: "Massimiliano"
+    orcid: "https://orcid.org/0000-0002-4980-6924"
+  - family-names: "Choi"
+    given-names: "Jong Youl"
+    orcid: "https://orcid.org/0000-0002-6459-6152"
+  - family-names: "Mehta"
+    given-names: "Kshitij"
+    orcid: "https://orcid.org/0000-0002-9714-9981"
+  - family-names: "Zhang"
+    given-names: "Pei"
+    orcid: "https://orcid.org/0000-0001-9447-9216"
+  - family-names: "Weaver"
+    given-names: "Rylie"
+  - family-names: "Messerly"
+    given-names: "Richard"
+    orcid: "https://orcid.org/0000-0003-1321-4246"
+  - family-names: "Chowdhury"
+    given-names: "Arindam"
+    orcid: "https://orcid.org/0000-0001-7298-1969"
+  - family-names: "Raman"
+    given-names: "Adithya"
+  - family-names: "Aji"
+    given-names: "Ashwin M."
