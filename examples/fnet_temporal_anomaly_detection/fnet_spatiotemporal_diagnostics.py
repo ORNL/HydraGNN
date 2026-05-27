@@ -78,6 +78,53 @@ def _load_artifacts(in_dir: Path, split: str):
         sites_df = pd.DataFrame(
             {"site": [f"node_{i}" for i in range(N)], "fdr_id": np.arange(N)}
         )
+
+    # De-standardize predictions and targets back to physical units.
+    # The trainer applies (X - feat_mean) / feat_std over all 4 dynamic
+    # channels; outputs are a subset selected by out_idx (default [0, 2, 3]
+    # = freq_dev, angle_delta, volt_dev). Scalers may be either per-channel
+    # (shape [F_dyn]) for back-compat or per-(node, channel) (shape
+    # [N, F_dyn]) since we made standardization act as a per-node bias.
+    # If the scalers are absent we leave the arrays untouched, e.g. for
+    # caches predating standardization.
+    mean_p = in_dir / "feat_mean.npy"
+    std_p = in_dir / "feat_std.npy"
+    idx_p = in_dir / "out_idx.npy"
+    if mean_p.exists() and std_p.exists() and idx_p.exists():
+        feat_mean = np.load(mean_p)
+        feat_std = np.load(std_p)
+        out_idx = np.load(idx_p)
+        if feat_mean.ndim == 1:
+            # Per-channel: select F_out and broadcast over [W, N, H].
+            out_mean = feat_mean[out_idx].astype(np.float32)
+            out_std = feat_std[out_idx].astype(np.float32)
+            mean_label = f"channels={out_mean}"
+            std_label = f"channels={out_std}"
+        elif feat_mean.ndim == 2:
+            # Per-(node, channel): index node axis as : and channel as out_idx.
+            # Reshape to [1, N, 1, F_out] for broadcasting over [W, N, H, F_out].
+            out_mean = feat_mean[:, out_idx].astype(np.float32)[None, :, None, :]
+            out_std = feat_std[:, out_idx].astype(np.float32)[None, :, None, :]
+            mean_label = (
+                f"per-node, channel-avg={out_mean.mean(axis=(0, 1, 2))}"
+            )
+            std_label = (
+                f"per-node, channel-avg={out_std.mean(axis=(0, 1, 2))}"
+            )
+        else:
+            raise ValueError(
+                f"Unexpected feat_mean shape {feat_mean.shape}; "
+                "expected 1D (per-channel) or 2D (per-node, per-channel)."
+            )
+        preds = preds * out_std + out_mean
+        ys = ys * out_std + out_mean
+        print(f"[load] de-standardized using feat_mean: {mean_label}")
+        print(f"[load] de-standardized using feat_std:  {std_label}")
+    else:
+        print(
+            "[load] no scaler files found; assuming arrays are already in physical units"
+        )
+
     return preds, ys, A_hat, sites_df
 
 
@@ -297,7 +344,11 @@ def build_argparser() -> argparse.ArgumentParser:
         help="Directory for generated PNGs (default: <in_dir>/diagnostics)",
     )
     p.add_argument(
-        "--split", type=str, default="test", choices=["val", "test"], help="Which split"
+        "--split",
+        type=str,
+        default="test",
+        choices=["train", "val", "test"],
+        help="Which split",
     )
     p.add_argument(
         "--n_overlay_nodes",

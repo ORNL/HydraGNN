@@ -250,43 +250,96 @@ def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
 
 
 def stack_node_features(fdr_ids, data, dt: float):
-    """Inner-merge all device timelines on timestamp.
+    """Resample every device onto a common uniform time grid.
 
-    PMU streams are not phase-locked across sensors, so positional stacking
-    (row i of sensor A vs row i of sensor B) would silently desynchronize
-    nodes whenever any device drops samples. We instead inner-join on the
-    parsed timestamp so every column of ``X[t, :, :]`` is the same instant.
+    PMU streams are not phase-locked across sensors and individual streams
+    have small gaps. Doing a strict timestamp inner-join would either return
+    nothing (sub-sample skew) or shrink to tens of rows (many small gaps).
 
-    The ``dt`` argument is unused but kept for signature symmetry with
-    callers that may want to fall back to positional alignment.
+    Instead we build a single regular grid at step ``dt`` covering the
+    intersection ``[max(start_i), min(end_i)]`` and reindex each device
+    onto it with nearest-neighbor matching within tolerance ``dt / 2``.
+    Devices that produce all-NaN after reindex are dropped. Any time slot
+    where any kept device is missing is dropped at the end.
 
     Returns
     -------
-    tvec : np.ndarray  (T,)        seconds since first common timestamp
-    X    : np.ndarray  (T, N, 4)   dynamic features per node per timestep
+    tvec     : np.ndarray  (T,)        seconds since first slot
+    X        : np.ndarray  (T, N, 4)   dynamic features per node per slot
+    keep_ids : list[int]               FDR ids that survived alignment
     """
-    del dt  # see docstring
     feats = ("freq_dev", "rocof", "angle_delta", "volt_dev")
-    M = data[fdr_ids[0]][["timestamp"]].copy()
-    for fid in fdr_ids:
-        sub = data[fid][["timestamp", *feats]].copy()
-        sub.columns = ["timestamp"] + [f"{fid}:{c}" for c in feats]
-        M = M.merge(sub, on="timestamp", how="inner")
-    if len(M) == 0:
+    starts = pd.Series([data[fid]["timestamp"].iloc[0] for fid in fdr_ids])
+    ends = pd.Series([data[fid]["timestamp"].iloc[-1] for fid in fdr_ids])
+    # Use inner percentiles instead of strict min/max so a few late-starting
+    # / early-ending sensors do not collapse the common window. Devices
+    # whose span does not cover the chosen window are dropped below.
+    grid_start = starts.quantile(0.9, interpolation="higher")
+    grid_end = ends.quantile(0.1, interpolation="lower")
+    if grid_end <= grid_start:
+        # Fall back to strict intersection if percentile-based window is empty.
+        grid_start = starts.max()
+        grid_end = ends.min()
+    if grid_end <= grid_start:
         raise RuntimeError(
-            "No common timestamps across devices after inner-join. "
-            "Check that the selected day has overlapping data."
+            f"Empty intersection of device time ranges: "
+            f"grid_start={grid_start}, grid_end={grid_end}."
         )
-    M = M.sort_values("timestamp").reset_index(drop=True)
-    t0 = M["timestamp"].iloc[0]
-    tvec = (M["timestamp"] - t0).dt.total_seconds().to_numpy(dtype=np.float32)
-    ordered = [f"{fid}:{c}" for fid in fdr_ids for c in feats]
+    freq = pd.Timedelta(int(round(float(dt) * 1e9)), unit="ns")
+    grid = pd.date_range(start=grid_start, end=grid_end, freq=freq)
+    if len(grid) == 0:
+        raise RuntimeError("Common time grid is empty.")
+    print(
+        f"[align] common time window {grid_start} -> {grid_end} "
+        f"({(grid_end - grid_start).total_seconds():.1f} s, {len(grid)} slots)"
+    )
+    tol = freq / 2
+
+    # Reindex each device onto `grid` with nearest-neighbor within tolerance.
+    keep_ids, columns, dropped = [], [], []
+    for fid in fdr_ids:
+        sub = (
+            data[fid][["timestamp", *feats]]
+            .drop_duplicates("timestamp")
+            .sort_values("timestamp")
+            .set_index("timestamp")
+        )
+        re = sub.reindex(grid, method="nearest", tolerance=tol)
+        coverage = re[list(feats)].notna().all(axis=1).mean()
+        if coverage < 0.95:
+            dropped.append((fid, float(coverage)))
+            continue
+        re.columns = [f"{fid}:{c}" for c in feats]
+        columns.append(re)
+        keep_ids.append(fid)
+    if not keep_ids:
+        raise RuntimeError(
+            "No device covered at least 95% of the common grid; "
+            "consider widening the percentile window or using a different day."
+        )
+    if dropped:
+        print(
+            f"[align] WARNING: {len(dropped)} device(s) dropped for low coverage "
+            f"(< 95%). First: {[d[0] for d in dropped[:5]]}"
+        )
+
+    M = pd.concat(columns, axis=1)
+    # Keep only slots where every retained device is present.
+    valid_mask = M.notna().all(axis=1)
+    M = M.loc[valid_mask]
+    if len(M) == 0:
+        raise RuntimeError("After alignment, no time slot has all devices present.")
+
+    tvec = (
+        (M.index - M.index[0]).total_seconds().to_numpy(dtype=np.float32)
+    )
+    ordered = [f"{fid}:{c}" for fid in keep_ids for c in feats]
     X = (
         M[ordered]
         .to_numpy(dtype=np.float32)
-        .reshape(len(tvec), len(fdr_ids), len(feats))
+        .reshape(len(tvec), len(keep_ids), len(feats))
     )
-    return tvec, X
+    return tvec, X, keep_ids
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -385,13 +438,27 @@ def build_grid_embeddings(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def make_window_dataset(X, grid_embed, edge_index, Tin: int, H: int):
+def make_window_dataset(
+    X,
+    grid_embed,
+    edge_index,
+    Tin: int,
+    H: int,
+    predict_delta: bool = False,
+    max_windows: int | None = None,
+):
     """Build sliding-window torch_geometric Data objects.
 
     Per window:
       data.x_seq : [N, Tin, F_dyn + F_static]   (static features tiled across time)
       data.y     : [N, H * F_out]               (multi-step target per node, flat)
       data.y_loc : [[0, N]]                     single output head spans all N nodes
+
+    If ``predict_delta`` is True, the target is the per-step increment
+    ``X[s+1+h] - X[s]`` (in the standardized feature space) rather than the
+    absolute level ``X[s+1+h]``. Mathematically equivalent to wiring an
+    input->output residual skip in the model. data.x still carries the last
+    observed *level* x_last so scoring can recover absolute predictions.
     """
     T, N, F = X.shape
     assert F == F_DYN
@@ -413,7 +480,14 @@ def make_window_dataset(X, grid_embed, edge_index, Tin: int, H: int):
     out_idx = np.array([0, 2, 3], dtype=np.int64)
 
     dataset = []
-    for s in range(Tin - 1, T - H):
+    start_indices = range(Tin - 1, T - H)
+    if max_windows is not None and len(start_indices) > max_windows:
+        # Subsample evenly *before* materializing windows to keep memory bounded
+        # for long days (full day = ~735k windows = ~190 GB of Data objects).
+        start_indices = np.linspace(
+            Tin - 1, T - H - 1, max_windows, dtype=np.int64
+        ).tolist()
+    for s in start_indices:
         # Dynamic input: shape [Tin, N, F_dyn] -> [N, Tin, F_dyn]
         x_dyn = torch.from_numpy(X[s - Tin + 1 : s + 1]).permute(1, 0, 2).contiguous()
         x_seq = torch.cat(
@@ -422,6 +496,10 @@ def make_window_dataset(X, grid_embed, edge_index, Tin: int, H: int):
 
         # Multi-step target: shape [H, N, F_out] -> [N, H*F_out]
         y_block = X[s + 1 : s + 1 + H][:, :, out_idx]  # [H, N, F_out]
+        if predict_delta:
+            # Subtract last observed level (broadcast over horizons) so the
+            # model only needs to learn the increment.
+            y_block = y_block - X[s : s + 1, :, out_idx]  # [H, N, F_out]
         y = (
             torch.from_numpy(y_block)
             .permute(1, 0, 2)  # [N, H, F_out]
@@ -563,7 +641,20 @@ def preprocess_stage(args, cache_dir: Path):
         )
     print(f"[meta]  {len(fdr_ids)} devices retained after metadata filtering")
 
-    tvec, X = stack_node_features(fdr_ids, data, dt)
+    tvec, X, kept_after_align = stack_node_features(fdr_ids, data, dt)
+    if len(kept_after_align) != len(fdr_ids):
+        keep_set = set(kept_after_align)
+        sites = [
+            s
+            for s, fid in zip(sites, fdr_ids)
+            if fid in keep_set
+        ]
+        meta_active = meta_active[meta_active["FDRID"].isin(keep_set)].copy()
+        # Reorder meta_active to match kept_after_align order.
+        meta_active = (
+            meta_active.set_index("FDRID").loc[kept_after_align].reset_index()
+        )
+        fdr_ids = kept_after_align
     if args.stride > 1:
         tvec = tvec[:: args.stride]
         X = X[:: args.stride]
@@ -588,16 +679,41 @@ def preprocess_stage(args, cache_dir: Path):
         f"unique grids = {len(grid_name_to_idx)}"
     )
 
-    full_dataset = make_window_dataset(
-        X, grid_embed, edge_index, Tin=args.Tin, H=args.horizon
+    # Per-(node, channel) standardization computed only on the train time
+    # slice. This acts as a frozen per-node bias + scale: each PMU gets its
+    # own zero-point and variance for each of the 4 dynamic features, so the
+    # model only has to predict residuals around the node's own baseline.
+    # Shapes: feat_mean / feat_std are (N, F_dyn); broadcast over time.
+    train_end_t = max(int(T * args.train_frac), 2)
+    feat_mean = X[:train_end_t].mean(axis=0).astype(np.float32)  # (N, F_dyn)
+    feat_std = X[:train_end_t].std(axis=0).astype(np.float32)  # (N, F_dyn)
+    feat_std = np.where(feat_std < 1e-8, np.float32(1.0), feat_std)
+    X = ((X - feat_mean[None, :, :]) / feat_std[None, :, :]).astype(np.float32)
+    print(
+        f"[scale] per-node mean shape={feat_mean.shape}  "
+        f"channel-avg={np.array2string(feat_mean.mean(axis=0), precision=4)}  "
+        f"channel-spread(std-of-means)={np.array2string(feat_mean.std(axis=0), precision=4)}"
     )
+    print(
+        f"[scale] per-node std  shape={feat_std.shape}   "
+        f"channel-avg={np.array2string(feat_std.mean(axis=0), precision=4)}  "
+        f"channel-spread(std-of-stds)={np.array2string(feat_std.std(axis=0), precision=4)}"
+    )
+
+    full_dataset = make_window_dataset(
+        X,
+        grid_embed,
+        edge_index,
+        Tin=args.Tin,
+        H=args.horizon,
+        predict_delta=bool(args.predict_delta),
+        max_windows=args.max_windows,
+    )
+    if args.predict_delta:
+        print("[ds]    target = delta from x_last (predict_delta=True)")
     print(
         f"[ds]    {len(full_dataset)} windows  " f"(Tin={args.Tin}, H={args.horizon})"
     )
-    if args.max_windows is not None and len(full_dataset) > args.max_windows:
-        idx = np.linspace(0, len(full_dataset) - 1, args.max_windows, dtype=int)
-        full_dataset = [full_dataset[i] for i in idx]
-        print(f"[ds]    capped to {len(full_dataset)} windows via --max_windows")
     if len(full_dataset) < 8:
         raise RuntimeError(
             "Too few windows; reduce --Tin/--horizon or use a longer day."
@@ -628,6 +744,10 @@ def preprocess_stage(args, cache_dir: Path):
         "F_dyn": F_DYN,
         "F_out": F_OUT,
         "F_static": int(grid_embed.shape[1]),
+        "feat_mean": feat_mean,
+        "feat_std": feat_std,
+        "out_idx": np.array([0, 2, 3], dtype=np.int64),
+        "predict_delta": bool(args.predict_delta),
     }
     write_cache(
         cache_dir, args.date, args.format, train_data, val_data, test_data, meta
@@ -753,6 +873,10 @@ def train_stage(args, cache_dir: Path):
     np.save(out_dir / "ys_val.npy", ys_val)
     np.save(out_dir / "preds_test.npy", preds_test)
     np.save(out_dir / "ys_test.npy", ys_test)
+    if "feat_mean" in meta and "feat_std" in meta:
+        np.save(out_dir / "feat_mean.npy", meta["feat_mean"])
+        np.save(out_dir / "feat_std.npy", meta["feat_std"])
+        np.save(out_dir / "out_idx.npy", meta["out_idx"])
     pd.DataFrame(
         {
             "site": meta["sites"],
@@ -778,6 +902,8 @@ def _score_split(model, loader, meta, device):
     N = len(meta["fdr_ids"])
     H = meta["horizon"]
     Fo = meta["F_out"]
+    out_idx = meta["out_idx"]
+    predict_delta = bool(meta.get("predict_delta", False))
     preds, ys = [], []
     model.eval()
     with torch.no_grad():
@@ -791,6 +917,13 @@ def _score_split(model, loader, meta, device):
             B = y_pred.shape[0] // N
             y_pred = y_pred.reshape(B, N, H, Fo)
             y_true = y_true.reshape(B, N, H, Fo)
+            if predict_delta:
+                # Re-add last observed level so saved arrays are in absolute
+                # (standardized) space, matching the no-delta convention.
+                x_last = data.x.cpu().numpy().reshape(B, N, -1)[:, :, out_idx]
+                x_last = x_last[:, :, None, :]  # [B, N, 1, Fo]
+                y_pred = y_pred + x_last
+                y_true = y_true + x_last
             preds.append(y_pred)
             ys.append(y_true)
     if not preds:
@@ -891,6 +1024,13 @@ def build_argparser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--horizon", type=int, default=10, help="Forecast horizon length (steps)"
+    )
+    p.add_argument(
+        "--predict_delta",
+        action="store_true",
+        help="Train the model to predict the per-step delta (X[s+1+h] - X[s]) "
+        "instead of the absolute level. Mathematically equivalent to an "
+        "input->output residual skip. Saved preds/ys remain in level space.",
     )
     p.add_argument(
         "--max_windows",
