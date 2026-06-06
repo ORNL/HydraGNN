@@ -230,6 +230,11 @@ def setup_ddp(use_deepspeed=False):
                 ## Setting LOCAL_RANK complicts with DeviceMesh when using the srun "--gpus-per-task=1" option
                 # os.environ["LOCAL_RANK"] = str(get_local_rank())
 
+            if backend == "nccl" and torch.cuda.is_available():
+                local_rank = get_local_rank()
+                if local_rank < torch.cuda.device_count():
+                    torch.cuda.set_device(local_rank)
+
             if (backend == "gloo") and ("GLOO_SOCKET_IFNAME" not in os.environ):
                 ifname = find_ifname(master_addr)
                 if ifname is not None:
