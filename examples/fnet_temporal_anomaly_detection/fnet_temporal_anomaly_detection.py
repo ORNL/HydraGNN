@@ -444,6 +444,7 @@ def make_window_dataset(
     edge_index,
     Tin: int,
     H: int,
+    edge_weight = None,
     predict_delta: bool = False,
     max_windows: int | None = None,
 ):
@@ -508,18 +509,22 @@ def make_window_dataset(
         )
 
         x_last = torch.from_numpy(X[s]).contiguous()  # [N, F_dyn]
-        dataset.append(
-            Data(
-                x=x_last,
-                x_seq=x_seq,
-                edge_index=edge_index.clone(),
-                y=y,
-                y_loc=y_loc.clone(),
-                pos=pos,
-                batch=batch,
-                num_nodes=N,
-            )
+        data = Data(
+            x=x_last,
+            x_seq=x_seq,
+            edge_index=edge_index.clone(),
+            y=y,
+            y_loc=y_loc.clone(),
+            pos=pos,
+            batch=batch,
+            num_nodes=N,
         )
+        if edge_weight is not None:
+            # Geographic edge weights exp(-d/sigma). First dim is E (num edges),
+            # so PyG's DataLoader concatenates it edge-aligned with edge_index
+            # across a batch. Consumed by GCNConv via TemporalGCN's conv string.
+            data.edge_weight = edge_weight.clone()
+        dataset.append(data)
     return dataset
 
 
@@ -706,6 +711,7 @@ def preprocess_stage(args, cache_dir: Path):
         edge_index,
         Tin=args.Tin,
         H=args.horizon,
+        edge_weight=edge_weight,
         predict_delta=bool(args.predict_delta),
         max_windows=args.max_windows,
     )

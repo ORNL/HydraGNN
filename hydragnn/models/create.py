@@ -751,8 +751,8 @@ def create_model(
 
     elif mpnn_type == "TemporalGCN":
         model = TemporalGCNStack(
-            "inv_node_feat, equiv_node_feat, edge_index",
-            "inv_node_feat, edge_index",
+            "inv_node_feat, equiv_node_feat, edge_index", "edge_weight", 
+            "inv_node_feat, edge_index", "edge_weight",
             input_dim,
             hidden_dim,
             output_dim,
