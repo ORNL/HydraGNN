@@ -106,6 +106,7 @@ def create_model_config(
         temporal_hidden_dim=config["Architecture"].get("temporal_hidden_dim", None),
         temporal_num_layers=config["Architecture"].get("temporal_num_layers", 1),
         temporal_mode=config["Architecture"].get("temporal_mode", "post_gcn"),
+        temporal_batch_norm=config["Architecture"].get("temporal_batch_norm", True),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -170,6 +171,7 @@ def create_model(
     temporal_hidden_dim: int = None,
     temporal_num_layers: int = 1,
     temporal_mode: str = "post_gcn",
+    temporal_batch_norm: bool = True,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -649,6 +651,7 @@ def create_model(
             temporal_hidden_dim=temporal_hidden_dim,
             temporal_num_layers=temporal_num_layers,
             temporal_mode=temporal_mode,
+            temporal_batch_norm=temporal_batch_norm
         )
 
     elif mpnn_type == "TemporalPNA":
@@ -682,6 +685,7 @@ def create_model(
             temporal_hidden_dim=temporal_hidden_dim,
             temporal_num_layers=temporal_num_layers,
             temporal_mode=temporal_mode,
+            temporal_batch_norm=temporal_batch_norm,
         )
 
     elif mpnn_type == "TemporalGAT":
@@ -717,6 +721,7 @@ def create_model(
             temporal_hidden_dim=temporal_hidden_dim,
             temporal_num_layers=temporal_num_layers,
             temporal_mode=temporal_mode,
+            temporal_batch_norm=temporal_batch_norm,
         )
 
     elif mpnn_type == "TemporalSAGE":
@@ -747,6 +752,7 @@ def create_model(
             temporal_hidden_dim=temporal_hidden_dim,
             temporal_num_layers=temporal_num_layers,
             temporal_mode=temporal_mode,
+            temporal_batch_norm=temporal_batch_norm,
         )
 
     elif mpnn_type == "TemporalGCN":
@@ -777,6 +783,7 @@ def create_model(
             temporal_hidden_dim=temporal_hidden_dim,
             temporal_num_layers=temporal_num_layers,
             temporal_mode=temporal_mode,
+            temporal_batch_norm=temporal_batch_norm,
         )
 
     else:

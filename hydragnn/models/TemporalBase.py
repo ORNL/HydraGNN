@@ -74,6 +74,7 @@ class TemporalBase(Base):
         temporal_hidden_dim: int = None,
         temporal_num_layers: int = 1,
         temporal_mode: str = "post_gcn",
+        temporal_batch_norm: bool = True,
         **kwargs,
     ):
         # ------------------------------------------------------------------ #
@@ -100,6 +101,12 @@ class TemporalBase(Base):
                 f"got '{temporal_mode}'"
             )
         self._temporal_mode = mode
+
+        # When False, skip the BatchNorm in self.feature_layers between GCN layers
+        # and apply only the activation — matching the standalone T-GCN's bare-ReLU
+        # stack (Base.py inserts BatchNorm unconditionally). Default True preserves
+        # HydraGNN's existing behavior for every other model.
+        self._temporal_batch_norm = bool(temporal_batch_norm)
 
         # ------------------------------------------------------------------ #
         # 3. Determine RNN input/output sizes.                                #
@@ -230,7 +237,9 @@ class TemporalBase(Base):
                     **conv_args,
                 )
             inv = self._apply_graph_conditioning(inv, batch_fc, data)
-            inv = self.activation_function(feat_layer(inv))
+            if self._temporal_batch_norm:
+                inv = feat_layer(inv)
+            inv = self.activation_function(inv)
 
         return inv, equiv, conv_args
 
@@ -334,7 +343,9 @@ class TemporalBase(Base):
                             **conv_args,
                         )
                     inv_t = self._apply_graph_conditioning(inv_t, batch_fc, data)
-                    inv_t = self.activation_function(feat_layer(inv_t))
+                    if self._temporal_batch_norm:
+                        inv_t = feat_layer(inv_t)
+                    inv_t = self.activation_function(inv_t)
                     gcn_outs.append(inv_t)
 
                 H_l = torch.stack(gcn_outs, dim=1)  # [N_total, T, hidden]
