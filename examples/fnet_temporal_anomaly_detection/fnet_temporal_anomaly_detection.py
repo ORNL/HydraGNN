@@ -444,7 +444,7 @@ def make_window_dataset(
     edge_index,
     Tin: int,
     H: int,
-    edge_weight = None,
+    edge_weight=None,
     predict_delta: bool = False,
     max_windows: int | None = None,
 ):

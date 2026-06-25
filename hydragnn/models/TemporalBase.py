@@ -174,7 +174,7 @@ class TemporalBase(Base):
         else:
             _, h_n = rnn(H)
         return h_n[-1]  # [N, t_hidden]
-    
+
     def _embedding(self, data):
         """Extend Base._embedding so a weighted spatial conv can see edge weights.
 
@@ -183,15 +183,15 @@ class TemporalBase(Base):
         signature names edge_weight (see create.py), so we inject it here.
 
         Safety:
-        - The ``"edge_weight" in self.conv_args`` guard means the other
-          temporal backbones (GIN/SAGE/GAT/PNA), whose conv_args never mention
-          edge_weight, are completely unaffected.
-        - ``getattr(data, "edge_weight", None)`` keeps unweighted graphs
-          working — PyG's GCNConv treats edge_weight=None as an unweighted
-          (binary) adjacency, so the synthetic example and the static
-          (no-x_seq) fallback path still run unchanged.
-        - super()._embedding follows the MRO, so each backbone's own
-          _embedding (e.g. PNAStack's) is still used as the base.
+          * The ``"edge_weight" in self.conv_args`` guard means the other
+            temporal backbones (GIN/SAGE/GAT/PNA), whose conv_args never mention
+            edge_weight, are completely unaffected.
+          * ``getattr(data, "edge_weight", None)`` keeps unweighted graphs
+            working — PyG's GCNConv treats edge_weight=None as an unweighted
+            (binary) adjacency, so the synthetic example and the static
+            (no-x_seq) fallback path still run unchanged.
+          * super()._embedding follows the MRO, so each backbone's own
+            _embedding (e.g. PNAStack's) is still used as the base.
         """
         inv_node_feat, equiv_node_feat, conv_args = super()._embedding(data)
         if "edge_weight" in self.conv_args:

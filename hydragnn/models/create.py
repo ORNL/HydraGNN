@@ -651,7 +651,7 @@ def create_model(
             temporal_hidden_dim=temporal_hidden_dim,
             temporal_num_layers=temporal_num_layers,
             temporal_mode=temporal_mode,
-            temporal_batch_norm=temporal_batch_norm
+            temporal_batch_norm=temporal_batch_norm,
         )
 
     elif mpnn_type == "TemporalPNA":
@@ -757,8 +757,8 @@ def create_model(
 
     elif mpnn_type == "TemporalGCN":
         model = TemporalGCNStack(
-            "inv_node_feat, equiv_node_feat, edge_index", "edge_weight", 
-            "inv_node_feat, edge_index", "edge_weight",
+            "inv_node_feat, equiv_node_feat, edge_index, edge_weight",
+            "inv_node_feat, edge_index, edge_weight",
             input_dim,
             hidden_dim,
             output_dim,
