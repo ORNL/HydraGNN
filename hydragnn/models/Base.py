@@ -845,7 +845,7 @@ class Base(Module):
             return outputs, outputs_var
         return outputs
 
-    def loss(self, pred, value, head_index):
+    def loss(self, pred, value, head_index, mask=None):
         var = None
         if self.var_output:
             var = pred[1]
@@ -853,7 +853,7 @@ class Base(Module):
         if self.ilossweights_nll == 1:
             return self.loss_nll(pred, value, head_index, var=var)
         elif self.ilossweights_hyperp == 1:
-            return self.loss_hpweighted(pred, value, head_index, var=var)
+            return self.loss_hpweighted(pred, value, head_index, var=var, mask=mask)
 
     def loss_nll(self, pred, value, head_index, var=None):
         # negative log likelihood loss
@@ -876,7 +876,7 @@ class Base(Module):
 
         return nll_loss, tasks_mseloss, []
 
-    def loss_hpweighted(self, pred, value, head_index, var=None):
+    def loss_hpweighted(self, pred, value, head_index, var=None, mask=None):
         # weights for different tasks as hyper-parameters
         tot_loss = 0
         tasks_loss = []
@@ -891,10 +891,30 @@ class Base(Module):
                 assert (
                     self.loss_function_type != "GaussianNLLLoss"
                 ), "Expecting var for GaussianNLLLoss, but got None"
-                tot_loss += (
-                    self.loss_function(head_pre, head_val) * self.loss_weights[ihead]
-                )
-                tasks_loss.append(self.loss_function(head_pre, head_val))
+                if mask is not None:
+                    # Masked MSE: drop entries where mask == 0 (imputed / missing
+                    # targets) so they do not contribute to the objective. MSE-only
+                    # because it needs an elementwise (reduction="none") loss;
+                    # smooth_l1 / rmse are modules/closures with no call-time reduction.
+                    assert self.loss_function_type == "mse", (
+                        "Masked loss supports loss_function_type='mse' only, got "
+                        f"'{self.loss_function_type}'"
+                    )
+                    head_mask = mask[head_index[ihead]]
+                    if head_mask.shape != pred_shape:
+                        head_mask = torch.reshape(head_mask, pred_shape)
+                    sq_err = (
+                        F.mse_loss(head_pre, head_val, reduction="none") * head_mask
+                    )
+                    head_loss = sq_err.sum() / head_mask.sum().clamp(min=1.0)
+                    tot_loss += head_loss * self.loss_weights[ihead]
+                    tasks_loss.append(head_loss)
+                else:
+                    tot_loss += (
+                        self.loss_function(head_pre, head_val)
+                        * self.loss_weights[ihead]
+                    )
+                    tasks_loss.append(self.loss_function(head_pre, head_val))
             else:
                 head_var = var[ihead]
                 tot_loss += (
