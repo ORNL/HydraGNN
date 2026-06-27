@@ -249,24 +249,36 @@ def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def stack_node_features(fdr_ids, data, dt: float):
-    """Resample every device onto a common uniform time grid.
+def stack_node_features(
+    fdr_ids,
+    data,
+    dt: float,
+    min_device_coverage: float = 0.5,
+    min_step_coverage: float = 0.8,
+):
+    """Resample every device onto a common uniform time grid, KEEPING gaps.
 
-    PMU streams are not phase-locked across sensors and individual streams
-    have small gaps. Doing a strict timestamp inner-join would either return
-    nothing (sub-sample skew) or shrink to tens of rows (many small gaps).
+    PMU streams are not phase-locked across sensors and individual streams have
+    small gaps. We build a single regular grid at step ``dt`` over the common
+    window and reindex each device onto it with nearest-neighbor matching within
+    tolerance ``dt / 2``.
 
-    Instead we build a single regular grid at step ``dt`` covering the
-    intersection ``[max(start_i), min(end_i)]`` and reindex each device
-    onto it with nearest-neighbor matching within tolerance ``dt / 2``.
-    Devices that produce all-NaN after reindex are dropped. Any time slot
-    where any kept device is missing is dropped at the end.
+    cov80 "keep-and-mask": rather than dropping every slot where a device is
+    missing (which discards exactly the disturbance-adjacent data the downstream
+    detector needs), missing cells are KEPT as NaN and recorded in
+    ``observed_mask``. Devices covering less than ``min_device_coverage`` of the
+    grid are still dropped (a near-dead sensor would be almost entirely imputed
+    and would pollute its graph neighbors). Timesteps where fewer than
+    ``min_step_coverage`` of the retained nodes are present are dropped. The
+    remaining NaNs are imputed downstream; ``observed_mask`` lets the loss ignore
+    the imputed targets.
 
     Returns
     -------
-    tvec     : np.ndarray  (T,)        seconds since first slot
-    X        : np.ndarray  (T, N, 4)   dynamic features per node per slot
-    keep_ids : list[int]               FDR ids that survived alignment
+    tvec          : np.ndarray  (T,)       seconds since first kept slot
+    X             : np.ndarray  (T, N, 4)  dynamic features; NaN at gaps (pre-impute)
+    observed_mask : np.ndarray  (T, N)     1.0 where the node was actually observed
+    keep_ids      : list[int]              FDR ids that survived alignment
     """
     feats = ("freq_dev", "rocof", "angle_delta", "volt_dev")
     starts = pd.Series([data[fid]["timestamp"].iloc[0] for fid in fdr_ids])
@@ -306,7 +318,7 @@ def stack_node_features(fdr_ids, data, dt: float):
         )
         re = sub.reindex(grid, method="nearest", tolerance=tol)
         coverage = re[list(feats)].notna().all(axis=1).mean()
-        if coverage < 0.95:
+        if coverage < min_device_coverage:
             dropped.append((fid, float(coverage)))
             continue
         re.columns = [f"{fid}:{c}" for c in feats]
@@ -314,32 +326,77 @@ def stack_node_features(fdr_ids, data, dt: float):
         keep_ids.append(fid)
     if not keep_ids:
         raise RuntimeError(
-            "No device covered at least 95% of the common grid; "
-            "consider widening the percentile window or using a different day."
+            f"No device covered at least {min_device_coverage:.0%} of the common "
+            f"grid; lower --min_device_coverage or use a different day."
         )
     if dropped:
         print(
-            f"[align] WARNING: {len(dropped)} device(s) dropped for low coverage "
-            f"(< 95%). First: {[d[0] for d in dropped[:5]]}"
+            f"[align] WARNING: {len(dropped)} device(s) dropped for coverage "
+            f"< {min_device_coverage:.0%}. First: {[d[0] for d in dropped[:5]]}"
         )
 
     M = pd.concat(columns, axis=1)
-    # Keep only slots where every retained device is present.
-    valid_mask = M.notna().all(axis=1)
-    M = M.loc[valid_mask]
-    if len(M) == 0:
-        raise RuntimeError("After alignment, no time slot has all devices present.")
 
-    tvec = (
-        (M.index - M.index[0]).total_seconds().to_numpy(dtype=np.float32)
+    # Per-(timestep, node) observed mask: a node is "observed" at t when all of
+    # its features are present after the nearest-reindex (a gap leaves all NaN).
+    present = np.stack(
+        [
+            M[[f"{fid}:{c}" for c in feats]].notna().all(axis=1).to_numpy()
+            for fid in keep_ids
+        ],
+        axis=1,
+    )  # [n_slots, N] bool
+
+    # Keep timesteps with enough node coverage (vs. requiring ALL nodes present).
+    keep_steps = present.mean(axis=1) >= min_step_coverage
+    if not keep_steps.any():
+        raise RuntimeError(
+            f"No timestep reached {min_step_coverage:.0%} node coverage; "
+            f"lower --min_step_coverage or use a different day."
+        )
+    M = M[keep_steps]
+    observed_mask = present[keep_steps].astype(np.float32)  # [T, N]
+    print(
+        f"[align] kept {int(keep_steps.sum())}/{int(keep_steps.size)} timesteps "
+        f"(>= {min_step_coverage:.0%} node coverage); "
+        f"observed fraction = {float(observed_mask.mean()):.3f}"
     )
+
+    tvec = (M.index - M.index[0]).total_seconds().to_numpy(dtype=np.float32)
     ordered = [f"{fid}:{c}" for fid in keep_ids for c in feats]
     X = (
         M[ordered]
         .to_numpy(dtype=np.float32)
         .reshape(len(tvec), len(keep_ids), len(feats))
-    )
-    return tvec, X, keep_ids
+    )  # contains NaN at gaps (imputed downstream)
+    return tvec, X, observed_mask, keep_ids
+
+
+def robust_impute_feature_matrix(
+    feature_matrix, observed_mask, train_end, short_gap_steps, medium_gap_steps
+):
+    """Per-sensor gap imputation: linear interpolate (short gaps) -> ffill/bfill
+    (medium gaps) -> train-only median fallback.
+
+    The fallback median is computed from observed *training* values only, so
+    imputation never leaks future/val/test information into the train segment.
+    Ported from the standalone T-GCN (train.py). Operates on one feature channel
+    at a time: ``feature_matrix`` and ``observed_mask`` are both [T, N].
+    """
+    out = feature_matrix.copy()
+    _, N = out.shape
+    for j in range(N):
+        col = pd.Series(out[:, j], dtype=float)
+        train_obs = observed_mask[:train_end, j] > 0.5
+        train_vals = out[:train_end, j][train_obs]
+        fallback = float(np.nanmedian(train_vals)) if train_vals.size > 0 else 0.0
+        col = col.interpolate(
+            method="linear", limit=short_gap_steps, limit_direction="both"
+        )
+        col = col.ffill(limit=medium_gap_steps).bfill(limit=medium_gap_steps)
+        col = col.fillna(fallback)
+        out[:, j] = col.to_numpy(dtype=np.float32)
+    return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -640,7 +697,13 @@ def preprocess_stage(args, cache_dir: Path):
         )
     print(f"[meta]  {len(fdr_ids)} devices retained after metadata filtering")
 
-    tvec, X, kept_after_align = stack_node_features(fdr_ids, data, dt)
+    tvec, X, observed_mask, kept_after_align = stack_node_features(
+        fdr_ids,
+        data,
+        dt,
+        min_device_coverage=args.min_device_coverage,
+        min_step_coverage=args.min_step_coverage,
+    )
     if len(kept_after_align) != len(fdr_ids):
         keep_set = set(kept_after_align)
         sites = [
@@ -657,10 +720,24 @@ def preprocess_stage(args, cache_dir: Path):
     if args.stride > 1:
         tvec = tvec[:: args.stride]
         X = X[:: args.stride]
+        observed_mask = observed_mask[:: args.stride]
         dt = dt * args.stride
         print(f"[align] applied stride={args.stride}: dt -> {dt:.4f} s")
     T, N, F = X.shape
-    print(f"[align] X shape = {(T, N, F)} (after timestamp inner-join)")
+    print(f"[align] X shape = {(T, N, F)} (gaps kept; observed_mask attached)")
+
+    # Impute the gaps (NaN) left by keep-and-mask alignment so the model sees a
+    # dense input. Train-only median fallback avoids leakage; observed_mask still
+    # marks these cells so the masked loss can ignore the imputed *targets*.
+    train_end_t = max(int(T * args.train_frac), 2)
+    for f in range(F):
+        X[:, :, f] = robust_impute_feature_matrix(
+            X[:, :, f],
+            observed_mask,
+            train_end_t,
+            args.short_gap_steps,
+            args.medium_gap_steps,
+        )
 
     edge_index, edge_weight, A_hat = build_geo_knn_graph(
         meta_active, k=args.k, sigma_km=args.sigma_km
@@ -751,6 +828,7 @@ def preprocess_stage(args, cache_dir: Path):
         "sites": sites,
         "tvec": tvec,
         "X": X,
+        "observed_mask": observed_mask,
         "dt": float(dt),
         "edge_index": edge_index,
         "edge_weight": edge_weight,
@@ -1016,6 +1094,32 @@ def build_argparser() -> argparse.ArgumentParser:
         type=int,
         default=1,
         help="Temporal subsampling stride applied after alignment",
+    )
+    # Coverage / imputation (cov80 keep-and-mask)
+    p.add_argument(
+        "--min_device_coverage",
+        type=float,
+        default=0.5,
+        help="Drop a device covering less than this fraction of the time grid "
+        "(retained devices' gaps are imputed + masked)",
+    )
+    p.add_argument(
+        "--min_step_coverage",
+        type=float,
+        default=0.8,
+        help="Keep a timestep only if at least this fraction of nodes are observed",
+    )
+    p.add_argument(
+        "--short_gap_steps",
+        type=int,
+        default=10,
+        help="Max gap length (steps) filled by linear interpolation during impute",
+    )
+    p.add_argument(
+        "--medium_gap_steps",
+        type=int,
+        default=300,
+        help="Max gap length (steps) filled by ffill/bfill during impute",
     )
     # Cache
     p.add_argument(
