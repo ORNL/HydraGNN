@@ -107,6 +107,15 @@ class TemporalBase(Base):
         # stack (Base.py inserts BatchNorm unconditionally). Default True preserves
         # HydraGNN's existing behavior for every other model.
         self._temporal_batch_norm = bool(temporal_batch_norm)
+        if not self._temporal_batch_norm:
+            # Base._init_conv always creates a BatchNorm per conv layer. With BN
+            # bypassed those modules never receive gradients, so DDP
+            # (find_unused_parameters=False) raises "parameters that were not used
+            # in producing loss". Swap them for Identity so no dead parameters
+            # remain (the forward pass skips them either way).
+            self.feature_layers = nn.ModuleList(
+                nn.Identity() for _ in self.feature_layers
+            )
 
         # ------------------------------------------------------------------ #
         # 3. Determine RNN input/output sizes.                                #

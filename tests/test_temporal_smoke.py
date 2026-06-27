@@ -271,3 +271,30 @@ def pytest_batch_norm_flag_changes_training_output():
     assert not torch.allclose(out_bn, out_nobn, atol=1e-6), (
         "temporal_batch_norm flag had no effect on the forward pass."
     )
+
+
+@pytest.mark.mpi_skip()
+def pytest_batch_norm_off_removes_bn_params():
+    """C2/DDP guard: with temporal_batch_norm=False the BatchNorm feature layers
+    are replaced by Identity, so there are no unused parameters. (Skipping BN in
+    the forward pass but leaving the modules registered makes DDP with
+    find_unused_parameters=False raise 'parameters that were not used in producing
+    loss'.)"""
+    import torch.nn as nn
+
+    edge_index, edge_weight = _build_graph()
+    dataset = _make_dataset(edge_index, edge_weight)
+
+    model_off, _ = _build_model(
+        _base_config("post_gcn", temporal_batch_norm=False), dataset
+    )
+    assert all(
+        isinstance(m, nn.Identity) for m in model_off.feature_layers
+    ), "feature_layers must be Identity when temporal_batch_norm=False"
+
+    model_on, _ = _build_model(
+        _base_config("post_gcn", temporal_batch_norm=True), dataset
+    )
+    assert not any(
+        isinstance(m, nn.Identity) for m in model_on.feature_layers
+    ), "feature_layers must keep BatchNorm when temporal_batch_norm=True"
