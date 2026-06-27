@@ -93,6 +93,7 @@ except ImportError:
 EARTH_RADIUS_KM = 6371.0
 F_DYN = 4  # freq_dev, rocof, angle_delta, volt_dev
 F_OUT = 3  # freq_dev, angle_delta, volt_dev (RoCoF is input-only)
+F_MASK = 1  # observed-mask input channel (1 = observed, 0 = imputed/missing)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -501,6 +502,7 @@ def make_window_dataset(
     edge_index,
     Tin: int,
     H: int,
+    observed_mask=None,
     edge_weight=None,
     predict_delta: bool = False,
     max_windows: int | None = None,
@@ -508,9 +510,13 @@ def make_window_dataset(
     """Build sliding-window torch_geometric Data objects.
 
     Per window:
-      data.x_seq : [N, Tin, F_dyn + F_static]   (static features tiled across time)
+      data.x_seq : [N, Tin, F_dyn (+1 mask) + F_static]   (mask + static tiled in time)
       data.y     : [N, H * F_out]               (multi-step target per node, flat)
       data.y_loc : [[0, N]]                     single output head spans all N nodes
+
+    If ``observed_mask`` ([T, N], 1=observed / 0=imputed) is given, it is tiled as
+    an extra input channel between the dynamic and static features so the model
+    can condition on which inputs are real.
 
     If ``predict_delta`` is True, the target is the per-step increment
     ``X[s+1+h] - X[s]`` (in the standardized feature space) rather than the
@@ -548,9 +554,21 @@ def make_window_dataset(
     for s in start_indices:
         # Dynamic input: shape [Tin, N, F_dyn] -> [N, Tin, F_dyn]
         x_dyn = torch.from_numpy(X[s - Tin + 1 : s + 1]).permute(1, 0, 2).contiguous()
+        channels = [x_dyn]
+        if observed_mask is not None:
+            # Observed-mask channel (1=observed, 0=imputed/missing), placed between
+            # the dynamic and static features. [Tin, N] -> [N, Tin, 1].
+            mask_win = (
+                torch.from_numpy(observed_mask[s - Tin + 1 : s + 1])
+                .permute(1, 0)
+                .unsqueeze(-1)
+                .contiguous()
+            )
+            channels.append(mask_win)
+        channels.append(static_t)
         x_seq = torch.cat(
-            [x_dyn, static_t], dim=-1
-        ).contiguous()  # [N, Tin, F_dyn+F_static]
+            channels, dim=-1
+        ).contiguous()  # [N, Tin, F_dyn(+1)+F_static]
 
         # Multi-step target: shape [H, N, F_out] -> [N, H*F_out]
         y_block = X[s + 1 : s + 1 + H][:, :, out_idx]  # [H, N, F_out]
@@ -798,6 +816,7 @@ def preprocess_stage(args, cache_dir: Path):
             edge_index,
             Tin=args.Tin,
             H=args.horizon,
+            observed_mask=observed_mask[lo:hi],
             edge_weight=edge_weight,
             predict_delta=bool(args.predict_delta),
             max_windows=args.max_windows,
@@ -839,6 +858,7 @@ def preprocess_stage(args, cache_dir: Path):
         "Tin": int(args.Tin),
         "horizon": int(args.horizon),
         "F_dyn": F_DYN,
+        "F_mask": F_MASK,
         "F_out": F_OUT,
         "F_static": int(grid_embed.shape[1]),
         "feat_mean": feat_mean,
@@ -905,11 +925,12 @@ def train_stage(args, cache_dir: Path):
         f"[cache] train/val/test/pred = "
         f"{len(trainset)}/{len(valset)}/{len(testset)}/{len(predset)}  "
         f"| sites={len(meta['sites'])}, Tin={meta['Tin']}, H={meta['horizon']}, "
-        f"F_dyn={meta['F_dyn']}, F_static={meta['F_static']}, F_out={meta['F_out']}"
+        f"F_dyn={meta['F_dyn']}, F_mask={meta.get('F_mask', 0)}, "
+        f"F_static={meta['F_static']}, F_out={meta['F_out']}"
     )
 
     # Patch JSON config to match cached tensor shapes.
-    F_total = meta["F_dyn"] + meta["F_static"]
+    F_total = meta["F_dyn"] + meta.get("F_mask", 0) + meta["F_static"]
     target_dim = meta["horizon"] * meta["F_out"]
     config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"] = list(
         range(F_total)
