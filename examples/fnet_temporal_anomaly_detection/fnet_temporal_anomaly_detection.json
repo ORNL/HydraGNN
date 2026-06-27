@@ -37,7 +37,7 @@
             "min_delta": 1e-3,
             "Checkpoint": true,
             "checkpoint_warmup": 5,
-            "loss_function_type": "smooth_l1",
+            "loss_function_type": "mse",
             "batch_size": 32,
             "continue": 0,
             "startfrom": "existing_model",

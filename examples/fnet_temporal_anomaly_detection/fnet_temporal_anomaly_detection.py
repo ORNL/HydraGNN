@@ -599,6 +599,23 @@ def make_window_dataset(
             # so PyG's DataLoader concatenates it edge-aligned with edge_index
             # across a batch. Consumed by GCNConv via TemporalGCN's conv string.
             data.edge_weight = edge_weight.clone()
+        if observed_mask is not None:
+            # Forecast-window LOSS mask, aligned element-for-element with y (same
+            # permute/reshape). The per-(t, node) observed flag is broadcast over
+            # the F_OUT output channels. Consumed by Base.loss(mask=...) so imputed
+            # targets are excluded from the objective. NOTE: distinct from the
+            # input-window mask channel baked into x_seq above (different window).
+            m_block = np.repeat(
+                observed_mask[s + 1 : s + 1 + H][:, :, None], F_OUT, axis=2
+            )  # [H, N, F_OUT]
+            y_mask = (
+                torch.from_numpy(m_block)
+                .permute(1, 0, 2)
+                .reshape(N, H * F_OUT)
+                .contiguous()
+            )
+            assert y_mask.shape == y.shape
+            data.observed_mask = y_mask
         dataset.append(data)
     return dataset
 
