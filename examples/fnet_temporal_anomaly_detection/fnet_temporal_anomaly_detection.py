@@ -528,16 +528,6 @@ def make_window_dataset(
     return dataset
 
 
-def time_ordered_split(dataset, train_frac: float, val_frac: float):
-    n = len(dataset)
-    n_train = int(n * train_frac)
-    n_val = int(n * val_frac)
-    train = dataset[:n_train]
-    val = dataset[n_train : n_train + n_val]
-    test = dataset[n_train + n_val :]
-    return train, val, test
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 5.  Cache I/O (pickle / ADIOS)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -553,7 +543,7 @@ def _meta_path(cache_dir: Path, date: str) -> Path:
 
 
 def write_cache(
-    cache_dir: Path, date: str, fmt: str, trainset, valset, testset, meta: dict
+    cache_dir: Path, date: str, fmt: str, trainset, valset, testset, predset, meta: dict
 ):
     cache_dir.mkdir(parents=True, exist_ok=True)
     if fmt == "pickle":
@@ -561,6 +551,7 @@ def write_cache(
         SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
         SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
         SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
+        SimplePickleWriter(predset, basedir, "predset", use_subdir=True)
         print(f"[cache] pickle splits saved under {basedir}/")
     elif fmt == "adios":
         if not ADIOS_AVAILABLE:
@@ -573,6 +564,7 @@ def write_cache(
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
         adwriter.add("testset", testset)
+        adwriter.add("predset", predset)
         adwriter.save()
         print(f"[cache] adios splits saved to {fname}")
     else:
@@ -595,6 +587,7 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
         trainset = SimplePickleDataset(basedir=basedir, label="trainset")
         valset = SimplePickleDataset(basedir=basedir, label="valset")
         testset = SimplePickleDataset(basedir=basedir, label="testset")
+        predset = SimplePickleDataset(basedir=basedir, label="predset")
     elif fmt == "adios":
         if not ADIOS_AVAILABLE:
             raise RuntimeError(
@@ -606,9 +599,10 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
+        predset = AdiosDataset(fname, "predset", comm, **opt)
     else:
         raise ValueError(f"Unknown --format: {fmt}")
-    return trainset, valset, testset, meta
+    return trainset, valset, testset, predset, meta
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -705,33 +699,52 @@ def preprocess_stage(args, cache_dir: Path):
         f"channel-spread(std-of-stds)={np.array2string(feat_std.std(axis=0), precision=4)}"
     )
 
-    full_dataset = make_window_dataset(
-        X,
-        grid_embed,
-        edge_index,
-        Tin=args.Tin,
-        H=args.horizon,
-        edge_weight=edge_weight,
-        predict_delta=bool(args.predict_delta),
-        max_windows=args.max_windows,
+    # Slice the timeline into 4 contiguous segments, THEN window each segment
+    # independently. The previous order (window the whole series, then split the
+    # window list by index) let overlapping sliding windows straddle the
+    # train/val/test boundaries, leaking recent history across splits. Windowing
+    # per-segment guarantees no window crosses a boundary.
+    T = X.shape[0]
+    n_train = int(T * args.train_frac)
+    n_val = int(T * args.val_frac)
+    n_test = int(T * args.test_frac)
+    seg_bounds = [
+        ("train", 0, n_train),
+        ("val", n_train, n_train + n_val),
+        ("test", n_train + n_val, n_train + n_val + n_test),
+        ("pred", n_train + n_val + n_test, T),
+    ]
+    seg_data = {
+        name: make_window_dataset(
+            X[lo:hi],
+            grid_embed,
+            edge_index,
+            Tin=args.Tin,
+            H=args.horizon,
+            edge_weight=edge_weight,
+            predict_delta=bool(args.predict_delta),
+            max_windows=args.max_windows,
+        )
+        for name, lo, hi in seg_bounds
+    }
+    train_data, val_data, test_data, pred_data = (
+        seg_data["train"],
+        seg_data["val"],
+        seg_data["test"],
+        seg_data["pred"],
     )
     if args.predict_delta:
         print("[ds]    target = delta from x_last (predict_delta=True)")
     print(
-        f"[ds]    {len(full_dataset)} windows  " f"(Tin={args.Tin}, H={args.horizon})"
+        f"[split] slice-then-window train/val/test/pred = "
+        f"{len(train_data)}/{len(val_data)}/{len(test_data)}/{len(pred_data)}  "
+        f"(Tin={args.Tin}, H={args.horizon}; no window crosses a boundary)"
     )
-    if len(full_dataset) < 8:
+    if min(len(train_data), len(val_data), len(test_data)) < 1:
         raise RuntimeError(
-            "Too few windows; reduce --Tin/--horizon or use a longer day."
+            "A split produced 0 windows; each segment length must exceed Tin + H. "
+            "Reduce --Tin/--horizon, change split fractions, or use a longer day."
         )
-
-    train_data, val_data, test_data = time_ordered_split(
-        full_dataset, train_frac=args.train_frac, val_frac=args.val_frac
-    )
-    print(
-        f"[split] train/val/test = {len(train_data)}/{len(val_data)}/{len(test_data)}  "
-        f"(time-ordered)"
-    )
 
     meta = {
         "fdr_ids": fdr_ids,
@@ -756,7 +769,14 @@ def preprocess_stage(args, cache_dir: Path):
         "predict_delta": bool(args.predict_delta),
     }
     write_cache(
-        cache_dir, args.date, args.format, train_data, val_data, test_data, meta
+        cache_dir,
+        args.date,
+        args.format,
+        train_data,
+        val_data,
+        test_data,
+        pred_data,
+        meta,
     )
 
 
@@ -800,9 +820,12 @@ def train_stage(args, cache_dir: Path):
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
     print(f"[cache] reading splits ({args.format}) from {cache_dir}")
-    trainset, valset, testset, meta = read_cache(cache_dir, args.date, args.format)
+    trainset, valset, testset, predset, meta = read_cache(
+        cache_dir, args.date, args.format
+    )
     print(
-        f"[cache] train/val/test = {len(trainset)}/{len(valset)}/{len(testset)}  "
+        f"[cache] train/val/test/pred = "
+        f"{len(trainset)}/{len(valset)}/{len(testset)}/{len(predset)}  "
         f"| sites={len(meta['sites'])}, Tin={meta['Tin']}, H={meta['horizon']}, "
         f"F_dyn={meta['F_dyn']}, F_static={meta['F_static']}, F_out={meta['F_out']}"
     )
@@ -815,11 +838,13 @@ def train_stage(args, cache_dir: Path):
     )
     config["NeuralNetwork"]["Variables_of_interest"]["output_dim"] = [target_dim]
 
+    bs = config["NeuralNetwork"]["Training"]["batch_size"]
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
-        trainset,
-        valset,
-        testset,
-        config["NeuralNetwork"]["Training"]["batch_size"],
+        trainset, valset, testset, bs
+    )
+    # Separate loader for the final held-out 'pred' split (scored after training).
+    pred_loader, _, _ = hydragnn.preprocess.create_dataloaders(
+        predset, predset, predset, bs
     )
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
@@ -861,13 +886,16 @@ def train_stage(args, cache_dir: Path):
     )
 
     raw_model = (model.module if hasattr(model, "module") else model).to(device)
-    print("\n[score] Scoring val + test windows ...")
+    print("\n[score] Scoring val + test + pred windows ...")
     preds_val, ys_val = _score_split(raw_model, val_loader, meta, device)
     preds_test, ys_test = _score_split(raw_model, test_loader, meta, device)
+    preds_pred, ys_pred = _score_split(raw_model, pred_loader, meta, device)
     val_mse = float(np.mean((preds_val - ys_val) ** 2))
     test_mse = float(np.mean((preds_test - ys_test) ** 2))
-    print(f"[score] val MSE = {val_mse:.6e}")
+    pred_mse = float(np.mean((preds_pred - ys_pred) ** 2)) if preds_pred.size else float("nan")
+    print(f"[score] val MSE  = {val_mse:.6e}")
     print(f"[score] test MSE = {test_mse:.6e}")
+    print(f"[score] pred MSE = {pred_mse:.6e}")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -879,6 +907,8 @@ def train_stage(args, cache_dir: Path):
     np.save(out_dir / "ys_val.npy", ys_val)
     np.save(out_dir / "preds_test.npy", preds_test)
     np.save(out_dir / "ys_test.npy", ys_test)
+    np.save(out_dir / "preds_pred.npy", preds_pred)
+    np.save(out_dir / "ys_pred.npy", ys_pred)
     if "feat_mean" in meta and "feat_std" in meta:
         np.save(out_dir / "feat_mean.npy", meta["feat_mean"])
         np.save(out_dir / "feat_std.npy", meta["feat_std"])
@@ -1044,9 +1074,16 @@ def build_argparser() -> argparse.ArgumentParser:
         default=None,
         help="Cap total windows (evenly spaced subset). Useful for fast iteration.",
     )
-    # Split
+    # Split (4-way, time-ordered; each segment is windowed independently)
     p.add_argument("--train_frac", type=float, default=0.8)
-    p.add_argument("--val_frac", type=float, default=0.1)
+    p.add_argument("--val_frac", type=float, default=0.05)
+    p.add_argument("--test_frac", type=float, default=0.05)
+    p.add_argument(
+        "--pred_frac",
+        type=float,
+        default=0.10,
+        help="Final held-out segment, scored once after training",
+    )
     # Model overrides (also used as HPO knobs)
     p.add_argument(
         "--mpnn_type", type=str, default=None, help="Override mpnn_type from JSON"
