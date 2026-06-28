@@ -400,6 +400,64 @@ def robust_impute_feature_matrix(
     return out
 
 
+def scale_features(X, observed_mask, train_end, method, clip_value=10.0):
+    """Train-only feature scaling computed over OBSERVED values only (imputed
+    cells are excluded from the statistics). Returns (X_scaled, center, scale),
+    with center/scale shaped (N, F) so they broadcast against X [T, N, F] and
+    round-trip through the existing per-node denormalization in the diagnostics.
+
+    method:
+      none      - identity (no scaling)
+      per_node  - per-(node, channel) mean/std (transductive; each PMU whitened)
+      global    - global per-channel mean/std (one center/scale per feature)
+      robust    - global per-channel median/IQR + clip to +/- clip_value
+
+    The observed-mask input channel is added later (during windowing), so it is
+    never seen here and stays unscaled.
+    """
+    _, N, F = X.shape
+    center = np.zeros((N, F), dtype=np.float32)
+    scale = np.ones((N, F), dtype=np.float32)
+    if method == "none":
+        return X.astype(np.float32), center, scale
+
+    obs = observed_mask[:train_end] > 0.5  # [train_end, N]
+    Xtr = X[:train_end]  # [train_end, N, F]
+
+    if method == "per_node":
+        for j in range(N):
+            m = obs[:, j]
+            if not m.any():
+                continue
+            vals = Xtr[m, j, :]  # [n_obs, F]
+            center[j] = vals.mean(axis=0)
+            s = vals.std(axis=0)
+            scale[j] = np.where(s < 1e-8, np.float32(1.0), s)
+    elif method in ("global", "robust"):
+        for f in range(F):
+            vals = Xtr[:, :, f][obs]  # 1-D observed values for channel f
+            if vals.size == 0:
+                continue
+            if method == "robust":
+                c = float(np.median(vals))
+                q25, q75 = np.percentile(vals, [25, 75])
+                s = float(q75 - q25)
+            else:  # global mean/std
+                c = float(vals.mean())
+                s = float(vals.std())
+            if not (np.isfinite(s) and s >= 1e-8):
+                s = 1.0
+            center[:, f] = c  # same per-channel value tiled across nodes
+            scale[:, f] = s
+    else:
+        raise ValueError(f"Unknown --scaling method: {method}")
+
+    Xs = (X - center[None, :, :]) / scale[None, :, :]
+    if method == "robust" and clip_value and clip_value > 0:
+        Xs = np.clip(Xs, -clip_value, clip_value)
+    return Xs.astype(np.float32), center, scale
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3.  Geographic k-NN graph + static node embeddings
 # ─────────────────────────────────────────────────────────────────────────────
@@ -790,25 +848,17 @@ def preprocess_stage(args, cache_dir: Path):
         f"unique grids = {len(grid_name_to_idx)}"
     )
 
-    # Per-(node, channel) standardization computed only on the train time
-    # slice. This acts as a frozen per-node bias + scale: each PMU gets its
-    # own zero-point and variance for each of the 4 dynamic features, so the
-    # model only has to predict residuals around the node's own baseline.
-    # Shapes: feat_mean / feat_std are (N, F_dyn); broadcast over time.
-    train_end_t = max(int(T * args.train_frac), 2)
-    feat_mean = X[:train_end_t].mean(axis=0).astype(np.float32)  # (N, F_dyn)
-    feat_std = X[:train_end_t].std(axis=0).astype(np.float32)  # (N, F_dyn)
-    feat_std = np.where(feat_std < 1e-8, np.float32(1.0), feat_std)
-    X = ((X - feat_mean[None, :, :]) / feat_std[None, :, :]).astype(np.float32)
-    print(
-        f"[scale] per-node mean shape={feat_mean.shape}  "
-        f"channel-avg={np.array2string(feat_mean.mean(axis=0), precision=4)}  "
-        f"channel-spread(std-of-means)={np.array2string(feat_mean.std(axis=0), precision=4)}"
+    # Train-only feature scaling over OBSERVED values (imputed cells excluded
+    # from the statistics). Method via --scaling; the observed-mask channel is
+    # added later (in windowing), so it is never scaled. train_end_t is the same
+    # train slice used for the imputation fallback above.
+    X, feat_mean, feat_std = scale_features(
+        X, observed_mask, train_end_t, args.scaling, clip_value=args.scaled_clip_value
     )
     print(
-        f"[scale] per-node std  shape={feat_std.shape}   "
-        f"channel-avg={np.array2string(feat_std.mean(axis=0), precision=4)}  "
-        f"channel-spread(std-of-stds)={np.array2string(feat_std.std(axis=0), precision=4)}"
+        f"[scale] method={args.scaling}  center/scale shape={feat_mean.shape}  "
+        f"channel-avg-center={np.array2string(feat_mean.mean(axis=0), precision=4)}  "
+        f"channel-avg-scale={np.array2string(feat_std.mean(axis=0), precision=4)}"
     )
 
     # Slice the timeline into 4 contiguous segments, THEN window each segment
@@ -880,6 +930,7 @@ def preprocess_stage(args, cache_dir: Path):
         "F_static": int(grid_embed.shape[1]),
         "feat_mean": feat_mean,
         "feat_std": feat_std,
+        "scaling": args.scaling,
         "out_idx": np.array([0, 2, 3], dtype=np.int64),
         "predict_delta": bool(args.predict_delta),
     }
@@ -1158,6 +1209,21 @@ def build_argparser() -> argparse.ArgumentParser:
         type=int,
         default=300,
         help="Max gap length (steps) filled by ffill/bfill during impute",
+    )
+    p.add_argument(
+        "--scaling",
+        type=str,
+        default="global",
+        choices=["none", "per_node", "global", "robust"],
+        help="Train-only feature scaling over observed values. Default 'global' "
+        "(per-channel mean/std). per_node is transductive; robust = median/IQR + clip",
+    )
+    p.add_argument(
+        "--scaled_clip_value",
+        type=float,
+        default=10.0,
+        help="For --scaling robust: clip standardized features to +/- this value "
+        "(<= 0 disables clipping)",
     )
     # Cache
     p.add_argument(
