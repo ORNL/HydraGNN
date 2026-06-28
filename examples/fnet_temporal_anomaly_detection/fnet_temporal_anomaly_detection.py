@@ -92,7 +92,7 @@ except ImportError:
 
 EARTH_RADIUS_KM = 6371.0
 F_DYN = 4  # freq_dev, rocof, angle_delta, volt_dev
-F_OUT = 3  # freq_dev, angle_delta, volt_dev (RoCoF is input-only)
+OUT_FEATURES_DEFAULT = [0, 2, 3]  # default outputs: freq_dev, angle_delta, volt_dev
 F_MASK = 1  # observed-mask input channel (1 = observed, 0 = imputed/missing)
 
 
@@ -561,6 +561,7 @@ def make_window_dataset(
     Tin: int,
     H: int,
     observed_mask=None,
+    out_idx=None,
     edge_weight=None,
     predict_delta: bool = False,
     max_windows: int | None = None,
@@ -593,13 +594,15 @@ def make_window_dataset(
     )
     pos = torch.zeros(N, 3)
     batch = torch.zeros(N, dtype=torch.long)
-    target_dim = H * F_OUT
+    out_idx = np.asarray(
+        OUT_FEATURES_DEFAULT if out_idx is None else out_idx, dtype=np.int64
+    )
+    F_out = len(out_idx)
+    target_dim = H * F_out
     # HydraGNN uses y_loc to slice y per output head; for a node-level head with
     # `output_dim` channels per node, dim_item = (y_loc[0,1] - y_loc[0,0]) / N,
     # so y_loc must span N * output_dim entries.
     y_loc = torch.tensor([[0, N * target_dim]], dtype=torch.int64)
-    # Output indices: freq_dev (0), angle_delta (2), volt_dev (3)
-    out_idx = np.array([0, 2, 3], dtype=np.int64)
 
     dataset = []
     start_indices = range(Tin - 1, T - H)
@@ -637,7 +640,7 @@ def make_window_dataset(
         y = (
             torch.from_numpy(y_block)
             .permute(1, 0, 2)  # [N, H, F_out]
-            .reshape(N, H * F_OUT)
+            .reshape(N, H * F_out)
             .contiguous()
         )
 
@@ -660,16 +663,16 @@ def make_window_dataset(
         if observed_mask is not None:
             # Forecast-window LOSS mask, aligned element-for-element with y (same
             # permute/reshape). The per-(t, node) observed flag is broadcast over
-            # the F_OUT output channels. Consumed by Base.loss(mask=...) so imputed
+            # the F_out output channels. Consumed by Base.loss(mask=...) so imputed
             # targets are excluded from the objective. NOTE: distinct from the
             # input-window mask channel baked into x_seq above (different window).
             m_block = np.repeat(
-                observed_mask[s + 1 : s + 1 + H][:, :, None], F_OUT, axis=2
-            )  # [H, N, F_OUT]
+                observed_mask[s + 1 : s + 1 + H][:, :, None], F_out, axis=2
+            )  # [H, N, F_out]
             y_mask = (
                 torch.from_numpy(m_block)
                 .permute(1, 0, 2)
-                .reshape(N, H * F_OUT)
+                .reshape(N, H * F_out)
                 .contiguous()
             )
             assert y_mask.shape == y.shape
@@ -876,6 +879,7 @@ def preprocess_stage(args, cache_dir: Path):
         ("test", n_train + n_val, n_train + n_val + n_test),
         ("pred", n_train + n_val + n_test, T),
     ]
+    out_idx = np.array(args.out_features, dtype=np.int64)
     seg_data = {
         name: make_window_dataset(
             X[lo:hi],
@@ -884,6 +888,7 @@ def preprocess_stage(args, cache_dir: Path):
             Tin=args.Tin,
             H=args.horizon,
             observed_mask=observed_mask[lo:hi],
+            out_idx=out_idx,
             edge_weight=edge_weight,
             predict_delta=bool(args.predict_delta),
             max_windows=args.max_windows,
@@ -926,12 +931,12 @@ def preprocess_stage(args, cache_dir: Path):
         "horizon": int(args.horizon),
         "F_dyn": F_DYN,
         "F_mask": F_MASK,
-        "F_out": F_OUT,
+        "F_out": int(len(out_idx)),
         "F_static": int(grid_embed.shape[1]),
         "feat_mean": feat_mean,
         "feat_std": feat_std,
         "scaling": args.scaling,
-        "out_idx": np.array([0, 2, 3], dtype=np.int64),
+        "out_idx": out_idx,
         "predict_delta": bool(args.predict_delta),
     }
     write_cache(
@@ -1054,15 +1059,28 @@ def train_stage(args, cache_dir: Path):
 
     raw_model = (model.module if hasattr(model, "module") else model).to(device)
     print("\n[score] Scoring val + test + pred windows ...")
-    preds_val, ys_val = _score_split(raw_model, val_loader, meta, device)
-    preds_test, ys_test = _score_split(raw_model, test_loader, meta, device)
-    preds_pred, ys_pred = _score_split(raw_model, pred_loader, meta, device)
-    val_mse = float(np.mean((preds_val - ys_val) ** 2))
-    test_mse = float(np.mean((preds_test - ys_test) ** 2))
-    pred_mse = float(np.mean((preds_pred - ys_pred) ** 2)) if preds_pred.size else float("nan")
-    print(f"[score] val MSE  = {val_mse:.6e}")
-    print(f"[score] test MSE = {test_mse:.6e}")
-    print(f"[score] pred MSE = {pred_mse:.6e}")
+    preds_val, ys_val, masks_val = _score_split(raw_model, val_loader, meta, device)
+    preds_test, ys_test, masks_test = _score_split(raw_model, test_loader, meta, device)
+    preds_pred, ys_pred, masks_pred = _score_split(raw_model, pred_loader, meta, device)
+
+    # Masked metrics (observed targets only) in standardized + original units.
+    fm, fs, oidx = meta["feat_mean"], meta["feat_std"], meta["out_idx"]
+    metrics = {}
+    for name, p, y, m in (
+        ("val", preds_val, ys_val, masks_val),
+        ("test", preds_test, ys_test, masks_test),
+        ("pred", preds_pred, ys_pred, masks_pred),
+    ):
+        scaled = compute_metrics(p, y, m)
+        original = compute_metrics(
+            denormalize(p, fm, fs, oidx), denormalize(y, fm, fs, oidx), m
+        )
+        metrics[name] = {"scaled": scaled, "original": original}
+        print(
+            f"[score] {name:>4}: MSE={scaled['mse']:.4e} MAE={scaled['mae']:.4e} "
+            f"RMSE={scaled['rmse']:.4e} R2={scaled['r2']:.4f} "
+            f"MAPE={scaled['mape']:.2f}%  (scaled, masked)"
+        )
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1076,6 +1094,11 @@ def train_stage(args, cache_dir: Path):
     np.save(out_dir / "ys_test.npy", ys_test)
     np.save(out_dir / "preds_pred.npy", preds_pred)
     np.save(out_dir / "ys_pred.npy", ys_pred)
+    np.save(out_dir / "masks_val.npy", masks_val)
+    np.save(out_dir / "masks_test.npy", masks_test)
+    np.save(out_dir / "masks_pred.npy", masks_pred)
+    with open(out_dir / "metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
     if "feat_mean" in meta and "feat_std" in meta:
         np.save(out_dir / "feat_mean.npy", meta["feat_mean"])
         np.save(out_dir / "feat_std.npy", meta["feat_std"])
@@ -1096,10 +1119,48 @@ def train_stage(args, cache_dir: Path):
         dist.destroy_process_group()
 
 
-def _score_split(model, loader, meta, device):
-    """Run model over a dataloader and return stacked (preds, ys).
+def compute_metrics(preds, ys, masks):
+    """MSE / MAE / RMSE / R2 / MAPE over OBSERVED elements only (mask > 0.5).
 
-    Each window's per-node output is reshaped back to [N, H, F_out].
+    preds / ys / masks are [W, N, H, F_out]. Returns all-NaN if no observed
+    elements. Ported from the standalone T-GCN (train.py compute_metrics).
+    """
+    valid = masks.reshape(-1) > 0.5
+    p = preds.reshape(-1)[valid]
+    y = ys.reshape(-1)[valid]
+    if p.size == 0:
+        return {k: float("nan") for k in ("mse", "mae", "rmse", "r2", "mape")}
+    err = p - y
+    mse = float(np.mean(err**2))
+    ss_res = float(np.sum(err**2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+    nz = np.abs(y) > 1e-8
+    mape = float(np.mean(np.abs(err[nz] / y[nz])) * 100.0) if nz.any() else 0.0
+    return {
+        "mse": mse,
+        "mae": float(np.mean(np.abs(err))),
+        "rmse": float(np.sqrt(mse)),
+        "r2": r2,
+        "mape": mape,
+    }
+
+
+def denormalize(arr, feat_mean, feat_std, out_idx):
+    """Map standardized [W, N, H, F_out] back to physical units using the
+    per-node (N, F_dyn) train scaler restricted to the output channels."""
+    if arr.size == 0:
+        return arr
+    center = feat_mean[:, out_idx]  # [N, F_out]
+    scale = feat_std[:, out_idx]  # [N, F_out]
+    return arr * scale[None, :, None, :] + center[None, :, None, :]
+
+
+def _score_split(model, loader, meta, device):
+    """Run model over a dataloader and return stacked (preds, ys, masks).
+
+    Each window's per-node output is reshaped to [N, H, F_out]; masks are the
+    forecast-window observed masks (1 = observed) used for masked metrics.
     Returns arrays of shape [num_windows, N, H, F_out].
     """
     N = len(meta["fdr_ids"])
@@ -1107,7 +1168,7 @@ def _score_split(model, loader, meta, device):
     Fo = meta["F_out"]
     out_idx = meta["out_idx"]
     predict_delta = bool(meta.get("predict_delta", False))
-    preds, ys = [], []
+    preds, ys, masks = [], [], []
     model.eval()
     with torch.no_grad():
         for data in loader:
@@ -1120,6 +1181,10 @@ def _score_split(model, loader, meta, device):
             B = y_pred.shape[0] // N
             y_pred = y_pred.reshape(B, N, H, Fo)
             y_true = y_true.reshape(B, N, H, Fo)
+            if hasattr(data, "observed_mask") and data.observed_mask is not None:
+                m = data.observed_mask.cpu().numpy().reshape(B, N, H, Fo)
+            else:
+                m = np.ones((B, N, H, Fo), dtype=np.float32)
             if predict_delta:
                 # Re-add last observed level so saved arrays are in absolute
                 # (standardized) space, matching the no-delta convention.
@@ -1129,11 +1194,15 @@ def _score_split(model, loader, meta, device):
                 y_true = y_true + x_last
             preds.append(y_pred)
             ys.append(y_true)
+            masks.append(m)
     if not preds:
-        return np.zeros((0, N, H, Fo), dtype=np.float32), np.zeros(
-            (0, N, H, Fo), dtype=np.float32
-        )
-    return np.concatenate(preds, axis=0), np.concatenate(ys, axis=0)
+        empty = np.zeros((0, N, H, Fo), dtype=np.float32)
+        return empty, empty.copy(), empty.copy()
+    return (
+        np.concatenate(preds, axis=0),
+        np.concatenate(ys, axis=0),
+        np.concatenate(masks, axis=0),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1268,6 +1337,15 @@ def build_argparser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--horizon", type=int, default=10, help="Forecast horizon length (steps)"
+    )
+    p.add_argument(
+        "--out_features",
+        type=int,
+        nargs="+",
+        default=[0, 2, 3],
+        help="Output feature indices into the 4 dynamic channels "
+        "[0=freq_dev, 1=rocof, 2=angle_delta, 3=volt_dev]. Default '0 2 3' (drop "
+        "RoCoF); use '0 3' for the 2-output (freq_dev, volt_dev) parity set",
     )
     p.add_argument(
         "--predict_delta",
