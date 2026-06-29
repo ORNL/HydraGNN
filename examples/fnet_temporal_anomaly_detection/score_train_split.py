@@ -113,7 +113,9 @@ def main():
     hydragnn.utils.distributed.setup_ddp()
 
     print(f"[cache] reading splits ({args.format}) from {cache_dir}")
-    trainset, valset, testset, meta = read_cache(cache_dir, args.date, args.format)
+    trainset, valset, testset, predset, meta = read_cache(
+        cache_dir, args.date, args.format
+    )
     print(
         f"[cache] train/val/test = {len(trainset)}/{len(valset)}/{len(testset)}  "
         f"| sites={len(meta['sites'])}, Tin={meta['Tin']}, H={meta['horizon']}, "

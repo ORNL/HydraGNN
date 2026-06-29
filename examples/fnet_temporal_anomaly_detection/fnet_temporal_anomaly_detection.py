@@ -92,7 +92,8 @@ except ImportError:
 
 EARTH_RADIUS_KM = 6371.0
 F_DYN = 4  # freq_dev, rocof, angle_delta, volt_dev
-F_OUT = 3  # freq_dev, angle_delta, volt_dev (RoCoF is input-only)
+OUT_FEATURES_DEFAULT = [0, 2, 3]  # default outputs: freq_dev, angle_delta, volt_dev
+F_MASK = 1  # observed-mask input channel (1 = observed, 0 = imputed/missing)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -249,24 +250,36 @@ def load_day_folder(date_dir: Path, limit: int = None, min_samples: int = 1000):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def stack_node_features(fdr_ids, data, dt: float):
-    """Resample every device onto a common uniform time grid.
+def stack_node_features(
+    fdr_ids,
+    data,
+    dt: float,
+    min_device_coverage: float = 0.5,
+    min_step_coverage: float = 0.8,
+):
+    """Resample every device onto a common uniform time grid, KEEPING gaps.
 
-    PMU streams are not phase-locked across sensors and individual streams
-    have small gaps. Doing a strict timestamp inner-join would either return
-    nothing (sub-sample skew) or shrink to tens of rows (many small gaps).
+    PMU streams are not phase-locked across sensors and individual streams have
+    small gaps. We build a single regular grid at step ``dt`` over the common
+    window and reindex each device onto it with nearest-neighbor matching within
+    tolerance ``dt / 2``.
 
-    Instead we build a single regular grid at step ``dt`` covering the
-    intersection ``[max(start_i), min(end_i)]`` and reindex each device
-    onto it with nearest-neighbor matching within tolerance ``dt / 2``.
-    Devices that produce all-NaN after reindex are dropped. Any time slot
-    where any kept device is missing is dropped at the end.
+    cov80 "keep-and-mask": rather than dropping every slot where a device is
+    missing (which discards exactly the disturbance-adjacent data the downstream
+    detector needs), missing cells are KEPT as NaN and recorded in
+    ``observed_mask``. Devices covering less than ``min_device_coverage`` of the
+    grid are still dropped (a near-dead sensor would be almost entirely imputed
+    and would pollute its graph neighbors). Timesteps where fewer than
+    ``min_step_coverage`` of the retained nodes are present are dropped. The
+    remaining NaNs are imputed downstream; ``observed_mask`` lets the loss ignore
+    the imputed targets.
 
     Returns
     -------
-    tvec     : np.ndarray  (T,)        seconds since first slot
-    X        : np.ndarray  (T, N, 4)   dynamic features per node per slot
-    keep_ids : list[int]               FDR ids that survived alignment
+    tvec          : np.ndarray  (T,)       seconds since first kept slot
+    X             : np.ndarray  (T, N, 4)  dynamic features; NaN at gaps (pre-impute)
+    observed_mask : np.ndarray  (T, N)     1.0 where the node was actually observed
+    keep_ids      : list[int]              FDR ids that survived alignment
     """
     feats = ("freq_dev", "rocof", "angle_delta", "volt_dev")
     starts = pd.Series([data[fid]["timestamp"].iloc[0] for fid in fdr_ids])
@@ -306,7 +319,7 @@ def stack_node_features(fdr_ids, data, dt: float):
         )
         re = sub.reindex(grid, method="nearest", tolerance=tol)
         coverage = re[list(feats)].notna().all(axis=1).mean()
-        if coverage < 0.95:
+        if coverage < min_device_coverage:
             dropped.append((fid, float(coverage)))
             continue
         re.columns = [f"{fid}:{c}" for c in feats]
@@ -314,32 +327,135 @@ def stack_node_features(fdr_ids, data, dt: float):
         keep_ids.append(fid)
     if not keep_ids:
         raise RuntimeError(
-            "No device covered at least 95% of the common grid; "
-            "consider widening the percentile window or using a different day."
+            f"No device covered at least {min_device_coverage:.0%} of the common "
+            f"grid; lower --min_device_coverage or use a different day."
         )
     if dropped:
         print(
-            f"[align] WARNING: {len(dropped)} device(s) dropped for low coverage "
-            f"(< 95%). First: {[d[0] for d in dropped[:5]]}"
+            f"[align] WARNING: {len(dropped)} device(s) dropped for coverage "
+            f"< {min_device_coverage:.0%}. First: {[d[0] for d in dropped[:5]]}"
         )
 
     M = pd.concat(columns, axis=1)
-    # Keep only slots where every retained device is present.
-    valid_mask = M.notna().all(axis=1)
-    M = M.loc[valid_mask]
-    if len(M) == 0:
-        raise RuntimeError("After alignment, no time slot has all devices present.")
 
-    tvec = (
-        (M.index - M.index[0]).total_seconds().to_numpy(dtype=np.float32)
+    # Per-(timestep, node) observed mask: a node is "observed" at t when all of
+    # its features are present after the nearest-reindex (a gap leaves all NaN).
+    present = np.stack(
+        [
+            M[[f"{fid}:{c}" for c in feats]].notna().all(axis=1).to_numpy()
+            for fid in keep_ids
+        ],
+        axis=1,
+    )  # [n_slots, N] bool
+
+    # Keep timesteps with enough node coverage (vs. requiring ALL nodes present).
+    keep_steps = present.mean(axis=1) >= min_step_coverage
+    if not keep_steps.any():
+        raise RuntimeError(
+            f"No timestep reached {min_step_coverage:.0%} node coverage; "
+            f"lower --min_step_coverage or use a different day."
+        )
+    M = M[keep_steps]
+    observed_mask = present[keep_steps].astype(np.float32)  # [T, N]
+    print(
+        f"[align] kept {int(keep_steps.sum())}/{int(keep_steps.size)} timesteps "
+        f"(>= {min_step_coverage:.0%} node coverage); "
+        f"observed fraction = {float(observed_mask.mean()):.3f}"
     )
+
+    tvec = (M.index - M.index[0]).total_seconds().to_numpy(dtype=np.float32)
     ordered = [f"{fid}:{c}" for fid in keep_ids for c in feats]
     X = (
         M[ordered]
         .to_numpy(dtype=np.float32)
         .reshape(len(tvec), len(keep_ids), len(feats))
-    )
-    return tvec, X, keep_ids
+    )  # contains NaN at gaps (imputed downstream)
+    return tvec, X, observed_mask, keep_ids
+
+
+def robust_impute_feature_matrix(
+    feature_matrix, observed_mask, train_end, short_gap_steps, medium_gap_steps
+):
+    """Per-sensor gap imputation: linear interpolate (short gaps) -> ffill/bfill
+    (medium gaps) -> train-only median fallback.
+
+    The fallback median is computed from observed *training* values only, so
+    imputation never leaks future/val/test information into the train segment.
+    Ported from the standalone T-GCN (train.py). Operates on one feature channel
+    at a time: ``feature_matrix`` and ``observed_mask`` are both [T, N].
+    """
+    out = feature_matrix.copy()
+    _, N = out.shape
+    for j in range(N):
+        col = pd.Series(out[:, j], dtype=float)
+        train_obs = observed_mask[:train_end, j] > 0.5
+        train_vals = out[:train_end, j][train_obs]
+        fallback = float(np.nanmedian(train_vals)) if train_vals.size > 0 else 0.0
+        col = col.interpolate(
+            method="linear", limit=short_gap_steps, limit_direction="both"
+        )
+        col = col.ffill(limit=medium_gap_steps).bfill(limit=medium_gap_steps)
+        col = col.fillna(fallback)
+        out[:, j] = col.to_numpy(dtype=np.float32)
+    return out
+
+
+def scale_features(X, observed_mask, train_end, method, clip_value=10.0):
+    """Train-only feature scaling computed over OBSERVED values only (imputed
+    cells are excluded from the statistics). Returns (X_scaled, center, scale),
+    with center/scale shaped (N, F) so they broadcast against X [T, N, F] and
+    round-trip through the existing per-node denormalization in the diagnostics.
+
+    method:
+      none      - identity (no scaling)
+      per_node  - per-(node, channel) mean/std (transductive; each PMU whitened)
+      global    - global per-channel mean/std (one center/scale per feature)
+      robust    - global per-channel median/IQR + clip to +/- clip_value
+
+    The observed-mask input channel is added later (during windowing), so it is
+    never seen here and stays unscaled.
+    """
+    _, N, F = X.shape
+    center = np.zeros((N, F), dtype=np.float32)
+    scale = np.ones((N, F), dtype=np.float32)
+    if method == "none":
+        return X.astype(np.float32), center, scale
+
+    obs = observed_mask[:train_end] > 0.5  # [train_end, N]
+    Xtr = X[:train_end]  # [train_end, N, F]
+
+    if method == "per_node":
+        for j in range(N):
+            m = obs[:, j]
+            if not m.any():
+                continue
+            vals = Xtr[m, j, :]  # [n_obs, F]
+            center[j] = vals.mean(axis=0)
+            s = vals.std(axis=0)
+            scale[j] = np.where(s < 1e-8, np.float32(1.0), s)
+    elif method in ("global", "robust"):
+        for f in range(F):
+            vals = Xtr[:, :, f][obs]  # 1-D observed values for channel f
+            if vals.size == 0:
+                continue
+            if method == "robust":
+                c = float(np.median(vals))
+                q25, q75 = np.percentile(vals, [25, 75])
+                s = float(q75 - q25)
+            else:  # global mean/std
+                c = float(vals.mean())
+                s = float(vals.std())
+            if not (np.isfinite(s) and s >= 1e-8):
+                s = 1.0
+            center[:, f] = c  # same per-channel value tiled across nodes
+            scale[:, f] = s
+    else:
+        raise ValueError(f"Unknown --scaling method: {method}")
+
+    Xs = (X - center[None, :, :]) / scale[None, :, :]
+    if method == "robust" and clip_value and clip_value > 0:
+        Xs = np.clip(Xs, -clip_value, clip_value)
+    return Xs.astype(np.float32), center, scale
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -444,6 +560,8 @@ def make_window_dataset(
     edge_index,
     Tin: int,
     H: int,
+    observed_mask=None,
+    out_idx=None,
     edge_weight=None,
     predict_delta: bool = False,
     max_windows: int | None = None,
@@ -451,9 +569,13 @@ def make_window_dataset(
     """Build sliding-window torch_geometric Data objects.
 
     Per window:
-      data.x_seq : [N, Tin, F_dyn + F_static]   (static features tiled across time)
+      data.x_seq : [N, Tin, F_dyn (+1 mask) + F_static]   (mask + static tiled in time)
       data.y     : [N, H * F_out]               (multi-step target per node, flat)
       data.y_loc : [[0, N]]                     single output head spans all N nodes
+
+    If ``observed_mask`` ([T, N], 1=observed / 0=imputed) is given, it is tiled as
+    an extra input channel between the dynamic and static features so the model
+    can condition on which inputs are real.
 
     If ``predict_delta`` is True, the target is the per-step increment
     ``X[s+1+h] - X[s]`` (in the standardized feature space) rather than the
@@ -472,13 +594,15 @@ def make_window_dataset(
     )
     pos = torch.zeros(N, 3)
     batch = torch.zeros(N, dtype=torch.long)
-    target_dim = H * F_OUT
+    out_idx = np.asarray(
+        OUT_FEATURES_DEFAULT if out_idx is None else out_idx, dtype=np.int64
+    )
+    F_out = len(out_idx)
+    target_dim = H * F_out
     # HydraGNN uses y_loc to slice y per output head; for a node-level head with
     # `output_dim` channels per node, dim_item = (y_loc[0,1] - y_loc[0,0]) / N,
     # so y_loc must span N * output_dim entries.
     y_loc = torch.tensor([[0, N * target_dim]], dtype=torch.int64)
-    # Output indices: freq_dev (0), angle_delta (2), volt_dev (3)
-    out_idx = np.array([0, 2, 3], dtype=np.int64)
 
     dataset = []
     start_indices = range(Tin - 1, T - H)
@@ -491,9 +615,21 @@ def make_window_dataset(
     for s in start_indices:
         # Dynamic input: shape [Tin, N, F_dyn] -> [N, Tin, F_dyn]
         x_dyn = torch.from_numpy(X[s - Tin + 1 : s + 1]).permute(1, 0, 2).contiguous()
+        channels = [x_dyn]
+        if observed_mask is not None:
+            # Observed-mask channel (1=observed, 0=imputed/missing), placed between
+            # the dynamic and static features. [Tin, N] -> [N, Tin, 1].
+            mask_win = (
+                torch.from_numpy(observed_mask[s - Tin + 1 : s + 1])
+                .permute(1, 0)
+                .unsqueeze(-1)
+                .contiguous()
+            )
+            channels.append(mask_win)
+        channels.append(static_t)
         x_seq = torch.cat(
-            [x_dyn, static_t], dim=-1
-        ).contiguous()  # [N, Tin, F_dyn+F_static]
+            channels, dim=-1
+        ).contiguous()  # [N, Tin, F_dyn(+1)+F_static]
 
         # Multi-step target: shape [H, N, F_out] -> [N, H*F_out]
         y_block = X[s + 1 : s + 1 + H][:, :, out_idx]  # [H, N, F_out]
@@ -504,7 +640,7 @@ def make_window_dataset(
         y = (
             torch.from_numpy(y_block)
             .permute(1, 0, 2)  # [N, H, F_out]
-            .reshape(N, H * F_OUT)
+            .reshape(N, H * F_out)
             .contiguous()
         )
 
@@ -524,18 +660,25 @@ def make_window_dataset(
             # so PyG's DataLoader concatenates it edge-aligned with edge_index
             # across a batch. Consumed by GCNConv via TemporalGCN's conv string.
             data.edge_weight = edge_weight.clone()
+        if observed_mask is not None:
+            # Forecast-window LOSS mask, aligned element-for-element with y (same
+            # permute/reshape). The per-(t, node) observed flag is broadcast over
+            # the F_out output channels. Consumed by Base.loss(mask=...) so imputed
+            # targets are excluded from the objective. NOTE: distinct from the
+            # input-window mask channel baked into x_seq above (different window).
+            m_block = np.repeat(
+                observed_mask[s + 1 : s + 1 + H][:, :, None], F_out, axis=2
+            )  # [H, N, F_out]
+            y_mask = (
+                torch.from_numpy(m_block)
+                .permute(1, 0, 2)
+                .reshape(N, H * F_out)
+                .contiguous()
+            )
+            assert y_mask.shape == y.shape
+            data.observed_mask = y_mask
         dataset.append(data)
     return dataset
-
-
-def time_ordered_split(dataset, train_frac: float, val_frac: float):
-    n = len(dataset)
-    n_train = int(n * train_frac)
-    n_val = int(n * val_frac)
-    train = dataset[:n_train]
-    val = dataset[n_train : n_train + n_val]
-    test = dataset[n_train + n_val :]
-    return train, val, test
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -553,7 +696,7 @@ def _meta_path(cache_dir: Path, date: str) -> Path:
 
 
 def write_cache(
-    cache_dir: Path, date: str, fmt: str, trainset, valset, testset, meta: dict
+    cache_dir: Path, date: str, fmt: str, trainset, valset, testset, predset, meta: dict
 ):
     cache_dir.mkdir(parents=True, exist_ok=True)
     if fmt == "pickle":
@@ -561,6 +704,7 @@ def write_cache(
         SimplePickleWriter(trainset, basedir, "trainset", use_subdir=True)
         SimplePickleWriter(valset, basedir, "valset", use_subdir=True)
         SimplePickleWriter(testset, basedir, "testset", use_subdir=True)
+        SimplePickleWriter(predset, basedir, "predset", use_subdir=True)
         print(f"[cache] pickle splits saved under {basedir}/")
     elif fmt == "adios":
         if not ADIOS_AVAILABLE:
@@ -573,6 +717,7 @@ def write_cache(
         adwriter.add("trainset", trainset)
         adwriter.add("valset", valset)
         adwriter.add("testset", testset)
+        adwriter.add("predset", predset)
         adwriter.save()
         print(f"[cache] adios splits saved to {fname}")
     else:
@@ -595,6 +740,7 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
         trainset = SimplePickleDataset(basedir=basedir, label="trainset")
         valset = SimplePickleDataset(basedir=basedir, label="valset")
         testset = SimplePickleDataset(basedir=basedir, label="testset")
+        predset = SimplePickleDataset(basedir=basedir, label="predset")
     elif fmt == "adios":
         if not ADIOS_AVAILABLE:
             raise RuntimeError(
@@ -606,9 +752,10 @@ def read_cache(cache_dir: Path, date: str, fmt: str):
         trainset = AdiosDataset(fname, "trainset", comm, **opt)
         valset = AdiosDataset(fname, "valset", comm, **opt)
         testset = AdiosDataset(fname, "testset", comm, **opt)
+        predset = AdiosDataset(fname, "predset", comm, **opt)
     else:
         raise ValueError(f"Unknown --format: {fmt}")
-    return trainset, valset, testset, meta
+    return trainset, valset, testset, predset, meta
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -646,7 +793,13 @@ def preprocess_stage(args, cache_dir: Path):
         )
     print(f"[meta]  {len(fdr_ids)} devices retained after metadata filtering")
 
-    tvec, X, kept_after_align = stack_node_features(fdr_ids, data, dt)
+    tvec, X, observed_mask, kept_after_align = stack_node_features(
+        fdr_ids,
+        data,
+        dt,
+        min_device_coverage=args.min_device_coverage,
+        min_step_coverage=args.min_step_coverage,
+    )
     if len(kept_after_align) != len(fdr_ids):
         keep_set = set(kept_after_align)
         sites = [
@@ -663,10 +816,24 @@ def preprocess_stage(args, cache_dir: Path):
     if args.stride > 1:
         tvec = tvec[:: args.stride]
         X = X[:: args.stride]
+        observed_mask = observed_mask[:: args.stride]
         dt = dt * args.stride
         print(f"[align] applied stride={args.stride}: dt -> {dt:.4f} s")
     T, N, F = X.shape
-    print(f"[align] X shape = {(T, N, F)} (after timestamp inner-join)")
+    print(f"[align] X shape = {(T, N, F)} (gaps kept; observed_mask attached)")
+
+    # Impute the gaps (NaN) left by keep-and-mask alignment so the model sees a
+    # dense input. Train-only median fallback avoids leakage; observed_mask still
+    # marks these cells so the masked loss can ignore the imputed *targets*.
+    train_end_t = max(int(T * args.train_frac), 2)
+    for f in range(F):
+        X[:, :, f] = robust_impute_feature_matrix(
+            X[:, :, f],
+            observed_mask,
+            train_end_t,
+            args.short_gap_steps,
+            args.medium_gap_steps,
+        )
 
     edge_index, edge_weight, A_hat = build_geo_knn_graph(
         meta_active, k=args.k, sigma_km=args.sigma_km
@@ -684,60 +851,75 @@ def preprocess_stage(args, cache_dir: Path):
         f"unique grids = {len(grid_name_to_idx)}"
     )
 
-    # Per-(node, channel) standardization computed only on the train time
-    # slice. This acts as a frozen per-node bias + scale: each PMU gets its
-    # own zero-point and variance for each of the 4 dynamic features, so the
-    # model only has to predict residuals around the node's own baseline.
-    # Shapes: feat_mean / feat_std are (N, F_dyn); broadcast over time.
-    train_end_t = max(int(T * args.train_frac), 2)
-    feat_mean = X[:train_end_t].mean(axis=0).astype(np.float32)  # (N, F_dyn)
-    feat_std = X[:train_end_t].std(axis=0).astype(np.float32)  # (N, F_dyn)
-    feat_std = np.where(feat_std < 1e-8, np.float32(1.0), feat_std)
-    X = ((X - feat_mean[None, :, :]) / feat_std[None, :, :]).astype(np.float32)
-    print(
-        f"[scale] per-node mean shape={feat_mean.shape}  "
-        f"channel-avg={np.array2string(feat_mean.mean(axis=0), precision=4)}  "
-        f"channel-spread(std-of-means)={np.array2string(feat_mean.std(axis=0), precision=4)}"
+    # Train-only feature scaling over OBSERVED values (imputed cells excluded
+    # from the statistics). Method via --scaling; the observed-mask channel is
+    # added later (in windowing), so it is never scaled. train_end_t is the same
+    # train slice used for the imputation fallback above.
+    X, feat_mean, feat_std = scale_features(
+        X, observed_mask, train_end_t, args.scaling, clip_value=args.scaled_clip_value
     )
     print(
-        f"[scale] per-node std  shape={feat_std.shape}   "
-        f"channel-avg={np.array2string(feat_std.mean(axis=0), precision=4)}  "
-        f"channel-spread(std-of-stds)={np.array2string(feat_std.std(axis=0), precision=4)}"
+        f"[scale] method={args.scaling}  center/scale shape={feat_mean.shape}  "
+        f"channel-avg-center={np.array2string(feat_mean.mean(axis=0), precision=4)}  "
+        f"channel-avg-scale={np.array2string(feat_std.mean(axis=0), precision=4)}"
     )
 
-    full_dataset = make_window_dataset(
-        X,
-        grid_embed,
-        edge_index,
-        Tin=args.Tin,
-        H=args.horizon,
-        edge_weight=edge_weight,
-        predict_delta=bool(args.predict_delta),
-        max_windows=args.max_windows,
+    # Slice the timeline into 4 contiguous segments, THEN window each segment
+    # independently. The previous order (window the whole series, then split the
+    # window list by index) let overlapping sliding windows straddle the
+    # train/val/test boundaries, leaking recent history across splits. Windowing
+    # per-segment guarantees no window crosses a boundary.
+    T = X.shape[0]
+    n_train = int(T * args.train_frac)
+    n_val = int(T * args.val_frac)
+    n_test = int(T * args.test_frac)
+    seg_bounds = [
+        ("train", 0, n_train),
+        ("val", n_train, n_train + n_val),
+        ("test", n_train + n_val, n_train + n_val + n_test),
+        ("pred", n_train + n_val + n_test, T),
+    ]
+    out_idx = np.array(args.out_features, dtype=np.int64)
+    seg_data = {
+        name: make_window_dataset(
+            X[lo:hi],
+            grid_embed,
+            edge_index,
+            Tin=args.Tin,
+            H=args.horizon,
+            observed_mask=observed_mask[lo:hi],
+            out_idx=out_idx,
+            edge_weight=edge_weight,
+            predict_delta=bool(args.predict_delta),
+            max_windows=args.max_windows,
+        )
+        for name, lo, hi in seg_bounds
+    }
+    train_data, val_data, test_data, pred_data = (
+        seg_data["train"],
+        seg_data["val"],
+        seg_data["test"],
+        seg_data["pred"],
     )
     if args.predict_delta:
         print("[ds]    target = delta from x_last (predict_delta=True)")
     print(
-        f"[ds]    {len(full_dataset)} windows  " f"(Tin={args.Tin}, H={args.horizon})"
+        f"[split] slice-then-window train/val/test/pred = "
+        f"{len(train_data)}/{len(val_data)}/{len(test_data)}/{len(pred_data)}  "
+        f"(Tin={args.Tin}, H={args.horizon}; no window crosses a boundary)"
     )
-    if len(full_dataset) < 8:
+    if min(len(train_data), len(val_data), len(test_data)) < 1:
         raise RuntimeError(
-            "Too few windows; reduce --Tin/--horizon or use a longer day."
+            "A split produced 0 windows; each segment length must exceed Tin + H. "
+            "Reduce --Tin/--horizon, change split fractions, or use a longer day."
         )
-
-    train_data, val_data, test_data = time_ordered_split(
-        full_dataset, train_frac=args.train_frac, val_frac=args.val_frac
-    )
-    print(
-        f"[split] train/val/test = {len(train_data)}/{len(val_data)}/{len(test_data)}  "
-        f"(time-ordered)"
-    )
 
     meta = {
         "fdr_ids": fdr_ids,
         "sites": sites,
         "tvec": tvec,
         "X": X,
+        "observed_mask": observed_mask,
         "dt": float(dt),
         "edge_index": edge_index,
         "edge_weight": edge_weight,
@@ -748,15 +930,24 @@ def preprocess_stage(args, cache_dir: Path):
         "Tin": int(args.Tin),
         "horizon": int(args.horizon),
         "F_dyn": F_DYN,
-        "F_out": F_OUT,
+        "F_mask": F_MASK,
+        "F_out": int(len(out_idx)),
         "F_static": int(grid_embed.shape[1]),
         "feat_mean": feat_mean,
         "feat_std": feat_std,
-        "out_idx": np.array([0, 2, 3], dtype=np.int64),
+        "scaling": args.scaling,
+        "out_idx": out_idx,
         "predict_delta": bool(args.predict_delta),
     }
     write_cache(
-        cache_dir, args.date, args.format, train_data, val_data, test_data, meta
+        cache_dir,
+        args.date,
+        args.format,
+        train_data,
+        val_data,
+        test_data,
+        pred_data,
+        meta,
     )
 
 
@@ -800,26 +991,32 @@ def train_stage(args, cache_dir: Path):
     hydragnn.utils.print.print_utils.setup_log(log_name)
 
     print(f"[cache] reading splits ({args.format}) from {cache_dir}")
-    trainset, valset, testset, meta = read_cache(cache_dir, args.date, args.format)
+    trainset, valset, testset, predset, meta = read_cache(
+        cache_dir, args.date, args.format
+    )
     print(
-        f"[cache] train/val/test = {len(trainset)}/{len(valset)}/{len(testset)}  "
+        f"[cache] train/val/test/pred = "
+        f"{len(trainset)}/{len(valset)}/{len(testset)}/{len(predset)}  "
         f"| sites={len(meta['sites'])}, Tin={meta['Tin']}, H={meta['horizon']}, "
-        f"F_dyn={meta['F_dyn']}, F_static={meta['F_static']}, F_out={meta['F_out']}"
+        f"F_dyn={meta['F_dyn']}, F_mask={meta.get('F_mask', 0)}, "
+        f"F_static={meta['F_static']}, F_out={meta['F_out']}"
     )
 
     # Patch JSON config to match cached tensor shapes.
-    F_total = meta["F_dyn"] + meta["F_static"]
+    F_total = meta["F_dyn"] + meta.get("F_mask", 0) + meta["F_static"]
     target_dim = meta["horizon"] * meta["F_out"]
     config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"] = list(
         range(F_total)
     )
     config["NeuralNetwork"]["Variables_of_interest"]["output_dim"] = [target_dim]
 
+    bs = config["NeuralNetwork"]["Training"]["batch_size"]
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
-        trainset,
-        valset,
-        testset,
-        config["NeuralNetwork"]["Training"]["batch_size"],
+        trainset, valset, testset, bs
+    )
+    # Separate loader for the final held-out 'pred' split (scored after training).
+    pred_loader, _, _ = hydragnn.preprocess.create_dataloaders(
+        predset, predset, predset, bs
     )
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
@@ -861,13 +1058,29 @@ def train_stage(args, cache_dir: Path):
     )
 
     raw_model = (model.module if hasattr(model, "module") else model).to(device)
-    print("\n[score] Scoring val + test windows ...")
-    preds_val, ys_val = _score_split(raw_model, val_loader, meta, device)
-    preds_test, ys_test = _score_split(raw_model, test_loader, meta, device)
-    val_mse = float(np.mean((preds_val - ys_val) ** 2))
-    test_mse = float(np.mean((preds_test - ys_test) ** 2))
-    print(f"[score] val MSE = {val_mse:.6e}")
-    print(f"[score] test MSE = {test_mse:.6e}")
+    print("\n[score] Scoring val + test + pred windows ...")
+    preds_val, ys_val, masks_val = _score_split(raw_model, val_loader, meta, device)
+    preds_test, ys_test, masks_test = _score_split(raw_model, test_loader, meta, device)
+    preds_pred, ys_pred, masks_pred = _score_split(raw_model, pred_loader, meta, device)
+
+    # Masked metrics (observed targets only) in standardized + original units.
+    fm, fs, oidx = meta["feat_mean"], meta["feat_std"], meta["out_idx"]
+    metrics = {}
+    for name, p, y, m in (
+        ("val", preds_val, ys_val, masks_val),
+        ("test", preds_test, ys_test, masks_test),
+        ("pred", preds_pred, ys_pred, masks_pred),
+    ):
+        scaled = compute_metrics(p, y, m)
+        original = compute_metrics(
+            denormalize(p, fm, fs, oidx), denormalize(y, fm, fs, oidx), m
+        )
+        metrics[name] = {"scaled": scaled, "original": original}
+        print(
+            f"[score] {name:>4}: MSE={scaled['mse']:.4e} MAE={scaled['mae']:.4e} "
+            f"RMSE={scaled['rmse']:.4e} R2={scaled['r2']:.4f} "
+            f"MAPE={scaled['mape']:.2f}%  (scaled, masked)"
+        )
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -879,6 +1092,13 @@ def train_stage(args, cache_dir: Path):
     np.save(out_dir / "ys_val.npy", ys_val)
     np.save(out_dir / "preds_test.npy", preds_test)
     np.save(out_dir / "ys_test.npy", ys_test)
+    np.save(out_dir / "preds_pred.npy", preds_pred)
+    np.save(out_dir / "ys_pred.npy", ys_pred)
+    np.save(out_dir / "masks_val.npy", masks_val)
+    np.save(out_dir / "masks_test.npy", masks_test)
+    np.save(out_dir / "masks_pred.npy", masks_pred)
+    with open(out_dir / "metrics.json", "w") as f:
+        json.dump(metrics, f, indent=2)
     if "feat_mean" in meta and "feat_std" in meta:
         np.save(out_dir / "feat_mean.npy", meta["feat_mean"])
         np.save(out_dir / "feat_std.npy", meta["feat_std"])
@@ -899,10 +1119,48 @@ def train_stage(args, cache_dir: Path):
         dist.destroy_process_group()
 
 
-def _score_split(model, loader, meta, device):
-    """Run model over a dataloader and return stacked (preds, ys).
+def compute_metrics(preds, ys, masks):
+    """MSE / MAE / RMSE / R2 / MAPE over OBSERVED elements only (mask > 0.5).
 
-    Each window's per-node output is reshaped back to [N, H, F_out].
+    preds / ys / masks are [W, N, H, F_out]. Returns all-NaN if no observed
+    elements. Ported from the standalone T-GCN (train.py compute_metrics).
+    """
+    valid = masks.reshape(-1) > 0.5
+    p = preds.reshape(-1)[valid]
+    y = ys.reshape(-1)[valid]
+    if p.size == 0:
+        return {k: float("nan") for k in ("mse", "mae", "rmse", "r2", "mape")}
+    err = p - y
+    mse = float(np.mean(err**2))
+    ss_res = float(np.sum(err**2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r2 = float(1.0 - ss_res / ss_tot) if ss_tot > 0 else 0.0
+    nz = np.abs(y) > 1e-8
+    mape = float(np.mean(np.abs(err[nz] / y[nz])) * 100.0) if nz.any() else 0.0
+    return {
+        "mse": mse,
+        "mae": float(np.mean(np.abs(err))),
+        "rmse": float(np.sqrt(mse)),
+        "r2": r2,
+        "mape": mape,
+    }
+
+
+def denormalize(arr, feat_mean, feat_std, out_idx):
+    """Map standardized [W, N, H, F_out] back to physical units using the
+    per-node (N, F_dyn) train scaler restricted to the output channels."""
+    if arr.size == 0:
+        return arr
+    center = feat_mean[:, out_idx]  # [N, F_out]
+    scale = feat_std[:, out_idx]  # [N, F_out]
+    return arr * scale[None, :, None, :] + center[None, :, None, :]
+
+
+def _score_split(model, loader, meta, device):
+    """Run model over a dataloader and return stacked (preds, ys, masks).
+
+    Each window's per-node output is reshaped to [N, H, F_out]; masks are the
+    forecast-window observed masks (1 = observed) used for masked metrics.
     Returns arrays of shape [num_windows, N, H, F_out].
     """
     N = len(meta["fdr_ids"])
@@ -910,7 +1168,7 @@ def _score_split(model, loader, meta, device):
     Fo = meta["F_out"]
     out_idx = meta["out_idx"]
     predict_delta = bool(meta.get("predict_delta", False))
-    preds, ys = [], []
+    preds, ys, masks = [], [], []
     model.eval()
     with torch.no_grad():
         for data in loader:
@@ -923,6 +1181,10 @@ def _score_split(model, loader, meta, device):
             B = y_pred.shape[0] // N
             y_pred = y_pred.reshape(B, N, H, Fo)
             y_true = y_true.reshape(B, N, H, Fo)
+            if hasattr(data, "observed_mask") and data.observed_mask is not None:
+                m = data.observed_mask.cpu().numpy().reshape(B, N, H, Fo)
+            else:
+                m = np.ones((B, N, H, Fo), dtype=np.float32)
             if predict_delta:
                 # Re-add last observed level so saved arrays are in absolute
                 # (standardized) space, matching the no-delta convention.
@@ -932,11 +1194,15 @@ def _score_split(model, loader, meta, device):
                 y_true = y_true + x_last
             preds.append(y_pred)
             ys.append(y_true)
+            masks.append(m)
     if not preds:
-        return np.zeros((0, N, H, Fo), dtype=np.float32), np.zeros(
-            (0, N, H, Fo), dtype=np.float32
-        )
-    return np.concatenate(preds, axis=0), np.concatenate(ys, axis=0)
+        empty = np.zeros((0, N, H, Fo), dtype=np.float32)
+        return empty, empty.copy(), empty.copy()
+    return (
+        np.concatenate(preds, axis=0),
+        np.concatenate(ys, axis=0),
+        np.concatenate(masks, axis=0),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -987,6 +1253,47 @@ def build_argparser() -> argparse.ArgumentParser:
         default=1,
         help="Temporal subsampling stride applied after alignment",
     )
+    # Coverage / imputation (cov80 keep-and-mask)
+    p.add_argument(
+        "--min_device_coverage",
+        type=float,
+        default=0.5,
+        help="Drop a device covering less than this fraction of the time grid "
+        "(retained devices' gaps are imputed + masked)",
+    )
+    p.add_argument(
+        "--min_step_coverage",
+        type=float,
+        default=0.8,
+        help="Keep a timestep only if at least this fraction of nodes are observed",
+    )
+    p.add_argument(
+        "--short_gap_steps",
+        type=int,
+        default=10,
+        help="Max gap length (steps) filled by linear interpolation during impute",
+    )
+    p.add_argument(
+        "--medium_gap_steps",
+        type=int,
+        default=300,
+        help="Max gap length (steps) filled by ffill/bfill during impute",
+    )
+    p.add_argument(
+        "--scaling",
+        type=str,
+        default="global",
+        choices=["none", "per_node", "global", "robust"],
+        help="Train-only feature scaling over observed values. Default 'global' "
+        "(per-channel mean/std). per_node is transductive; robust = median/IQR + clip",
+    )
+    p.add_argument(
+        "--scaled_clip_value",
+        type=float,
+        default=10.0,
+        help="For --scaling robust: clip standardized features to +/- this value "
+        "(<= 0 disables clipping)",
+    )
     # Cache
     p.add_argument(
         "--format",
@@ -1032,6 +1339,15 @@ def build_argparser() -> argparse.ArgumentParser:
         "--horizon", type=int, default=10, help="Forecast horizon length (steps)"
     )
     p.add_argument(
+        "--out_features",
+        type=int,
+        nargs="+",
+        default=[0, 2, 3],
+        help="Output feature indices into the 4 dynamic channels "
+        "[0=freq_dev, 1=rocof, 2=angle_delta, 3=volt_dev]. Default '0 2 3' (drop "
+        "RoCoF); use '0 3' for the 2-output (freq_dev, volt_dev) parity set",
+    )
+    p.add_argument(
         "--predict_delta",
         action="store_true",
         help="Train the model to predict the per-step delta (X[s+1+h] - X[s]) "
@@ -1044,9 +1360,16 @@ def build_argparser() -> argparse.ArgumentParser:
         default=None,
         help="Cap total windows (evenly spaced subset). Useful for fast iteration.",
     )
-    # Split
+    # Split (4-way, time-ordered; each segment is windowed independently)
     p.add_argument("--train_frac", type=float, default=0.8)
-    p.add_argument("--val_frac", type=float, default=0.1)
+    p.add_argument("--val_frac", type=float, default=0.05)
+    p.add_argument("--test_frac", type=float, default=0.05)
+    p.add_argument(
+        "--pred_frac",
+        type=float,
+        default=0.10,
+        help="Final held-out segment, scored once after training",
+    )
     # Model overrides (also used as HPO knobs)
     p.add_argument(
         "--mpnn_type", type=str, default=None, help="Override mpnn_type from JSON"
