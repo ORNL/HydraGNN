@@ -733,7 +733,9 @@ def train(
                 # Perform forward pass and backward pass under autocast
                 with autocast_context:
                     pred = model(data)
-                    loss, tasks_loss = model.module.loss(pred, data.y, head_index)
+                    loss, tasks_loss = model.module.loss(
+                        pred, data.y, head_index, mask=getattr(data, "observed_mask", None)
+                    )
             if trace_level > 0:
                 tr.start("forward_sync", **syncopt)
                 MPI.COMM_WORLD.Barrier()
@@ -848,7 +850,9 @@ def validate(
             with autocast_context:
                 head_index = get_head_indices(model, data)
                 pred = model(data)
-                error, tasks_loss = model.module.loss(pred, data.y, head_index)
+                error, tasks_loss = model.module.loss(
+                    pred, data.y, head_index, mask=getattr(data, "observed_mask", None)
+                )
         error = error.detach()
         if torch.is_tensor(tasks_loss):
             tasks_loss = tasks_loss.detach()
@@ -929,7 +933,9 @@ def test(
             with autocast_context:
                 head_index = get_head_indices(model, data)
                 pred = model(data)
-                error, tasks_loss = model.module.loss(pred, data.y, head_index)
+                error, tasks_loss = model.module.loss(
+                    pred, data.y, head_index, mask=getattr(data, "observed_mask", None)
+                )
         ## FIXME: temporary
         if int(os.getenv("HYDRAGNN_DUMP_TESTDATA", "0")) == 1:
             if model.module.var_output:
