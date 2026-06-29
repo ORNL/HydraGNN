@@ -8,6 +8,7 @@
             "temporal_backbone": "gru",
             "temporal_mode": "post_gcn",
             "temporal_num_layers": 1,
+            "temporal_batch_norm": false,
             "hidden_dim": 32,
             "num_conv_layers": 2,
             "max_neighbours": 10,

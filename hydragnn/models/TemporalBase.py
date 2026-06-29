@@ -74,6 +74,7 @@ class TemporalBase(Base):
         temporal_hidden_dim: int = None,
         temporal_num_layers: int = 1,
         temporal_mode: str = "post_gcn",
+        temporal_batch_norm: bool = True,
         **kwargs,
     ):
         # ------------------------------------------------------------------ #
@@ -100,6 +101,21 @@ class TemporalBase(Base):
                 f"got '{temporal_mode}'"
             )
         self._temporal_mode = mode
+
+        # When False, skip the BatchNorm in self.feature_layers between GCN layers
+        # and apply only the activation — matching the standalone T-GCN's bare-ReLU
+        # stack (Base.py inserts BatchNorm unconditionally). Default True preserves
+        # HydraGNN's existing behavior for every other model.
+        self._temporal_batch_norm = bool(temporal_batch_norm)
+        if not self._temporal_batch_norm:
+            # Base._init_conv always creates a BatchNorm per conv layer. With BN
+            # bypassed those modules never receive gradients, so DDP
+            # (find_unused_parameters=False) raises "parameters that were not used
+            # in producing loss". Swap them for Identity so no dead parameters
+            # remain (the forward pass skips them either way).
+            self.feature_layers = nn.ModuleList(
+                nn.Identity() for _ in self.feature_layers
+            )
 
         # ------------------------------------------------------------------ #
         # 3. Determine RNN input/output sizes.                                #
@@ -168,6 +184,29 @@ class TemporalBase(Base):
             _, h_n = rnn(H)
         return h_n[-1]  # [N, t_hidden]
 
+    def _embedding(self, data):
+        """Extend Base._embedding so a weighted spatial conv can see edge weights.
+
+        Base._embedding only populates conv_args with edge_index (and optionally
+        edge_attr); it has no notion of a scalar edge_weight. TemporalGCN's conv
+        signature names edge_weight (see create.py), so we inject it here.
+
+        Safety:
+          * The ``"edge_weight" in self.conv_args`` guard means the other
+            temporal backbones (GIN/SAGE/GAT/PNA), whose conv_args never mention
+            edge_weight, are completely unaffected.
+          * ``getattr(data, "edge_weight", None)`` keeps unweighted graphs
+            working — PyG's GCNConv treats edge_weight=None as an unweighted
+            (binary) adjacency, so the synthetic example and the static
+            (no-x_seq) fallback path still run unchanged.
+          * super()._embedding follows the MRO, so each backbone's own
+            _embedding (e.g. PNAStack's) is still used as the base.
+        """
+        inv_node_feat, equiv_node_feat, conv_args = super()._embedding(data)
+        if "edge_weight" in self.conv_args:
+            conv_args["edge_weight"] = getattr(data, "edge_weight", None)
+        return inv_node_feat, equiv_node_feat, conv_args
+
     def _spatial_encode_step(self, data, x_t: torch.Tensor, conv_args: dict = None):
         """Run Base's full spatial encoder for a single timestep.
 
@@ -207,7 +246,9 @@ class TemporalBase(Base):
                     **conv_args,
                 )
             inv = self._apply_graph_conditioning(inv, batch_fc, data)
-            inv = self.activation_function(feat_layer(inv))
+            if self._temporal_batch_norm:
+                inv = feat_layer(inv)
+            inv = self.activation_function(inv)
 
         return inv, equiv, conv_args
 
@@ -311,7 +352,9 @@ class TemporalBase(Base):
                             **conv_args,
                         )
                     inv_t = self._apply_graph_conditioning(inv_t, batch_fc, data)
-                    inv_t = self.activation_function(feat_layer(inv_t))
+                    if self._temporal_batch_norm:
+                        inv_t = feat_layer(inv_t)
+                    inv_t = self.activation_function(inv_t)
                     gcn_outs.append(inv_t)
 
                 H_l = torch.stack(gcn_outs, dim=1)  # [N_total, T, hidden]
