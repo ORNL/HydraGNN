@@ -879,11 +879,14 @@ def preprocess_stage(args, cache_dir: Path):
     n_train = int(T * args.train_frac)
     n_val = int(T * args.val_frac)
     n_test = int(T * args.test_frac)
+    n_pred = int(T * args.pred_frac)
+    pred_start = n_train + n_val + n_test
+
     seg_bounds = [
         ("train", 0, n_train),
         ("val", n_train, n_train + n_val),
-        ("test", n_train + n_val, n_train + n_val + n_test),
-        ("pred", n_train + n_val + n_test, T),
+        ("test", n_train + n_val, pred_start),
+        ("pred", pred_start, min(pred_start + n_pred, T)),
     ]
     out_idx = np.array(args.out_features, dtype=np.int64)
     seg_data = {

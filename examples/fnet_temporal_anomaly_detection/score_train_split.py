@@ -153,13 +153,22 @@ def main():
 
     raw_model = (model.module if hasattr(model, "module") else model).to(device)
     print("[score] Scoring train split ...")
-    preds_train, ys_train = _score_split(raw_model, train_loader, meta, device)
-    train_mse = float(np.mean((preds_train - ys_train) ** 2)) if preds_train.size else float("nan")
+    preds_train, ys_train, masks_train = _score_split(
+        raw_model, train_loader, meta, device
+    )
+    # Masked MSE over observed targets only (matches the cov80 masked metrics).
+    if preds_train.size:
+        valid = masks_train.reshape(-1) > 0.5
+        err = preds_train.reshape(-1)[valid] - ys_train.reshape(-1)[valid]
+        train_mse = float(np.mean(err**2)) if err.size else float("nan")
+    else:
+        train_mse = float("nan")
     print(f"[score] train MSE = {train_mse:.6e}  shape={preds_train.shape}")
 
     np.save(out_dir / "preds_train.npy", preds_train)
     np.save(out_dir / "ys_train.npy", ys_train)
-    print(f"[save]  wrote preds_train.npy / ys_train.npy to {out_dir}/")
+    np.save(out_dir / "masks_train.npy", masks_train)
+    print(f"[save]  wrote preds_train / ys_train / masks_train .npy to {out_dir}/")
 
 
 if __name__ == "__main__":
