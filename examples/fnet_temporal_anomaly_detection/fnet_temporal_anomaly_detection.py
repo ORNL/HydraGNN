@@ -495,6 +495,10 @@ def build_geo_knn_graph(meta_active: pd.DataFrame, k: int, sigma_km: float):
     edge_index  : LongTensor [2, E]   directed (symmetric) edges
     edge_weight : FloatTensor [E]
     A_hat       : np.ndarray [N, N]   GCN-normalized adjacency (D^-0.5 (A+I) D^-0.5)
+    A_geo       : np.ndarray [N, N]   raw exp(-d/sigma) similarity, symmetric,
+                                      zero diagonal (pre-normalization). Downstream
+                                      cluster detection thresholds on the
+                                      raw weights, which A_hat cannot recover.
     """
     coords = meta_active[["Latitude", "Longitude"]].to_numpy(dtype=np.float64)
     coords_rad = np.radians(coords)
@@ -526,7 +530,9 @@ def build_geo_knn_graph(meta_active: pd.DataFrame, k: int, sigma_km: float):
     deg = A_self.sum(axis=1)
     D_inv_sqrt = np.diag(1.0 / np.sqrt(np.clip(deg, 1e-12, None)))
     A_hat = D_inv_sqrt @ A_self @ D_inv_sqrt
-    return edge_index, edge_weight, A_hat
+    # A is the raw exp(-d/sigma) similarity (symmetric, zero-diagonal); return it
+    # too so downstream detection can threshold on the un-normalized weights.
+    return edge_index, edge_weight, A_hat, A.astype(np.float32)
 
 
 def build_grid_embeddings(
@@ -835,7 +841,7 @@ def preprocess_stage(args, cache_dir: Path):
             args.medium_gap_steps,
         )
 
-    edge_index, edge_weight, A_hat = build_geo_knn_graph(
+    edge_index, edge_weight, A_hat, A_geo = build_geo_knn_graph(
         meta_active, k=args.k, sigma_km=args.sigma_km
     )
     print(
@@ -873,11 +879,14 @@ def preprocess_stage(args, cache_dir: Path):
     n_train = int(T * args.train_frac)
     n_val = int(T * args.val_frac)
     n_test = int(T * args.test_frac)
+    n_pred = int(T * args.pred_frac)
+    pred_start = n_train + n_val + n_test
+
     seg_bounds = [
         ("train", 0, n_train),
         ("val", n_train, n_train + n_val),
-        ("test", n_train + n_val, n_train + n_val + n_test),
-        ("pred", n_train + n_val + n_test, T),
+        ("test", n_train + n_val, pred_start),
+        ("pred", pred_start, min(pred_start + n_pred, T)),
     ]
     out_idx = np.array(args.out_features, dtype=np.int64)
     seg_data = {
@@ -924,6 +933,7 @@ def preprocess_stage(args, cache_dir: Path):
         "edge_index": edge_index,
         "edge_weight": edge_weight,
         "A_hat": A_hat,
+        "A_geo": A_geo,
         "grid_embed": grid_embed,
         "grid_name_to_idx": grid_name_to_idx,
         "grid_names": grid_names,
@@ -1087,6 +1097,7 @@ def train_stage(args, cache_dir: Path):
     np.save(out_dir / "tvec.npy", meta["tvec"])
     np.save(out_dir / "X.npy", meta["X"])
     np.save(out_dir / "A_hat.npy", meta["A_hat"])
+    np.save(out_dir / "A_geo.npy", meta["A_geo"])
     np.save(out_dir / "grid_embed.npy", meta["grid_embed"])
     np.save(out_dir / "preds_val.npy", preds_val)
     np.save(out_dir / "ys_val.npy", ys_val)
@@ -1103,6 +1114,29 @@ def train_stage(args, cache_dir: Path):
         np.save(out_dir / "feat_mean.npy", meta["feat_mean"])
         np.save(out_dir / "feat_std.npy", meta["feat_std"])
         np.save(out_dir / "out_idx.npy", meta["out_idx"])
+    # Run metadata Downstream needs but that the saved arrays don't encode: Tin and
+    # the split fractions (to recover each split's segment start) plus context
+    # (dt, scaling, predict_delta). H / F_out / N are recoverable from the preds
+    # array shapes, so they are informational here. tvec.npy is already strided,
+    # so the window->timestamp math runs entirely in strided-index space.
+    with open(out_dir / "downstream_meta.json", "w") as f:
+        json.dump(
+            {
+                "Tin": int(meta["Tin"]),
+                "horizon": int(meta["horizon"]),
+                "train_frac": float(args.train_frac),
+                "val_frac": float(args.val_frac),
+                "test_frac": float(args.test_frac),
+                "stride": int(args.stride),
+                "dt": float(meta["dt"]),
+                "scaling": meta.get("scaling"),
+                "predict_delta": bool(meta.get("predict_delta", False)),
+                "n_nodes": int(len(meta["fdr_ids"])),
+                "F_out": int(meta["F_out"]),
+            },
+            f,
+            indent=2,
+        )
     pd.DataFrame(
         {
             "site": meta["sites"],

@@ -66,6 +66,14 @@ must be `mse` (the masked-loss path is MSE-specific).
 - `metrics.json` — masked MSE/MAE/RMSE/R²/MAPE per split, in scaled + original units
 - `preds_{val,test,pred}.npy`, `ys_*.npy`, `masks_*.npy` — `[W, N, H, F_out]`
 - `feat_mean/feat_std/out_idx.npy`, `X.npy`, `tvec.npy`, `A_hat.npy`, `sites.csv`
+- `A_geo.npy` — raw `exp(-d/σ)` similarity (for downstream cluster thresholding)
+- `downstream_meta.json` — `Tin` / split fractions / stride / scaling (for downstream)
+
+## Downstream detection
+
+Post-hoc regional-anomaly detection on the saved residuals lives in
+[`downstream/`](downstream/README.md) (`regional_detector.py` → `collapse_episodes.py`).
+It reads this `--out_dir`; no retraining.
 
 ## Notes
 
