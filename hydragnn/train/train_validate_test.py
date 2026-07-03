@@ -352,6 +352,8 @@ def train_validate_test(
 
     timer = Timer("train_validate_test")
     timer.start()
+    train_validate_wall_start = time.time()
+    epoch_wall_times = []
 
     epoch_start = config["Training"].get("epoch_start", 0)
     for epoch in range(epoch_start, num_epoch):
@@ -448,6 +450,12 @@ def train_validate_test(
         print_distributed(
             verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
         )
+        epoch_wall_seconds = time.time() - t0
+        epoch_wall_times.append(epoch_wall_seconds)
+        print_distributed(
+            verbosity,
+            f"EpochTime epoch={epoch:02d} seconds={epoch_wall_seconds:.6f}",
+        )
 
         total_loss_train[epoch] = train_loss
         total_loss_val[epoch] = val_loss
@@ -493,6 +501,18 @@ def train_validate_test(
                 break
 
     timer.stop()
+    total_wall_seconds = time.time() - train_validate_wall_start
+    if epoch_wall_times:
+        avg_epoch_seconds = sum(epoch_wall_times) / len(epoch_wall_times)
+    else:
+        avg_epoch_seconds = 0.0
+    print_distributed(
+        verbosity,
+        "TrainingTime "
+        f"total_seconds={total_wall_seconds:.6f} "
+        f"epochs={len(epoch_wall_times)} "
+        f"avg_epoch_seconds={avg_epoch_seconds:.6f}",
+    )
 
     if create_plots:
         # reduce loss statistics across all processes

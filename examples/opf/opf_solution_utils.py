@@ -13,13 +13,14 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-class OPFDomainLoss:
+class OPFDomainLoss(torch.nn.Module):
     """Domain-informed regularization for OPF bus-level targets.
 
     Feasibility penalties (all zero on any strictly feasible OPF solution):
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
       - angle_diff_weight              : Penalty for predicted Va angle-difference outside line [theta_min, theta_max].
       - line_flow_weight               : Penalty for DC-approximate branch flow (DeltaVa / x_ij) exceeding rate_a.
+      - ac_line_flow_weight            : Penalty for AC apparent branch flow |S_ij| exceeding rate_a.
       - line_flow_slack               : Tolerance subtracted from rate_a before penalising, absorbing the
                                         small linearisation error of the DC approximation on AC-feasible
                                         solutions.  Default 1e-4 (one decade above the ~1.3e-5 residual
@@ -46,6 +47,7 @@ class OPFDomainLoss:
     """
 
     def __init__(self, config: dict | None = None, node_target_type: str = "bus"):
+        super().__init__()
         cfg = copy.deepcopy(config or {})
         self.enabled = bool(cfg.get("enabled", False))
         self.node_target_type = node_target_type
@@ -60,6 +62,7 @@ class OPFDomainLoss:
         self.va_output_index = int(cfg.get("va_output_index", 0))
         self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
         self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
+        self.ac_line_flow_weight = float(cfg.get("ac_line_flow_weight", 0.0))
         # line_flow_slack: a small tolerance subtracted from rate_a before the DC thermal-limit
         # penalty is evaluated.  It exists because the DC power-flow formula
         #   P_ij = (Va_i - Va_j) / x_ij
@@ -77,6 +80,23 @@ class OPFDomainLoss:
         # Curriculum scheduling.
         self.warmup_epochs = int(cfg.get("warmup_epochs", 0))
         self.ramp_epochs = int(cfg.get("ramp_epochs", 0))
+        # Augmented Lagrangian settings.  In static mode, behavior remains the
+        # previous EMA-normalized quadratic penalty.
+        self.loss_mode = str(cfg.get("mode", "static")).lower()
+        self.use_augmented_lagrangian = self.loss_mode in {
+            "augmented_lagrangian",
+            "al",
+        }
+        self.al_rho = float(cfg.get("al_rho", 1e-3))
+        self.al_mu_max = float(cfg.get("al_mu_max", 100.0))
+
+        self.register_buffer("mu_voltage_bound", torch.zeros(()))
+        self.register_buffer("mu_ac_angle_diff", torch.zeros(()))
+        self.register_buffer("mu_tr_angle_diff", torch.zeros(()))
+        self.register_buffer("mu_ac_line_flow", torch.zeros(()))
+        self.register_buffer("mu_tr_line_flow", torch.zeros(()))
+        self.register_buffer("mu_ac_apparent_flow", torch.zeros(()))
+        self.register_buffer("mu_tr_apparent_flow", torch.zeros(()))
 
         if self.voltage_bound_feature_indices is not None:
             if len(self.voltage_bound_feature_indices) != 2:
@@ -130,7 +150,84 @@ class OPFDomainLoss:
         # (e.g. the constraint is already satisfied for all samples in a batch).
         return raw / self._penalty_ema[name]
 
-    def __call__(self, pred, value, head_index, data):
+    def _inequality_loss(self, name, violation, static_weight, update_duals):
+        raw_squared = violation.pow(2).mean()
+
+        if not self.use_augmented_lagrangian:
+            return static_weight * self._normalize(name, raw_squared), raw_squared
+
+        mu = getattr(self, f"mu_{name}")
+        mean_violation = violation.mean()
+
+        loss = static_weight * (
+            mu * mean_violation + 0.5 * self.al_rho * raw_squared
+        )
+
+        if update_duals:
+            with torch.no_grad():
+                mu.add_(self.al_rho * mean_violation.detach())
+                mu.clamp_(min=0.0, max=self.al_mu_max)
+
+        return loss, raw_squared
+
+    @staticmethod
+    def _safe_series_admittance(r, x):
+        denom = r.pow(2) + x.pow(2)
+        denom = denom.clamp(min=1e-12)
+        return r / denom, -x / denom
+
+    def _ac_apparent_flow_violation(
+        self,
+        Va,
+        Vm,
+        edge_index,
+        edge_attr,
+        rel_tag,
+    ):
+        src, dst = edge_index
+        Vm_src = Vm[src].to(torch.float32).clamp(min=1e-6)
+        Vm_dst = Vm[dst].to(torch.float32).clamp(min=1e-6)
+        Vi = torch.polar(Vm_src, Va[src].to(torch.float32))
+        Vj = torch.polar(Vm_dst, Va[dst].to(torch.float32))
+
+        ea = edge_attr.to(device=Va.device, dtype=torch.float32)
+        if rel_tag == "ac":
+            if ea.shape[1] <= 6:
+                return None
+            # OPFDataset schema: ac_line [theta_min, theta_max, r_from, r_to,
+            # b_sh, x, rate_a, ...].  Use the average of the two resistance-like
+            # columns as a symmetric series resistance approximation.
+            r = 0.5 * (ea[:, 2].abs() + ea[:, 3].abs())
+            b_sh = ea[:, 4]
+            x = ea[:, 5]
+            rate_a = ea[:, 6].clamp(min=0.0)
+        elif rel_tag == "tr":
+            if ea.shape[1] <= 4:
+                return None
+            # Transformer schema: [theta_min, theta_max, r, x, rate_a, ...].
+            # Tap/phase-shift details are not included here yet; this is the
+            # first AC upgrade over the DC thermal-limit approximation.
+            r = ea[:, 2].abs()
+            b_sh = ea.new_zeros(ea.shape[0])
+            x = ea[:, 3]
+            rate_a = ea[:, 4].clamp(min=0.0)
+        else:
+            return None
+
+        x_floor = torch.where(x >= 0.0, x.new_full(x.shape, 1e-6), x.new_full(x.shape, -1e-6))
+        x = torch.where(x.abs() < 1e-6, x_floor, x)
+        g, b = self._safe_series_admittance(r, x)
+        y = torch.complex(g, b)
+        y_sh = torch.complex(torch.zeros_like(b_sh), 0.5 * b_sh)
+
+        Iij = (y + y_sh) * Vi - y * Vj
+        Iji = (y + y_sh) * Vj - y * Vi
+        Sij = Vi * torch.conj(Iij)
+        Sji = Vj * torch.conj(Iji)
+        apparent = torch.maximum(torch.abs(Sij), torch.abs(Sji))
+        return F.relu(apparent - rate_a)
+
+    def forward(self, pred, value, head_index, data, update_duals=False):
         if not self.enabled or data is None:
             return value.new_zeros(()), {}
 
@@ -171,15 +268,19 @@ class OPFDomainLoss:
                 voltage = bus_pred[:, self.voltage_output_index].reshape(-1)
                 # F.relu zeros out values that already satisfy the bound, so the gradient
                 # is zero for feasible predictions and proportional to the violation otherwise.
-                # Squaring gives a smooth (C1) penalty with growing gradient for larger violations.
-                bound_penalty = torch.mean(
-                    F.relu(lower - voltage).pow(2)
-                    + F.relu(voltage - upper).pow(2)
+                voltage_violation = (
+                    F.relu(lower - voltage)
+                    + F.relu(voltage - upper)
                 )
-                total_penalty = (
-                    total_penalty + curriculum * self.voltage_bound_weight * self._normalize("voltage_bound", bound_penalty)
+                bound_loss, bound_penalty = self._inequality_loss(
+                    "voltage_bound",
+                    voltage_violation,
+                    self.voltage_bound_weight,
+                    update_duals,
                 )
+                total_penalty = total_penalty + curriculum * bound_loss
                 metrics["opf_voltage_bound"] = bound_penalty.detach()
+                metrics["opf_mu_voltage_bound"] = self.mu_voltage_bound.detach()
 
         # ── Angle difference limit penalty ──────────────────────────────────
         # Penalise predicted Va angle-differences that violate per-line bounds.
@@ -205,12 +306,21 @@ class OPFDomainLoss:
                 # feasible region [theta_min, theta_max], growing penalty outside it.
                 # No slack is needed here: verified empirically that this term is exactly
                 # zero on OPFDataset ground-truth solutions (Va and theta bounds share units).
-                angdiff_p = torch.mean(
-                    F.relu(delta_theta - theta_max).pow(2)
-                    + F.relu(theta_min - delta_theta).pow(2)
+                angle_violation = (
+                    F.relu(delta_theta - theta_max)
+                    + F.relu(theta_min - delta_theta)
                 )
-                total_penalty = total_penalty + curriculum * self.angle_diff_weight * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                angdiff_loss, angdiff_p = self._inequality_loss(
+                    f"{rel_tag}_angle_diff",
+                    angle_violation,
+                    self.angle_diff_weight,
+                    update_duals,
+                )
+                total_penalty = total_penalty + curriculum * angdiff_loss
                 metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
+                metrics[f"opf_mu_{rel_tag}_angle_diff"] = getattr(
+                    self, f"mu_{rel_tag}_angle_diff"
+                ).detach()
 
         # ── DC thermal limit penalty ─────────────────────────────────────────
         # Penalise approximate DC branch flows that exceed the thermal limit.
@@ -243,9 +353,58 @@ class OPFDomainLoss:
                 # line_flow_slack is subtracted from rate_a to absorb the residual introduced
                 # by the DC linearisation on AC-feasible solutions (see __init__ for details).
                 # Without it, ground-truth predictions would incur a spurious non-zero penalty.
-                flow_p = torch.mean(F.relu(P_ij.abs() - rate_a - self.line_flow_slack).pow(2))
-                total_penalty = total_penalty + curriculum * self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                flow_violation = F.relu(P_ij.abs() - rate_a - self.line_flow_slack)
+                flow_loss, flow_p = self._inequality_loss(
+                    f"{rel_tag}_line_flow",
+                    flow_violation,
+                    self.line_flow_weight,
+                    update_duals,
+                )
+                total_penalty = total_penalty + curriculum * flow_loss
                 metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
+                metrics[f"opf_mu_{rel_tag}_line_flow"] = getattr(
+                    self, f"mu_{rel_tag}_line_flow"
+                ).detach()
+
+        # ── AC apparent-flow thermal limit penalty ──────────────────────────
+        # Penalise |S_ij| from an AC branch-flow approximation.  This uses both
+        # predicted Va and Vm, unlike the DC line-flow term above.
+        if (
+            self.ac_line_flow_weight > 0.0
+            and bus_pred.shape[-1] > max(self.va_output_index, self.voltage_output_index)
+        ):
+            Va = bus_pred[:, self.va_output_index].reshape(-1)
+            Vm = bus_pred[:, self.voltage_output_index].reshape(-1)
+            for rel, rel_tag in [
+                (("bus", "ac_line", "bus"), "ac"),
+                (("bus", "transformer", "bus"), "tr"),
+            ]:
+                if rel not in data.edge_types:
+                    continue
+                ea = getattr(data[rel], "edge_attr", None)
+                ei = getattr(data[rel], "edge_index", None)
+                if ea is None or ei is None or ea.numel() == 0:
+                    continue
+                flow_violation = self._ac_apparent_flow_violation(
+                    Va,
+                    Vm,
+                    ei,
+                    ea,
+                    rel_tag,
+                )
+                if flow_violation is None:
+                    continue
+                flow_loss, flow_p = self._inequality_loss(
+                    f"{rel_tag}_apparent_flow",
+                    flow_violation,
+                    self.ac_line_flow_weight,
+                    update_duals,
+                )
+                total_penalty = total_penalty + curriculum * flow_loss
+                metrics[f"opf_{rel_tag}_apparent_flow"] = flow_p.detach()
+                metrics[f"opf_mu_{rel_tag}_apparent_flow"] = getattr(
+                    self, f"mu_{rel_tag}_apparent_flow"
+                ).detach()
 
         metrics["opf_domain_total"] = total_penalty.detach()
         return total_penalty, metrics
@@ -330,6 +489,15 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             "opf_tr_angle_diff":     "raw_tr_angle_diff",
             "opf_ac_line_flow":      "raw_ac_line_flow",
             "opf_tr_line_flow":      "raw_tr_line_flow",
+            "opf_ac_apparent_flow":  "raw_ac_apparent_flow",
+            "opf_tr_apparent_flow":  "raw_tr_apparent_flow",
+            "opf_mu_voltage_bound":  "mu_voltage_bound",
+            "opf_mu_ac_angle_diff":  "mu_ac_angle_diff",
+            "opf_mu_tr_angle_diff":  "mu_tr_angle_diff",
+            "opf_mu_ac_line_flow":   "mu_ac_line_flow",
+            "opf_mu_tr_line_flow":   "mu_tr_line_flow",
+            "opf_mu_ac_apparent_flow": "mu_ac_apparent_flow",
+            "opf_mu_tr_apparent_flow": "mu_tr_apparent_flow",
         }
 
         parts = [f"epoch={epoch:02d}", f"data_driven_mse={task_mean:.8f}"]
@@ -370,6 +538,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             value,
             head_index,
             self._last_batch,
+            update_duals=self.training,
         )
         self.last_extra_loss_metrics = extra_metrics
 
