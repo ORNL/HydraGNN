@@ -134,6 +134,12 @@ def create_model_config(
         uma_ff_type=config["Architecture"]["uma_ff_type"],
         uma_use_chg_spin=config["Architecture"]["uma_use_chg_spin"],
         uma_max_num_elements=config["Architecture"]["uma_max_num_elements"],
+        uma_variant=config["Architecture"]["uma_variant"],
+        uma_num_experts=config["Architecture"]["uma_num_experts"],
+        uma_moe_dropout=config["Architecture"]["uma_moe_dropout"],
+        uma_use_composition_embedding=config["Architecture"][
+            "uma_use_composition_embedding"
+        ],
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -218,6 +224,10 @@ def create_model(
     uma_ff_type: str = "grid",
     uma_use_chg_spin: bool = False,
     uma_max_num_elements: int = 100,
+    uma_variant: str = "S",
+    uma_num_experts: int = None,
+    uma_moe_dropout: float = 0.0,
+    uma_use_composition_embedding: bool = False,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -756,6 +766,10 @@ def create_model(
             uma_ff_type,
             uma_use_chg_spin,
             uma_max_num_elements,
+            uma_variant,
+            uma_num_experts,
+            uma_moe_dropout,
+            uma_use_composition_embedding,
             False,  # periodic_boundary_conditions; CI/default is non-periodic.
             input_dim,
             hidden_dim,

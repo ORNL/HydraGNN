@@ -78,6 +78,15 @@ Key                               Purpose
 ``uma_ff_type``                   FFN style ("grid" or "spectral").
 ``uma_use_chg_spin``              Enable optional ChgSpinEmbedding.
 ``uma_max_num_elements``          Z embedding table size.
+``uma_variant``                   UMA capacity tier: ``"S"`` (single
+                                  dense backbone), ``"M"`` or ``"L"``
+                                  (Mixture-of-Linear-Experts routing).
+``uma_num_experts``               Override the routed-expert count for
+                                  the ``"M"`` / ``"L"`` variants
+                                  (defaults: M=8, L=32; ignored for S).
+``uma_moe_dropout``               Dropout on the MoLE routing weights.
+``uma_use_composition_embedding`` Route experts using the atomic
+                                  composition in addition to charge/spin.
 ================================  =========================================
 
 Equivariance
@@ -104,6 +113,15 @@ from hydragnn.models.Base import Base
 from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_md import (
     eSCNMDBackbone,
 )
+from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_moe import (
+    eSCNMDMoeBackbone,
+)
+
+# Default expert counts for the Mixture-of-Linear-Experts (MoLE) UMA
+# variants when the user does not override ``uma_num_experts``. UMA's "S"
+# variant is a single dense backbone (no experts); "M" and "L" grow the
+# routed-expert capacity.
+_UMA_VARIANT_DEFAULT_EXPERTS = {"M": 8, "L": 32}
 
 
 class _UMADataDict(dict):
@@ -156,6 +174,10 @@ class UMAStack(Base):
         uma_ff_type: str = "grid",
         uma_use_chg_spin: bool = False,
         uma_max_num_elements: int = 100,
+        uma_variant: str = "S",
+        uma_num_experts: Optional[int] = None,
+        uma_moe_dropout: float = 0.0,
+        uma_use_composition_embedding: bool = False,
         periodic_boundary_conditions: bool = False,
         *args,
         **kwargs,
@@ -185,6 +207,23 @@ class UMAStack(Base):
         self.uma_use_chg_spin = uma_use_chg_spin
         self.uma_max_num_elements = uma_max_num_elements
         self.uma_periodic = bool(periodic_boundary_conditions)
+
+        # UMA S / M / L variant selection. "S" is a single dense
+        # backbone (eSCNMDBackbone); "M" / "L" enable Mixture-of-Linear-
+        # Experts (MoLE) routing via eSCNMDMoeBackbone with progressively
+        # larger expert counts.
+        variant = str(uma_variant).upper()
+        if variant not in ("S", "M", "L"):
+            raise ValueError(
+                f"uma_variant must be one of 'S', 'M', 'L'; got {uma_variant!r}."
+            )
+        self.uma_variant = variant
+        if uma_num_experts is not None:
+            self.uma_num_experts = int(uma_num_experts)
+        else:
+            self.uma_num_experts = _UMA_VARIANT_DEFAULT_EXPERTS.get(variant, 0)
+        self.uma_moe_dropout = float(uma_moe_dropout)
+        self.uma_use_composition_embedding = bool(uma_use_composition_embedding)
 
         # Capture the HydraGNN activation-function string and map to UMA's
         # supported act_type. UMA accepts "gate" or "s2"; other names
@@ -243,7 +282,21 @@ class UMAStack(Base):
             "always_use_pbc": self.uma_periodic,
         }
 
-        self.uma_backbone = eSCNMDBackbone(**backbone_cfg)
+        if self.uma_variant == "S":
+            # Single dense backbone -- no routed experts.
+            self.uma_backbone = eSCNMDBackbone(**backbone_cfg)
+        else:
+            # "M" / "L": Mixture-of-Linear-Experts (MoLE) routing. The
+            # routing coefficients are derived from the per-system
+            # charge/spin (and optionally composition) embeddings, so no
+            # HydraGNN-side dataset labelling is required.
+            self.uma_backbone = eSCNMDMoeBackbone(
+                num_experts=int(self.uma_num_experts),
+                moe_dropout=self.uma_moe_dropout,
+                use_composition_embedding=self.uma_use_composition_embedding,
+                moe_type="so2",
+                **backbone_cfg,
+            )
         # Cache lmax once -- UMA's node_embedding has shape
         # (N, (lmax+1)**2, sphere_channels). We pull L=0 (index 0) as
         # the invariant scalar feature for HydraGNN's standard decoders.

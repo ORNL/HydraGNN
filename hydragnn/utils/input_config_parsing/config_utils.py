@@ -184,6 +184,15 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["uma_use_chg_spin"] = False
     if "uma_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["uma_max_num_elements"] = 100
+    if "uma_variant" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_variant"] = "S"
+    if "uma_num_experts" not in config["NeuralNetwork"]["Architecture"]:
+        # None -> UMAStack picks the per-variant default (M=8, L=32; S=0).
+        config["NeuralNetwork"]["Architecture"]["uma_num_experts"] = None
+    if "uma_moe_dropout" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_moe_dropout"] = 0.0
+    if "uma_use_composition_embedding" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_use_composition_embedding"] = False
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
