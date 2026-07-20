@@ -10,11 +10,74 @@
 ##############################################################################
 
 import torch
-from torch.nn import Linear, ModuleDict, ModuleList
+from torch.nn import Linear, Module, ModuleDict, ModuleList
 from torch_geometric.data import HeteroData
 from torch_geometric.nn import BatchNorm, HEATConv
 
 from .HeteroBase import HeteroBase
+
+
+class _HeteroHEATConvAdapter(Module):
+    def __init__(
+        self,
+        heat_conv,
+        node_types,
+        edge_types,
+        heat_edge_dim: int,
+    ):
+        super().__init__()
+        self.heat_conv = heat_conv
+        self.node_types = list(node_types)
+        self.edge_types = list(edge_types)
+        self.heat_edge_dim = heat_edge_dim
+
+    def forward(self, x_dict, edge_index_dict, edge_attr_dict=None):
+        hdata = HeteroData()
+        for node_type in self.node_types:
+            hdata[node_type].x = x_dict[node_type]
+
+        for edge_type in self.edge_types:
+            if edge_type in edge_index_dict:
+                edge_index = edge_index_dict[edge_type]
+            else:
+                device = x_dict[self.node_types[0]].device
+                edge_index = torch.empty((2, 0), dtype=torch.long, device=device)
+
+            hdata[edge_type].edge_index = edge_index
+            num_edges = edge_index.size(1)
+            device = edge_index.device
+
+            if edge_attr_dict is not None and edge_type in edge_attr_dict:
+                edge_attr = edge_attr_dict[edge_type]
+                if edge_attr.size(0) != num_edges:
+                    raise ValueError(
+                        f"edge_attr rows ({edge_attr.size(0)}) must match "
+                        f"num_edges ({num_edges}) for edge_type={edge_type}"
+                    )
+                hdata[edge_type].edge_attr = edge_attr
+            else:
+                hdata[edge_type].edge_attr = torch.zeros(
+                    (num_edges, self.heat_edge_dim),
+                    dtype=hdata[self.node_types[0]].x.dtype,
+                    device=device,
+                )
+
+        homo = hdata.to_homogeneous(node_attrs=["x"], edge_attrs=["edge_attr"])
+        x = self.heat_conv(
+            homo.x,
+            homo.edge_index,
+            homo.node_type,
+            homo.edge_type,
+            homo.edge_attr,
+        )
+
+        out_dict = {}
+        for idx, node_type in enumerate(self.node_types):
+            out_dict[node_type] = x[homo.node_type == idx]
+        return out_dict
+
+    def reset_parameters(self):
+        self.heat_conv.reset_parameters()
 
 
 class HeteroHEATStack(HeteroBase):
@@ -45,19 +108,24 @@ class HeteroHEATStack(HeteroBase):
         self._heat_edge_dim = self.hidden_dim
 
         for _ in range(self.num_conv_layers):
-            self.graph_convs.append(
-                HEATConv(
-                    in_channels=self.hidden_dim,
-                    out_channels=self.hidden_dim,
-                    num_node_types=len(self.node_types),
-                    num_edge_types=len(self.edge_types),
-                    edge_type_emb_dim=self.edge_type_emb_dim,
-                    edge_dim=self._heat_edge_dim,
-                    edge_attr_emb_dim=self.edge_attr_emb_dim,
-                    heads=self.attention_heads,
-                    concat=False,
-                )
+            heat_conv = HEATConv(
+                in_channels=self.hidden_dim,
+                out_channels=self.hidden_dim,
+                num_node_types=len(self.node_types),
+                num_edge_types=len(self.edge_types),
+                edge_type_emb_dim=self.edge_type_emb_dim,
+                edge_dim=self._heat_edge_dim,
+                edge_attr_emb_dim=self.edge_attr_emb_dim,
+                heads=self.attention_heads,
+                concat=False,
             )
+            mpnn = _HeteroHEATConvAdapter(
+                heat_conv,
+                self.node_types,
+                self.edge_types,
+                self._heat_edge_dim,
+            )
+            self.graph_convs.append(self._apply_global_attn(mpnn))
             node_norms = ModuleDict({})
             for node_type in self.node_types:
                 node_norms[node_type] = BatchNorm(self.hidden_dim)
@@ -98,8 +166,11 @@ class HeteroHEATStack(HeteroBase):
                 "HeteroHEATStack does not support conv-based node heads. Use 'mlp' or 'mlp_per_node'."
             )
 
+        attention_only_gps = (
+            self.use_global_attn and self.global_attn_engine == "GPS-attn-only"
+        )
         projected_edge_attr_dict = {}
-        if edge_attr_dict is not None:
+        if edge_attr_dict is not None and not attention_only_gps:
             for edge_type, edge_attr in edge_attr_dict.items():
                 self._ensure_edge_projector(
                     edge_type, edge_attr.size(-1), edge_attr.device
@@ -108,62 +179,25 @@ class HeteroHEATStack(HeteroBase):
                     self.edge_lin_dict[str(edge_type)](edge_attr)
                 )
 
-        # Build temporary HeteroData for HEATConv -> homogeneous conversion
-        hdata = HeteroData()
-        for node_type in self.node_types:
-            hdata[node_type].x = x_dict[node_type]
-
-        for edge_type in self.edge_types:
-            if edge_type in data.edge_index_dict:
-                ei = data.edge_index_dict[edge_type]
-            else:
-                device = x_dict[self.node_types[0]].device
-                ei = torch.empty((2, 0), dtype=torch.long, device=device)
-
-            hdata[edge_type].edge_index = ei
-            num_edges = ei.size(1)
-            device = ei.device
-
-            if edge_type in projected_edge_attr_dict:
-                ea = projected_edge_attr_dict[edge_type]
-                if ea.size(0) != num_edges:
-                    raise ValueError(
-                        f"edge_attr rows ({ea.size(0)}) must match num_edges ({num_edges}) for edge_type={edge_type}"
-                    )
-                hdata[edge_type].edge_attr = ea
-            else:
-                hdata[edge_type].edge_attr = torch.zeros(
-                    (num_edges, self._heat_edge_dim),
-                    dtype=hdata[self.node_types[0]].x.dtype,
-                    device=device,
-                )
-
-        homo = hdata.to_homogeneous(node_attrs=["x"], edge_attrs=["edge_attr"])
-        x = homo.x
-        edge_index = homo.edge_index
-        node_type = homo.node_type
-        edge_type = homo.edge_type
-        edge_attr = homo.edge_attr
-
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
-            x = conv(x, edge_index, node_type, edge_type, edge_attr)
-            for idx, node_name in enumerate(self.node_types):
-                mask = node_type == idx
-                if not torch.any(mask):
-                    continue
-                x_type = x[mask]
-                x_type = self._apply_graph_conditioning(
-                    x_type, batch_dict[node_name], data
+            if self.use_global_attn:
+                x_dict = conv(
+                    x_dict,
+                    data.edge_index_dict,
+                    batch_dict,
+                    edge_attr_dict=projected_edge_attr_dict,
                 )
-                x_type = node_norms[node_name](x_type)
-                x_type = self.activation_function(x_type)
-                x[mask] = x_type
-
-        # Reconstruct x_dict from homogeneous representation
-        x_dict = {}
-        for idx, node_name in enumerate(self.node_types):
-            mask = node_type == idx
-            x_dict[node_name] = x[mask]
+            else:
+                x_dict = conv(
+                    x_dict,
+                    data.edge_index_dict,
+                    edge_attr_dict=projected_edge_attr_dict,
+                )
+            for node_type, x in x_dict.items():
+                x = self._apply_graph_conditioning(x, batch_dict[node_type], data)
+                x = node_norms[node_type](x)
+                x = self.activation_function(x)
+                x_dict[node_type] = x
 
         return self._decode_from_x_dict(x_dict, batch_dict, data, edge_attr_dict=None)
 

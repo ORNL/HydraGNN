@@ -26,11 +26,13 @@ class HeteroHGTStack(HeteroBase):
         self.feature_layers = ModuleList()
 
         for _ in range(self.num_conv_layers):
-            self.graph_convs.append(
-                HGTConv(
-                    self.hidden_dim, self.hidden_dim, self._metadata, self.num_heads
-                )
+            mpnn = HGTConv(
+                self.hidden_dim,
+                self.hidden_dim,
+                self._metadata,
+                self.num_heads,
             )
+            self.graph_convs.append(self._apply_global_attn(mpnn))
             node_norms = ModuleDict({})
             for node_type in self._metadata[0]:
                 node_norms[node_type] = BatchNorm(self.hidden_dim)
@@ -64,7 +66,15 @@ class HeteroHGTStack(HeteroBase):
             )
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
-            x_dict = conv(x_dict, data.edge_index_dict)
+            if self.use_global_attn:
+                x_dict = conv(
+                    x_dict,
+                    data.edge_index_dict,
+                    batch_dict,
+                    edge_attr_dict=None,
+                )
+            else:
+                x_dict = conv(x_dict, data.edge_index_dict)
             for node_type, x in x_dict.items():
                 x = self._apply_graph_conditioning(x, batch_dict[node_type], data)
                 x = node_norms[node_type](x)

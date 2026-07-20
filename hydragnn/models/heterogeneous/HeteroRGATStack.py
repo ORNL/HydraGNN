@@ -9,10 +9,39 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-from torch.nn import ModuleDict, ModuleList
+from torch.nn import Linear, Module, ModuleDict, ModuleList
 from torch_geometric.nn import BatchNorm, GATConv, HeteroConv
 
 from .HeteroBase import HeteroBase
+
+
+class _ProjectedHeteroConv(Module):
+    def __init__(self, conv, node_types, input_dim: int, output_dim: int):
+        super().__init__()
+        self.conv = conv
+        self.proj = ModuleDict(
+            {node_type: Linear(input_dim, output_dim) for node_type in node_types}
+        )
+
+    def forward(self, x_dict, edge_index_dict, edge_attr_dict=None):
+        if edge_attr_dict is None:
+            out_dict = self.conv(x_dict, edge_index_dict)
+        else:
+            out_dict = self.conv(
+                x_dict,
+                edge_index_dict,
+                edge_attr_dict=edge_attr_dict,
+            )
+
+        return {
+            node_type: self.proj[node_type](x)
+            for node_type, x in out_dict.items()
+        }
+
+    def reset_parameters(self):
+        self.conv.reset_parameters()
+        for proj in self.proj.values():
+            proj.reset_parameters()
 
 
 class HeteroRGATStack(HeteroBase):
@@ -65,38 +94,81 @@ class HeteroRGATStack(HeteroBase):
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
 
-        # First layer: concat=True -> hidden_dim * heads
-        self.graph_convs.append(
-            self._build_hetero_rgat_conv(self.hidden_dim, self.hidden_dim, True)
-        )
-        node_norms = ModuleDict({})
-        for node_type in self._metadata[0]:
-            node_norms[node_type] = BatchNorm(self.hidden_dim * self.heads)
-        self.feature_layers.append(node_norms)
+        if self.use_global_attn:
+            # Match non-hetero GATStack: concat heads are projected back to
+            # hidden_dim before GPS sees the local branch output.
+            mpnn = self._build_hetero_rgat_conv(self.hidden_dim, self.hidden_dim, True)
+            mpnn = _ProjectedHeteroConv(
+                mpnn,
+                self._metadata[0],
+                self.hidden_dim * self.heads,
+                self.hidden_dim,
+            )
+            self.graph_convs.append(self._apply_global_attn(mpnn))
+            node_norms = ModuleDict({})
+            for node_type in self._metadata[0]:
+                node_norms[node_type] = BatchNorm(self.hidden_dim)
+            self.feature_layers.append(node_norms)
 
-        # Middle layers: concat=True -> hidden_dim * heads
-        for _ in range(self.num_conv_layers - 2):
-            self.graph_convs.append(
-                self._build_hetero_rgat_conv(
-                    self.hidden_dim * self.heads, self.hidden_dim, True
+            for _ in range(self.num_conv_layers - 2):
+                mpnn = self._build_hetero_rgat_conv(
+                    self.hidden_dim, self.hidden_dim, True
                 )
+                mpnn = _ProjectedHeteroConv(
+                    mpnn,
+                    self._metadata[0],
+                    self.hidden_dim * self.heads,
+                    self.hidden_dim,
+                )
+                self.graph_convs.append(self._apply_global_attn(mpnn))
+                node_norms = ModuleDict({})
+                for node_type in self._metadata[0]:
+                    node_norms[node_type] = BatchNorm(self.hidden_dim)
+                self.feature_layers.append(node_norms)
+
+            if self.num_conv_layers > 1:
+                mpnn = self._build_hetero_rgat_conv(
+                    self.hidden_dim, self.hidden_dim, False
+                )
+                self.graph_convs.append(self._apply_global_attn(mpnn))
+                node_norms = ModuleDict({})
+                for node_type in self._metadata[0]:
+                    node_norms[node_type] = BatchNorm(self.hidden_dim)
+                self.feature_layers.append(node_norms)
+
+        else:
+            # First layer: concat=True -> hidden_dim * heads
+            self.graph_convs.append(
+                self._build_hetero_rgat_conv(self.hidden_dim, self.hidden_dim, True)
             )
             node_norms = ModuleDict({})
             for node_type in self._metadata[0]:
                 node_norms[node_type] = BatchNorm(self.hidden_dim * self.heads)
             self.feature_layers.append(node_norms)
 
-        # Final layer: concat=False -> hidden_dim
-        if self.num_conv_layers > 1:
-            self.graph_convs.append(
-                self._build_hetero_rgat_conv(
-                    self.hidden_dim * self.heads, self.hidden_dim, False
+            # Middle layers: concat=True -> hidden_dim * heads
+            for _ in range(self.num_conv_layers - 2):
+                self.graph_convs.append(
+                    self._build_hetero_rgat_conv(
+                        self.hidden_dim * self.heads, self.hidden_dim, True
+                    )
                 )
-            )
-            node_norms = ModuleDict({})
-            for node_type in self._metadata[0]:
-                node_norms[node_type] = BatchNorm(self.hidden_dim)
-            self.feature_layers.append(node_norms)
+                node_norms = ModuleDict({})
+                for node_type in self._metadata[0]:
+                    node_norms[node_type] = BatchNorm(self.hidden_dim * self.heads)
+                self.feature_layers.append(node_norms)
+
+            # Final layer: concat=False -> hidden_dim
+            if self.num_conv_layers > 1:
+                self.graph_convs.append(
+                    self._build_hetero_rgat_conv(
+                        self.hidden_dim * self.heads, self.hidden_dim, False
+                    )
+                )
+                node_norms = ModuleDict({})
+                for node_type in self._metadata[0]:
+                    node_norms[node_type] = BatchNorm(self.hidden_dim)
+                self.feature_layers.append(node_norms)
 
         self._initialized = True
 
