@@ -63,6 +63,7 @@ def create_model_config(
         global_attn_engine=config["Architecture"]["global_attn_engine"],
         global_attn_type=config["Architecture"]["global_attn_type"],
         global_attn_heads=config["Architecture"]["global_attn_heads"],
+        attn_only=config["Architecture"].get("attn_only", False),
         output_type=config["Architecture"]["output_type"],
         output_heads=config["Architecture"]["output_heads"],
         activation_function=config["Architecture"]["activation_function"],
@@ -195,6 +196,7 @@ def create_model(
     hetero_edge_attr_emb_dim: int = 16,
     verbosity: int = 0,
     use_gpu: bool = True,
+    attn_only: bool = False,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -645,6 +647,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
 
     elif mpnn_type == "HeteroSAGE":
@@ -674,6 +677,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
 
     elif mpnn_type == "HeteroGAT":
@@ -708,6 +712,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
 
     elif mpnn_type == "HeteroPNA":
@@ -740,6 +745,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
     elif mpnn_type == "HeteroRGAT":
         model = HeteroRGATStack(
@@ -771,6 +777,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
     elif mpnn_type == "HeteroHGT":
         model = HeteroHGTStack(
@@ -800,6 +807,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
     elif mpnn_type == "HeteroHEAT":
         model = HeteroHEATStack(
@@ -831,6 +839,7 @@ def create_model(
             share_relation_weights=share_relation_weights,
             metadata=metadata,
             node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))

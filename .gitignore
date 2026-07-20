@@ -10,3 +10,11 @@ exporter.log
 installation_DOE_supercomputers/HydraGNN-Installation-Frontier*/
 *.doc
 *.docx
+  **/logs/
+  **/serialized_dataset/
+  *.h5
+  *.hdf5
+  *.pickle
+  *.pkl
+  *.bp/
+  *.bp

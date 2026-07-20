@@ -22,6 +22,7 @@ from torch_geometric.nn import (
 from hydragnn.utils.model import activation_function_selection, loss_function_selection
 from hydragnn.utils.distributed import get_device
 from hydragnn.models.Base import MLPNode
+from hydragnn.globalAtt.Hetero_gps import HeteroGPSConv
 
 
 class HeteroBase(Module):
@@ -61,13 +62,11 @@ class HeteroBase(Module):
         share_relation_weights: bool = False,
         node_input_dims: dict | None = None,
         metadata=None,
+        attn_only: bool = False,
     ):
         super().__init__()
 
-        if global_attn_engine:
-            raise NotImplementedError(
-                "HeteroBase does not yet support global attention. Set global_attn_engine=None."
-            )
+        self.use_global_attn = bool(global_attn_engine)
 
         self.device = get_device()
         self.input_dim = input_dim
@@ -90,6 +89,7 @@ class HeteroBase(Module):
         self.global_attn_engine = global_attn_engine
         self.global_attn_type = global_attn_type
         self.global_attn_heads = global_attn_heads
+        self.attn_only = bool(attn_only)
 
         self.heads_NN = ModuleList()
         self.config_heads = config_heads
@@ -283,7 +283,9 @@ class HeteroBase(Module):
         for layer_idx in range(self.num_conv_layers):
             in_dim = self.hidden_dim if layer_idx > 0 else self.hidden_dim
             out_dim = self.hidden_dim
-            self.graph_convs.append(self._build_hetero_conv(in_dim, out_dim))
+            self.graph_convs.append(
+                self._apply_global_attn(self._build_hetero_conv(in_dim, out_dim))
+            )
             node_norms = ModuleDict({})
             for node_type in self._metadata[0]:
                 node_norms[node_type] = BatchNorm(out_dim)
@@ -703,19 +705,20 @@ class HeteroBase(Module):
                     store.edge_index = store.edge_index.to(device)
                 if hasattr(store, "edge_attr") and store.edge_attr is not None:
                     store.edge_attr = store.edge_attr.to(device)
-
-        x_dict = {node_type: x.to(device) for node_type, x in data.x_dict.items()}
-        self._ensure_node_embedders(x_dict)
-        x_dict = {
-            node_type: self.node_embedders[node_type](x.float())
-            for node_type, x in x_dict.items()
-        }
-
-        batch_dict = self._get_batch_dict(data, x_dict)
+                    
+        x_dict, batch_dict = self._prepare_node_features(data)
+        
         edge_attr_dict = self._get_edge_attr_dict(data)
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
-            if edge_attr_dict is None:
+            if self.use_global_attn:
+                x_dict = conv(
+                    x_dict,
+                    data.edge_index_dict,
+                    batch_dict,
+                    edge_attr_dict=edge_attr_dict,
+                )
+            elif edge_attr_dict is None:
                 x_dict = conv(x_dict, data.edge_index_dict)
             else:
                 x_dict = conv(x_dict, data.edge_index_dict, edge_attr_dict)
