@@ -16,18 +16,15 @@
 """
 HydraGNN integration of FairChem's UMA model.
 
-Unlike :class:`AllScAIPStack`, which vendors its source under
-``hydragnn/utils/model/allscaip``, UMA depends on a much larger set of
-specialized SO(3) / SO(2) primitives, Wigner-D tables, and rotation
-machinery that we deliberately do **not** vendor. Instead we declare
-``fairchem-core`` as an *optional* HydraGNN dependency
-(``requirements-optional.txt``) and import the upstream backbone class
-lazily inside :meth:`UMAStack._init_conv`.
+The upstream ``eSCNMDBackbone`` (and all of its transitive fairchem-core
+dependencies -- SO(3)/SO(2) primitives, Wigner-D tables, rotation and
+radial modules) is vendored verbatim under
+``hydragnn/utils/model/uma/_vendored/fairchem/core/**`` (Meta MIT licence
+preserved). ``UMAStack`` imports the vendored class directly, so there
+is no runtime dependency on the external ``fairchem-core`` distribution.
 
-If ``fairchem-core`` is not installed at runtime, instantiating
-``UMAStack`` raises a clear :class:`ImportError` with installation
-instructions; HydraGNN itself continues to import and run all other
-backbones normally.
+Refresh the vendored tree from a newer fairchem-core install with
+``python tools/vendor_uma.py --apply``.
 
 Design summary
 --------------
@@ -104,13 +101,8 @@ import torch
 from torch.nn import Identity, ModuleList
 
 from hydragnn.models.Base import Base
-
-
-_FAIRCHEM_INSTALL_HINT = (
-    "UMAStack requires the optional 'fairchem-core' package, which "
-    "provides the eSCNMDBackbone implementation. Install it with:\n"
-    "    pip install fairchem-core\n"
-    "(see requirements-optional.txt)."
+from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_md import (
+    eSCNMDBackbone,
 )
 
 
@@ -217,11 +209,6 @@ class UMAStack(Base):
         super().__init__(input_args, conv_args, *args, **kwargs)
 
     def _init_conv(self):
-        try:
-            from fairchem.core.models.uma.escn_md import eSCNMDBackbone
-        except ImportError as exc:  # pragma: no cover - exercised at runtime
-            raise ImportError(_FAIRCHEM_INSTALL_HINT) from exc
-
         # Build the UMA backbone with HydraGNN-derived configuration.
         # We disable the dataset embedding (no UMA-style multi-task
         # routing in HydraGNN datasets) and gradient-based force/stress

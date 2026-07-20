@@ -1,2 +1,5 @@
 include LICENSE
 include LICENSES/PYG-MIT.txt
+# Vendored FairChem UMA backbone resources (Wigner-D / spherical-harmonic
+# coefficient tensors and model metadata) required at runtime.
+recursive-include hydragnn/utils/model/uma/_vendored *.pt *.json *.yaml
