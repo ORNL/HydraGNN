@@ -166,9 +166,7 @@ class HeteroHEATStack(HeteroBase):
                 "HeteroHEATStack does not support conv-based node heads. Use 'mlp' or 'mlp_per_node'."
             )
 
-        attention_only_gps = (
-            self.use_global_attn and self.global_attn_engine == "GPS-attn-only"
-        )
+        attention_only_gps = self.use_global_attn and self.attn_only
         projected_edge_attr_dict = {}
         if edge_attr_dict is not None and not attention_only_gps:
             for edge_type, edge_attr in edge_attr_dict.items():
