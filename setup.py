@@ -65,7 +65,12 @@ setup(
     # harmonic / Wigner-D coefficient tensors and model metadata) that must be
     # packaged alongside the sources so the backbone can be constructed.
     include_package_data=True,
-    package_data={"hydragnn": ["utils/model/uma/_vendored/**/*.pt", "utils/model/uma/_vendored/**/*.json"]},
+    package_data={
+        "hydragnn": [
+            "utils/model/uma/_vendored/**/*.pt",
+            "utils/model/uma/_vendored/**/*.json",
+        ]
+    },
     install_requires=install_requires,
     extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph neural networks",
