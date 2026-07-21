@@ -10,13 +10,3 @@ pandas==2.3.3 # needed for HPO examples and FAIRChem functionalities
 PyYAML # needed for FAIRChem configuration files
 wandb # needed for FAIRChem logging functionalities
 
-# --- Vendored FAIRChem UMA backbone runtime deps -------------------------------
-# Unlike the entries above (which are truly optional and NOT installed in CI),
-# these two are imported by the vendored UMA backbone whenever a UMA model runs,
-# and UMA is exercised in CI. They are therefore installed by a dedicated CI
-# step (.github/workflows/CI.yml) that keeps pip build isolation ENABLED, so
-# omegaconf's sdist-only antlr4-python3-runtime dependency can build its own
-# backend -- installing them under the base `--no-build-isolation` step fails.
-omegaconf # UMA backbone: DictConfig/ListConfig config types
-monty # UMA backbone: monty.dev.requires decorator
-

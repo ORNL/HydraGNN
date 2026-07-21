@@ -25,6 +25,12 @@ if [ "$1" == "dev" ]; then
     pip install --no-build-isolation -v -r requirements-dev.txt
 fi
 
+# Install model-specific backbone dependencies (e.g. FAIRChem UMA).
+# NOTE: build isolation is intentionally ENABLED here (no --no-build-isolation)
+# so omegaconf's sdist-only antlr4-python3-runtime dependency can build.
+echo "Installing model-specific backbone dependencies..."
+pip install -v -r requirements-specific-models.txt
+
 # Install optional dependencies (optional)
 if [ "$1" == "all" ] || [ "$2" == "optional" ]; then
     echo "Installing optional dependencies..."

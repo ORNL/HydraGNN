@@ -33,17 +33,17 @@ jobs:
         uses: actions/cache@v4
         id: cache
         with:
-          path: ~/.cache/pip
-          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-specific-models.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel meson-python ninja cython
           python -m pip install numpy==2.2.6
           python -m pip install --upgrade --no-build-isolation -v -r requirements-base.txt -r requirements-dev.txt
-          # UMA backbone runtime deps (declared in requirements-optional.txt).
-          # Installed WITH build isolation so omegaconf's sdist-only
-          # antlr4-python3-runtime dependency can build its own backend.
-          python -m pip install -v --upgrade omegaconf monty
+          # Model-specific backbone deps (e.g. FAIRChem UMA). Installed WITH
+          # build isolation so omegaconf's sdist-only antlr4-python3-runtime
+          # dependency can build its own backend -- see the file header.
+          python -m pip install -v --upgrade -r requirements-specific-models.txt
           python -m pip install --upgrade --no-build-isolation -v -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
           python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.13.0+cpu.html
           python -m pip install --upgrade --no-build-isolation -v -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"

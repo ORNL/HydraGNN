@@ -198,7 +198,7 @@ def ensure_init(dirpath: Path):
 # they live only in checkpoint / inference code paths that HydraGNN does not
 # use, so we defer them to their single use sites. The remaining lightweight
 # import-time deps (``omegaconf``, ``monty``) are declared in
-# requirements-optional.txt and imported normally by the vendored code.
+# requirements-specific-models.txt and imported normally by the vendored code.
 # Each patch is (relpath-under-fairchem/core, old, new) applied to the rewritten
 # text; every ``old`` must match exactly once or the run aborts.
 PATCHES: list[tuple[str, str, str]] = [
