@@ -20,6 +20,15 @@ from torch_geometric.loader import DataLoader
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 from hydragnn.models.create import create_model_config
 
+from tests.uma_optional import uma_available
+
+# UMA requires optional backbone dependencies (see requirements-optional);
+# skip the UMA cases when those deps are unavailable so CI does not error.
+_skip_uma = pytest.mark.skipif(
+    not uma_available(),
+    reason="UMA optional dependencies are not installed",
+)
+
 
 def _tiny_loader(num_graphs=4, num_nodes=6):
     """Build a tiny in-memory loader mirroring the LennardJones example.
@@ -60,7 +69,7 @@ def _load_example_config(filename):
 @pytest.mark.parametrize(
     "filename, expected_mpnn, expected_str",
     [
-        ("LJ_UMA.json", "UMA", "UMAStack"),
+        pytest.param("LJ_UMA.json", "UMA", "UMAStack", marks=_skip_uma),
         ("LJ_AllScAIP.json", "AllScAIP", "AllScAIPStack"),
     ],
 )
@@ -91,6 +100,7 @@ def pytest_example_config_builds_model(filename, expected_mpnn, expected_str):
 
 
 @pytest.mark.parametrize("uma_variant", ["S", "M", "L"])
+@_skip_uma
 def pytest_uma_variant_config_builds_model(uma_variant):
     """The UMA example config builds for every S / M / L capacity tier."""
     os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = "0"

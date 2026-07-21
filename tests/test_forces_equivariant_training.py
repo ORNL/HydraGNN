@@ -18,10 +18,27 @@ import sys
 
 import subprocess
 
+from tests.uma_optional import uma_available
+
 
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.parametrize(
-    "mpnn_type", ["SchNet", "EGNN", "DimeNet", "PAINN", "PNAPlus", "MACE", "UMA"]
+    "mpnn_type",
+    [
+        "SchNet",
+        "EGNN",
+        "DimeNet",
+        "PAINN",
+        "PNAPlus",
+        "MACE",
+        pytest.param(
+            "UMA",
+            marks=pytest.mark.skipif(
+                not uma_available(),
+                reason="UMA optional dependencies are not installed",
+            ),
+        ),
+    ],
 )
 @pytest.mark.mpi_skip()
 def pytest_examples(example, mpnn_type):

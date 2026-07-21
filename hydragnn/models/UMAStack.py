@@ -110,12 +110,41 @@ import torch
 from torch.nn import Identity, ModuleList
 
 from hydragnn.models.Base import Base
-from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_md import (
-    eSCNMDBackbone,
-)
-from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_moe import (
-    eSCNMDMoeBackbone,
-)
+
+# NOTE: the vendored FairChem UMA backbone is imported lazily (see
+# ``_load_uma_backbones``) rather than at module import time. Its transitive
+# import closure pulls a number of fairchem-core third-party dependencies
+# (omegaconf, hydra, torchtnt, ...) that are *not* part of HydraGNN's core
+# requirements. Importing them eagerly here would make ``import hydragnn`` --
+# and therefore all test collection -- fail in environments that only install
+# the base requirements. Keeping the import lazy means UMA is a truly optional
+# backbone: the deps are only needed when a UMA model is actually constructed.
+
+
+def _load_uma_backbones():
+    """Import and return the vendored UMA backbone classes.
+
+    Raises a clear, actionable :class:`ImportError` when the optional UMA
+    dependencies are not installed, instead of the opaque failure that would
+    otherwise surface deep inside the vendored fairchem-core tree.
+    """
+    try:
+        from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_md import (
+            eSCNMDBackbone,
+        )
+        from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.escn_moe import (
+            eSCNMDMoeBackbone,
+        )
+    except ImportError as exc:  # pragma: no cover - exercised via optional deps
+        raise ImportError(
+            "The UMA backbone requires optional dependencies that are not "
+            "installed. Install them with:\n"
+            "    pip install -r requirements-optional.txt\n"
+            f"(underlying import error: {exc})"
+        ) from exc
+
+    return eSCNMDBackbone, eSCNMDMoeBackbone
+
 
 # Default expert counts for the Mixture-of-Linear-Experts (MoLE) UMA
 # variants when the user does not override ``uma_num_experts``. UMA's "S"
@@ -284,12 +313,14 @@ class UMAStack(Base):
 
         if self.uma_variant == "S":
             # Single dense backbone -- no routed experts.
+            eSCNMDBackbone, _ = _load_uma_backbones()
             self.uma_backbone = eSCNMDBackbone(**backbone_cfg)
         else:
             # "M" / "L": Mixture-of-Linear-Experts (MoLE) routing. The
             # routing coefficients are derived from the per-system
             # charge/spin (and optionally composition) embeddings, so no
             # HydraGNN-side dataset labelling is required.
+            _, eSCNMDMoeBackbone = _load_uma_backbones()
             self.uma_backbone = eSCNMDMoeBackbone(
                 num_experts=int(self.uma_num_experts),
                 moe_dropout=self.uma_moe_dropout,
