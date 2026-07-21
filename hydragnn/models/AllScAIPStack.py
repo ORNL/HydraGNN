@@ -16,66 +16,114 @@
 """
 HydraGNN integration of FairChem's AllScAIP model.
 
-The vendored FairChem code lives under
-``hydragnn.utils.model.allscaip`` (and its EScAIP utility deps under
-``hydragnn.utils.model.escaip.utils``). This stack wraps the vendored
-:class:`AllScAIPBackbone` so it composes with HydraGNN's ``Base`` model
-machinery (multi-head decoders, graph conditioning, training loop).
+The vendored FairChem code lives under ``hydragnn.utils.model.allscaip``
+(and its EScAIP utility deps under ``hydragnn.utils.model.escaip.utils``).
+This stack wraps the vendored :class:`AllScAIPBackbone` so it composes with
+HydraGNN's ``Base`` model machinery (multi-head decoders, graph
+conditioning, and the interatomic-potential training loop).
 
 Design summary
 --------------
-AllScAIP is a monolithic transformer-style backbone: it performs its
-own kNN radius-graph construction, runs an input block + N transformer
-blocks, and emits a per-node hidden representation. To plug it into
-HydraGNN we:
+AllScAIP is a monolithic transformer-style backbone: it performs its own
+differentiable kNN radius-graph construction, runs an input block + N
+transformer blocks, and emits a per-node scalar hidden representation. To
+plug it into HydraGNN we:
 
 * run the **entire** AllScAIP backbone inside ``_embedding(...)``,
-* expose the result as the invariant node feature consumed by
-  HydraGNN's standard decoder pipeline, and
+* expose the result as the invariant node feature consumed by HydraGNN's
+  standard decoder pipeline, and
 * register a single identity placeholder convolution so the
-  ``Base.forward`` loop becomes a no-op.
+  ``Base.forward`` per-layer loop becomes a no-op.
 
-The number of AllScAIP transformer blocks is controlled by the
-standard HydraGNN ``num_conv_layers`` architecture flag (same key used
-by every other backbone). Internally we capture it as the AllScAIP
-depth and then force Base's per-layer forward loop to a single
-no-op iteration.
+The number of AllScAIP transformer blocks is controlled by the standard
+HydraGNN ``num_conv_layers`` architecture flag (same key used by every
+other backbone). Internally we capture it as the AllScAIP depth and then
+force Base's per-layer forward loop to a single no-op iteration.
+
+Hyperparameter mapping
+----------------------
+HydraGNN's standard ``Architecture`` keys are reused wherever the
+semantics overlap; AllScAIP-specific keys keep the ``allscaip_`` prefix.
+
+============================  ==============================  ===============
+HydraGNN key                  AllScAIP config argument        Notes
+============================  ==============================  ===============
+``radius``                    ``max_radius``                  kNN cutoff (A).
+``max_neighbours``            ``knn_k``                       kNN degree.
+``hidden_dim``                ``hidden_size``                 Scalar width.
+``num_conv_layers``           ``num_layers``                  Transformer depth.
+``activation_function``       (mapped to ``activation``)      See ``_ACT_MAP``.
+============================  ==============================  ===============
+
+AllScAIP-specific keys (no HydraGNN equivalent):
+
+======================================  ====================================
+Key                                     Purpose
+======================================  ====================================
+``allscaip_num_heads``                  Attention head count. ``hidden_dim``
+                                        must be divisible by this.
+``allscaip_freq_list``                  Per-degree spherical-harmonic
+                                        frequency repeats. Must sum to
+                                        ``hidden_dim // allscaip_num_heads``
+                                        (defaults to a single l=0 bucket).
+``allscaip_atten_name``                 SDPA backend: ``"math"`` (safe for
+                                        autograd forces / CPU), or
+                                        ``"memory_efficient"`` / ``"flash"``
+                                        for direct-force GPU inference.
+``allscaip_use_node_path``              Enable the global node-attention path.
+``allscaip_use_sincx_mask``             sinc(x) node-attention distance mask.
+``allscaip_use_freq_mask``              Frequency-vector neighbor mask.
+``allscaip_max_num_elements``           Z embedding table size.
+``allscaip_knn_soft``                   Differentiable soft-kNN gate. **Keep
+                                        ``True`` for gradient-based force
+                                        training** (positions must flow
+                                        through the graph construction).
+``allscaip_distance_function``          Radial basis: ``"gaussian"`` /
+                                        ``"sigmoid"`` / ``"linearsigmoid"`` /
+                                        ``"silu"``.
+``allscaip_normalization``              Block norm: ``"rmsnorm"`` /
+                                        ``"layernorm"`` / ``"skip"``.
+``allscaip_mlp_dropout``                Dropout on the MLP path.
+``allscaip_atten_dropout``              Dropout on attention weights.
+``allscaip_use_residual_scaling``       Learnable per-layer residual scaling.
+``allscaip_regress_stress``             Track cell displacement so stress can
+                                        be recovered by autograd.
+``allscaip_dataset_list``               List of dataset names for
+                                        multi-dataset routing. When non-empty
+                                        the backbone adds a per-graph dataset
+                                        embedding and the wrapper reads a
+                                        per-graph label from ``data.dataset``.
+======================================  ====================================
+
+Force training
+--------------
+AllScAIP is a scalar (invariant) energy model, so forces are obtained the
+same way HydraGNN handles every invariant potential: by differentiating the
+predicted energy with respect to atomic positions
+(:meth:`energy_force_loss` sets ``data.pos.requires_grad = True`` and takes
+the autograd gradient). For those gradients to be non-trivial the backbone's
+graph construction must itself be differentiable in the positions, which is
+why ``allscaip_knn_soft`` defaults to ``True`` (a hard top-k selection would
+detach the position gradient at the neighbor boundaries). The wrapper
+therefore leaves ``regress_forces`` / ``direct_forces`` off and relies on
+HydraGNN's autograd force path; ``allscaip_atten_name="math"`` is the safe
+SDPA backend for that double-backward.
 
 Equivariance
 ------------
-**AllScAIP is NOT an e3nn-style equivariant model.** It is a plain
-scalar transformer over a kNN graph:
-
-* Hidden features are scalar tensors ``(N, hidden_dim)`` and padded
-  kNN tensors ``(N, k_max, hidden_dim)``. There is no
-  ``e3nn.o3.Irreps`` decomposition (no ``0e + 1o + 2e`` channels) and
-  no Clebsch-Gordan tensor products in the message-passing path.
-* Spherical harmonics are used as **input features only** (computed
-  via ``e3nn.o3._spherical_harmonics`` of edge directions and fed
-  into the attention as additional scalar channels via
-  ``frequency_vectors`` / ``node_sincx_matrix``). They lose their
-  irrep semantics on the first ``Linear`` / ``LayerNorm`` inside
-  :class:`InputBlock`.
-* For graph-level scalar targets (e.g. energy) the prediction is
-  **rotation/translation invariant** because all SH magnitudes and
-  pairwise distances fed in are themselves invariants -- same kind of
-  invariance SchNet provides via its distance features. But internal
-  representations are NOT equivariant.
-
-For genuinely equivariant predictions of vectorial / tensorial
-quantities (forces from auto-grad excepted, but also dipoles,
-stresses, ...), use :class:`EGNN`, :class:`PAINN`, :class:`MACE`, or
-:class:`PNAEqStack` instead. The wrapper therefore always passes
-``equivariance=False`` through to ``Base``, and AllScAIP is
-deliberately excluded from the equivariant CI test families
-(``pytest_train_equivariant_model`` / ``*_lengths`` /
-``*_vectoroutput`` / ``*_lengths_global_attention``) in
-``tests/test_graphs.py`` and ``tests/test_graphs_graphattr.py``.
+**AllScAIP is NOT an e3nn-style equivariant model.** Hidden features are
+scalar tensors; spherical harmonics of edge directions enter only as
+invariant input channels and lose their irrep semantics on the first
+``Linear`` / ``LayerNorm``. Graph-level scalar predictions (energy) are
+rotation/translation invariant, and autograd forces derived from an
+invariant energy are correctly equivariant, but the internal
+representations are not. The wrapper always passes ``equivariance=False``
+through to :class:`Base`, and AllScAIP is deliberately excluded from the
+equivariant CI test families.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -84,24 +132,25 @@ from torch.nn import Identity, ModuleList
 from hydragnn.models.Base import Base
 from hydragnn.utils.model.allscaip.AllScAIP import AllScAIPBackbone
 
-
-@dataclass
-class _BatchStats:
-    """Container returned by the FairChem-style ``get_batch_stats`` call."""
-
-    slices: Dict[str, torch.Tensor]
-    cumsum: Dict[str, torch.Tensor]
-    cat_dims: Dict[str, int]
-    natoms_list: List[int]
+# Map HydraGNN activation-function names to AllScAIP-supported ones.
+# AllScAIP accepts: squared_relu, gelu, leaky_relu, relu, smelu, star_relu.
+# Unknown names fall back to "gelu" (the AllScAIP default).
+_ACT_MAP = {
+    "relu": "relu",
+    "lrelu_01": "leaky_relu",
+    "lrelu_025": "leaky_relu",
+    "lrelu_05": "leaky_relu",
+    "gelu": "gelu",
+}
 
 
 class _FairChemAdapter:
     """Lightweight FairChem ``AtomicData`` look-alike.
 
     The vendored AllScAIP graph-construction and preprocessing code only
-    accesses a small set of attributes / methods on the input object.
-    We expose exactly those (without inheriting from any FairChem class)
-    so HydraGNN can keep using PyG ``Data`` batches.
+    accesses a small set of attributes / methods on the input object. We
+    expose exactly those (without inheriting from any FairChem class) so
+    HydraGNN can keep using PyG ``Data`` batches.
     """
 
     def __init__(
@@ -114,6 +163,7 @@ class _FairChemAdapter:
         pbc: torch.Tensor,
         charge: torch.Tensor,
         spin: torch.Tensor,
+        dataset: Optional[torch.Tensor] = None,
     ) -> None:
         self.pos = pos
         self.atomic_numbers = atomic_numbers
@@ -123,6 +173,7 @@ class _FairChemAdapter:
         self.pbc = pbc
         self.charge = charge
         self.spin = spin
+        self.dataset = dataset
         self.num_nodes = int(pos.shape[0])
         # AllScAIP code stamps these in the entry-point forward:
         self.atomic_numbers_full = atomic_numbers
@@ -148,19 +199,19 @@ class _FairChemAdapter:
             dim=0,
         )
         slices = {"pos": offsets}
-        # ``cumsum`` and ``cat_dims`` are not consumed by the
-        # vendored radius-graph code; pass empty dicts so downstream
-        # ``None`` checks in biknn_radius_graph see truthy values.
+        # ``cumsum`` and ``cat_dims`` are not consumed by the vendored
+        # radius-graph code; pass empty dicts so downstream ``None`` checks
+        # in biknn_radius_graph see truthy values.
         return slices, {}, {}, natoms_list
 
 
 class _IdentityConv(torch.nn.Module):
     """No-op stand-in used in place of HydraGNN's standard graph_conv.
 
-    AllScAIP runs its full message-passing stack inside ``_embedding``,
-    so the standard ``Base.forward`` conv loop has nothing to do. We
-    register a single instance and force ``num_conv_layers = 1`` for
-    this stack (see :class:`AllScAIPStack.__init__`).
+    AllScAIP runs its full message-passing stack inside ``_embedding``, so
+    the standard ``Base.forward`` conv loop has nothing to do. We register a
+    single instance and force ``num_conv_layers = 1`` for this stack (see
+    :class:`AllScAIPStack.__init__`).
     """
 
     def forward(self, inv_node_feat, equiv_node_feat, **_kwargs):
@@ -170,23 +221,8 @@ class _IdentityConv(torch.nn.Module):
 class AllScAIPStack(Base):
     """HydraGNN wrapper around FairChem's :class:`AllScAIPBackbone`.
 
-    Notable arguments
-    -----------------
-    radius : float
-        Cutoff distance (Å) for the internal differentiable kNN graph.
-    max_neighbours : int
-        ``knn_k`` for the kNN graph.
-    allscaip_num_heads : int
-        Attention head count. ``hidden_dim`` must be divisible by this.
-    allscaip_freq_list : list[int] | None
-        Per-degree frequency repeats for spherical-harmonic attention
-        masks. Must sum to ``hidden_dim // allscaip_num_heads``. When
-        ``None`` we synthesize a single-degree (l=0) list of that size,
-        which matches the constraint trivially at the cost of dropping
-        higher-l directional info in the attention bias.
-    allscaip_atten_name : {"math", "memory_efficient", "flash"}
-        SDPA backend selection. ``"math"`` is the safe default for
-        gradient-based forces / mixed CPU/GPU runs.
+    See the module docstring for the full hyperparameter mapping, the
+    force-training contract, and the (non-)equivariance discussion.
     """
 
     def __init__(
@@ -202,6 +238,14 @@ class AllScAIPStack(Base):
         allscaip_use_sincx_mask: bool = True,
         allscaip_use_freq_mask: bool = True,
         allscaip_max_num_elements: int = 119,
+        allscaip_knn_soft: bool = True,
+        allscaip_distance_function: str = "gaussian",
+        allscaip_normalization: str = "rmsnorm",
+        allscaip_mlp_dropout: float = 0.0,
+        allscaip_atten_dropout: float = 0.0,
+        allscaip_use_residual_scaling: bool = True,
+        allscaip_regress_stress: bool = False,
+        allscaip_dataset_list: Optional[List[str]] = None,
         *args,
         **kwargs,
     ):
@@ -218,31 +262,34 @@ class AllScAIPStack(Base):
         self.allscaip_use_sincx_mask = allscaip_use_sincx_mask
         self.allscaip_use_freq_mask = allscaip_use_freq_mask
         self.allscaip_max_num_elements = allscaip_max_num_elements
+        self.allscaip_knn_soft = bool(allscaip_knn_soft)
+        self.allscaip_distance_function = allscaip_distance_function
+        self.allscaip_normalization = allscaip_normalization
+        self.allscaip_mlp_dropout = float(allscaip_mlp_dropout)
+        self.allscaip_atten_dropout = float(allscaip_atten_dropout)
+        self.allscaip_use_residual_scaling = bool(allscaip_use_residual_scaling)
+        self.allscaip_regress_stress = bool(allscaip_regress_stress)
+        # Dataset routing: an ordered list of dataset names. Non-empty
+        # enables the backbone's per-graph dataset embedding, and the
+        # wrapper maps ``data.dataset`` labels to indices into this list.
+        self.allscaip_dataset_list = (
+            list(allscaip_dataset_list) if allscaip_dataset_list else []
+        )
+        self._dataset_name_to_index = {
+            name: idx for idx, name in enumerate(self.allscaip_dataset_list)
+        }
 
-        # Capture the HydraGNN activation-function string so the
-        # AllScAIP backbone can be configured with the same activation
-        # used by the rest of the model. Base only keeps the callable,
-        # not the string, so we sniff it out of args/kwargs here.
-        # Position in args matches Base.__init__'s signature:
-        # (input_dim, hidden_dim, output_dim, pe_dim, global_attn_engine,
-        #  global_attn_type, global_attn_heads, output_type, config_heads,
-        #  activation_function_type, ...)
+        # Capture the HydraGNN activation-function string so the AllScAIP
+        # backbone uses the same activation as the rest of the model. Base
+        # only keeps the callable, not the string, so we sniff it out of
+        # args/kwargs here. Position in args matches Base.__init__'s
+        # signature (activation_function_type is the 10th positional).
         if "activation_function_type" in kwargs:
             hydragnn_act = kwargs["activation_function_type"]
         elif len(args) >= 10:
             hydragnn_act = args[9]
         else:
             hydragnn_act = "gelu"
-        # Map HydraGNN activation names to AllScAIP-supported ones
-        # (AllScAIP allows: squared_relu, gelu, leaky_relu, relu, smelu,
-        # star_relu). Unknown names fall back to "gelu" (AllScAIP default).
-        _ACT_MAP = {
-            "relu": "relu",
-            "lrelu_01": "leaky_relu",
-            "lrelu_025": "leaky_relu",
-            "lrelu_05": "leaky_relu",
-            "gelu": "gelu",
-        }
         self.allscaip_activation = _ACT_MAP.get(hydragnn_act, "gelu")
 
         # AllScAIP performs its own graph construction, so HydraGNN should
@@ -257,13 +304,13 @@ class AllScAIPStack(Base):
 
     def _init_conv(self):
         # Build the AllScAIP backbone with HydraGNN-derived configuration.
-        head_dim = self.hidden_dim // self.allscaip_num_heads
         if self.hidden_dim % self.allscaip_num_heads != 0:
             raise ValueError(
                 "hidden_dim must be divisible by allscaip_num_heads "
                 f"(got hidden_dim={self.hidden_dim}, "
                 f"allscaip_num_heads={self.allscaip_num_heads})."
             )
+        head_dim = self.hidden_dim // self.allscaip_num_heads
 
         if self.allscaip_freq_list is None:
             freq_list = [head_dim]
@@ -279,21 +326,21 @@ class AllScAIPStack(Base):
             # GlobalConfigs
             "regress_forces": False,
             "direct_forces": False,
-            "regress_stress": False,
+            "regress_stress": self.allscaip_regress_stress,
             "hidden_size": self.hidden_dim,
             "num_layers": self.allscaip_num_layers,
             "activation": self.allscaip_activation,
-            "use_residual_scaling": True,
+            "use_residual_scaling": self.allscaip_use_residual_scaling,
             "use_node_path": self.allscaip_use_node_path,
-            "dataset_list": [],
+            "dataset_list": self.allscaip_dataset_list,
             # MolecularGraphConfigs
             "max_num_elements": self.allscaip_max_num_elements,
             "max_radius": float(self.radius),
             "knn_k": int(self.max_neighbours),
-            "knn_soft": True,
+            "knn_soft": self.allscaip_knn_soft,
             "knn_sigmoid_scale": 0.2,
             "knn_lse_scale": 0.1,
-            "distance_function": "gaussian",
+            "distance_function": self.allscaip_distance_function,
             "use_envelope": True,
             # GraphNeuralNetworksConfigs
             "atten_name": self.allscaip_atten_name,
@@ -301,7 +348,10 @@ class AllScAIPStack(Base):
             "freequency_list": freq_list,
             "use_freq_mask": self.allscaip_use_freq_mask,
             "use_sincx_mask": self.allscaip_use_sincx_mask,
-            # RegularizationConfigs - rely on dataclass defaults
+            # RegularizationConfigs
+            "normalization": self.allscaip_normalization,
+            "mlp_dropout": self.allscaip_mlp_dropout,
+            "atten_dropout": self.allscaip_atten_dropout,
         }
 
         self.allscaip_backbone = AllScAIPBackbone(**backbone_cfg)
@@ -314,9 +364,61 @@ class AllScAIPStack(Base):
 
     # --- HydraGNN data adapter -----------------------------------------------
 
+    def _resolve_dataset_index(
+        self, data, num_graphs: int, device
+    ) -> Optional[torch.Tensor]:
+        """Return a per-graph dataset index tensor, or ``None`` if routing off.
+
+        When ``allscaip_dataset_list`` is empty the backbone has no dataset
+        embedding and we return ``None``. Otherwise we accept either an
+        integer index tensor (used verbatim after a range check) or a list of
+        dataset-name strings (mapped through ``allscaip_dataset_list``); a
+        missing ``data.dataset`` defaults every graph to index 0.
+        """
+        if not self.allscaip_dataset_list:
+            return None
+
+        raw = getattr(data, "dataset", None)
+        num_datasets = len(self.allscaip_dataset_list)
+        if raw is None:
+            return torch.zeros(num_graphs, dtype=torch.long, device=device)
+
+        if isinstance(raw, torch.Tensor):
+            index = raw.to(device=device, dtype=torch.long).view(-1)
+        elif isinstance(raw, (list, tuple)):
+            try:
+                index = torch.tensor(
+                    [self._dataset_name_to_index[str(name)] for name in raw],
+                    dtype=torch.long,
+                    device=device,
+                )
+            except KeyError as exc:
+                raise ValueError(
+                    f"Unknown dataset label {exc.args[0]!r}; expected one of "
+                    f"{self.allscaip_dataset_list}."
+                ) from exc
+        else:
+            index = torch.full(
+                (num_graphs,),
+                self._dataset_name_to_index.get(str(raw), 0),
+                dtype=torch.long,
+                device=device,
+            )
+
+        if index.numel() == 1 and num_graphs > 1:
+            index = index.expand(num_graphs).contiguous()
+        if int(index.min()) < 0 or int(index.max()) >= num_datasets:
+            raise ValueError(
+                f"data.dataset index out of range for dataset_list of length "
+                f"{num_datasets}: got min/max "
+                f"{int(index.min())}/{int(index.max())}."
+            )
+        return index
+
     def _build_adapter(self, data) -> _FairChemAdapter:
         """Map a HydraGNN PyG ``Data`` batch to a FairChem-style object."""
         device = data.pos.device
+        dtype = torch.get_default_dtype()
 
         # Atomic numbers: HydraGNN typically stores them in data.x[:, 0]
         # (first node feature column). Allow an explicit override via
@@ -335,13 +437,11 @@ class AllScAIPStack(Base):
 
         # Cell / PBC: optional. Default to a zero cell with PBC off.
         if hasattr(data, "cell") and data.cell is not None:
-            cell = data.cell.to(device=device, dtype=torch.get_default_dtype())
+            cell = data.cell.to(device=device, dtype=dtype)
             if cell.dim() == 2:
                 cell = cell.unsqueeze(0).expand(num_graphs, 3, 3).contiguous()
         else:
-            cell = torch.zeros(
-                num_graphs, 3, 3, device=device, dtype=torch.get_default_dtype()
-            )
+            cell = torch.zeros(num_graphs, 3, 3, device=device, dtype=dtype)
         if hasattr(data, "pbc") and data.pbc is not None:
             pbc = data.pbc.to(device=device, dtype=torch.bool)
             if pbc.dim() == 1:
@@ -360,6 +460,8 @@ class AllScAIPStack(Base):
         else:
             spin = torch.zeros(num_graphs, device=device, dtype=torch.long)
 
+        dataset = self._resolve_dataset_index(data, num_graphs, device)
+
         return _FairChemAdapter(
             pos=data.pos,
             atomic_numbers=atomic_numbers,
@@ -369,6 +471,7 @@ class AllScAIPStack(Base):
             pbc=pbc,
             charge=charge,
             spin=spin,
+            dataset=dataset,
         )
 
     # --- HydraGNN Base hooks -------------------------------------------------
@@ -376,14 +479,14 @@ class AllScAIPStack(Base):
     def _embedding(self, data):
         """Run the full AllScAIP backbone and return invariant node features."""
         # NOTE: We deliberately do NOT call ``super()._embedding(data)``.
-        # Base's implementation expects ``data.edge_index`` to already
-        # exist (it pre-pads ``edge_shifts`` from it), but AllScAIP builds
-        # its own kNN radius graph internally and HydraGNN datasets used
-        # with this stack should not be required to carry an edge_index.
+        # Base's implementation expects ``data.edge_index`` to already exist
+        # (it pre-pads ``edge_shifts`` from it), but AllScAIP builds its own
+        # kNN radius graph internally and HydraGNN datasets used with this
+        # stack should not be required to carry an edge_index.
 
         adapter = self._build_adapter(data)
         results = self.allscaip_backbone(adapter)
-        # ``node_reps`` is shape [N, hidden_dim] (no padding — AllScAIP
+        # ``node_reps`` is shape [N, hidden_dim] (no padding -- AllScAIP
         # always runs unpadded under HydraGNN).
         inv_node_feat = results["node_reps"]
         # AllScAIP is not equivariant; provide an empty equiv tensor so

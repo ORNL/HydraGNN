@@ -287,6 +287,9 @@ def data_preprocess_radius_graph(
     node_batch = data.batch
     charge = data.charge
     spin = data.spin
+    # Optional per-graph dataset index for multi-dataset routing. Present
+    # only when the caller supplies it (non-empty ``dataset_list``).
+    dataset = getattr(data, "dataset", None)
 
     # edge distance expansion (N, k, edge_distance_expansion_size)
     edge_distance_expansion = get_edge_distance_expansion(
@@ -351,6 +354,7 @@ def data_preprocess_radius_graph(
         atomic_numbers=atomic_numbers,
         charge=charge,
         spin=spin,
+        dataset=dataset,
         node_direction_expansion=node_direction_expansion,
         edge_distance_expansion=edge_distance_expansion,
         edge_direction_expansion=edge_direction_expansion,

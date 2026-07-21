@@ -86,6 +86,26 @@ class ChgSpinEmbedding(nn.Module):
         raise ValueError(f"embedding type {self.embedding_type} not implemented")
 
 
+class DatasetEmbedding(nn.Module):
+    """Per-graph dataset embedding for multi-dataset routing.
+
+    Maps a per-graph dataset index (into the model's ``dataset_list``) to a
+    learnable ``hidden_size`` vector, mirroring the charge/spin embeddings.
+    Only instantiated when ``dataset_list`` is non-empty.
+    """
+
+    def __init__(self, num_datasets: int, embedding_size: int, grad: bool = True):
+        super().__init__()
+        self.num_datasets = num_datasets
+        self.emb = nn.Embedding(num_datasets, embedding_size)
+        if not grad:
+            for param in self.emb.parameters():
+                param.requires_grad = False
+
+    def forward(self, dataset_index: torch.Tensor) -> torch.Tensor:
+        return self.emb(dataset_index.long())
+
+
 class InputBlock(nn.Module):
     """
     Featurize the input data into edge and global embeddings.
@@ -159,6 +179,17 @@ class InputBlock(nn.Module):
             bias=True,
         )
 
+        # dataset embedding (multi-dataset routing). Enabled only when the
+        # model is configured with a non-empty ``dataset_list``.
+        self.dataset_list = list(global_cfg.dataset_list)
+        self.use_dataset_embedding = len(self.dataset_list) > 0
+        if self.use_dataset_embedding:
+            self.dataset_embedding = DatasetEmbedding(
+                num_datasets=len(self.dataset_list),
+                embedding_size=global_cfg.hidden_size,
+                grad=True,
+            )
+
     def forward(self, data: GraphAttentionData):
         # neighbor embeddings
         atomic_embedding = self.atomic_embedding(data.atomic_numbers)
@@ -179,6 +210,12 @@ class InputBlock(nn.Module):
         )
         # charge_spin_embeddings: (num_graphs, hidden_dim)
         node_embeddings = node_embeddings + charge_spin_embeddings[data.node_batch]
+
+        # dataset embedding (multi-dataset routing)
+        if self.use_dataset_embedding and data.dataset is not None:
+            dataset_embeddings = self.dataset_embedding(data.dataset)
+            # dataset_embeddings: (num_graphs, hidden_dim)
+            node_embeddings = node_embeddings + dataset_embeddings[data.node_batch]
 
         # neighbor embedding
         edge_attr = self.edge_attr_linear(

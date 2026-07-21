@@ -16,6 +16,9 @@ class GraphAttentionData:
     atomic_numbers: torch.Tensor
     charge: torch.Tensor
     spin: torch.Tensor
+    # Optional per-graph dataset index for multi-dataset routing. ``None``
+    # when dataset conditioning is disabled (empty ``dataset_list``).
+    dataset: torch.Tensor | None
     edge_distance_expansion: torch.Tensor
     edge_direction: torch.Tensor
     edge_direction_expansion: torch.Tensor

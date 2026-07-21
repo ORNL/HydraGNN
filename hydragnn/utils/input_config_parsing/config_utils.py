@@ -165,6 +165,24 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = True
     if "allscaip_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["allscaip_max_num_elements"] = 119
+    if "allscaip_knn_soft" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_knn_soft"] = True
+    if "allscaip_distance_function" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"][
+            "allscaip_distance_function"
+        ] = "gaussian"
+    if "allscaip_normalization" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_normalization"] = "rmsnorm"
+    if "allscaip_mlp_dropout" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_mlp_dropout"] = 0.0
+    if "allscaip_atten_dropout" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_atten_dropout"] = 0.0
+    if "allscaip_use_residual_scaling" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_residual_scaling"] = True
+    if "allscaip_regress_stress" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_regress_stress"] = False
+    if "allscaip_dataset_list" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_dataset_list"] = []
 
     # UMA-specific defaults (used by UMAStack via create_model).
     if "uma_mmax" not in config["NeuralNetwork"]["Architecture"]:
