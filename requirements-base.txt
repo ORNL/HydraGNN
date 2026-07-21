@@ -13,9 +13,3 @@ numpy==2.2.6
 scipy==1.17.1
 mpi4py==4.1.1
 vesin==0.4.2
-# Required by the vendored FairChem UMA backbone
-# (hydragnn/utils/model/uma/_vendored). Lightweight; the heavier fairchem-core
-# deps (torchtnt/ray/wandb/hydra) are only reached in checkpoint/inference code
-# paths that HydraGNN does not use, so they are deferred to lazy imports.
-omegaconf==2.3.0
-monty>=2024.7.30

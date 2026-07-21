@@ -23,7 +23,22 @@ from ase.calculators.singlepoint import SinglePointCalculator, SinglePointDFTCal
 from ase.constraints import FixAtoms
 from ase.geometry import wrap_positions
 from ase.stress import full_3x3_to_voigt_6_stress, voigt_6_to_full_3x3_stress
-from monty.dev import requires
+
+try:
+    from monty.dev import requires
+except ImportError:  # optional dep: guarded functions are not used by HydraGNN
+
+    def requires(condition, message="", **kwargs):
+        def decorator(func):
+            if condition:
+                return func
+
+            def _raise(*args, **kwargs):
+                raise ImportError(message)
+
+            return _raise
+
+        return decorator
 
 from hydragnn.utils.model.uma._vendored.fairchem.core.common.utils import StrEnum
 
