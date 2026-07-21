@@ -11,22 +11,7 @@ import logging
 
 import numpy as np
 import torch
-
-try:
-    from monty.dev import requires
-except ImportError:  # optional dep: guarded functions are not used by HydraGNN
-
-    def requires(condition, message="", **kwargs):
-        def decorator(func):
-            if condition:
-                return func
-
-            def _raise(*args, **kwargs):
-                raise ImportError(message)
-
-            return _raise
-
-        return decorator
+from monty.dev import requires
 
 from hydragnn.utils.model.uma._vendored.fairchem.core.graph.radius_graph_pbc import get_max_neighbors_mask
 

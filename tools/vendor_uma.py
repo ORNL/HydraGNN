@@ -193,13 +193,12 @@ def ensure_init(dirpath: Path):
 
 # ---------- post-vendor patches ----------
 # The vendored UMA backbone is copied verbatim, but a few module-level imports
-# pull deps that are never reached during import/construct/forward -- they live
-# only in checkpoint / inference code paths that HydraGNN does not use:
-#   * heavy fairchem-core deps (torchtnt/ray/wandb via ``mlip_unit``; ``hydra``
-#     via ``models/base``) are deferred to their single use sites;
-#   * lightweight optional deps (``omegaconf``, ``monty``) are wrapped in
-#     try/except so the vendored backbone needs NO extra dependencies beyond
-#     HydraGNN's core requirements.
+# pull heavy fairchem-core deps (torchtnt/ray/wandb via ``mlip_unit``; ``hydra``
+# via ``models/base``) that are never reached during import/construct/forward --
+# they live only in checkpoint / inference code paths that HydraGNN does not
+# use, so we defer them to their single use sites. The remaining lightweight
+# import-time deps (``omegaconf``, ``monty``) are declared in
+# requirements-optional.txt and imported normally by the vendored code.
 # Each patch is (relpath-under-fairchem/core, old, new) applied to the rewritten
 # text; every ``old`` must match exactly once or the run aborts.
 PATCHES: list[tuple[str, str, str]] = [
@@ -248,65 +247,6 @@ PATCHES: list[tuple[str, str, str]] = [
         "        import hydra\n"
         "\n"
         "        tasks = [hydra.utils.instantiate(task_config) for task_config in tasks_config]",
-    ),
-    # escn_md: omegaconf types only used in isinstance() checks -> make optional
-    (
-        "models/uma/escn_md.py",
-        "import torch.nn as nn\n"
-        "from omegaconf import DictConfig, ListConfig\n"
-        "from torch.distributed.nn.functional import all_reduce as all_reduce_with_grad",
-        "import torch.nn as nn\n"
-        "\n"
-        "try:\n"
-        "    from omegaconf import DictConfig, ListConfig\n"
-        "except ImportError:  # optional dep: types only used in isinstance() checks below\n"
-        "    DictConfig = ListConfig = ()\n"
-        "from torch.distributed.nn.functional import all_reduce as all_reduce_with_grad",
-    ),
-    # monty.dev.requires only decorates nvidia/optional functions HydraGNN never
-    # calls -> make the import optional with a faithful fallback decorator.
-    (
-        "graph/radius_graph_pbc_nvidia.py",
-        "import numpy as np\nimport torch\nfrom monty.dev import requires\n",
-        "import numpy as np\n"
-        "import torch\n"
-        "\n"
-        "try:\n"
-        "    from monty.dev import requires\n"
-        "except ImportError:  # optional dep: guarded functions are not used by HydraGNN\n"
-        "\n"
-        '    def requires(condition, message="", **kwargs):\n'
-        "        def decorator(func):\n"
-        "            if condition:\n"
-        "                return func\n"
-        "\n"
-        "            def _raise(*args, **kwargs):\n"
-        "                raise ImportError(message)\n"
-        "\n"
-        "            return _raise\n"
-        "\n"
-        "        return decorator\n",
-    ),
-    (
-        "datasets/atomic_data.py",
-        "from ase.stress import full_3x3_to_voigt_6_stress, voigt_6_to_full_3x3_stress\nfrom monty.dev import requires\n",
-        "from ase.stress import full_3x3_to_voigt_6_stress, voigt_6_to_full_3x3_stress\n"
-        "\n"
-        "try:\n"
-        "    from monty.dev import requires\n"
-        "except ImportError:  # optional dep: guarded functions are not used by HydraGNN\n"
-        "\n"
-        '    def requires(condition, message="", **kwargs):\n'
-        "        def decorator(func):\n"
-        "            if condition:\n"
-        "                return func\n"
-        "\n"
-        "            def _raise(*args, **kwargs):\n"
-        "                raise ImportError(message)\n"
-        "\n"
-        "            return _raise\n"
-        "\n"
-        "        return decorator\n",
     ),
 ]
 

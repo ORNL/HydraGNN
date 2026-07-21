@@ -15,11 +15,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 import torch
 import torch.nn as nn
-
-try:
-    from omegaconf import DictConfig, ListConfig
-except ImportError:  # optional dep: types only used in isinstance() checks below
-    DictConfig = ListConfig = ()
+from omegaconf import DictConfig, ListConfig
 from torch.distributed.nn.functional import all_reduce as all_reduce_with_grad
 from torch.profiler import record_function
 
