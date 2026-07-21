@@ -9,12 +9,4 @@ orjson # needed to use FAIRChem functionalities released by the Meta Research AI
 pandas==2.3.3 # needed for HPO examples and FAIRChem functionalities
 PyYAML # needed for FAIRChem configuration files
 wandb # needed for FAIRChem logging functionalities
-# Dependencies required by the vendored FairChem UMA backbone
-# (hydragnn/utils/model/uma/_vendored). These are only needed when a UMA
-# model is actually constructed; see hydragnn/models/UMAStack.py.
-omegaconf # UMA backbone config handling
-hydra-core # UMA backbone instantiation
-torchtnt # UMA backbone / mlip_unit utilities
-monty # UMA dataset utilities
-ray # UMA distributed utilities
 

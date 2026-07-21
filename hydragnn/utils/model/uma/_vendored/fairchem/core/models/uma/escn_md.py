@@ -70,8 +70,6 @@ from hydragnn.utils.model.uma._vendored.fairchem.core.units.mlip_unit.api.infere
     SPIN_RANGE,
     UMATask,
 )
-from hydragnn.utils.model.uma._vendored.fairchem.core.units.mlip_unit.mlip_unit import OutputSpec, Task
-
 from .escn_md_block import eSCNMD_Block
 
 if TYPE_CHECKING:
@@ -905,6 +903,14 @@ class eSCNMDBackbone(nn.Module, MOLEInterface):
         # Direct force models can't compute stress via autograd
         if self.direct_forces:
             return []
+
+        # Imported lazily: mlip_unit pulls the fairchem training/inference
+        # infra (torchtnt/ray/wandb); this method is only reached for
+        # checkpoint-based inference, never during construct/forward.
+        from hydragnn.utils.model.uma._vendored.fairchem.core.units.mlip_unit.mlip_unit import (
+            OutputSpec,
+            Task,
+        )
 
         tasks = []
 
