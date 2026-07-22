@@ -195,8 +195,13 @@ pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
 pip_retry h5py==3.14.0
-pip_retry tensorflow
-pip_retry tensorflow_datasets
+# tensorflow and tensorflow_datasets are intentionally NOT installed for ROCm builds.
+# Both TF and ROCm PyTorch link their own LLVM; loading both in the same process
+# triggers: "LLVM ERROR: inconsistency in registered CommandLine options" (hard abort).
+# tensorboard falls back to its pure-Python tensorflow_stub when TF is absent,
+# so SummaryWriter still works without the LLVM conflict.
+#pip_retry tensorflow
+#pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
 
 # ============================================================
