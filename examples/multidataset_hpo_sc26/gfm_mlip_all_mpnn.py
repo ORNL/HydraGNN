@@ -706,10 +706,29 @@ if __name__ == "__main__":
             keys=common_variable_names,
         )
         ## FIXME
+        dataset_name_dict = {
+            "alexandria": torch.tensor([[0]]),
+            "ani1x": torch.tensor([[1]]),
+            "mptrj": torch.tensor([[2]]),
+            "oc2020": torch.tensor([[3]]),
+            "oc2022": torch.tensor([[4]]),
+            "oc25": torch.tensor([[5]]),
+            "odac23": torch.tensor([[6]]),
+            "omat24": torch.tensor([[7]]),
+            "omol25": torch.tensor([[8]]),
+            "omol25-neutral": torch.tensor([[9]]),
+            "omol25-non-neutral": torch.tensor([[10]]),
+            "opoly2026": torch.tensor([[11]]),
+            "nabla2dft": torch.tensor([[12]]),
+            "qcml": torch.tensor([[13]]),
+            "qm7x": torch.tensor([[14]]),
+            "transition1x": torch.tensor([[15]]),
+        }
+        assert (
+            trainset.dataset_name in dataset_name_dict
+        ), f"{trainset.dataset_name} not in {dataset_name_dict.keys()}"
         for ds in [trainset, valset, testset]:
-            ds.dataset_name_dict = dict()
-            for i, name in enumerate(modellist):
-                ds.dataset_name_dict[name.lower()] = torch.tensor([[i]])
+            ds.dataset_name_dict = dataset_name_dict
 
         ## Set local set
         num_samples_list = list()
