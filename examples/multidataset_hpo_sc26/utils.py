@@ -17,6 +17,26 @@ except ImportError:
     AdiosDataset = None
     adios2_open = None
 
+## SC26
+dataset_name_dict = {
+    "alexandria": torch.tensor([[0]]),
+    "ani1x": torch.tensor([[1]]),
+    "mptrj": torch.tensor([[2]]),
+    "oc2020": torch.tensor([[3]]),
+    "oc2022": torch.tensor([[4]]),
+    "oc25": torch.tensor([[5]]),
+    "odac23": torch.tensor([[6]]),
+    "omat24": torch.tensor([[7]]),
+    "omol25": torch.tensor([[8]]),
+    "omol25-neutral": torch.tensor([[9]]),
+    "omol25-non-neutral": torch.tensor([[10]]),
+    "opoly2026": torch.tensor([[11]]),
+    "nabla2dft": torch.tensor([[12]]),
+    "qcml": torch.tensor([[13]]),
+    "qm7x": torch.tensor([[14]]),
+    "transition1x": torch.tensor([[15]]),
+}
+
 
 def cleanup_distributed():
     if dist.is_available() and dist.is_initialized():
@@ -258,9 +278,7 @@ def load_multidataset_dataloaders(args, config, var_config):
                 var_config=var_config,
             )
 
-            dataset.dataset_name_dict = {
-                name.lower(): torch.tensor([[i]]) for i, name in enumerate(modellist)
-            }
+            dataset.dataset_name_dict = dataset_name_dict
 
             dataset_len = len(dataset)
             subset_len = dataset_len
@@ -359,9 +377,7 @@ def load_single_dataset_chunk(
             keys=common_variable_names,
             var_config=var_config,
         )
-        dataset.dataset_name_dict = {
-            name.lower(): torch.tensor([[i]]) for i, name in enumerate(modellist)
-        }
+        dataset.dataset_name_dict = dataset_name_dict
         dataset_len = len(dataset)
 
         # For val, chunk_size is scaled down proportionally

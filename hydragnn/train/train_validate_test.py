@@ -308,6 +308,30 @@ def train_validate_test(
                 use_deepspeed=use_deepspeed,
             )
 
+    ## inference only
+    if int(os.getenv("HYDRAGNN_EVALONLY", "0")) == 1:
+        for loader, dataset_name in zip(
+            [train_loader, val_loader, test_loader], ["trainset", "valset", "testset"]
+        ):
+            loss, taskserr, true_values, predicted_values = test(
+                loader,
+                model,
+                verbosity,
+                num_tasks=num_tasks,
+                reduce_ranks=True,
+                return_samples=plot_hist_solution,
+                compute_grad_energy=compute_grad_energy,
+                precision=precision,
+            )
+            print_distributed(
+                verbosity,
+                f"Loss for {dataset_name}: {loss:.8f}",
+            )
+            print_distributed(
+                verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
+            )
+        return
+
     timer = Timer("train_validate_test")
     timer.start()
 
