@@ -13,6 +13,80 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
+def _distributed_mean(values: torch.Tensor) -> torch.Tensor:
+    """Return the elementwise global mean of ``values`` as a detached scalar."""
+    stats = torch.stack(
+        (
+            values.detach().sum(),
+            values.new_tensor(values.numel()),
+        )
+    )
+    if dist.is_available() and dist.is_initialized():
+        dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+    return stats[0] / stats[1].clamp_min(1.0)
+
+
+def safe_series_admittance(r, x):
+    """Return conductance and susceptance for the series impedance ``r + jx``."""
+    denom = r.pow(2) + x.pow(2)
+    denom = denom.clamp(min=1e-12)
+    return r / denom, -x / denom
+
+
+def ac_apparent_flow_violation(Va, Vm, edge_index, edge_attr, rel_tag):
+    """Return apparent-flow thermal-limit violations for AC lines or transformers."""
+    src, dst = edge_index
+    Vm_src = Vm[src].to(torch.float32).clamp(min=1e-6)
+    Vm_dst = Vm[dst].to(torch.float32).clamp(min=1e-6)
+    Vi = torch.polar(Vm_src, Va[src].to(torch.float32))
+    Vj = torch.polar(Vm_dst, Va[dst].to(torch.float32))
+
+    ea = edge_attr.to(device=Va.device, dtype=torch.float32)
+    if rel_tag == "ac":
+        if ea.shape[1] <= 6:
+            return None
+        # OPFDataset schema: ac_line [theta_min, theta_max, r_from, r_to,
+        # b_sh, x, rate_a, ...]. Use the average of the two resistance-like
+        # columns as a symmetric series resistance approximation.
+        r = 0.5 * (ea[:, 2].abs() + ea[:, 3].abs())
+        b_sh = ea[:, 4]
+        x = ea[:, 5]
+        rate_a = ea[:, 6].clamp(min=0.0)
+    elif rel_tag == "tr":
+        if ea.shape[1] <= 8:
+            return None
+        # Transformer schema: [theta_min, theta_max, r, x, rate_a,
+        # rate_b, rate_c, tap, shift, ...].
+        r = ea[:, 2].abs()
+        x = ea[:, 3]
+        rate_a = ea[:, 4].clamp(min=0.0)
+        tap = ea[:, 7].abs().clamp(min=1e-6)
+        shift = ea[:, 8]
+    else:
+        return None
+
+    x_floor = torch.where(
+        x >= 0.0,
+        x.new_full(x.shape, 1e-6),
+        x.new_full(x.shape, -1e-6),
+    )
+    x = torch.where(x.abs() < 1e-6, x_floor, x)
+    g, b = safe_series_admittance(r, x)
+    y = torch.complex(g, b)
+    if rel_tag == "tr":
+        tap_complex = torch.polar(tap, shift.to(torch.float32))
+        Iij = (y / tap.pow(2)) * Vi - (y / torch.conj(tap_complex)) * Vj
+        Iji = y * Vj - (y / tap_complex) * Vi
+    else:
+        y_sh = torch.complex(torch.zeros_like(b_sh), 0.5 * b_sh)
+        Iij = (y + y_sh) * Vi - y * Vj
+        Iji = (y + y_sh) * Vj - y * Vi
+    Sij = Vi * torch.conj(Iij)
+    Sji = Vj * torch.conj(Iji)
+    apparent = torch.maximum(torch.abs(Sij), torch.abs(Sji))
+    return F.relu(apparent - rate_a)
+
+
 class OPFDomainLoss(torch.nn.Module):
     """Domain-informed regularization for OPF bus-level targets.
 
@@ -20,8 +94,10 @@ class OPFDomainLoss(torch.nn.Module):
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
       - angle_diff_weight              : Penalty for predicted Va angle-difference outside line [theta_min, theta_max].
       - line_flow_weight               : Penalty for DC-approximate branch flow (DeltaVa / x_ij) exceeding rate_a.
-      - ac_line_flow_weight            : Penalty for AC apparent branch flow |S_ij| exceeding rate_a.
-      - line_flow_slack               : Tolerance subtracted from rate_a before penalising, absorbing the
+      - ac_line_flow_weight            : Penalty for AC-line apparent branch flow |S_ij| exceeding rate_a.
+      - include_transformer_ac_flow    : Optional transformer apparent-flow penalty.  Defaults to false
+                                        so AC-line-only and transformer-aware experiments can be compared.
+      - line_flow_slack               : Tolerance added to the rate_a threshold before penalising, absorbing the
                                         small linearisation error of the DC approximation on AC-feasible
                                         solutions.  Default 1e-4 (one decade above the ~1.3e-5 residual
                                         observed on pglib_opf_case10000_goc ground-truth data).
@@ -63,7 +139,10 @@ class OPFDomainLoss(torch.nn.Module):
         self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
         self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
         self.ac_line_flow_weight = float(cfg.get("ac_line_flow_weight", 0.0))
-        # line_flow_slack: a small tolerance subtracted from rate_a before the DC thermal-limit
+        self.include_transformer_ac_flow = bool(
+            cfg.get("include_transformer_ac_flow", False)
+        )
+        # line_flow_slack: a small tolerance added to rate_a before the DC thermal-limit
         # penalty is evaluated.  It exists because the DC power-flow formula
         #   P_ij = (Va_i - Va_j) / x_ij
         # is a linearisation of the full AC power-flow equations.  Even when the OPF solver
@@ -80,9 +159,12 @@ class OPFDomainLoss(torch.nn.Module):
         # Curriculum scheduling.
         self.warmup_epochs = int(cfg.get("warmup_epochs", 0))
         self.ramp_epochs = int(cfg.get("ramp_epochs", 0))
-        # Augmented Lagrangian settings.  In static mode, behavior remains the
-        # previous EMA-normalized quadratic penalty.
+        # Loss mode:
+        #   static  -- add fixed-weight, EMA-normalized quadratic penalties
+        #   AL      -- add augmented-Lagrangian penalties and update multipliers
+        #   monitor -- compute identical raw violations but add zero training loss
         self.loss_mode = str(cfg.get("mode", "static")).lower()
+        self.monitor_only = self.loss_mode in {"monitor", "monitor_only"}
         self.use_augmented_lagrangian = self.loss_mode in {
             "augmented_lagrangian",
             "al",
@@ -130,102 +212,70 @@ class OPFDomainLoss(torch.nn.Module):
         progress = (epoch - self.warmup_epochs) / self.ramp_epochs
         return float(min(progress, 1.0))
 
-    def _normalize(self, name: str, raw: torch.Tensor) -> torch.Tensor:
+    def _normalize(
+        self,
+        name: str,
+        raw: torch.Tensor,
+        global_raw: torch.Tensor,
+        update_ema: bool,
+    ) -> torch.Tensor:
         """Normalize *raw* by its EMA so that the effective scale ≈ 1.0 on average.
 
-        On the first call the EMA is seeded with the raw value, returning 1.0
-        (or near-1.0 for non-zero values).  Subsequent calls use the smoothed
-        estimate so the normalization adapts gradually as training progresses.
+        The EMA is updated only during training from a globally reduced penalty,
+        keeping every DDP rank synchronized. Evaluation uses the frozen training
+        EMA so validation and test data cannot affect subsequent optimization.
         """
-        val = float(raw.detach())
-        if name not in self._penalty_ema:
-            # Seed: ema = raw value, normalized output = 1.0 on first step.
-            self._penalty_ema[name] = max(val, 1e-8)
-        else:
-            m = self._ema_momentum
-            self._penalty_ema[name] = max(
-                m * val + (1.0 - m) * self._penalty_ema[name], 1e-8
-            )
+        global_val = max(float(global_raw), 1e-8)
+        if update_ema:
+            if name not in self._penalty_ema:
+                self._penalty_ema[name] = global_val
+            else:
+                m = self._ema_momentum
+                self._penalty_ema[name] = max(
+                    m * global_val + (1.0 - m) * self._penalty_ema[name],
+                    1e-8,
+                )
+        denominator = self._penalty_ema.get(name, global_val)
         # Floor at 1e-8 prevents division by zero when a penalty term is exactly zero
         # (e.g. the constraint is already satisfied for all samples in a batch).
-        return raw / self._penalty_ema[name]
+        return raw / denominator
 
-    def _inequality_loss(self, name, violation, static_weight, update_duals):
-        raw_squared = violation.pow(2).mean()
+    def _inequality_loss(self, name, violation, static_weight, update_state):
+        squared_violation = violation.pow(2)
+        raw_squared = squared_violation.mean()
+
+        if self.monitor_only:
+            return raw_squared.new_zeros(()), raw_squared
 
         if not self.use_augmented_lagrangian:
-            return static_weight * self._normalize(name, raw_squared), raw_squared
+            if update_state or name not in self._penalty_ema:
+                global_raw_squared = _distributed_mean(squared_violation)
+            else:
+                # Evaluation uses the frozen training EMA, so no collective is needed.
+                global_raw_squared = raw_squared.detach()
+            normalized = self._normalize(
+                name,
+                raw_squared,
+                global_raw_squared,
+                update_ema=update_state,
+            )
+            return static_weight * normalized, raw_squared
 
         mu = getattr(self, f"mu_{name}")
-        mean_violation = violation.mean()
+        local_mean_violation = violation.mean()
+        mu_for_loss = mu.detach().clone()
 
         loss = static_weight * (
-            mu * mean_violation + 0.5 * self.al_rho * raw_squared
+            mu_for_loss * local_mean_violation + 0.5 * self.al_rho * raw_squared
         )
 
-        if update_duals:
+        if update_state:
+            global_mean_violation = _distributed_mean(violation)
             with torch.no_grad():
-                mu.add_(self.al_rho * mean_violation.detach())
+                mu.add_(self.al_rho * global_mean_violation)
                 mu.clamp_(min=0.0, max=self.al_mu_max)
 
         return loss, raw_squared
-
-    @staticmethod
-    def _safe_series_admittance(r, x):
-        denom = r.pow(2) + x.pow(2)
-        denom = denom.clamp(min=1e-12)
-        return r / denom, -x / denom
-
-    def _ac_apparent_flow_violation(
-        self,
-        Va,
-        Vm,
-        edge_index,
-        edge_attr,
-        rel_tag,
-    ):
-        src, dst = edge_index
-        Vm_src = Vm[src].to(torch.float32).clamp(min=1e-6)
-        Vm_dst = Vm[dst].to(torch.float32).clamp(min=1e-6)
-        Vi = torch.polar(Vm_src, Va[src].to(torch.float32))
-        Vj = torch.polar(Vm_dst, Va[dst].to(torch.float32))
-
-        ea = edge_attr.to(device=Va.device, dtype=torch.float32)
-        if rel_tag == "ac":
-            if ea.shape[1] <= 6:
-                return None
-            # OPFDataset schema: ac_line [theta_min, theta_max, r_from, r_to,
-            # b_sh, x, rate_a, ...].  Use the average of the two resistance-like
-            # columns as a symmetric series resistance approximation.
-            r = 0.5 * (ea[:, 2].abs() + ea[:, 3].abs())
-            b_sh = ea[:, 4]
-            x = ea[:, 5]
-            rate_a = ea[:, 6].clamp(min=0.0)
-        elif rel_tag == "tr":
-            if ea.shape[1] <= 4:
-                return None
-            # Transformer schema: [theta_min, theta_max, r, x, rate_a, ...].
-            # Tap/phase-shift details are not included here yet; this is the
-            # first AC upgrade over the DC thermal-limit approximation.
-            r = ea[:, 2].abs()
-            b_sh = ea.new_zeros(ea.shape[0])
-            x = ea[:, 3]
-            rate_a = ea[:, 4].clamp(min=0.0)
-        else:
-            return None
-
-        x_floor = torch.where(x >= 0.0, x.new_full(x.shape, 1e-6), x.new_full(x.shape, -1e-6))
-        x = torch.where(x.abs() < 1e-6, x_floor, x)
-        g, b = self._safe_series_admittance(r, x)
-        y = torch.complex(g, b)
-        y_sh = torch.complex(torch.zeros_like(b_sh), 0.5 * b_sh)
-
-        Iij = (y + y_sh) * Vi - y * Vj
-        Iji = (y + y_sh) * Vj - y * Vi
-        Sij = Vi * torch.conj(Iij)
-        Sji = Vj * torch.conj(Iji)
-        apparent = torch.maximum(torch.abs(Sij), torch.abs(Sji))
-        return F.relu(apparent - rate_a)
 
     def forward(self, pred, value, head_index, data, update_duals=False):
         if not self.enabled or data is None:
@@ -295,6 +345,8 @@ class OPFDomainLoss(torch.nn.Module):
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
+                if ea is None:
+                    ea = getattr(data[rel], "physics_edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
                 if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] < 2:
                     continue
@@ -336,6 +388,8 @@ class OPFDomainLoss(torch.nn.Module):
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
+                if ea is None:
+                    ea = getattr(data[rel], "physics_edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
                 if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(x_idx, ra_idx):
                     continue
@@ -350,9 +404,10 @@ class OPFDomainLoss(torch.nn.Module):
                 # This linearises the full AC formula sin(Va_i - Va_j) / x_ij and is only
                 # exact in the flat-voltage, small-angle limit.
                 P_ij = (Va[src] - Va[dst]) / x_ij
-                # line_flow_slack is subtracted from rate_a to absorb the residual introduced
-                # by the DC linearisation on AC-feasible solutions (see __init__ for details).
-                # Without it, ground-truth predictions would incur a spurious non-zero penalty.
+                # line_flow_slack increases the effective rate_a threshold to absorb the
+                # residual introduced by the DC linearisation on AC-feasible solutions
+                # (see __init__ for details). Without it, ground-truth predictions would
+                # incur a spurious non-zero penalty.
                 flow_violation = F.relu(P_ij.abs() - rate_a - self.line_flow_slack)
                 flow_loss, flow_p = self._inequality_loss(
                     f"{rel_tag}_line_flow",
@@ -367,25 +422,29 @@ class OPFDomainLoss(torch.nn.Module):
                 ).detach()
 
         # ── AC apparent-flow thermal limit penalty ──────────────────────────
-        # Penalise |S_ij| from an AC branch-flow approximation.  This uses both
-        # predicted Va and Vm, unlike the DC line-flow term above.
+        # Penalise |S_ij| from an AC branch-flow approximation. This uses both
+        # predicted Va and Vm, unlike the DC line-flow term above. Transformer
+        # AC flow is opt-in and uses the transformer tap ratio and phase shift
+        # when those attributes are available in the OPFDataset edge schema.
         if (
             self.ac_line_flow_weight > 0.0
             and bus_pred.shape[-1] > max(self.va_output_index, self.voltage_output_index)
         ):
             Va = bus_pred[:, self.va_output_index].reshape(-1)
             Vm = bus_pred[:, self.voltage_output_index].reshape(-1)
-            for rel, rel_tag in [
-                (("bus", "ac_line", "bus"), "ac"),
-                (("bus", "transformer", "bus"), "tr"),
-            ]:
+            ac_flow_rels = [(("bus", "ac_line", "bus"), "ac")]
+            if self.include_transformer_ac_flow:
+                ac_flow_rels.append((("bus", "transformer", "bus"), "tr"))
+            for rel, rel_tag in ac_flow_rels:
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
+                if ea is None:
+                    ea = getattr(data[rel], "physics_edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
                 if ea is None or ei is None or ea.numel() == 0:
                     continue
-                flow_violation = self._ac_apparent_flow_violation(
+                flow_violation = ac_apparent_flow_violation(
                     Va,
                     Vm,
                     ei,
@@ -431,10 +490,11 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self.domain_loss = domain_loss
         self._last_batch = None
         self.last_extra_loss_metrics = {}
-        # Per-epoch accumulation state.
-        # Keyed by metric name; values are (sum, count) pairs for computing means.
-        self._epoch_accum: dict[str, list[float]] = {}
-        self._epoch_accum_task: list[float] = []
+        # Per-epoch, per-split accumulation state. Keeping train/val/test separate
+        # is important because the three loaders have different sample counts and
+        # only the training split updates augmented-Lagrangian multipliers.
+        self._epoch_accum: dict[str, dict[str, list[float]]] = {}
+        self._epoch_accum_task: dict[str, list[float]] = {}
         self._last_seen_epoch: int = -1
 
     def _flush_epoch_log(self, epoch: int) -> None:
@@ -445,9 +505,10 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
 
         Log format (one line per epoch in run.log, rank 0 only)::
 
-          LossBreakdown epoch=XX \
+          LossBreakdown epoch=XX split=train \
               data_driven_mse=X.XXXXXXXX \
               physics_penalty_total=X.XXXXXXXX \
+              total_loss=X.XXXXXXXX \
               curriculum_scale=X.XX \
               raw_voltage_bound=X.XXXXXXXX \
               raw_ac_angle_diff=X.XXXXXXXX \
@@ -457,8 +518,8 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         Field meanings:
           data_driven_mse        -- MSE between model predictions and OPF ground-truth
                                     targets (the standard HydraGNN task loss, no physics).
-          physics_penalty_total  -- weighted, EMA-normalised sum of all feasibility
-                                    penalties (voltage bound + angle diff + DC flow).
+          physics_penalty_total  -- weighted sum of all enabled feasibility
+                                    penalties (voltage bound + angle diff + branch flow).
                                     This is what is added to data_driven_mse during
                                     back-propagation.  Should stay well below
                                     data_driven_mse for the task signal to dominate.
@@ -469,49 +530,91 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
                                     feasible OPF solution; non-zero indicates the current
                                     prediction violates that constraint.
         """
-        # Only log from rank 0 to avoid duplicate lines in the shared run.log.
-        if dist.is_initialized() and dist.get_rank() != 0:
-            self._epoch_accum.clear()
-            self._epoch_accum_task.clear()
-            return
-        if not self._epoch_accum_task:
-            return  # nothing accumulated yet (e.g. first call before any batch)
-
-        n = len(self._epoch_accum_task)
-        task_mean = sum(self._epoch_accum_task) / n
-
         # Map internal metric keys to self-explaining log field names.
         _key_labels = {
-            "opf_domain_total":      "physics_penalty_total",
-            "opf_curriculum_scale":  "curriculum_scale",
-            "opf_voltage_bound":     "raw_voltage_bound",
-            "opf_ac_angle_diff":     "raw_ac_angle_diff",
-            "opf_tr_angle_diff":     "raw_tr_angle_diff",
-            "opf_ac_line_flow":      "raw_ac_line_flow",
-            "opf_tr_line_flow":      "raw_tr_line_flow",
-            "opf_ac_apparent_flow":  "raw_ac_apparent_flow",
-            "opf_tr_apparent_flow":  "raw_tr_apparent_flow",
-            "opf_mu_voltage_bound":  "mu_voltage_bound",
-            "opf_mu_ac_angle_diff":  "mu_ac_angle_diff",
-            "opf_mu_tr_angle_diff":  "mu_tr_angle_diff",
-            "opf_mu_ac_line_flow":   "mu_ac_line_flow",
-            "opf_mu_tr_line_flow":   "mu_tr_line_flow",
+            "opf_domain_total": "physics_penalty_total",
+            "opf_curriculum_scale": "curriculum_scale",
+            "opf_voltage_bound": "raw_voltage_bound",
+            "opf_ac_angle_diff": "raw_ac_angle_diff",
+            "opf_tr_angle_diff": "raw_tr_angle_diff",
+            "opf_ac_line_flow": "raw_ac_line_flow",
+            "opf_tr_line_flow": "raw_tr_line_flow",
+            "opf_ac_apparent_flow": "raw_ac_apparent_flow",
+            "opf_tr_apparent_flow": "raw_tr_apparent_flow",
+            "opf_mu_voltage_bound": "mu_voltage_bound",
+            "opf_mu_ac_angle_diff": "mu_ac_angle_diff",
+            "opf_mu_tr_angle_diff": "mu_tr_angle_diff",
+            "opf_mu_ac_line_flow": "mu_ac_line_flow",
+            "opf_mu_tr_line_flow": "mu_tr_line_flow",
             "opf_mu_ac_apparent_flow": "mu_ac_apparent_flow",
             "opf_mu_tr_apparent_flow": "mu_tr_apparent_flow",
         }
 
-        parts = [f"epoch={epoch:02d}", f"data_driven_mse={task_mean:.8f}"]
-        for key in sorted(self._epoch_accum):
-            vals = self._epoch_accum[key]
-            mean_val = sum(vals) / len(vals)
-            label = _key_labels.get(key, key.removeprefix("opf_"))
-            parts.append(f"{label}={mean_val:.8f}")
+        splits = ("train", "val", "test")
+        metric_keys = tuple(_key_labels)
+        device = self.domain_loss.mu_voltage_bound.device
+        # Store [sum, count] for the task loss and every known physics metric.
+        # Packing all statistics into one tensor limits this to one collective
+        # per epoch instead of one collective per split and metric.
+        stats = torch.zeros(
+            len(splits),
+            1 + len(metric_keys),
+            2,
+            dtype=torch.float64,
+            device=device,
+        )
+        for split_index, split in enumerate(splits):
+            task_values = self._epoch_accum_task.get(split, [])
+            stats[split_index, 0, 0] = sum(task_values)
+            stats[split_index, 0, 1] = len(task_values)
+            split_metrics = self._epoch_accum.get(split, {})
+            for metric_index, key in enumerate(metric_keys, start=1):
+                values = split_metrics.get(key, [])
+                stats[split_index, metric_index, 0] = sum(values)
+                stats[split_index, metric_index, 1] = len(values)
 
-        # Use print rather than logging.info so the line is always visible in
-        # run.log regardless of the logging level configured by HydraGNN.
-        print("0: LossBreakdown " + "  ".join(parts), flush=True)
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+            rank = dist.get_rank()
+        else:
+            rank = 0
 
-        # Reset accumulators for the next epoch.
+        if rank == 0:
+            for split_index, split in enumerate(splits):
+                task_count = stats[split_index, 0, 1].item()
+                if task_count == 0:
+                    continue
+                task_mean = stats[split_index, 0, 0].item() / task_count
+                physics_index = 1 + metric_keys.index("opf_domain_total")
+                physics_count = stats[split_index, physics_index, 1].item()
+                physics_mean = (
+                    stats[split_index, physics_index, 0].item() / physics_count
+                    if physics_count > 0
+                    else 0.0
+                )
+                parts = [
+                    f"epoch={epoch:02d}",
+                    f"split={split}",
+                    f"data_driven_mse={task_mean:.8f}",
+                    f"physics_penalty_total={physics_mean:.8f}",
+                    f"total_loss={task_mean + physics_mean:.8f}",
+                ]
+                for metric_index, key in enumerate(metric_keys, start=1):
+                    if key == "opf_domain_total":
+                        continue
+                    count = stats[split_index, metric_index, 1].item()
+                    if count == 0:
+                        continue
+                    mean_val = stats[split_index, metric_index, 0].item() / count
+                    parts.append(f"{_key_labels[key]}={mean_val:.8f}")
+
+                # The configured HydraGNN logger writes to both the console and
+                # the run-specific run.log. Only rank 0 emits the global values.
+                logging.getLogger("hydragnn").info(
+                    "LossBreakdown " + "  ".join(parts)
+                )
+
+        # Every rank resets its local accumulators for the next epoch.
         self._epoch_accum.clear()
         self._epoch_accum_task.clear()
 
@@ -556,11 +659,16 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             self._flush_epoch_log(self._last_seen_epoch)
         self._last_seen_epoch = current_epoch
 
-        # Accumulate task loss (total_loss is the data-driven term before domain is added).
-        self._epoch_accum_task.append(float(total_loss.detach()))
-        # Accumulate each domain metric (raw, un-normalized values for interpretability).
+        split = os.environ.get("HYDRAGNN_PHASE", "train").lower()
+        if split not in {"train", "val", "test"}:
+            split = "train"
+
+        # total_loss is the data-driven term before the domain loss is added.
+        self._epoch_accum_task.setdefault(split, []).append(float(total_loss.detach()))
+        split_metrics = self._epoch_accum.setdefault(split, {})
+        # Accumulate both the weighted objective contribution and raw violations.
         for key, val in extra_metrics.items():
-            self._epoch_accum.setdefault(key, []).append(float(val))
+            split_metrics.setdefault(key, []).append(float(val))
 
         return total_loss + extra_loss, tasks_loss
 
@@ -1038,15 +1146,31 @@ class HeteroFromHomogeneousDataset:
 class EdgeAttrDatasetAdapter:
     """Validates ``edge_attr`` on every access — no assembly, just shape check."""
 
-    def __init__(self, base, edge_dim: int):
+    def __init__(
+        self,
+        base,
+        edge_dim: int,
+        preserve_physics_edge_attr: bool = False,
+    ):
         self.base = base
         self.edge_dim = edge_dim
+        self.preserve_physics_edge_attr = preserve_physics_edge_attr
 
     def __len__(self):
         return len(self.base)
 
     def __getitem__(self, idx):
         data = self.base[idx]
+        if self.preserve_physics_edge_attr and hasattr(data, "edge_types"):
+            for edge_type in data.edge_types:
+                edge_store = data[edge_type]
+                edge_attr = getattr(edge_store, "edge_attr", None)
+                if isinstance(edge_attr, torch.Tensor):
+                    # Keep a private copy for feasibility monitoring while
+                    # removing the model-facing edge_attr. PyG batches this
+                    # custom tensor, but heterogeneous message passing ignores it.
+                    edge_store.physics_edge_attr = edge_attr
+                    delattr(edge_store, "edge_attr")
         validate_edge_attr(data, self.edge_dim)
         return data
 

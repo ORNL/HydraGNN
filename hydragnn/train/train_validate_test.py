@@ -373,6 +373,7 @@ def train_validate_test(
         with profiler as prof:
             tr.enable()
             tr.start("train")
+            os.environ["HYDRAGNN_PHASE"] = "train"
             train_loss, train_taskserr = train(
                 train_loader,
                 model,
@@ -406,6 +407,7 @@ def train_validate_test(
         except TypeError:
             optimizer.zero_grad()
 
+        os.environ["HYDRAGNN_PHASE"] = "val"
         val_loss, val_taskserr = validate(
             val_loader,
             model,
@@ -415,6 +417,7 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
+        os.environ["HYDRAGNN_PHASE"] = "test"
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
             model,

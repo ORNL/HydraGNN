@@ -1,0 +1,3 @@
+model,best_validation_epoch,best_validation_mse,raw_voltage_bound,raw_ac_angle_diff,raw_ac_line_flow,raw_ac_apparent_flow
+HeteroHEAT with Edge Attributes,42,0.00082587,2e-07,0.0,1.55631121,1.37879479
+HeteroHEAT without Edge Attributes,42,0.00085822,8e-08,0.0,1.60853251,1.46895552

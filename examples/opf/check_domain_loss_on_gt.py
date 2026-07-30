@@ -17,6 +17,8 @@ import sys
 import torch
 import torch.nn.functional as F
 
+from opf_solution_utils import ac_apparent_flow_violation
+
 # ---------------------------------------------------------------------------
 # Parse args
 # ---------------------------------------------------------------------------
@@ -27,6 +29,15 @@ parser.add_argument(
     default=(
         "dataset/dataset_release_1/pglib_opf_case10000_goc/raw/"
         "gridopt-dataset-tmp/dataset_release_1/pglib_opf_case10000_goc/group_1"
+    ),
+)
+parser.add_argument(
+    "--include_transformer_ac_flow",
+    action="store_true",
+    help=(
+        "Also evaluate transformer AC apparent-flow. This is diagnostic only: "
+        "the calculation includes the transformer tap ratio and phase shift "
+        "when those attributes are available in the OPFDataset edge schema."
     ),
 )
 args = parser.parse_args()
@@ -135,6 +146,24 @@ def evaluate(data):
         P_ij = (Va[src] - Va[dst]) / x_ij
         p = torch.mean(F.relu(P_ij.abs() - rate_a).pow(2))
         results[tag] = p.item()
+
+    # 4. AC apparent-flow thermal limit: |S_ij| <= rate_a
+    ac_flow_rels = [(("bus", "ac_line", "bus"), "ac", "ac_apparent_flow")]
+    if args.include_transformer_ac_flow:
+        ac_flow_rels.append(
+            (("bus", "transformer", "bus"), "tr", "tr_apparent_flow")
+        )
+    for rel, rel_tag, tag in ac_flow_rels:
+        if rel not in data.edge_types:
+            continue
+        ea = getattr(data[rel], "edge_attr", None)
+        ei = getattr(data[rel], "edge_index", None)
+        if ea is None or ei is None or ea.numel() == 0:
+            continue
+        violation = ac_apparent_flow_violation(Va, Vm, ei, ea, rel_tag)
+        if violation is None:
+            continue
+        results[tag] = violation.pow(2).mean().item()
 
     return results
 

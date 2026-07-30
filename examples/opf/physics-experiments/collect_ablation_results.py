@@ -6,9 +6,9 @@ and optional inference ``test_metrics.json`` files, then writes one flat CSV
 and one structured JSON summary.
 
 Examples:
-    python collect_ablation_results.py
-    python collect_ablation_results.py --logs_root ../../logs --out_dir results/ablations
-    python collect_ablation_results.py --run logs/heat_attr --run logs/heat_attr_AL
+    python physics-experiments/collect_ablation_results.py
+    python physics-experiments/collect_ablation_results.py --logs_root logs --out_dir physics-experiments/results
+    python physics-experiments/collect_ablation_results.py --run logs/heat_attr --run logs/heat_attr_AL
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ EPOCH_RE = re.compile(
 )
 
 KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[0-9eE+\-.]+)")
+SPLIT_RE = re.compile(r"\bsplit=(?P<split>train|val|test)\b")
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -83,6 +84,9 @@ def _parse_run_log(
 
             if "LossBreakdown" in line:
                 row: dict[str, Any] = {}
+                split_match = SPLIT_RE.search(line)
+                if split_match:
+                    row["split"] = split_match.group("split")
                 for kv in KV_RE.finditer(line):
                     key = kv.group("key")
                     value = float(kv.group("value"))
@@ -124,18 +128,27 @@ def _last_epoch(epochs: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _nearest_breakdown(
-    breakdowns: list[dict[str, Any]], epoch: int | None
+    breakdowns: list[dict[str, Any]], epoch: int | None, split: str = "val"
 ) -> dict[str, Any]:
     if epoch is None or not breakdowns:
         return {}
-    exact = [row for row in breakdowns if row.get("epoch") == epoch]
+    split_rows = [row for row in breakdowns if row.get("split") == split]
+    # Older logs did not include a split, so retain backward compatibility.
+    candidates = split_rows or breakdowns
+    exact = [row for row in candidates if row.get("epoch") == epoch]
     if exact:
         return exact[-1]
-    return min(breakdowns, key=lambda row: abs(int(row.get("epoch", -10**9)) - epoch))
+    return min(
+        candidates, key=lambda row: abs(int(row.get("epoch", -10**9)) - epoch)
+    )
 
 
-def _final_breakdown(breakdowns: list[dict[str, Any]]) -> dict[str, Any]:
-    return breakdowns[-1] if breakdowns else {}
+def _final_breakdown(
+    breakdowns: list[dict[str, Any]], split: str = "val"
+) -> dict[str, Any]:
+    split_rows = [row for row in breakdowns if row.get("split") == split]
+    candidates = split_rows or breakdowns
+    return candidates[-1] if candidates else {}
 
 
 def _nearest_epoch_time(
@@ -388,10 +401,24 @@ def _fieldnames(rows: list[dict[str, Any]]) -> list[str]:
     return ordered
 
 
+def _write_csv(path: Path, rows: list[dict[str, Any]]):
+    if rows:
+        fieldnames = sorted(set().union(*(row.keys() for row in rows)))
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+    else:
+        path.write_text("", encoding="utf-8")
+
+
 def _write_outputs(rows: list[dict[str, Any]], details: list[dict[str, Any]], out_dir: Path):
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "opf_ablation_summary.csv"
     json_path = out_dir / "opf_ablation_summary.json"
+    epochs_path = out_dir / "opf_ablation_epochs.csv"
+    epoch_times_path = out_dir / "opf_ablation_epoch_times.csv"
+    breakdowns_path = out_dir / "opf_ablation_loss_breakdowns.csv"
 
     if rows:
         with csv_path.open("w", newline="", encoding="utf-8") as fh:
@@ -404,8 +431,28 @@ def _write_outputs(rows: list[dict[str, Any]], details: list[dict[str, Any]], ou
     with json_path.open("w", encoding="utf-8") as fh:
         json.dump(details, fh, indent=2)
 
+    epoch_rows = []
+    epoch_time_rows = []
+    breakdown_rows = []
+    for detail in details:
+        log_name = detail["log_name"]
+        log_dir = detail["log_dir"]
+        for row in detail["epochs"]:
+            epoch_rows.append({"log_name": log_name, "log_dir": log_dir, **row})
+        for row in detail["epoch_times"]:
+            epoch_time_rows.append({"log_name": log_name, "log_dir": log_dir, **row})
+        for row in detail["loss_breakdowns"]:
+            breakdown_rows.append({"log_name": log_name, "log_dir": log_dir, **row})
+
+    _write_csv(epochs_path, epoch_rows)
+    _write_csv(epoch_times_path, epoch_time_rows)
+    _write_csv(breakdowns_path, breakdown_rows)
+
     print(f"[collect] CSV  -> {csv_path} ({len(rows)} rows)")
     print(f"[collect] JSON -> {json_path}")
+    print(f"[collect] epochs CSV      -> {epochs_path} ({len(epoch_rows)} rows)")
+    print(f"[collect] epoch times CSV -> {epoch_times_path} ({len(epoch_time_rows)} rows)")
+    print(f"[collect] breakdowns CSV  -> {breakdowns_path} ({len(breakdown_rows)} rows)")
 
 
 def _fmt(value: Any, width: int = 11) -> str:
@@ -455,6 +502,7 @@ def collect(run_dirs: list[Path], logs_root: Path, out_dir: Path):
     if not run_dirs:
         run_dirs = _discover_runs(logs_root)
     run_dirs = sorted({path.resolve() for path in run_dirs})
+    resolved_logs_root = logs_root.resolve()
 
     if not run_dirs:
         print(f"[collect] No run.log files found under {logs_root}")
@@ -464,6 +512,16 @@ def collect(run_dirs: list[Path], logs_root: Path, out_dir: Path):
     details: list[dict[str, Any]] = []
     for run_dir in run_dirs:
         row, detail = _collect_run(run_dir)
+        try:
+            relative_run_dir = run_dir.relative_to(resolved_logs_root)
+            display_dir = Path(resolved_logs_root.name) / relative_run_dir
+        except ValueError:
+            # Avoid embedding machine- or user-specific absolute paths when
+            # collecting an explicitly supplied run outside --logs_root.
+            display_dir = Path(run_dir.name)
+        row["log_dir"] = str(display_dir)
+        detail["log_dir"] = str(display_dir)
+        detail["summary"]["log_dir"] = str(display_dir)
         rows.append(row)
         details.append(detail)
 
@@ -476,17 +534,17 @@ def main(argv: list[str] | None = None):
         description="Collect OPF ablation results from HydraGNN logs."
     )
     script_dir = Path(__file__).resolve().parent
-    repo_root = script_dir.parents[1]
+    opf_dir = script_dir.parent
     parser.add_argument(
         "--logs_root",
         type=Path,
-        default=repo_root / "logs",
+        default=opf_dir / "logs",
         help="Directory to recursively scan for run.log files.",
     )
     parser.add_argument(
         "--out_dir",
         type=Path,
-        default=script_dir / "results" / "ablations",
+        default=script_dir / "results",
         help="Directory for opf_ablation_summary.csv/json.",
     )
     parser.add_argument(

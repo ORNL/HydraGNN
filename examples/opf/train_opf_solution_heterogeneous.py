@@ -109,7 +109,7 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
-from hydragnn.utils.distributed import nsplit
+from hydragnn.utils.distributed import get_device, nsplit
 from hydragnn.utils.model import print_model
 from hydragnn.utils.print import iterate_tqdm
 from hydragnn.utils.input_config_parsing.config_utils import update_config
@@ -1276,9 +1276,34 @@ if __name__ == "__main__":
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
 
-    trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
-    valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
-    testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
+    domain_cfg = config["NeuralNetwork"]["Training"].get("DomainLoss") or {}
+    monitor_without_model_edge_attrs = (
+        bool(domain_cfg.get("enabled", False))
+        and isinstance(edge_dim, dict)
+        and not edge_dim
+        and str(domain_cfg.get("mode", "")).lower() in {"monitor", "monitor_only"}
+    )
+    if monitor_without_model_edge_attrs and rank == 0:
+        info(
+            "[DomainLoss] Preserving physical edge attributes for monitoring "
+            "while hiding them from the model."
+        )
+
+    trainset = EdgeAttrDatasetAdapter(
+        trainset,
+        edge_dim=edge_dim,
+        preserve_physics_edge_attr=monitor_without_model_edge_attrs,
+    )
+    valset = EdgeAttrDatasetAdapter(
+        valset,
+        edge_dim=edge_dim,
+        preserve_physics_edge_attr=monitor_without_model_edge_attrs,
+    )
+    testset = EdgeAttrDatasetAdapter(
+        testset,
+        edge_dim=edge_dim,
+        preserve_physics_edge_attr=monitor_without_model_edge_attrs,
+    )
 
     trainset = NodeTargetDatasetAdapter(
         trainset, args.node_target_type, edge_dim=edge_dim
@@ -1362,6 +1387,8 @@ if __name__ == "__main__":
                 node_target_type=args.node_target_type,
             ),
         )
+
+    model = model.to(get_device())
 
     learning_rate = config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"]
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
