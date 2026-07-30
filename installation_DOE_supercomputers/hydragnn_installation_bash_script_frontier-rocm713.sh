@@ -51,6 +51,13 @@ banner "Starting HydraGNN environment setup (ROCm 7.13.0) ($(date))"
 # Module initialization & Frontier stack
 # ============================================================
 banner "Configure Frontier Modules"
+# Clear any conda environment inherited from the launching shell. Otherwise the
+# miniforge module's deactivate hook runs `conda deactivate` in this
+# non-interactive shell and fails ("Run 'conda init' before 'conda deactivate'"),
+# which aborts the script under `set -e`.
+unset CONDA_PREFIX CONDA_DEFAULT_ENV CONDA_SHLVL CONDA_EXE CONDA_PYTHON_EXE \
+      CONDA_PROMPT_MODIFIER 2>/dev/null || true
+
 if ! command -v module >/dev/null 2>&1; then
   if [[ -f /etc/profile.d/modules.sh ]]; then
     source /etc/profile.d/modules.sh
