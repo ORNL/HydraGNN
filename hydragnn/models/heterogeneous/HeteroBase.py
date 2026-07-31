@@ -511,6 +511,15 @@ class HeteroBase(Module):
             edge_attr_dict = None
         return edge_attr_dict
 
+    def _get_equiv_node_feat_dict(self, data):
+        """Best-effort retrieval of hetero equivariant node features."""
+        for attr_name in ("equiv_node_feat_dict", "v_dict", "equiv_dict"):
+            if hasattr(data, attr_name):
+                equiv_dict = getattr(data, attr_name)
+                if equiv_dict is not None:
+                    return equiv_dict
+        return None
+
     def _pool_hetero_graph_features(self, x_dict, batch_dict):
         pooled = []
         for node_type, x in x_dict.items():
@@ -723,15 +732,17 @@ class HeteroBase(Module):
                     store.edge_attr = store.edge_attr.to(device)
                     
         x_dict, batch_dict = self._prepare_node_features(data)
-        
+        equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
+
         edge_attr_dict = self._get_edge_attr_dict(data)
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
             if self.use_global_attn:
-                x_dict = conv(
-                    x_dict,
-                    data.edge_index_dict,
-                    batch_dict,
+                x_dict, equiv_node_feat_dict = conv(
+                    inv_node_feat_dict=x_dict,
+                    equiv_node_feat_dict=equiv_node_feat_dict,
+                    edge_index_dict=data.edge_index_dict,
+                    batch_dict=batch_dict,
                     edge_attr_dict=edge_attr_dict,
                 )
             elif edge_attr_dict is None:
