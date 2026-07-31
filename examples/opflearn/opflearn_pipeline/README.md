@@ -125,8 +125,8 @@ Raw and corrected values are intentionally both retained to prevent ambiguity.
 
 ```bash
 python preprocess_opflearn.py \
-  --input data/opflearn/extracted/pglib_opf_case118_ieee.csv \
-  --output data/opflearn/processed/pglib_opf_case118_ieee.parquet \
+  --input dataset/opflearn/extracted/pglib_opf_case118_ieee.csv \
+  --output dataset/opflearn/processed/pglib_opf_case118_ieee.parquet \
   --chunksize 1000 \
   --overwrite
 ```
@@ -135,8 +135,8 @@ python preprocess_opflearn.py \
 
 ```bash
 python preprocess_opflearn.py \
-  --input-dir data/opflearn/extracted \
-  --output-dir data/opflearn/processed \
+  --input-dir dataset/opflearn/extracted \
+  --output-dir dataset/opflearn/processed \
   --chunksize 1000 \
   --overwrite
 ```
@@ -145,7 +145,7 @@ python preprocess_opflearn.py \
 
 ```bash
 python inspect_opflearn.py \
-  data/opflearn/processed/pglib_opf_case14_ieee.parquet
+  dataset/opflearn/processed/pglib_opf_case14_ieee.parquet
 ```
 
 ## Serialize To PyG HDF5
@@ -154,8 +154,8 @@ Serialize all feasible processed parquet files to HydraGNN-compatible HDF5 datas
 
 ```bash
 python serialize_opflearn_to_hdf5.py \
-  --input-dir data/opflearn/processed \
-  --output-dir data/opflearn/serialized_hdf5 \
+  --input-dir dataset/opflearn/processed \
+  --output-dir dataset/opflearn/serialized_hdf5 \
   --overwrite
 ```
 
@@ -163,8 +163,8 @@ Serialize one file only:
 
 ```bash
 python serialize_opflearn_to_hdf5.py \
-  --input data/opflearn/processed/pglib_opf_case14_ieee.parquet \
-  --output data/opflearn/serialized_hdf5/pglib_opf_case14_ieee.h5 \
+  --input dataset/opflearn/processed/pglib_opf_case14_ieee.parquet \
+  --output dataset/opflearn/serialized_hdf5/pglib_opf_case14_ieee.h5 \
   --overwrite
 ```
 
@@ -229,15 +229,15 @@ python download_opflearn.py --archive --extract
 ```
 
 ```bash
-python preprocess_opflearn.py --input-dir data/opflearn/extracted --output-dir data/opflearn/processed
+python preprocess_opflearn.py --input-dir dataset/opflearn/extracted --output-dir dataset/opflearn/processed
 ```
 
 ```bash
-python inspect_opflearn.py data/opflearn/processed/pglib_opf_case14_ieee.parquet
+python inspect_opflearn.py dataset/opflearn/processed/pglib_opf_case14_ieee.parquet
 ```
 
 ```bash
-python serialize_opflearn_to_hdf5.py --input-dir data/opflearn/processed --output-dir data/opflearn/serialized_hdf5
+python serialize_opflearn_to_hdf5.py --input-dir dataset/opflearn/processed --output-dir dataset/opflearn/serialized_hdf5
 ```
 
 ```bash
