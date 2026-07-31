@@ -382,6 +382,30 @@ HydraGNN provides extensive configuration options for building graph neural netw
 }
 ```
 
+#### Interaction between GPS and equivariant MPNNs
+
+HydraGNN applies GPS global attention only to invariant scalar node features. In each GPS layer, the selected local MPNN receives both invariant and equivariant node features and updates both representations. In parallel, the global attention branch operates only on the invariant node features.
+
+The invariant outputs from the local and global branches are added and processed by a residual multilayer perceptron. The equivariant features returned by the layer are those produced by the local MPNN; global attention does not directly update vector- or tensor-valued equivariant channels.
+
+Conceptually, one HydraGNN GPS layer performs
+
+$$
+(h_{\mathrm{local}}, v') = \operatorname{MPNN}(h, v, E),
+$$
+
+$$
+h_{\mathrm{global}} = \operatorname{Attention}(h),
+$$
+
+$$
+h' = \operatorname{MLPResidual}\left(h_{\mathrm{local}} + h_{\mathrm{global}}\right),
+$$
+
+and returns $(h', v')$.
+
+Therefore, GPS provides global communication between invariant node representations, while geometric equivariance remains governed by the selected local equivariant MPNN. Global information may influence equivariant features indirectly in subsequent layers through the coupling between invariant and equivariant channels inside the local MPNN.
+
 ### Graph-level conditioning (concat_node default)
 
 - Enable with `NeuralNetwork.Architecture.use_graph_attr_conditioning: true` and select `graph_attr_conditioning_mode`:
