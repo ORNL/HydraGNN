@@ -23,13 +23,15 @@ from torch_geometric.utils import to_dense_batch
 
 
 class HeteroGPSConv(torch.nn.Module):
-    """Sketch of a GPS-style block for heterogeneous node dictionaries.
+    """GPS-style block for heterogeneous node dictionaries.
 
-    This file intentionally does not keep the homogeneous GPS forward signature.
-    A hetero GPS block should operate on ``x_dict``/``batch_dict`` and return an
-    updated ``x_dict``. The local branch should be a hetero message-passing
-    module, and the global branch should pack all node types into a shared token
-    sequence before attention.
+    This module mirrors the homogeneous GPS wrapper behavior:
+    - local branch can update both invariant and equivariant channels;
+    - global attention updates only invariant channels;
+    - invariant local/global outputs are fused with residual MLP.
+
+    For backward compatibility with invariant-only hetero models, the wrapper
+    also accepts/returns invariant-only dictionaries.
     """
 
     def __init__(
@@ -228,21 +230,90 @@ class HeteroGPSConv(torch.nn.Module):
 
         return global_out
 
-    def forward(self, x_dict, edge_index_dict, batch_dict, edge_attr_dict=None):
-        """Run one hetero local-message-passing + global-attention block."""
-        local_out = None
-        if self.conv is not None:
+    def _call_local_conv(
+        self,
+        inv_node_feat_dict,
+        equiv_node_feat_dict,
+        edge_index_dict,
+        edge_attr_dict,
+    ):
+        """Call local conv with best-effort signature adaptation.
+
+        Supports both:
+        - equivariant hetero convs returning (inv_dict, equiv_dict), and
+        - invariant hetero convs returning inv_dict only.
+        """
+        if self.conv is None:
+            return None, equiv_node_feat_dict
+
+        # Equivariant-style API (preferred).
+        try:
+            local_out = self.conv(
+                inv_node_feat_dict=inv_node_feat_dict,
+                equiv_node_feat_dict=equiv_node_feat_dict,
+                edge_index_dict=edge_index_dict,
+                edge_attr_dict=edge_attr_dict,
+            )
+        except TypeError:
+            # Invariant hetero API fallback.
             if edge_attr_dict is None:
-                local_out = self.conv(x_dict, edge_index_dict)
+                local_out = self.conv(inv_node_feat_dict, edge_index_dict)
             else:
                 local_out = self.conv(
-                    x_dict,
+                    inv_node_feat_dict,
                     edge_index_dict,
                     edge_attr_dict=edge_attr_dict,
                 )
 
+        if isinstance(local_out, tuple) and len(local_out) == 2:
+            local_inv, local_equiv = local_out
+        else:
+            local_inv = local_out
+            local_equiv = equiv_node_feat_dict
+
+        return local_inv, local_equiv
+
+    def forward(
+        self,
+        x_dict=None,
+        edge_index_dict=None,
+        batch_dict=None,
+        edge_attr_dict=None,
+        inv_node_feat_dict=None,
+        equiv_node_feat_dict=None,
+    ):
+        """Run one hetero local-message-passing + global-attention block.
+
+        Accepts both legacy invariant-only arguments (x_dict, ...) and
+        generalized equivariant arguments (inv_node_feat_dict,
+        equiv_node_feat_dict, ...).
+        """
+        if inv_node_feat_dict is None:
+            inv_node_feat_dict = x_dict
+        if inv_node_feat_dict is None:
+            raise ValueError("HeteroGPSConv.forward requires invariant node features.")
+        if edge_index_dict is None:
+            raise ValueError("HeteroGPSConv.forward requires edge_index_dict.")
+
+        if batch_dict is None:
+            batch_dict = {
+                node_type: torch.zeros(
+                    x.size(0), device=x.device, dtype=torch.long
+                )
+                for node_type, x in inv_node_feat_dict.items()
+            }
+
+        local_out, local_equiv = self._call_local_conv(
+            inv_node_feat_dict,
+            equiv_node_feat_dict,
+            edge_index_dict,
+            edge_attr_dict,
+        )
+
+        local_out_norm = None
+        if local_out is not None:
             local_out_norm = {}
-            for node_type, x in x_dict.items():
+            for node_type, x in inv_node_feat_dict.items():
                 h = local_out.get(node_type)
                 if h is None:
                     h = torch.zeros_like(x)
@@ -256,10 +327,10 @@ class HeteroGPSConv(torch.nn.Module):
                 )
             local_out = local_out_norm
 
-        global_out = self._apply_global_attention(x_dict, batch_dict)
+        global_out = self._apply_global_attention(inv_node_feat_dict, batch_dict)
 
         out = {}
-        for node_type, x in x_dict.items():
+        for node_type, x in inv_node_feat_dict.items():
             h = global_out[node_type]
             if local_out is not None:
                 h = h + local_out[node_type]
@@ -271,7 +342,7 @@ class HeteroGPSConv(torch.nn.Module):
                 batch_dict.get(node_type),
             )
 
-        return out
+        return out, local_equiv
 
     def __repr__(self) -> str:
         return (
