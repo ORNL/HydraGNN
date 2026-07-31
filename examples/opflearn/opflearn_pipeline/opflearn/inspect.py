@@ -20,8 +20,10 @@ def _summary(series: pd.Series) -> dict[str, float]:
 def _aggregate_summary(frame: pd.DataFrame, columns: list[str]) -> dict[str, float]:
     if not columns:
         return {"min": float("nan"), "max": float("nan"), "mean": float("nan")}
-    stacked = pd.to_numeric(frame[columns].stack(dropna=False), errors="coerce")
-    return _summary(stacked)
+    # Avoid DataFrame.stack(dropna=...) because pandas behavior differs across versions.
+    flattened = frame[columns].to_numpy().reshape(-1)
+    values = pd.to_numeric(pd.Series(flattened), errors="coerce")
+    return _summary(values)
 
 
 def _range_from_columns(frame: pd.DataFrame, columns: list[str]) -> dict[str, float]:

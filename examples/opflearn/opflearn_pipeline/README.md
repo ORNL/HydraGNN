@@ -104,6 +104,7 @@ Core modules:
 - `opflearn/validation.py`: required numerical validations
 - `opflearn/preprocessing.py`: chunked CSV -> corrected Parquet conversion
 - `opflearn/inspect.py`: schema/stats inspection report
+- `opflearn/pyg_serialization.py`: Parquet -> PyG objects -> HydraGNN HDF5 serialization
 - `opflearn/download.py`: redirect-aware streaming downloader with retries
 
 ## Preprocessing Behavior
@@ -146,6 +147,32 @@ python preprocess_opflearn.py \
 python inspect_opflearn.py \
   data/opflearn/processed/pglib_opf_case14_ieee.parquet
 ```
+
+## Serialize To PyG HDF5
+
+Serialize all feasible processed parquet files to HydraGNN-compatible HDF5 datasets:
+
+```bash
+python serialize_opflearn_to_hdf5.py \
+  --input-dir data/opflearn/processed \
+  --output-dir data/opflearn/serialized_hdf5 \
+  --overwrite
+```
+
+Serialize one file only:
+
+```bash
+python serialize_opflearn_to_hdf5.py \
+  --input data/opflearn/processed/pglib_opf_case14_ieee.parquet \
+  --output data/opflearn/serialized_hdf5/pglib_opf_case14_ieee.h5 \
+  --overwrite
+```
+
+Notes:
+
+- Each sample is represented as a single-node PyG graph (tabular OPFLearn row -> graph sample).
+- Output directories contain `trainset`, `valset`, and `testset` serialized via HydraGNN `HDF5Writer`.
+- By default, `INFEASIBLE_*.parquet` files are skipped; pass `--include-infeasible` to include them.
 
 `inspect_opflearn.py` reports:
 
@@ -207,6 +234,10 @@ python preprocess_opflearn.py --input-dir data/opflearn/extracted --output-dir d
 
 ```bash
 python inspect_opflearn.py data/opflearn/processed/pglib_opf_case14_ieee.parquet
+```
+
+```bash
+python serialize_opflearn_to_hdf5.py --input-dir data/opflearn/processed --output-dir data/opflearn/serialized_hdf5
 ```
 
 ```bash
