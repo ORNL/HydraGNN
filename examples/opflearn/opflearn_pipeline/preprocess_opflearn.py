@@ -4,7 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
-from opflearn.preprocessing import process_csv_to_parquet, process_directory
+from utils.preprocessing import process_csv_to_parquet, process_directory
 
 
 def parse_args() -> argparse.Namespace:

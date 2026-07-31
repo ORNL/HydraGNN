@@ -6,7 +6,7 @@ from pathlib import Path
 import torch.distributed as dist
 
 import hydragnn
-from opflearn.pyg_serialization import serialize_directory, serialize_parquet_to_hdf5
+from utils.pyg_serialization import serialize_directory, serialize_parquet_to_hdf5
 
 
 def parse_args() -> argparse.Namespace:
