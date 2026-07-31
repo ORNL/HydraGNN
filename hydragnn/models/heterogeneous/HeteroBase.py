@@ -511,13 +511,52 @@ class HeteroBase(Module):
             edge_attr_dict = None
         return edge_attr_dict
 
+    def _prepare_node_features(self, data):
+        """Prepare invariant node features and batch vectors for hetero forward.
+
+        This keeps compatibility with both legacy heterogeneous data (x_dict)
+        and the new equivariant-capable path where invariant node features may
+        already be materialized under inv_node_feat_dict.
+        """
+        inv_node_feat_dict = None
+        for attr_name in ("inv_node_feat_dict", "x_dict"):
+            try:
+                candidate = getattr(data, attr_name)
+            except (AttributeError, KeyError):
+                candidate = None
+            if candidate is not None:
+                inv_node_feat_dict = candidate
+                break
+
+        if inv_node_feat_dict is None:
+            raise ValueError(
+                "Heterogeneous input is missing invariant node features. "
+                "Expected one of: inv_node_feat_dict, x_dict."
+            )
+
+        # Ensure each node type uses the shared hidden width before message passing.
+        self._ensure_node_embedders(inv_node_feat_dict)
+        embedded_dict = {}
+        for node_type, x in inv_node_feat_dict.items():
+            x = x.float()
+            embedder = self.node_embedders[node_type]
+            if embedder.weight.device != x.device:
+                embedder = embedder.to(x.device)
+                self.node_embedders[node_type] = embedder
+            embedded_dict[node_type] = embedder(x)
+
+        batch_dict = self._get_batch_dict(data, embedded_dict)
+        return embedded_dict, batch_dict
+
     def _get_equiv_node_feat_dict(self, data):
         """Best-effort retrieval of hetero equivariant node features."""
         for attr_name in ("equiv_node_feat_dict", "v_dict", "equiv_dict"):
-            if hasattr(data, attr_name):
+            try:
                 equiv_dict = getattr(data, attr_name)
-                if equiv_dict is not None:
-                    return equiv_dict
+            except (AttributeError, KeyError):
+                equiv_dict = None
+            if equiv_dict is not None:
+                return equiv_dict
         return None
 
     def _pool_hetero_graph_features(self, x_dict, batch_dict):
