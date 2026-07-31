@@ -216,6 +216,28 @@ def wrapped_angle_difference(prediction, target):
     return np.arctan2(np.sin(prediction - target), np.cos(prediction - target))
 ```
 
+## Modeling Caveat: Homogeneous-Only (No Heterogeneous Graph)
+
+> **Note / caveat.** The training and inference examples in `examples/opflearn`
+> (`train_opflearn_solution_homogeneous.py`, `infer_opflearn_solution_homogeneous.py`)
+> deliberately ship **homogeneous variants only**. There is no
+> `*_heterogeneous.py` / `*_heterogeneous.json`, unlike the `opf` and `pglearn`
+> examples.
+>
+> **Why.** OPFLearnData is *tabular*: each sample is one row mapping load
+> setpoints to the corresponding AC-OPF solution. When serialized to PyG, every
+> sample becomes a **single-node graph with no edges** (`x = [1, in_dim]`,
+> `y = [1, out_dim]`, empty `edge_index`). There is no released bus/branch
+> topology to build a heterogeneous bus/branch/generator graph from, so a
+> heterogeneous model would have no node types or edges to operate on and would
+> add no modeling value. For the same reason, degree-sensitive layers (e.g. PNA)
+> are avoided and the example uses **GIN**, which operates correctly on
+> edge-free graphs.
+>
+> If a future OPFLearn release (or a join against `pglib-opf` case files)
+> provides explicit topology, a heterogeneous variant mirroring the `pglearn`
+> example could then be added.
+
 ## Units and Multi-Grid Training Notes
 
 - Treat power quantities as per-unit unless authoritative case metadata says otherwise.
