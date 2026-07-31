@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from opflearn.parsing import parse_complex_voltage
-from opflearn.preprocessing import correct_v_bus_columns, process_csv_to_parquet
-from opflearn.voltage_correction import ANGLE_CORRECTION_FACTOR, correct_bus_voltage_array
+from utils.parsing import parse_complex_voltage
+from utils.preprocessing import correct_v_bus_columns, process_csv_to_parquet
+from utils.voltage_correction import ANGLE_CORRECTION_FACTOR, correct_bus_voltage_array
 
 
 def test_parse_complex_with_spaces() -> None:

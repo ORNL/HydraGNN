@@ -4,7 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
-from opflearn.download import (
+from utils.download import (
     DEFAULT_CASES,
     download_archive,
     download_cases,

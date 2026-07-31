@@ -99,13 +99,13 @@ end
 
 Core modules:
 
-- `opflearn/parsing.py`: robust complex parser for `v_bus` strings
-- `opflearn/voltage_correction.py`: correction equations and wrapped-angle difference
-- `opflearn/validation.py`: required numerical validations
-- `opflearn/preprocessing.py`: chunked CSV -> corrected Parquet conversion
-- `opflearn/inspect.py`: schema/stats inspection report
-- `opflearn/pyg_serialization.py`: Parquet -> PyG objects -> HydraGNN HDF5 serialization
-- `opflearn/download.py`: redirect-aware streaming downloader with retries
+- `utils/parsing.py`: robust complex parser for `v_bus` strings
+- `utils/voltage_correction.py`: correction equations and wrapped-angle difference
+- `utils/validation.py`: required numerical validations
+- `utils/preprocessing.py`: chunked CSV -> corrected Parquet conversion
+- `utils/inspect.py`: schema/stats inspection report
+- `utils/pyg_serialization.py`: Parquet -> PyG objects -> HydraGNN HDF5 serialization
+- `utils/download.py`: redirect-aware streaming downloader with retries
 
 ## Preprocessing Behavior
 

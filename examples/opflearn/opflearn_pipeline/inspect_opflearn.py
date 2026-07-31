@@ -5,7 +5,7 @@ import logging
 import sys
 from pathlib import Path
 
-from opflearn.inspect import inspect_dataset_table, load_table
+from utils.inspect import inspect_dataset_table, load_table
 
 
 def parse_args() -> argparse.Namespace:
