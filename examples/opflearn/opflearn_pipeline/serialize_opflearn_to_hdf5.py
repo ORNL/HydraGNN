@@ -19,13 +19,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input-dir",
         type=Path,
-        default=Path("data/opflearn/processed"),
+        default=Path("dataset/opflearn/processed"),
         help="Directory with processed parquet files.",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("data/opflearn/serialized_hdf5"),
+        default=Path("dataset/opflearn/serialized_hdf5"),
         help="Output directory for HDF5 dataset directories.",
     )
     parser.add_argument("--include-infeasible", action="store_true", help="Also serialize INFEASIBLE_*.parquet files.")

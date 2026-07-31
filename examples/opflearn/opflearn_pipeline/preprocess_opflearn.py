@@ -70,8 +70,8 @@ def main() -> int:
             logger.info("Completed directory preprocessing for %d files.", len(results))
             return 0
 
-        default_input_dir = (script_dir / "data/opflearn/extracted").resolve()
-        default_output_dir = (script_dir / "data/opflearn/processed").resolve()
+        default_input_dir = (script_dir / "dataset/opflearn/extracted").resolve()
+        default_output_dir = (script_dir / "dataset/opflearn/processed").resolve()
         logger.info(
             "No explicit input provided; processing directory %s -> %s",
             default_input_dir,

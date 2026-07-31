@@ -22,8 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--all-cases", action="store_true", help="Download all known individual case CSV files.")
     parser.add_argument("--extract", action="store_true", help="Extract ZIP archive after download.")
     parser.add_argument("--force", action="store_true", help="Re-download even when target file already exists.")
-    parser.add_argument("--raw-dir", type=Path, default=Path("data/opflearn/raw"), help="Output directory for downloaded files.")
-    parser.add_argument("--extract-dir", type=Path, default=Path("data/opflearn/extracted"), help="Output directory for extracted archive contents.")
+    parser.add_argument("--raw-dir", type=Path, default=Path("dataset/opflearn/raw"), help="Output directory for downloaded files.")
+    parser.add_argument("--extract-dir", type=Path, default=Path("dataset/opflearn/extracted"), help="Output directory for extracted archive contents.")
     return parser.parse_args()
 
 
