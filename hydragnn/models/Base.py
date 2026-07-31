@@ -470,6 +470,8 @@ class Base(Module):
                 (data.edge_index.size(1), 3), device=data.edge_index.device
             )
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
+        if self.use_global_attn:
+            conv_args["graph_batch"] = getattr(data, "batch", None)
         if self.use_edge_attr:
             assert (
                 data.edge_attr is not None
