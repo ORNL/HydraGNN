@@ -487,7 +487,7 @@ banner "Install HydraGNN dependencies (do NOT install torch here)"
 pip_retry "scipy==1.17.1" pyyaml requests "tqdm==4.70.0" filelock "psutil==7.1.0"
 pip_retry networkx jinja2
 pip_retry "tensorboard==2.20.0" "scikit-learn==1.7.2" "pytest==8.4.2"
-pip_retry "ase==3.26.0" "h5py==3.16.0" lmdb
+pip_retry "ase==3.26.0" "h5py==3.16.0" lmdb pandas==2.3.3 pyarrow
 
 # Keep numpy pinned and avoid it being bumped by scientific packages
 pip_retry "numpy==2.4.6"

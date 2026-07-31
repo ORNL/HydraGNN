@@ -7,6 +7,7 @@ p7zip # to uncompress .7z file after download - needed for qm7x example
 lmdb # needed to use FAIRChem functionalities released by the Meta Research AI group
 orjson # needed to use FAIRChem functionalities released by the Meta Research AI group
 pandas==2.3.3 # needed for HPO examples and FAIRChem functionalities
+pyarrow # needed for OPFLearn parquet preprocessing pipeline
 PyYAML # needed for FAIRChem configuration files
 wandb # needed for FAIRChem logging functionalities
 
