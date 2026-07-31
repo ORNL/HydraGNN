@@ -25,5 +25,9 @@ from .load_data import (
 from .serialized_dataset_loader import (
     SerializedDataLoader,
 )
+from .positional_encodings import (
+    create_positional_encoder,
+    add_relative_pe,
+)
 from .lsms_raw_dataset_loader import LSMS_RawDataLoader
 from .cfg_raw_dataset_loader import CFG_RawDataLoader

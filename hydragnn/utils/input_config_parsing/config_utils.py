@@ -64,6 +64,23 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["attn_only"] = False
     if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
+    if "pe_encoder" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["pe_encoder"] = "laplacian"
+    if "communicability_method" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["communicability_method"] = "katz"
+    if "communicability_alpha_min" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["communicability_alpha_min"] = 0.05
+    if "communicability_alpha_max" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["communicability_alpha_max"] = 0.5
+    if (
+        "communicability_degree_normalize"
+        not in config["NeuralNetwork"]["Architecture"]
+    ):
+        config["NeuralNetwork"]["Architecture"][
+            "communicability_degree_normalize"
+        ] = True
+    if "communicability_eps" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["communicability_eps"] = 1.0e-8
 
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
