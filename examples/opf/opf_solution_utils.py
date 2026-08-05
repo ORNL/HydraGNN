@@ -33,6 +33,20 @@ def safe_series_admittance(r, x):
     return r / denom, -x / denom
 
 
+def wrapped_angle_difference(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    """Return the signed angular difference ``a - b`` in ``[-pi, pi]``."""
+    delta = a - b
+    return torch.atan2(torch.sin(delta), torch.cos(delta))
+
+
+def circular_angle_mse(
+    pred_angle: torch.Tensor,
+    true_angle: torch.Tensor,
+) -> torch.Tensor:
+    """Return MSE of wrapped angular residuals for angles in radians."""
+    return wrapped_angle_difference(pred_angle, true_angle).square().mean()
+
+
 def ac_apparent_flow_violation(Va, Vm, edge_index, edge_attr, rel_tag):
     """Return apparent-flow thermal-limit violations for AC lines or transformers."""
     src, dst = edge_index
@@ -136,6 +150,9 @@ class OPFDomainLoss(torch.nn.Module):
         self.voltage_output_index = int(cfg.get("voltage_output_index", 1))
         # va_output_index: index in bus_pred corresponding to voltage angle (Va).
         self.va_output_index = int(cfg.get("va_output_index", 0))
+        # Replace ordinary Va MSE with circular MSE while retaining the dataset's
+        # fixed type-3 reference-bus convention.
+        self.circular_angle_loss = bool(cfg.get("circular_angle_loss", True))
         self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
         self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
         self.ac_line_flow_weight = float(cfg.get("ac_line_flow_weight", 0.0))
@@ -353,7 +370,9 @@ class OPFDomainLoss(torch.nn.Module):
                 theta_min = ea[:, 0].to(Va.device)
                 theta_max = ea[:, 1].to(Va.device)
                 src, dst = ei
-                delta_theta = Va[src] - Va[dst]
+                # Phase angles are periodic: buses near -pi and +pi are close,
+                # not almost 2*pi apart.
+                delta_theta = wrapped_angle_difference(Va[src], Va[dst])
                 # Same relu-squared form as voltage_bound: zero gradient inside the
                 # feasible region [theta_min, theta_max], growing penalty outside it.
                 # No slack is needed here: verified empirically that this term is exactly
@@ -403,7 +422,8 @@ class OPFDomainLoss(torch.nn.Module):
                 # DC power-flow approximation: P_ij ≈ (Va_i - Va_j) / x_ij  [per unit].
                 # This linearises the full AC formula sin(Va_i - Va_j) / x_ij and is only
                 # exact in the flat-voltage, small-angle limit.
-                P_ij = (Va[src] - Va[dst]) / x_ij
+                delta_theta = wrapped_angle_difference(Va[src], Va[dst])
+                P_ij = delta_theta / x_ij
                 # line_flow_slack increases the effective rate_a threshold to absorb the
                 # residual introduced by the DC linearisation on AC-feasible solutions
                 # (see __init__ for details). Without it, ground-truth predictions would
@@ -628,8 +648,48 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self._last_batch = data
         return self.model(data)
 
+    def _replace_bus_mse_with_circular_angle_loss(
+        self, total_loss, tasks_loss, pred, value, head_index
+    ):
+        """Use wrapped Va MSE and ordinary Vm MSE for the OPF bus head."""
+        if not self.domain_loss.circular_angle_loss:
+            return total_loss, tasks_loss
+        if self.domain_loss.node_target_type != "bus" or self._last_batch is None:
+            return total_loss, tasks_loss
+        if getattr(self.model, "loss_function_type", None) != "mse":
+            raise RuntimeError(
+                "circular_angle_loss currently requires loss_function_type='mse'."
+            )
+
+        bus_pred = pred[0]
+        if bus_pred.dim() == 1:
+            bus_pred = bus_pred.unsqueeze(-1)
+        va_idx = self.domain_loss.va_output_index
+        vm_idx = self.domain_loss.voltage_output_index
+        if bus_pred.shape[-1] <= max(va_idx, vm_idx):
+            raise RuntimeError(
+                "Bus predictions do not contain the configured Va and Vm columns."
+            )
+
+        bus_true = value[head_index[0]].reshape_as(bus_pred).to(bus_pred.device)
+        angle_loss = circular_angle_mse(
+            bus_pred[:, va_idx], bus_true[:, va_idx]
+        )
+        magnitude_loss = F.mse_loss(bus_pred[:, vm_idx], bus_true[:, vm_idx])
+        # Match the scale of the previous MSE over the two equally sized columns.
+        bus_loss = 0.5 * (angle_loss + magnitude_loss)
+
+        original_bus_loss = F.mse_loss(bus_pred, bus_true)
+        bus_weight = self.model.loss_weights[0]
+        total_loss = total_loss + bus_weight * (bus_loss - original_bus_loss)
+        tasks_loss[0] = bus_loss
+        return total_loss, tasks_loss
+
     def loss(self, pred, value, head_index):
         total_loss, tasks_loss = self.model.loss(pred, value, head_index)
+        total_loss, tasks_loss = self._replace_bus_mse_with_circular_angle_loss(
+            total_loss, tasks_loss, pred, value, head_index
+        )
         if self._last_batch is None:
             info(
                 "[OPFEnhancedModelWrapper] loss() called before forward(); "
