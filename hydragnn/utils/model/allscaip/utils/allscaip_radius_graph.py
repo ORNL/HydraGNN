@@ -2,9 +2,11 @@
 Bidirectional kNN radius graph builder for AllScAIP.
 
 Modified from MinDScAIP (credit: Ryan Liu) and trimmed for HydraGNN: removed
-chunked-construction, low-memory soft-rank, padding, torch.compile fast-paths,
-and per-system batched padding helpers — none of which are exercised by the
-HydraGNN integration (we always run unpadded, eager forward).
+chunked-construction, padding, torch.compile fast-paths, and per-system
+batched padding helpers — none of which are exercised by the HydraGNN
+integration (we always run unpadded, eager forward). The soft-kNN path uses
+the low-memory soft-rank, since the full O(N*(N*M)^2) soft-rank OOMs on dense
+periodic crystals.
 
 The output is the dense, padded ``(N, k_max, ...)`` tensor layout that
 AllScAIP's transformer attention blocks consume; this is fundamentally
@@ -23,7 +25,7 @@ AtomicData = Any
 from hydragnn.utils.model.escaip.utils.radius_graph import (
     hard_rank,
     safe_norm,
-    soft_rank,
+    soft_rank_low_mem,
 )
 
 
@@ -70,9 +72,13 @@ def build_radius_graph(
     dist_pairwise = dist.min(dim=2)[0] if compute_dist_pairwise else None
 
     if soft:
-        src_ranks = soft_rank(dist.view(N, N * M), sigmoid_scale).view(N, N, M)
+        # Low-memory soft rank: truncates the pairwise ranking to the k+delta
+        # nearest, avoiding the [N, N*M, N*M] tensor that OOMs on dense crystals.
+        src_ranks = soft_rank_low_mem(dist.view(N, N * M), k, sigmoid_scale).view(
+            N, N, M
+        )
         dst_ranks = (
-            soft_rank(dist_T.view(N, N * M), sigmoid_scale)
+            soft_rank_low_mem(dist_T.view(N, N * M), k, sigmoid_scale)
             .view(N, N, M)
             .transpose(0, 1)
         )
