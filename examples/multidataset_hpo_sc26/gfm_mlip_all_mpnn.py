@@ -186,6 +186,15 @@ if __name__ == "__main__":
     parser.add_argument("--max_ell", type=int, help="max_ell", default=None)
     parser.add_argument("--node_max_ell", type=int, help="node_max_ell", default=None)
     parser.add_argument("--correlation", type=int, help="correlation", default=None)
+    parser.add_argument(
+        "--max_neighbours", type=int, help="max_neighbours", default=None
+    )
+    parser.add_argument(
+        "--allscaip_num_heads", type=int, help="allscaip_num_heads", default=None
+    )
+    parser.add_argument(
+        "--uma_edge_channels", type=int, help="uma_edge_channels", default=None
+    )
     parser.add_argument("--nvme", action="store_true", help="use NVME")
     parser.add_argument("--startfrom", type=str, help="startfrom", default=None)
     parser.add_argument(
@@ -265,6 +274,19 @@ if __name__ == "__main__":
     set_param_value("max_ell")
     set_param_value("node_max_ell")
     set_param_value("correlation")
+    set_param_value("max_neighbours")
+    set_param_value("allscaip_num_heads")
+    set_param_value("uma_edge_channels")
+
+    # AllScAIP (EScAIP) is invariant and learns equivariance from data; UMA is
+    # equivariant with a fixed low rotation order (lmax=2, mmax=2 by default).
+    _mpnn_type = config["NeuralNetwork"]["Architecture"]["mpnn_type"]
+    if _mpnn_type == "AllScAIP":
+        config["NeuralNetwork"]["Architecture"]["equivariance"] = False
+    elif _mpnn_type == "UMA":
+        config["NeuralNetwork"]["Architecture"]["equivariance"] = True
+        if args.parameters["max_ell"] is None:
+            config["NeuralNetwork"]["Architecture"]["max_ell"] = 2
 
     if not args.multi_model_list or args.multi_model_list.strip() == "":
         logging.warning(

@@ -136,6 +136,10 @@ export HYDRAGNN_TRACE_LEVEL=1
 export HYDRAGNN_MAX_NUM_BATCH=100
 export BATCH_SIZE=200
 export NUM_EPOCH=20
+# Training precision passed to each trial (fp32|fp64|bf16); fp32 cuts memory/time
+# for AllScAIP/UMA (attention + autograd double-backward) vs the fp64 default.
+# Use ?= pattern so `sbatch --export=...,PRECISION=fp32` overrides this default.
+[ -z "$PRECISION" ] && export PRECISION=fp64
 
 export HYDRAGNN_DDSTORE_METHOD=1
 export HYDRAGNN_CUSTOM_DATALOADER=1
@@ -179,7 +183,12 @@ mkdir -p $DEEPHYPER_LOG_DIR
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
 export OMNISTAT_DIR=$OMNISTAT_DIR
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
+# Match the omnistat telemetry config to the training precision knob.
+if [ "$PRECISION" = "fp64" ]; then
+    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
+else
+    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp32bf16.config
+fi
 
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 15
