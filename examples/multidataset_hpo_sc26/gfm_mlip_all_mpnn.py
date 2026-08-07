@@ -337,7 +337,16 @@ if __name__ == "__main__":
                 head_type
             ] = head_branches
 
-    equivariant_models = ["EGNN", "SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"]
+    equivariant_models = [
+        "EGNN",
+        "SchNet",
+        "DimeNet",
+        "MACE",
+        "PAINN",
+        "PNAEq",
+        "AllScAIP",
+        "UMA",
+    ]
     assert (
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] in equivariant_models
     ), f"mpnn_type must be one of {equivariant_models} for this workflow"

@@ -424,9 +424,9 @@ class AllScAIPStack(Base):
         # (first node feature column). Allow an explicit override via
         # data.atomic_numbers if the dataset already provides it.
         if hasattr(data, "atomic_numbers") and data.atomic_numbers is not None:
-            atomic_numbers = data.atomic_numbers.long()
+            atomic_numbers = data.atomic_numbers.long().view(-1)
         else:
-            atomic_numbers = data.x[:, 0].long()
+            atomic_numbers = data.x[:, 0].long().view(-1)
 
         batch = (
             data.batch
@@ -438,14 +438,34 @@ class AllScAIPStack(Base):
         # Cell / PBC: optional. Default to a zero cell with PBC off.
         if hasattr(data, "cell") and data.cell is not None:
             cell = data.cell.to(device=device, dtype=dtype)
-            if cell.dim() == 2:
+            if cell.dim() == 2 and cell.shape == (3, 3):
                 cell = cell.unsqueeze(0).expand(num_graphs, 3, 3).contiguous()
+            elif cell.dim() == 2 and cell.shape[0] == 3 * num_graphs:
+                # PyG batching of per-graph (3, 3) cells -> (3*B, 3).
+                cell = cell.view(num_graphs, 3, 3).contiguous()
+            elif cell.dim() == 3:
+                cell = cell.contiguous()
+            else:
+                raise ValueError(
+                    f"Unexpected cell shape {tuple(cell.shape)} for "
+                    f"num_graphs={num_graphs}."
+                )
         else:
             cell = torch.zeros(num_graphs, 3, 3, device=device, dtype=dtype)
         if hasattr(data, "pbc") and data.pbc is not None:
             pbc = data.pbc.to(device=device, dtype=torch.bool)
-            if pbc.dim() == 1:
+            if pbc.dim() == 1 and pbc.numel() == 3:
                 pbc = pbc.unsqueeze(0).expand(num_graphs, 3).contiguous()
+            elif pbc.dim() == 1 and pbc.numel() == 3 * num_graphs:
+                # PyG batching of per-graph (3,) pbc -> (3*B,).
+                pbc = pbc.view(num_graphs, 3).contiguous()
+            elif pbc.dim() == 2:
+                pbc = pbc.contiguous()
+            else:
+                raise ValueError(
+                    f"Unexpected pbc shape {tuple(pbc.shape)} for "
+                    f"num_graphs={num_graphs}."
+                )
         else:
             pbc = torch.zeros(num_graphs, 3, device=device, dtype=torch.bool)
 
