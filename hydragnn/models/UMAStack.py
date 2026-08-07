@@ -87,6 +87,15 @@ Key                               Purpose
 ``uma_moe_dropout``               Dropout on the MoLE routing weights.
 ``uma_use_composition_embedding`` Route experts using the atomic
                                   composition in addition to charge/spin.
+``uma_equivariant_vector_head``   Enable an SO(3)-equivariant per-node
+                                  vector head (ported from fairchem's
+                                  ``Linear_Force_Head``) that reads UMA's
+                                  L=1 irrep to produce genuine 3-vectors
+                                  for a designated 'node' output head.
+``uma_vector_head_index``         Index of the 'node' output head the
+                                  equivariant vector maps to (its dim must
+                                  be a multiple of 3). ``None`` auto-detects
+                                  the unique matching node head.
 ================================  =========================================
 
 Equivariance
@@ -100,6 +109,13 @@ the L=1 / L=2 channels can be sliced from ``node_embedding`` to obtain
 genuinely equivariant predictions. The wrapper sets
 ``equivariance=True`` in :class:`Base` so HydraGNN's downstream
 machinery (vector outputs, forces from autograd) is consistent.
+
+By default only the L=0 invariant scalar is read out (energies stay
+invariant; conservative forces from autograd stay equivariant). Set
+``uma_equivariant_vector_head=True`` to additionally expose a
+direct SO(3)-equivariant per-node vector prediction from the L=1 irrep
+(see :class:`_UMAEquivariantVectorHead`); this populates the node
+output head selected by ``uma_vector_head_index``.
 """
 
 from __future__ import annotations
@@ -180,6 +196,46 @@ class _IdentityConv(torch.nn.Module):
         return inv_node_feat, equiv_node_feat
 
 
+class _UMAEquivariantVectorHead(torch.nn.Module):
+    """Rotation-equivariant per-node vector head for UMA.
+
+    Ported from fairchem's ``Linear_Force_Head``: an ``SO3_Linear`` acts on
+    the L=0/L=1 block of UMA's spherical-harmonic node embedding and the L=1
+    (vector) component of the result is read out, yielding ``num_vectors``
+    genuine 3-vectors per node. Because ``SO3_Linear`` applies a shared weight
+    across the three L=1 components (mixing only the channel axis), the map
+    commutes with the rotation representation and the output vectors transform
+    equivariantly with the input.
+    """
+
+    def __init__(self, sphere_channels: int, num_vectors: int = 1) -> None:
+        super().__init__()
+        # Lazy import: keeps ``import hydragnn`` cheap and matches the rest of
+        # the UMA integration (the vendored fairchem tree is only touched when
+        # a UMA model is actually built). ``so3_layers`` itself only imports
+        # ``math``/``torch``.
+        from hydragnn.utils.model.uma._vendored.fairchem.core.models.uma.nn.so3_layers import (  # noqa: E501
+            SO3_Linear,
+        )
+
+        self.num_vectors = int(num_vectors)
+        # lmax=1 SO3_Linear consumes the L=0 (index 0) + L=1 (indices 1..3)
+        # components and returns the same irrep layout with ``num_vectors``
+        # output channels.
+        self.linear = SO3_Linear(int(sphere_channels), self.num_vectors, lmax=1)
+
+    def forward(self, node_embedding: torch.Tensor) -> torch.Tensor:
+        # node_embedding: (N, (lmax+1)**2, C). Take the first 4 harmonics
+        # (L=0 + L=1) that SO3_Linear(lmax=1) expects.
+        l0_l1 = node_embedding.narrow(1, 0, 4)  # (N, 4, C)
+        out = self.linear(l0_l1)  # (N, 4, num_vectors)
+        vec = out.narrow(1, 1, 3)  # (N, 3, num_vectors) -- L=1 component
+        # (N, 3, V) -> (N, V, 3) -> (N, 3V) so each vector's xyz is contiguous.
+        return vec.permute(0, 2, 1).reshape(
+            node_embedding.shape[0], 3 * self.num_vectors
+        )
+
+
 class UMAStack(Base):
     """HydraGNN wrapper around FairChem's ``eSCNMDBackbone``.
 
@@ -208,6 +264,8 @@ class UMAStack(Base):
         uma_use_composition_embedding: bool = False,
         periodic_boundary_conditions: bool = False,
         *args,
+        uma_equivariant_vector_head: bool = False,
+        uma_vector_head_index: Optional[int] = None,
         **kwargs,
     ):
         # --- Stash UMA-specific args before calling Base.__init__ ---
@@ -252,6 +310,12 @@ class UMAStack(Base):
             self.uma_num_experts = _UMA_VARIANT_DEFAULT_EXPERTS.get(variant, 0)
         self.uma_moe_dropout = float(uma_moe_dropout)
         self.uma_use_composition_embedding = bool(uma_use_composition_embedding)
+
+        # Optional rotation-equivariant per-node vector head (ported from
+        # fairchem's Linear_Force_Head). Stashed here so _init_conv (called by
+        # super().__init__) can build it once the head config is known.
+        self.uma_equivariant_vector_head_enabled = bool(uma_equivariant_vector_head)
+        self.uma_vector_head_index = uma_vector_head_index
 
         # Capture the HydraGNN activation-function string and map to UMA's
         # supported act_type. UMA accepts "gate" or "s2"; other names
@@ -332,11 +396,67 @@ class UMAStack(Base):
         # the invariant scalar feature for HydraGNN's standard decoders.
         self._sph_l0_index = 0
 
+        # Optional rotation-equivariant per-node vector head. When enabled it
+        # populates a designated 'node' output head with genuine 3-vectors read
+        # from UMA's L=1 irrep (see _UMAEquivariantVectorHead / forward()).
+        self.equivariant_vector_head = None
+        self._vector_head_index = None
+        self._equivariant_vector_cache = None
+        if self.uma_equivariant_vector_head_enabled:
+            if int(self.max_ell) < 1:
+                raise ValueError(
+                    "uma_equivariant_vector_head requires max_ell >= 1 so the "
+                    f"L=1 irrep exists (got max_ell={self.max_ell})."
+                )
+            idx = self._resolve_vector_head_index()
+            head_dim = int(self.head_dims[idx])
+            if head_dim % 3 != 0:
+                raise ValueError(
+                    "The UMA equivariant vector head targets node output head "
+                    f"{idx}, whose dimension ({head_dim}) is not a multiple of "
+                    "3; each equivariant vector contributes exactly 3 "
+                    "components."
+                )
+            self._vector_head_index = idx
+            self.equivariant_vector_head = _UMAEquivariantVectorHead(
+                int(self.hidden_dim), num_vectors=head_dim // 3
+            )
+
         # HydraGNN's Base.forward iterates over (graph_convs, feature_layers)
         # exactly num_conv_layers times. We forced num_conv_layers=1 in
         # __init__ and supply identity placeholders so the loop is a no-op.
         self.graph_convs = ModuleList([_IdentityConv()])
         self.feature_layers = ModuleList([Identity()])
+
+    def _resolve_vector_head_index(self) -> int:
+        """Pick which HydraGNN output head the equivariant vector maps to."""
+        if self.uma_vector_head_index is not None:
+            idx = int(self.uma_vector_head_index)
+            if not (0 <= idx < self.num_heads):
+                raise ValueError(
+                    f"uma_vector_head_index={idx} is out of range for "
+                    f"{self.num_heads} output heads."
+                )
+            if self.head_type[idx] != "node":
+                raise ValueError(
+                    "The UMA equivariant vector head must target a 'node' "
+                    f"output head; head {idx} is of type "
+                    f"'{self.head_type[idx]}'."
+                )
+            return idx
+        candidates = [
+            i
+            for i, htype in enumerate(self.head_type)
+            if htype == "node" and int(self.head_dims[i]) % 3 == 0
+        ]
+        if len(candidates) != 1:
+            raise ValueError(
+                "Could not auto-detect a single 'node' output head whose "
+                "dimension is a multiple of 3 for the UMA equivariant vector "
+                "head; set uma_vector_head_index explicitly. Node-head "
+                f"candidates (index) = {candidates}."
+            )
+        return candidates[0]
 
     # --- HydraGNN data adapter -----------------------------------------------
 
@@ -457,12 +577,46 @@ class UMAStack(Base):
         node_embedding = out["node_embedding"]
         # node_embedding: (N, (lmax+1)**2, sphere_channels)
         inv_node_feat = node_embedding[:, self._sph_l0_index, :]
+        # Optional equivariant vector head: read genuine 3-vectors from the
+        # L=1 irrep now (while node_embedding is in scope) and stash them for
+        # forward() to slot into the designated node output head.
+        if self.equivariant_vector_head is not None:
+            self._equivariant_vector_cache = self.equivariant_vector_head(
+                node_embedding
+            )
+        else:
+            self._equivariant_vector_cache = None
         # Equivariant L=1 channel exists but is not currently consumed
         # by HydraGNN's standard MLP heads. Expose it via an empty tensor
         # for now to keep Base's signature stable.
         equiv_node_feat = inv_node_feat.new_zeros((inv_node_feat.shape[0], 0))
         conv_args: Dict[str, Any] = {}
         return inv_node_feat, equiv_node_feat, conv_args
+
+    def forward(self, data):
+        """Run ``Base.forward`` and, if enabled, overwrite the designated node
+        head output with the rotation-equivariant vector prediction.
+
+        ``Base.forward`` still evaluates the scalar MLP for that head slot; we
+        replace its output with the equivariant vectors computed in
+        ``_embedding``. This keeps the model output aligned with HydraGNN's
+        head/loss configuration (the target must be declared as a 'node' head
+        whose dimension is a multiple of 3).
+        """
+        out = super().forward(data)
+        if self.equivariant_vector_head is None:
+            return out
+
+        vec = self._equivariant_vector_cache
+        idx = self._vector_head_index
+        if self.var_output:
+            outputs, outputs_var = out
+            outputs[idx] = vec
+            # No aleatoric variance is predicted for the equivariant head.
+            outputs_var[idx] = vec.new_zeros(vec.shape)
+            return outputs, outputs_var
+        out[idx] = vec
+        return out
 
     def __str__(self):
         return "UMAStack"

@@ -211,6 +211,15 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["uma_moe_dropout"] = 0.0
     if "uma_use_composition_embedding" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["uma_use_composition_embedding"] = False
+    if (
+        "uma_equivariant_vector_head"
+        not in config["NeuralNetwork"]["Architecture"]
+    ):
+        config["NeuralNetwork"]["Architecture"][
+            "uma_equivariant_vector_head"
+        ] = False
+    if "uma_vector_head_index" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_vector_head_index"] = None
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]

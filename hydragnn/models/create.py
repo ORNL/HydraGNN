@@ -150,6 +150,10 @@ def create_model_config(
         uma_use_composition_embedding=config["Architecture"][
             "uma_use_composition_embedding"
         ],
+        uma_equivariant_vector_head=config["Architecture"][
+            "uma_equivariant_vector_head"
+        ],
+        uma_vector_head_index=config["Architecture"]["uma_vector_head_index"],
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -246,6 +250,8 @@ def create_model(
     uma_num_experts: int = None,
     uma_moe_dropout: float = 0.0,
     uma_use_composition_embedding: bool = False,
+    uma_equivariant_vector_head: bool = False,
+    uma_vector_head_index: int = None,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -809,6 +815,8 @@ def create_model(
             activation_function,
             loss_function_type,
             equivariance,
+            uma_equivariant_vector_head=uma_equivariant_vector_head,
+            uma_vector_head_index=uma_vector_head_index,
             loss_weights=task_weights,
             freeze_conv=freeze_conv,
             initial_bias=initial_bias,

@@ -42,6 +42,30 @@ def _tiny_loader(num_graphs=4, num_nodes=6):
     return DataLoader(data_list, batch_size=2, shuffle=False)
 
 
+def _vector_head_loader(num_graphs=4, num_nodes=6):
+    """Loader carrying an energy graph target and a 3-dim node force target.
+
+    ``y``/``y_loc`` encode two heads (energy dim 1, forces dim 3) so
+    ``update_config`` infers the ``[1, 3]`` output dims required by the
+    equivariant-vector-head example config.
+    """
+    torch.manual_seed(0)
+    data_list = []
+    for _ in range(num_graphs):
+        pos = torch.randn(num_nodes, 3)
+        atom_type = torch.randint(1, 10, (num_nodes, 1)).float()
+        energy = torch.randn(1)
+        forces = torch.randn(3 * num_nodes)
+        d = Data(x=atom_type, pos=pos)
+        d.atomic_numbers = atom_type.view(-1).long()
+        d.charge = torch.zeros(1, dtype=torch.long)
+        d.spin = torch.zeros(1, dtype=torch.long)
+        d.y = torch.cat([energy, forces])
+        d.y_loc = torch.tensor([[0, 1, 1 + 3 * num_nodes]], dtype=torch.long)
+        data_list.append(d)
+    return DataLoader(data_list, batch_size=2, shuffle=False)
+
+
 def _load_example_config(filename):
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(here, "..", "examples", "LennardJones", filename)
@@ -113,6 +137,39 @@ def pytest_uma_variant_config_builds_model(uma_variant):
             assert inner.uma_num_experts == 0
         else:
             assert inner.uma_num_experts > 0
+    finally:
+        torch.set_default_dtype(prev_dtype)
+        os.environ.pop("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE", None)
+
+
+def pytest_uma_equivariant_vector_head_config_builds_model():
+    """The equivariant-vector-head example config builds and wires the head.
+
+    Mirrors ``LJ_UMA_equivariant_vector.json``: an energy graph head plus a
+    3-dim ``forces`` node head with ``uma_equivariant_vector_head`` enabled.
+    The dim-3 node head must be auto-detected and backed by the equivariant
+    SO(3) vector head rather than a scalar MLP readout.
+    """
+    os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = "0"
+    prev_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(torch.float32)
+    try:
+        config = _load_example_config("LJ_UMA_equivariant_vector.json")
+        arch = config["NeuralNetwork"]["Architecture"]
+        assert arch["uma_equivariant_vector_head"] is True
+
+        loader = _vector_head_loader()
+        update_config(config, loader, loader, loader)
+
+        model = create_model_config(
+            config=config["NeuralNetwork"], verbosity=0, use_gpu=False
+        )
+        inner = getattr(model, "model", model)
+        assert str(inner) == "UMAStack"
+        assert inner.equivariant_vector_head is not None
+        # The dim-3 'forces' node head (index 1) is the equivariant target.
+        assert inner._vector_head_index == 1
+        assert inner.head_dims[inner._vector_head_index] == 3
     finally:
         torch.set_default_dtype(prev_dtype)
         os.environ.pop("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE", None)
