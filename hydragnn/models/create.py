@@ -79,6 +79,9 @@ def create_model_config(
         num_gaussians=config["Architecture"]["num_gaussians"],
         num_filters=config["Architecture"]["num_filters"],
         radius=config["Architecture"]["radius"],
+        periodic_boundary_conditions=config["Architecture"].get(
+            "periodic_boundary_conditions", False
+        ),
         equivariance=config["Architecture"]["equivariance"],
         correlation=config["Architecture"]["correlation"],
         max_ell=config["Architecture"]["max_ell"],
@@ -254,6 +257,7 @@ def create_model(
     uma_vector_head_index: int = None,
     verbosity: int = 0,
     use_gpu: bool = True,
+    periodic_boundary_conditions: bool = False,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -802,7 +806,7 @@ def create_model(
             uma_num_experts,
             uma_moe_dropout,
             uma_use_composition_embedding,
-            False,  # periodic_boundary_conditions; CI/default is non-periodic.
+            periodic_boundary_conditions,
             input_dim,
             hidden_dim,
             output_dim,

@@ -224,3 +224,78 @@ def pytest_end_to_end_rotational_equivariance():
     finally:
         torch.set_default_dtype(prev_dtype)
 
+
+def pytest_uma_adapter_reads_charge_spin_from_graph_attr():
+    model = _build_uma_with_vector_head()
+    batch = _make_batch(torch.get_default_dtype())
+    batch.graph_attr = torch.tensor([2.0, 1.0, -1.0, 3.0])
+
+    data_dict = model._build_data_dict(batch)
+    assert torch.equal(data_dict["charge"], torch.tensor([2, -1]))
+    assert torch.equal(data_dict["spin"], torch.tensor([1, 3]))
+
+    batch.charge = torch.tensor([4, 5])
+    batch.spin = torch.tensor([6, 7])
+    data_dict = model._build_data_dict(batch)
+    assert torch.equal(data_dict["charge"], batch.charge)
+    assert torch.equal(data_dict["spin"], batch.spin)
+
+    del batch.charge
+    del batch.spin
+    batch.graph_attr = torch.zeros(2, 3)
+    with pytest.raises(ValueError, match=r"graph_attr=\[charge, spin\]"):
+        model._build_data_dict(batch)
+
+
+def pytest_uma_adapter_converts_periodic_edge_shifts():
+    from torch_geometric.data import Batch, Data
+
+    model = _build_uma_with_vector_head()
+    cells = [
+        torch.diag(torch.tensor([4.0, 5.0, 6.0])),
+        torch.tensor([[3.0, 0.0, 0.0], [0.5, 4.0, 0.0], [0.2, 0.3, 5.0]]),
+    ]
+    hydra_offsets = [
+        torch.tensor([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]]),
+        torch.tensor([[0.0, -1.0, 1.0], [0.0, 1.0, -1.0]]),
+    ]
+    graphs = []
+    for cell, offsets in zip(cells, hydra_offsets):
+        graphs.append(
+            Data(
+                pos=torch.tensor([[0.2, 0.4, 0.6], [2.8, 3.2, 4.1]]),
+                x=torch.tensor([[1.0], [8.0]]),
+                atomic_numbers=torch.tensor([1, 8]),
+                edge_index=torch.tensor([[0, 1], [1, 0]]),
+                edge_shifts=offsets @ cell,
+                cell=cell,
+                pbc=torch.tensor([True, True, True]),
+            )
+        )
+    batch = Batch.from_data_list(graphs)
+
+    data_dict = model._build_data_dict(batch)
+    expected_offsets = -torch.cat(hydra_offsets, dim=0)
+    assert torch.equal(data_dict["cell_offsets"], expected_offsets)
+
+    edge_batch = batch.batch[batch.edge_index[0]]
+    cell_per_edge = data_dict["cell"][edge_batch]
+    uma_shifts = torch.einsum(
+        "ei,eij->ej", data_dict["cell_offsets"], cell_per_edge
+    )
+    src, dst = batch.edge_index
+    uma_vectors = batch.pos[src] - batch.pos[dst] + uma_shifts
+    hydragnn_vectors = batch.pos[dst] - batch.pos[src] + batch.edge_shifts
+    assert torch.allclose(uma_vectors, -hydragnn_vectors)
+
+
+def pytest_uma_adapter_rejects_nonperiodic_lattice_shift():
+    model = _build_uma_with_vector_head()
+    batch = _make_batch(torch.get_default_dtype())
+    batch.cell = torch.eye(3).repeat(2, 1)
+    batch.pbc = torch.ones(6, dtype=torch.bool)
+    batch.edge_shifts[0, 0] = 0.25
+
+    with pytest.raises(ValueError, match="not integer combinations"):
+        model._build_data_dict(batch)
+

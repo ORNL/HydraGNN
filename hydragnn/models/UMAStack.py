@@ -469,7 +469,7 @@ class UMAStack(Base):
         either disabled or defaulted.
         """
         device = data.pos.device
-        dtype = torch.get_default_dtype()
+        dtype = data.pos.dtype
 
         if hasattr(data, "atomic_numbers") and data.atomic_numbers is not None:
             atomic_numbers = data.atomic_numbers.long().view(-1)
@@ -528,19 +528,67 @@ class UMAStack(Base):
                 dtype=torch.bool,
             )
 
-        # Edge bookkeeping. With otf_graph=False, UMA expects edge_index
-        # plus per-edge cell_offsets and per-system nedges.
+        # Edge bookkeeping. HydraGNN stores Cartesian shifts using the
+        # opposite edge-vector convention from UMA.
         edge_index = data.edge_index
-        nedges = torch.bincount(batch[edge_index[0]], minlength=num_systems).long()
-        cell_offsets = torch.zeros(edge_index.shape[1], 3, device=device, dtype=dtype)
+        edge_batch = batch[edge_index[0]]
+        nedges = torch.bincount(edge_batch, minlength=num_systems).long()
+        if edge_batch.numel() > 1 and torch.any(edge_batch[1:] < edge_batch[:-1]):
+            raise ValueError("UMA requires edges to be grouped by system.")
 
-        # Charge / spin: per-system scalars. Default to neutral / singlet.
+        if hasattr(data, "edge_shifts") and data.edge_shifts is not None:
+            edge_shifts = data.edge_shifts.to(device=device, dtype=dtype).reshape(-1, 3)
+            if edge_shifts.shape[0] != edge_index.shape[1]:
+                raise ValueError(
+                    "edge_shifts must contain one Cartesian shift per edge; "
+                    f"got {edge_shifts.shape[0]} shifts for {edge_index.shape[1]} edges."
+                )
+            cell_per_edge = cell[edge_batch]
+            solve_dtype = torch.float64 if dtype == torch.float64 else torch.float32
+            cell_offsets = torch.linalg.solve(
+                cell_per_edge.to(solve_dtype).transpose(1, 2),
+                -edge_shifts.to(solve_dtype).unsqueeze(-1),
+            ).squeeze(-1)
+            rounded_offsets = cell_offsets.round()
+            tolerance = 1e-10 if solve_dtype == torch.float64 else 1e-5
+            if not torch.allclose(
+                cell_offsets, rounded_offsets, atol=tolerance, rtol=tolerance
+            ):
+                max_error = (cell_offsets - rounded_offsets).abs().max().item()
+                raise ValueError(
+                    "edge_shifts are not integer combinations of their system cell; "
+                    f"maximum fractional-offset error is {max_error:.3e}."
+                )
+            cell_offsets = rounded_offsets.to(dtype)
+        else:
+            cell_offsets = torch.zeros(
+                edge_index.shape[1], 3, device=device, dtype=dtype
+            )
+
+        graph_charge = None
+        graph_spin = None
+        if hasattr(data, "graph_attr") and data.graph_attr is not None:
+            graph_attr = data.graph_attr.to(device=device)
+            if graph_attr.numel() != 2 * num_systems:
+                raise ValueError(
+                    "UMA expects graph_attr=[charge, spin] for each system; "
+                    f"got shape {tuple(graph_attr.shape)} for "
+                    f"num_systems={num_systems}."
+                )
+            graph_attr = graph_attr.reshape(num_systems, 2)
+            graph_charge = graph_attr[:, 0].to(dtype=torch.long)
+            graph_spin = graph_attr[:, 1].to(dtype=torch.long)
+
         if hasattr(data, "charge") and data.charge is not None:
             charge = data.charge.to(device=device, dtype=torch.long).view(-1)
+        elif graph_charge is not None:
+            charge = graph_charge
         else:
             charge = torch.zeros(num_systems, device=device, dtype=torch.long)
         if hasattr(data, "spin") and data.spin is not None:
             spin = data.spin.to(device=device, dtype=torch.long).view(-1)
+        elif graph_spin is not None:
+            spin = graph_spin
         else:
             spin = torch.zeros(num_systems, device=device, dtype=torch.long)
 

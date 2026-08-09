@@ -107,6 +107,8 @@ def pytest_example_config_builds_model(filename, expected_mpnn, expected_str):
         # EnhancedModelWrapper; unwrap to inspect the underlying stack.
         inner = getattr(model, "model", model)
         assert str(inner) == expected_str
+        if expected_mpnn == "UMA":
+            assert inner.uma_periodic is True
         # Model has learnable parameters and a backbone attribute.
         assert sum(p.numel() for p in model.parameters()) > 0
     finally:
