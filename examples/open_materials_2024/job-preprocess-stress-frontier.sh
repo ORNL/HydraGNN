@@ -1,0 +1,47 @@
+#!/bin/bash
+#SBATCH -A LRN070
+#SBATCH -J OMat24-stress-ADIOS
+#SBATCH -o job-preprocess-stress-%j.out
+#SBATCH -e job-preprocess-stress-%j.out
+#SBATCH -t 02:00:00
+#SBATCH -N 256
+#SBATCH -p batch
+
+set -euo pipefail
+
+HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN
+EXAMPLE_DIR=${HYDRAGNN_ROOT}/examples/open_materials_2024
+OUTPUT_DIR=${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/datasest
+MODEL_NAME=OMat24-v3
+
+module reset
+ml cpe/24.07 cce/18.0.0 rocm/7.2.0 amd-mixed/7.2.0 craype-accel-amd-gfx90a PrgEnv-gnu miniforge3/23.11.0-0 git-lfs
+module unload darshan-runtime
+source activate ${HYDRAGNN_ROOT}/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72
+
+export PYTHONNOUSERSITE=1
+export PYTHONPATH=${HYDRAGNN_ROOT}:${EXAMPLE_DIR}:${EXAMPLE_DIR}/fairchem:${PYTHONPATH:-}
+export HYDRAGNN_BACKEND=gloo
+export HYDRAGNN_AGGR_BACKEND=mpi
+export OMP_NUM_THREADS=7
+
+cd ${EXAMPLE_DIR}
+rm -rf dataset/${MODEL_NAME}.bp
+
+srun -N${SLURM_JOB_NUM_NODES} -n$((SLURM_JOB_NUM_NODES * 8)) -c7 \
+    --cpu-bind=cores --kill-on-bad-exit=1 \
+    python -u train.py \
+        --preonly \
+        --adios \
+        --inputfile=omat24_energy.json \
+        --modelname=${MODEL_NAME} \
+        --precision=fp32
+
+test -d dataset/${MODEL_NAME}.bp
+python ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/verify_stress_adios.py \
+    dataset/${MODEL_NAME}.bp \
+    --train=84550587 \
+    --validation=9395657 \
+    --test=1077382
+rm -rf ${OUTPUT_DIR}/${MODEL_NAME}.bp
+mv dataset/${MODEL_NAME}.bp ${OUTPUT_DIR}/${MODEL_NAME}.bp
