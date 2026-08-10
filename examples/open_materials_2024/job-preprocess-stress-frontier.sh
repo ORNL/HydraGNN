@@ -13,6 +13,7 @@ HYDRAGNN_ROOT=/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN
 EXAMPLE_DIR=${HYDRAGNN_ROOT}/examples/open_materials_2024
 OUTPUT_DIR=${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/datasest
 MODEL_NAME=OMat24-v3
+LINEAR_MODEL_NAME=OMat24-v3-linear
 
 module reset
 ml cpe/24.07 cce/18.0.0 rocm/7.2.0 amd-mixed/7.2.0 craype-accel-amd-gfx90a PrgEnv-gnu miniforge3/23.11.0-0 git-lfs
@@ -45,3 +46,17 @@ python ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/verify_stress_adios.py \
     --test=1077382
 rm -rf ${OUTPUT_DIR}/${MODEL_NAME}.bp
 mv dataset/${MODEL_NAME}.bp ${OUTPUT_DIR}/${MODEL_NAME}.bp
+
+rm -rf ${OUTPUT_DIR}/${LINEAR_MODEL_NAME}.bp
+srun -N${SLURM_JOB_NUM_NODES} -n$((SLURM_JOB_NUM_NODES * 8)) -c7 \
+    --cpu-bind=cores --kill-on-bad-exit=1 \
+    python -u ${HYDRAGNN_ROOT}/examples/multidataset/energy_linear_regression.py \
+        ${MODEL_NAME} \
+        --input=${OUTPUT_DIR}/${MODEL_NAME}.bp \
+        --output=${OUTPUT_DIR}/${LINEAR_MODEL_NAME}.bp
+
+python ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/verify_stress_adios.py \
+    ${OUTPUT_DIR}/${LINEAR_MODEL_NAME}.bp \
+    --train=84550587 \
+    --validation=9395657 \
+    --test=1077382
