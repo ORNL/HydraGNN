@@ -95,7 +95,7 @@ class PAINNStack(Base):
             nn.Tanh(),
             nn.Linear(output_dim, output_dim),
         )  # Tanh activation is necessary to prevent exploding gradients when learning from random signals in test_graphs.py
-        vec_embed_out = nn.Linear(input_dim, output_dim) if not last_layer else None
+        vec_embed_out = nn.Linear(input_dim, output_dim, bias=False) if not last_layer else None
 
         if not last_layer:
             return geom_nn.Sequential(
@@ -278,8 +278,8 @@ class PainnUpdate(nn.Module):
     def __init__(self, node_size: int, last_layer=False):
         super().__init__()
 
-        self.update_U = nn.Linear(node_size, node_size)
-        self.update_V = nn.Linear(node_size, node_size)
+        self.update_U = nn.Linear(node_size, node_size, bias=False)
+        self.update_V = nn.Linear(node_size, node_size, bias=False)
         self.last_layer = last_layer
 
         if not self.last_layer:
