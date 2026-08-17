@@ -160,7 +160,8 @@ class HydraDataLoader(DataLoader):
         # log (f"Worker done: pid={os.getpid()} hostname={hostname} ibatch={ibatch}")
         data = Batch.from_data_list(batch)
         if pin_memory:
-            data = torch.utils.data._utils.pin_memory.pin_memory(data)
+            if torch.cuda.is_available():
+                data = torch.utils.data._utils.pin_memory.pin_memory(data)
         return (ibatch, data)
 
     def __iter__(self):
