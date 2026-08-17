@@ -145,7 +145,7 @@ class PNAEqStack(Base):
             nn.Linear(output_dim, output_dim),
         )
         vec_embed_out = (
-            geom_nn.Linear(input_dim, output_dim) if not last_layer else None
+            geom_nn.Linear(input_dim, output_dim, bias=False) if not last_layer else None
         )
 
         if not last_layer:
@@ -426,8 +426,8 @@ class PainnUpdate(MessagePassing):
     def __init__(self, node_size: int, last_layer=False):
         super().__init__()
 
-        self.update_X = nn.Linear(node_size, node_size)
-        self.update_V = nn.Linear(node_size, node_size)
+        self.update_X = nn.Linear(node_size, node_size, bias=False)
+        self.update_V = nn.Linear(node_size, node_size, bias=False)
         self.last_layer = last_layer
 
         if not self.last_layer:
