@@ -33,15 +33,15 @@ jobs:
         uses: actions/cache@v4
         id: cache
         with:
-          path: ${{ env.pythonLocation }}
+          path: ~/.cache/pip
           key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install --no-build-isolation -v --upgrade -r requirements-base.txt -r requirements-dev.txt
-          python -m pip install --no-build-isolation -v --upgrade -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
-          python -m pip install --no-build-isolation -v --upgrade -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.8.0+cpu.html
-          python -m pip install --no-build-isolation -v --upgrade -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-base.txt -r requirements-dev.txt
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.8.0+cpu.html
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"
       - name: Show installed packages
         run: |
           echo "=== Installed package versions ==="
