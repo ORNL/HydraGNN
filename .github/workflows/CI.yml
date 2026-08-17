@@ -33,11 +33,10 @@ jobs:
         uses: actions/cache@v4
         id: cache
         with:
-          path: ${{ env.pythonLocation }}
+          path: ~/.cache/pip
           key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
       - name: Install dependencies
         run: |
-          python -m pip cache purge
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install --upgrade -r requirements-base.txt -r requirements-dev.txt
           python -m pip install --upgrade -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
