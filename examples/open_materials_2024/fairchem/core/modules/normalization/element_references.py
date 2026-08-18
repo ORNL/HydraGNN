@@ -59,9 +59,11 @@ class LinearReferences(nn.Module):
         super().__init__()
         self.register_buffer(
             name="element_references",
-            tensor=element_references
-            if element_references is not None
-            else torch.zeros(max_num_elements + 1),
+            tensor=(
+                element_references
+                if element_references is not None
+                else torch.zeros(max_num_elements + 1)
+            ),
         )
 
     def _apply_refs(

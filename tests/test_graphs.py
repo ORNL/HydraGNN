@@ -21,6 +21,7 @@ import hydragnn, tests
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from mpi4py import MPI
 
+
 # Main unit test function called by pytest wrappers.
 def unittest_train_model(
     mpnn_type,

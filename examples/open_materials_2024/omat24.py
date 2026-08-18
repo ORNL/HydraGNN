@@ -19,7 +19,6 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
 from hydragnn.utils.distributed import nsplit
 from utils import balance_load
 
-
 # transform_coordinates = Spherical(norm=False, cat=False)
 # transform_coordinates = LocalCartesian(norm=False, cat=False)
 transform_coordinates = Distance(norm=False, cat=False)

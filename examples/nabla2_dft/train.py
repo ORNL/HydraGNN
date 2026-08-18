@@ -42,7 +42,6 @@ except ImportError:
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 
-
 torch.set_default_dtype(torch.float32)
 
 transform_coordinates = Distance(norm=False, cat=False)
@@ -462,7 +461,11 @@ if __name__ == "__main__":
         os.environ["HYDRAGNN_AGGR_BACKEND"] = "mpi"
         os.environ["HYDRAGNN_USE_ddstore"] = "1"
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

@@ -175,9 +175,11 @@ def guess_property_metadata(atoms_list):
             # atoms2graphs will always request voigt=False so turn it into full 3x3
             if key == "stress":
                 target_samples = [
-                    voigt_6_to_full_3x3_stress(sample)
-                    if sample.shape != (3, 3)
-                    else sample
+                    (
+                        voigt_6_to_full_3x3_stress(sample)
+                        if sample.shape != (3, 3)
+                        else sample
+                    )
                     for sample in target_samples
                 ]
 

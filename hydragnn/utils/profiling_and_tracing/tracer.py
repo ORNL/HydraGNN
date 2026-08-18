@@ -77,7 +77,6 @@ try:
             self.hist = dict()
             self.last = dict()
 
-
 except:
     pass
 
@@ -103,7 +102,6 @@ try:
 
         def reset(self):
             pass
-
 
 except:
     pass
@@ -178,7 +176,6 @@ try:
                     file.write(
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
-
 
 except:
     pass
@@ -277,7 +274,6 @@ try:
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
 
-
 except:
     pass
 
@@ -352,7 +348,6 @@ try:
                     file.write(
                         f"{k}, {len(v)}, {mean_energy}, {total_energy}, {median_energy}, {stdDev}, {max_energy}, {min_energy}\n"
                     )
-
 
 except:
     pass

@@ -20,7 +20,6 @@ from hydragnn.preprocess import graph_samples_checks_and_updates as gscu
 from hydragnn.preprocess import serialized_dataset_loader as sdl
 from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
 
-
 torch.manual_seed(97)
 
 CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]

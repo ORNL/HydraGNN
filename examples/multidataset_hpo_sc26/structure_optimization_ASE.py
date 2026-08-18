@@ -390,7 +390,7 @@ def main():
 
             energy = atoms.get_potential_energy()
             forces = atoms.get_forces()
-            max_force = float(np.sqrt((forces ** 2).sum(axis=1).max()))
+            max_force = float(np.sqrt((forces**2).sum(axis=1).max()))
             weights = calculator.last_branch_weights
             top_branch = int(np.argmax(weights)) if weights is not None else -1
             top_weight = (

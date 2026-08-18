@@ -104,9 +104,11 @@ class AdsorbMLRunner(CalculateRunner):
                 steps=self.steps,
                 num_placements=self.num_placements,
                 reference_ml_energies=not self.adsorption_energy_model,
-                relaxed_slab_atoms=relaxed_slab.atoms  # In the case of adsorption energy model, use the DFT relaxed slab
-                if self.adsorption_energy_model
-                else None,
+                relaxed_slab_atoms=(
+                    relaxed_slab.atoms  # In the case of adsorption energy model, use the DFT relaxed slab
+                    if self.adsorption_energy_model
+                    else None
+                ),
                 place_on_relaxed_slab=self.place_on_relaxed_slab,
             )
             top_candidates = outputs["adslabs"]
