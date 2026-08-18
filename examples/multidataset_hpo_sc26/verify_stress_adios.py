@@ -26,13 +26,15 @@ def main():
             MPI.COMM_SELF,
             keys=["stress"],
         )
-        assert len(dataset) == expected_count, (
-            f"{label} contains {len(dataset)} samples, expected {expected_count}"
-        )
+        assert (
+            len(dataset) == expected_count
+        ), f"{label} contains {len(dataset)} samples, expected {expected_count}"
         for index in {0, len(dataset) // 2, len(dataset) - 1}:
             stress = dataset[index].stress
             assert stress.shape == (3, 3), stress.shape
-            assert torch.isfinite(stress).all(), f"Non-finite stress at {label}[{index}]"
+            assert torch.isfinite(
+                stress
+            ).all(), f"Non-finite stress at {label}[{index}]"
             torch.testing.assert_close(stress, stress.T, rtol=1e-5, atol=1e-7)
 
         print(f"{label}: {len(dataset)} samples with valid stress")

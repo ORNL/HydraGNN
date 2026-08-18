@@ -22,7 +22,6 @@ from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
 
-
 torch.manual_seed(97)
 
 CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]

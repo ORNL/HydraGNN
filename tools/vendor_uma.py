@@ -12,6 +12,7 @@ pretrained_models.json) that live next to visited modules.
 Adds a marker file at each vendored subtree root so we know its
 provenance (MIT license, upstream commit).
 """
+
 from __future__ import annotations
 import ast
 import importlib.util

@@ -280,9 +280,7 @@ def pytest_uma_adapter_converts_periodic_edge_shifts():
 
     edge_batch = batch.batch[batch.edge_index[0]]
     cell_per_edge = data_dict["cell"][edge_batch]
-    uma_shifts = torch.einsum(
-        "ei,eij->ej", data_dict["cell_offsets"], cell_per_edge
-    )
+    uma_shifts = torch.einsum("ei,eij->ej", data_dict["cell_offsets"], cell_per_edge)
     src, dst = batch.edge_index
     uma_vectors = batch.pos[src] - batch.pos[dst] + uma_shifts
     hydragnn_vectors = batch.pos[dst] - batch.pos[src] + batch.edge_shifts
@@ -298,4 +296,3 @@ def pytest_uma_adapter_rejects_nonperiodic_lattice_shift():
 
     with pytest.raises(ValueError, match="not integer combinations"):
         model._build_data_dict(batch)
-
