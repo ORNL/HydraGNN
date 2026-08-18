@@ -9,7 +9,7 @@ tensorboard==2.20.0
 psutil==7.1.0
 sympy==1.14.0
 matscipy
-scikit-learn==1.5.1
+scikit-learn==1.7.2
 numpy==2.2.6
 scipy==1.17.1
 mpi4py==4.1.1
