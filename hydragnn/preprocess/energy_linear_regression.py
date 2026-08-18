@@ -8,7 +8,6 @@ from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
 from tqdm import tqdm
 import logging
 
-
 logger = logging.getLogger("energy_linear_transform")
 logging.basicConfig(
     format="%(levelname)s %(asctime)s %(message)s",

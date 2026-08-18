@@ -67,7 +67,7 @@ dataset = torch_geometric.datasets.QM9(
 
 
 trainset, valset, testset = hydragnn.preprocess.split_dataset(dataset, 0.8, False)
-(train_loader, val_loader, test_loader) = hydragnn.preprocess.create_dataloaders(
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
     trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
 )
 
@@ -95,9 +95,9 @@ def run(trial):
     # log("Command: {0}\n".format(" ".join([x for x in sys.argv])), rank=0)
 
     if trial.parameters["global_attn_heads"] is not None:
-        trial_config["NeuralNetwork"]["Architecture"][
-            "global_attn_heads"
-        ] = trial.parameters["global_attn_heads"]
+        trial_config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = (
+            trial.parameters["global_attn_heads"]
+        )
         global_attn_heads = trial.parameters["global_attn_heads"]
         hidden_dim = global_attn_heads * trial.parameters["hidden_dim"]
     else:

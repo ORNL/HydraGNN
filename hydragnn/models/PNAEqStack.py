@@ -145,7 +145,9 @@ class PNAEqStack(Base):
             nn.Linear(output_dim, output_dim),
         )
         vec_embed_out = (
-            geom_nn.Linear(input_dim, output_dim, bias=False) if not last_layer else None
+            geom_nn.Linear(input_dim, output_dim, bias=False)
+            if not last_layer
+            else None
         )
 
         if not last_layer:

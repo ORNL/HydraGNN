@@ -13,7 +13,6 @@ import numpy as np
 import adios2.bindings as adios2
 from tqdm import tqdm
 
-
 local_cache_dir = f"/tmp/{getpass.getuser()}"
 if len(sys.argv) == 2:
     local_cache_dir = sys.argv[1]

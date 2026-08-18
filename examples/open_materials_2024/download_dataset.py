@@ -4,7 +4,6 @@ import logging
 import os
 import shutil
 
-
 DOWNLOAD_LINKS = {
     "train": {
         "rattled-1000": "wget https://dl.fbaipublicfiles.com/opencatalystproject/data/omat/241018/omat/train/rattled-1000.tar.gz",

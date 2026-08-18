@@ -71,9 +71,11 @@ def batch_to_atoms(
     fixed = torch.split(batch.fixed.to(torch.bool), natoms)
     if results is not None:
         results = {
-            key: val.view(ASE_PROP_RESHAPE.get(key, -1)).tolist()
-            if len(val) == len(batch)
-            else [v.cpu().detach().numpy() for v in torch.split(val, natoms)]
+            key: (
+                val.view(ASE_PROP_RESHAPE.get(key, -1)).tolist()
+                if len(val) == len(batch)
+                else [v.cpu().detach().numpy() for v in torch.split(val, natoms)]
+            )
             for key, val in results.items()
         }
 

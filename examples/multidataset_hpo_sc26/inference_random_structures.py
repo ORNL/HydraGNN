@@ -39,7 +39,6 @@ from hydragnn.train.train_validate_test import (
 )
 from hydragnn.utils.distributed import get_device
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

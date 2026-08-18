@@ -1,4 +1,4 @@
-""" 
+"""
 This is a dummy package for gptl4py (https://github.com/jychoi-hpc/gptl4py).
 When gptl4py is not available, use as follows:
 ```

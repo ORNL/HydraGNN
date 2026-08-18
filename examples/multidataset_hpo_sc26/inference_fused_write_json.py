@@ -36,7 +36,6 @@ from inference_fused import (
 
 from inference_random_structures_write_json import structure_to_dict
 
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------

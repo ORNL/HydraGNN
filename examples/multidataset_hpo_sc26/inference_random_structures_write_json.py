@@ -34,7 +34,6 @@ from inference_random_structures import (
     run_inference,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -165,7 +164,7 @@ def main():
         fx = np.array(entry["forces_x"])
         fy = np.array(entry["forces_y"])
         fz = np.array(entry["forces_z"])
-        f_norms = np.sqrt(fx ** 2 + fy ** 2 + fz ** 2)
+        f_norms = np.sqrt(fx**2 + fy**2 + fz**2)
         f_mean = f_norms.mean()
         print(
             f"[rank {world_rank}] {idx:6d} | {n:5d} | {e:16.6f} | "

@@ -632,7 +632,7 @@ if __name__ == "__main__":
                 for file in os.listdir(fname):
                     total_size += os.path.getsize(os.path.join(fname, file))
 
-                if total_size < 1.5 * 1024 ** 4:
+                if total_size < 1.5 * 1024**4:
                     print(
                         f"Copying {fname} to local NVME (size: {total_size/1024**4:.2f} TB)"
                     )
@@ -883,7 +883,11 @@ if __name__ == "__main__":
     elif args.ddstore and args.ddstore_width is not None:
         group = trainset.ddstore_comm
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
         testset,

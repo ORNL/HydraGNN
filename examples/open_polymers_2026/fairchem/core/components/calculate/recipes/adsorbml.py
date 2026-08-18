@@ -119,9 +119,11 @@ def adsorb_ml_pipeline(
         detect_anomaly(
             relaxed_result["input_atoms"]["atoms"],
             relaxed_result["atoms"],
-            ml_relaxed_slab_result["atoms"]
-            if reference_ml_energies
-            else relaxed_slab_atoms,
+            (
+                ml_relaxed_slab_result["atoms"]
+                if reference_ml_energies
+                else relaxed_slab_atoms
+            ),
         )
         for relaxed_result in ml_relaxed_configurations
     ]

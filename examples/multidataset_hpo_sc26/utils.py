@@ -432,7 +432,7 @@ def load_single_dataset_dataloaders(
     """Load a full dataset (no chunking). Kept for backward compatibility and tiny loaders."""
     num_samples = getattr(args, "num_samples", None)
     chunk_start = 0
-    chunk_size = num_samples if num_samples is not None else 10 ** 9  # effectively all
+    chunk_size = num_samples if num_samples is not None else 10**9  # effectively all
 
     return load_single_dataset_chunk(
         args,

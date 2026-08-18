@@ -525,6 +525,7 @@ class AseDBDataset(AseAtomsDataset):
         Returns:
             atoms: ASE atoms corresponding to datapoint idx
         """
+
         # Some legacy LMDB shards store numpy arrays as JSON-style dicts
         # with a "__ndarray__" key. ASE's Row.toatoms cannot consume those
         # and raises KeyError('__ndarray__'). Decode them proactively.

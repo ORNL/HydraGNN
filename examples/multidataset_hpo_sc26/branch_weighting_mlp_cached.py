@@ -470,7 +470,7 @@ def main():
     total_train_cached = 0
     total_val_cached = 0
 
-    chunk_size = args.chunk_size or (args.num_samples or 10 ** 9)
+    chunk_size = args.chunk_size or (args.num_samples or 10**9)
 
     for model_index, model_name in enumerate(modellist):
         if rank == 0:
@@ -511,7 +511,7 @@ def main():
         os.makedirs(os.path.dirname(out_train), exist_ok=True)
         os.makedirs(os.path.dirname(out_val), exist_ok=True)
 
-        num_samples = args.num_samples or 10 ** 9
+        num_samples = args.num_samples or 10**9
         train_batches_written = 0
         val_batches_written = 0
 
