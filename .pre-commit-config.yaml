@@ -7,7 +7,6 @@ repos:
       - id: end-of-file-fixer
 
   - repo: https://github.com/psf/black
-    rev: 21.5b1
+    rev: 26.5.1
     hooks:
       - id: black
-        additional_dependencies: ['click==8.0.0']
