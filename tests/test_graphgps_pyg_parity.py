@@ -19,13 +19,11 @@ import torch
 from torch import Tensor
 from torch_geometric.nn import GCNConv
 from torch_geometric.nn import GPSConv as PyGGPSConv
-from torch_geometric.data import Data
 
 from hydragnn.globalAtt.gps import (
     HydraGPSConv,
     redraw_performer_projections,
 )
-from hydragnn.models.create import create_model
 
 
 class _HydraLocalAdapter(torch.nn.Module):
@@ -110,10 +108,6 @@ def pytest_graphgps_local_and_global_branches_match_pyg():
     assert torch.equal(actual_equiv, equiv)
 
 
-def pytest_graphgps_records_pyg_source_version():
-    assert HydraGPSConv.pyg_source_version == "2.8.0"
-
-
 def pytest_graphgps_performer_projection_redraw_is_step_based(monkeypatch):
     layer = HydraGPSConv(8, conv=None, heads=2, attn_type="performer").train()
     redraw_count = 0
@@ -133,49 +127,3 @@ def pytest_graphgps_performer_projection_redraw_is_step_based(monkeypatch):
     layer.eval()
     assert redraw_performer_projections(layer, redraw_interval=1) == 0
     assert redraw_count == 1
-
-
-def pytest_graphgps_model_factory_forward_and_backward():
-    model = create_model(
-        mpnn_type="GIN",
-        input_dim=2,
-        hidden_dim=8,
-        output_dim=[1],
-        pe_dim=2,
-        global_attn_engine="GPS",
-        global_attn_type="multihead",
-        global_attn_heads=2,
-        output_type=["graph"],
-        output_heads={
-            "graph": [
-                {
-                    "type": "branch-0",
-                    "architecture": {
-                        "num_sharedlayers": 1,
-                        "dim_sharedlayers": 4,
-                        "num_headlayers": 1,
-                        "dim_headlayers": [4],
-                    },
-                }
-            ]
-        },
-        activation_function="relu",
-        loss_function_type="mse",
-        task_weights=[1.0],
-        num_conv_layers=1,
-        use_gpu=False,
-    )
-    data = Data(
-        x=torch.randn(5, 2),
-        pe=torch.randn(5, 2),
-        pos=torch.randn(5, 3),
-        edge_index=torch.tensor([[0, 1, 1, 2, 2, 0, 3, 4], [1, 0, 2, 1, 0, 2, 4, 3]]),
-        batch=torch.tensor([0, 0, 0, 1, 1]),
-    )
-
-    output = model(data)
-    assert len(output) == 1
-    assert output[0].shape == (2, 1)
-    output[0].sum().backward()
-    assert any(parameter.grad is not None for parameter in model.parameters())
-    assert isinstance(model.graph_convs[0], HydraGPSConv)

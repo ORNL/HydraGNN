@@ -40,8 +40,6 @@ class HydraGPSConv(torch.nn.Module):
     call signature and the tuple return value.
     """
 
-    pyg_source_version = "2.8.0"
-
     def __init__(
         self,
         channels: int,
