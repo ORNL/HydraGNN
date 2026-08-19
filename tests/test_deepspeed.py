@@ -7,7 +7,7 @@ try:
     import deepspeed
 
     deepspeed_available = True
-except ImportError:
+except Exception:
     deepspeed_available = False
 
 

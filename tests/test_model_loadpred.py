@@ -100,8 +100,9 @@ def pytest_model_loadpred():
     if not case_exist:
         unittest_train_model(
             config["NeuralNetwork"]["Architecture"]["model_type"],
+            None,
+            None,
             "ci_multihead.json",
-            False,
             False,
         )
     unittest_model_prediction(config)
