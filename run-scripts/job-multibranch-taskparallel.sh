@@ -13,10 +13,10 @@
 # Load conda environemnt
 source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm624.sh
 source /lustre/orion/lrn070/world-shared/mlupopa/max_conda_envs_frontier/bin/activate
-conda activate hydragnn_rocm624
+source activate /lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv
  
 #export python path to use ADIOS2 v.2.9.2
-export PYTHONPATH=/lustre/orion/lrn070/world-shared/mlupopa/ADIOS_ROCm624/adios2-install/lib/python3.11/site-packages/:$PYTHONPATH
+export PYTHONPATH=/lustre/orion/lrn078/proj-shared/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier/hydragnn_venv/lib/python3.11/site-packages/:$PYTHONPATH
 
 ## Score-P
 module use -a /lustre/orion/world-shared/lrn070/jyc/frontier/sw/modulefiles

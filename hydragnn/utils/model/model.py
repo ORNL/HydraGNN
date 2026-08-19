@@ -57,6 +57,8 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
     elif loss_function_string == "GaussianNLLLoss":
         return torch.nn.GaussianNLLLoss()
+    elif loss_function_string == "binary_cross_entropy":
+        return torch.nn.functional.binary_cross_entropy_with_logits
     else:
         ImportError
 

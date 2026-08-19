@@ -81,9 +81,41 @@ else
 
   ml craype-accel-amd-gfx90a
   ml PrgEnv-gnu
+
+  # Prefer a modern GNU toolchain for PyTorch extension builds (>= GCC 9).
+  # Users can override with GCC_MODULE, e.g. GCC_MODULE=gcc-native/13.2.
+  GCC_MODULE="${GCC_MODULE:-gcc-native/12.3}"
+  if module -t avail "${GCC_MODULE}" >/dev/null 2>&1; then
+    ml "${GCC_MODULE}"
+    echo "Loaded GCC module: ${GCC_MODULE}"
+  else
+    echo "⚠️  Requested GCC module '${GCC_MODULE}' not found; using current compiler from PrgEnv-gnu."
+  fi
+
   ml miniforge3/23.11.0-0
   ml git-lfs
   module unload darshan-runtime
+fi
+
+# Ensure extension builds use a sufficiently new GNU compiler.
+if command -v g++ >/dev/null 2>&1; then
+  GCC_MAJOR="$(g++ -dumpfullversion -dumpversion 2>/dev/null | cut -d. -f1)"
+  if [[ -z "${GCC_MAJOR}" ]]; then
+    GCC_MAJOR="0"
+  fi
+  if (( GCC_MAJOR < 9 )); then
+    echo "❌ g++ is too old: $(g++ --version | head -n1)"
+    echo "   PyTorch extension builds require GCC 9 or newer."
+    echo "   Try setting GCC_MODULE to a newer toolchain, e.g. GCC_MODULE=gcc-native/12.3"
+    exit 1
+  fi
+  export CC="${CC:-gcc}"
+  export CXX="${CXX:-g++}"
+  echo "Using compilers: CC=$(command -v "$CC"), CXX=$(command -v "$CXX")"
+  "$CXX" --version | head -n1
+else
+  echo "❌ g++ not found after module setup."
+  exit 1
 fi
 
 # ============================================================
@@ -202,6 +234,8 @@ pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
 pip_retry h5py==3.14.0
+pip_retry pandas==2.3.3
+pip_retry pyarrow
 # tensorflow and tensorflow_datasets are intentionally NOT installed for ROCm builds.
 # Both TF and ROCm PyTorch link their own LLVM; loading both in the same process
 # triggers: "LLVM ERROR: inconsistency in registered CommandLine options" (hard abort).

@@ -1,0 +1,60 @@
+{
+    "Task": {
+        "kind": "opf",
+        "formulation": "ACOPF",
+        "task_token": 1.0,
+        "notes": "Use --task pf with PF formulations; do not mix PF and OPF samples in one unconditioned mapping."
+    },
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "PNA",
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "pe_dim": 0,
+            "max_neighbours": 64,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [32, 16],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0],
+            "edge_dim": 10
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            "graph_feature_names": ["context"],
+            "graph_feature_dims": [2],
+            "node_feature_names": ["node_features"],
+            "node_feature_dims": [10],
+            "output_names": ["bus_solution"],
+            "output_index": [0],
+            "output_dim": [2],
+            "type": ["node"],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 20,
+            "batch_size": 32,
+            "patience": 10,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.001
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}

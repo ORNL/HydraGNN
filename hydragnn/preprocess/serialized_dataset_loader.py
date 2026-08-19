@@ -20,8 +20,11 @@ from torch_geometric.transforms import (
     Spherical,
     PointPairFeatures,
 )
-from torch_geometric.transforms import AddLaplacianEigenvectorPE
 from hydragnn.preprocess import update_predicted_values, update_atom_features
+from hydragnn.preprocess.positional_encodings import (
+    add_relative_pe,
+    create_positional_encoder,
+)
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
@@ -86,11 +89,9 @@ class SerializedDataLoader:
         assert len(self.graph_feature_name) == len(self.graph_feature_dim)
         assert len(self.graph_feature_name) == len(self.graph_feature_col)
 
-        # LPE
-        self.compute_lapPE = AddLaplacianEigenvectorPE(
-            k=config["NeuralNetwork"]["Architecture"]["pe_dim"],
-            attr_name="pe",
-            is_undirected=True,
+        # Configurable node positional encoding (Laplacian, communicability, or disabled).
+        self.compute_positional_encoding = create_positional_encoder(
+            config["NeuralNetwork"]["Architecture"]
         )
 
         self.dist = dist
@@ -179,14 +180,9 @@ class SerializedDataLoader:
         if self.point_pair_features:
             dataset[:] = [PointPairFeatures(data) for data in dataset]
 
-        # LPE
-        dataset[:] = [self.compute_lapPE(data) for data in dataset]
-
-        # Relative LPE
-        for data in dataset:
-            source_pe = data.pe[data.edge_index[0]]
-            target_pe = data.pe[data.edge_index[1]]
-            data.rel_pe = torch.abs(source_pe - target_pe)
+        # Node PE and edge-wise relative PE.
+        dataset[:] = [self.compute_positional_encoding(data) for data in dataset]
+        dataset[:] = [add_relative_pe(data) for data in dataset]
 
         # Move data to the device, if used. # FIXME: this does not respect the choice set by use_gpu
         device = get_device(verbosity_level=self.verbosity)

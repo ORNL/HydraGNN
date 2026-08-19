@@ -1,0 +1,137 @@
+{
+    "_ft_strategy": "FT3_contingency",
+    "_ft_description": "Contingency fine-tuning: adapt to N-1 topological perturbations (topological_perturbations=True) for pglib_opf_case118_ieee.",
+    "_ft_case_name": "pglib_opf_case118_ieee",
+    "_ft_num_groups": "20",
+    "_ft_max_samples": null,
+    "_ft_topological_perturbations": true,
+    "ft_data_modelname": "FT3_contingency_data",
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "HeteroHEAT",
+            "hidden_dim": 232,
+            "num_conv_layers": 6,
+            "pe_dim": 0,
+            "max_neighbours": 100,
+            "hetero_attention_heads": 4,
+            "edge_dim": {
+                "ac_line": 9,
+                "transformer": 11
+            },
+            "node_input_dims": {
+                "bus": 4,
+                "generator": 11,
+                "load": 2,
+                "shunt": 2
+            },
+            "output_heads": {
+                "node": [
+                    {
+                        "type": "branch-0",
+                        "architecture": {
+                            "num_headlayers": 2,
+                            "dim_headlayers": [
+                                32,
+                                16
+                            ],
+                            "type": "mlp"
+                        }
+                    }
+                ]
+            },
+            "task_weights": [
+                1.0
+            ],
+            "hetero_pooling_mode": "sum",
+            "node_target_type": "bus",
+            "global_attn_engine": null,
+            "global_attn_type": null,
+            "global_attn_heads": 0,
+            "output_dim": [
+                2
+            ],
+            "output_type": [
+                "node"
+            ],
+            "num_nodes": 31,
+            "input_dim": 4,
+            "pna_deg": null,
+            "activation_function": "relu",
+            "hetero_attention_negative_slope": 0.2,
+            "hetero_edge_type_emb_dim": 16,
+            "hetero_edge_attr_emb_dim": 16,
+            "SyncBatchNorm": false,
+            "freeze_conv_layers": false
+        },
+        "Variables_of_interest": {
+            "input_node_features": [
+                0,
+                1,
+                2,
+                3
+            ],
+            "graph_feature_names": [
+                "context"
+            ],
+            "graph_feature_dims": [
+                1
+            ],
+            "node_feature_names": [
+                "node_features"
+            ],
+            "node_feature_dims": [
+                4
+            ],
+            "output_names": [
+                "bus_solution"
+            ],
+            "output_index": [
+                0
+            ],
+            "output_dim": [
+                2
+            ],
+            "type": [
+                "node"
+            ],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 50,
+            "batch_size": 32,
+            "patience": 15,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 2,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "DomainLoss": {
+                "enabled": false,
+                "smoothness_weight": 0.001,
+                "transformer_smoothness_weight": 0.001,
+                "voltage_bound_weight": 0.01,
+                "voltage_bound_feature_indices": [
+                    2,
+                    3
+                ],
+                "voltage_output_index": -1
+            },
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.0001
+            },
+            "conv_checkpointing": false,
+            "loss_function_type": "mse",
+            "precision": "fp32",
+            "_ft_regime": "full"
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}

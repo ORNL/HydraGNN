@@ -1,0 +1,59 @@
+{
+    "Task": {
+        "kind": "opf",
+        "formulation": "ACOPF",
+        "notes": "OPFLearn samples are tabular single-node graphs (load setpoints -> OPF solution). Only a homogeneous model is meaningful; there is no bus/branch topology to build a heterogeneous graph from."
+    },
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "GIN",
+            "hidden_dim": 128,
+            "num_conv_layers": 3,
+            "pe_dim": 0,
+            "max_neighbours": 1,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [128, 64],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [1.0],
+            "edge_dim": 1
+        },
+        "Variables_of_interest": {
+            "input_node_features": [0],
+            "graph_feature_names": ["feasible"],
+            "graph_feature_dims": [1],
+            "node_feature_names": ["load_setpoints"],
+            "node_feature_dims": [1],
+            "output_names": ["opf_solution"],
+            "output_index": [0],
+            "output_dim": [1],
+            "type": ["node"],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 20,
+            "batch_size": 64,
+            "patience": 10,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.001
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}
