@@ -38,7 +38,9 @@ def add_graph_attr(monkeypatch):
         if hasattr(data, "x") and data.x.numel() > 0:
             first_val = data.x[0, 0]
             matches = torch.isclose(data.x[:, 0], first_val)
-            data.graph_attr = matches.sum().unsqueeze(0).to(data.x.dtype)
+            charge = matches.sum().to(torch.float32)
+            spin = torch.ones(1, dtype=torch.float32)
+            data.graph_attr = torch.cat([charge.unsqueeze(0), spin])
         return res
 
     monkeypatch.setattr(gscu, "update_predicted_values", _wrapped)
