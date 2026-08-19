@@ -1,7 +1,9 @@
+import pytest
 import torch
 from mpi4py import MPI
 from torch_geometric.data import Data
 
+pytest.importorskip("adios2")
 from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
 
 
