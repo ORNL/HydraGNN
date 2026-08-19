@@ -1,22 +1,21 @@
 ##############################################################################
 # Copyright (c) 2024, Oak Ridge National Laboratory                          #
-# All rights reserved.                                                       #
+# Copyright (c) 2023, PyG Team <team@pyg.org>                                #
 #                                                                            #
-# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
-# license. For the licensing terms see the LICENSE file in the top-level     #
-# directory.                                                                 #
+# Adapted from torch_geometric.nn.conv.GPSConv (PyG 2.8.0), distributed      #
+# under the MIT License. HydraGNN modifications are distributed under the    #
+# BSD 3-clause license. See LICENSE and LICENSES/PYG-MIT.txt.                 #
 #                                                                            #
-# SPDX-License-Identifier: BSD-3-Clause                                      #
+# SPDX-License-Identifier: MIT AND BSD-3-Clause                              #
 ##############################################################################
-
 
 import inspect
 from typing import Any, Dict, Optional
-import pdb
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-from torch.nn import Dropout, Linear, Sequential, LazyLinear
+from torch.nn import Dropout, Linear, Sequential
 
 from torch_geometric.nn.attention import PerformerAttention
 from torch_geometric.nn.conv import MessagePassing
@@ -25,11 +24,24 @@ from torch_geometric.nn.resolver import (
     activation_resolver,
     normalization_resolver,
 )
-from torch_geometric.typing import Adj
 from torch_geometric.utils import to_dense_batch
 
 
-class GPSConv(torch.nn.Module):
+class HydraGPSConv(torch.nn.Module):
+    r"""PyG ``GPSConv`` adapted to HydraGNN's two-stream feature interface.
+
+    The local message-passing layer consumes and returns invariant and
+    equivariant node features. Global attention is applied only to invariant
+    features, while the updated equivariant features are propagated unchanged
+    by the global branch.
+
+    This implementation tracks ``torch_geometric.nn.conv.GPSConv`` from PyG
+    2.8.0. The differences are intentionally limited to the local-convolution
+    call signature and the tuple return value.
+    """
+
+    pyg_source_version = "2.8.0"
+
     def __init__(
         self,
         channels: int,
@@ -106,7 +118,7 @@ class GPSConv(torch.nn.Module):
         equiv_node_feat: Tensor,
         graph_batch: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Tensor:
+    ) -> tuple[Tensor, Tensor]:
         """Runs the forward pass of the module."""
         hs = []
         if self.conv is not None:  # Local MPNN.
@@ -157,3 +169,7 @@ class GPSConv(torch.nn.Module):
             f"conv={self.conv}, heads={self.heads}, "
             f"attn_type={self.attn_type})"
         )
+
+
+# Backward-compatible name used by existing HydraGNN callers.
+GPSConv = HydraGPSConv
