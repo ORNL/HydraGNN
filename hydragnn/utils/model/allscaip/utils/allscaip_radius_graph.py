@@ -165,7 +165,7 @@ def bump_function(x: torch.Tensor) -> torch.Tensor:
     """
     mask = x.abs() < 4
     step = torch.where(x < 0, 0.0, 1.0)
-    x = x.div(4.0).masked_fill_(~mask, 0)
+    x = x.div(4.0).masked_fill(~mask, 0)
     bump = torch.exp(-2.0 / (x + 1)) / (
         torch.exp(-2.0 / (x + 1)) + torch.exp(-2.0 / (1 - x))
     )

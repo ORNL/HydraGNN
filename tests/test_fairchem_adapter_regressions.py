@@ -97,12 +97,13 @@ def pytest_allscaip_construction_preserves_global_matmul_precision(monkeypatch):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def pytest_allscaip_chunked_graph_matches_dense(dtype):
+@pytest.mark.parametrize("soft", [False, True])
+def pytest_allscaip_chunked_graph_matches_dense(dtype, soft):
     torch.manual_seed(7)
     pos = torch.rand(8, 3, dtype=dtype)
     cell = torch.eye(3, dtype=dtype) * 20
     images = torch.zeros(1, 3, dtype=dtype)
-    args = (pos, cell, images, 3.0, 0, pos.device, 4, False, 0.2, 0.1, True)
+    args = (pos, cell, images, 3.0, 0, pos.device, 4, soft, 0.2, 0.1, True)
     dense = build_radius_graph(*args)
     chunked = build_radius_graph_chunked(*args, chunk_size=3)
     # The edge set and numeric geometry agree exactly. Rank values may choose a
@@ -134,4 +135,3 @@ def pytest_native_fairchem_available_for_parity_suite():
     native = native_module.build_radius_graph(*args)
     for ours_value, native_value in zip(ours, native):
         assert torch.allclose(ours_value, native_value)
-
