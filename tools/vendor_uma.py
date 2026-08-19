@@ -14,15 +14,19 @@ provenance (MIT license, upstream commit).
 """
 
 from __future__ import annotations
+import argparse
 import ast
+import datetime as dt
 import importlib.util
+import json
 import re
 import shutil
+import subprocess
 import sys
 from collections import deque
 from pathlib import Path
 
-REPO = Path("/Users/7ml/Documents/Codes/HydraGNN").resolve()
+REPO = Path(__file__).resolve().parents[1]
 VENDOR_ROOT = REPO / "hydragnn" / "utils" / "model" / "uma" / "_vendored"
 
 SEEDS = [
@@ -152,9 +156,9 @@ def closure() -> tuple[set[Path], set[Path], Path]:
 
 IMPORT_RE = re.compile(r"\bfairchem\.core\b")
 
-MARKER = """# NOTE: This tree was vendored verbatim from fairchem-core (Meta MIT-licensed)
-# for use inside HydraGNN. Imports were rewritten by
-# tools/vendor_uma.py to point at hydragnn.utils.model.uma._vendored.
+MARKER = """# NOTE: This tree was derived from fairchem-core (Meta MIT-licensed)
+# for use inside HydraGNN. Imports and package initializers are transformed by
+# tools/vendor_uma.py; see PROVENANCE.json for the pinned source and details.
 # Do not edit these files directly; re-run vendor_uma.py to refresh.
 """
 
@@ -265,8 +269,40 @@ def apply_patches():
         print(f"# patched {rel}")
 
 
+def _git_sha(source: Path) -> str:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+        ).strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise RuntimeError(
+            f"Cannot establish FAIR-Chem git provenance for {source}"
+        ) from exc
+
+
 def main():
-    apply = "--apply" in sys.argv
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--fairchem-source",
+        type=Path,
+        help="Explicit FAIR-Chem git checkout used for reproducible provenance",
+    )
+    args = parser.parse_args()
+    apply = args.apply
+
+    if args.fairchem_source is not None:
+        source = args.fairchem_source.resolve()
+        package_root = source / "src"
+        if not (package_root / "fairchem" / "core").is_dir():
+            raise RuntimeError(f"No src/fairchem/core tree under {source}")
+        sys.path.insert(0, str(package_root))
+        fairchem_sha = _git_sha(source)
+    else:
+        raise RuntimeError(
+            "--fairchem-source is required; vendoring from an arbitrary installed "
+            "package cannot record reproducible commit provenance"
+        )
 
     py_files, resources, fairchem_root = closure()
     print(f"# py files:        {len([p for p in py_files if p.suffix == '.py'])}")
@@ -285,6 +321,22 @@ def main():
 
     # Root marker + top-level __init__
     (VENDOR_ROOT / "__init__.py").write_text(MARKER)
+    (VENDOR_ROOT / "PROVENANCE.json").write_text(
+        json.dumps(
+            {
+                "upstream": "https://github.com/facebookresearch/fairchem",
+                "commit": fairchem_sha,
+                "vendored_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+                "transformations": [
+                    "fairchem.core imports rewritten to HydraGNN vendored namespace",
+                    "package __init__.py files stripped to avoid unrelated eager imports",
+                    "documented lazy-import patches in tools/vendor_uma.py applied",
+                ],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
     for p in sorted(py_files):
         copy_and_rewrite(p, fairchem_root)

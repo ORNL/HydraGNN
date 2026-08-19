@@ -30,7 +30,7 @@
       "hidden_dim": 32,
       "num_conv_layers": 2,
       "allscaip_num_heads": 4,
-      "allscaip_freq_list": null,
+      "allscaip_freq_list": [3, 1, 1, 1, 2],
       "allscaip_atten_name": "math",
       "allscaip_use_node_path": true,
       "allscaip_use_sincx_mask": true,

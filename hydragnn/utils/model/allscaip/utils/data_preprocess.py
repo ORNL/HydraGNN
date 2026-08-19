@@ -274,8 +274,12 @@ def data_preprocess_radius_graph(
         molecular_graph_cfg.knn_soft,
         molecular_graph_cfg.knn_sigmoid_scale,
         molecular_graph_cfg.knn_lse_scale,
+        molecular_graph_cfg.knn_use_low_mem,
+        molecular_graph_cfg.knn_pad_size,
         device,
         compute_dist_pairwise=need_dist_pairwise,
+        use_chunked=molecular_graph_cfg.use_chunked_graph,
+        chunk_size=molecular_graph_cfg.graph_chunk_size,
     )
 
     num_nodes, max_num_neighbors, _ = disp.shape
@@ -339,11 +343,8 @@ def data_preprocess_radius_graph(
                 "Fallback to math attention for gradient based force prediction"
             )
             gnn_cfg.atten_name = "math"
-        torch.backends.cuda.enable_flash_sdp(gnn_cfg.atten_name == "flash")
-        torch.backends.cuda.enable_mem_efficient_sdp(
-            gnn_cfg.atten_name == "memory_efficient"
-        )
-        # torch.backends.cuda.enable_math_sdp(gnn_cfg.atten_name == "math")
+        # Backend selection is scoped around attention execution in the
+        # backbone. Do not mutate process-global CUDA SDPA settings here.
     else:
         raise NotImplementedError(
             f"Attention name {gnn_cfg.atten_name} not implemented"

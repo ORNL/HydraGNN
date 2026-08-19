@@ -78,21 +78,27 @@ class AllScAIPBackbone(nn.Module):
         )
 
         self.init_weights()
-        torch.set_float32_matmul_precision("high")
-        torch._logging.set_logs(recompiles=True)  # type: ignore
 
     def compiled_forward(self, data: "GraphAttentionData"):
         with record_function("input_block"):
             neighbor_reps = self.input_block(data)
 
-        for idx in range(self.global_cfg.num_layers):
-            neighbor_reps = self.transformer_blocks[idx](
-                data, neighbor_reps, layer_idx=idx
-            )
+        backend = {
+            "math": torch.nn.attention.SDPBackend.MATH,
+            "flash": torch.nn.attention.SDPBackend.FLASH_ATTENTION,
+            "memory_efficient": torch.nn.attention.SDPBackend.EFFICIENT_ATTENTION,
+        }[self.gnn_cfg.atten_name]
+        # ``sdpa_kernel`` restores the caller's settings on exit, unlike the
+        # process-global torch.backends.cuda.enable_* functions.
+        with torch.nn.attention.sdpa_kernel(backend):
+            for idx in range(self.global_cfg.num_layers):
+                neighbor_reps = self.transformer_blocks[idx](
+                    data, neighbor_reps, layer_idx=idx
+                )
 
         return {
             "data": data,
-            "node_reps": neighbor_reps[:, 0].to(torch.float32),
+            "node_reps": neighbor_reps[:, 0],
         }
 
     @torch.compiler.disable()

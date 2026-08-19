@@ -18,13 +18,20 @@ HydraGNN integration of FairChem's UMA model.
 
 The upstream ``eSCNMDBackbone`` (and all of its transitive fairchem-core
 dependencies -- SO(3)/SO(2) primitives, Wigner-D tables, rotation and
-radial modules) is vendored verbatim under
+radial modules) is vendored with documented namespace/import transformations under
 ``hydragnn/utils/model/uma/_vendored/fairchem/core/**`` (Meta MIT licence
 preserved). ``UMAStack`` imports the vendored class directly, so there
 is no runtime dependency on the external ``fairchem-core`` distribution.
 
-Refresh the vendored tree from a newer fairchem-core install with
-``python tools/vendor_uma.py --apply``.
+Refresh it from an explicit FAIR-Chem checkout with
+``python tools/vendor_uma.py --apply --fairchem-source /path/to/fairchem``;
+the tool records the upstream commit in ``PROVENANCE.json``.
+
+HydraGNN does not currently vendor FAIR-Chem's distributed ``GPContext``,
+graph partitioning, or differentiable all-to-all runtime. Consequently this
+wrapper supports large local graphs but does **not** have current FAIR-Chem
+UMA graph-parallel parity. The adapter boundary intentionally leaves room for
+a future distributed data dictionary / context without changing task heads.
 
 Design summary
 --------------
@@ -333,6 +340,9 @@ class UMAStack(Base):
         # Mark this as an edge-aware model so HydraGNN's preprocess sets
         # one up via the standard radius graph transform.
         self.is_edge_model = True
+        # UMA completes its encoder in _embedding; do not alter the spherical
+        # representation in Base's identity-convolution wrapper.
+        self.skip_post_conv_processing = True
         # Force num_conv_layers=1 for the Base forward loop. The actual
         # UMA depth lives in self.uma_num_layers.
         kwargs["num_conv_layers"] = 1

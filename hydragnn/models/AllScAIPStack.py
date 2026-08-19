@@ -109,6 +109,11 @@ therefore leaves ``regress_forces`` / ``direct_forces`` off and relies on
 HydraGNN's autograd force path; ``allscaip_atten_name="math"`` is the safe
 SDPA backend for that double-backward.
 
+HydraGNN integrates the FAIR-Chem backbone representation and applies its
+configured output normalization, then uses HydraGNN's generic multi-task
+decoders. Those decoders intentionally do not reproduce every FAIR-Chem
+energy/force/stress head or its task-specific reductions.
+
 Equivariance
 ------------
 **AllScAIP is NOT an e3nn-style equivariant model.** Hidden features are
@@ -129,6 +134,11 @@ from typing import Any, Dict, List, Optional
 import torch
 from torch.nn import Identity, ModuleList
 
+from hydragnn.utils.model.escaip.utils.nn_utils import (
+    NormalizationType,
+    get_normalization_layer,
+)
+
 from hydragnn.models.Base import Base
 from hydragnn.utils.model.allscaip.AllScAIP import AllScAIPBackbone
 
@@ -142,6 +152,35 @@ _ACT_MAP = {
     "lrelu_05": "leaky_relu",
     "gelu": "gelu",
 }
+
+
+def _resolve_frequency_list(
+    head_dim: int, explicit: Optional[List[int]], use_freq_mask: bool
+) -> List[int]:
+    """Resolve the AllScAIP l-frequency multiplicities.
+
+    FAIR-Chem defines a canonical spectrum only for its 64-wide attention
+    heads. Other masked head sizes must be configured explicitly so they do
+    not silently degrade to an all-l=0 representation.
+    """
+    if explicit is not None:
+        freq_list = list(explicit)
+    elif not use_freq_mask:
+        freq_list = [head_dim]
+    elif head_dim == 64:
+        freq_list = [20, 10, 4, 10, 20]
+    else:
+        raise ValueError(
+            "Frequency masking requires allscaip_freq_list for head_dim "
+            f"{head_dim}; FAIR-Chem only defines the canonical automatic "
+            "default [20, 10, 4, 10, 20] for head_dim=64."
+        )
+    if sum(freq_list) != head_dim:
+        raise ValueError(
+            f"allscaip_freq_list must sum to head_dim (= {head_dim}); "
+            f"got {freq_list}."
+        )
+    return freq_list
 
 
 class _FairChemAdapter:
@@ -246,6 +285,9 @@ class AllScAIPStack(Base):
         allscaip_use_residual_scaling: bool = True,
         allscaip_regress_stress: bool = False,
         allscaip_dataset_list: Optional[List[str]] = None,
+        allscaip_use_chunked_graph: bool = False,
+        allscaip_graph_chunk_size: int = 512,
+        allscaip_knn_use_low_mem: bool = True,
         *args,
         **kwargs,
     ):
@@ -269,6 +311,11 @@ class AllScAIPStack(Base):
         self.allscaip_atten_dropout = float(allscaip_atten_dropout)
         self.allscaip_use_residual_scaling = bool(allscaip_use_residual_scaling)
         self.allscaip_regress_stress = bool(allscaip_regress_stress)
+        self.allscaip_use_chunked_graph = bool(allscaip_use_chunked_graph)
+        self.allscaip_graph_chunk_size = int(allscaip_graph_chunk_size)
+        if self.allscaip_graph_chunk_size <= 0:
+            raise ValueError("allscaip_graph_chunk_size must be positive")
+        self.allscaip_knn_use_low_mem = bool(allscaip_knn_use_low_mem)
         # Dataset routing: an ordered list of dataset names. Non-empty
         # enables the backbone's per-graph dataset embedding, and the
         # wrapper maps ``data.dataset`` labels to indices into this list.
@@ -296,6 +343,9 @@ class AllScAIPStack(Base):
         # not pass edge_attr through it. Mark the model as edge-free for
         # Base.__init__'s edge handling.
         self.is_edge_model = False
+        # AllScAIP completes message passing in _embedding.  Avoid an extra
+        # generic HydraGNN activation after the identity placeholder conv.
+        self.skip_post_conv_processing = True
         # Force num_conv_layers=1 for the Base forward loop. The actual
         # AllScAIP depth lives in self.allscaip_num_layers.
         kwargs["num_conv_layers"] = 1
@@ -312,15 +362,9 @@ class AllScAIPStack(Base):
             )
         head_dim = self.hidden_dim // self.allscaip_num_heads
 
-        if self.allscaip_freq_list is None:
-            freq_list = [head_dim]
-        else:
-            freq_list = list(self.allscaip_freq_list)
-            if sum(freq_list) != head_dim:
-                raise ValueError(
-                    "allscaip_freq_list must sum to hidden_dim // "
-                    f"allscaip_num_heads (= {head_dim}); got {freq_list}."
-                )
+        freq_list = _resolve_frequency_list(
+            head_dim, self.allscaip_freq_list, self.allscaip_use_freq_mask
+        )
 
         backbone_cfg: Dict[str, Any] = {
             # GlobalConfigs
@@ -342,6 +386,9 @@ class AllScAIPStack(Base):
             "knn_lse_scale": 0.1,
             "distance_function": self.allscaip_distance_function,
             "use_envelope": True,
+            "knn_use_low_mem": self.allscaip_knn_use_low_mem,
+            "use_chunked_graph": self.allscaip_use_chunked_graph,
+            "graph_chunk_size": self.allscaip_graph_chunk_size,
             # GraphNeuralNetworksConfigs
             "atten_name": self.allscaip_atten_name,
             "atten_num_heads": self.allscaip_num_heads,
@@ -355,6 +402,12 @@ class AllScAIPStack(Base):
         }
 
         self.allscaip_backbone = AllScAIPBackbone(**backbone_cfg)
+        # FAIR-Chem AllScAIP heads normalize backbone node representations
+        # before their prediction FFN. HydraGNN keeps its generic task heads,
+        # but mirrors that normalization at this adapter boundary.
+        self.allscaip_output_norm = get_normalization_layer(
+            NormalizationType(self.allscaip_normalization)
+        )(self.hidden_dim)
 
         # HydraGNN's Base.forward iterates over (graph_convs, feature_layers)
         # exactly num_conv_layers times. We forced num_conv_layers=1 in
@@ -418,7 +471,7 @@ class AllScAIPStack(Base):
     def _build_adapter(self, data) -> _FairChemAdapter:
         """Map a HydraGNN PyG ``Data`` batch to a FairChem-style object."""
         device = data.pos.device
-        dtype = torch.get_default_dtype()
+        dtype = data.pos.dtype
 
         # Atomic numbers: HydraGNN typically stores them in data.x[:, 0]
         # (first node feature column). Allow an explicit override via
@@ -508,7 +561,7 @@ class AllScAIPStack(Base):
         results = self.allscaip_backbone(adapter)
         # ``node_reps`` is shape [N, hidden_dim] (no padding -- AllScAIP
         # always runs unpadded under HydraGNN).
-        inv_node_feat = results["node_reps"]
+        inv_node_feat = self.allscaip_output_norm(results["node_reps"])
         # AllScAIP is not equivariant; provide an empty equiv tensor so
         # Base.forward signatures still match.
         equiv_node_feat = inv_node_feat.new_zeros((inv_node_feat.shape[0], 0))

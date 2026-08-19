@@ -137,6 +137,15 @@ def create_model_config(
             "allscaip_use_residual_scaling"
         ],
         allscaip_regress_stress=config["Architecture"]["allscaip_regress_stress"],
+        allscaip_use_chunked_graph=config["Architecture"].get(
+            "allscaip_use_chunked_graph", False
+        ),
+        allscaip_graph_chunk_size=config["Architecture"].get(
+            "allscaip_graph_chunk_size", 512
+        ),
+        allscaip_knn_use_low_mem=config["Architecture"].get(
+            "allscaip_knn_use_low_mem", True
+        ),
         allscaip_dataset_list=config["Architecture"]["allscaip_dataset_list"],
         # UMA-specific
         uma_mmax=config["Architecture"]["uma_mmax"],
@@ -239,6 +248,9 @@ def create_model(
     allscaip_atten_dropout: float = 0.0,
     allscaip_use_residual_scaling: bool = True,
     allscaip_regress_stress: bool = False,
+    allscaip_use_chunked_graph: bool = False,
+    allscaip_graph_chunk_size: int = 512,
+    allscaip_knn_use_low_mem: bool = True,
     allscaip_dataset_list: List[str] = None,
     # UMA-specific
     uma_mmax: int = 2,
@@ -761,6 +773,9 @@ def create_model(
             allscaip_use_residual_scaling,
             allscaip_regress_stress,
             allscaip_dataset_list,
+            allscaip_use_chunked_graph,
+            allscaip_graph_chunk_size,
+            allscaip_knn_use_low_mem,
             input_dim,
             hidden_dim,
             output_dim,

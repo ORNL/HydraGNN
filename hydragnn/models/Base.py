@@ -760,6 +760,17 @@ class Base(Module):
         print_master("Enabling checkpointing")
         self.conv_checkpointing = True
 
+    def _postprocess_conv_output(self, inv_node_feat, batch, data, feat_layer):
+        """Apply HydraGNN processing after one convolution layer.
+
+        Monolithic external backbones opt out because their encoder output is
+        already final and an identity wrapper must not change it.
+        """
+        if getattr(self, "skip_post_conv_processing", False):
+            return inv_node_feat
+        inv_node_feat = self._apply_graph_conditioning(inv_node_feat, batch, data)
+        return self.activation_function(feat_layer(inv_node_feat))
+
     def forward(self, data):
         ### encoder part ####
         tr.start("enc_forward")
@@ -786,10 +797,12 @@ class Base(Module):
                     **conv_args,
                 )
 
-            inv_node_feat = self._apply_graph_conditioning(
-                inv_node_feat, batch_for_cond, data
+            # External/monolithic backbones may already have completed their
+            # encoder in ``_embedding``.  Their identity conv must be a genuine
+            # no-op rather than an extra HydraGNN conditioning/activation step.
+            inv_node_feat = self._postprocess_conv_output(
+                inv_node_feat, batch_for_cond, data, feat_layer
             )
-            inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
 
         x = inv_node_feat
         tr.stop("enc_forward")

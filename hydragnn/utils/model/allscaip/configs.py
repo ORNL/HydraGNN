@@ -31,6 +31,10 @@ class MolecularGraphConfigs:
         "gaussian"
     )
     use_envelope: bool = True
+    knn_use_low_mem: bool = True
+    knn_pad_size: int | None = None
+    use_chunked_graph: bool = False
+    graph_chunk_size: int = 512
 
 
 @dataclass
