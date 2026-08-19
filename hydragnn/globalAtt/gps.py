@@ -95,9 +95,32 @@ class HydraGPSConv(torch.nn.Module):
         self.norm3 = normalization_resolver(norm, channels, **norm_kwargs)
 
         self.norm_with_batch = False
+        self._performer_steps_since_redraw = 0
         if self.norm1 is not None:
             signature = inspect.signature(self.norm1.forward)
             self.norm_with_batch = "batch" in signature.parameters
+
+    def maybe_redraw_performer_projection(self, redraw_interval: Optional[int]) -> bool:
+        """Redraw Performer features after a configured number of train steps.
+
+        This method is intentionally called by the training loop rather than
+        from :meth:`forward`, since a forward may be repeated by activation
+        checkpointing or other execution strategies.
+        """
+        if redraw_interval is None or self.attn_type != "performer":
+            return False
+        if redraw_interval <= 0:
+            raise ValueError("Performer redraw interval must be positive or None")
+        if not self.training:
+            return False
+
+        self._performer_steps_since_redraw += 1
+        if self._performer_steps_since_redraw < redraw_interval:
+            return False
+
+        self.attn.redraw_projection_matrix()
+        self._performer_steps_since_redraw = 0
+        return True
 
     def reset_parameters(self):
         r"""Resets all learnable parameters of the module."""
@@ -173,3 +196,14 @@ class HydraGPSConv(torch.nn.Module):
 
 # Backward-compatible name used by existing HydraGNN callers.
 GPSConv = HydraGPSConv
+
+
+def redraw_performer_projections(
+    model: torch.nn.Module, redraw_interval: Optional[int]
+) -> int:
+    """Redraw all HydraGPSConv Performer projections once per training step."""
+    return sum(
+        module.maybe_redraw_performer_projection(redraw_interval)
+        for module in model.modules()
+        if isinstance(module, HydraGPSConv)
+    )

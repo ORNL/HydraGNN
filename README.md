@@ -159,7 +159,7 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
     - `["global_attn_engine"]`
       Accepted types: `GPS`, `None`
     - `["global_attn_type"]`
-      Accepted types: `multihead`
+      Accepted types: `multihead`, `performer`
     - `["pe_dim"]`
       Dimension of positional encodings (int)
     - `["global_attn_heads"]`
@@ -168,6 +168,16 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
     - `["enable_interatomic_potential"]`  
       Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
+
+  - `["Training"]`
+    - `["global_attn_redraw_interval"]`
+      Number of training batches between Performer random-feature projection
+      redraws (int, default `1000`); set to `null` to disable redraw. This has
+      no effect when `global_attn_type` is `multihead`.
+
+When GPS wraps an equivariant HydraGNN model, global attention operates only
+on invariant node channels. Equivariant channels are updated by the local MPNN
+and propagated alongside the globally attended invariant representation.
 
   - `["Variables of Interest"]`
     - `["input_node_features"]`  
