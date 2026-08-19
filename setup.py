@@ -69,6 +69,8 @@ setup(
         "hydragnn": [
             "utils/model/uma/_vendored/**/*.pt",
             "utils/model/uma/_vendored/**/*.json",
+            "utils/model/uma/_vendored/*.md",
+            "utils/model/uma/_vendored/**/*.md",
         ]
     },
     install_requires=install_requires,

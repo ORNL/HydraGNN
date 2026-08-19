@@ -1,12 +1,12 @@
 ##############################################################################
 # Copyright (c) 2026, Oak Ridge National Laboratory                          #
-# All rights reserved.                                                       #
+# Copyright (c) Meta Platforms, Inc. and affiliates.                         #
 #                                                                            #
-# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
-# license. For the licensing terms see the LICENSE file in the top-level     #
-# directory.                                                                 #
+# Portions derived from FAIR-Chem are distributed under the MIT License;     #
+# HydraGNN modifications are distributed under the BSD 3-clause license.     #
+# Original upstream copyright and license notices are preserved below.       #
 #                                                                            #
-# SPDX-License-Identifier: BSD-3-Clause                                      #
+# SPDX-License-Identifier: MIT AND BSD-3-Clause                              #
 ##############################################################################
 # Vendored from fairchem-core (MIT). Original __init__ contents
 # stripped to avoid eager imports of modules outside the

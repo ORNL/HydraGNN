@@ -11,10 +11,11 @@
 ##############################################################################
 """Vendor fairchem.core UMA closure into HydraGNN.
 
-Copies the enumerated closure verbatim under
+Copies the enumerated closure under
   hydragnn/utils/model/uma/_vendored/fairchem/core/**
 then rewrites all `from fairchem.core.X` / `import fairchem.core.X`
-occurrences to point at the vendored location.
+occurrences to point at the vendored location and prepends the combined
+MIT/BSD-3-Clause copyright and SPDX header.
 
 Also copies non-.py resources (Jd.pt, wigner_d_coefficients.pt,
 pretrained_models.json) that live next to visited modules.
@@ -47,6 +48,19 @@ SEEDS = [
 ]
 
 RESOURCE_EXTS = {".pt", ".yaml", ".yml", ".json"}
+
+DUAL_LICENSE_HEADER = """\
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# Copyright (c) Meta Platforms, Inc. and affiliates.                         #
+#                                                                            #
+# Portions derived from FAIR-Chem are distributed under the MIT License;     #
+# HydraGNN modifications are distributed under the BSD 3-clause license.     #
+# Original upstream copyright and license notices are preserved below.       #
+#                                                                            #
+# SPDX-License-Identifier: MIT AND BSD-3-Clause                              #
+##############################################################################
+"""
 
 
 # ---------- discovery ----------
@@ -187,14 +201,15 @@ def copy_and_rewrite(src: Path, fairchem_root: Path) -> Path:
         # in modules outside our closure. We only need __init__ presence.
         if src.name == "__init__.py":
             dst.write_text(
-                "# Vendored from fairchem-core (MIT). Original __init__ contents\n"
+                DUAL_LICENSE_HEADER
+                + "# Vendored from fairchem-core (MIT). Original __init__ contents\n"
                 "# stripped to avoid eager imports of modules outside the\n"
                 "# UMA forward-pass closure.\n"
             )
             return dst
         text = src.read_text()
         text = IMPORT_RE.sub("hydragnn.utils.model.uma._vendored.fairchem.core", text)
-        dst.write_text(text)
+        dst.write_text(DUAL_LICENSE_HEADER + text)
     else:
         shutil.copy2(src, dst)
     return dst
@@ -203,7 +218,7 @@ def copy_and_rewrite(src: Path, fairchem_root: Path) -> Path:
 def ensure_init(dirpath: Path):
     init = dirpath / "__init__.py"
     if not init.exists():
-        init.write_text("")
+        init.write_text(DUAL_LICENSE_HEADER + MARKER)
 
 
 # ---------- post-vendor patches ----------
@@ -330,17 +345,23 @@ def main():
     VENDOR_ROOT.mkdir(parents=True)
 
     # Root marker + top-level __init__
-    (VENDOR_ROOT / "__init__.py").write_text(MARKER)
+    (VENDOR_ROOT / "__init__.py").write_text(DUAL_LICENSE_HEADER + MARKER)
+    license_file = source / "LICENSE.md"
+    if not license_file.is_file():
+        raise RuntimeError(f"No FAIR-Chem LICENSE.md under {source}")
+    shutil.copy2(license_file, VENDOR_ROOT / "FAIRCHEM_LICENSE.md")
     (VENDOR_ROOT / "PROVENANCE.json").write_text(
         json.dumps(
             {
-                "upstream": "https://github.com/facebookresearch/fairchem",
+                "upstream": "https://github.com/FAIR-Chem/fairchem",
                 "commit": fairchem_sha,
                 "vendored_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "transformations": [
                     "fairchem.core imports rewritten to HydraGNN vendored namespace",
                     "package __init__.py files stripped to avoid unrelated eager imports",
                     "documented lazy-import patches in tools/vendor_uma.py applied",
+                    "MIT AND BSD-3-Clause copyright/SPDX header prepended while preserving upstream notices",
+                    "upstream FAIR-Chem LICENSE.md copied as FAIRCHEM_LICENSE.md",
                 ],
             },
             indent=2,
