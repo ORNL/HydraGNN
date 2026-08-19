@@ -20,48 +20,6 @@ from hydragnn.utils.model.escaip.utils.radius_graph import (
 )
 
 
-def segment_argsort(
-    values: torch.Tensor, segment_ids: torch.Tensor, num_segments: int
-) -> torch.Tensor:
-    """
-    Compute argsort within each segment.
-
-    Args:
-        values: (E,) values to sort
-        segment_ids: (E,) segment ID for each value (must be sorted!)
-        num_segments: total number of segments
-
-    Returns:
-        ranks: (E,) rank of each value within its segment (0-indexed)
-    """
-    E = values.size(0)
-    device = values.device
-
-    # Add large offset per segment to make global sort work per-segment
-    # offset[i] = segment_ids[i] * max_possible_value
-    max_val = values.max() - values.min() + 1
-    offset_values = values + segment_ids.float() * max_val
-
-    # Global argsort
-    global_order = torch.argsort(offset_values)
-
-    # Compute rank within segment using scatter
-    ranks = torch.zeros(E, device=device, dtype=torch.long)
-
-    # Count elements per segment up to each position
-    # For each position in sorted order, its rank is its position within segment
-    segment_counts = torch.zeros(num_segments, device=device, dtype=torch.long)
-    sorted_segments = segment_ids[global_order]
-
-    # Compute cumulative count per segment
-    for i in range(E):
-        seg = sorted_segments[i].item()
-        ranks[global_order[i]] = segment_counts[seg]
-        segment_counts[seg] += 1
-
-    return ranks
-
-
 def compute_soft_ranks_single_segment(
     dist_padded: torch.Tensor,
     valid_mask: torch.Tensor,
