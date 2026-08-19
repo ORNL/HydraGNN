@@ -9,8 +9,38 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import warnings
+
 import torch
 from e3nn import o3
+
+
+class ScalarIrrepsAdapter(torch.nn.Module):
+    """Expose invariant local-model features as an e3nn ``0e`` tensor.
+
+    This adapter is intended for SchNet and DimeNet.  It does not manufacture
+    vector or higher-order latent features: the associated Transformer is
+    therefore equivariant only in the scalar (rotation-invariant) sense.
+    """
+
+    def __init__(self, channels: int):
+        super().__init__()
+        _validate_channels(channels)
+        self.channels = channels
+        self.irreps = o3.Irreps(f"{channels}x0e")
+
+    def forward(self, inv_node_feat: torch.Tensor) -> torch.Tensor:
+        """Validate and expose HydraGNN invariant node features."""
+        if inv_node_feat.ndim != 2 or inv_node_feat.shape[1] != self.channels:
+            raise ValueError(
+                f"inv_node_feat must have shape [N, {self.channels}], "
+                f"but has shape {tuple(inv_node_feat.shape)}"
+            )
+        return inv_node_feat
+
+    def decode(self, features: torch.Tensor) -> torch.Tensor:
+        """Restore the scalar-only HydraGNN feature layout."""
+        return self(features)
 
 
 class ScalarVectorIrrepsAdapter(torch.nn.Module):
@@ -29,8 +59,7 @@ class ScalarVectorIrrepsAdapter(torch.nn.Module):
 
     def __init__(self, channels: int):
         super().__init__()
-        if not isinstance(channels, int) or isinstance(channels, bool) or channels <= 0:
-            raise ValueError("channels must be a positive integer")
+        _validate_channels(channels)
 
         self.channels = channels
         self.irreps = o3.Irreps(f"{channels}x0e + {channels}x1o")
@@ -87,3 +116,51 @@ class ScalarVectorIrrepsAdapter(torch.nn.Module):
             raise ValueError("scalar and vector features must be on the same device")
         if inv_node_feat.dtype != equiv_node_feat.dtype:
             raise ValueError("scalar and vector features must have the same dtype")
+
+
+def create_local_feature_adapter(
+    mpnn_type: str,
+    channels: int,
+    *,
+    allow_scalar_only: bool = False,
+    local_equivariance: bool = False,
+) -> ScalarVectorIrrepsAdapter | ScalarIrrepsAdapter:
+    """Create an adapter while enforcing each local model's feature contract.
+
+    SchNet and DimeNet require an explicit scalar-only opt-in because their
+    latent node features contain no vectors or higher-order tensors.  SchNet's
+    coordinate-update mode is rejected: coordinates are not translation-
+    invariant latent vector features and must never be passed through this
+    adapter.
+    """
+    if mpnn_type in {"PAINN", "PNAEq"}:
+        return ScalarVectorIrrepsAdapter(channels)
+    if mpnn_type not in {"SchNet", "DimeNet"}:
+        raise ValueError(
+            f"{mpnn_type} does not yet have an equivariant Transformer adapter"
+        )
+    if not allow_scalar_only:
+        raise ValueError(
+            f"{mpnn_type} has scalar-only latent features; set "
+            "equivariant_attn_allow_scalar_only=true to acknowledge that the "
+            "local and global branches will exchange invariant features only"
+        )
+    if mpnn_type == "SchNet" and local_equivariance:
+        raise ValueError(
+            "SchNet scalar-only integration cannot use coordinate updates; "
+            "set Architecture.equivariance=false"
+        )
+
+    warnings.warn(
+        f"{mpnn_type} uses scalar-only equivariant Transformer integration: "
+        "attention is rotation invariant and does not exchange tensor-valued "
+        "latent features with the local MPNN.",
+        UserWarning,
+        stacklevel=2,
+    )
+    return ScalarIrrepsAdapter(channels)
+
+
+def _validate_channels(channels: int) -> None:
+    if not isinstance(channels, int) or isinstance(channels, bool) or channels <= 0:
+        raise ValueError("channels must be a positive integer")

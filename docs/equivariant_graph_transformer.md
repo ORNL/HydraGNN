@@ -43,12 +43,16 @@ shapes.
   `channels x 0e + channels x 1o` and restores the original layout afterward.
 - `MACE` exposes flattened e3nn irreps. Its adapter obtains the exact irreps
   from the stack configuration and preserves all configured degrees.
+- `SchNet` and `DimeNet` may be used in an explicitly acknowledged scalar-only
+  mode. Their hidden node features map to `channels x 0e`; consequently, their
+  local and global branches exchange invariant features only. This mode does
+  not provide tensor-valued local/global feature exchange and must not be
+  described as equivalent to the PaiNN/PNAEq or MACE integrations.
 - `EGNN` uses atomic coordinates as its equivariant state rather than latent
   irreducible tensor features. It is initially unsupported; treating positions
   as ordinary vector channels would break translation invariance.
-- Scalar-only MPNNs are rejected because this engine is specifically intended
-  to combine equivariant local and global branches. They can continue to use
-  `GPS`.
+- Other scalar-only MPNNs remain unsupported until their feature and geometry
+  contracts have been reviewed explicitly.
 
 Adapters must validate dimensions and parity and fail with actionable errors.
 
@@ -79,15 +83,24 @@ The engine is selected with:
       "global_attn_heads": 4,
       "equivariant_attn_lmax": 1,
       "equivariant_attn_num_radial": 32,
-      "equivariant_attn_chunk_size": 512
+      "equivariant_attn_chunk_size": 512,
+      "equivariant_attn_allow_scalar_only": false
     }
   }
 }
 ```
 
-`equivariant_attn_lmax` cannot exceed the degrees supplied by the selected
-local-model adapter. Chunking changes execution and memory use, not numerical
-semantics.
+`equivariant_attn_lmax` controls the spherical-harmonic degrees available to
+the value tensor product. In scalar-only mode, non-scalar harmonics cannot
+couple a scalar input back to a scalar output, so increasing `lmax` does not
+create tensor-valued latent channels. Chunking changes execution and memory
+use, not numerical semantics.
+
+`equivariant_attn_allow_scalar_only` must be set to `true` for SchNet or
+DimeNet. HydraGNN emits a warning when this limited mode is selected. For
+SchNet it also rejects coordinate-update mode
+(`Architecture.equivariance=true`) because raw coordinates are not
+translation-invariant latent tensor features.
 
 ## Required tests
 

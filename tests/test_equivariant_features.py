@@ -13,7 +13,11 @@ import pytest
 import torch
 from e3nn import o3
 
-from hydragnn.globalAtt.equivariant_features import ScalarVectorIrrepsAdapter
+from hydragnn.globalAtt.equivariant_features import (
+    ScalarIrrepsAdapter,
+    ScalarVectorIrrepsAdapter,
+    create_local_feature_adapter,
+)
 
 
 def pytest_scalar_vector_adapter_round_trip():
@@ -79,3 +83,35 @@ def pytest_scalar_vector_adapter_rejects_invalid_encoded_width():
 
     with pytest.raises(ValueError, match="12 entries per node"):
         adapter.decode(torch.randn(2, 11))
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+def pytest_scalar_local_models_require_explicit_limited_mode(mpnn_type):
+    with pytest.raises(ValueError, match="allow_scalar_only"):
+        create_local_feature_adapter(mpnn_type, channels=4)
+
+    with pytest.warns(UserWarning, match="scalar-only"):
+        adapter = create_local_feature_adapter(
+            mpnn_type, channels=4, allow_scalar_only=True
+        )
+
+    assert isinstance(adapter, ScalarIrrepsAdapter)
+    assert adapter.irreps == o3.Irreps("4x0e")
+    features = torch.randn(3, 4)
+    assert adapter.decode(adapter(features)) is features
+
+
+def pytest_schnet_scalar_mode_rejects_coordinate_updates():
+    with pytest.raises(ValueError, match="coordinate updates"):
+        create_local_feature_adapter(
+            "SchNet",
+            channels=4,
+            allow_scalar_only=True,
+            local_equivariance=True,
+        )
+
+
+def pytest_equivariant_local_models_use_scalar_vector_adapter_without_opt_in():
+    for mpnn_type in ("PAINN", "PNAEq"):
+        adapter = create_local_feature_adapter(mpnn_type, channels=4)
+        assert isinstance(adapter, ScalarVectorIrrepsAdapter)
