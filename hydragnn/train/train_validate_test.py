@@ -737,6 +737,9 @@ def train(
         tr.stop("get_head_indices")
         tr.start("forward", **syncopt)
         with record_function("forward"):
+            # Advance Performer redraw schedules once per training batch. Keep
+            # this outside model.forward(), which may be replayed by activation
+            # checkpointing and would otherwise advance the schedule twice.
             redraw_performer_projections(model, performer_redraw_interval)
             if trace_level > 0:
                 tr.start("h2d", **syncopt)

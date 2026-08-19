@@ -100,12 +100,30 @@ class HydraGPSConv(torch.nn.Module):
             signature = inspect.signature(self.norm1.forward)
             self.norm_with_batch = "batch" in signature.parameters
 
-    def maybe_redraw_performer_projection(self, redraw_interval: Optional[int]) -> bool:
-        """Redraw Performer features after a configured number of train steps.
+    def _maybe_redraw_performer_projection(
+        self, redraw_interval: Optional[int]
+    ) -> bool:
+        """Redraw Performer's random-feature projection when it is due.
+
+        Performer uses random features to approximate softmax attention. A
+        periodic redraw during training prevents optimization from depending
+        on only the initial random approximation. ``redraw_interval`` counts
+        calls to this method, with one call expected per training batch.
 
         This method is intentionally called by the training loop rather than
         from :meth:`forward`, since a forward may be repeated by activation
         checkpointing or other execution strategies.
+
+        Args:
+            redraw_interval: Number of training batches between redraws. A
+                value of ``None`` keeps the initial projection fixed.
+
+        Returns:
+            ``True`` if the projection was redrawn, otherwise ``False``. No
+            redraw occurs for non-Performer attention or in evaluation mode.
+
+        Raises:
+            ValueError: If ``redraw_interval`` is not positive or ``None``.
         """
         if redraw_interval is None or self.attn_type != "performer":
             return False
@@ -197,9 +215,14 @@ class HydraGPSConv(torch.nn.Module):
 def redraw_performer_projections(
     model: torch.nn.Module, redraw_interval: Optional[int]
 ) -> int:
-    """Redraw all HydraGPSConv Performer projections once per training step."""
+    """Advance the redraw schedule for every ``HydraGPSConv`` in ``model``.
+
+    Call this exactly once per training batch, immediately before the model
+    forward. The return value is the number of layers whose Performer random
+    projection was redrawn by this call.
+    """
     return sum(
-        module.maybe_redraw_performer_projection(redraw_interval)
+        module._maybe_redraw_performer_projection(redraw_interval)
         for module in model.modules()
         if isinstance(module, HydraGPSConv)
     )

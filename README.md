@@ -172,8 +172,32 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
   - `["Training"]`
     - `["global_attn_redraw_interval"]`
       Number of training batches between Performer random-feature projection
-      redraws (int, default `1000`); set to `null` to disable redraw. This has
-      no effect when `global_attn_type` is `multihead`.
+      redraws (positive int, default `1000`); set to `null` to keep the initial
+      projection fixed. This setting has no effect when `global_attn_type` is
+      `multihead` or while the model is in evaluation mode.
+
+Performer approximates softmax attention with features produced from a random
+projection matrix. Periodically replacing that matrix during training prevents
+the learned model from depending on a single random approximation. HydraGNN
+counts training batches and redraws the projection immediately before the next
+model forward when the configured interval is reached. Redraw bookkeeping is
+kept outside `HydraGPSConv.forward` so that execution strategies that repeat a
+forward pass, such as activation checkpointing, do not accidentally count one
+training batch more than once. For example:
+
+```json
+{
+  "NeuralNetwork": {
+    "Architecture": {
+      "global_attn_engine": "GPS",
+      "global_attn_type": "performer"
+    },
+    "Training": {
+      "global_attn_redraw_interval": 1000
+    }
+  }
+}
+```
 
 When GPS wraps an equivariant HydraGNN model, global attention operates only
 on invariant node channels. Equivariant channels are updated by the local MPNN
