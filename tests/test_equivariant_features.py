@@ -87,12 +87,20 @@ def pytest_scalar_vector_adapter_rejects_invalid_encoded_width():
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
 def pytest_scalar_local_models_require_explicit_limited_mode(mpnn_type):
+    with pytest.raises(ValueError, match="cannot provide tensor-valued"):
+        create_local_feature_adapter(mpnn_type, channels=4, allow_scalar_only=True)
+
     with pytest.raises(ValueError, match="allow_scalar_only"):
-        create_local_feature_adapter(mpnn_type, channels=4)
+        create_local_feature_adapter(
+            mpnn_type, channels=4, require_tensor_coupling=False
+        )
 
     with pytest.warns(UserWarning, match="scalar-only"):
         adapter = create_local_feature_adapter(
-            mpnn_type, channels=4, allow_scalar_only=True
+            mpnn_type,
+            channels=4,
+            allow_scalar_only=True,
+            require_tensor_coupling=False,
         )
 
     assert isinstance(adapter, ScalarIrrepsAdapter)
@@ -107,6 +115,7 @@ def pytest_schnet_scalar_mode_rejects_coordinate_updates():
             "SchNet",
             channels=4,
             allow_scalar_only=True,
+            require_tensor_coupling=False,
             local_equivariance=True,
         )
 

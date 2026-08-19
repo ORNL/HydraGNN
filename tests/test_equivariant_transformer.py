@@ -120,3 +120,15 @@ def pytest_equivariant_transformer_layer_rejects_invalid_explicit_pairs(
 
     with pytest.raises(ValueError, match=message):
         layer(features, positions, batch, edge_index=edge_index)
+
+
+def pytest_equivariant_transformer_rejects_tensor_coupling_without_tensor_irreps():
+    with pytest.raises(ValueError, match="requires at least one non-scalar"):
+        EquivariantTransformerLayer("4x0e")
+
+    # Scalar-only operation remains available, but must be explicit.
+    layer = EquivariantTransformerLayer("4x0e", require_tensor_coupling=False)
+    features = torch.randn(3, 4)
+    positions = torch.randn(3, 3)
+    output = layer(features, positions, torch.tensor([0, 0, 0]))
+    assert output.shape == features.shape

@@ -61,9 +61,17 @@ class EquivariantTransformerLayer(torch.nn.Module):
         lmax: int = 1,
         num_radial: int = 16,
         feedforward_multiplier: int = 2,
+        require_tensor_coupling: bool = True,
     ):
         super().__init__()
         self.irreps = o3.Irreps(irreps)
+        has_tensor_features = any(irrep.l > 0 for _, irrep in self.irreps)
+        if require_tensor_coupling and not has_tensor_features:
+            raise ValueError(
+                "tensor-valued local/global coupling requires at least one "
+                "non-scalar input irrep; use require_tensor_coupling=False "
+                "only for the acknowledged SchNet/DimeNet scalar-only mode"
+            )
         if (
             not isinstance(feedforward_multiplier, int)
             or isinstance(feedforward_multiplier, bool)

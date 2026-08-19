@@ -123,6 +123,7 @@ def create_local_feature_adapter(
     channels: int,
     *,
     allow_scalar_only: bool = False,
+    require_tensor_coupling: bool = True,
     local_equivariance: bool = False,
 ) -> ScalarVectorIrrepsAdapter | ScalarIrrepsAdapter:
     """Create an adapter while enforcing each local model's feature contract.
@@ -138,6 +139,11 @@ def create_local_feature_adapter(
     if mpnn_type not in {"SchNet", "DimeNet"}:
         raise ValueError(
             f"{mpnn_type} does not yet have an equivariant Transformer adapter"
+        )
+    if require_tensor_coupling:
+        raise ValueError(
+            f"{mpnn_type} cannot provide tensor-valued local/global coupling: "
+            "its latent node features are invariant scalars only"
         )
     if not allow_scalar_only:
         raise ValueError(

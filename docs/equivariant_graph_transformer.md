@@ -84,7 +84,8 @@ The engine is selected with:
       "equivariant_attn_lmax": 1,
       "equivariant_attn_num_radial": 32,
       "equivariant_attn_chunk_size": 512,
-      "equivariant_attn_allow_scalar_only": false
+      "equivariant_attn_allow_scalar_only": false,
+      "equivariant_attn_require_tensor_coupling": true
     }
   }
 }
@@ -97,8 +98,12 @@ create tensor-valued latent channels. Chunking changes execution and memory
 use, not numerical semantics.
 
 `equivariant_attn_allow_scalar_only` must be set to `true` for SchNet or
-DimeNet. HydraGNN emits a warning when this limited mode is selected. For
-SchNet it also rejects coordinate-update mode
+DimeNet, and `equivariant_attn_require_tensor_coupling` must be set to `false`.
+If tensor coupling remains requested, model construction fails because these
+MPNNs expose no non-scalar latent irreps. The Transformer layer independently
+performs the same irrep-level validation so the restriction cannot be bypassed
+by constructing it directly. HydraGNN emits a warning when the limited mode is
+selected. For SchNet it also rejects coordinate-update mode
 (`Architecture.equivariance=true`) because raw coordinates are not
 translation-invariant latent tensor features.
 
