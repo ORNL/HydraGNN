@@ -22,7 +22,6 @@ from torch_geometric.nn import GPSConv as PyGGPSConv
 from torch_geometric.data import Data
 
 from hydragnn.globalAtt.gps import (
-    GPSConv,
     HydraGPSConv,
     redraw_performer_projections,
 )
@@ -111,8 +110,7 @@ def pytest_graphgps_local_and_global_branches_match_pyg():
     assert torch.equal(actual_equiv, equiv)
 
 
-def pytest_graphgps_legacy_name_remains_compatible():
-    assert GPSConv is HydraGPSConv
+def pytest_graphgps_records_pyg_source_version():
     assert HydraGPSConv.pyg_source_version == "2.8.0"
 
 

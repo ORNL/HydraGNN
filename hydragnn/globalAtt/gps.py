@@ -194,10 +194,6 @@ class HydraGPSConv(torch.nn.Module):
         )
 
 
-# Backward-compatible name used by existing HydraGNN callers.
-GPSConv = HydraGPSConv
-
-
 def redraw_performer_projections(
     model: torch.nn.Module, redraw_interval: Optional[int]
 ) -> int:
