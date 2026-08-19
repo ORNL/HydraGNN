@@ -1,0 +1,81 @@
+##############################################################################
+# Copyright (c) 2026, Oak Ridge National Laboratory                          #
+# All rights reserved.                                                       #
+#                                                                            #
+# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
+# license. For the licensing terms see the LICENSE file in the top-level     #
+# directory.                                                                 #
+#                                                                            #
+# SPDX-License-Identifier: BSD-3-Clause                                      #
+##############################################################################
+
+import pytest
+import torch
+from e3nn import o3
+
+from hydragnn.globalAtt.equivariant_features import ScalarVectorIrrepsAdapter
+
+
+def pytest_scalar_vector_adapter_round_trip():
+    adapter = ScalarVectorIrrepsAdapter(channels=4)
+    scalars = torch.randn(5, 4)
+    vectors = torch.randn(5, 3, 4)
+
+    encoded = adapter(scalars, vectors)
+    decoded_scalars, decoded_vectors = adapter.decode(encoded)
+
+    assert adapter.irreps == o3.Irreps("4x0e + 4x1o")
+    assert encoded.shape == (5, adapter.irreps.dim)
+    assert torch.equal(decoded_scalars, scalars)
+    assert torch.equal(decoded_vectors, vectors)
+
+
+def pytest_scalar_vector_adapter_is_rotation_equivariant():
+    adapter = ScalarVectorIrrepsAdapter(channels=3).double()
+    scalars = torch.randn(7, 3, dtype=torch.float64)
+    vectors = torch.randn(7, 3, 3, dtype=torch.float64)
+    rotation = o3.rand_matrix(dtype=torch.float64)
+
+    rotated_vectors = torch.einsum("ij,njc->nic", rotation, vectors)
+    encoded_after_rotation = adapter(scalars, rotated_vectors)
+
+    representation = adapter.irreps.D_from_matrix(rotation)
+    rotated_after_encoding = adapter(scalars, vectors) @ representation.T
+
+    torch.testing.assert_close(
+        encoded_after_rotation,
+        rotated_after_encoding,
+        # e3nn obtains D matrices through an angle decomposition whose
+        # numerical error is larger than the feature-layout conversion.
+        rtol=1.0e-5,
+        atol=2.0e-6,
+    )
+
+
+@pytest.mark.parametrize(
+    ("scalars", "vectors", "message"),
+    [
+        (torch.randn(2, 3, 1), torch.randn(2, 3, 3), "inv_node_feat"),
+        (torch.randn(2, 3), torch.randn(2, 3, 2), "equiv_node_feat"),
+        (torch.randn(2, 3), torch.randn(3, 3, 3), "equiv_node_feat"),
+    ],
+)
+def pytest_scalar_vector_adapter_rejects_invalid_shapes(scalars, vectors, message):
+    adapter = ScalarVectorIrrepsAdapter(channels=3)
+
+    with pytest.raises(ValueError, match=message):
+        adapter(scalars, vectors)
+
+
+def pytest_scalar_vector_adapter_rejects_mixed_dtypes():
+    adapter = ScalarVectorIrrepsAdapter(channels=3)
+
+    with pytest.raises(ValueError, match="same dtype"):
+        adapter(torch.randn(2, 3), torch.randn(2, 3, 3, dtype=torch.float64))
+
+
+def pytest_scalar_vector_adapter_rejects_invalid_encoded_width():
+    adapter = ScalarVectorIrrepsAdapter(channels=3)
+
+    with pytest.raises(ValueError, match="12 entries per node"):
+        adapter.decode(torch.randn(2, 11))
