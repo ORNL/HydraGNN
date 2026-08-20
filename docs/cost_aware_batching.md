@@ -34,6 +34,10 @@ Shuffling is reproducible from `seed + epoch`. The core sampler also accepts
 precomputed costs, allowing dataset implementations to avoid loading every
 sample merely to determine its size.
 
+DDStore-backed `DistDataset` instances expose their global node counts from
+existing variable-shape metadata. Batch planning therefore performs no DDStore
+payload reads: each rank retrieves only the samples assigned to its batches.
+
 In distributed training, all ranks construct the same cost-bounded batches.
 HydraGNN groups similarly sized batches into distributed steps, assigns one to
 each rank, and rotates rank assignments to avoid repeatedly giving the largest

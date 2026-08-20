@@ -44,6 +44,30 @@ def graph_node_cost(sample) -> int:
     return int(value)
 
 
+def graph_node_costs(dataset) -> Sequence[int] | None:
+    """Return node counts from dataset metadata without loading samples.
+
+    Dataset implementations may expose a ``get_node_counts`` method. The
+    fallback recognizes HydraGNN datasets carrying global variable-shape
+    metadata, including DDStore- and ADIOS-backed datasets.
+    """
+    getter = getattr(dataset, "get_node_counts", None)
+    if callable(getter):
+        costs = getter()
+        if costs is not None:
+            return costs
+
+    variable_count = getattr(dataset, "variable_count", None)
+    variable_dim = getattr(dataset, "variable_dim", None)
+    if isinstance(variable_count, dict) and isinstance(variable_dim, dict):
+        for key in ("x", "pos"):
+            if key in variable_count and variable_dim.get(key) == 0:
+                costs = variable_count[key]
+                if len(costs) == len(dataset):
+                    return costs
+    return None
+
+
 class CostAwareBatchSampler(Sampler[list[int]]):
     """Pack dataset samples into batches bounded by an additive cost.
 
@@ -93,6 +117,8 @@ class CostAwareBatchSampler(Sampler[list[int]]):
         self.drop_last = drop_last
         self.epoch = 0
 
+        if costs is None:
+            costs = graph_node_costs(dataset)
         if costs is None:
             costs = [cost_fn(dataset[index]) for index in range(len(dataset))]
         if len(costs) != len(dataset):

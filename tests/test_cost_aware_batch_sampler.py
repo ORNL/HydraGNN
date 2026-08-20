@@ -73,9 +73,25 @@ def pytest_cost_sampler_uses_precomputed_costs_without_loading_dataset():
         def __getitem__(self, index):
             raise AssertionError("samples should not be loaded")
 
-    sampler = CostAwareBatchSampler(
-        MetadataOnlyDataset(), 4, costs=[1, 2, 3], shuffle=False
-    )
+        def get_node_counts(self):
+            return [1, 2, 3]
+
+    sampler = CostAwareBatchSampler(MetadataOnlyDataset(), 4, shuffle=False)
+    assert list(sampler) == [[0, 1], [2]]
+
+
+def pytest_cost_sampler_reads_ddstore_style_shape_metadata_without_samples():
+    class MetadataOnlyDataset:
+        variable_count = {"x": [2, 4, 3], "edge_index": [5, 9, 7]}
+        variable_dim = {"x": 0, "edge_index": 1}
+
+        def __len__(self):
+            return 3
+
+        def __getitem__(self, index):
+            raise AssertionError("DDStore payload should not be read")
+
+    sampler = CostAwareBatchSampler(MetadataOnlyDataset(), 6, shuffle=False)
     assert list(sampler) == [[0, 1], [2]]
 
 

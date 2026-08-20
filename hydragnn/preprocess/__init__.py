@@ -28,6 +28,7 @@ from .batch_sampler import (
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
     graph_node_cost,
+    graph_node_costs,
 )
 
 from .load_data import (
