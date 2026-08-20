@@ -112,6 +112,9 @@ def create_model_config(
         equivariant_attn_chunk_size=config["Architecture"].get(
             "equivariant_attn_chunk_size", 512
         ),
+        equivariant_attn_coupling_mode=config["Architecture"].get(
+            "equivariant_attn_coupling_mode", "parallel"
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -178,6 +181,7 @@ def create_model(
     equivariant_attn_allow_scalar_only: bool = False,
     equivariant_attn_require_tensor_coupling: bool = True,
     equivariant_attn_chunk_size: int | None = 512,
+    equivariant_attn_coupling_mode: str = "parallel",
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -434,6 +438,7 @@ def create_model(
                 equivariant_attn_require_tensor_coupling
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
+            equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
 
     elif mpnn_type == "DimeNet":
@@ -492,6 +497,7 @@ def create_model(
                 equivariant_attn_require_tensor_coupling
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
+            equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
 
     elif mpnn_type == "EGNN":
@@ -559,6 +565,7 @@ def create_model(
                 equivariant_attn_require_tensor_coupling
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
+            equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
 
     elif mpnn_type == "PNAEq":
@@ -599,6 +606,7 @@ def create_model(
                 equivariant_attn_require_tensor_coupling
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
+            equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
 
     elif mpnn_type == "MACE":
@@ -651,6 +659,7 @@ def create_model(
                 equivariant_attn_require_tensor_coupling
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
+            equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))

@@ -57,6 +57,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     architecture.setdefault("equivariant_attn_allow_scalar_only", False)
     architecture.setdefault("equivariant_attn_require_tensor_coupling", True)
     architecture.setdefault("equivariant_attn_chunk_size", 512)
+    architecture.setdefault("equivariant_attn_coupling_mode", "parallel")
     validate_equivariant_transformer_config(architecture)
 
     # update output_heads with latest config rules
@@ -196,6 +197,13 @@ def validate_equivariant_transformer_config(config):
         raise ValueError("equivariant_attn_feedforward_multiplier must be positive")
     if config.get("equivariant_attn_chunk_size", 512) <= 0:
         raise ValueError("equivariant_attn_chunk_size must be positive")
+    if config.get("equivariant_attn_coupling_mode", "parallel") not in {
+        "parallel",
+        "sequential",
+    }:
+        raise ValueError(
+            "equivariant_attn_coupling_mode must be 'parallel' or 'sequential'"
+        )
     if (
         mpnn_type in {"PAINN", "PNAEq", "MACE"}
         and not config["equivariant_attn_require_tensor_coupling"]

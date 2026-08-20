@@ -73,6 +73,7 @@ def _data(positions, edge_shifts=None):
 def pytest_painn_equivariant_transformer_forward_backward_and_rotation():
     torch.manual_seed(31)
     model = _create_model()
+    assert all(conv.coupling_mode == "parallel" for conv in model.graph_convs)
     positions = torch.tensor(
         [[0.0, 0.0, 0.0], [1.0, 0.2, 0.0], [-0.1, 0.8, 0.3]],
         requires_grad=True,
@@ -117,4 +118,20 @@ def pytest_equivariant_transformer_config_rejects_untested_model_integration():
     }
 
     with pytest.raises(ValueError, match="currently supports PAINN, PNAEq"):
+        validate_equivariant_transformer_config(config)
+
+
+def pytest_equivariant_transformer_config_rejects_unknown_coupling_mode():
+    config = {
+        "global_attn_engine": "EquivariantTransformer",
+        "mpnn_type": "PAINN",
+        "global_attn_heads": 2,
+        "equivariant_attn_lmax": 1,
+        "equivariant_attn_num_radial": 8,
+        "equivariant_attn_feedforward_multiplier": 2,
+        "equivariant_attn_require_tensor_coupling": True,
+        "equivariant_attn_coupling_mode": "unknown",
+    }
+
+    with pytest.raises(ValueError, match="parallel.*sequential"):
         validate_equivariant_transformer_config(config)

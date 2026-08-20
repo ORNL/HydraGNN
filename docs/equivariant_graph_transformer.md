@@ -93,6 +93,7 @@ The engine is selected with:
       "equivariant_attn_lmax": 1,
       "equivariant_attn_num_radial": 32,
       "equivariant_attn_chunk_size": 512,
+      "equivariant_attn_coupling_mode": "parallel",
       "equivariant_attn_allow_scalar_only": false,
       "equivariant_attn_require_tensor_coupling": true
     }
@@ -105,6 +106,13 @@ the value tensor product. In scalar-only mode, non-scalar harmonics cannot
 couple a scalar input back to a scalar output, so increasing `lmax` does not
 create tensor-valued latent channels. Chunking changes execution and memory
 use, not numerical semantics.
+
+`equivariant_attn_coupling_mode` controls how the local MPNN and global
+Transformer are combined. The default, `"parallel"`, applies both branches to
+the same input and adds their outputs in the shared irrep representation. This
+matches GraphGPS's local/global organization while preserving equivariance.
+`"sequential"` retains the earlier local-MPNN-then-global-Transformer flow for
+experiments and compatibility with models trained using that architecture.
 
 `equivariant_attn_allow_scalar_only` must be set to `true` for SchNet or
 DimeNet, and `equivariant_attn_require_tensor_coupling` must be set to `false`.

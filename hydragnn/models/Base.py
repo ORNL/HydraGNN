@@ -68,6 +68,7 @@ class Base(Module):
         equivariant_attn_allow_scalar_only: bool = False,
         equivariant_attn_require_tensor_coupling: bool = True,
         equivariant_attn_chunk_size: int | None = 512,
+        equivariant_attn_coupling_mode: str = "parallel",
     ):
         super().__init__()
         self.device = get_device()
@@ -91,6 +92,7 @@ class Base(Module):
             equivariant_attn_require_tensor_coupling
         )
         self.equivariant_attn_chunk_size = equivariant_attn_chunk_size
+        self.equivariant_attn_coupling_mode = equivariant_attn_coupling_mode
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -293,6 +295,7 @@ class Base(Module):
                     ),
                     local_equivariance=self.equivariance,
                     chunk_size=self.equivariant_attn_chunk_size,
+                    coupling_mode=self.equivariant_attn_coupling_mode,
                     irreps=irreps,
                 )
             raise ValueError(

@@ -150,3 +150,15 @@ def pytest_mace_irreps_adapter_round_trip_and_rotation():
 def pytest_mace_irreps_adapter_rejects_nonleading_scalars():
     with pytest.raises(ValueError, match="precede tensor irreps"):
         IrrepsFeatureAdapter("1x1o + 1x0e")
+
+
+def pytest_mace_parallel_input_zero_initializes_absent_tensor_irreps():
+    adapter = IrrepsFeatureAdapter("2x0e + 2x1o")
+    scalars = torch.randn(3, 2)
+    features = adapter.encode_parallel_input(scalars, torch.empty(3, 0))
+
+    torch.testing.assert_close(features[:, :2], scalars)
+    torch.testing.assert_close(features[:, 2:], torch.zeros(3, 6))
+
+    with pytest.raises(ValueError, match="match.*or be absent"):
+        adapter.encode_parallel_input(scalars, torch.randn(3, 3))

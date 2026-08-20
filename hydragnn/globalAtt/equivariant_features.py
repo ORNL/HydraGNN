@@ -81,6 +81,31 @@ class IrrepsFeatureAdapter(torch.nn.Module):
             raise ValueError(f"features must have shape [N, {self.irreps.dim}]")
         return features[:, : self.scalar_dim], features[:, self.scalar_dim :]
 
+    def encode_parallel_input(
+        self, inv_node_feat: torch.Tensor, equiv_node_feat: torch.Tensor
+    ) -> torch.Tensor:
+        """Embed a MACE layer input in the layer's output representation.
+
+        MACE's first hidden layer promotes scalar input features to a
+        scalar-plus-tensor representation. Zero is the unique canonical value
+        for tensor channels that are absent at that boundary and remains zero
+        under every rotation. Other representation mismatches remain errors.
+        """
+        tensor_dim = self.irreps.dim - self.scalar_dim
+        if equiv_node_feat.shape == (inv_node_feat.shape[0], tensor_dim):
+            return self(inv_node_feat, equiv_node_feat)
+        if equiv_node_feat.shape == (inv_node_feat.shape[0], 0):
+            if inv_node_feat.ndim != 2 or inv_node_feat.shape[1] != self.scalar_dim:
+                raise ValueError(
+                    f"inv_node_feat must have shape [N, {self.scalar_dim}]"
+                )
+            zeros = inv_node_feat.new_zeros(inv_node_feat.shape[0], tensor_dim)
+            return torch.cat((inv_node_feat, zeros), dim=-1)
+        raise ValueError(
+            "MACE parallel coupling requires input tensor features to either "
+            f"match [N, {tensor_dim}] or be absent with shape [N, 0]"
+        )
+
 
 class ScalarVectorIrrepsAdapter(torch.nn.Module):
     """Convert HydraGNN scalar/vector features to an e3nn representation.

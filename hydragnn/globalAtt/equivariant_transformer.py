@@ -121,6 +121,19 @@ class EquivariantTransformerLayer(torch.nn.Module):
         edge_index: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Update node features using pairs within each graph in ``batch``."""
+        node_features = self.forward_attention(
+            node_features, positions, batch, edge_index=edge_index
+        )
+        return self.forward_feedforward(node_features)
+
+    def forward_attention(
+        self,
+        node_features: torch.Tensor,
+        positions: torch.Tensor,
+        batch: torch.Tensor,
+        edge_index: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Apply the normalized attention residual sublayer."""
         if batch.ndim != 1 or batch.shape[0] != node_features.shape[0]:
             raise ValueError("batch must contain one graph identifier per node")
         if batch.dtype != torch.long:
@@ -153,5 +166,8 @@ class EquivariantTransformerLayer(torch.nn.Module):
             )
         else:
             attention_output = self.attention(normalized, positions, edge_index)
-        node_features = node_features + attention_output
+        return node_features + attention_output
+
+    def forward_feedforward(self, node_features: torch.Tensor) -> torch.Tensor:
+        """Apply the normalized equivariant feed-forward residual sublayer."""
         return node_features + self.feedforward(self.feedforward_norm(node_features))
