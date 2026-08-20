@@ -12,6 +12,9 @@ import argparse
 import glob
 import logging
 import os
+import shutil
+
+from hydragnn.utils.datasets.download import download_file, safe_extract_tar
 
 """
 This script provides users with an automated way to download, preprocess (where
@@ -66,10 +69,10 @@ def get_data(datadir, task, split, del_intmd_files):
     elif task == "is2re":
         download_link = DOWNLOAD_LINKS[task]
 
-    os.system(f"wget {download_link} -P {datadir}")
     filename = os.path.join(datadir, os.path.basename(download_link))
+    download_file(download_link, filename)
     logging.info("Extracting contents...")
-    os.system(f"tar -xvf {filename} -C {datadir}")
+    safe_extract_tar(filename, datadir)
     dirname = os.path.join(
         datadir,
         os.path.basename(filename).split(".")[0],
@@ -87,9 +90,10 @@ def get_data(datadir, task, split, del_intmd_files):
     if task == "s2ef" and split == "test":
         if not (os.path.exists(f"{datadir}/s2ef/all")):
             os.makedirs(f"{datadir}/s2ef/all")
-        os.system(f"mv {dirname}/test_data/s2ef/all/test_* {datadir}/s2ef/all")
+        for source in glob.glob(f"{dirname}/test_data/s2ef/all/test_*"):
+            shutil.move(source, f"{datadir}/s2ef/all")
     elif task == "is2re":
-        os.system(f"mv {dirname}/data/is2re {datadir}")
+        shutil.move(f"{dirname}/data/is2re", datadir)
 
     # if del_intmd_files:
     #     cleanup(filename, dirname)
