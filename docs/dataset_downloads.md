@@ -29,3 +29,10 @@ facility helper before invoking any dataset downloader:
 ```bash
 source installation_DOE_supercomputers/olcf_proxy_env.sh
 ```
+
+Normal pull-request tests run a complete download, resume, redirect, checksum,
+CLI, and extraction flow against a local HTTP server. They also verify that
+every migrated example calls the shared transport. No external service is
+required. A separate weekly/manual workflow probes only the first 64 KiB from
+each live dataset endpoint; run it locally with
+`HYDRAGNN_RUN_NETWORK_TESTS=1 pytest -m network`.
