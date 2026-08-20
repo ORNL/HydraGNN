@@ -113,6 +113,7 @@ class MACEStack(Base):
         ## Passed
         self.max_ell = max_ell
         self.node_max_ell = node_max_ell
+        self.equivariant_attn_adapter_type = "MACE"
         num_interactions = kwargs["num_conv_layers"]
         self.edge_dim = edge_dim
         self.avg_num_neighbors = avg_num_neighbors
@@ -227,15 +228,16 @@ class MACEStack(Base):
         )
 
         # First Conv and Decoder
+        first_conv = self.get_conv(
+            self.hidden_dim,
+            self.hidden_dim,
+            first_layer=True,
+            last_layer=last_layer,
+        )  # Node features are already converted to hidden_dim via one-hot embedding
         self.graph_convs.append(
-            self._apply_global_attn(
-                self.get_conv(
-                    self.hidden_dim,
-                    self.hidden_dim,
-                    first_layer=True,
-                    last_layer=last_layer,
-                )  # Node features are already converted to hidden_dim via one-hot embedding
-            )
+            first_conv
+            if last_layer and self.global_attn_engine == "EquivariantTransformer"
+            else self._apply_global_attn(first_conv, irreps=str(hidden_irreps))
         )
         irreps = hidden_irreps if not last_layer else final_hidden_irreps
         self.multihead_decoders.append(
@@ -255,12 +257,13 @@ class MACEStack(Base):
         # Variable number of convolutions and decoders
         for i in range(self.num_conv_layers - 1):
             last_layer = i == self.num_conv_layers - 2
+            conv = self.get_conv(
+                self.hidden_dim, self.hidden_dim, last_layer=last_layer
+            )
             self.graph_convs.append(
-                self._apply_global_attn(
-                    self.get_conv(
-                        self.hidden_dim, self.hidden_dim, last_layer=last_layer
-                    )
-                )
+                conv
+                if last_layer and self.global_attn_engine == "EquivariantTransformer"
+                else self._apply_global_attn(conv, irreps=str(hidden_irreps))
             )
             irreps = hidden_irreps if not last_layer else final_hidden_irreps
             self.multihead_decoders.append(
@@ -431,6 +434,13 @@ class MACEStack(Base):
             data.pos is not None
         ), "MACE requires node positions (data.pos) to be set."
 
+        if self.global_attn_engine == "EquivariantTransformer" and torch.any(
+            data.edge_shifts != 0
+        ):
+            raise ValueError(
+                "EquivariantTransformer does not yet support periodic images"
+            )
+
         # Center positions at 0 per graph. This is a requirement for equivariant models that
         # initialize the spherical harmonics, since the initial spherical harmonic projection
         # uses the nodal position vector  x/||x|| as the input to the spherical harmonics.
@@ -475,14 +485,33 @@ class MACEStack(Base):
             "edge_index": data.edge_index,
         }
 
+        if self.global_attn_engine == "EquivariantTransformer":
+            conv_args.update(
+                {
+                    "positions": data.pos,
+                    "graph_batch": (
+                        data.batch
+                        if data.batch is not None
+                        else torch.zeros(
+                            data.pos.shape[0], dtype=torch.long, device=data.pos.device
+                        )
+                    ),
+                }
+            )
+
         if self.use_global_attn:
-            # encode node positional embeddings
+            if self.global_attn_engine == "EquivariantTransformer":
+                return (
+                    data.node_features[:, : self.hidden_dim],
+                    data.node_features[:, self.hidden_dim :],
+                    conv_args,
+                )
+
+            # GPS combines learned node and positional encodings.
             x = self.pos_emb(data.pe)
-            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
             if self.input_dim:
                 x = torch.cat((data.node_features, x), 1)
                 x = self.node_lin(x)
-            # repeat for edge features and relative edge encodings
             if self.is_edge_model:
                 e = self.rel_pos_emb(data.rel_pe)
                 if self.use_edge_attr:

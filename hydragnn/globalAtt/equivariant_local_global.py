@@ -14,6 +14,7 @@ from typing import Any
 import torch
 
 from hydragnn.globalAtt.equivariant_features import (
+    IrrepsFeatureAdapter,
     ScalarVectorIrrepsAdapter,
     create_local_feature_adapter,
 )
@@ -36,16 +37,22 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         require_tensor_coupling: bool,
         local_equivariance: bool,
         chunk_size: int | None,
+        irreps: str | None = None,
     ):
         super().__init__()
         self.conv = conv
-        self.adapter = create_local_feature_adapter(
-            mpnn_type,
-            channels,
-            allow_scalar_only=allow_scalar_only,
-            require_tensor_coupling=require_tensor_coupling,
-            local_equivariance=local_equivariance,
-        )
+        if mpnn_type == "MACE":
+            if irreps is None:
+                raise ValueError("MACE integration requires explicit output irreps")
+            self.adapter = IrrepsFeatureAdapter(irreps)
+        else:
+            self.adapter = create_local_feature_adapter(
+                mpnn_type,
+                channels,
+                allow_scalar_only=allow_scalar_only,
+                require_tensor_coupling=require_tensor_coupling,
+                local_equivariance=local_equivariance,
+            )
         self.global_layer = EquivariantTransformerLayer(
             self.adapter.irreps,
             heads=heads,
@@ -75,7 +82,7 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
             equiv_node_feat=equiv_node_feat,
             **kwargs,
         )
-        if isinstance(self.adapter, ScalarVectorIrrepsAdapter):
+        if isinstance(self.adapter, (ScalarVectorIrrepsAdapter, IrrepsFeatureAdapter)):
             features = self.adapter(inv_node_feat, equiv_node_feat)
             features = self.global_layer(features, positions, graph_batch)
             return self.adapter.decode(features)

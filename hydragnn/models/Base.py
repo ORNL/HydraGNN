@@ -259,7 +259,7 @@ class Base(Module):
 
         self.conv_checkpointing = False
 
-    def _apply_global_attn(self, mpnn):
+    def _apply_global_attn(self, mpnn, irreps=None):
         # choose to use global attention or mpnn
         if self.use_global_attn:
             # specify global attention engine; use this to support more engines in future
@@ -293,6 +293,7 @@ class Base(Module):
                     ),
                     local_equivariance=self.equivariance,
                     chunk_size=self.equivariant_attn_chunk_size,
+                    irreps=irreps,
                 )
             raise ValueError(
                 f"Unknown global attention engine: {self.global_attn_engine}"

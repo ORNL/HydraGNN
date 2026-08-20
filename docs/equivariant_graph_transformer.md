@@ -11,9 +11,11 @@ This is a new HydraGNN architecture. It is not EquiformerV2, whose attention is
 restricted to a local neighbor graph, and it is not AllScAIP, whose rotational
 equivariance is learned rather than encoded with irreducible tensors.
 
-The end-to-end model integration supports PaiNN and PNAEq with tensor-valued
-coupling. SchNet and DimeNet are supported only in the explicitly acknowledged
-scalar-only mode described below.
+The end-to-end model integration supports PaiNN, PNAEq, and MACE with
+tensor-valued coupling. SchNet and DimeNet are supported only in the explicitly
+acknowledged scalar-only mode described below. MACE applies global attention
+after its tensor-valued hidden layers but not after its final scalar-only
+readout layer, and consequently requires at least two convolution layers.
 
 ## Equivariance contract
 
@@ -45,8 +47,8 @@ shapes.
 - `PAINN` and `PNAEq` expose scalar channels plus vector channels shaped
   `[num_nodes, 3, channels]`. Their adapter maps these to
   `channels x 0e + channels x 1o` and restores the original layout afterward.
-- `MACE` exposes flattened e3nn irreps. Its adapter obtains the exact irreps
-  from the stack configuration and preserves all configured degrees.
+- `MACE` exposes flattened e3nn irreps. Its adapter receives the exact output
+  irreps from each wrapped MACE layer and preserves all configured degrees.
 - `SchNet` and `DimeNet` may be used in an explicitly acknowledged scalar-only
   mode. Their hidden node features map to `channels x 0e`; consequently, their
   local and global branches exchange invariant features only. This mode does

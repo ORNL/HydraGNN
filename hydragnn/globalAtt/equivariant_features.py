@@ -43,6 +43,45 @@ class ScalarIrrepsAdapter(torch.nn.Module):
         return self(features)
 
 
+class IrrepsFeatureAdapter(torch.nn.Module):
+    """Join HydraGNN's split MACE layout using its declared e3nn irreps."""
+
+    def __init__(self, irreps: o3.Irreps | str):
+        super().__init__()
+        self.irreps = o3.Irreps(irreps)
+        if self.irreps.dim == 0:
+            raise ValueError("irreps must not be empty")
+        self.scalar_dim = self.irreps.count(o3.Irrep("0e"))
+        scalar_prefix_dim = 0
+        for multiplicity, irrep in self.irreps:
+            if irrep != o3.Irrep("0e"):
+                break
+            scalar_prefix_dim += multiplicity * irrep.dim
+        if scalar_prefix_dim != self.scalar_dim:
+            raise ValueError(
+                "MACE adapter requires all 0e scalar irreps to precede tensor irreps"
+            )
+
+    def forward(
+        self, inv_node_feat: torch.Tensor, equiv_node_feat: torch.Tensor
+    ) -> torch.Tensor:
+        if inv_node_feat.ndim != 2 or inv_node_feat.shape[1] != self.scalar_dim:
+            raise ValueError(f"inv_node_feat must have shape [N, {self.scalar_dim}]")
+        tensor_dim = self.irreps.dim - self.scalar_dim
+        if equiv_node_feat.shape != (inv_node_feat.shape[0], tensor_dim):
+            raise ValueError(f"equiv_node_feat must have shape [N, {tensor_dim}]")
+        if inv_node_feat.device != equiv_node_feat.device:
+            raise ValueError("scalar and tensor features must be on the same device")
+        if inv_node_feat.dtype != equiv_node_feat.dtype:
+            raise ValueError("scalar and tensor features must have the same dtype")
+        return torch.cat((inv_node_feat, equiv_node_feat), dim=-1)
+
+    def decode(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if features.ndim != 2 or features.shape[1] != self.irreps.dim:
+            raise ValueError(f"features must have shape [N, {self.irreps.dim}]")
+        return features[:, : self.scalar_dim], features[:, self.scalar_dim :]
+
+
 class ScalarVectorIrrepsAdapter(torch.nn.Module):
     """Convert HydraGNN scalar/vector features to an e3nn representation.
 

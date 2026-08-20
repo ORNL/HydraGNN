@@ -14,6 +14,7 @@ import torch
 from e3nn import o3
 
 from hydragnn.globalAtt.equivariant_features import (
+    IrrepsFeatureAdapter,
     ScalarIrrepsAdapter,
     ScalarVectorIrrepsAdapter,
     create_local_feature_adapter,
@@ -124,3 +125,28 @@ def pytest_equivariant_local_models_use_scalar_vector_adapter_without_opt_in():
     for mpnn_type in ("PAINN", "PNAEq"):
         adapter = create_local_feature_adapter(mpnn_type, channels=4)
         assert isinstance(adapter, ScalarVectorIrrepsAdapter)
+
+
+def pytest_mace_irreps_adapter_round_trip_and_rotation():
+    irreps = o3.Irreps("3x0e + 3x1o + 2x2e")
+    adapter = IrrepsFeatureAdapter(irreps)
+    features = torch.randn(5, irreps.dim, dtype=torch.float64)
+    scalars, tensors = adapter.decode(features)
+
+    assert scalars.shape == (5, 3)
+    assert tensors.shape == (5, irreps.dim - 3)
+    assert torch.equal(adapter(scalars, tensors), features)
+
+    rotation = o3.rand_matrix(dtype=torch.float64)
+    representation = irreps.D_from_matrix(rotation)
+    transformed = features @ representation.T
+    transformed_scalars, transformed_tensors = adapter.decode(transformed)
+    torch.testing.assert_close(transformed_scalars, scalars)
+    torch.testing.assert_close(
+        adapter(transformed_scalars, transformed_tensors), transformed
+    )
+
+
+def pytest_mace_irreps_adapter_rejects_nonleading_scalars():
+    with pytest.raises(ValueError, match="precede tensor irreps"):
+        IrrepsFeatureAdapter("1x1o + 1x0e")

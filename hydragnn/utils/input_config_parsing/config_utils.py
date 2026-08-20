@@ -180,10 +180,10 @@ def validate_equivariant_transformer_config(config):
     if config.get("global_attn_engine") != "EquivariantTransformer":
         return
     mpnn_type = config.get("mpnn_type")
-    if mpnn_type not in {"PAINN", "PNAEq", "SchNet", "DimeNet"}:
+    if mpnn_type not in {"PAINN", "PNAEq", "SchNet", "DimeNet", "MACE"}:
         raise ValueError(
             "EquivariantTransformer model integration currently supports "
-            "PAINN, PNAEq, SchNet, and DimeNet; "
+            "PAINN, PNAEq, SchNet, DimeNet, and MACE; "
             "the other adapters remain unavailable until their integration tests pass"
         )
     if config.get("global_attn_heads", 0) <= 0:
@@ -197,7 +197,7 @@ def validate_equivariant_transformer_config(config):
     if config.get("equivariant_attn_chunk_size", 512) <= 0:
         raise ValueError("equivariant_attn_chunk_size must be positive")
     if (
-        mpnn_type in {"PAINN", "PNAEq"}
+        mpnn_type in {"PAINN", "PNAEq", "MACE"}
         and not config["equivariant_attn_require_tensor_coupling"]
     ):
         raise ValueError(
@@ -217,6 +217,11 @@ def validate_equivariant_transformer_config(config):
         raise ValueError(
             "SchNet with EquivariantTransformer cannot use coordinate updates; "
             "set Architecture.equivariance=false"
+        )
+    if mpnn_type == "MACE" and config.get("num_conv_layers", 0) < 2:
+        raise ValueError(
+            "MACE with EquivariantTransformer requires at least two convolution "
+            "layers because MACE's final layer contains scalar irreps only"
         )
 
 
