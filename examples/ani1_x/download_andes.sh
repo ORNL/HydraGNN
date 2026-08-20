@@ -1,7 +1,9 @@
-export all_proxy=socks://proxy.ccs.ornl.gov:3128/
-export ftp_proxy=ftp://proxy.ccs.ornl.gov:3128/
-export http_proxy=http://proxy.ccs.ornl.gov:3128/
-export https_proxy=http://proxy.ccs.ornl.gov:3128/
-export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
-wget --user-agent="Mozilla" https://springernature.figshare.com/ndownloader/files/18112775
-mv 18112775 ani1x-release.h5
+#!/bin/bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "${script_dir}/../.." && pwd)
+output_dir="${1:-$PWD}"
+python "${repo_root}/hydragnn/utils/datasets/download.py" \
+    https://springernature.figshare.com/ndownloader/files/18112775 \
+    "${output_dir}/ani1x-release.h5"
