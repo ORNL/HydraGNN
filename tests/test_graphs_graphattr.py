@@ -94,8 +94,11 @@ def unittest_train_model_graphattr(
 
     # AllScAIP requires hidden_dim divisible by allscaip_num_heads; the unit-test
     # configs use hidden_dim=8, so override the default (8) to a value that fits.
+    # The resulting head_dim=4 has no canonical FAIR-Chem frequency spectrum,
+    # so this generic training smoke test explicitly disables frequency masking.
     if mpnn_type == "AllScAIP":
         config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 2
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = False
 
     # UMA's eSCNMDBackbone allocates large irrep blocks; clamp the
     # bookkeeping channels to keep the unit test cheap.
