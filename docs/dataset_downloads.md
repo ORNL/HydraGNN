@@ -22,3 +22,10 @@ dataset-specific URLs, filenames, selection, and post-download organization.
 Site-specific proxy configuration is left to the user's environment rather
 than embedded in repository scripts. Specialized discovery-based downloaders
 such as Alexandria and Nabla2 retain their purpose-built workflows.
+
+On OLCF systems whose compute nodes require the CCS proxy, source the optional
+facility helper before invoking any dataset downloader:
+
+```bash
+source installation_DOE_supercomputers/olcf_proxy_env.sh
+```

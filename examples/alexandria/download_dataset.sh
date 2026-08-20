@@ -1,11 +1,5 @@
 #!/bin/bash
 
-export all_proxy=socks://proxy.ccs.ornl.gov:3128/
-export ftp_proxy=ftp://proxy.ccs.ornl.gov:3128/
-export http_proxy=http://proxy.ccs.ornl.gov:3128/
-export https_proxy=http://proxy.ccs.ornl.gov:3128/
-export no_proxy='localhost,127.0.0.0/8,*.ccs.ornl.gov'
-
 # List of URLs to download from
 URLS=(
   "https://alexandria.icams.rub.de/data/pbe/2024.12.15/"
@@ -37,4 +31,3 @@ for URL in "${URLS[@]}"; do
 done
 
 echo "Download complete. All files saved to $OUTPUT_DIR."
-
