@@ -65,6 +65,7 @@ setup(
     extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph neural networks",
     license="BSD-3",
+    license_files=["LICENSE", "LICENSES/PYG-MIT.txt"],
     long_description_content_type="text/markdown",
     long_description=read("README.md"),
     url="https://github.com/ORNL/HydraGNN",

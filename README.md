@@ -159,7 +159,7 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
     - `["global_attn_engine"]`
       Accepted types: `GPS`, `None`
     - `["global_attn_type"]`
-      Accepted types: `multihead`
+      Accepted types: `multihead`, `performer`
     - `["pe_dim"]`
       Dimension of positional encodings (int)
     - `["global_attn_heads"]`
@@ -168,6 +168,40 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
     - `["enable_interatomic_potential"]`  
       Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
+
+  - `["Training"]`
+    - `["global_attn_redraw_interval"]`
+      Number of training batches between Performer random-feature projection
+      redraws (positive int, default `1000`); set to `null` to keep the initial
+      projection fixed. This setting has no effect when `global_attn_type` is
+      `multihead` or while the model is in evaluation mode.
+
+Performer approximates softmax attention with features produced from a random
+projection matrix. Periodically replacing that matrix during training prevents
+the learned model from depending on a single random approximation. HydraGNN
+counts training batches and redraws the projection immediately before the next
+model forward when the configured interval is reached. Redraw bookkeeping is
+kept outside `HydraGPSConv.forward` so that execution strategies that repeat a
+forward pass, such as activation checkpointing, do not accidentally count one
+training batch more than once. For example:
+
+```json
+{
+  "NeuralNetwork": {
+    "Architecture": {
+      "global_attn_engine": "GPS",
+      "global_attn_type": "performer"
+    },
+    "Training": {
+      "global_attn_redraw_interval": 1000
+    }
+  }
+}
+```
+
+When GPS wraps an equivariant HydraGNN model, global attention operates only
+on invariant node channels. Equivariant channels are updated by the local MPNN
+and propagated alongside the globally attended invariant representation.
 
   - `["Variables of Interest"]`
     - `["input_node_features"]`  

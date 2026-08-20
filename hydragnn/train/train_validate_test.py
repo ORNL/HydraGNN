@@ -21,6 +21,7 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
+from hydragnn.globalAtt.gps import redraw_performer_projections
 
 import os
 
@@ -358,6 +359,9 @@ def train_validate_test(
                 use_deepspeed=use_deepspeed,
                 compute_grad_energy=compute_grad_energy,
                 precision=precision,
+                performer_redraw_interval=config["Training"].get(
+                    "global_attn_redraw_interval", 1000
+                ),
             )
             tr.stop("train")
             tr.disable()
@@ -660,6 +664,7 @@ def train(
     use_deepspeed=False,
     compute_grad_energy=False,
     precision="fp32",
+    performer_redraw_interval=1000,
 ):
     if profiler is None:
         profiler = Profiler()
@@ -732,6 +737,10 @@ def train(
         tr.stop("get_head_indices")
         tr.start("forward", **syncopt)
         with record_function("forward"):
+            # Advance Performer redraw schedules once per training batch. Keep
+            # this outside model.forward(), which may be replayed by activation
+            # checkpointing and would otherwise advance the schedule twice.
+            redraw_performer_projections(model, performer_redraw_interval)
             if trace_level > 0:
                 tr.start("h2d", **syncopt)
             data = move_batch_to_device(data, param_dtype)

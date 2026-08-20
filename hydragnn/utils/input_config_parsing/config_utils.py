@@ -46,6 +46,9 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = 0
     if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
+    if "global_attn_redraw_interval" not in config["NeuralNetwork"]["Training"]:
+        # Used only by Performer attention. None disables projection redraw.
+        config["NeuralNetwork"]["Training"]["global_attn_redraw_interval"] = 1000
 
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
