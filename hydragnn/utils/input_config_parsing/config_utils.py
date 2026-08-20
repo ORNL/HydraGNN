@@ -178,9 +178,10 @@ def validate_equivariant_transformer_config(config):
     """Validate options whose meaning is specific to the equivariant engine."""
     if config.get("global_attn_engine") != "EquivariantTransformer":
         return
-    if config.get("mpnn_type") != "PAINN":
+    if config.get("mpnn_type") not in {"PAINN", "PNAEq"}:
         raise ValueError(
-            "EquivariantTransformer model integration currently supports PAINN; "
+            "EquivariantTransformer model integration currently supports "
+            "PAINN and PNAEq; "
             "the other adapters remain unavailable until their integration tests pass"
         )
     if config.get("global_attn_heads", 0) <= 0:
@@ -193,7 +194,8 @@ def validate_equivariant_transformer_config(config):
         raise ValueError("equivariant_attn_feedforward_multiplier must be positive")
     if not config["equivariant_attn_require_tensor_coupling"]:
         raise ValueError(
-            "PAINN provides vector features; tensor coupling must remain enabled"
+            f"{config['mpnn_type']} provides vector features; tensor coupling "
+            "must remain enabled"
         )
 
 

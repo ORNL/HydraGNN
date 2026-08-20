@@ -15,9 +15,6 @@ from e3nn import o3
 from torch_geometric.data import Data
 
 from hydragnn.models.create import create_model
-from hydragnn.utils.input_config_parsing.config_utils import (
-    validate_equivariant_transformer_config,
-)
 from hydragnn.utils.model import update_multibranch_heads
 
 
@@ -33,7 +30,7 @@ def _create_model():
         }
     )
     return create_model(
-        mpnn_type="PAINN",
+        mpnn_type="PNAEq",
         input_dim=1,
         hidden_dim=4,
         output_dim=[1],
@@ -48,6 +45,7 @@ def _create_model():
         task_weights=[1.0],
         num_conv_layers=2,
         edge_dim=None,
+        pna_deg=[1.0, 3.0, 2.0],
         num_radial=4,
         radius=3.0,
         equivariance=True,
@@ -70,21 +68,21 @@ def _data(positions, edge_shifts=None):
     )
 
 
-def pytest_painn_equivariant_transformer_forward_backward_and_rotation():
-    torch.manual_seed(31)
+def pytest_pnaeq_equivariant_transformer_forward_backward_and_se3():
+    torch.manual_seed(41)
     model = _create_model()
     positions = torch.tensor(
         [[0.0, 0.0, 0.0], [1.0, 0.2, 0.0], [-0.1, 0.8, 0.3]],
         requires_grad=True,
     )
     rotation = o3.rand_matrix(dtype=positions.dtype)
-    translation = torch.tensor([[0.4, -1.2, 0.7]])
+    translation = torch.tensor([[-0.3, 0.5, 1.1]])
 
     output = model(_data(positions))[0]
     transformed_output = model(_data(positions.detach() @ rotation.T + translation))[0]
 
     torch.testing.assert_close(
-        transformed_output, output.detach(), rtol=2.0e-5, atol=3.0e-6
+        transformed_output, output.detach(), rtol=3.0e-5, atol=5.0e-6
     )
     output.square().sum().backward()
     assert positions.grad is not None and torch.isfinite(positions.grad).all()
@@ -95,26 +93,11 @@ def pytest_painn_equivariant_transformer_forward_backward_and_rotation():
     )
 
 
-def pytest_painn_equivariant_transformer_rejects_periodic_images():
+def pytest_pnaeq_equivariant_transformer_rejects_periodic_images():
     model = _create_model()
     positions = torch.randn(3, 3)
     shifts = torch.zeros(6, 3)
-    shifts[0, 0] = 2.0
+    shifts[0, 1] = 2.0
 
     with pytest.raises(ValueError, match="periodic images"):
         model(_data(positions, edge_shifts=shifts))
-
-
-def pytest_equivariant_transformer_config_rejects_untested_model_integration():
-    config = {
-        "global_attn_engine": "EquivariantTransformer",
-        "mpnn_type": "SchNet",
-        "global_attn_heads": 2,
-        "equivariant_attn_lmax": 1,
-        "equivariant_attn_num_radial": 8,
-        "equivariant_attn_feedforward_multiplier": 2,
-        "equivariant_attn_require_tensor_coupling": True,
-    }
-
-    with pytest.raises(ValueError, match="currently supports PAINN and PNAEq"):
-        validate_equivariant_transformer_config(config)

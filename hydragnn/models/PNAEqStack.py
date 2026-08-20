@@ -55,7 +55,7 @@ class PNAEqStack(Base):
         *args,
         **kwargs,
     ):
-
+        self.equivariant_attn_adapter_type = "PNAEq"
         self.x_aggregators = ["mean", "min", "max", "std"]
         self.x_scalers = [
             "identity",
@@ -212,6 +212,24 @@ class PNAEqStack(Base):
             "edge_vec": norm_edge_vec,
         }
 
+        if self.global_attn_engine == "EquivariantTransformer":
+            if torch.any(data.edge_shifts != 0):
+                raise ValueError(
+                    "EquivariantTransformer does not yet support periodic images"
+                )
+            conv_args.update(
+                {
+                    "positions": data.pos,
+                    "graph_batch": (
+                        data.batch
+                        if data.batch is not None
+                        else torch.zeros(
+                            data.pos.shape[0], dtype=torch.long, device=data.pos.device
+                        )
+                    ),
+                }
+            )
+
         if self.use_edge_attr:
             assert (
                 data.edge_attr is not None
@@ -219,14 +237,20 @@ class PNAEqStack(Base):
             conv_args.update({"edge_attr": data.edge_attr})
 
         if self.use_global_attn:
-            # encode node positional embeddings
-            x = self.pos_emb(data.pe)
-            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
-            if self.input_dim:
-                x = torch.cat((self.node_emb(data.x.float()), x), 1)
-                x = self.node_lin(x)
-            # repeat for edge features and relative edge encodings
-            if self.is_edge_model:
+            if self.global_attn_engine == "EquivariantTransformer":
+                if not self.input_dim:
+                    raise ValueError(
+                        "EquivariantTransformer requires invariant node features"
+                    )
+                x = self.node_emb(data.x.float())
+            else:
+                # GPS combines learned node and positional encodings.
+                x = self.pos_emb(data.pe)
+                if self.input_dim:
+                    x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                    x = self.node_lin(x)
+
+            if self.is_edge_model and self.global_attn_engine == "GPS":
                 e = self.rel_pos_emb(data.rel_pe)
                 if self.use_edge_attr:
                     e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)
