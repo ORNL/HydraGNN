@@ -420,6 +420,15 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_lmax=equivariant_attn_lmax,
+            equivariant_attn_num_radial=equivariant_attn_num_radial,
+            equivariant_attn_feedforward_multiplier=(
+                equivariant_attn_feedforward_multiplier
+            ),
+            equivariant_attn_allow_scalar_only=equivariant_attn_allow_scalar_only,
+            equivariant_attn_require_tensor_coupling=(
+                equivariant_attn_require_tensor_coupling
+            ),
         )
 
     elif mpnn_type == "DimeNet":
@@ -468,6 +477,15 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_lmax=equivariant_attn_lmax,
+            equivariant_attn_num_radial=equivariant_attn_num_radial,
+            equivariant_attn_feedforward_multiplier=(
+                equivariant_attn_feedforward_multiplier
+            ),
+            equivariant_attn_allow_scalar_only=equivariant_attn_allow_scalar_only,
+            equivariant_attn_require_tensor_coupling=(
+                equivariant_attn_require_tensor_coupling
+            ),
         )
 
     elif mpnn_type == "EGNN":

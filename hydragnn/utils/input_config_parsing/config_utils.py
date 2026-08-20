@@ -178,10 +178,11 @@ def validate_equivariant_transformer_config(config):
     """Validate options whose meaning is specific to the equivariant engine."""
     if config.get("global_attn_engine") != "EquivariantTransformer":
         return
-    if config.get("mpnn_type") not in {"PAINN", "PNAEq"}:
+    mpnn_type = config.get("mpnn_type")
+    if mpnn_type not in {"PAINN", "PNAEq", "SchNet", "DimeNet"}:
         raise ValueError(
             "EquivariantTransformer model integration currently supports "
-            "PAINN and PNAEq; "
+            "PAINN, PNAEq, SchNet, and DimeNet; "
             "the other adapters remain unavailable until their integration tests pass"
         )
     if config.get("global_attn_heads", 0) <= 0:
@@ -192,10 +193,27 @@ def validate_equivariant_transformer_config(config):
         raise ValueError("equivariant_attn_num_radial must be positive")
     if config["equivariant_attn_feedforward_multiplier"] <= 0:
         raise ValueError("equivariant_attn_feedforward_multiplier must be positive")
-    if not config["equivariant_attn_require_tensor_coupling"]:
+    if (
+        mpnn_type in {"PAINN", "PNAEq"}
+        and not config["equivariant_attn_require_tensor_coupling"]
+    ):
         raise ValueError(
-            f"{config['mpnn_type']} provides vector features; tensor coupling "
+            f"{mpnn_type} provides vector features; tensor coupling "
             "must remain enabled"
+        )
+    if mpnn_type in {"SchNet", "DimeNet"}:
+        if config["equivariant_attn_require_tensor_coupling"]:
+            raise ValueError(
+                f"{mpnn_type} cannot provide tensor-valued local/global coupling"
+            )
+        if not config["equivariant_attn_allow_scalar_only"]:
+            raise ValueError(
+                f"{mpnn_type} requires equivariant_attn_allow_scalar_only=true"
+            )
+    if mpnn_type == "SchNet" and config.get("equivariance"):
+        raise ValueError(
+            "SchNet with EquivariantTransformer cannot use coordinate updates; "
+            "set Architecture.equivariance=false"
         )
 
 
