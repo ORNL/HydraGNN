@@ -13,7 +13,10 @@ import pytest
 import torch
 from torch_geometric.data import Data
 
-from hydragnn.preprocess.batch_sampler import CostAwareBatchSampler
+from hydragnn.preprocess.batch_sampler import (
+    CostAwareBatchSampler,
+    DistributedCostAwareBatchSampler,
+)
 from hydragnn.preprocess.load_data import create_dataloaders
 
 
@@ -93,3 +96,54 @@ def pytest_node_budget_configuration_builds_variable_graph_batches():
         [2, 5],
         [2, 5],
     ]
+
+
+def pytest_distributed_sampler_has_equal_steps_and_complete_step_assignment():
+    dataset = _dataset([1, 2, 3, 4, 5, 6, 7, 8, 9])
+    samplers = [
+        DistributedCostAwareBatchSampler(
+            dataset,
+            10,
+            num_replicas=3,
+            rank=rank,
+            shuffle=False,
+        )
+        for rank in range(3)
+    ]
+    rank_batches = [list(sampler) for sampler in samplers]
+
+    assert len({len(batches) for batches in rank_batches}) == 1
+    for step in range(len(rank_batches[0])):
+        step_batches = [rank_batches[rank][step] for rank in range(3)]
+        assert len({tuple(batch) for batch in step_batches}) == 3
+
+
+def pytest_distributed_sampler_groups_similar_costs_per_step():
+    dataset = _dataset([1, 2, 3, 4, 5, 6, 7, 8])
+    samplers = [
+        DistributedCostAwareBatchSampler(
+            dataset,
+            8,
+            num_replicas=2,
+            rank=rank,
+            shuffle=False,
+        )
+        for rank in range(2)
+    ]
+    rank_batches = [list(sampler) for sampler in samplers]
+
+    for left, right in zip(*rank_batches):
+        left_cost = sum(samplers[0].costs[index] for index in left)
+        right_cost = sum(samplers[1].costs[index] for index in right)
+        assert abs(left_cost - right_cost) <= 2
+
+
+def pytest_distributed_sampler_epoch_shuffle_is_reproducible():
+    dataset = _dataset([1] * 20)
+    first = DistributedCostAwareBatchSampler(dataset, 3, num_replicas=2, rank=0, seed=9)
+    second = DistributedCostAwareBatchSampler(
+        dataset, 3, num_replicas=2, rank=0, seed=9
+    )
+    first.set_epoch(4)
+    second.set_epoch(4)
+    assert list(first) == list(second)

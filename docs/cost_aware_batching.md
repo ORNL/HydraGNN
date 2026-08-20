@@ -34,6 +34,9 @@ Shuffling is reproducible from `seed + epoch`. The core sampler also accepts
 precomputed costs, allowing dataset implementations to avoid loading every
 sample merely to determine its size.
 
-The initial implementation supports single-process loading. Distributed
-cost-aware allocation will be added separately; enabling `node_budget` after a
-distributed process group is initialized raises an explicit error.
+In distributed training, all ranks construct the same cost-bounded batches.
+HydraGNN groups similarly sized batches into distributed steps, assigns one to
+each rank, and rotates rank assignments to avoid repeatedly giving the largest
+batch to the same rank. Batches are padded by repetition so every rank executes
+the same number of optimizer steps. Setting `drop_last` discards the incomplete
+final distributed step instead.

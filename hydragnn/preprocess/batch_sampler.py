@@ -168,3 +168,78 @@ class CostAwareBatchSampler(Sampler[list[int]]):
             max_cost=max(totals, default=0),
             mean_cost=math.fsum(totals) / len(totals) if totals else 0.0,
         )
+
+
+class DistributedCostAwareBatchSampler(CostAwareBatchSampler):
+    """Distribute cost-bounded batches with equal steps on every rank.
+
+    Complete batches are created identically on every rank. They are ordered by
+    cost and grouped into distributed steps so batches executed concurrently
+    have similar estimated costs. Step order and the rank-to-batch mapping are
+    shuffled deterministically each epoch.
+    """
+
+    def __init__(
+        self,
+        dataset,
+        max_cost: int,
+        *,
+        num_replicas: int,
+        rank: int,
+        pad_batches: bool = True,
+        **kwargs,
+    ) -> None:
+        if num_replicas <= 0:
+            raise ValueError("num_replicas must be positive")
+        if rank < 0 or rank >= num_replicas:
+            raise ValueError("rank must be in [0, num_replicas)")
+        self.num_replicas = int(num_replicas)
+        self.rank = int(rank)
+        self.pad_batches = pad_batches
+        super().__init__(dataset, max_cost, **kwargs)
+
+    def _distributed_batches(self) -> list[list[int]]:
+        batches, _ = self._batches()
+        if not batches:
+            return []
+
+        remainder = len(batches) % self.num_replicas
+        if remainder:
+            if self.pad_batches:
+                needed = self.num_replicas - remainder
+                batches.extend(batches[index % len(batches)] for index in range(needed))
+            else:
+                batches = batches[: len(batches) - remainder]
+        if not batches:
+            return []
+
+        def batch_cost(batch):
+            return sum(self.costs[index] for index in batch)
+
+        batches.sort(key=batch_cost)
+        steps = [
+            batches[start : start + self.num_replicas]
+            for start in range(0, len(batches), self.num_replicas)
+        ]
+
+        if self.shuffle:
+            generator = torch.Generator().manual_seed(self.seed + self.epoch)
+            step_order = torch.randperm(len(steps), generator=generator).tolist()
+            steps = [steps[index] for index in step_order]
+
+        local_batches = []
+        for step, candidates in enumerate(steps):
+            # Rotation prevents one rank from consistently receiving the most
+            # expensive member of each similarly sized group.
+            local_index = (self.rank + step) % self.num_replicas
+            local_batches.append(candidates[local_index])
+        return local_batches
+
+    def __iter__(self) -> Iterator[list[int]]:
+        return iter(self._distributed_batches())
+
+    def __len__(self) -> int:
+        batches, _ = self._batches()
+        if self.pad_batches:
+            return math.ceil(len(batches) / self.num_replicas)
+        return len(batches) // self.num_replicas
