@@ -109,6 +109,9 @@ def create_model_config(
         equivariant_attn_require_tensor_coupling=config["Architecture"].get(
             "equivariant_attn_require_tensor_coupling", True
         ),
+        equivariant_attn_chunk_size=config["Architecture"].get(
+            "equivariant_attn_chunk_size", 512
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -174,6 +177,7 @@ def create_model(
     equivariant_attn_feedforward_multiplier: int = 2,
     equivariant_attn_allow_scalar_only: bool = False,
     equivariant_attn_require_tensor_coupling: bool = True,
+    equivariant_attn_chunk_size: int | None = 512,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -429,6 +433,7 @@ def create_model(
             equivariant_attn_require_tensor_coupling=(
                 equivariant_attn_require_tensor_coupling
             ),
+            equivariant_attn_chunk_size=equivariant_attn_chunk_size,
         )
 
     elif mpnn_type == "DimeNet":
@@ -486,6 +491,7 @@ def create_model(
             equivariant_attn_require_tensor_coupling=(
                 equivariant_attn_require_tensor_coupling
             ),
+            equivariant_attn_chunk_size=equivariant_attn_chunk_size,
         )
 
     elif mpnn_type == "EGNN":
@@ -552,6 +558,7 @@ def create_model(
             equivariant_attn_require_tensor_coupling=(
                 equivariant_attn_require_tensor_coupling
             ),
+            equivariant_attn_chunk_size=equivariant_attn_chunk_size,
         )
 
     elif mpnn_type == "PNAEq":
@@ -591,6 +598,7 @@ def create_model(
             equivariant_attn_require_tensor_coupling=(
                 equivariant_attn_require_tensor_coupling
             ),
+            equivariant_attn_chunk_size=equivariant_attn_chunk_size,
         )
 
     elif mpnn_type == "MACE":

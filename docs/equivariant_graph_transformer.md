@@ -71,9 +71,12 @@ all-to-all attention requires an explicit image convention or a lattice-aware
 long-range formulation; silently applying a minimum-image displacement is not
 equivalent to an infinite periodic interaction.
 
-The reference implementation may materialize the complete edge set for
-correctness tests. The production path must support query chunking so memory
-does not require storing every pairwise message simultaneously.
+The dense reference path materializes the complete edge set for correctness
+tests. Production execution chunks target nodes and constructs only the pairs
+needed by the current target chunk. Every target still attends to every source
+in its graph in one softmax; chunks never split a target's source set. Thus
+chunking bounds pair-message memory without approximating or truncating
+attention. Dense/chunked output and gradient parity are regression-tested.
 
 ## Configuration
 

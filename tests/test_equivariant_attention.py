@@ -9,6 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
+
 import torch
 from e3nn import o3
 
@@ -108,3 +110,58 @@ def pytest_equivariant_attention_supports_backward_propagation():
     assert torch.isfinite(features.grad).all()
     assert torch.isfinite(positions.grad).all()
     assert all(parameter.grad is not None for parameter in module.parameters())
+
+
+def pytest_chunked_attention_matches_dense_outputs_and_gradients():
+    torch.manual_seed(15)
+    irreps = o3.Irreps("2x0e + 2x1o")
+    dense_module = EquivariantAllToAllAttention(
+        irreps, heads=2, lmax=1, num_radial=5
+    ).double()
+    chunked_module = copy.deepcopy(dense_module)
+    batch = torch.tensor([0, 0, 0, 0, 1, 1, 1])
+    dense_features = torch.randn(7, irreps.dim, dtype=torch.float64, requires_grad=True)
+    dense_positions = torch.randn(7, 3, dtype=torch.float64, requires_grad=True)
+    chunked_features = dense_features.detach().clone().requires_grad_()
+    chunked_positions = dense_positions.detach().clone().requires_grad_()
+    probe = torch.randn(7, irreps.dim, dtype=torch.float64)
+
+    dense_output = dense_module(
+        dense_features,
+        dense_positions,
+        complete_graph_edge_index(batch),
+    )
+    chunked_output = chunked_module.forward_chunked(
+        chunked_features, chunked_positions, batch, chunk_size=2
+    )
+    (dense_output * probe).sum().backward()
+    (chunked_output * probe).sum().backward()
+
+    torch.testing.assert_close(chunked_output, dense_output)
+    torch.testing.assert_close(chunked_features.grad, dense_features.grad)
+    torch.testing.assert_close(chunked_positions.grad, dense_positions.grad)
+    for (dense_name, dense_parameter), (chunked_name, chunked_parameter) in zip(
+        dense_module.named_parameters(), chunked_module.named_parameters()
+    ):
+        assert dense_name == chunked_name
+        if dense_parameter.grad is None:
+            assert chunked_parameter.grad is None
+        else:
+            torch.testing.assert_close(
+                chunked_parameter.grad, dense_parameter.grad, rtol=1.0e-10, atol=1.0e-12
+            )
+
+
+def pytest_chunked_attention_handles_interleaved_and_singleton_graphs():
+    torch.manual_seed(16)
+    irreps = o3.Irreps("1x0e + 1x1o")
+    module = EquivariantAllToAllAttention(irreps, heads=1).double()
+    features = torch.randn(6, irreps.dim, dtype=torch.float64)
+    positions = torch.randn(6, 3, dtype=torch.float64)
+    batch = torch.tensor([2, 7, 2, 9, 7, 2])
+
+    dense = module(features, positions, complete_graph_edge_index(batch))
+    chunked = module.forward_chunked(features, positions, batch, chunk_size=1)
+
+    torch.testing.assert_close(chunked, dense)
+    assert torch.equal(chunked[3], torch.zeros_like(chunked[3]))

@@ -67,6 +67,7 @@ class Base(Module):
         equivariant_attn_feedforward_multiplier: int = 2,
         equivariant_attn_allow_scalar_only: bool = False,
         equivariant_attn_require_tensor_coupling: bool = True,
+        equivariant_attn_chunk_size: int | None = 512,
     ):
         super().__init__()
         self.device = get_device()
@@ -89,6 +90,7 @@ class Base(Module):
         self.equivariant_attn_require_tensor_coupling = (
             equivariant_attn_require_tensor_coupling
         )
+        self.equivariant_attn_chunk_size = equivariant_attn_chunk_size
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -290,6 +292,7 @@ class Base(Module):
                         self.equivariant_attn_require_tensor_coupling
                     ),
                     local_equivariance=self.equivariance,
+                    chunk_size=self.equivariant_attn_chunk_size,
                 )
             raise ValueError(
                 f"Unknown global attention engine: {self.global_attn_engine}"

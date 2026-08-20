@@ -35,6 +35,7 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         allow_scalar_only: bool,
         require_tensor_coupling: bool,
         local_equivariance: bool,
+        chunk_size: int | None,
     ):
         super().__init__()
         self.conv = conv
@@ -52,6 +53,7 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
             num_radial=num_radial,
             feedforward_multiplier=feedforward_multiplier,
             require_tensor_coupling=require_tensor_coupling,
+            chunk_size=chunk_size,
         )
 
     def forward(

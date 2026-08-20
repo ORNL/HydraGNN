@@ -62,6 +62,7 @@ class EquivariantTransformerLayer(torch.nn.Module):
         num_radial: int = 16,
         feedforward_multiplier: int = 2,
         require_tensor_coupling: bool = True,
+        chunk_size: int | None = None,
     ):
         super().__init__()
         self.irreps = o3.Irreps(irreps)
@@ -78,6 +79,13 @@ class EquivariantTransformerLayer(torch.nn.Module):
             or feedforward_multiplier <= 0
         ):
             raise ValueError("feedforward_multiplier must be a positive integer")
+        if chunk_size is not None and (
+            not isinstance(chunk_size, int)
+            or isinstance(chunk_size, bool)
+            or chunk_size <= 0
+        ):
+            raise ValueError("chunk_size must be a positive integer or None")
+        self.chunk_size = chunk_size
 
         hidden_irreps = o3.Irreps(
             [
@@ -120,7 +128,8 @@ class EquivariantTransformerLayer(torch.nn.Module):
         if batch.device != node_features.device:
             raise ValueError("batch and node features must share a device")
         if edge_index is None:
-            edge_index = complete_graph_edge_index(batch)
+            if self.chunk_size is None:
+                edge_index = complete_graph_edge_index(batch)
         elif edge_index.ndim == 2 and edge_index.shape[0] == 2:
             if edge_index.dtype != torch.long:
                 raise TypeError("edge_index must have dtype torch.long")
@@ -137,7 +146,12 @@ class EquivariantTransformerLayer(torch.nn.Module):
             if edge_index.numel() and torch.any(batch[source] != batch[target]):
                 raise ValueError("edge_index must not contain cross-graph pairs")
 
-        node_features = node_features + self.attention(
-            self.attention_norm(node_features), positions, edge_index
-        )
+        normalized = self.attention_norm(node_features)
+        if edge_index is None:
+            attention_output = self.attention.forward_chunked(
+                normalized, positions, batch, self.chunk_size
+            )
+        else:
+            attention_output = self.attention(normalized, positions, edge_index)
+        node_features = node_features + attention_output
         return node_features + self.feedforward(self.feedforward_norm(node_features))
