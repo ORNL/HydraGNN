@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         id: cache
         with:
-          path: ${{ env.pythonLocation }}
+          path: ~/.cache/pip
           key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-specific-models.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
       - name: Install dependencies
         run: |
