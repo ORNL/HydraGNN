@@ -233,6 +233,25 @@ def pytest_graphgps_performer_projection_redraw_is_step_based(monkeypatch):
     assert redraw_count == 1
 
 
+def pytest_graphgps_reset_restarts_performer_redraw_schedule(monkeypatch):
+    layer = HydraGPSConv(8, conv=None, heads=2, attn_type="performer").train()
+    redraw_count = 0
+
+    def count_redraw():
+        nonlocal redraw_count
+        redraw_count += 1
+
+    monkeypatch.setattr(layer.attn, "redraw_projection_matrix", count_redraw)
+
+    assert redraw_performer_projections(layer, redraw_interval=2) == 0
+    layer.reset_parameters()
+    redraws_after_reset = redraw_count
+    assert redraw_performer_projections(layer, redraw_interval=2) == 0
+    assert redraw_count == redraws_after_reset
+    assert redraw_performer_projections(layer, redraw_interval=2) == 1
+    assert redraw_count == redraws_after_reset + 1
+
+
 def pytest_graphgps_performer_projection_redraw_handles_multiple_layers(monkeypatch):
     layers = torch.nn.ModuleList(
         [

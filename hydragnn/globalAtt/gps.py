@@ -140,6 +140,7 @@ class HydraGPSConv(torch.nn.Module):
 
     def reset_parameters(self):
         r"""Resets all learnable parameters of the module."""
+        self._performer_steps_since_redraw = 0
         if self.conv is not None:
             self.conv.reset_parameters()
         self.attn._reset_parameters()
