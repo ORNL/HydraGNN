@@ -60,6 +60,14 @@ def update_config(config, train_loader, val_loader, test_loader):
     architecture.setdefault("equivariant_attn_coupling_mode", "parallel")
     validate_equivariant_transformer_config(architecture)
 
+    batching = config["NeuralNetwork"]["Training"].get("Batching")
+    if batching is not None:
+        mode = batching.get("mode", "fixed")
+        if mode not in {"fixed", "node_budget"}:
+            raise ValueError(f"unsupported batching mode: {mode}")
+        if mode == "node_budget" and "max_nodes" not in batching:
+            raise ValueError("node_budget batching requires max_nodes")
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
