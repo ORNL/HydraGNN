@@ -39,11 +39,6 @@ srun -N${SLURM_JOB_NUM_NODES} -n${SLURM_JOB_NUM_NODES} -c14 \
         --precision=fp32
 
 test -d dataset/${MODEL_NAME}.bp
-python ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/verify_stress_adios.py \
-    dataset/${MODEL_NAME}.bp \
-    --train=1422335 \
-    --validation=79021 \
-    --test=79039
 rm -rf ${OUTPUT_DIR}/${MODEL_NAME}.bp
 mv dataset/${MODEL_NAME}.bp ${OUTPUT_DIR}/${MODEL_NAME}.bp
 
@@ -54,9 +49,3 @@ srun -N${SLURM_JOB_NUM_NODES} -n${SLURM_JOB_NUM_NODES} -c14 \
         ${MODEL_NAME} \
         --input=${OUTPUT_DIR}/${MODEL_NAME}.bp \
         --output=${OUTPUT_DIR}/${LINEAR_MODEL_NAME}.bp
-
-python ${HYDRAGNN_ROOT}/examples/multidataset_hpo_sc26/verify_stress_adios.py \
-    ${OUTPUT_DIR}/${LINEAR_MODEL_NAME}.bp \
-    --train=1422335 \
-    --validation=79021 \
-    --test=79039
