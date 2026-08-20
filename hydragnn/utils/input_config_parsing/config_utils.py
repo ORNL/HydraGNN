@@ -195,8 +195,16 @@ def validate_equivariant_transformer_config(config):
         raise ValueError("equivariant_attn_num_radial must be positive")
     if config["equivariant_attn_feedforward_multiplier"] <= 0:
         raise ValueError("equivariant_attn_feedforward_multiplier must be positive")
-    if config.get("equivariant_attn_chunk_size", 512) <= 0:
-        raise ValueError("equivariant_attn_chunk_size must be positive")
+    chunk_size = config.get("equivariant_attn_chunk_size", 512)
+    if chunk_size is not None:
+        if (
+            not isinstance(chunk_size, int)
+            or isinstance(chunk_size, bool)
+            or chunk_size <= 0
+        ):
+            raise ValueError(
+                "equivariant_attn_chunk_size must be a positive integer or null"
+            )
     if config.get("equivariant_attn_coupling_mode", "parallel") not in {
         "parallel",
         "sequential",
