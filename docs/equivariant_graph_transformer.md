@@ -11,6 +11,12 @@ This is a new HydraGNN architecture. It is not EquiformerV2, whose attention is
 restricted to a local neighbor graph, and it is not AllScAIP, whose rotational
 equivariance is learned rather than encoded with irreducible tensors.
 
+The current end-to-end model integration is enabled only for PaiNN. PNAEq,
+SchNet, and DimeNet have representation adapters, but model construction keeps
+them disabled until each path has its own full-model symmetry and gradient
+tests. This distinction prevents an adapter-level test from being mistaken for
+a supported training configuration.
+
 ## Equivariance contract
 
 Node features are represented as e3nn irreducible representations (irreps).

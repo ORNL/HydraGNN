@@ -96,6 +96,19 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
+        equivariant_attn_num_radial=config["Architecture"].get(
+            "equivariant_attn_num_radial", 16
+        ),
+        equivariant_attn_feedforward_multiplier=config["Architecture"].get(
+            "equivariant_attn_feedforward_multiplier", 2
+        ),
+        equivariant_attn_allow_scalar_only=config["Architecture"].get(
+            "equivariant_attn_allow_scalar_only", False
+        ),
+        equivariant_attn_require_tensor_coupling=config["Architecture"].get(
+            "equivariant_attn_require_tensor_coupling", True
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -156,6 +169,11 @@ def create_model(
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    equivariant_attn_lmax: int = 1,
+    equivariant_attn_num_radial: int = 16,
+    equivariant_attn_feedforward_multiplier: int = 2,
+    equivariant_attn_allow_scalar_only: bool = False,
+    equivariant_attn_require_tensor_coupling: bool = True,
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
@@ -507,6 +525,15 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_lmax=equivariant_attn_lmax,
+            equivariant_attn_num_radial=equivariant_attn_num_radial,
+            equivariant_attn_feedforward_multiplier=(
+                equivariant_attn_feedforward_multiplier
+            ),
+            equivariant_attn_allow_scalar_only=equivariant_attn_allow_scalar_only,
+            equivariant_attn_require_tensor_coupling=(
+                equivariant_attn_require_tensor_coupling
+            ),
         )
 
     elif mpnn_type == "PNAEq":

@@ -50,6 +50,14 @@ def update_config(config, train_loader, val_loader, test_loader):
         # Used only by Performer attention. None disables projection redraw.
         config["NeuralNetwork"]["Training"]["global_attn_redraw_interval"] = 1000
 
+    architecture = config["NeuralNetwork"]["Architecture"]
+    architecture.setdefault("equivariant_attn_lmax", 1)
+    architecture.setdefault("equivariant_attn_num_radial", 16)
+    architecture.setdefault("equivariant_attn_feedforward_multiplier", 2)
+    architecture.setdefault("equivariant_attn_allow_scalar_only", False)
+    architecture.setdefault("equivariant_attn_require_tensor_coupling", True)
+    validate_equivariant_transformer_config(architecture)
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
@@ -164,6 +172,29 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Training"]["precision"] = "fp32"
 
     return config
+
+
+def validate_equivariant_transformer_config(config):
+    """Validate options whose meaning is specific to the equivariant engine."""
+    if config.get("global_attn_engine") != "EquivariantTransformer":
+        return
+    if config.get("mpnn_type") != "PAINN":
+        raise ValueError(
+            "EquivariantTransformer model integration currently supports PAINN; "
+            "the other adapters remain unavailable until their integration tests pass"
+        )
+    if config.get("global_attn_heads", 0) <= 0:
+        raise ValueError("EquivariantTransformer requires global_attn_heads > 0")
+    if config["equivariant_attn_lmax"] < 0:
+        raise ValueError("equivariant_attn_lmax must be nonnegative")
+    if config["equivariant_attn_num_radial"] <= 0:
+        raise ValueError("equivariant_attn_num_radial must be positive")
+    if config["equivariant_attn_feedforward_multiplier"] <= 0:
+        raise ValueError("equivariant_attn_feedforward_multiplier must be positive")
+    if not config["equivariant_attn_require_tensor_coupling"]:
+        raise ValueError(
+            "PAINN provides vector features; tensor coupling must remain enabled"
+        )
 
 
 def update_config_equivariance(config):

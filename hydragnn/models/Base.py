@@ -28,6 +28,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import HydraGPSConv
+from hydragnn.globalAtt.equivariant_local_global import EquivariantLocalGlobalConv
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
@@ -61,6 +62,11 @@ class Base(Module):
         graph_pooling: str = "mean",
         use_graph_attr_conditioning: bool = False,
         graph_attr_conditioning_mode: str = "concat_node",
+        equivariant_attn_lmax: int = 1,
+        equivariant_attn_num_radial: int = 16,
+        equivariant_attn_feedforward_multiplier: int = 2,
+        equivariant_attn_allow_scalar_only: bool = False,
+        equivariant_attn_require_tensor_coupling: bool = True,
     ):
         super().__init__()
         self.device = get_device()
@@ -74,6 +80,15 @@ class Base(Module):
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.global_attn_dropout = dropout
+        self.equivariant_attn_lmax = equivariant_attn_lmax
+        self.equivariant_attn_num_radial = equivariant_attn_num_radial
+        self.equivariant_attn_feedforward_multiplier = (
+            equivariant_attn_feedforward_multiplier
+        )
+        self.equivariant_attn_allow_scalar_only = equivariant_attn_allow_scalar_only
+        self.equivariant_attn_require_tensor_coupling = (
+            equivariant_attn_require_tensor_coupling
+        )
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -178,10 +193,17 @@ class Base(Module):
         # if model can handle edge features, enforce use of relative edge encodings
         if self.global_attn_engine:
             self.use_global_attn = True
-            self.embed_dim = self.edge_embed_dim = (
-                hidden_dim  # ensure that all input to gps have the same dimensionality
+            self.embed_dim = hidden_dim
+            self.edge_embed_dim = (
+                hidden_dim
+                if self.global_attn_engine == "GPS"
+                else (
+                    self.edge_dim
+                    if hasattr(self, "edge_dim") and self.edge_dim is not None
+                    else None
+                )
             )
-            if self.is_edge_model:
+            if self.is_edge_model and self.global_attn_engine == "GPS":
                 if "edge_attr" not in self.input_args:
                     self.input_args += ", edge_attr"
                 if "edge_attr" not in self.conv_args:
@@ -202,11 +224,15 @@ class Base(Module):
 
         # Specify learnable embeddings
         if self.use_global_attn or self.use_encodings:
-            self.pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False)
+            if self.global_attn_engine == "GPS":
+                self.pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False)
             if self.input_dim:
                 self.node_emb = Linear(self.input_dim, self.hidden_dim, bias=False)
-                self.node_lin = Linear(2 * self.hidden_dim, self.hidden_dim, bias=False)
-            if self.is_edge_model:
+                if self.global_attn_engine == "GPS":
+                    self.node_lin = Linear(
+                        2 * self.hidden_dim, self.hidden_dim, bias=False
+                    )
+            if self.is_edge_model and self.global_attn_engine == "GPS":
                 self.rel_pos_emb = Linear(self.pe_dim, self.hidden_dim, bias=False)
                 if self.use_edge_attr:
                     self.edge_emb = Linear(self.edge_dim, self.hidden_dim, bias=False)
@@ -243,6 +269,31 @@ class Base(Module):
                     dropout=self.global_attn_dropout,
                     attn_type=self.global_attn_type,
                 )
+            if self.global_attn_engine == "EquivariantTransformer":
+                if not hasattr(self, "equivariant_attn_adapter_type"):
+                    raise ValueError(
+                        f"{self.__class__.__name__} does not yet support "
+                        "EquivariantTransformer"
+                    )
+                return EquivariantLocalGlobalConv(
+                    channels=self.hidden_dim,
+                    conv=mpnn,
+                    mpnn_type=self.equivariant_attn_adapter_type,
+                    heads=self.global_attn_heads,
+                    lmax=self.equivariant_attn_lmax,
+                    num_radial=self.equivariant_attn_num_radial,
+                    feedforward_multiplier=(
+                        self.equivariant_attn_feedforward_multiplier
+                    ),
+                    allow_scalar_only=self.equivariant_attn_allow_scalar_only,
+                    require_tensor_coupling=(
+                        self.equivariant_attn_require_tensor_coupling
+                    ),
+                    local_equivariance=self.equivariance,
+                )
+            raise ValueError(
+                f"Unknown global attention engine: {self.global_attn_engine}"
+            )
         else:
             return mpnn
 
@@ -475,6 +526,12 @@ class Base(Module):
             conv_args.update({"edge_attr": data.edge_attr})
 
         if self.use_global_attn:
+            if self.global_attn_engine == "EquivariantTransformer":
+                if not self.input_dim:
+                    raise ValueError(
+                        "EquivariantTransformer requires invariant node features"
+                    )
+                return self.node_emb(data.x.float()), data.pos, conv_args
             # encode node positional embeddings
             x = self.pos_emb(data.pe)
             # if node features are available, generate mebeddings, concatenate with positional embeddings and map to hidden dim
