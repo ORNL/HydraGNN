@@ -65,6 +65,7 @@ def download_file(
             shutil.copyfileobj(response, output, length=chunk_size)
 
     if sha256 is not None and _sha256(partial, chunk_size) != sha256.lower():
+        partial.unlink()
         raise ValueError(f"SHA-256 mismatch for downloaded file: {destination}")
     partial.replace(destination)
     return destination
@@ -79,9 +80,8 @@ def safe_extract_tar(
     destination.mkdir(parents=True, exist_ok=True)
     root = destination.resolve()
 
-    with tarfile.open(archive, "r:*") as tar:
-        members = tar.getmembers()
-        for member in members:
+    with tarfile.open(archive, "r|*") as tar:
+        for member in tar:
             target = (destination / member.name).resolve()
             if target != root and root not in target.parents:
                 raise ValueError(f"unsafe archive path: {member.name}")
@@ -89,7 +89,7 @@ def safe_extract_tar(
                 raise ValueError(f"archive links are not allowed: {member.name}")
             if not (member.isfile() or member.isdir()):
                 raise ValueError(f"unsupported archive entry: {member.name}")
-        tar.extractall(destination, members=members)
+            tar.extract(member, path=destination)
     return destination
 
 

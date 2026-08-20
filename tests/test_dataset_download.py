@@ -95,6 +95,25 @@ def pytest_download_file_rejects_existing_directory(monkeypatch, tmp_path):
         download_file("https://example.invalid/dataset.bin", destination)
 
 
+def pytest_download_file_removes_partial_after_checksum_mismatch(monkeypatch, tmp_path):
+    destination = tmp_path / "dataset.bin"
+    partial = tmp_path / "dataset.bin.part"
+    monkeypatch.setattr(
+        "hydragnn.utils.datasets.download.urlopen",
+        lambda request: _Response(b"corrupted", status=200),
+    )
+
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        download_file(
+            "https://example.invalid/dataset.bin",
+            destination,
+            sha256=hashlib.sha256(b"expected").hexdigest(),
+        )
+
+    assert not partial.exists()
+    assert not destination.exists()
+
+
 def _write_tar(path: Path, member_name: str, data: bytes = b"data"):
     with tarfile.open(path, "w:gz") as tar:
         info = tarfile.TarInfo(member_name)
@@ -102,9 +121,14 @@ def _write_tar(path: Path, member_name: str, data: bytes = b"data"):
         tar.addfile(info, io.BytesIO(data))
 
 
-def pytest_safe_extract_tar_extracts_regular_files(tmp_path):
+def pytest_safe_extract_tar_streams_regular_files(monkeypatch, tmp_path):
     archive = tmp_path / "dataset.tar.gz"
     _write_tar(archive, "split/sample.txt")
+    monkeypatch.setattr(
+        tarfile.TarFile,
+        "getmembers",
+        lambda self: pytest.fail("streaming extraction must not load all members"),
+    )
 
     destination = safe_extract_tar(archive, tmp_path / "output")
     assert (destination / "split/sample.txt").read_bytes() == b"data"
@@ -115,4 +139,27 @@ def pytest_safe_extract_tar_rejects_path_traversal(tmp_path):
     _write_tar(archive, "../outside.txt")
 
     with pytest.raises(ValueError, match="unsafe archive path"):
+        safe_extract_tar(archive, tmp_path / "output")
+
+
+@pytest.mark.parametrize(
+    ("member_type", "message"),
+    [
+        (tarfile.SYMTYPE, "archive links are not allowed"),
+        (tarfile.LNKTYPE, "archive links are not allowed"),
+        (tarfile.CHRTYPE, "unsupported archive entry"),
+    ],
+)
+def pytest_safe_extract_tar_rejects_links_and_special_entries(
+    tmp_path, member_type, message
+):
+    archive = tmp_path / "unsafe.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        member = tarfile.TarInfo("unsafe-entry")
+        member.type = member_type
+        if member_type in {tarfile.SYMTYPE, tarfile.LNKTYPE}:
+            member.linkname = "target"
+        tar.addfile(member)
+
+    with pytest.raises(ValueError, match=message):
         safe_extract_tar(archive, tmp_path / "output")
