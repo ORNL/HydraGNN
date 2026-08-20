@@ -83,6 +83,18 @@ def pytest_download_file_reuses_verified_destination(monkeypatch, tmp_path):
     )
 
 
+def pytest_download_file_rejects_existing_directory(monkeypatch, tmp_path):
+    destination = tmp_path / "dataset.bin"
+    destination.mkdir()
+    monkeypatch.setattr(
+        "hydragnn.utils.datasets.download.urlopen",
+        lambda request: pytest.fail("invalid destination should not be downloaded"),
+    )
+
+    with pytest.raises(ValueError, match="exists and is not a file"):
+        download_file("https://example.invalid/dataset.bin", destination)
+
+
 def _write_tar(path: Path, member_name: str, data: bytes = b"data"):
     with tarfile.open(path, "w:gz") as tar:
         info = tarfile.TarInfo(member_name)

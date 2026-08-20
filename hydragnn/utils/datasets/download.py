@@ -50,6 +50,10 @@ def download_file(
         if sha256 is None or _sha256(destination, chunk_size) == sha256.lower():
             return destination
         raise ValueError(f"SHA-256 mismatch for existing file: {destination}")
+    if destination.exists():
+        raise ValueError(
+            f"Download destination exists and is not a file: {destination}"
+        )
 
     partial = destination.with_name(destination.name + ".part")
     offset = partial.stat().st_size if partial.exists() else 0
