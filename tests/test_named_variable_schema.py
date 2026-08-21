@@ -120,3 +120,29 @@ def pytest_internal_output_names_are_rejected():
     }
     with pytest.raises(ValueError, match="internal tensors: x"):
         parse_variable_schema(variables)
+
+
+def pytest_schema_recompilation_removes_stale_derived_attributes():
+    data = _sample()
+    prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
+
+    node_only = {
+        "inputs": [{"name": "species", "level": "node", "dim": 2}],
+        "outputs": [{"name": "energy", "level": "graph", "dim": 1}],
+    }
+    prepare_data_from_schema(data, parse_variable_schema(node_only))
+
+    assert "edge_attr" not in data
+    assert "graph_attr" not in data
+    assert "node_output" not in data
+    assert "edge_output" not in data
+    assert data.graph_output.shape == (1, 1)
+
+    no_outputs = {
+        "inputs": [{"name": "species", "level": "node", "dim": 2}],
+        "outputs": [],
+    }
+    prepare_data_from_schema(data, parse_variable_schema(no_outputs))
+
+    for name in ("node_output", "edge_output", "graph_output", "y", "y_loc"):
+        assert name not in data

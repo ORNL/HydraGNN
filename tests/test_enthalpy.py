@@ -11,49 +11,41 @@
 
 import os
 import numpy as np
-import tests
 import pytest
 from hydragnn.utils.lsms import (
     convert_raw_data_energy_to_gibbs,
 )
 
 
-def unittest_formation_enthalpy():
-
-    dir = "dataset/unit_test_enthalpy"
-    if not os.path.exists(dir):
-        os.makedirs(dir)
-
-    # Create random samples.
-    num_config = 10
-    tests.deterministic_graph_data(
-        dir,
-        num_config,
-        number_types=2,
-        linear_only=True,
+def _write_lsms_fixture(path, index, element_types):
+    """Write the minimal LSMS-style text consumed by the conversion utility."""
+    total_energy = float(sum(element_types))
+    lines = [f"{total_energy}\n"]
+    lines.extend(
+        f"{element_type} {atom_id} 0.0 0.0 0.0\n"
+        for atom_id, element_type in enumerate(element_types)
     )
+    (path / f"output{index}.txt").write_text("".join(lines))
+
+
+def unittest_formation_enthalpy(tmp_path):
+
+    data_dir = tmp_path / "unit_test_enthalpy"
+    data_dir.mkdir()
+
+    # The energy is the sum of the element identifiers, so every mixture has
+    # zero formation enthalpy relative to the two pure components.
+    mixtures = ([0, 0, 1, 1], [0, 1, 0, 1], [0, 1, 1, 1])
+    for index in range(10):
+        _write_lsms_fixture(data_dir, index, mixtures[index % len(mixtures)])
 
     # Create pure components.
-    tests.deterministic_graph_data(
-        dir,
-        number_configurations=1,
-        configuration_start=num_config,
-        number_types=1,
-        types=[0],
-        linear_only=True,
-    )
-    tests.deterministic_graph_data(
-        dir,
-        number_configurations=1,
-        configuration_start=num_config + 1,
-        number_types=1,
-        types=[1],
-        linear_only=True,
-    )
+    _write_lsms_fixture(data_dir, 10, [0, 0, 0, 0])
+    _write_lsms_fixture(data_dir, 11, [1, 1, 1, 1])
 
-    convert_raw_data_energy_to_gibbs(dir, [0, 1], create_plots=False)
+    convert_raw_data_energy_to_gibbs(str(data_dir), [0, 1], create_plots=False)
 
-    new_dir = dir + "_gibbs_energy"
+    new_dir = str(data_dir) + "_gibbs_energy"
     for filename in os.listdir(new_dir):
         path = os.path.join(new_dir, filename)
         enthalpy = np.loadtxt(path, max_rows=1)
@@ -61,5 +53,5 @@ def unittest_formation_enthalpy():
 
 
 @pytest.mark.mpi_skip()
-def pytest_formation_enthalpy():
-    unittest_formation_enthalpy()
+def pytest_formation_enthalpy(tmp_path):
+    unittest_formation_enthalpy(tmp_path)

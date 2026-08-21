@@ -36,7 +36,6 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
-    get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
@@ -232,7 +231,6 @@ if __name__ == "__main__":
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
     var_config = config["Variables"]
-    () = get_node_attribute_name(csce_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()

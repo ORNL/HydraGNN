@@ -19,9 +19,28 @@ from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
 import warnings
 import json
+import hashlib
+import re
 import torch
 
 from .variable_schema import get_variable_schema, schema_dimensions
+
+_UNSAFE_LOG_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _sanitize_log_component(value, max_length=48):
+    """Return a bounded, filesystem-safe representation of a log component."""
+    original = str(value)
+    sanitized = _UNSAFE_LOG_COMPONENT.sub("-", original).strip("._-")
+    if not sanitized:
+        sanitized = "variable"
+
+    if sanitized != original or len(sanitized) > max_length:
+        digest = hashlib.sha256(original.encode("utf-8")).hexdigest()[:8]
+        prefix = sanitized[: max_length - len(digest) - 1].rstrip("._-")
+        sanitized = f"{prefix or 'variable'}-{digest}"
+
+    return sanitized
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -314,6 +333,10 @@ def update_config_edge_dim(config):
 
 
 def get_log_name_config(config):
+    input_names = "-".join(
+        _sanitize_log_component(spec.name)
+        for spec in get_variable_schema(config).inputs
+    )
     return (
         config["NeuralNetwork"]["Architecture"]["mpnn_type"]
         + "-r-"
@@ -337,7 +360,7 @@ def get_log_name_config(config):
             )
         ]
         + "-node_ft-"
-        + "".join(spec.name + "-" for spec in get_variable_schema(config).inputs)
+        + input_names
         + "-task_weights-"
         + "".join(
             str(weigh) + "-"

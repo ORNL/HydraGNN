@@ -29,7 +29,6 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
 # from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
 from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
-    get_node_attribute_name,
     generate_graphdata_from_rdkit_molecule,
 )
 from hydragnn.utils.distributed import get_device
@@ -182,7 +181,6 @@ if __name__ == "__main__":
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
     var_config = config["Variables"]
-    () = get_node_attribute_name(dftb_node_types)
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
     ##################################################################################################################

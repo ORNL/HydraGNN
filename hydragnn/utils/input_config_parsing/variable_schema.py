@@ -18,7 +18,18 @@ import torch
 VariableLevel = Literal["node", "edge", "graph"]
 _LEVELS = frozenset(("node", "edge", "graph"))
 _INTERNAL_OUTPUT_NAMES = frozenset(
-    ("x", "edge_attr", "graph_attr", "edge_index", "batch", "y", "y_loc")
+    (
+        "x",
+        "edge_attr",
+        "graph_attr",
+        "edge_index",
+        "batch",
+        "y",
+        "y_loc",
+        "node_output",
+        "edge_output",
+        "graph_output",
+    )
 )
 
 
@@ -163,8 +174,12 @@ def prepare_data_from_schema(data, schema: VariableSchema):
     data.x = torch.cat(by_level["node"], dim=-1)
     if by_level["edge"]:
         data.edge_attr = torch.cat(by_level["edge"], dim=-1)
+    elif "edge_attr" in data:
+        del data["edge_attr"]
     if by_level["graph"]:
         data.graph_attr = torch.cat(by_level["graph"], dim=-1)
+    elif "graph_attr" in data:
+        del data["graph_attr"]
 
     output_by_level = {level: [] for level in _LEVELS}
     outputs = []
@@ -178,9 +193,16 @@ def prepare_data_from_schema(data, schema: VariableSchema):
     if outputs:
         data.y = torch.cat(outputs, dim=0)
         data.y_loc = torch.tensor([locations], dtype=torch.int64, device=data.y.device)
+    else:
+        for name in ("y", "y_loc"):
+            if name in data:
+                del data[name]
     for level, values in output_by_level.items():
+        name = f"{level}_output"
         if values:
-            setattr(data, f"{level}_output", torch.cat(values, dim=1))
+            setattr(data, name, torch.cat(values, dim=1))
+        elif name in data:
+            del data[name]
     return data
 
 

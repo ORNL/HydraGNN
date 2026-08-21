@@ -87,7 +87,7 @@
             {
                 "name": "atomic_forces",
                 "level": "node",
-                "dim": 1
+                "dim": 3
             }
         ]
     }

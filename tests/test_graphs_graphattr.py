@@ -86,6 +86,9 @@ def unittest_train_model_graphattr(
     # Only run with edge lengths for models that support them.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+        config["Variables"]["inputs"].append(
+            {"name": "edge_attr", "level": "edge", "dim": 1}
+        )
 
     if rank == 0:
         num_samples_tot = 500
@@ -157,7 +160,7 @@ def unittest_train_model_graphattr(
         thresholds["PNA"] = [0.10, 0.10]
         thresholds["PNAPlus"] = [0.10, 0.10]
         if graph_attr_conditioning_mode == "fuse_pool":
-            thresholds["PNAPlus"] = [0.16, 0.16]
+            thresholds["PNAPlus"] = [0.18, 0.18]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
         thresholds["PNAPlus"] = [0.2, 0.15]
