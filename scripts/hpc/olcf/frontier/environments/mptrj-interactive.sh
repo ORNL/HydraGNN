@@ -1,6 +1,6 @@
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "${script_dir}/../../../../.." && pwd)
-source "${repo_root}/installation_DOE_supercomputers/olcf_proxy_env.sh"
+source "${repo_root}/scripts/hpc/olcf/proxy-env.sh"
 
 function cmd() {
     echo "$@"

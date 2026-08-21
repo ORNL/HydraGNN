@@ -1,6 +1,6 @@
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "${script_dir}/../../../../.." && pwd)
-source "${repo_root}/installation_DOE_supercomputers/olcf_proxy_env.sh"
+source "${repo_root}/scripts/hpc/olcf/proxy-env.sh"
 
 function cmd() {
     echo "$@"
@@ -12,7 +12,7 @@ function cmd() {
 # HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION MI250X collective crash seen on the old
 # ROCm 7.1.x / 6.4 RCCL) plus the validated lumina-sdk RCCL runtime config.
 HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN}"
-VENV_PATH="${VENV_PATH:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm713/hydragnn_venv_rocm713}"
+VENV_PATH="${VENV_PATH:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN/HydraGNN-Installation-Frontier-ROCm713/hydragnn_venv_rocm713}"
 
 # Load ROCm 7.13 module stack + conda environment
 source /lustre/orion/lrn070/world-shared/mlupopa/module-to-load-frontier-rocm713.sh

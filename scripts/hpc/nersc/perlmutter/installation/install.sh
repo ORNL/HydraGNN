@@ -41,7 +41,7 @@ banner "Configure Perlmutter Modules"
 EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/module_loads_perlmutter.sh"
+source "${SCRIPT_DIR}/module-loads.sh"
 load_perlmutter_modules "${EXPECTED_CUDA_MM}"
 
 # ============================================================
@@ -406,4 +406,3 @@ EOF
 echo "✅ HydraGNN-Installation-Perlmutter environment setup complete!"
 echo ""
 print_perlmutter_activation_instructions "${EXPECTED_CUDA_MM}" "${VENV_PATH}"
-

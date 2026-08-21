@@ -18,7 +18,7 @@ function cmd() {
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}
 EXAMPLES_DIR=$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26
-VENV_PATH=${VENV_PATH:-$HYDRAGNN_ROOT/installation_DOE_supercomputers/HydraGNN-Installation-Aurora/hydragnn_venv}
+VENV_PATH=${VENV_PATH:-$HYDRAGNN_ROOT/HydraGNN-Installation-Aurora/hydragnn_venv}
 
 # Aurora proxy (needed on compute nodes for outbound HTTPS in some environments)
 export HTTP_PROXY=${HTTP_PROXY:-http://proxy.alcf.anl.gov:3128}

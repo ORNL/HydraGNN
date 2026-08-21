@@ -8,4 +8,6 @@ scripts/hpc/<facility>/<system>/
 
 For example, `olcf/frontier/environments` contains interactive Frontier setup
 scripts, while `olcf/frontier/omnistat` contains the corresponding Omnistat
-collector configurations. Keep portable HydraGNN utilities outside this hierarchy.
+collector configurations and `olcf/frontier/installation` contains installation
+scripts. Facility-wide helpers, such as `olcf/proxy-env.sh`, live at the facility
+level. Keep portable HydraGNN utilities outside this hierarchy.

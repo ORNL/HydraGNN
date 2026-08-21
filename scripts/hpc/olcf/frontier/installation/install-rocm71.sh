@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # setup_env.sh
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
+# Updated to ROCm 7.1 (module rocm/7.1.1) and PyTorch wheels from https://download.pytorch.org/whl/rocm7.1
 
 set -Eeuo pipefail
 
@@ -14,9 +15,9 @@ subbanner() { echo "-- $1"; }
 # =========================
 # Config (env-overridable)
 # =========================
-FRONTIER_ROCM_MODULE_VERSION="${FRONTIER_ROCM_MODULE_VERSION:-6.4.0}"
-FRONTIER_AMD_MIXED_MODULE_VERSION="${FRONTIER_AMD_MIXED_MODULE_VERSION:-6.4.0}"
-EXPECTED_ROCM_MM="${EXPECTED_ROCM_MM:-6.4}"
+FRONTIER_ROCM_MODULE_VERSION="${FRONTIER_ROCM_MODULE_VERSION:-7.1.1}"
+FRONTIER_AMD_MIXED_MODULE_VERSION="${FRONTIER_AMD_MIXED_MODULE_VERSION:-7.1.1}"
+EXPECTED_ROCM_MM="${EXPECTED_ROCM_MM:-7.1}"
 PYTORCH_ROCM_INDEX_URL="${PYTORCH_ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm${EXPECTED_ROCM_MM}}"
 PYTORCH_SCATTER_ROCM_REPO="${PYTORCH_SCATTER_ROCM_REPO:-https://github.com/Looong01/pytorch_scatter-rocm.git}"
 PYTORCH_SCATTER_ROCM_COMMIT="${PYTORCH_SCATTER_ROCM_COMMIT:-9799c51}"
@@ -31,7 +32,7 @@ banner "Starting HydraGNN environment setup ($(date))"
 banner "Configure Frontier Modules"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/module_loads_frontier.sh"
+source "${SCRIPT_DIR}/module-loads.sh"
 load_frontier_modules "${FRONTIER_ROCM_MODULE_VERSION}" "${FRONTIER_AMD_MIXED_MODULE_VERSION}"
 
 # ============================================================
@@ -113,23 +114,23 @@ assert_numpy_1264
 banner "Install Core Python Packages"
 
 pip_retry ninja
-pip_retry astunparse 
-pip_retry expecttest 
-pip_retry hypothesis 
-pip_retry numpy==1.26.4 
-pip_retry psutil==7.1.0 
-pip_retry pyyaml 
-pip_retry requests 
-pip_retry setuptools 
-pip_retry typing-extensions 
-pip_retry sympy==1.14.0 
-pip_retry filelock 
-pip_retry networkx 
-pip_retry jinja2 
+pip_retry astunparse
+pip_retry expecttest
+pip_retry hypothesis
+pip_retry numpy==1.26.4
+pip_retry psutil==7.1.0
+pip_retry pyyaml
+pip_retry requests
+pip_retry setuptools
+pip_retry typing-extensions
+pip_retry sympy==1.14.0
+pip_retry filelock
+pip_retry networkx
+pip_retry jinja2
 pip_retry tqdm==4.67.1
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1 
-pip_retry pyparsing 
+pip_retry scipy==1.14.1
+pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
@@ -143,7 +144,7 @@ pip_retry pymatgen
 pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
-pip_retry h5py==3.14.0 
+pip_retry h5py==3.14.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -180,16 +181,24 @@ subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
 pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" torch torchvision
 assert_numpy_1264
 
-python - <<PY
+python - <<'PY'
 import torch
 print("torch.__version__ =", torch.__version__)
 print("torch.version.hip =", torch.version.hip)
+print("torch.cuda.is_available() =", torch.cuda.is_available())  # ROCm uses torch.cuda API
+print("torch.cuda.device_count() =", torch.cuda.device_count())
+if torch.cuda.device_count() > 0:
+    print("GPU[0] =", torch.cuda.get_device_name(0))
 PY
 
 # ============================================================
 # PyTorch-Geometric stack
 # ============================================================
 banner "PyTorch-Geometric Stack (ROCm ${ROCM_MM})"
+
+# Recommended for MI250X builds
+export PYTORCH_ROCM_ARCH="${PYTORCH_ROCM_ARCH:-gfx90a}"
+
 PYG_DIR_NAME="PyTorch-Geometric-${ROCM_MM}"
 PYG_FRONTIER="${INSTALL_ROOT}/${PYG_DIR_NAME}"
 export PYG_FRONTIER
@@ -219,15 +228,14 @@ git fetch --all
 git checkout "${PYTORCH_SCATTER_ROCM_COMMIT}"
 git submodule update --init --recursive
 rm -rf build
-# If needed: export PYTORCH_ROCM_ARCH=gfx90a
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
-# --- pytorch_sparse (official pinned) ---
-subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
+# --- pytorch_sparse (ROCm fork pinned) ---
+subbanner "pytorch_sparse (ROCm fork pinned to ${PYTORCH_SPARSE_ROCM_COMMIT}; temporary until upstream merges)"
 if [[ ! -d pytorch_sparse/.git ]]; then
   # Official upstream (kept for reference; will switch back after merge):
   # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
@@ -272,9 +280,14 @@ CC=gcc CXX=g++ python setup.py install
 assert_numpy_1264
 popd >/dev/null
 
-subbanner "Install e3nn and openequivariance"
+subbanner "Install e3nn"
 pip_retry e3nn --verbose
 assert_numpy_1264
+
+# NOTE: unload ROCm for mpi4py build
+module unload craype-accel-amd-gfx90a
+module unload rocm
+#######
 
 # ============================================================
 # mpi4py
@@ -384,7 +397,7 @@ Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_scatter fork: ${PYTORCH_SCATTER_ROCM_REPO} @ ${PYTORCH_SCATTER_ROCM_COMMIT} (temporary)
-  - pytorch_sparse:       0.6.18-8-gcdbf561
+  - pytorch_sparse fork:  ${PYTORCH_SPARSE_ROCM_REPO} @ ${PYTORCH_SPARSE_ROCM_COMMIT} (temporary)
   - pytorch_cluster:      1.6.3-11-g4126a52
   - pytorch_spline_conv:  1.2.2-9-ga6d1020
 MPI4PY:              $MPI4PY_FRONTIER
@@ -396,4 +409,3 @@ EOF
 echo "✅ HydraGNN-Installation-Frontier environment setup complete!"
 echo ""
 print_frontier_activation_instructions "${FRONTIER_ROCM_MODULE_VERSION}" "${FRONTIER_AMD_MIXED_MODULE_VERSION}" "${VENV_PATH}"
-

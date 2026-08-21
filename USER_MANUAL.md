@@ -109,9 +109,10 @@ python -c "import hydragnn; print('HydraGNN installed successfully')"
 
 ### DOE Supercomputer Installation
 
-Tested installation scripts are provided for major leadership-class machines in the `installation_DOE_supercomputers/` directory:
+Tested installation scripts are organized by facility and system under
+`scripts/hpc/<facility>/<system>/installation/`:
 
-- **Frontier** (AMD, ROCm 6.4 and 7.1)
+- **Frontier** (AMD, ROCm 6.4, 7.1, 7.2, and 7.13)
 - **Aurora** (Intel XPU)
 - **Perlmutter** (NVIDIA)
 - **Andes** (NVIDIA)

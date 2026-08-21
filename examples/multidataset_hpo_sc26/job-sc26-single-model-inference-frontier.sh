@@ -11,7 +11,7 @@
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "${script_dir}/../.." && pwd)
-source "${repo_root}/installation_DOE_supercomputers/olcf_proxy_env.sh"
+source "${repo_root}/scripts/hpc/olcf/proxy-env.sh"
 
 function cmd() {
     echo "$@"
@@ -23,7 +23,7 @@ EXAMPLE_DIR=$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26
 
 # Load conda environment (same pattern as job-sc26-oom.sh)
 source /lustre/orion/mat746/world-shared/mlupopa/module-to-load-frontier-rocm640.sh
-source activate /lustre/orion/mat746/world-shared/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
+source activate /lustre/orion/mat746/world-shared/mlupopa/HydraGNN/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
 
 cd "$HYDRAGNN_ROOT"
 export PYTHONPATH=$PWD:$PYTHONPATH

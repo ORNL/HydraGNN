@@ -2,7 +2,7 @@
 
 # Shared module loader for Frontier installation scripts.
 # Usage:
-#   source ".../module_loads_frontier.sh"
+#   source ".../module-loads.sh"
 #   load_frontier_modules "7.1.1" "7.1.1"
 
 # Paths are declared as env-overridable variables so callers can adjust

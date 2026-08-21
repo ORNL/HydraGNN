@@ -3,7 +3,7 @@
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
 # Updated to ROCm 7.2 (module rocm/7.2.0) and PyTorch wheels from https://download.pytorch.org/whl/rocm7.2
 #
-# Derived from hydragnn_installation_bash_script_frontier-rocm71.sh.
+# Derived from install-rocm71.sh.
 # Key changes vs ROCm 7.1:
 #   - Module stack:  rocm/7.2.0  amd-mixed/7.2.0
 #   - EXPECTED_ROCM_MM="7.2"
@@ -14,7 +14,7 @@
 #           ${VLLM_SRC_DIR} (must be cloned before running on a compute node).
 #
 # Usage:
-#   bash hydragnn_installation_bash_script_frontier-rocm72.sh
+#   bash scripts/hpc/olcf/frontier/installation/install-rocm72.sh
 #
 # Override variables:
 #   VENV_PATH        Override conda env path

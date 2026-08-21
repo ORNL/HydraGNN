@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# hydragnn_installation_bash_script_aurora.sh
+# HydraGNN installation for Aurora
 #
 # Aurora approach (with ADIOS2/DDStore build-from-source):
 # - PyTorch: use "module load frameworks" (do NOT pip-install torch wheels)
@@ -12,7 +12,7 @@
 # - Install HydraGNN editable
 #
 # Run:
-#   nohup ./hydragnn_installation_bash_script_aurora.sh > installation_aurora.log 2>&1 &
+#   nohup scripts/hpc/alcf/aurora/installation/install.sh > installation_aurora.log 2>&1 &
 
 # ============================================================
 # Aurora compute node proxy (required for outbound HTTPS)

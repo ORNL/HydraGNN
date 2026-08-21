@@ -11,37 +11,6 @@ hr() { printf '%*s\n' "${COLUMNS:-80}" '' | tr ' ' '='; }
 banner() { hr; echo ">>> $1"; hr; }
 subbanner() { echo "-- $1"; }
 
-timeit() {
-  SECONDS=0
-  local start_time=$(date +"%T")
-  echo "[$start_time] Starting: $*" >&2
-  "$@"
-  local status=$?
-  local end_time=$(date +"%T")
-  echo "[$end_time] Finished: $* (Elapsed: ${SECONDS}s, Status: $status)" >&2
-  return $status
-}
-
-# Spinner function
-progress() {
-  local pid=$1
-  local delay=0.1
-
-  spinstr[0]="-"
-  spinstr[1]="\\"
-  spinstr[2]="|"
-  spinstr[3]="/"
-
-  echo -n "${spinstr[0]}"
-  while kill -0 $pid 2>/dev/null; do
-    for c in "${spinstr[@]}"; do
-      echo -ne "\b$c"
-      sleep $delay
-    done
-  done
-  echo -ne "\b"
-}
-
 banner "Starting HydraGNN environment setup on ANDES ($(date))"
 
 # ============================================================
@@ -191,23 +160,7 @@ pip_retry mendeleev==0.16.0
 pip_retry lmdb
 pip_retry h5py==3.14.0 
 pip_retry tensorflow
-pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
-
-# ============================================================
-# mpi4py
-# ============================================================
-banner "mpi4py (v4.1.1)"
-MPI4PY_ANDES="${INSTALL_ROOT}/MPI4PY-Andes"
-export MPI4PY_ANDES
-mkdir -p "$MPI4PY_ANDES"
-cd "$MPI4PY_ANDES"
-
-git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
-pushd mpi4py >/dev/null
-rm -rf build
-CC=mpicc MPICC=mpicc pip_retry . --verbose
-popd >/dev/null
 
 # ============================================================
 # PyTorch (CPU-only) + torchvision
@@ -244,193 +197,164 @@ assert_numpy_1264
 popd >/dev/null
 
 # --- pytorch_scatter (official repo & stable ref for CPU) ---
-build_pytorch_scatter() {
-  subbanner "pytorch_scatter (official @ 2.1.2-9-g7cabb53)"
-  if [[ ! -d pytorch_scatter/.git ]]; then
-    git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
-  fi
-  pushd pytorch_scatter >/dev/null
-  git fetch --all
-  git checkout 2.1.2-9-g7cabb53
-  git submodule update --init --recursive
-  rm -rf build
-  CC=mpicc CXX=mpicxx python setup.py build
-  CC=mpicc CXX=mpicxx python setup.py install
-  assert_numpy_1264
-  popd >/dev/null
-}
+subbanner "pytorch_scatter (official @ 2.1.2-9-g7cabb53)"
+if [[ ! -d pytorch_scatter/.git ]]; then
+  git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
+fi
+pushd pytorch_scatter >/dev/null
+git fetch --all
+git checkout 2.1.2-9-g7cabb53
+git submodule update --init --recursive
+rm -rf build
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
+assert_numpy_1264
+popd >/dev/null
 
 # --- pytorch_sparse (official pinned) ---
-build_pytorch_sparse() {
-  subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
-  if [[ ! -d pytorch_sparse/.git ]]; then
-    git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
-  fi
-  pushd pytorch_sparse >/dev/null
-  git fetch --all
-  git checkout 0.6.18-8-gcdbf561
-  rm -rf build
-  CC=mpicc CXX=mpicxx python setup.py build
-  CC=mpicc CXX=mpicxx python setup.py install
-  assert_numpy_1264
-  popd >/dev/null
-}
+subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
+if [[ ! -d pytorch_sparse/.git ]]; then
+  git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
+fi
+pushd pytorch_sparse >/dev/null
+git fetch --all
+git checkout 0.6.18-8-gcdbf561
+rm -rf build
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
+assert_numpy_1264
+popd >/dev/null
 
 # --- pytorch_cluster (official pinned) ---
-build_pytorch_cluster() {
-  subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
-  if [[ ! -d pytorch_cluster/.git ]]; then
-    git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
-  fi
-  pushd pytorch_cluster >/dev/null
-  git fetch --all
-  git checkout 1.6.3-11-g4126a52
-  rm -rf build
-  CC=mpicc CXX=mpicxx python setup.py build
-  CC=mpicc CXX=mpicxx python setup.py install
-  assert_numpy_1264
-  popd >/dev/null
-}
+subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
+if [[ ! -d pytorch_cluster/.git ]]; then
+  git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
+fi
+pushd pytorch_cluster >/dev/null
+git fetch --all
+git checkout 1.6.3-11-g4126a52
+rm -rf build
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
+assert_numpy_1264
+popd >/dev/null
 
 # --- pytorch_spline_conv (official pinned) ---
-build_pytorch_spline_conv() {
-  subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
-  if [[ ! -d pytorch_spline_conv/.git ]]; then
-    git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
-  fi
-  pushd pytorch_spline_conv >/dev/null
-  git fetch --all
-  git checkout 1.2.2-9-ga6d1020
-  rm -rf build
-  CC=mpicc CXX=mpicxx python setup.py build
-  CC=mpicc CXX=mpicxx python setup.py install
-  assert_numpy_1264
-  popd >/dev/null
-}
+subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
+if [[ ! -d pytorch_spline_conv/.git ]]; then
+  git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
+fi
+pushd pytorch_spline_conv >/dev/null
+git fetch --all
+git checkout 1.2.2-9-ga6d1020
+rm -rf build
+CC=mpicc CXX=mpicxx python setup.py build
+CC=mpicc CXX=mpicxx python setup.py install
+assert_numpy_1264
+popd >/dev/null
 
-## parallel build
-banner "pytorch geometric dependencies build (in parallel)"
-timeit build_pytorch_scatter > build_pytorch_scatter.log & pid1=$!
-timeit build_pytorch_sparse > build_pytorch_sparse.log & pid2=$!
-timeit build_pytorch_cluster > build_pytorch_cluster.log & pid3=$!
-timeit build_pytorch_spline_conv > build_pytorch_spline_conv.log & pid4=$!
-
-for pid in $pid1 $pid2 $pid3 $pid4; do
-    progress $pid &
-done
-wait
-
-# ============================================================
-# e3nn and openequivariance
-# ============================================================
-banner "Install e3nn and openequivariance"
+subbanner "Install e3nn and openequivariance"
 pip_retry e3nn openequivariance --verbose
 assert_numpy_1264
 
 # ============================================================
+# mpi4py
+# ============================================================
+banner "mpi4py (v4.1.1)"
+MPI4PY_ANDES="${INSTALL_ROOT}/MPI4PY-Andes"
+export MPI4PY_ANDES
+mkdir -p "$MPI4PY_ANDES"
+cd "$MPI4PY_ANDES"
+
+git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
+pushd mpi4py >/dev/null
+rm -rf build
+CC=mpicc MPICC=mpicc pip_retry . --verbose
+popd >/dev/null
+
+# ============================================================
 # ADIOS2
 # ============================================================
+banner "ADIOS2 (v2.10.2)"
 ADIOS2_ANDES="${INSTALL_ROOT}/ADIOS2-Andes"
 export ADIOS2_ANDES
-build_adios() {
-  banner "ADIOS2 (v2.10.2)"
-  mkdir -p "$ADIOS2_ANDES"
-  cd "$ADIOS2_ANDES"
+mkdir -p "$ADIOS2_ANDES"
+cd "$ADIOS2_ANDES"
 
-  if [[ ! -d ADIOS2/.git ]]; then
-    git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
-  fi
+if [[ ! -d ADIOS2/.git ]]; then
+  git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
+fi
 
-  mkdir -p adios2-build
+mkdir -p adios2-build
 
-  CC=mpicc CXX=mpicxx FC=mpifort \
-  cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DBUILD_TESTING=OFF \
-        -DADIOS2_USE_MPI=ON \
-        -DADIOS2_USE_Fortran=OFF \
-        -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
-        -DADIOS2_BUILD_TESTING=OFF \
-        -DADIOS2_USE_HDF5=OFF \
-        -DADIOS2_USE_SST=OFF \
-        -DADIOS2_USE_BZip2=OFF \
-        -DADIOS2_USE_PNG=OFF \
-        -DADIOS2_USE_DataSpaces=OFF \
-        -DADIOS2_USE_Python=ON \
-        -DPython_EXECUTABLE=$(which python) \
-        -B adios2-build -S ADIOS2
+CC=mpicc CXX=mpicxx FC=mpifort \
+cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_TESTING=OFF \
+      -DADIOS2_USE_MPI=ON \
+      -DADIOS2_USE_Fortran=OFF \
+      -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
+      -DADIOS2_BUILD_TESTING=OFF \
+      -DADIOS2_USE_HDF5=OFF \
+      -DADIOS2_USE_SST=OFF \
+      -DADIOS2_USE_BZip2=OFF \
+      -DADIOS2_USE_PNG=OFF \
+      -DADIOS2_USE_DataSpaces=OFF \
+      -DADIOS2_USE_Python=ON \
+      -DPython_EXECUTABLE=$(which python) \
+      -B adios2-build -S ADIOS2
 
-  cmake --build adios2-build -j$(nproc || echo 16)
-  cmake --install adios2-build
-}
+cmake --build adios2-build -j$(nproc || echo 16)
+cmake --install adios2-build
 
 # ============================================================
 # DDStore
 # ============================================================
+banner "DDStore"
 DDSTORE_ANDES="${INSTALL_ROOT}/DDStore-Andes"
 export DDSTORE_ANDES
-build_ddstore() {
-  banner "DDStore"
-  mkdir -p "$DDSTORE_ANDES"
-  cd "$DDSTORE_ANDES"
+mkdir -p "$DDSTORE_ANDES"
+cd "$DDSTORE_ANDES"
 
-  git clone git@github.com:ORNL/DDStore.git || true
-  pushd DDStore >/dev/null
-  CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
-  popd >/dev/null
-}
+git clone git@github.com:ORNL/DDStore.git || true
+pushd DDStore >/dev/null
+CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
+popd >/dev/null
 
 # ============================================================
 # DeepHyper
 # ============================================================
+banner "DeepHyper (develop branch)"
 DEEPHYPER_ANDES="${INSTALL_ROOT}/DeepHyper-Andes"
 export DEEPHYPER_ANDES
-build_deephyper() {
-  banner "DeepHyper (develop branch)"
-  mkdir -p "$DEEPHYPER_ANDES"
-  cd "$DEEPHYPER_ANDES"
+mkdir -p "$DEEPHYPER_ANDES"
+cd "$DEEPHYPER_ANDES"
 
-  git clone https://github.com/deephyper/deephyper.git || true
-  cd deephyper
-  pip_retry -e . --verbose
-  assert_numpy_1264
-}
+git clone https://github.com/deephyper/deephyper.git || true
+cd deephyper
+pip_retry -e . --verbose
+assert_numpy_1264
 
 # ============================================================
 # GPTL
 # ============================================================
+banner "GPTL"
 GPTL_ANDES="${INSTALL_ROOT}/GPTL-Andes"
 export GPTL_ANDES
-build_gptl() {
-  banner "GPTL"
-  mkdir -p "$GPTL_ANDES"
-  cd "$GPTL_ANDES"
+mkdir -p "$GPTL_ANDES"
+cd "$GPTL_ANDES"
 
-  wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
-  tar xvf gptl-8.1.1.tar.gz
-  pushd gptl-8.1.1 >/dev/null
-  ./configure --prefix=$VENV_PATH --disable-libunwind CC=mpicc CXX=mpicxx FC=mpifort
-  make install
-  popd >/dev/null
+wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+tar xvf gptl-8.1.1.tar.gz
+pushd gptl-8.1.1 >/dev/null
+./configure --prefix=$VENV_PATH --disable-libunwind CC=mpicc CXX=mpicxx FC=mpifort
+make install
+popd >/dev/null
 
-  git clone https://github.com/jychoi-hpc/gptl4py.git || true
-  pushd gptl4py >/dev/null
-  GPTL_DIR=$VENV_PATH CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
-  popd >/dev/null
-}
-
-## parallel build
-cd "$INSTALL_ROOT"
-banner "Adios, DDStore and DeepHyper build (in parallel)"
-timeit build_adios > build_adios.log & pid1=$!
-timeit build_ddstore > build_ddstore.log & pid2=$!
-timeit build_deephyper > build_deephyper.log & pid3=$!
-timeit build_gptl > build_gptl.log & pid4=$!
-
-for pid in $pid1 $pid2 $pid3 $pid4; do
-    progress $pid &
-done
-wait
+git clone https://github.com/jychoi-hpc/gptl4py.git || true
+pushd gptl4py >/dev/null
+GPTL_DIR=$VENV_PATH CC=mpicc CXX=mpicxx pip_retry . --no-build-isolation --verbose
+popd >/dev/null
 
 # ============================================================
 # Final Summary
@@ -468,5 +392,4 @@ echo "  ml miniforge3/23.11.0-0"
 echo "  ml libfabric/1.14.0"
 echo ""
 echo "  source activate ${VENV_PATH}"
-
 
