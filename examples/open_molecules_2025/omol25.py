@@ -225,7 +225,7 @@ class OMol2025(AbstractBaseDataset):
 
                 # Skip samples that still contain self-loops
                 if should_skip_self_loops(data_object, context="omol25"):
-                    continue
+                    return
 
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):
