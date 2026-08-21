@@ -1,12 +1,13 @@
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "${script_dir}/installation_DOE_supercomputers/olcf_proxy_env.sh"
+repo_root=$(cd "${script_dir}/../../../../.." && pwd)
+source "${repo_root}/installation_DOE_supercomputers/olcf_proxy_env.sh"
 
 function cmd() {
     echo "$@"
     time $@
 }
 
-# ROCm 7.13 variant of export_variables_and_run_interactive_job.sh.
+# ROCm 7.13 variant of interactive.sh.
 # Uses the AMD ROCm 7.13 PyTorch wheel (bundled RCCL 2.28.3, which fixes the
 # HSA_STATUS_ERROR_ILLEGAL_INSTRUCTION MI250X collective crash seen on the old
 # ROCm 7.1.x / 6.4 RCCL) plus the validated lumina-sdk RCCL runtime config.
@@ -100,7 +101,7 @@ export datadir14=OMol25-non-neutral
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
+export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
 
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 1

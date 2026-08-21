@@ -1,5 +1,6 @@
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "${script_dir}/installation_DOE_supercomputers/olcf_proxy_env.sh"
+repo_root=$(cd "${script_dir}/../../../../.." && pwd)
+source "${repo_root}/installation_DOE_supercomputers/olcf_proxy_env.sh"
 
 function cmd() {
     echo "$@"
@@ -86,23 +87,24 @@ export datadir4=OC2022
 export datadir5=ODAC23
 export datadir6=OMat24
 export datadir7=OMol25
-export datadir8=OC2025
+export datadir8=OC25
 export datadir9=OPoly2026
 export datadir10=Nabla2DFT
 export datadir11=QCML
 export datadir12=QM7-X
 export datadir13=transition1x
+export datadir14=OMol25-non-neutral
 
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
+export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
 
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 1
 
 ## HYDRAGNN_USE_FSDP: 1 (enabled), 0 (disabled)
-export HYDRAGNN_USE_FSDP=0
+export HYDRAGNN_USE_FSDP=1
 # export HYDRAGNN_USE_FSDP=1
 ## HYDRAGNN_FSDP_VERSION: 1 (FSDP1), 2 (FSDP2/composable)
 export HYDRAGNN_FSDP_VERSION=1
@@ -116,17 +118,18 @@ export HYDRAGNN_FSDP_STRATEGY=FULL_SHARD
 # [ -z $HIDDEN_DIM ] && HIDDEN_DIM=889
 # [ -z $HIDDEN_DIM ] && HIDDEN_DIM=1000
 # [ -z $HIDDEN_DIM ] && HIDDEN_DIM=2000
-[ -z $HIDDEN_DIM ] && HIDDEN_DIM=300
+[ -z $HIDDEN_DIM ] && HIDDEN_DIM=30
 
 
+#    --multi --ddstore --multi_model_list=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4,$datadir5,$datadir6,$datadir7,$datadir8,$datadir9,$datadir10,$datadir11,$datadir12,$datadir13,$datadir14 --batch_size=$BATCH_SIZE --num_epoch=$NUM_EPOCH \
 cmd srun -N$SLURM_JOB_NUM_NODES -n$((SLURM_JOB_NUM_NODES*8)) -c7 --gpus-per-task=1 --gpu-bind=closest \
 python -u $HYDRAGNN_ROOT/examples/multidataset_hpo_sc26/gfm_mlip_all_mpnn.py \
     --log=multidataset_hpo-$SLURM_JOB_ID-NN$SLURM_JOB_NUM_NODES-FSDP$HYDRAGNN_USE_FSDP --everyone \
     --inputfile=gfm_mlip.json --num_samples=$((BATCH_SIZE*HYDRAGNN_MAX_NUM_BATCH*NUM_EPOCH)) \
-    --multi --multi_model_list=MPTrj --batch_size=$BATCH_SIZE --num_epoch=$NUM_EPOCH \
-    --precision=fp32 \
-    --mpnn_type=MACE \
-#    --hidden_dim=$HIDDEN_DIM \
-#    --num_conv_layers=4 \
-#    --num_headlayers=3 \
-#    --dim_headlayers=200
+    --multi --ddstore --multi_model_list=$datadir2,$datadir3,$datadir4,$datadir5 --batch_size=$BATCH_SIZE --num_epoch=$NUM_EPOCH \
+    --precision=fp64 \
+    --mpnn_type=SchNet \
+    --hidden_dim=$HIDDEN_DIM \
+    --num_conv_layers=4 \
+    --num_headlayers=2 \
+    --dim_headlayers=10
