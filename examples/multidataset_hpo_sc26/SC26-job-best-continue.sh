@@ -199,11 +199,18 @@ export datadir13=QCML
 export datadir14=QM7X
 export datadir15=transition1x
 
+[ -z "$BEST" ] && BEST=6
+[ -z "$PRECISION" ] && PRECISION=fp64
+
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp32bf16.config
+if [ "$PRECISION" = "fp64" ]; then
+    omnistat_config="$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config"
+else
+    omnistat_config="$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp32bf16.config"
+fi
+export OMNISTAT_CONFIG="$omnistat_config"
 
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 15
@@ -213,15 +220,6 @@ exclude_nodes $NUM_NODES
 echo JOB_NODELIST=$JOB_NODELIST
 
 MULTI_MODEL_LIST=$datadir0,$datadir1,$datadir2,$datadir3,$datadir4,$datadir5,$datadir6,$datadir7,$datadir8,$datadir9,$datadir10,$datadir11,$datadir12,$datadir13,$datadir14,$datadir15
-
-[ -z $BEST ] && BEST=6
-[ -z $PRECISION ] && PRECISION=fp64
-
-if [ $PRECISION == "fp64" ]; then
-    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
-else
-    export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp32bf16.config
-fi
 
 export HYDRAGNN_TASK_PARALLEL_PROPORTIONAL_SPLIT=1
 
