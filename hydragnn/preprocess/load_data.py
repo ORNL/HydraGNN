@@ -25,6 +25,10 @@ except:
     from torch_geometric.data import DataLoader
 
 from hydragnn.preprocess.serialized_dataset_loader import SerializedDataLoader
+from hydragnn.preprocess.batch_sampler import (
+    CostAwareBatchSampler,
+    DistributedCostAwareBatchSampler,
+)
 from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
 from hydragnn.utils.datasets.compositional_data_splitting import (
@@ -221,6 +225,7 @@ def dataset_loading_and_splitting(config: {}):
         valset,
         testset,
         batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
+        batching=config["NeuralNetwork"]["Training"].get("Batching"),
     )
 
 
@@ -235,7 +240,69 @@ def create_dataloaders(
     group=None,
     oversampling=False,
     num_samples=None,  ## tuple of number of samples (train, val, test)
+    batching=None,
 ):
+    if batching and batching.get("mode", "fixed") != "fixed":
+        if oversampling:
+            raise ValueError("cost-aware batching cannot be combined with oversampling")
+        if batching["mode"] != "node_budget":
+            raise ValueError(f"unsupported batching mode: {batching['mode']}")
+
+        sampler_type = CostAwareBatchSampler
+        distributed_options = {}
+        if dist.is_initialized():
+            if group is None:
+                group = dist.group.WORLD
+            if isinstance(group, dist.ProcessGroup):
+                group_size = dist.get_world_size(group=group)
+                group_rank = dist.get_rank(group=group)
+            elif isinstance(group, MPI.Comm):
+                group_size = group.Get_size()
+                group_rank = group.Get_rank()
+            else:
+                raise ValueError("Unsupported group type for distributed sampling")
+            sampler_type = DistributedCostAwareBatchSampler
+            distributed_options = {
+                "num_replicas": group_size,
+                "rank": group_rank,
+                "pad_batches": not batching.get("drop_last", False),
+            }
+
+        def make_loader(dataset, shuffle):
+            sampler_drop_last = (
+                batching.get("drop_last", False)
+                if sampler_type is CostAwareBatchSampler
+                else False
+            )
+            batch_sampler = sampler_type(
+                dataset,
+                max_cost=batching["max_nodes"],
+                max_graphs=batching.get("max_graphs"),
+                shuffle=batching.get("shuffle", shuffle),
+                seed=batching.get("seed", 0),
+                oversized_sample=batching.get("oversized_sample", "error"),
+                drop_last=sampler_drop_last,
+                **distributed_options,
+            )
+            loader_type = DataLoader
+            if dist.is_initialized() and int(
+                os.getenv("HYDRAGNN_CUSTOM_DATALOADER", "0")
+            ):
+                loader_type = HydraDataLoader
+            return loader_type(
+                dataset,
+                batch_sampler=batch_sampler,
+                num_workers=int(os.getenv("HYDRAGNN_NUM_WORKERS", "0")),
+                pin_memory=dist.is_initialized(),
+                persistent_workers=False,
+            )
+
+        return (
+            make_loader(trainset, train_sampler_shuffle),
+            make_loader(valset, val_sampler_shuffle),
+            make_loader(testset, test_sampler_shuffle),
+        )
+
     if dist.is_initialized():
         if oversampling:
             assert num_samples is not None

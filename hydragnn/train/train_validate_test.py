@@ -171,11 +171,8 @@ def _set_reshard_after_backward(model, enabled):
 
 
 def get_nbatch(loader):
-    ## calculate numbrer of batches for a given loader
-    m = len(loader.sampler)
-    nbatch = (m - 1) // loader.batch_size + 1
-    extra = -1 if m - nbatch * loader.batch_size > 0 and loader.drop_last else 0
-    nbatch = nbatch + extra
+    """Calculate the number of batches produced by a loader."""
+    nbatch = len(loader)
 
     if os.getenv("HYDRAGNN_MAX_NUM_BATCH") is not None:
         nbatch = min(nbatch, int(os.environ["HYDRAGNN_MAX_NUM_BATCH"]))
@@ -343,8 +340,13 @@ def train_validate_test(
         t0 = time.time()
         profiler.set_current_epoch(epoch)
         for dataloader in [train_loader, val_loader, test_loader]:
-            if getattr(dataloader.sampler, "set_epoch", None) is not None:
-                dataloader.sampler.set_epoch(epoch)
+            sampler = getattr(dataloader, "batch_sampler", None)
+            if getattr(sampler, "set_epoch", None) is not None:
+                sampler.set_epoch(epoch)
+            else:
+                sampler = dataloader.sampler
+                if getattr(sampler, "set_epoch", None) is not None:
+                    sampler.set_epoch(epoch)
 
         with profiler as prof:
             tr.enable()

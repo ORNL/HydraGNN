@@ -23,6 +23,13 @@ from .graph_samples_checks_and_updates import (
 )
 
 from .stratified_sampling import stratified_sampling
+from .batch_sampler import (
+    BatchStatistics,
+    CostAwareBatchSampler,
+    DistributedCostAwareBatchSampler,
+    graph_node_cost,
+    graph_node_costs,
+)
 
 from .load_data import (
     dataset_loading_and_splitting,

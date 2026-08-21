@@ -311,6 +311,17 @@ class DistDataset(AbstractBaseDataset):
     def len(self):
         return self.total_ns
 
+    def get_node_counts(self):
+        """Return global per-sample node counts without reading DDStore data."""
+        for key in ("x", "pos"):
+            if key in self.variable_count and self.variable_dim.get(key) == 0:
+                counts = self.variable_count[key]
+                if len(counts) == self.total_ns:
+                    return counts
+        raise ValueError(
+            "DDStore dataset has no node-indexed x or pos metadata for batching"
+        )
+
     def update_data_object(self, data_object):
         if self.var_config is not None:
             update_predicted_values(
