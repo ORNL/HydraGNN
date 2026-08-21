@@ -261,6 +261,10 @@ HydraGNN concatenates them along tensor dimension 1 in their JSON order. Thus,
 node attributes with dimensions 2 and 3 produce an `(N, 5)` tensor, while graph
  attributes with dimensions 1 and 4 produce a `(1, 5)` tensor per sample.
 
+Attribute names are not aliases: the example uses PyG's conventional `pos`
+attribute, so the corresponding sample must provide `data.pos`. A different
+name is valid only when the JSON specification and PyG attribute match exactly.
+
 Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
 `data.graph_attr`, `data.y`, or `data.y_loc` tensors in dataset importers.
 HydraGNN validates the named source attributes and builds those tensors when a
