@@ -19,6 +19,8 @@ import shutil
 
 import hydragnn, tests
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
+from tests._prediction_workflow import load_checkpoint_and_test
+from tests._training_workflow import train_and_checkpoint
 
 
 # Main unit test function called by pytest wrappers.
@@ -130,7 +132,7 @@ def unittest_train_model(
     train_loader, val_loader, test_loader = (
         hydragnn.preprocess.dataset_loading_and_splitting(config)
     )
-    _, config = hydragnn.train_model(
+    _, config = train_and_checkpoint(
         config, train_loader, val_loader, test_loader, use_deepspeed
     )
 
@@ -139,7 +141,7 @@ def unittest_train_model(
         error_mse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.predict_model(config, test_loader, use_deepspeed)
+    ) = load_checkpoint_and_test(config, test_loader, use_deepspeed)
 
     # Set RMSE and sample MAE error thresholds
     thresholds = {

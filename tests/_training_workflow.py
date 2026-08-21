@@ -54,8 +54,10 @@ def _cast_optimizer_state(optimizer, dtype):
                 state[key] = value.to(dtype=dtype)
 
 
-def train_model(config, train_loader, val_loader, test_loader, use_deepspeed=False):
-    """Train from explicit loaders; dataset construction belongs to the caller."""
+def train_and_checkpoint(
+    config, train_loader, val_loader, test_loader, use_deepspeed=False
+):
+    """Exercise HydraGNN's low-level training APIs in integration tests."""
     setup_log(get_log_name_config(config))
 
     training_cfg = config["NeuralNetwork"]["Training"]

@@ -19,6 +19,8 @@ from mpi4py import MPI
 from hydragnn.preprocess import graph_samples_checks_and_updates as gscu
 from hydragnn.preprocess import graph_dataset
 from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
+from tests._prediction_workflow import load_checkpoint_and_test
+from tests._training_workflow import train_and_checkpoint
 
 torch.manual_seed(97)
 
@@ -159,7 +161,7 @@ def unittest_train_model_graphattr(
     train_loader, val_loader, test_loader = (
         hydragnn.preprocess.dataset_loading_and_splitting(config)
     )
-    _, config = hydragnn.train_model(
+    _, config = train_and_checkpoint(
         config, train_loader, val_loader, test_loader, use_deepspeed
     )
 
@@ -168,7 +170,7 @@ def unittest_train_model_graphattr(
         error_mse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.predict_model(config, test_loader, use_deepspeed)
+    ) = load_checkpoint_and_test(config, test_loader, use_deepspeed)
 
     thresholds = {
         "SAGE": [0.20, 0.20],

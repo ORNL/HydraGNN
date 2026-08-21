@@ -574,10 +574,8 @@ HydraGNN provides a complete training pipeline with extensive configuration opti
 ```python
 import hydragnn
 
-# Distributed setup is performed by train_model. The caller supplies loaders.
-model, config = hydragnn.train_model(
-    config, train_loader, val_loader, test_loader
-)
+# Initialize distributed execution before constructing the distributed model.
+world_size, rank = hydragnn.utils.distributed.setup_ddp()
 ```
 
 #### MPI Execution
@@ -689,8 +687,10 @@ import hydragnn
 train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
     trainset, valset, testset, batch_size=32
 )
-model, config = hydragnn.train_model(
-    config, train_loader, val_loader, test_loader
+# Construct the model, optimizer, scheduler, and writer explicitly, then train.
+hydragnn.train.train_validate_test(
+    model, optimizer, train_loader, val_loader, test_loader,
+    writer, scheduler, config["NeuralNetwork"], log_name, verbosity
 )
 ```
 
@@ -778,14 +778,8 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 #### Running with DeepSpeed
 
 ```python
-# Enable DeepSpeed during training
-hydragnn.train_model(
-    config,
-    train_loader,
-    val_loader,
-    test_loader,
-    use_deepspeed=True,
-)
+# Initialize the model and optimizer with DeepSpeed, then pass the resulting
+# engine and explicit loaders to train_validate_test(use_deepspeed=True).
 ```
 
 ### FSDP (Fully Sharded Data Parallel) Integration
@@ -1328,7 +1322,10 @@ logging.basicConfig(
 #### Graceful Error Handling
 ```python
 try:
-    hydragnn.train_model(config, train_loader, val_loader, test_loader)
+    hydragnn.train.train_validate_test(
+        model, optimizer, train_loader, val_loader, test_loader,
+        writer, scheduler, config["NeuralNetwork"], log_name, verbosity
+    )
 except Exception as e:
     logging.error(f"Training failed: {e}")
     # Save partial results

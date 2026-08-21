@@ -15,6 +15,7 @@ import pytest
 import shutil
 
 import hydragnn, tests
+from tests._training_workflow import train_and_checkpoint
 
 
 # Loss function unit test called by pytest wrappers.
@@ -94,7 +95,7 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
     train_loader, val_loader, test_loader = (
         hydragnn.preprocess.dataset_loading_and_splitting(config)
     )
-    hydragnn.train_model(config, train_loader, val_loader, test_loader)
+    train_and_checkpoint(config, train_loader, val_loader, test_loader)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.

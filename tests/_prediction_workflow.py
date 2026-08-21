@@ -26,8 +26,8 @@ except:
     deepspeed_available = False
 
 
-def predict_model(config, test_loader, use_deepspeed=False):
-    """Load a trained model and predict from an explicit test loader."""
+def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
+    """Exercise checkpoint loading and testing in integration tests."""
     world_size, world_rank = setup_ddp(use_deepspeed=use_deepspeed)
 
     model = create_model_config(
