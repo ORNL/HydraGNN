@@ -188,6 +188,8 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
     - `["enable_interatomic_potential"]`  
       Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
+    - `["atomic_species_encoding"]`
+      Species-input policy in MLIP mode: `auto`, `embedding`, `native`, or `none` (str, default `auto`). Generic stacks use a learned embedding in `auto` mode; stacks with a native species encoder retain it.
 
   - `["Training"]`
     - `["global_attn_redraw_interval"]`

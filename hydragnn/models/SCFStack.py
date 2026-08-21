@@ -164,7 +164,7 @@ class SCFStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
+        node_features, _, _ = super()._embedding(data)
         equivariant_geometry = None
         if self.global_attn_engine == "EquivariantTransformer":
             # Capture periodic metadata before the legacy coordinate-update
@@ -213,11 +213,11 @@ class SCFStack(Base):
                     raise ValueError(
                         "EquivariantTransformer requires invariant node features"
                     )
-                x = self.node_emb(data.x.float())
+                x = self.node_emb(node_features.float())
             else:
                 x = self.pos_emb(data.pe)
                 if self.input_dim:
-                    x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                    x = torch.cat((self.node_emb(node_features.float()), x), 1)
                     x = self.node_lin(x)
 
             if self.is_edge_model and self.global_attn_engine == "GPS":
@@ -232,7 +232,7 @@ class SCFStack(Base):
                 )
             return x, data.pos, conv_args
         else:
-            return data.x, data.pos, conv_args
+            return node_features, data.pos, conv_args
 
     def __str__(self):
         return "SCFStack"
