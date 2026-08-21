@@ -140,7 +140,14 @@ def generate_graphdata_from_rdkit_molecule(
         offset = 0
         flat_targets = ytarget.reshape(-1)
         for spec in schema.outputs:
-            rows = data.num_nodes if spec.level == "node" else 1
+            if spec.level == "node":
+                rows = data.num_nodes
+            elif spec.level == "edge":
+                rows = data.num_edges
+            elif spec.level == "graph":
+                rows = 1
+            else:  # Defensive guard if VariableLevel is extended in the future.
+                raise ValueError(f"Unsupported output level: {spec.level}")
             size = rows * spec.dim
             setattr(
                 data,

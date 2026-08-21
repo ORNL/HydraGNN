@@ -26,6 +26,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.pickledataset import SimplePickleDataset
 from hydragnn.utils.config_utils import (
+    get_log_name_config,
     update_config,
 )
 from hydragnn.models.create import create_model_config
@@ -41,31 +42,6 @@ except ImportError:
 import matplotlib.pyplot as plt
 
 plt.rcParams.update({"font.size": 16})
-
-
-def get_log_name_config(config):
-    return (
-        config["NeuralNetwork"]["Architecture"]["model_type"]
-        + "-r-"
-        + str(config["NeuralNetwork"]["Architecture"]["radius"])
-        + "-ncl-"
-        + str(config["NeuralNetwork"]["Architecture"]["num_conv_layers"])
-        + "-hd-"
-        + str(config["NeuralNetwork"]["Architecture"]["hidden_dim"])
-        + "-ne-"
-        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
-        + "-lr-"
-        + str(config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"])
-        + "-bs-"
-        + str(config["NeuralNetwork"]["Training"]["batch_size"])
-        + "-node_ft-"
-        + "".join(spec["name"] + "-" for spec in config["Variables"]["inputs"])
-        + "-task_weights-"
-        + "".join(
-            str(weigh) + "-"
-            for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
-        )
-    )
 
 
 def getcolordensity(xdata, ydata):

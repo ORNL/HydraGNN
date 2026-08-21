@@ -45,3 +45,24 @@ def pytest_csce_smiles_features_are_compiled_from_named_attributes():
     assert data.y_loc.tolist() == [[0, 1]]
     assert "edge_attr" not in data
     assert data.bond_attributes.shape[1] == 4
+
+
+def pytest_smiles_edge_outputs_use_one_row_per_edge():
+    variables = {
+        "inputs": [
+            {"name": "atom_type", "level": "node", "dim": 6},
+            {"name": "atom_descriptors", "level": "node", "dim": 6},
+        ],
+        "outputs": [{"name": "bond_target", "level": "edge", "dim": 1}],
+    }
+    node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
+    # "CO" has two directed edges, one in each direction.
+    target = torch.tensor([[0.25], [0.75]], dtype=torch.float32)
+
+    data = generate_graphdata_from_smilestr(
+        "CO", target, node_types, var_config=variables
+    )
+
+    assert data.bond_target.shape == (data.num_edges, 1)
+    torch.testing.assert_close(data.bond_target, target)
+    assert data.edge_output.shape == (data.num_edges, 1)

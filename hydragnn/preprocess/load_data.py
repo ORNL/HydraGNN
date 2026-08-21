@@ -210,12 +210,13 @@ class HydraDataLoader(DataLoader):
 
 
 def dataset_loading_and_splitting(config: {}):
-    first_path = list(config["Dataset"]["path"].values())[0]
-    if not first_path.endswith(".pkl") and not os.path.isdir(first_path):
-        raise ValueError(
-            "HydraGNN requires a pickle dataset or a directory of serialized "
-            "PyG .pt samples. Convert raw source files before training."
-        )
+    for split_name, dataset_path in config["Dataset"]["path"].items():
+        if not dataset_path.endswith(".pkl") and not os.path.isdir(dataset_path):
+            raise ValueError(
+                f"Dataset.path.{split_name} must be a pickle dataset or a "
+                "directory of serialized PyG .pt samples; got "
+                f"{dataset_path!r}. Convert raw source files before training."
+            )
 
     ##if total datasets is provided, split the datasets and save them to pkl files and update config with pkl file locations
     if "total" in config["Dataset"]["path"].keys():
@@ -468,23 +469,32 @@ def total_to_train_val_test_pkls(config, isdist=False):
         )
         if not paths:
             raise ValueError(f"No serialized PyG .pt samples found in {total_path}")
-        dataset_total = [torch.load(path, weights_only=False) for path in paths]
+        # Split lightweight paths before deserializing so the complete dataset
+        # is not materialized at once. Compositional stratification needs the
+        # samples themselves and therefore retains the eager path.
+        if config["Dataset"]["compositional_stratified_splitting"]:
+            dataset_total = [_load_trusted_pyg_sample(path) for path in paths]
+            samples_are_paths = False
+        else:
+            dataset_total = paths
+            samples_are_paths = True
         minmax_node_feature = None
         minmax_graph_feature = None
-        serialized_dir = os.path.join(
-            os.environ["SERIALIZED_DATA_PATH"], "serialized_dataset"
-        )
+        serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
+        serialized_dir = os.path.join(serialized_data_path, "serialized_dataset")
         os.makedirs(serialized_dir, exist_ok=True)
     else:
         if total_path.endswith(".pkl"):
             file_dir = total_path
         else:
-            file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
+            serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
+            file_dir = f"{serialized_data_path}/serialized_dataset/{config['Dataset']['name']}.pkl"
         with open(file_dir, "rb") as f:
             minmax_node_feature = pickle.load(f)
             minmax_graph_feature = pickle.load(f)
             dataset_total = pickle.load(f)
         serialized_dir = os.path.dirname(file_dir)
+        samples_are_paths = False
 
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
@@ -495,6 +505,8 @@ def total_to_train_val_test_pkls(config, isdist=False):
     for dataset_type, dataset in zip(
         ["train", "validate", "test"], [trainset, valset, testset]
     ):
+        if samples_are_paths:
+            dataset = [_load_trusted_pyg_sample(path) for path in dataset]
         serial_data_name = config["Dataset"]["name"] + "_" + dataset_type + ".pkl"
         config["Dataset"]["path"][dataset_type] = (
             serialized_dir + "/" + serial_data_name
@@ -514,3 +526,13 @@ def total_to_train_val_test_pkls(config, isdist=False):
 
     if dist.is_initialized():
         dist.barrier()
+
+
+def _load_trusted_pyg_sample(path):
+    """Load a trusted HydraGNN/PyG sample.
+
+    PyTorch ``.pt`` files use pickle-backed deserialization and can execute
+    code. Only files produced by a trusted HydraGNN workflow should be passed
+    here; dataset directories from untrusted sources must not be loaded.
+    """
+    return torch.load(path, weights_only=False)
