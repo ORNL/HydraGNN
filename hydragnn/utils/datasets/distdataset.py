@@ -23,7 +23,10 @@ except ImportError:
 
 from hydragnn.utils.print.print_utils import log0
 from hydragnn.utils.distributed import nsplit
-from hydragnn.preprocess import update_predicted_values, update_atom_features
+from hydragnn.utils.input_config_parsing.variable_schema import (
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from tqdm import tqdm
@@ -302,11 +305,7 @@ class DistDataset(AbstractBaseDataset):
         self.var_config = var_config
 
         if self.var_config is not None:
-            self.input_node_features = self.var_config["input_node_features"]
-            self.variables_type = self.var_config["type"]
-            self.output_index = self.var_config["output_index"]
-            self.graph_feature_dim = self.var_config["graph_feature_dims"]
-            self.node_feature_dim = self.var_config["node_feature_dims"]
+            self.variable_schema = parse_variable_schema(self.var_config)
 
     def len(self):
         return self.total_ns
@@ -324,14 +323,7 @@ class DistDataset(AbstractBaseDataset):
 
     def update_data_object(self, data_object):
         if self.var_config is not None:
-            update_predicted_values(
-                self.variables_type,
-                self.output_index,
-                self.graph_feature_dim,
-                self.node_feature_dim,
-                data_object,
-            )
-            update_atom_features(self.input_node_features, data_object)
+            prepare_data_from_schema(data_object, self.variable_schema)
 
     @tr.profile("get")
     def get(self, idx):

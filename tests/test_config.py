@@ -30,7 +30,8 @@ def pytest_config(config_file):
             "node_features",
             "graph_features",
         ],
-        "NeuralNetwork": ["Architecture", "Variables_of_interest", "Training"],
+        "NeuralNetwork": ["Architecture", "Training"],
+        "Variables": ["inputs", "outputs"],
     }
 
     for category in expected.keys():

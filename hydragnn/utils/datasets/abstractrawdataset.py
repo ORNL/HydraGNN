@@ -108,14 +108,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
         ]
         self.radius = config["NeuralNetwork"]["Architecture"]["radius"]
         self.max_neighbours = config["NeuralNetwork"]["Architecture"]["max_neighbours"]
-        self.variables = config["NeuralNetwork"]["Variables_of_interest"]
-        self.variables_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
-        self.output_index = config["NeuralNetwork"]["Variables_of_interest"][
-            "output_index"
-        ]
-        self.input_node_features = config["NeuralNetwork"]["Variables_of_interest"][
-            "input_node_features"
-        ]
+        self.variables = config["Variables"]
 
         self.spherical_coordinates = False
         self.point_pair_features = False

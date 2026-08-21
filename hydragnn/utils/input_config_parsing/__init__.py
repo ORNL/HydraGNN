@@ -10,10 +10,18 @@
 ##############################################################################
 from .config_utils import (
     update_config,
-    update_config_minmax,
     update_config_edge_dim,
     update_config_equivariance,
     get_log_name_config,
     save_config,
     parse_deepspeed_config,
+)
+from .variable_schema import (
+    VariableSchema,
+    VariableSpec,
+    get_variable_schema,
+    parse_variable_schema,
+    prepare_data_from_schema,
+    schema_dimensions,
+    validate_variable,
 )

@@ -221,15 +221,33 @@ When GPS wraps an equivariant HydraGNN model, global attention operates only
 on invariant node channels. Equivariant channels are updated by the local MPNN
 and propagated alongside the globally attended invariant representation.
 
-  - `["Variables of Interest"]`
-    - `["input_node_features"]`  
-      Indices from nodal data used as inputs (int)
-    - `["output_index"]`  
-      Indices from data used as targets (int)
-    - `["type"]`  
-      Either `node` or `graph` (string)
-    - `["output_dim"]`  
-      Dimensions of prediction tasks (list)
+  - top-level `["Variables"]`
+    - `["inputs"]` and `["outputs"]` contain named tensor specifications.
+      Every specification has an attribute `name`, a `level` (`node`, `edge`,
+      or `graph`), and a positive feature dimension `dim`.
+
+```json
+"Variables": {
+  "inputs": [
+    {"name": "atomic_numbers", "level": "node", "dim": 1},
+    {"name": "positions", "level": "node", "dim": 3},
+    {"name": "bond_attributes", "level": "edge", "dim": 4},
+    {"name": "charge_and_spin", "level": "graph", "dim": 2}
+  ],
+  "outputs": [
+    {"name": "energy", "level": "graph", "dim": 1},
+    {"name": "forces", "level": "node", "dim": 3}
+  ]
+}
+```
+
+Each PyG sample must expose tensors with exactly those names. Node variables
+must have shape `(N, dim)`, edge variables `(E, dim)`, and graph variables
+`(1, dim)`. PyG therefore batches graph variables into `(B, dim)` without any
+special collation rule. When multiple attributes of the same level are listed,
+HydraGNN concatenates them along tensor dimension 1 in their JSON order. Thus,
+node attributes with dimensions 2 and 3 produce an `(N, 5)` tensor, while graph
+attributes with dimensions 1 and 4 produce a `(1, 5)` tensor per sample.
 
   - `["Training"]`
     - `["num_epoch"]`  

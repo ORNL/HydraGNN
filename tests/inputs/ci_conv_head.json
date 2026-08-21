@@ -13,14 +13,32 @@
             "validate": "dataset/unit_test_singlehead_validate"
         },
         "node_features": {
-            "name": ["x","x2","x3"],
-            "dim": [1, 1, 1],
-            "column_index": [0, 6, 7]
+            "name": [
+                "x",
+                "x2",
+                "x3"
+            ],
+            "dim": [
+                1,
+                1,
+                1
+            ],
+            "column_index": [
+                0,
+                6,
+                7
+            ]
         },
-        "graph_features":{
-            "name": [ "sum_x_x2_x3"],
-            "dim": [1],
-            "column_index": [0]
+        "graph_features": {
+            "name": [
+                "sum_x_x2_x3"
+            ],
+            "dim": [
+                1
+            ],
+            "column_index": [
+                0
+            ]
         }
     },
     "NeuralNetwork": {
@@ -48,24 +66,22 @@
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [20,10],
-                     "type": "conv"
+                    "dim_headlayers": [
+                        20,
+                        10
+                    ],
+                    "type": "conv"
                 }
             },
-            "task_weights": [1.0]
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["x"],
-            "output_index": [0],
-            "type": ["node"],
-            "denormalize_output": false
+            "task_weights": [
+                1.0
+            ]
         },
         "Training": {
             "num_epoch": 100,
             "perc_train": 0.7,
-	        "EarlyStopping": false,
-	        "patience": 10,
+            "EarlyStopping": false,
+            "patience": 10,
             "loss_function_type": "mse",
             "batch_size": 32,
             "Optimizer": {
@@ -79,5 +95,21 @@
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "x",
+                "level": "node",
+                "dim": 1
+            }
+        ],
+        "outputs": [
+            {
+                "name": "x",
+                "level": "node",
+                "dim": 1
+            }
+        ]
     }
 }
