@@ -45,9 +45,24 @@ GENERIC_STACKS = (
     MFCStack,
 )
 NATIVE_STACKS = (MACEStack,)
+GENERIC_MPNN_TYPES = (
+    "PAINN",
+    "PNAEq",
+    "DimeNet",
+    "SchNet",
+    "EGNN",
+    "PNAPlus",
+    "PNA",
+    "GAT",
+    "GIN",
+    "SAGE",
+    "CGCNN",
+    "MFC",
+)
+CUSTOM_EMBEDDING_MPNN_TYPES = ("PAINN", "PNAEq", "DimeNet", "SchNet", "PNAPlus")
 
 
-def _model(atomistic):
+def _model(atomistic, mpnn_type="EGNN"):
     heads = update_multibranch_heads(
         {
             "node": {
@@ -60,7 +75,7 @@ def _model(atomistic):
         }
     )
     return create_model(
-        mpnn_type="EGNN",
+        mpnn_type=mpnn_type,
         input_dim=1,
         hidden_dim=8,
         output_dim=[1],
@@ -75,6 +90,20 @@ def _model(atomistic):
         task_weights=[1.0],
         num_conv_layers=2,
         num_nodes=3,
+        max_neighbours=8,
+        edge_dim=1 if mpnn_type == "CGCNN" else None,
+        pna_deg=torch.tensor([0, 1, 2, 1]),
+        num_radial=4,
+        num_spherical=3,
+        num_gaussians=8,
+        num_filters=8,
+        radius=5.0,
+        envelope_exponent=5,
+        basis_emb_size=4,
+        int_emb_size=8,
+        out_emb_size=8,
+        num_before_skip=1,
+        num_after_skip=1,
         enable_interatomic_potential=atomistic,
         energy_weight=0.1,
         force_weight=1.0,
@@ -96,6 +125,7 @@ def _data(atomic_numbers=None):
         atomic_numbers=atomic_numbers,
         pos=pos,
         edge_index=edge_index,
+        edge_attr=torch.ones(edge_index.shape[1], 1),
         edge_shifts=torch.zeros(edge_index.shape[1], 3),
         batch=torch.zeros(3, dtype=torch.long),
         energy=torch.zeros(1),
@@ -108,8 +138,9 @@ def pytest_stack_species_capabilities_are_explicit():
     assert all(stack.uses_native_species_encoder for stack in NATIVE_STACKS)
 
 
-def pytest_non_atomistic_generic_input_is_unchanged():
-    model = _model(atomistic=False)
+@pytest.mark.parametrize("mpnn_type", GENERIC_MPNN_TYPES)
+def pytest_non_atomistic_generic_input_is_unchanged(mpnn_type):
+    model = _model(atomistic=False, mpnn_type=mpnn_type)
     data = _data()
     features, _, _ = model._embedding(data)
 
@@ -117,8 +148,9 @@ def pytest_non_atomistic_generic_input_is_unchanged():
     assert torch.equal(features, data.x)
 
 
-def pytest_atomistic_generic_input_is_a_hidden_width_species_embedding():
-    model = _model(atomistic=True)
+@pytest.mark.parametrize("mpnn_type", GENERIC_MPNN_TYPES)
+def pytest_atomistic_generic_input_is_a_hidden_width_species_embedding(mpnn_type):
+    model = _model(atomistic=True, mpnn_type=mpnn_type)
     data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
     features, _, _ = model.model._embedding(data)
 
@@ -126,6 +158,47 @@ def pytest_atomistic_generic_input_is_a_hidden_width_species_embedding():
     assert model.model.species_embedding.num_embeddings == 119
     assert features.shape == (3, 8)
     assert torch.equal(features, model.model.species_embedding(data.atomic_numbers))
+
+
+@pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)
+def pytest_custom_embedding_paths_do_not_restore_raw_atomic_numbers(mpnn_type):
+    model = _model(atomistic=True, mpnn_type=mpnn_type).model
+    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+    features, _, _ = model._embedding(data)
+
+    assert features.shape == (data.num_nodes, model.hidden_dim)
+    assert torch.equal(features, model.species_embedding(data.atomic_numbers))
+    assert not torch.equal(features[:, :1], data.x)
+
+
+@pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)
+def pytest_custom_embedding_paths_receive_gradients(mpnn_type, monkeypatch):
+    if mpnn_type == "SchNet":
+        import torch_geometric.nn.models.schnet as schnet_module
+
+        def complete_radius_graph(pos, r, batch, max_num_neighbors):
+            del r, max_num_neighbors
+            nodes = torch.arange(pos.shape[0], device=pos.device)
+            row = nodes.repeat_interleave(pos.shape[0])
+            col = nodes.repeat(pos.shape[0])
+            mask = (row != col) & (batch[row] == batch[col])
+            return torch.stack((row[mask], col[mask]))
+
+        # The unit-test environment does not provide the optional pyg-lib
+        # radius-graph kernel. Replacing only graph construction keeps this
+        # test focused on feature propagation through SchNet.
+        monkeypatch.setattr(schnet_module, "radius_graph", complete_radius_graph)
+
+    model = _model(atomistic=True, mpnn_type=mpnn_type)
+    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+
+    predictions = model(data)
+    sum(prediction.sum() for prediction in predictions).backward()
+
+    gradient = model.model.species_embedding.weight.grad
+    assert gradient is not None
+    assert torch.isfinite(gradient).all()
+    assert gradient[data.atomic_numbers].abs().sum() > 0
 
 
 def pytest_native_capability_prevents_double_embedding():
