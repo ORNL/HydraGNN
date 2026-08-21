@@ -88,7 +88,6 @@ GCP_PROJECT = "deepmind-opensource"
 # charge and spin are constant across QCML dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class QCMLDataset(AbstractBaseDataset):
@@ -181,8 +180,6 @@ class QCMLDataset(AbstractBaseDataset):
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-            x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
             # Calculate chemical composition
             atomic_number_list = atomic_numbers.tolist()
             assert len(atomic_number_list) == natoms
@@ -203,17 +200,10 @@ class QCMLDataset(AbstractBaseDataset):
                 atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                 chemical_composition=chemical_composition,
                 # smiles_string=smiles_string,
-                x=x,
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
-                graph_attr=graph_attr,
             )
-
-            if self.energy_per_atom:
-                data_object.y = data_object.energy_per_atom
-            else:
-                data_object.y = data_object.energy
 
             data_object = self.radius_graph(data_object)
 

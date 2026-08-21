@@ -49,7 +49,7 @@
     "Variables": {
         "inputs": [
             {
-                "name": "x",
+                "name": "atomic_numbers",
                 "level": "node",
                 "dim": 1
             }

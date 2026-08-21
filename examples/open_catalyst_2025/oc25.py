@@ -208,8 +208,6 @@ def _create_pytorch_data_object(
             cell = torch.eye(3, dtype=torch.float32)
             pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-        x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
         atomic_number_list = atomic_numbers.tolist()
         assert len(atomic_number_list) == natoms
         hist, _ = np.histogram(atomic_number_list, bins=range(1, 118 + 2))
@@ -217,8 +215,6 @@ def _create_pytorch_data_object(
 
         charge = atoms.info.get("charge", 0)
         spin = atoms.info.get("spin", 1)
-        graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-
         data_object = Data(
             dataset_name="oc25",
             natoms=natoms,
@@ -230,15 +226,9 @@ def _create_pytorch_data_object(
             atomic_numbers=atomic_numbers,
             chemical_composition=chemical_composition,
             smiles_string=None,
-            x=x,
             energy=energy,
             energy_per_atom=energy_per_atom,
             forces=forces,
-            graph_attr=graph_attr,
-        )
-
-        data_object.y = (
-            data_object.energy_per_atom if energy_per_atom_bool else data_object.energy
         )
 
         if data_object.pbc.any():

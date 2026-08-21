@@ -69,8 +69,13 @@
     "Variables": {
         "inputs": [
             {
-                "name": "x",
+                "name": "atom_type",
                 "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "bond_type",
+                "level": "edge",
                 "dim": 1
             }
         ],

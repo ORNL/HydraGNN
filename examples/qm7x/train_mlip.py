@@ -89,7 +89,6 @@ transform_coordinates = Distance(norm=False, cat=False)
 # charge and spin are constant across QM7-X dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
@@ -244,8 +243,6 @@ class QM7XDataset(AbstractBaseDataset):
                 energy = torch.tensor(EPBE0, dtype=torch.float32).unsqueeze(0)
                 energy_per_atom = energy.detach().clone() / natoms
 
-                x = torch.cat((atomic_numbers, pos, forces, hCHG, hVDIP, hRAT), dim=1)
-
                 # Calculate chemical composition
                 atomic_number_list = atomic_numbers.tolist()
                 assert len(atomic_number_list) == natoms
@@ -286,17 +283,10 @@ class QM7XDataset(AbstractBaseDataset):
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     # smiles_string=smiles_string,
-                    x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
                     forces=forces,
-                    graph_attr=graph_attr,
                 )
-
-                if self.energy_per_atom:
-                    data_object.y = data_object.energy_per_atom
-                else:
-                    data_object.y = data_object.energy
 
                 data_object = self.radius_graph(data_object)
 

@@ -57,8 +57,10 @@ lapPE = AddLaplacianEigenvectorPE(
 
 
 def zinc_pre_transform(data):
-    data.x = data.x.float().view(-1, 1)
-    data.edge_attr = data.edge_attr.float().view(-1, 1)
+    data.atom_type = data.x.float().view(-1, 1)
+    data.bond_type = data.edge_attr.float().view(-1, 1)
+    data.free_energy = data.y.reshape(1, 1)
+    del data.x, data.edge_attr, data.y
     data = lapPE(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]

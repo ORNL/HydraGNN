@@ -43,7 +43,6 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 # charge and spin are constant across Open Catalyst 2020 dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class AtomsToGraphs:
@@ -133,8 +132,6 @@ class AtomsToGraphs:
 
         forces = torch.Tensor(atoms.get_forces(apply_constraint=False))
 
-        x = torch.cat((atomic_numbers, positions, forces), dim=1)
-
         # put the minimum data in torch geometric data object
         data_object = Data(
             dataset_name="oc2020",
@@ -145,18 +142,11 @@ class AtomsToGraphs:
             edge_index=None,
             edge_attr=None,
             atomic_numbers=atomic_numbers,
-            x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
             tags=tags,
-            graph_attr=graph_attr,
         )
-
-        if energy_per_atom:
-            data_object.y = data_object.energy_per_atom
-        else:
-            data_object.y = data_object.energy
 
         if data_object.pbc.any():
             try:

@@ -82,7 +82,6 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 # charge and spin are constant across MPTrj dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class MPTrjDataset(AbstractBaseDataset):
@@ -203,8 +202,6 @@ class MPTrjDataset(AbstractBaseDataset):
                     source_unit="kbar",
                     source_sign="compression_positive",
                 )
-                x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
                 # Calculate chemical composition
                 atomic_number_list = atomic_numbers.tolist()
                 assert len(atomic_number_list) == natoms
@@ -224,19 +221,12 @@ class MPTrjDataset(AbstractBaseDataset):
                     atomic_numbers=atomic_numbers,  # Reshaping atomic_numbers to Nx1 tensor
                     chemical_composition=chemical_composition,
                     smiles_string=None,
-                    x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
                     stress=stress,
                     # magmom=torch.tensor(magmom, dtype=torch.float32),
                     forces=forces,
-                    graph_attr=graph_attr,
                 )
-
-                if self.energy_per_atom:
-                    data_object.y = data_object.energy_per_atom
-                else:
-                    data_object.y = data_object.energy
 
                 if data_object.pbc.any():
                     try:

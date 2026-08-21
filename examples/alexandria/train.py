@@ -94,7 +94,6 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 # charge and spin are constant across Alexandria dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class Alexandria(AbstractBaseDataset):
@@ -293,8 +292,6 @@ class Alexandria(AbstractBaseDataset):
         #    print(f"Structure {entry_id} does not have e_above_hull")
         #    return data_object
 
-        x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
         # Calculate chemical composition
         atomic_number_list = atomic_numbers.tolist()
         assert len(atomic_number_list) == natoms
@@ -314,7 +311,6 @@ class Alexandria(AbstractBaseDataset):
             chemical_composition=chemical_composition,
             smiles_string=None,
             # entry_id=entry_id,
-            x=x,
             energy=formation_energy_tensor,
             energy_per_atom=formation_energy_per_atom_tensor,
             forces=forces,
@@ -325,13 +321,7 @@ class Alexandria(AbstractBaseDataset):
             # total_mag=total_mag,
             # dos_ef=dos_ef,
             # band_gap_ind=band_gap_ind,
-            graph_attr=graph_attr,
         )
-
-        if self.energy_per_atom:
-            data_object.y = data_object.energy_per_atom
-        else:
-            data_object.y = data_object.energy
 
         # Apply radius graph and build edge attributes accordingly
         if data_object.pbc.any():
