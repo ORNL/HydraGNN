@@ -149,7 +149,7 @@ class PAINNStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
+        node_features, _, _ = super()._embedding(data)
 
         assert (
             data.pos is not None
@@ -174,11 +174,7 @@ class PAINNStack(Base):
 
         if self.use_global_attn:
             # encode node positional embeddings
-            x = self.pos_emb(data.pe)
-            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
-            if self.input_dim:
-                x = torch.cat((self.node_emb(data.x.float()), x), 1)
-                x = self.node_lin(x)
+            x = node_features
             # repeat for edge features and relative edge encodings
             if self.is_edge_model:
                 e = self.rel_pos_emb(data.rel_pe)
@@ -187,7 +183,7 @@ class PAINNStack(Base):
                     e = self.edge_lin(e)
                 conv_args.update({"edge_attr": e})
         else:
-            x = data.x
+            x = node_features
         # Instantiate tensor to hold equivariant traits
         v = torch.zeros(x.size(0), 3, x.size(1), device=x.device)
         return x, v, conv_args
