@@ -20,6 +20,11 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.data import Data
 import hydragnn
+from hydragnn.utils.input_config_parsing.variable_schema import (
+    VariableSchema,
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 
 ##################################################################################################################
 ##################################################################################################################
@@ -131,12 +136,11 @@ def generate_graphdata_from_rdkit_molecule(
         data.edge_attr = edge_attr
         data.y = ytarget
     else:
-        from hydragnn.utils.input_config_parsing.variable_schema import (
-            parse_variable_schema,
-            prepare_data_from_schema,
+        schema = (
+            var_config
+            if isinstance(var_config, VariableSchema)
+            else parse_variable_schema(var_config)
         )
-
-        schema = parse_variable_schema(var_config)
         offset = 0
         flat_targets = ytarget.reshape(-1)
         for spec in schema.outputs:

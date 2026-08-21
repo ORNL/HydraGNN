@@ -19,7 +19,7 @@ VariableLevel = Literal["node", "edge", "graph"]
 VariableRole = Literal["feature", "position"]
 _LEVELS = frozenset(("node", "edge", "graph"))
 _ROLES = frozenset(("feature", "position"))
-_INTERNAL_OUTPUT_NAMES = frozenset(
+_DERIVED_TENSOR_NAMES = frozenset(
     (
         "x",
         "edge_attr",
@@ -122,13 +122,17 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
         spec.level == "node" and spec.role == "feature" for spec in schema.inputs
     ):
         raise ValueError("Variables.inputs must contain at least one node feature")
-    reserved_outputs = sorted(
-        spec.name for spec in schema.outputs if spec.name in _INTERNAL_OUTPUT_NAMES
+    reserved = sorted(
+        {
+            spec.name
+            for spec in (*schema.inputs, *schema.outputs)
+            if spec.name in _DERIVED_TENSOR_NAMES
+        }
     )
-    if reserved_outputs:
+    if reserved:
         raise ValueError(
-            "Output variable names conflict with HydraGNN internal tensors: "
-            + ", ".join(reserved_outputs)
+            "Variable names conflict with HydraGNN derived/internal tensors: "
+            + ", ".join(reserved)
         )
     return schema
 

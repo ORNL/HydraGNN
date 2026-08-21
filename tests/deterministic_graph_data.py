@@ -78,7 +78,7 @@ def deterministic_graph_data(
     # that fixture behavior here so model-quality thresholds remain meaningful
     # while production loaders stay schema-only and do not reinterpret values.
     for name in (
-        "x",
+        "node_features",
         "x_target",
         "x2",
         "x3",
@@ -186,7 +186,7 @@ def create_configuration(
         total_value if linear_only else total_value_linear.reshape(1, 1).float()
     )
     data = Data(
-        x=node_feature.float(),
+        node_features=node_feature.float(),
         x_target=node_feature.float(),
         x2=node_output_x_square.float(),
         x3=node_output_x_cube.float(),

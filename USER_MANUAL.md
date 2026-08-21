@@ -485,6 +485,22 @@ To prevent silent misuse, schema validation rejects all of the following:
 In particular, users must never work around this contract by manually
 concatenating `data.pos` into `data.x`.
 
+The names of HydraGNN's derived tensors are reserved and cannot be declared as
+source variables. This includes `x`, `edge_attr`, `graph_attr`, `y`, `y_loc`,
+`node_output`, `edge_output`, and `graph_output` (as well as structural PyG
+names managed internally). For example, declare a source input as
+`node_features`, not `x`; schema preparation preserves `data.node_features`
+and constructs `data.x` from it. Rejecting collisions guarantees that a named
+source attribute is never overwritten by the tensor derived from that source.
+
+The named schema intentionally does not provide compatibility with the removed
+`Variables_of_interest` format. In particular, `update_config_minmax` was tied
+to column indices (`input_node_features` and `output_index`) and has been
+removed from both `config_utils` and the package exports. Downstream code must
+not import it. Normalize named attributes explicitly in application-owned
+preprocessing and retain normalization statistics alongside the serialized
+dataset or application configuration.
+
 If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
 shape `(N, 3)`, HydraGNN constructs `data.y` with shape `(1 + 3*N, 1)` and
 `data.y_loc = [[0, 1, 1 + 3*N]]`. The offsets preserve the two output-head

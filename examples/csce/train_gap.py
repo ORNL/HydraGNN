@@ -38,6 +38,7 @@ from hydragnn.utils.datasets.pickledataset import (
 from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
+from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.utils.distributed import nsplit
 import hydragnn.utils.profiling_and_tracing.tracer as tr
@@ -113,7 +114,11 @@ class CSCEDatasetFactory:
     def __init__(
         self, datafile, sampling=1.0, seed=43, var_config=None, norm_yflag=False
     ):
-        self.var_config = var_config
+        self.var_config = (
+            parse_variable_schema(var_config)
+            if isinstance(var_config, dict)
+            else var_config
+        )
 
         ## Read full data
         (
@@ -230,7 +235,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["Variables"]
+    var_config = parse_variable_schema(config["Variables"])
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()

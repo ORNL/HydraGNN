@@ -68,7 +68,7 @@
     "Variables": {
         "inputs": [
             {
-                "name": "x",
+                "name": "node_features",
                 "level": "node",
                 "dim": 1
             }
