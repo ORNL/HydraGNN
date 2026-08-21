@@ -529,6 +529,12 @@ third-party PyG samples may initially contain conventional attributes such as
 `x`, `edge_attr`, or `y`, but those attributes cannot bypass the current JSON
 schema or survive from a previous schema preparation unnoticed.
 
+Serialized PyG `.pt` samples are pickle-backed. Loading them with PyTorch may
+execute code embedded in the file, so HydraGNN treats these files as trusted
+local dataset artifacts. Do not train from a `.pt` dataset directory obtained
+from an untrusted source; inspect or convert such data through a safe format
+before loading it with HydraGNN.
+
 ### Global Attention Mechanisms
 
 #### GPS (Graph Positional and Structural Attention)

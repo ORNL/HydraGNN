@@ -65,7 +65,7 @@
     "Variables": {
         "inputs": [
             {
-                "name": "atomic_number",
+                "name": "atomic_numbers",
                 "level": "node",
                 "dim": 1
             },
@@ -78,7 +78,7 @@
         ],
         "outputs": [
             {
-                "name": "graph_energy",
+                "name": "potential",
                 "level": "node",
                 "dim": 1
             }

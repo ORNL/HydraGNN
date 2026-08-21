@@ -34,17 +34,17 @@ def test_config(config_file):
             "name",
             "path",
             "format",
-            "num_nodes",
         ],
         "NeuralNetwork": ["Architecture", "Training"],
         "Variables": ["inputs", "outputs"],
     }
 
-    for category in expected.keys():
-        assert category in config, "Missing required input category"
-
-        for input in category:
-            assert input in category, "Missing required input"
+    for category_name, required_keys in expected.items():
+        assert category_name in config, "Missing required input category"
+        for key in required_keys:
+            assert (
+                key in config[category_name]
+            ), f"Missing required input {category_name}.{key}"
 
 
 def pytest_log_name_sanitizes_named_variables():

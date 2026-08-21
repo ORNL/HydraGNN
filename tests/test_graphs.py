@@ -106,7 +106,7 @@ def unittest_train_model(
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
         config["Variables"]["inputs"].append(
-            {"name": "edge_attr", "level": "edge", "dim": 1}
+            {"name": "edge_lengths", "level": "edge", "dim": 1}
         )
 
     if rank == 0:

@@ -99,6 +99,10 @@ def prepare_graph_dataset(dataset, config, dist=False):
         max_edge_length = max_edge_length.to(device)
     for data in dataset:
         data.edge_attr = data.edge_attr / max_edge_length
+        # Preserve generated distances as a named source attribute. Schema
+        # preparation may then rebuild the derived ``edge_attr`` tensor from
+        # this attribute without making the source and destination collide.
+        data.edge_lengths = data.edge_attr
 
     descriptors = dataset_config.get("Descriptors", {})
     if descriptors.get("SphericalCoordinates"):

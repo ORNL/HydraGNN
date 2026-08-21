@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     graph_feature_names = ["total_energy"]
     graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "potential", "forces"]
+    node_feature_names = ["atomic_numbers", "potential", "forces"]
     node_feature_dims = [1, 1, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     ##################################################################################################################

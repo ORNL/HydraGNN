@@ -49,7 +49,7 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
     config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
     config["Variables"]["inputs"].append(
-        {"name": "graph_attr", "level": "graph", "dim": 1}
+        {"name": "global_conditioning", "level": "graph", "dim": 1}
     )
     config["NeuralNetwork"]["Architecture"][
         "graph_attr_conditioning_mode"
@@ -102,7 +102,7 @@ def unittest_train_model_graphattr(
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
         config["Variables"]["inputs"].append(
-            {"name": "edge_attr", "level": "edge", "dim": 1}
+            {"name": "edge_lengths", "level": "edge", "dim": 1}
         )
 
     if rank == 0:

@@ -196,7 +196,10 @@ def create_configuration(
         sum=total_value,
         sums_vec=torch.cat((total_value, total_value_linear), dim=1),
         sum_linear=total_value_linear,
-        graph_attr=(node_feature == node_feature[0]).sum().reshape(1, 1).float(),
+        global_conditioning=(node_feature == node_feature[0])
+        .sum()
+        .reshape(1, 1)
+        .float(),
         pos=positions.float(),
     )
     return data
