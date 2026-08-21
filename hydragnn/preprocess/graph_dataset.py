@@ -45,8 +45,10 @@ def _build_edges(data, radius, max_neighbours, periodic):
         data.pbc = [True, True, True]
         if not hasattr(data, "cell") or data.cell is None:
             raise ValueError("Periodic graph samples require data.cell")
-        return get_radius_graph_pbc(radius, False, max_neighbours)(data)
-    data = get_radius_graph(radius, False, max_neighbours)(data)
+        return get_radius_graph_pbc(radius, loop=False, max_neighbours=max_neighbours)(
+            data
+        )
+    data = get_radius_graph(radius, loop=False, max_neighbours=max_neighbours)(data)
     return Distance(norm=False, cat=True)(data)
 
 
@@ -54,11 +56,11 @@ def _stratified_sample(dataset, percentage, verbosity):
     categories = []
     print_distributed(verbosity, "Computing the categories for the whole datasets.")
     for data in iterate_tqdm(dataset, verbosity):
-        frequencies = sorted(torch.bincount(data.x[:, 0].int()).tolist())
+        frequencies = sorted(
+            value for value in torch.bincount(data.x[:, 0].int()).tolist() if value
+        )
         categories.append(
-            sum(
-                value * (100**index) for index, value in enumerate(frequencies) if value
-            )
+            sum(value * (100**index) for index, value in enumerate(frequencies))
         )
     splitter = StratifiedShuffleSplit(n_splits=1, train_size=percentage, random_state=0)
     indices, _ = next(splitter.split(dataset, categories))

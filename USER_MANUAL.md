@@ -709,7 +709,7 @@ train_validate_test(
     writer=writer,
     scheduler=scheduler,
     config=config["NeuralNetwork"],
-    log_name=log_name,
+    model_with_config_name=log_name,
     verbosity=verbosity,
     create_plots=True
 )
@@ -777,10 +777,10 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 
 #### Running with DeepSpeed
 
-```python
-# Initialize the model and optimizer with DeepSpeed, then pass the resulting
-# engine and explicit loaders to train_validate_test(use_deepspeed=True).
-```
+Initialize the model and optimizer with `deepspeed.initialize`, then pass the
+resulting engine and explicit loaders to `train_validate_test` with
+`use_deepspeed=True`. See `examples/ogb/train_gap.py` for the complete setup;
+HydraGNN no longer hides this initialization inside a convenience wrapper.
 
 ### FSDP (Fully Sharded Data Parallel) Integration
 

@@ -438,7 +438,8 @@ def load_train_val_test_sets(config, isdist=False):
         if raw_data_path.endswith(".pkl"):
             files_dir = raw_data_path
         else:
-            files_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
+            serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
+            files_dir = f"{serialized_data_path}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
         # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
         dataset = load_and_prepare_graph_dataset(files_dir, config, dist=isdist)
 
