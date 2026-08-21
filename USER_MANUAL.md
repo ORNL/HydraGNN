@@ -446,6 +446,61 @@ passes it separately to geometry-aware and equivariant models. Declaring `pos`
 without `"role": "position"` is rejected to prevent accidental loss of
 translation invariance or rotation equivariance.
 
+#### Geometric positions and equivariance
+
+Although Cartesian positions are model inputs, they must not be handled like
+ordinary invariant node features. A translation changes the numerical value of
+every coordinate, while a rotation mixes the x, y, and z components. Naively
+concatenating those components into `data.x` exposes coordinate-frame-dependent
+numbers as scalar feature channels and can invalidate the guarantees of an
+invariant or equivariant architecture.
+
+The required declaration is therefore:
+
+```json
+{"name": "pos", "level": "node", "dim": 3, "role": "position"}
+```
+
+and each PyG sample must provide:
+
+```python
+data.pos  # torch.Tensor with shape (data.num_nodes, 3)
+```
+
+During schema preparation, HydraGNN performs these operations separately:
+
+1. It validates `data.pos`, including its node count and three coordinate
+   columns, and preserves the tensor as `data.pos`.
+2. It concatenates only node inputs whose role is `feature` to construct
+   `data.x`.
+3. It computes `Architecture.input_dim` from those feature inputs only; the
+   three position dimensions are not included.
+4. It passes `data.pos` through the dedicated geometric path used by neighbor
+   construction, geometry-aware local message passing, equivariant global
+   attention, and energy-gradient force calculations. The original tensor and
+   its autograd relationship are preserved.
+
+For example, if `atomic_numbers` has dimension 1, `chemical_state` has
+dimension 4, and `pos` is the position input, the result is `data.x` with shape
+`(N, 5)` and a separate `data.pos` with shape `(N, 3)`—not `data.x` with shape
+`(N, 8)`. Dataset importers should assign the three named source attributes and
+must not perform either concatenation themselves.
+
+This is a general geometry contract, not an MLIP-only convention. Any
+HydraGNN model that relies on translation invariance or rotational
+invariance/equivariance should receive Cartesian coordinates this way.
+
+To prevent silent misuse, schema validation rejects all of the following:
+
+- `pos` declared without `"role": "position"`;
+- a position input whose name is not `pos`;
+- a position input that is not node-level or does not have `dim: 3`;
+- `role: "position"` on an output; and
+- a schema with no ordinary node feature input from which to build `data.x`.
+
+In particular, users must never work around this contract by manually
+concatenating `data.pos` into `data.x`.
+
 If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
 shape `(N, 3)`, HydraGNN constructs `data.y` with shape `(1 + 3*N, 1)` and
 `data.y_loc = [[0, 1, 1 + 3*N]]`. The offsets preserve the two output-head
