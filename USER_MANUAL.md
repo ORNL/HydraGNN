@@ -331,6 +331,50 @@ HydraGNN provides extensive configuration options for building graph neural netw
 
 ### Output Head Configuration
 
+### Buffered neighbor lists and smooth cutoffs
+
+For atomistic models, the physical interaction cutoff and candidate graph can
+be configured independently:
+
+```json
+"Architecture": {
+    "radius": 5.0,
+    "neighbor_list_radius": 5.5,
+    "max_neighbours": 128,
+    "neighbor_overflow": "error"
+}
+```
+
+- `radius` is the physical cutoff understood by the model.
+- `neighbor_list_radius` is the candidate-list radius and defaults to
+  `radius`.
+- `max_neighbours` is candidate storage capacity, not a smooth physical
+  top-k definition.
+- `neighbor_overflow: "error"` rejects a sample if that capacity would remove
+  an edge. `"truncate"` explicitly selects the historical hard truncation.
+
+A buffered radius is valid only for a stack with a native distance envelope:
+SchNet, DimeNet, PAINN, PNAEq, PNAPlus, or MACE. The native envelope makes
+edges between `radius` and `neighbor_list_radius` carry zero physical weight;
+the larger graph merely delays discrete edge deletion until after the
+interaction has vanished. This does not solve hard top-k truncation, which is
+why overflow detection is a separate requirement.
+
+HydraGNN also exports an opt-in septic cutoff:
+
+```python
+from hydragnn.utils.model import SepticCutoff
+
+cutoff = SepticCutoff(onset=4.0, cutoff=5.0)
+edge_weight = cutoff(edge_distance)
+```
+
+For `t = (r - onset) / (cutoff - onset)`, its transition polynomial is
+`1 - 35*t**4 + 84*t**5 - 70*t**6 + 20*t**7`. Its first three derivatives
+match zero at both transition boundaries. Model authors must apply the
+envelope to every geometry-dependent interaction path to claim the resulting
+smoothness. Native envelopes are not modified automatically.
+
 #### Multi-Task Learning Setup
 
 ```json

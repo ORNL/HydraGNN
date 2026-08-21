@@ -109,35 +109,79 @@ def check_data_samples_equivalence(data1, data2, tol):
     return x_bool and pos_bool and y_bool and edge_bool
 
 
-def get_radius_graph(radius, max_neighbours, loop=False):
-    return RadiusGraph(
+class RadiusGraphWithOverflow(RadiusGraph):
+    """Radius graph that can reject silent hard neighbor truncation."""
+
+    def __init__(self, *args, overflow="truncate", **kwargs):
+        if overflow not in {"error", "truncate"}:
+            raise ValueError("neighbor_overflow must be 'error' or 'truncate'")
+        self.overflow = overflow
+        requested_max = kwargs["max_num_neighbors"]
+        self.requested_max_num_neighbors = requested_max
+        if overflow == "error":
+            kwargs["max_num_neighbors"] = requested_max + 1
+        super().__init__(*args, **kwargs)
+
+    def __call__(self, data):
+        data = super().__call__(data)
+        if self.overflow == "error" and data.edge_index.numel():
+            counts = torch.bincount(data.edge_index[1], minlength=int(data.num_nodes))
+            saturated = torch.nonzero(
+                counts > self.requested_max_num_neighbors, as_tuple=False
+            ).flatten()
+            if saturated.numel():
+                raise RuntimeError(
+                    "Candidate neighbor list exceeds max_neighbours="
+                    f"{self.requested_max_num_neighbors} for "
+                    f"{saturated.numel()} node(s). Increase max_neighbours; "
+                    "silent truncation would break smoothness."
+                )
+        return data
+
+
+def get_radius_graph(radius, max_neighbours, loop=False, overflow="truncate"):
+    return RadiusGraphWithOverflow(
         r=radius,
         loop=loop,
         max_num_neighbors=max_neighbours,
+        overflow=overflow,
     )
 
 
-def get_radius_graph_pbc(radius, max_neighbours, loop=False):
+def get_radius_graph_pbc(radius, max_neighbours, loop=False, overflow="truncate"):
     return RadiusGraphPBC(
         r=radius,
         loop=loop,
         max_num_neighbors=max_neighbours,
+        overflow=overflow,
     )
 
 
 def get_radius_graph_config(config, loop=False):
-    return RadiusGraph(
-        r=config["radius"],
+    from hydragnn.utils.input_config_parsing.config_utils import (
+        validate_neighbor_list_config,
+    )
+
+    validate_neighbor_list_config(config)
+    return get_radius_graph(
+        config.get("neighbor_list_radius", config["radius"]),
+        config["max_neighbours"],
         loop=loop,
-        max_num_neighbors=config["max_neighbours"],
+        overflow=config.get("neighbor_overflow", "truncate"),
     )
 
 
 def get_radius_graph_pbc_config(config, loop=False):
-    return RadiusGraphPBC(
-        r=config["radius"],
+    from hydragnn.utils.input_config_parsing.config_utils import (
+        validate_neighbor_list_config,
+    )
+
+    validate_neighbor_list_config(config)
+    return get_radius_graph_pbc(
+        config.get("neighbor_list_radius", config["radius"]),
+        config["max_neighbours"],
         loop=loop,
-        max_num_neighbors=config["max_neighbours"],
+        overflow=config.get("neighbor_overflow", "truncate"),
     )
 
 
@@ -145,6 +189,12 @@ class RadiusGraphPBC(RadiusGraph):
     r"""Creates edges based on node positions :obj:`pos` to all points within a
     given distance, including periodic images. Uses vesin for fast neighbor search.
     """
+
+    def __init__(self, *args, overflow="truncate", **kwargs):
+        if overflow not in {"error", "truncate"}:
+            raise ValueError("neighbor_overflow must be 'error' or 'truncate'")
+        self.overflow = overflow
+        super().__init__(*args, **kwargs)
 
     def __call__(self, data):
         data, device, dtype = self._check_and_standardize_data(data)
@@ -192,6 +242,17 @@ class RadiusGraphPBC(RadiusGraph):
                 ) = self._remove_true_self_loops(
                     edge_src, edge_dst, edge_length, edge_cell_shifts
                 )
+
+            if self.overflow == "error":
+                counts = np.bincount(edge_dst, minlength=data.num_nodes)
+                saturated = np.flatnonzero(counts > self.max_num_neighbors)
+                if saturated.size:
+                    raise RuntimeError(
+                        "Candidate periodic neighbor list exceeds max_neighbours="
+                        f"{self.max_num_neighbors} for {saturated.size} node(s). "
+                        "Increase max_neighbours; silent truncation would break "
+                        "smoothness."
+                    )
 
             # Limit neighbors per node (vectorized)
             edge_src, edge_dst, edge_length, edge_cell_shifts = self._limit_neighbors(
