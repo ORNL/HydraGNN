@@ -14,6 +14,7 @@ import shutil
 import math
 import torch
 import numpy
+from torch_geometric.data import Data
 from sklearn.neighbors import KNeighborsRegressor
 
 
@@ -133,19 +134,6 @@ def create_configuration(
     node_output_x_square = node_output_x**2 + node_feature
     node_output_x_cube = node_output_x**3
 
-    updated_table = torch.cat(
-        (
-            node_feature,
-            node_ids,
-            positions,
-            node_output_x,
-            node_output_x_square,
-            node_output_x_cube,
-        ),
-        1,
-    )
-    updated_table = updated_table.detach().numpy()
-
     if linear_only:
         total_value = torch.sum(node_output_x)
     else:
@@ -155,19 +143,25 @@ def create_configuration(
             + torch.sum(node_output_x_square)
             + torch.sum(node_output_x_cube)
         )
-    filetxt = numpy.array2string(total_value.detach().numpy())
-    if not linear_only:
-        filetxt += "\t" + numpy.array2string(total_value_linear.detach().numpy())
-
-    for index in range(0, number_nodes):
-        numpy_row = updated_table[index, :]
-        numpy_string_row = numpy.array2string(
-            numpy_row, precision=2, separator="\t", suppress_small=True
-        )
-        filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
-
     filename = os.path.join(
-        path, "output" + str(configuration + configuration_start) + ".txt"
+        path, "output" + str(configuration + configuration_start) + ".pt"
     )
-    with open(filename, "w") as f:
-        f.write(filetxt)
+    total_value = total_value.reshape(1, 1).float()
+    total_value_linear = (
+        total_value if linear_only else total_value_linear.reshape(1, 1).float()
+    )
+    data = Data(
+        x=node_feature.float(),
+        x_target=node_feature.float(),
+        x2=node_output_x_square.float(),
+        x3=node_output_x_cube.float(),
+        xx2_vec=torch.cat((node_feature, node_ids), dim=1).float(),
+        x2x3_vec=torch.cat((node_output_x_square, node_output_x_cube), dim=1).float(),
+        sum_x_x2_x3=total_value,
+        sum=total_value,
+        sums_vec=torch.cat((total_value, total_value_linear), dim=1),
+        sum_linear=total_value_linear,
+        graph_attr=(node_feature == node_feature[0]).sum().reshape(1, 1).float(),
+        pos=positions.float(),
+    )
+    torch.save(data, filename)

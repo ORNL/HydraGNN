@@ -9,40 +9,6 @@
         "rotational_invariance": false,
         "path": {
             "total": "dataset/unit_test_multihead"
-        },
-        "node_features": {
-            "name": [
-                "xx2_vec",
-                "x",
-                "x2x3_vec"
-            ],
-            "dim": [
-                2,
-                1,
-                2
-            ],
-            "column_index": [
-                0,
-                0,
-                6
-            ]
-        },
-        "graph_features": {
-            "name": [
-                "sum",
-                "sums_vec",
-                "sum_linear"
-            ],
-            "dim": [
-                1,
-                2,
-                1
-            ],
-            "column_index": [
-                0,
-                0,
-                1
-            ]
         }
     },
     "NeuralNetwork": {
@@ -145,7 +111,7 @@
                 "dim": 1
             },
             {
-                "name": "x",
+                "name": "x_target",
                 "level": "node",
                 "dim": 1
             },

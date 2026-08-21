@@ -17,6 +17,9 @@ import torch
 
 VariableLevel = Literal["node", "edge", "graph"]
 _LEVELS = frozenset(("node", "edge", "graph"))
+_INTERNAL_OUTPUT_NAMES = frozenset(
+    ("x", "edge_attr", "graph_attr", "edge_index", "batch", "y", "y_loc")
+)
 
 
 @dataclass(frozen=True)
@@ -72,19 +75,29 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
         raise TypeError("Variables must be a JSON object")
     extra = set(raw_variables) - {"inputs", "outputs"}
     if extra:
-        raise ValueError(
-            "Variables has unknown keys: " + ", ".join(sorted(extra))
-        )
+        raise ValueError("Variables has unknown keys: " + ", ".join(sorted(extra)))
     schema = VariableSchema(
         inputs=_parse_group(raw_variables, "inputs"),
         outputs=_parse_group(raw_variables, "outputs"),
     )
-    names = [spec.name for spec in (*schema.inputs, *schema.outputs)]
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ValueError("Variable names must be unique: " + ", ".join(duplicates))
+    for group, specs in (("inputs", schema.inputs), ("outputs", schema.outputs)):
+        names = [spec.name for spec in specs]
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(
+                f"Variable names within {group} must be unique: "
+                + ", ".join(duplicates)
+            )
     if not any(spec.level == "node" for spec in schema.inputs):
         raise ValueError("Variables.inputs must contain at least one node variable")
+    reserved_outputs = sorted(
+        spec.name for spec in schema.outputs if spec.name in _INTERNAL_OUTPUT_NAMES
+    )
+    if reserved_outputs:
+        raise ValueError(
+            "Output variable names conflict with HydraGNN internal tensors: "
+            + ", ".join(reserved_outputs)
+        )
     return schema
 
 

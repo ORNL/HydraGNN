@@ -122,7 +122,7 @@ def objective(trial):
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     with open(filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
 
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.setup_ddp()

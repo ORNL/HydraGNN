@@ -3,7 +3,9 @@
         "level": 2
     },
     "NeuralNetwork": {
-        "Profile": {"enable": 1},
+        "Profile": {
+            "enable": 1
+        },
         "Architecture": {
             "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
@@ -28,22 +30,19 @@
             "num_radial": 5,
             "num_spherical": 2,
             "output_heads": {
-                "graph":{
+                "graph": {
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 5,
                     "num_headlayers": 2,
-                    "dim_headlayers": [50,25]
+                    "dim_headlayers": [
+                        50,
+                        25
+                    ]
                 }
             },
-            "task_weights": [1.0]
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["free_energy"],
-            "output_index": [0],
-            "output_dim": [1],
-            "type": ["graph"],
-            "denormalize_output": false
+            "task_weights": [
+                1.0
+            ]
         },
         "Training": {
             "num_epoch": 2,
@@ -54,7 +53,7 @@
             "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             }
         }
     },
@@ -62,5 +61,21 @@
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "x",
+                "level": "node",
+                "dim": 1
+            }
+        ],
+        "outputs": [
+            {
+                "name": "free_energy",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
     }
 }

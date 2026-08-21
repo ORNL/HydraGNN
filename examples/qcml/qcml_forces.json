@@ -1,5 +1,7 @@
 {
-    "Verbosity": {"level": 2},
+    "Verbosity": {
+        "level": 2
+    },
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
@@ -16,24 +18,24 @@
             "num_radial": 6,
             "num_spherical": 7,
             "num_filters": 126,
-            "edge_features": ["length"],
+            "edge_features": [
+                "length"
+            ],
             "hidden_dim": 50,
             "num_conv_layers": 3,
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [200, 200],
-                    "type": "mlp",
+                    "dim_headlayers": [
+                        200,
+                        200
+                    ],
+                    "type": "mlp"
                 }
             },
-            "task_weights": [1.0],
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
-            "output_names": ["forces"],
-            "output_index": [2],
-            "output_dim": [3],
-            "type": ["node"],
+            "task_weights": [
+                1.0
+            ]
         },
         "Training": {
             "num_epoch": 50,
@@ -42,12 +44,31 @@
             "loss_function_type": "mae",
             "batch_size": 32,
             "continue": 0,
-            "Optimizer": {"type": "AdamW", "learning_rate": 1e-3},
-        },
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.001
+            }
+        }
     },
     "Visualization": {
         "plot_init_solution": true,
         "plot_hist_solution": false,
-        "create_plots": true,
+        "create_plots": true
     },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "x",
+                "level": "node",
+                "dim": 4
+            }
+        ],
+        "outputs": [
+            {
+                "name": "forces",
+                "level": "node",
+                "dim": 3
+            }
+        ]
+    }
 }

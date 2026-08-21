@@ -171,7 +171,7 @@ def run(trial):
         test_loader,
         writer,
         scheduler,
-        trial_config["NeuralNetwork"],
+        trial_config,
         trial_log_name,
         verbosity,
         create_plots=False,

@@ -123,15 +123,31 @@ def generate_graphdata_from_rdkit_molecule(
         edge_index=edge_index,
         edge_attr=edge_attr,
         y=y,
-        **{"dataset_name": None, "smiles": None}
+        **{"dataset_name": None, "smiles": None},
     )
     if var_config is not None:
-        hydragnn.preprocess.update_predicted_values(
-            var_config["type"],
-            var_config["output_index"],
-            var_config["graph_feature_dims"],
-            var_config["input_node_feature_dims"],
-            data,
+        from hydragnn.utils.input_config_parsing.variable_schema import (
+            parse_variable_schema,
+            prepare_data_from_schema,
         )
+
+        schema = parse_variable_schema(var_config)
+        offset = 0
+        flat_targets = ytarget.reshape(-1)
+        for spec in schema.outputs:
+            rows = data.num_nodes if spec.level == "node" else 1
+            size = rows * spec.dim
+            setattr(
+                data,
+                spec.name,
+                flat_targets[offset : offset + size].reshape(rows, spec.dim),
+            )
+            offset += size
+        if offset != flat_targets.numel():
+            raise ValueError(
+                f"Configured outputs consume {offset} target values, but the "
+                f"sample provides {flat_targets.numel()}"
+            )
+        prepare_data_from_schema(data, schema)
 
     return data

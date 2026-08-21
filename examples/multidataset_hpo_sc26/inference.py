@@ -219,7 +219,7 @@ def main():
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
     configure_variable_names(config)
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
 
     hydragnn.utils.distributed.setup_ddp()
 

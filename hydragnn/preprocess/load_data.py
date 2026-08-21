@@ -31,8 +31,6 @@ from hydragnn.preprocess.batch_sampler import (
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
 )
-from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
-from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
 from hydragnn.utils.datasets.compositional_data_splitting import (
     compositional_stratified_splitting,
 )
@@ -212,9 +210,12 @@ class HydraDataLoader(DataLoader):
 
 
 def dataset_loading_and_splitting(config: {}):
-    ##check if serialized pickle files or folders for raw files provided
-    if not list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
-        transform_raw_data_to_serialized(config["Dataset"])
+    first_path = list(config["Dataset"]["path"].values())[0]
+    if not first_path.endswith(".pkl") and not os.path.isdir(first_path):
+        raise ValueError(
+            "HydraGNN requires a pickle dataset or a directory of serialized "
+            "PyG .pt samples. Convert raw source files before training."
+        )
 
     ##if total datasets is provided, split the datasets and save them to pkl files and update config with pkl file locations
     if "total" in config["Dataset"]["path"].keys():
@@ -435,7 +436,7 @@ def load_train_val_test_sets(config, isdist=False):
     datasetname_list = []
 
     for dataset_name, raw_data_path in config["Dataset"]["path"].items():
-        if raw_data_path.endswith(".pkl"):
+        if raw_data_path.endswith(".pkl") or os.path.isdir(raw_data_path):
             files_dir = raw_data_path
         else:
             serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
@@ -453,23 +454,6 @@ def load_train_val_test_sets(config, isdist=False):
     timer.stop()
 
     return trainset, valset, testset
-
-
-def transform_raw_data_to_serialized(config):
-    _, rank = get_comm_size_and_rank()
-
-    if rank == 0:
-        if config["format"] == "LSMS" or config["format"] == "unit_test":
-            loader = LSMS_RawDataLoader(config)
-        elif config["format"] == "CFG":
-            loader = CFG_RawDataLoader(config)
-        else:
-            raise NameError("Data format not recognized for raw data loader")
-
-        loader.load_raw_data()
-
-    if dist.is_initialized():
-        dist.barrier()
 
 
 def total_to_train_val_test_pkls(config, isdist=False):

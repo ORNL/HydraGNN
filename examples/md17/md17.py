@@ -150,7 +150,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

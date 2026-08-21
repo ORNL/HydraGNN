@@ -9,35 +9,7 @@
         },
         "format": "LSMS",
         "compositional_stratified_splitting": true,
-        "rotational_invariance": false,
-        "node_features": {
-            "name": [
-                "num_of_protons",
-                "charge_density",
-                "magnetic_moment"
-            ],
-            "dim": [
-                1,
-                1,
-                1
-            ],
-            "column_index": [
-                0,
-                5,
-                6
-            ]
-        },
-        "graph_features": {
-            "name": [
-                "free_energy_scaled_num_nodes"
-            ],
-            "dim": [
-                1
-            ],
-            "column_index": [
-                0
-            ]
-        }
+        "rotational_invariance": false
     },
     "NeuralNetwork": {
         "Architecture": {
@@ -101,7 +73,7 @@
         ],
         "outputs": [
             {
-                "name": "free_energy_scaled_num_nodes",
+                "name": "free_energy_per_atom",
                 "level": "graph",
                 "dim": 1
             },

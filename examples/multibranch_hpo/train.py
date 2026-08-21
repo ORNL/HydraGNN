@@ -147,15 +147,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
-    if args.parameters["mpnn_type"] == "MACE":
-        # Currently, MACE only supports atomic number node attributes, see hydragnn/models/MACEStack.py
-        var_config["input_node_features"] = [0]
-
+    var_config = config["Variables"]
     # Update the config dictionary with the suggested hyperparameters
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = args.parameters["mpnn_type"]
     config["NeuralNetwork"]["Architecture"]["hidden_dim"] = args.parameters[
@@ -623,7 +615,7 @@ if __name__ == "__main__":
             test_loader,
             writer,
             scheduler,
-            config["NeuralNetwork"],
+            config,
             log_name,
             verbosity,
             create_plots=False,

@@ -177,19 +177,21 @@ dataset = AdiosDataset(filename, "trainset", comm)
 {
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"total": "./dataset/FePt_enthalpy"},
-        "format": "LSMS",
-        "compositional_stratified_splitting": true,
-        "node_features": {
-            "name": ["num_of_protons", "charge_density", "magnetic_moment"],
-            "dim": [1, 1, 1],
-            "column_index": [0, 5, 6]
-        },
-        "graph_features": {
-            "name": ["free_energy_scaled_num_nodes"],
-            "dim": [1],
-            "column_index": [0]
+        "path": {
+            "train": "./dataset/FePt_train.pkl",
+            "validate": "./dataset/FePt_validate.pkl",
+            "test": "./dataset/FePt_test.pkl"
         }
+    },
+    "Variables": {
+        "inputs": [
+            {"name": "num_of_protons", "level": "node", "dim": 1}
+        ],
+        "outputs": [
+            {"name": "free_energy_per_atom", "level": "graph", "dim": 1},
+            {"name": "charge_density", "level": "node", "dim": 1},
+            {"name": "magnetic_moment", "level": "node", "dim": 1}
+        ]
     }
 }
 ```
@@ -240,19 +242,15 @@ The regression coefficients are stored in the ADIOS dataset under `energy_linear
 #### Writing Custom Data Loaders
 
 ```python
-from hydragnn.preprocess.raw_dataset_loader import RawDatasetLoader
+from torch_geometric.data import Data
 
-class CustomRawDataLoader(RawDatasetLoader):
-    def __init__(self, config):
-        super().__init__(config)
-    
-    def load_raw_data(self):
-        # Implement custom data loading logic
-        pass
-    
-    def get_data(self):
-        # Return processed torch_geometric.data.Data objects
-        return self.dataset
+# Users parse their source format and construct named PyG attributes.
+sample = Data(
+    atomic_numbers=atomic_numbers,  # (N, 1)
+    positions=positions,            # (N, 3)
+    energy=energy,                  # (1, 1)
+    forces=forces,                  # (N, 3)
+)
 ```
 
 #### Data Serialization for Performance
@@ -368,17 +366,18 @@ HydraGNN provides extensive configuration options for building graph neural netw
 }
 ```
 
-#### Variables of Interest
+#### Variables
 
 ```json
 {
-    "Variables_of_interest": {
-        "input_node_features": [0, 1, 2],     // Input feature indices
-        "output_names": ["energy", "forces"], // Output property names
-        "output_index": [0, 1],               // Output target indices
-        "type": ["graph", "node"],            // Prediction types
-        "output_dim": [1, 3],                 // Output dimensions
-        "denormalize_output": true            // Whether to denormalize predictions
+    "Variables": {
+        "inputs": [
+            {"name": "node_features", "level": "node", "dim": 3}
+        ],
+        "outputs": [
+            {"name": "energy", "level": "graph", "dim": 1},
+            {"name": "forces", "level": "node", "dim": 3}
+        ]
     }
 }
 ```
@@ -1102,9 +1101,14 @@ Features:
     "Training": {
         "compute_grad_energy": true
     },
-    "Variables_of_interest": {
-        "output_names": ["energy", "forces"],
-        "type": ["graph", "node"]
+    "Variables": {
+        "inputs": [
+            {"name": "atomic_numbers", "level": "node", "dim": 1}
+        ],
+        "outputs": [
+            {"name": "energy", "level": "graph", "dim": 1},
+            {"name": "forces", "level": "node", "dim": 3}
+        ]
     }
 }
 ```
@@ -1114,32 +1118,20 @@ Features:
 #### Creating Custom Data Loaders
 
 ```python
-from hydragnn.preprocess.raw_dataset_loader import RawDatasetLoader
 import torch_geometric.data as pygdata
 
-class MyCustomLoader(RawDatasetLoader):
-    def __init__(self, config):
-        super().__init__(config)
-        
-    def load_raw_data(self):
-        # Load your custom data format
-        raw_data = self.load_my_format()
-        
-        # Convert to PyTorch Geometric format
-        self.dataset = []
-        for sample in raw_data:
-            data = pygdata.Data(
-                x=sample.node_features,
-                edge_index=sample.edge_indices,
-                edge_attr=sample.edge_features,
-                y=sample.targets,
-                pos=sample.positions
-            )
-            self.dataset.append(data)
-    
-    def load_my_format(self):
-        # Implement your data loading logic
-        pass
+# Parsing the external format is application code. Its result must be a
+# collection of PyG objects whose attribute names match the JSON Variables.
+dataset = [
+    pygdata.Data(
+        node_features=sample.node_features,
+        edge_index=sample.edge_indices,
+        bond_features=sample.edge_features,
+        positions=sample.positions,
+        target=sample.target,
+    )
+    for sample in parse_my_format(source)
+]
 ```
 
 ### 6. High-Performance Computing Deployment
