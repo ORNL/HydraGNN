@@ -73,6 +73,7 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
 
     data = Data(
         x=x,
+        atomic_numbers=x[:, 0].long(),
         pos=pos,
         edge_index=edge_index,
         batch=batch,

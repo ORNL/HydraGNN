@@ -5,6 +5,7 @@
   "NeuralNetwork": {
     "Architecture": {
       "mpnn_type": "EGNN",
+      "enable_atomistic_species_encoding": true,
       "edge_features": ["bond_length"],
       "equivariance": true,
       "max_neighbours": 40,
@@ -37,7 +38,7 @@
       "task_weights": [1.0, 50.0]
     },
     "Variables_of_interest": {
-      "input_node_features": [0],
+      "input_node_features": [],
       "output_index": [0, 1],
       "type": ["graph", "node"],
       "output_dim": [1, 3],

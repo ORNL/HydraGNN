@@ -144,7 +144,7 @@ class AtomsToGraphs:
             pbc=pbc,
             edge_index=None,
             edge_attr=None,
-            atomic_numbers=atomic_numbers,
+            atomic_numbers=atomic_numbers.long().view(-1),
             x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,

@@ -20,6 +20,7 @@
     "Architecture": {
       "periodic_boundary_conditions": true,
       "mpnn_type": "DimeNet",
+      "enable_atomistic_species_encoding": true,
       "radius": 5.0,
       "max_neighbours": 5,
       "int_emb_size": 32,
@@ -50,7 +51,7 @@
       "task_weights": [1]
     },
     "Variables_of_interest": {
-      "input_node_features": [0],
+      "input_node_features": [],
       "output_index": [
         0
       ],

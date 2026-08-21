@@ -161,7 +161,7 @@ class SCFStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
+        node_features, _, _ = super()._embedding(data)
 
         if (self.use_edge_attr or (self.use_global_attn and self.is_edge_model)) and (
             self.equivariance
@@ -197,10 +197,7 @@ class SCFStack(Base):
             }
 
         if self.use_global_attn:
-            x = self.pos_emb(data.pe)
-            if self.input_dim:
-                x = torch.cat((self.node_emb(data.x.float()), x), 1)
-                x = self.node_lin(x)
+            x = node_features
             if self.is_edge_model:
                 e = self.rel_pos_emb(data.rel_pe)
                 if self.use_edge_attr:
@@ -213,7 +210,7 @@ class SCFStack(Base):
                 )
             return x, data.pos, conv_args
         else:
-            return data.x, data.pos, conv_args
+            return node_features, data.pos, conv_args
 
     def __str__(self):
         return "SCFStack"
