@@ -12,6 +12,12 @@
 import os, json
 import pytest
 
+import hydragnn
+
+
+def pytest_input_config_parsing_is_exposed_through_utils():
+    assert hydragnn.utils.input_config_parsing.update_config is not None
+
 
 @pytest.mark.parametrize("config_file", ["lsms/lsms.json"])
 @pytest.mark.mpi_skip()
