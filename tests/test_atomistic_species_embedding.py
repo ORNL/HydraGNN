@@ -47,7 +47,7 @@ GENERIC_STACKS = (
 NATIVE_STACKS = (MACEStack,)
 
 
-def _model(atomistic, species_encoding="auto"):
+def _model(atomistic):
     heads = update_multibranch_heads(
         {
             "node": {
@@ -76,7 +76,6 @@ def _model(atomistic, species_encoding="auto"):
         num_conv_layers=2,
         num_nodes=3,
         enable_interatomic_potential=atomistic,
-        atomic_species_encoding=species_encoding,
         energy_weight=0.1,
         force_weight=1.0,
         use_gpu=False,
@@ -135,7 +134,7 @@ def pytest_native_capability_prevents_double_embedding():
         torch.nn.Module.__init__(stack)
         stack.hidden_dim = 8
         stack.species_embedding = None
-        Base.configure_atomistic_species_encoding(stack, True, "auto")
+        Base.configure_atomistic_species_encoding(stack, True)
         assert stack.enable_atomistic_species_encoding is False
         assert stack.species_embedding is None
 
@@ -174,20 +173,6 @@ def pytest_atomic_number_count_must_match_nodes():
     model = _model(atomistic=True).model
     with pytest.raises(ValueError, match="one value per node"):
         model._input_node_features(_data(torch.tensor([1, 8])))
-
-
-def pytest_species_encoding_policy_is_validated():
-    with pytest.raises(ValueError, match="native species encoder"):
-        _model(atomistic=True, species_encoding="native")
-    with pytest.raises(ValueError, match="atomic_species_encoding"):
-        _model(atomistic=True, species_encoding="invalid")
-
-
-def pytest_none_policy_preserves_advanced_opt_out():
-    model = _model(atomistic=True, species_encoding="none").model
-    data = _data(torch.tensor([7, 1, 8]))
-    assert model.species_embedding is None
-    assert torch.equal(model._input_node_features(data), data.x)
 
 
 def pytest_distinct_species_have_distinct_learned_representations():
