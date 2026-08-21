@@ -447,6 +447,24 @@ so on) remain available on the `Data` object.
 If a schema has no inputs or outputs at a particular level, HydraGNN removes a
 stale internal tensor for that level. This makes repeated schema preparation
 idempotent and prevents undeclared features from silently reaching the model.
+More precisely:
+
+- At least one node input is mandatory, so `data.x` is always reconstructed
+  from the declared node attributes. Any pre-existing `data.x` is overwritten.
+- When edge inputs are declared, `data.edge_attr` is reconstructed from them;
+  otherwise a pre-existing `data.edge_attr` is removed.
+- When graph inputs are declared, `data.graph_attr` is reconstructed from them;
+  otherwise a pre-existing `data.graph_attr` is removed.
+- When outputs are declared, HydraGNN reconstructs `data.y`, `data.y_loc`, and
+  the applicable level-specific output tensors. With no outputs, these internal
+  tensors are removed. A level-specific output tensor is also removed when the
+  current schema contains no outputs at that level.
+
+These removals apply only to HydraGNN's derived internal tensors. The named
+source attributes declared by the user remain on the PyG object. Consequently,
+third-party PyG samples may initially contain conventional attributes such as
+`x`, `edge_attr`, or `y`, but those attributes cannot bypass the current JSON
+schema or survive from a previous schema preparation unnoticed.
 
 ### Global Attention Mechanisms
 

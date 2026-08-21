@@ -278,6 +278,15 @@ The named source attributes remain on the PyG object after preparation. See the
 Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
 for the complete construction rules and a worked example.
 
+The schema is authoritative over HydraGNN's internal tensors. Because at least
+one node input is required, `data.x` is always rebuilt and overwrites any
+pre-existing `data.x`. Edge inputs, graph inputs, and outputs are optional:
+HydraGNN rebuilds their internal tensors when they are declared and removes
+stale `data.edge_attr`, `data.graph_attr`, `data.y`, `data.y_loc`, or
+level-specific output tensors when they are not. This prevents attributes
+provided by a third-party PyG dataset or an earlier schema preparation from
+silently reaching the model.
+
   - `["Training"]`
     - `["num_epoch"]`  
       Examples: `75`, `100`, `250` (int)
