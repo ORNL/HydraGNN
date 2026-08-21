@@ -171,12 +171,14 @@ def pytest_named_variable_configuration_is_required():
         get_variable_schema({"NeuralNetwork": {}})
 
 
-def pytest_internal_output_names_are_rejected():
+@pytest.mark.parametrize("group", ["inputs", "outputs"])
+def pytest_internal_derived_names_are_rejected(group):
     variables = {
         "inputs": [{"name": "features", "level": "node", "dim": 2}],
-        "outputs": [{"name": "x", "level": "node", "dim": 1}],
+        "outputs": [{"name": "target", "level": "node", "dim": 1}],
     }
-    with pytest.raises(ValueError, match="internal tensors: x"):
+    variables[group][0]["name"] = "x"
+    with pytest.raises(ValueError, match="derived/internal tensors: x"):
         parse_variable_schema(variables)
 
 

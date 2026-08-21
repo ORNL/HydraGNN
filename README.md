@@ -329,6 +329,20 @@ The named source attributes remain on the PyG object after preparation. See the
 Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
 for the complete construction rules and a worked example.
 
+Source-variable names must not collide with HydraGNN's derived tensors. Names
+such as `x`, `edge_attr`, `graph_attr`, `y`, `y_loc`, `node_output`,
+`edge_output`, and `graph_output` are therefore rejected in both `inputs` and
+`outputs`. Use a semantic source name such as `node_features`, `edge_lengths`,
+or `energy`; HydraGNN then constructs the corresponding internal tensor.
+
+This schema is an intentional breaking replacement for
+`Variables_of_interest`. The index-based normalization helper
+`update_config_minmax` was removed with that interface because its
+`input_node_features` and `output_index` arguments have no meaning in the
+named-attribute schema. Applications that need normalization should normalize
+their named tensors explicitly and store the associated statistics with their
+dataset or application configuration.
+
 The schema is authoritative over HydraGNN's internal tensors. Because at least
 one node feature input is required, `data.x` is always rebuilt and overwrites any
 pre-existing `data.x`. Edge inputs, graph inputs, and outputs are optional:
