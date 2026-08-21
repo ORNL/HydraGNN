@@ -29,6 +29,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     update_predicted_values,
 )
 from hydragnn.utils.distributed import get_device
+from hydragnn.utils.input_config_parsing.config_utils import (
+    validate_neighbor_list_config,
+)
 from hydragnn.utils.print.print_utils import iterate_tqdm, print_distributed
 
 
@@ -40,15 +43,23 @@ def load_pickled_graphs(dataset_path):
         return pickle.load(stream)
 
 
-def _build_edges(data, radius, max_neighbours, periodic):
+def _build_edges(data, radius, max_neighbours, periodic, overflow="truncate"):
     if periodic:
         data.pbc = [True, True, True]
         if not hasattr(data, "cell") or data.cell is None:
             raise ValueError("Periodic graph samples require data.cell")
-        return get_radius_graph_pbc(radius, loop=False, max_neighbours=max_neighbours)(
-            data
-        )
-    data = get_radius_graph(radius, loop=False, max_neighbours=max_neighbours)(data)
+        return get_radius_graph_pbc(
+            radius,
+            loop=False,
+            max_neighbours=max_neighbours,
+            overflow=overflow,
+        )(data)
+    data = get_radius_graph(
+        radius,
+        loop=False,
+        max_neighbours=max_neighbours,
+        overflow=overflow,
+    )(data)
     return Distance(norm=False, cat=True)(data)
 
 
@@ -70,6 +81,7 @@ def _stratified_sample(dataset, percentage, verbosity):
 def prepare_graph_dataset(dataset, config, dist=False):
     """Prepare an explicit graph collection according to per-sample geometry."""
     architecture = config["NeuralNetwork"]["Architecture"]
+    validate_neighbor_list_config(architecture)
     dataset_config = config["Dataset"]
     variables = config["NeuralNetwork"]["Variables_of_interest"]
     verbosity = config["Verbosity"]["level"]
@@ -96,9 +108,10 @@ def prepare_graph_dataset(dataset, config, dist=False):
     dataset = [
         _build_edges(
             data,
-            architecture["radius"],
+            architecture.get("neighbor_list_radius", architecture["radius"]),
             architecture["max_neighbours"],
             architecture["periodic_boundary_conditions"],
+            architecture.get("neighbor_overflow", "truncate"),
         )
         for data in dataset
     ]

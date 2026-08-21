@@ -304,7 +304,11 @@ class CFConv(MessagePassing):
         edge_rbf: Tensor,
         edge_attr: OptTensor = None,
     ) -> Tensor:
-        C = 0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0)
+        C = torch.where(
+            edge_weight < self.cutoff,
+            0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0),
+            torch.zeros_like(edge_weight),
+        )
         if edge_attr is None:
             W = self.nn(edge_rbf) * C.view(-1, 1)
         else:
