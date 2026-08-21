@@ -258,6 +258,48 @@ The `position` role is restricted to `pos` with node level and dimension 3.
 HydraGNN validates this geometric input but keeps it separate from `data.x`, so
 Cartesian coordinates do not become invariant scalar feature channels.
 
+#### Why positions are not concatenated into `data.x`
+
+`pos` is an input to a geometry-aware model, but it is not an ordinary scalar
+node feature. Translating a structure changes every Cartesian coordinate, and
+rotating it mixes the three coordinate components. If the coordinates were
+concatenated directly into `data.x`, an otherwise invariant or equivariant
+architecture could treat those frame-dependent values as scalar channels and
+lose its intended translation or rotation behavior.
+
+Declare Cartesian coordinates explicitly as:
+
+```json
+{"name": "pos", "level": "node", "dim": 3, "role": "position"}
+```
+
+For every sample, the matching `data.pos` must be a tensor of shape `(N, 3)`.
+HydraGNN validates it and leaves it in `data.pos`; geometry-aware local MPNNs,
+equivariant transformers, neighbor construction, and force calculations can
+then consume the coordinates through their dedicated geometric paths. The
+coordinates are excluded from both the constructed `data.x` and
+`Architecture.input_dim`. Autograd information on `data.pos` is preserved, so
+energy-gradient force models can still differentiate with respect to positions.
+
+For example, with `atomic_numbers` and `pos` declared above, preparation gives
+the model the following logically separate inputs:
+
+```text
+data.atomic_numbers ──> data.x       # ordinary node-feature channels
+data.pos            ──> data.pos     # geometric coordinates, unchanged
+```
+
+When several node inputs have the default `feature` role, only those inputs are
+concatenated into `data.x`, in JSON order. Never manually append `data.pos` to
+`data.x`. This rule applies to any geometry-aware application, not only machine
+learning interatomic potentials.
+
+The contract is deliberately strict: `role: "position"` is accepted only for
+an input named `pos` with `level: "node"` and `dim: 3`; outputs cannot have this
+role. Conversely, declaring `pos` without `role: "position"` is rejected. A
+schema must still declare at least one ordinary node input from which HydraGNN
+can construct `data.x`.
+
 Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
 `data.graph_attr`, `data.y`, or `data.y_loc` tensors in dataset importers.
 HydraGNN validates the named source attributes and builds those tensors when a
