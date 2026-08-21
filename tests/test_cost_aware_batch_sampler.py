@@ -12,12 +12,14 @@
 import pytest
 import torch
 from torch_geometric.data import Data
+from mpi4py import MPI
 
 from hydragnn.preprocess.batch_sampler import (
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
 )
 from hydragnn.preprocess.load_data import create_dataloaders
+import hydragnn.preprocess.load_data as load_data_module
 
 
 def _dataset(costs):
@@ -48,6 +50,38 @@ def pytest_cost_sampler_shuffle_is_deterministic_per_epoch():
     second.set_epoch(1)
     assert list(first) == list(second)
     assert list(first) != list(CostAwareBatchSampler(dataset, 3, seed=17))
+
+
+def pytest_cost_sampler_caches_batches_until_epoch_changes(monkeypatch):
+    sampler = CostAwareBatchSampler(_dataset([1] * 8), 3, seed=17)
+    calls = 0
+    original = sampler._ordered_indices
+
+    def counted_order():
+        nonlocal calls
+        calls += 1
+        return original()
+
+    monkeypatch.setattr(sampler, "_ordered_indices", counted_order)
+    list(sampler)
+    len(sampler)
+    sampler.statistics()
+    assert calls == 1
+
+    sampler.set_epoch(1)
+    list(sampler)
+    assert calls == 2
+
+
+def pytest_drop_last_considers_graph_limit():
+    sampler = CostAwareBatchSampler(
+        _dataset([1] * 5),
+        max_cost=10,
+        max_graphs=2,
+        shuffle=False,
+        drop_last=True,
+    )
+    assert list(sampler) == [[0, 1], [2, 3]]
 
 
 @pytest.mark.parametrize("policy", ["error", "single", "skip"])
@@ -112,6 +146,36 @@ def pytest_node_budget_configuration_builds_variable_graph_batches():
         [2, 5],
         [2, 5],
     ]
+
+
+def pytest_node_budget_preserves_custom_distributed_loader_settings(monkeypatch):
+    calls = []
+
+    class RecordingLoader:
+        def __init__(self, dataset, **kwargs):
+            self.dataset = dataset
+            calls.append(kwargs)
+
+    monkeypatch.setenv("HYDRAGNN_CUSTOM_DATALOADER", "1")
+    monkeypatch.setenv("HYDRAGNN_NUM_WORKERS", "3")
+    monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(load_data_module, "HydraDataLoader", RecordingLoader)
+
+    dataset = _dataset([2, 3, 4])
+    loaders = load_data_module.create_dataloaders(
+        dataset,
+        dataset,
+        dataset,
+        batch_size=99,
+        group=MPI.COMM_SELF,
+        batching={"mode": "node_budget", "max_nodes": 5},
+    )
+
+    assert all(isinstance(loader, RecordingLoader) for loader in loaders)
+    assert len(calls) == 3
+    assert all(call["num_workers"] == 3 for call in calls)
+    assert all(call["pin_memory"] is True for call in calls)
+    assert all(call["persistent_workers"] is False for call in calls)
 
 
 def pytest_distributed_sampler_has_equal_steps_and_complete_step_assignment():

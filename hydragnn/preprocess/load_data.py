@@ -284,11 +284,17 @@ def create_dataloaders(
                 drop_last=sampler_drop_last,
                 **distributed_options,
             )
-            return DataLoader(
+            loader_type = DataLoader
+            if dist.is_initialized() and int(
+                os.getenv("HYDRAGNN_CUSTOM_DATALOADER", "0")
+            ):
+                loader_type = HydraDataLoader
+            return loader_type(
                 dataset,
                 batch_sampler=batch_sampler,
                 num_workers=int(os.getenv("HYDRAGNN_NUM_WORKERS", "0")),
                 pin_memory=dist.is_initialized(),
+                persistent_workers=False,
             )
 
         return (

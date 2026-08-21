@@ -85,7 +85,8 @@ class CostAwareBatchSampler(Sampler[list[int]]):
         seed: Base seed used for deterministic epoch shuffling.
         oversized_sample: Policy for a sample whose cost exceeds ``max_cost``:
             ``"error"``, ``"single"``, or ``"skip"``.
-        drop_last: Drop the final batch when its cost is below ``max_cost``.
+        drop_last: Drop the final batch unless it reaches ``max_cost`` or,
+            when configured, ``max_graphs``.
     """
 
     def __init__(
@@ -116,6 +117,7 @@ class CostAwareBatchSampler(Sampler[list[int]]):
         self.oversized_sample = oversized_sample
         self.drop_last = drop_last
         self.epoch = 0
+        self._batch_cache: tuple[list[list[int]], int] | None = None
 
         if costs is None:
             costs = graph_node_costs(dataset)
@@ -130,6 +132,7 @@ class CostAwareBatchSampler(Sampler[list[int]]):
     def set_epoch(self, epoch: int) -> None:
         """Select the deterministic ordering for an epoch."""
         self.epoch = int(epoch)
+        self._batch_cache = None
 
     def _ordered_indices(self) -> list[int]:
         if not self.shuffle:
@@ -138,6 +141,9 @@ class CostAwareBatchSampler(Sampler[list[int]]):
         return torch.randperm(len(self.dataset), generator=generator).tolist()
 
     def _batches(self) -> tuple[list[list[int]], int]:
+        if self._batch_cache is not None:
+            return self._batch_cache
+
         batches: list[list[int]] = []
         batch: list[int] = []
         batch_cost = 0
@@ -170,9 +176,16 @@ class CostAwareBatchSampler(Sampler[list[int]]):
             batch.append(index)
             batch_cost += cost
 
-        if batch and not (self.drop_last and batch_cost < self.max_cost):
-            batches.append(batch)
-        return batches, skipped
+        if batch:
+            reached_cost_limit = batch_cost == self.max_cost
+            reached_graph_limit = (
+                self.max_graphs is not None and len(batch) == self.max_graphs
+            )
+            if not self.drop_last or reached_cost_limit or reached_graph_limit:
+                batches.append(batch)
+
+        self._batch_cache = (batches, skipped)
+        return self._batch_cache
 
     def __iter__(self) -> Iterator[list[int]]:
         batches, _ = self._batches()
@@ -225,7 +238,10 @@ class DistributedCostAwareBatchSampler(CostAwareBatchSampler):
         super().__init__(dataset, max_cost, **kwargs)
 
     def _distributed_batches(self) -> list[list[int]]:
-        batches, _ = self._batches()
+        packed_batches, _ = self._batches()
+        # Distribution sorts and may pad the global plan. Keep the cached core
+        # batches immutable from the perspective of this operation.
+        batches = [batch.copy() for batch in packed_batches]
         if not batches:
             return []
 

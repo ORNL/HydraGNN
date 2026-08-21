@@ -23,6 +23,8 @@ node budget:
 optional secondary bound for datasets containing many small graphs. The number
 of graphs per batch is therefore variable; `batch_size` is ignored in this
 mode and remains available for configurations using the default `fixed` mode.
+When `drop_last` is enabled, the final batch is dropped unless it reaches
+either `max_nodes` or the configured `max_graphs` limit.
 
 The `oversized_sample` policy controls graphs larger than `max_nodes`:
 
