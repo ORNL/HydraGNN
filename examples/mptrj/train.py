@@ -38,6 +38,7 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
     SimplePickleDataset,
 )
+from hydragnn.utils.materials import normalize_stress, validate_materials_sample
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     RadiusGraph,
@@ -197,6 +198,11 @@ class MPTrjDataset(AbstractBaseDataset):
                 energy = torch.tensor(total_energy, dtype=torch.float32).unsqueeze(0)
                 energy_per_atom = energy.detach().clone() / natoms
                 forces = torch.tensor(forces, dtype=torch.float32)
+                stress = normalize_stress(
+                    stresses,
+                    source_unit="kbar",
+                    source_sign="compression_positive",
+                )
                 x = torch.cat([atomic_numbers, pos, forces], dim=1)
 
                 # Calculate chemical composition
@@ -221,7 +227,7 @@ class MPTrjDataset(AbstractBaseDataset):
                     x=x,
                     energy=energy,
                     energy_per_atom=energy_per_atom,
-                    # stress=torch.tensor(stresses, dtype=torch.float32),
+                    stress=stress,
                     # magmom=torch.tensor(magmom, dtype=torch.float32),
                     forces=forces,
                     graph_attr=graph_attr,
@@ -247,15 +253,11 @@ class MPTrjDataset(AbstractBaseDataset):
                     data_object = self.radius_graph(data_object)
                     data_object = transform_coordinates(data_object)
 
-                # Skip samples that still contain self-loops
-                if data_object.edge_index is not None:
-                    loop_mask = data_object.edge_index[0] != data_object.edge_index[1]
-                    if not torch.all(loop_mask):
-                        print(
-                            "Skipping sample: self-loops detected in edge_index.",
-                            flush=True,
-                        )
-                        continue
+                try:
+                    validate_materials_sample(data_object, require_stress=True)
+                except ValueError as error:
+                    print(f"Skipping sample: {error}", flush=True)
+                    continue
 
                 # Default edge_shifts for when radius_graph_pbc is not activated
                 if not hasattr(data_object, "edge_shifts"):

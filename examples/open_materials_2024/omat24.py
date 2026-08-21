@@ -24,9 +24,9 @@ from hydragnn.preprocess.graph_samples_checks_and_updates import (
     PBCLocalCartesian,
     pbc_as_tensor,
     gather_deg,
-    should_skip_self_loops,
 )
 from hydragnn.utils.distributed import nsplit
+from hydragnn.utils.materials import normalize_stress, validate_materials_sample
 from utils import balance_load
 
 # transform_coordinates = Spherical(norm=False, cat=False)
@@ -199,6 +199,11 @@ class OMat2024(AbstractBaseDataset):
 
             energy_per_atom = energy.detach().clone() / natoms
             forces = torch.as_tensor(atoms.get_forces(), dtype=torch.float32)
+            stress = normalize_stress(
+                atoms.get_stress(apply_constraint=False, voigt=False),
+                source_unit="ev_per_angstrom_cubed",
+                source_sign="tension_positive",
+            )
 
             chemical_formula = atoms.get_chemical_formula()
 
@@ -260,6 +265,7 @@ class OMat2024(AbstractBaseDataset):
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
+                stress=stress,
                 graph_attr=graph_attr,
             )
 
@@ -283,9 +289,11 @@ class OMat2024(AbstractBaseDataset):
                 data_object = self.radius_graph(data_object)
                 data_object = transform_coordinates(data_object)
 
-            # Skip samples that still contain self-loops
-            if should_skip_self_loops(data_object, context="omat24"):
-                continue
+            try:
+                validate_materials_sample(data_object, require_stress=True)
+            except ValueError as error:
+                print(f"Skipping sample: {error}. Context: omat24", flush=True)
+                return
 
             # Default edge_shifts for when radius_graph_pbc is not activated
             if not hasattr(data_object, "edge_shifts"):
