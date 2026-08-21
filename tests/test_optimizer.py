@@ -91,7 +91,10 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
     config["NeuralNetwork"]["Training"]["Optimizer"]["type"] = optimizer_type
     config["NeuralNetwork"]["Training"]["Optimizer"]["use_zero_redundancy"] = use_zero
 
-    hydragnn.run_training(config)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    hydragnn.train_model(config, train_loader, val_loader, test_loader)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.

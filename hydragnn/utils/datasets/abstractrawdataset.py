@@ -100,7 +100,7 @@ class AbstractRawDataset(AbstractBaseDataset, ABC):
 
         self.__load_raw_data()
 
-        ## SerializedDataLoader
+        # Graph preprocessing configuration
         self.verbosity = config["Verbosity"]["level"]
         self.rotational_invariance = config["Dataset"]["rotational_invariance"]
         self.periodic_boundary_conditions = config["NeuralNetwork"]["Architecture"][

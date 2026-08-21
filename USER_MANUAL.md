@@ -574,8 +574,10 @@ HydraGNN provides a complete training pipeline with extensive configuration opti
 ```python
 import hydragnn
 
-# Simple distributed training
-hydragnn.run_training("config.json")
+# Distributed setup is performed by train_model. The caller supplies loaders.
+model, config = hydragnn.train_model(
+    config, train_loader, val_loader, test_loader
+)
 ```
 
 #### MPI Execution
@@ -678,17 +680,18 @@ With `enable_interatomic_potential`, the training loss includes energy, per-atom
 
 ### Training Execution
 
-#### High-Level Training Interface
+#### Training Interface
 
 ```python
 import hydragnn
 
-# Train with configuration file
-hydragnn.run_training("examples/lsms/lsms.json")
-
-# Train with configuration dictionary
-config = {...}  # Configuration dictionary
-hydragnn.run_training(config)
+# Dataset parsing and splitting are application responsibilities.
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+    trainset, valset, testset, batch_size=32
+)
+model, config = hydragnn.train_model(
+    config, train_loader, val_loader, test_loader
+)
 ```
 
 #### Custom Training Loop
@@ -776,7 +779,13 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 
 ```python
 # Enable DeepSpeed during training
-hydragnn.run_training(config, use_deepspeed=True)
+hydragnn.train_model(
+    config,
+    train_loader,
+    val_loader,
+    test_loader,
+    use_deepspeed=True,
+)
 ```
 
 ### FSDP (Fully Sharded Data Parallel) Integration
@@ -1319,7 +1328,7 @@ logging.basicConfig(
 #### Graceful Error Handling
 ```python
 try:
-    hydragnn.run_training(config)
+    hydragnn.train_model(config, train_loader, val_loader, test_loader)
 except Exception as e:
     logging.error(f"Training failed: {e}")
     # Save partial results

@@ -127,14 +127,19 @@ def unittest_train_model(
                     )
 
     # Run Training
-    hydragnn.run_training(config, use_deepspeed)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    _, config = hydragnn.train_model(
+        config, train_loader, val_loader, test_loader, use_deepspeed
+    )
 
     (
         error,
         error_mse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.run_prediction(config, use_deepspeed)
+    ) = hydragnn.predict_model(config, test_loader, use_deepspeed)
 
     # Set RMSE and sample MAE error thresholds
     thresholds = {

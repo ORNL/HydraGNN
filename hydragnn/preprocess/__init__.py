@@ -39,8 +39,10 @@ from .load_data import (
     total_to_train_val_test_pkls,
     HydraDataLoader,
 )
-from .serialized_dataset_loader import (
-    SerializedDataLoader,
+from .graph_dataset import (
+    load_and_prepare_graph_dataset,
+    load_pickled_graphs,
+    prepare_graph_dataset,
 )
 from .lsms_raw_dataset_loader import LSMS_RawDataLoader
 from .cfg_raw_dataset_loader import CFG_RawDataLoader

@@ -107,7 +107,12 @@ Below are the four main functionalities for running the code.
 1. Training a model, including continuing from a previously trained model using configuration options:
 ```python
 import hydragnn
-hydragnn.run_training("examples/configuration.json")
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+    trainset, valset, testset, batch_size=32
+)
+model, config = hydragnn.train_model(
+    config, train_loader, val_loader, test_loader
+)
 ```
 2. Saving a model state:
 ```python
@@ -124,9 +129,15 @@ hydragnn.load_existing_model(model, model_name, path="./logs/")
 4. Making predictions from a previously trained model:
 ```python
 import hydragnn
-hydragnn.run_prediction("examples/configuration.json", model)
+errors, task_errors, targets, predictions = hydragnn.predict_model(
+    config, test_loader
+)
 ```
-The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference) on toy problems, which are included in the CI test workflows. Both `run_training` and `run_predictions` require a JSON input file for configurable options. The `save_model` and `load_model` functions store and retrieve model checkpoints for continued training and subsequent inference. Ad-hoc example scripts where data pre-processing, training, and inference are done for specific datasets are provided in the `examples` folder.
+Dataset creation and preprocessing are explicit caller responsibilities. Pass prepared
+datasets to `create_dataloaders`, then pass the resulting loaders to `train_model` or
+`predict_model`. This keeps application-specific data handling separate from the
+training workflow. The `save_model` and `load_model` functions store and retrieve
+model checkpoints for continued training and subsequent inference.
 
 ### Datasets
 

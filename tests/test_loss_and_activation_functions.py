@@ -97,7 +97,10 @@ def unittest_loss_and_activation_functions(
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2
 
     # Make sure training works with each loss function.
-    hydragnn.run_training(config)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    hydragnn.train_model(config, train_loader, val_loader, test_loader)
 
 
 # Test all supported loss function types. Separate input file because only 2 steps are run.
