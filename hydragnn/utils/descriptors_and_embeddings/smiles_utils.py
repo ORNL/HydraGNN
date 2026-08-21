@@ -108,24 +108,29 @@ def generate_graphdata_from_rdkit_molecule(
         .contiguous()
     )
 
-    x = torch.cat([x1.to(torch.float), x2], dim=-1)
+    atom_type = x1.to(torch.float)
+    atom_descriptors = x2
 
     if atomicdescriptors_torch_tensor is not None:
         assert (
-            atomicdescriptors_torch_tensor.shape[0] == x.shape[0]
+            atomicdescriptors_torch_tensor.shape[0] == atom_type.shape[0]
         ), "tensor of atomic descriptors MUST have the number of rows equal to the number of atoms in the molecule"
-        x = torch.cat([x, atomicdescriptors_torch_tensor], dim=-1).to(torch.float)
-
-    y = ytarget  # .squeeze()
+        atom_descriptors = torch.cat(
+            [atom_descriptors, atomicdescriptors_torch_tensor], dim=-1
+        ).to(torch.float)
 
     data = Data(
-        x=x,
+        atom_type=atom_type,
+        atom_descriptors=atom_descriptors,
         edge_index=edge_index,
-        edge_attr=edge_attr,
-        y=y,
+        bond_attributes=edge_attr,
         **{"dataset_name": None, "smiles": None},
     )
-    if var_config is not None:
+    if var_config is None:
+        data.x = torch.cat([atom_type, atom_descriptors], dim=-1)
+        data.edge_attr = edge_attr
+        data.y = ytarget
+    else:
         from hydragnn.utils.input_config_parsing.variable_schema import (
             parse_variable_schema,
             prepare_data_from_schema,

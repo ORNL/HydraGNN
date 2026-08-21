@@ -36,9 +36,14 @@
     "Variables": {
         "inputs": [
             {
-                "name": "x",
+                "name": "atom_type",
                 "level": "node",
-                "dim": 12
+                "dim": 6
+            },
+            {
+                "name": "atom_descriptors",
+                "level": "node",
+                "dim": 6
             }
         ],
         "outputs": [
