@@ -33,13 +33,8 @@ spin = 1.0
 
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
-    # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
-    # Only predict energy (index 0 of 2 properties) for this run.
-    data.y = data.energy / len(data.x)
-    graph_features_dim = [1]
-    node_feature_dim = [1]
-    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+    data.atomic_numbers = data.z.float().view(-1, 1)
+    data.energy = data.energy.reshape(1, 1) / data.num_nodes
     data = compute_edges(data)
     data = transform(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings

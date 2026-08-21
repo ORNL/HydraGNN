@@ -177,8 +177,6 @@ class LJDataset(AbstractBaseDataset):
             atomic_number=atomic_number,
             potential=potential,
             graph_energy=potential,
-            x=torch.cat([atomic_number, potential], axis=1),
-            y=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
             energy_per_atom=torch.tensor(energy_per_atom_pretransformed)
             .reshape(1, 1)
             .to(torch.float32),
