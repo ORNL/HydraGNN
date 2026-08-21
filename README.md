@@ -168,6 +168,8 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
     - `["enable_interatomic_potential"]`  
       Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
+    - `["enable_atomistic_species_encoding"]`
+      Treat `data.atomic_numbers` as categorical chemical species for atomistic models (bool, default `false`). Interatomic-potential mode enables this automatically; set it explicitly for other atomistic property models.
   - `["Training"]`
     - `["global_attn_redraw_interval"]`
       Number of training batches between Performer random-feature projection
