@@ -341,10 +341,12 @@ def train_validate_test(
         profiler.set_current_epoch(epoch)
         for dataloader in [train_loader, val_loader, test_loader]:
             sampler = getattr(dataloader, "batch_sampler", None)
-            if getattr(sampler, "set_epoch", None) is None:
-                sampler = dataloader.sampler
             if getattr(sampler, "set_epoch", None) is not None:
                 sampler.set_epoch(epoch)
+            else:
+                sampler = dataloader.sampler
+                if getattr(sampler, "set_epoch", None) is not None:
+                    sampler.set_epoch(epoch)
 
         with profiler as prof:
             tr.enable()
