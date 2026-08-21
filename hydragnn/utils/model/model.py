@@ -30,6 +30,8 @@ from torch.distributed.optim import ZeroRedundancyOptimizer
 def activation_function_selection(activation_function_string: str):
     if activation_function_string == "relu":
         return torch.nn.ReLU()
+    elif activation_function_string == "silu":
+        return torch.nn.SiLU()
     elif activation_function_string == "selu":
         return torch.nn.SELU()
     elif activation_function_string == "prelu":
