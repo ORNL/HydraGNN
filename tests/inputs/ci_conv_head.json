@@ -11,34 +11,6 @@
             "train": "dataset/unit_test_singlehead_train",
             "test": "dataset/unit_test_singlehead_test",
             "validate": "dataset/unit_test_singlehead_validate"
-        },
-        "node_features": {
-            "name": [
-                "x",
-                "x2",
-                "x3"
-            ],
-            "dim": [
-                1,
-                1,
-                1
-            ],
-            "column_index": [
-                0,
-                6,
-                7
-            ]
-        },
-        "graph_features": {
-            "name": [
-                "sum_x_x2_x3"
-            ],
-            "dim": [
-                1
-            ],
-            "column_index": [
-                0
-            ]
         }
     },
     "NeuralNetwork": {
@@ -106,7 +78,7 @@
         ],
         "outputs": [
             {
-                "name": "x",
+                "name": "x_target",
                 "level": "node",
                 "dim": 1
             }

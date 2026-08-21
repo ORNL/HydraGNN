@@ -170,7 +170,7 @@ def train_and_checkpoint(
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         plot_init_solution,
@@ -179,7 +179,6 @@ def train_and_checkpoint(
         use_deepspeed=use_deepspeed,
         compute_grad_energy=enable_interatomic_potential,
         precision=precision,
-        variables=config["Variables"],
     )
 
     save_model(model, optimizer, log_name, use_deepspeed=use_deepspeed)

@@ -119,11 +119,7 @@ def main():
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
 
     # Update the config dictionary with the suggested hyperparameters
     config["NeuralNetwork"]["Architecture"]["model_type"] = args.parameters[
@@ -419,7 +415,7 @@ def main():
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

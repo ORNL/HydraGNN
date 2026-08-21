@@ -33,7 +33,7 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 # HydraGNN
-from hydragnn.utils.datasets.abstractrawdataset import AbstractBaseDataset
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distributed import nsplit
 from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths

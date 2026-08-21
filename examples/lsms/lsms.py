@@ -18,7 +18,6 @@ import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.lsmsdataset import LSMSDataset
 from hydragnn.utils.datasets.serializeddataset import (
     SerializedWriter,
     SerializedDataset,
@@ -96,8 +95,9 @@ if __name__ == "__main__":
         config["Dataset"]["path"][dataset_type] = os.path.join(dirpwd, raw_data_path)
 
     if not args.loadexistingsplit and rank == 0:
-        ## Only rank=0 is enough for pre-processing
-        total = LSMSDataset(config)
+        raise ValueError(
+            "Provide pre-serialized PyG Data objects; HydraGNN does not parse LSMS files."
+        )
 
         trainset, valset, testset = split_dataset(
             dataset=total,
@@ -167,14 +167,6 @@ if __name__ == "__main__":
         testset = SerializedDataset(basedir, datasetname, "testset")
     else:
         raise ValueError("Unknown data format: %d" % args.format)
-    ## Set minmax
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_node_feature"
-    ] = trainset.minmax_node_feature
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_graph_feature"
-    ] = trainset.minmax_graph_feature
-
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
@@ -192,8 +184,8 @@ if __name__ == "__main__":
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_node_feature", None)
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_graph_feature", None)
+    config["Variables"].pop("minmax_node_feature", None)
+    config["Variables"].pop("minmax_graph_feature", None)
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(
@@ -233,7 +225,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=True,

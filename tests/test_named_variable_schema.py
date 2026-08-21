@@ -101,11 +101,22 @@ def pytest_named_variables_require_exact_attribute_name():
 
 
 def pytest_named_variable_schema_rejects_duplicate_names():
-    variables = {**VARIABLES, "outputs": [VARIABLES["inputs"][0]]}
-    with pytest.raises(ValueError, match="Variable names must be unique: species"):
+    variables = {**VARIABLES, "outputs": [VARIABLES["outputs"][0]] * 2}
+    with pytest.raises(
+        ValueError, match="Variable names within outputs must be unique: energy"
+    ):
         parse_variable_schema(variables)
 
 
 def pytest_named_variable_configuration_is_required():
     with pytest.raises(ValueError, match="top-level Variables section is required"):
         get_variable_schema({"NeuralNetwork": {}})
+
+
+def pytest_internal_output_names_are_rejected():
+    variables = {
+        "inputs": [{"name": "features", "level": "node", "dim": 2}],
+        "outputs": [{"name": "x", "level": "node", "dim": 1}],
+    }
+    with pytest.raises(ValueError, match="internal tensors: x"):
+        parse_variable_schema(variables)

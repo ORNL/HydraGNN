@@ -16,50 +16,12 @@ import torch
 import hydragnn, tests
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from mpi4py import MPI
-from hydragnn.preprocess import graph_samples_checks_and_updates as gscu
-from hydragnn.preprocess import graph_dataset
-from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
 
 torch.manual_seed(97)
 
 CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]
-
-
-@pytest.fixture(autouse=True)
-def add_graph_attr(monkeypatch):
-    """Inject graph_attr during dataset preparation without touching core code."""
-
-    orig_update = gscu.update_predicted_values
-
-    def _wrapped(type, index, graph_feature_dim, node_feature_dim, data):
-        res = orig_update(type, index, graph_feature_dim, node_feature_dim, data)
-        if hasattr(data, "x") and data.x.numel() > 0:
-            first_val = data.x[0, 0]
-            matches = torch.isclose(data.x[:, 0], first_val)
-            data.graph_attr = matches.sum().unsqueeze(0).to(data.x.dtype)
-        return res
-
-    monkeypatch.setattr(gscu, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(graph_dataset, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(pickledataset, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(distdataset, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(adiosdataset, "update_predicted_values", _wrapped)
-    yield
-    monkeypatch.setattr(gscu, "update_predicted_values", orig_update)
-    monkeypatch.setattr(
-        graph_dataset, "update_predicted_values", orig_update, raising=False
-    )
-    monkeypatch.setattr(
-        pickledataset, "update_predicted_values", orig_update, raising=False
-    )
-    monkeypatch.setattr(
-        distdataset, "update_predicted_values", orig_update, raising=False
-    )
-    monkeypatch.setattr(
-        adiosdataset, "update_predicted_values", orig_update, raising=False
-    )
 
 
 def unittest_train_model_graphattr(
@@ -86,6 +48,9 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
     config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
+    config["Variables"]["inputs"].append(
+        {"name": "graph_attr", "level": "graph", "dim": 1}
+    )
     config["NeuralNetwork"]["Architecture"][
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode
@@ -152,7 +117,7 @@ def unittest_train_model_graphattr(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
+                if not any(name.endswith(".pt") for name in os.listdir(data_path)):
                     tests.deterministic_graph_data(
                         data_path, number_configurations=num_samples
                     )

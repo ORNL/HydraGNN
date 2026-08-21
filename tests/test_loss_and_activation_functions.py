@@ -89,7 +89,7 @@ def unittest_loss_and_activation_functions(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
+                if not any(name.endswith(".pt") for name in os.listdir(data_path)):
                     tests.deterministic_graph_data(
                         data_path, number_configurations=num_samples
                     )

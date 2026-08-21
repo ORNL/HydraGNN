@@ -27,8 +27,6 @@ def pytest_config(config_file):
             "path",
             "format",
             "num_nodes",
-            "node_features",
-            "graph_features",
         ],
         "NeuralNetwork": ["Architecture", "Training"],
         "Variables": ["inputs", "outputs"],

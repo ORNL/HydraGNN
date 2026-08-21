@@ -311,18 +311,8 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["output_names"] = [
-        graph_feature_names[item]
-        for ihead, item in enumerate(var_config["output_index"])
-    ]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dim
-    (
-        var_config["input_node_feature_names"],
-        var_config["input_node_feature_dims"],
-    ) = get_node_attribute_name(ogb_node_types)
-    var_config["node_feature_dims"] = var_config["input_node_feature_dims"]
+    var_config = config["Variables"]
+    () = get_node_attribute_name(ogb_node_types)
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp(
@@ -535,7 +525,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,
@@ -559,8 +549,8 @@ if __name__ == "__main__":
             ihead = 0
             head_true = np.asarray(true_values[ihead].cpu()).squeeze()
             head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
-            ifeat = var_config["output_index"][ihead]
-            outtype = var_config["type"][ihead]
+            ifeat = ihead
+            outtype = var_config["outputs"][ihead]["level"]
             varname = graph_feature_names[ifeat]
 
             ax = axs[isub]

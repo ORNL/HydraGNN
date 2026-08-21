@@ -197,8 +197,9 @@ def train_validate_test(
     use_deepspeed=False,
     compute_grad_energy=False,
     precision="fp32",
-    variables=None,
 ):
+    variable_schema = parse_variable_schema(config["Variables"])
+    config = config["NeuralNetwork"]
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
         config["Training"]["EarlyStopping"]
@@ -219,9 +220,6 @@ def train_validate_test(
     )
 
     precision, _, _ = resolve_precision(precision)
-    if variables is None:
-        raise ValueError("The top-level Variables section must be passed to training")
-    variable_schema = parse_variable_schema(variables)
     configured_output_names = [spec.name for spec in variable_schema.outputs]
 
     device = get_device()
