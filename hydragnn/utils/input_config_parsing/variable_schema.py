@@ -16,7 +16,9 @@ from typing import Literal
 import torch
 
 VariableLevel = Literal["node", "edge", "graph"]
+VariableRole = Literal["feature", "position"]
 _LEVELS = frozenset(("node", "edge", "graph"))
+_ROLES = frozenset(("feature", "position"))
 _INTERNAL_OUTPUT_NAMES = frozenset(
     (
         "x",
@@ -40,6 +42,7 @@ class VariableSpec:
     name: str
     level: VariableLevel
     dim: int
+    role: VariableRole = "feature"
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         path = f"Variables.{group}[{index}]"
         if not isinstance(raw, dict):
             raise TypeError(f"{path} must be a JSON object")
-        extra = set(raw) - {"name", "level", "dim"}
+        extra = set(raw) - {"name", "level", "dim", "role"}
         missing = {"name", "level", "dim"} - set(raw)
         if missing:
             raise ValueError(f"{path} is missing: {', '.join(sorted(missing))}")
@@ -70,13 +73,26 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         name = raw["name"]
         level = raw["level"]
         dim = raw["dim"]
+        role = raw.get("role", "feature")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
             raise ValueError(f"{path}.level must be one of {sorted(_LEVELS)}")
         if isinstance(dim, bool) or not isinstance(dim, int) or dim <= 0:
             raise ValueError(f"{path}.dim must be a positive integer")
-        parsed.append(VariableSpec(name=name, level=level, dim=dim))
+        if role not in _ROLES:
+            raise ValueError(f"{path}.role must be one of {sorted(_ROLES)}")
+        if role == "position":
+            if group != "inputs":
+                raise ValueError(f"{path}.role 'position' is valid only for inputs")
+            if name != "pos" or level != "node" or dim != 3:
+                raise ValueError(
+                    f"{path} with role 'position' must have name 'pos', "
+                    "level 'node', and dim 3"
+                )
+        if group == "inputs" and name == "pos" and role != "position":
+            raise ValueError(f"{path} named 'pos' must declare role 'position'")
+        parsed.append(VariableSpec(name=name, level=level, dim=dim, role=role))
     return tuple(parsed)
 
 
@@ -99,8 +115,13 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
                 f"Variable names within {group} must be unique: "
                 + ", ".join(duplicates)
             )
-    if not any(spec.level == "node" for spec in schema.inputs):
-        raise ValueError("Variables.inputs must contain at least one node variable")
+    positions = [spec for spec in schema.inputs if spec.role == "position"]
+    if len(positions) > 1:
+        raise ValueError("Variables.inputs may contain only one position variable")
+    if not any(
+        spec.level == "node" and spec.role == "feature" for spec in schema.inputs
+    ):
+        raise ValueError("Variables.inputs must contain at least one node feature")
     reserved_outputs = sorted(
         spec.name for spec in schema.outputs if spec.name in _INTERNAL_OUTPUT_NAMES
     )
@@ -160,8 +181,10 @@ def validate_variable(data, spec: VariableSpec) -> torch.Tensor:
 def prepare_data_from_schema(data, schema: VariableSchema):
     """Validate named attributes and compile them for existing model internals.
 
-    Named tensors remain on ``data``. Node, edge, and graph inputs are
-    concatenated into ``x``, ``edge_attr``, and ``graph_attr`` respectively.
+    Named tensors remain on ``data``. Feature inputs at node, edge, and graph
+    level are concatenated into ``x``, ``edge_attr``, and ``graph_attr``
+    respectively. Geometric positions are validated but remain exclusively in
+    ``data.pos`` and are never concatenated into ``data.x``.
     Outputs of each level are concatenated along dimension 1 into
     ``node_output``, ``edge_output``, or ``graph_output``. They are also
     flattened into the internal ``y``/``y_loc`` representation while
@@ -169,7 +192,9 @@ def prepare_data_from_schema(data, schema: VariableSchema):
     """
     by_level = {level: [] for level in _LEVELS}
     for spec in schema.inputs:
-        by_level[spec.level].append(validate_variable(data, spec))
+        value = validate_variable(data, spec)
+        if spec.role == "feature":
+            by_level[spec.level].append(value)
 
     data.x = torch.cat(by_level["node"], dim=-1)
     if by_level["edge"]:
@@ -209,4 +234,6 @@ def prepare_data_from_schema(data, schema: VariableSchema):
 def schema_dimensions(schema: VariableSchema, level: VariableLevel, group: str) -> int:
     """Return the concatenated feature dimension for a level and group."""
     specs = getattr(schema, group)
-    return sum(spec.dim for spec in specs if spec.level == level)
+    return sum(
+        spec.dim for spec in specs if spec.level == level and spec.role == "feature"
+    )

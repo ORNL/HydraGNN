@@ -64,6 +64,7 @@
             },
             {
                 "name": "pos",
+                "role": "position",
                 "level": "node",
                 "dim": 3
             }

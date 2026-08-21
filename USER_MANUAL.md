@@ -398,7 +398,8 @@ representation according to these rules:
 
 | JSON variables | Internal tensor | Construction |
 |---|---|---|
-| node inputs | `data.x` | concatenate columns in JSON order |
+| node inputs with role `feature` | `data.x` | concatenate columns in JSON order |
+| node input with role `position` | `data.pos` | validate as `(N, 3)`; do not concatenate |
 | edge inputs | `data.edge_attr` | concatenate columns in JSON order |
 | graph inputs | `data.graph_attr` | concatenate columns in JSON order |
 | node outputs | `data.node_output` | concatenate columns in JSON order |
@@ -412,15 +413,22 @@ As a more explicit input example:
 ```json
 "inputs": [
   {"name": "atomic_numbers", "level": "node", "dim": 1},
-  {"name": "pos", "level": "node", "dim": 3}
+  {"name": "pos", "level": "node", "dim": 3, "role": "position"}
 ]
 ```
 
-causes HydraGNN to construct an `(N, 4)` internal node tensor equivalent to:
+causes HydraGNN to validate `data.pos` as `(N, 3)` while constructing an
+`(N, 1)` internal node-feature tensor equivalent to:
 
 ```python
-data.x = torch.cat([data.atomic_numbers, data.pos], dim=1)
+data.x = data.atomic_numbers
 ```
+
+The `position` role is a geometric input contract, not a feature channel.
+HydraGNN keeps it in `data.pos`, excludes it from `data.x` and `input_dim`, and
+passes it separately to geometry-aware and equivariant models. Declaring `pos`
+without `"role": "position"` is rejected to prevent accidental loss of
+translation invariance or rotation equivariance.
 
 If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
 shape `(N, 3)`, HydraGNN constructs `data.y` with shape `(1 + 3*N, 1)` and
@@ -433,7 +441,7 @@ stale internal tensor for that level. This makes repeated schema preparation
 idempotent and prevents undeclared features from silently reaching the model.
 More precisely:
 
-- At least one node input is mandatory, so `data.x` is always reconstructed
+- At least one node feature input is mandatory, so `data.x` is always reconstructed
   from the declared node attributes. Any pre-existing `data.x` is overwritten.
 - When edge inputs are declared, `data.edge_attr` is reconstructed from them;
   otherwise a pre-existing `data.edge_attr` is removed.

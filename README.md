@@ -224,13 +224,15 @@ and propagated alongside the globally attended invariant representation.
   - top-level `["Variables"]`
     - `["inputs"]` and `["outputs"]` contain named tensor specifications.
       Every specification has an attribute `name`, a `level` (`node`, `edge`,
-      or `graph`), and a positive feature dimension `dim`.
+      or `graph`), and a positive feature dimension `dim`. Inputs may also
+      declare a semantic `role`; ordinary inputs use the default `feature`
+      role, while Cartesian coordinates use `position`.
 
 ```json
 "Variables": {
   "inputs": [
     {"name": "atomic_numbers", "level": "node", "dim": 1},
-    {"name": "pos", "level": "node", "dim": 3},
+    {"name": "pos", "level": "node", "dim": 3, "role": "position"},
     {"name": "bond_attributes", "level": "edge", "dim": 4},
     {"name": "charge_and_spin", "level": "graph", "dim": 2}
   ],
@@ -252,13 +254,16 @@ attributes with dimensions 1 and 4 produce a `(1, 5)` tensor per sample.
 Attribute names are not aliases: the example uses PyG's conventional `pos`
 attribute, so the corresponding sample must provide `data.pos`. A different
 name is valid only when the JSON specification and PyG attribute match exactly.
+The `position` role is restricted to `pos` with node level and dimension 3.
+HydraGNN validates this geometric input but keeps it separate from `data.x`, so
+Cartesian coordinates do not become invariant scalar feature channels.
 
 Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
 `data.graph_attr`, `data.y`, or `data.y_loc` tensors in dataset importers.
 HydraGNN validates the named source attributes and builds those tensors when a
 sample is prepared from the schema:
 
-- node inputs become `data.x`;
+- node inputs with role `feature` become `data.x`;
 - edge inputs become `data.edge_attr`;
 - graph inputs become `data.graph_attr`;
 - outputs become the level-specific `data.node_output`, `data.edge_output`, and
@@ -271,7 +276,7 @@ Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
 for the complete construction rules and a worked example.
 
 The schema is authoritative over HydraGNN's internal tensors. Because at least
-one node input is required, `data.x` is always rebuilt and overwrites any
+one node feature input is required, `data.x` is always rebuilt and overwrites any
 pre-existing `data.x`. Edge inputs, graph inputs, and outputs are optional:
 HydraGNN rebuilds their internal tensors when they are declared and removes
 stale `data.edge_attr`, `data.graph_attr`, `data.y`, `data.y_loc`, or
