@@ -52,6 +52,7 @@ class SCFStack(Base):
         max_neighbours: Optional[int] = None,
         **kwargs,
     ):
+        self.equivariant_attn_adapter_type = "SchNet"
         self.radius = radius
         self.max_neighbours = max_neighbours
         self.num_filters = num_filters
@@ -111,7 +112,9 @@ class SCFStack(Base):
             equivariant=self.equivariance and not last_layer,
         )
 
-        if self.use_edge_attr or (self.use_global_attn and self.is_edge_model):
+        if self.use_edge_attr or (
+            self.global_attn_engine == "GPS" and self.is_edge_model
+        ):
             return PyGSeq(
                 "inv_node_feat, equiv_node_feat, edge_index, edge_weight, edge_rbf, batch, edge_attr",
                 [
@@ -163,13 +166,19 @@ class SCFStack(Base):
     def _embedding(self, data):
         super()._embedding(data)
 
-        if (self.use_edge_attr or (self.use_global_attn and self.is_edge_model)) and (
-            self.equivariance
+        if self.global_attn_engine == "EquivariantTransformer" and torch.any(
+            data.edge_shifts != 0
         ):
+            raise ValueError(
+                "EquivariantTransformer does not yet support periodic images"
+            )
+
+        gps_edge_encodings = self.global_attn_engine == "GPS" and self.is_edge_model
+        if (self.use_edge_attr or gps_edge_encodings) and self.equivariance:
             raise Exception(
                 "For SchNet if using edge attributes or edge encodings for gps, then E(3)-equivariance cannot be ensured. Please disable equivariance or edge attributes."
             )
-        elif self.use_edge_attr or (self.use_global_attn and self.is_edge_model):
+        elif self.use_edge_attr or gps_edge_encodings:
             edge_index = data.edge_index
             data.edge_shifts = torch.zeros(
                 (data.edge_index.size(1), 3), device=data.edge_index.device
@@ -196,12 +205,34 @@ class SCFStack(Base):
                 "batch": data.batch,
             }
 
+        if self.global_attn_engine == "EquivariantTransformer":
+            conv_args.update(
+                {
+                    "positions": data.pos,
+                    "graph_batch": (
+                        data.batch
+                        if data.batch is not None
+                        else torch.zeros(
+                            data.pos.shape[0], dtype=torch.long, device=data.pos.device
+                        )
+                    ),
+                }
+            )
+
         if self.use_global_attn:
-            x = self.pos_emb(data.pe)
-            if self.input_dim:
-                x = torch.cat((self.node_emb(data.x.float()), x), 1)
-                x = self.node_lin(x)
-            if self.is_edge_model:
+            if self.global_attn_engine == "EquivariantTransformer":
+                if not self.input_dim:
+                    raise ValueError(
+                        "EquivariantTransformer requires invariant node features"
+                    )
+                x = self.node_emb(data.x.float())
+            else:
+                x = self.pos_emb(data.pe)
+                if self.input_dim:
+                    x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                    x = self.node_lin(x)
+
+            if self.is_edge_model and self.global_attn_engine == "GPS":
                 e = self.rel_pos_emb(data.rel_pe)
                 if self.use_edge_attr:
                     e = torch.cat((self.edge_emb(conv_args["edge_attr"]), e), 1)

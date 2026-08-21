@@ -50,6 +50,16 @@ def update_config(config, train_loader, val_loader, test_loader):
         # Used only by Performer attention. None disables projection redraw.
         config["NeuralNetwork"]["Training"]["global_attn_redraw_interval"] = 1000
 
+    architecture = config["NeuralNetwork"]["Architecture"]
+    architecture.setdefault("equivariant_attn_lmax", 1)
+    architecture.setdefault("equivariant_attn_num_radial", 16)
+    architecture.setdefault("equivariant_attn_feedforward_multiplier", 2)
+    architecture.setdefault("equivariant_attn_allow_scalar_only", False)
+    architecture.setdefault("equivariant_attn_require_tensor_coupling", True)
+    architecture.setdefault("equivariant_attn_chunk_size", 512)
+    architecture.setdefault("equivariant_attn_coupling_mode", "parallel")
+    validate_equivariant_transformer_config(architecture)
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
@@ -164,6 +174,71 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Training"]["precision"] = "fp32"
 
     return config
+
+
+def validate_equivariant_transformer_config(config):
+    """Validate options whose meaning is specific to the equivariant engine."""
+    if config.get("global_attn_engine") != "EquivariantTransformer":
+        return
+    mpnn_type = config.get("mpnn_type")
+    if mpnn_type not in {"PAINN", "PNAEq", "SchNet", "DimeNet", "MACE"}:
+        raise ValueError(
+            "EquivariantTransformer model integration currently supports "
+            "PAINN, PNAEq, SchNet, DimeNet, and MACE; "
+            "the other adapters remain unavailable until their integration tests pass"
+        )
+    if config.get("global_attn_heads", 0) <= 0:
+        raise ValueError("EquivariantTransformer requires global_attn_heads > 0")
+    if config["equivariant_attn_lmax"] < 0:
+        raise ValueError("equivariant_attn_lmax must be nonnegative")
+    if config["equivariant_attn_num_radial"] <= 0:
+        raise ValueError("equivariant_attn_num_radial must be positive")
+    if config["equivariant_attn_feedforward_multiplier"] <= 0:
+        raise ValueError("equivariant_attn_feedforward_multiplier must be positive")
+    chunk_size = config.get("equivariant_attn_chunk_size", 512)
+    if chunk_size is not None:
+        if (
+            not isinstance(chunk_size, int)
+            or isinstance(chunk_size, bool)
+            or chunk_size <= 0
+        ):
+            raise ValueError(
+                "equivariant_attn_chunk_size must be a positive integer or null"
+            )
+    if config.get("equivariant_attn_coupling_mode", "parallel") not in {
+        "parallel",
+        "sequential",
+    }:
+        raise ValueError(
+            "equivariant_attn_coupling_mode must be 'parallel' or 'sequential'"
+        )
+    if (
+        mpnn_type in {"PAINN", "PNAEq", "MACE"}
+        and not config["equivariant_attn_require_tensor_coupling"]
+    ):
+        raise ValueError(
+            f"{mpnn_type} provides vector features; tensor coupling "
+            "must remain enabled"
+        )
+    if mpnn_type in {"SchNet", "DimeNet"}:
+        if config["equivariant_attn_require_tensor_coupling"]:
+            raise ValueError(
+                f"{mpnn_type} cannot provide tensor-valued local/global coupling"
+            )
+        if not config["equivariant_attn_allow_scalar_only"]:
+            raise ValueError(
+                f"{mpnn_type} requires equivariant_attn_allow_scalar_only=true"
+            )
+    if mpnn_type == "SchNet" and config.get("equivariance"):
+        raise ValueError(
+            "SchNet with EquivariantTransformer cannot use coordinate updates; "
+            "set Architecture.equivariance=false"
+        )
+    if mpnn_type == "MACE" and config.get("num_conv_layers", 0) < 2:
+        raise ValueError(
+            "MACE with EquivariantTransformer requires at least two convolution "
+            "layers because MACE's final layer contains scalar irreps only"
+        )
 
 
 def update_config_equivariance(config):
