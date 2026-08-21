@@ -231,7 +231,7 @@ from torch_geometric.data import Data
 # Users parse their source format and construct named PyG attributes.
 sample = Data(
     atomic_numbers=atomic_numbers,  # (N, 1)
-    positions=positions,            # (N, 3)
+    pos=positions,                  # (N, 3)
     energy=energy,                  # (1, 1)
     forces=forces,                  # (N, 3)
 )
@@ -412,14 +412,14 @@ As a more explicit input example:
 ```json
 "inputs": [
   {"name": "atomic_numbers", "level": "node", "dim": 1},
-  {"name": "positions", "level": "node", "dim": 3}
+  {"name": "pos", "level": "node", "dim": 3}
 ]
 ```
 
 causes HydraGNN to construct an `(N, 4)` internal node tensor equivalent to:
 
 ```python
-data.x = torch.cat([data.atomic_numbers, data.positions], dim=1)
+data.x = torch.cat([data.atomic_numbers, data.pos], dim=1)
 ```
 
 If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
