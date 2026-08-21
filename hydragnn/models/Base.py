@@ -538,41 +538,16 @@ class Base(Module):
             )
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
-    def configure_atomistic_species_encoding(
-        self, enabled: bool, encoding: str = "auto"
-    ) -> None:
+    def configure_atomistic_species_encoding(self, enabled: bool) -> None:
         """Configure categorical species handling for atomistic models.
 
-        ``auto`` selects the stack's native encoder when it has one and the
-        common HydraGNN embedding otherwise. ``embedding`` and ``native`` make
-        that choice explicit, while ``none`` is an advanced opt-out.
+        Stacks with a native encoder retain it; all other stacks use the common
+        HydraGNN species embedding. Generic graph behavior remains unchanged.
         """
-        valid_encodings = {"auto", "embedding", "native", "none"}
-        if encoding not in valid_encodings:
-            raise ValueError(
-                "atomic_species_encoding must be one of "
-                f"{sorted(valid_encodings)}; received {encoding!r}"
-            )
         self.atomistic_mode_enabled = bool(enabled)
-        if not enabled or encoding == "none":
-            use_common_embedding = False
-        elif encoding == "auto":
-            use_common_embedding = not self.uses_native_species_encoder
-        elif encoding == "embedding":
-            if self.uses_native_species_encoder:
-                raise ValueError(
-                    f"{type(self).__name__} has a native species encoder and cannot "
-                    "also use the common HydraGNN species embedding"
-                )
-            use_common_embedding = True
-        else:
-            if not self.uses_native_species_encoder:
-                raise ValueError(
-                    f"{type(self).__name__} does not provide a native species encoder"
-                )
-            use_common_embedding = False
-
-        self.enable_atomistic_species_encoding = use_common_embedding
+        self.enable_atomistic_species_encoding = bool(
+            enabled and not self.uses_native_species_encoder
+        )
         if self.enable_atomistic_species_encoding:
             self.species_embedding = Embedding(119, self.hidden_dim, padding_idx=0)
 

@@ -682,8 +682,7 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
 ```json
 {
     "Architecture": {
-        "enable_interatomic_potential": true,
-        "atomic_species_encoding": "auto"
+        "enable_interatomic_potential": true
     },
     "Training": {
         "compute_grad_energy": true
@@ -695,14 +694,10 @@ With `enable_interatomic_potential`, the training loss includes energy, per-atom
 
 Atomistic datasets should store integer atomic numbers from 1 through 118 in
 `data.atomic_numbers`; `data.x` remains reserved for generic or continuous node
-features. With the default `atomic_species_encoding: "auto"`, generic stacks
-replace atomic numbers with a learned hidden-width embedding, while stacks such
-as MACE retain their native chemical species encoder. Reading atomic numbers
-from `data.x[:, 0]` remains available as a deprecated compatibility fallback.
-
-Advanced users may select `"embedding"` or `"native"` to require a particular
-encoder capability, or `"none"` to disable categorical species encoding. An
-incompatible explicit selection fails during model construction.
+features. In interatomic-potential mode, generic stacks replace atomic numbers
+with a learned hidden-width embedding, while stacks such as MACE retain their
+native chemical species encoder. Reading atomic numbers from `data.x[:, 0]`
+remains available as a deprecated compatibility fallback.
 ```
 
 ### Training Execution
