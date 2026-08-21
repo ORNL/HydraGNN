@@ -68,6 +68,12 @@
                 "name": "atomic_numbers",
                 "level": "node",
                 "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
             }
         ],
         "outputs": [

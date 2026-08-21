@@ -208,7 +208,7 @@
                 "dim": 1
             },
             {
-                "name": "pos", "level": "node", "dim": 3
+                "name": "pos", "role": "position", "level": "node", "dim": 3
             }
         ],
         "outputs": [
