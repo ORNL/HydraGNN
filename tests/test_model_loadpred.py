@@ -77,7 +77,7 @@ def pytest_model_loadpred():
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)
     with open(config_file, "r") as f:
         config = json.load(f)
-    config["NeuralNetwork"]["Architecture"]["model_type"] = model_type
+    config["NeuralNetwork"]["Architecture"]["mpnn_type"] = model_type
     # get the directory of trained model
     log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
         config
@@ -91,18 +91,40 @@ def pytest_model_loadpred():
         case_exist = False
     else:
         with open(config_file, "r") as f:
-            config = json.load(f)
-        for dataset_name, raw_data_path in config["Dataset"]["path"].items():
-            if not os.path.isfile(raw_data_path):
-                print(dataset_name, "datasets not found: ", raw_data_path)
-                case_exist = False
-                break
+            saved_config = json.load(f)
+        saved_log_name = (
+            hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
+                saved_config
+            )
+        )
+        if saved_log_name != log_name:
+            print(
+                "Saved configuration does not match requested checkpoint: ",
+                saved_log_name,
+                log_name,
+            )
+            case_exist = False
+        else:
+            config = saved_config
+            for dataset_name, raw_data_path in config["Dataset"]["path"].items():
+                if not os.path.isfile(raw_data_path):
+                    print(dataset_name, "datasets not found: ", raw_data_path)
+                    case_exist = False
+                    break
     if not case_exist:
         unittest_train_model(
-            config["NeuralNetwork"]["Architecture"]["model_type"],
+            config["NeuralNetwork"]["Architecture"]["mpnn_type"],
             None,
             None,
             "ci_multihead.json",
             False,
         )
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        assert (
+            hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
+                config
+            )
+            == log_name
+        ), "Newly trained checkpoint configuration does not match its log name"
     unittest_model_prediction(config)
