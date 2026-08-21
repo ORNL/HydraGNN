@@ -90,7 +90,7 @@ def test_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pool
         }
         config["NeuralNetwork"]["Architecture"]["task_weights"] = [1]
         config["Variables"]["outputs"] = [
-            {"name": "sum_x_x2_x3", "level": "graph", "dim": 1}
+            {"name": "energy", "level": "graph", "dim": 1}
         ]
 
     # Create temporary config file

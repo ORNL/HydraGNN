@@ -29,46 +29,81 @@ def deterministic_graph_data(
     types: list = None,
     number_neighbors: int = 2,
     linear_only=False,
+    seed: int = 43,
 ):
     if types == None:
         types = range(number_types)
 
+    generator = torch.Generator().manual_seed(seed + configuration_start)
     # We assume that the unit cell is Body Center Cubic (BCC)
     unit_cell_x = torch.randint(
         unit_cell_x_range[0],
         unit_cell_x_range[1],
         (number_configurations,),
+        generator=generator,
     )
     unit_cell_y = torch.randint(
         unit_cell_y_range[0],
         unit_cell_y_range[1],
         (number_configurations,),
+        generator=generator,
     )
     unit_cell_z = torch.randint(
         unit_cell_z_range[0],
         unit_cell_z_range[1],
         (number_configurations,),
+        generator=generator,
     )
 
+    samples = []
     for configuration in range(number_configurations):
         uc_x = unit_cell_x[configuration]
         uc_y = unit_cell_y[configuration]
         uc_z = unit_cell_z[configuration]
-        create_configuration(
-            path,
-            configuration,
-            configuration_start,
-            uc_x,
-            uc_y,
-            uc_z,
-            types,
-            number_neighbors,
-            linear_only,
+        samples.append(
+            create_configuration(
+                configuration,
+                configuration_start,
+                uc_x,
+                uc_y,
+                uc_z,
+                types,
+                number_neighbors,
+                linear_only,
+                generator,
+            )
         )
+
+    # The retired raw test-data loader normalized every declared feature. Keep
+    # that fixture behavior here so model-quality thresholds remain meaningful
+    # while production loaders stay schema-only and do not reinterpret values.
+    for name in (
+        "x",
+        "x_target",
+        "x2",
+        "x3",
+        "xx2_vec",
+        "x2x3_vec",
+        "sum_x_x2_x3",
+        "sum",
+        "sums_vec",
+        "sum_linear",
+    ):
+        values = torch.cat([getattr(data, name).reshape(-1) for data in samples])
+        minimum, maximum = values.min(), values.max()
+        scale = maximum - minimum
+        for data in samples:
+            value = getattr(data, name)
+            setattr(data, name, (value - minimum) / scale if scale else value * 0)
+
+    for configuration, data in enumerate(samples):
+        filename = os.path.join(
+            path, "output" + str(configuration + configuration_start) + ".pt"
+        )
+        torch.save(data, filename)
 
 
 def create_configuration(
-    path,
     configuration,
     configuration_start,
     uc_x,
@@ -77,6 +112,7 @@ def create_configuration(
     types,
     number_neighbors,
     linear_only,
+    generator,
 ):
     ###############################################################################################
     ###################################   STRUCTURE OF THE DATA  ##################################
@@ -121,7 +157,9 @@ def create_configuration(
     node_ids = torch.tensor(range(number_nodes), dtype=torch.int64).reshape(
         (number_nodes, 1)
     )
-    node_feature = torch.randint(min(types), max(types) + 1, (number_nodes, 1))
+    node_feature = torch.randint(
+        min(types), max(types) + 1, (number_nodes, 1), generator=generator
+    )
 
     if linear_only:
         node_output_x = node_feature
@@ -143,9 +181,6 @@ def create_configuration(
             + torch.sum(node_output_x_square)
             + torch.sum(node_output_x_cube)
         )
-    filename = os.path.join(
-        path, "output" + str(configuration + configuration_start) + ".pt"
-    )
     total_value = total_value.reshape(1, 1).float()
     total_value_linear = (
         total_value if linear_only else total_value_linear.reshape(1, 1).float()
@@ -164,4 +199,4 @@ def create_configuration(
         graph_attr=(node_feature == node_feature[0]).sum().reshape(1, 1).float(),
         pos=positions.float(),
     )
-    torch.save(data, filename)
+    return data

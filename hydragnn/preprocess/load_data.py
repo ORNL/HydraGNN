@@ -459,22 +459,38 @@ def load_train_val_test_sets(config, isdist=False):
 def total_to_train_val_test_pkls(config, isdist=False):
     _, rank = get_comm_size_and_rank()
 
-    if list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
-        file_dir = config["Dataset"]["path"]["total"]
+    total_path = config["Dataset"]["path"]["total"]
+    if os.path.isdir(total_path):
+        paths = sorted(
+            os.path.join(total_path, name)
+            for name in os.listdir(total_path)
+            if name.endswith(".pt")
+        )
+        if not paths:
+            raise ValueError(f"No serialized PyG .pt samples found in {total_path}")
+        dataset_total = [torch.load(path, weights_only=False) for path in paths]
+        minmax_node_feature = None
+        minmax_graph_feature = None
+        serialized_dir = os.path.join(
+            os.environ["SERIALIZED_DATA_PATH"], "serialized_dataset"
+        )
+        os.makedirs(serialized_dir, exist_ok=True)
     else:
-        file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-    # if "total" raw datasets is provided, generate train/val/test pkl files and update config dict.
-    with open(file_dir, "rb") as f:
-        minmax_node_feature = pickle.load(f)
-        minmax_graph_feature = pickle.load(f)
-        dataset_total = pickle.load(f)
+        if total_path.endswith(".pkl"):
+            file_dir = total_path
+        else:
+            file_dir = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
+        with open(file_dir, "rb") as f:
+            minmax_node_feature = pickle.load(f)
+            minmax_graph_feature = pickle.load(f)
+            dataset_total = pickle.load(f)
+        serialized_dir = os.path.dirname(file_dir)
 
     trainset, valset, testset = split_dataset(
         dataset=dataset_total,
         perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
         stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
     )
-    serialized_dir = os.path.dirname(file_dir)
     config["Dataset"]["path"] = {}
     for dataset_type, dataset in zip(
         ["train", "validate", "test"], [trainset, valset, testset]

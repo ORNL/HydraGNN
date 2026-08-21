@@ -159,6 +159,8 @@ class LJDataset(AbstractBaseDataset):
             1.0 / energy_pre_scaling_factor * torch.ones(num_nodes, 1)
         )
         forces = torch_data[:, [5, 6, 7]]
+        atomic_number = torch_data[:, [0]].to(torch.float32)
+        potential = torch_data[:, [4]].to(torch.float32)
         forces_pre_scaling_factor = 1.0
         forces_pre_scaled = forces * forces_pre_scaling_factor
 
@@ -172,12 +174,15 @@ class LJDataset(AbstractBaseDataset):
             forces=forces,
             forces_pre_scaled=forces_pre_scaled,
             pos=torch_data[:, [1, 2, 3]].to(torch.float32),
-            x=torch.cat([torch_data[:, [0, 4]]], axis=1).to(torch.float32),
+            atomic_number=atomic_number,
+            potential=potential,
+            graph_energy=potential,
+            x=torch.cat([atomic_number, potential], axis=1),
             y=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
             energy_per_atom=torch.tensor(energy_per_atom_pretransformed)
-            .unsqueeze(0)
+            .reshape(1, 1)
             .to(torch.float32),
-            energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
+            energy=torch.tensor(total_energy).reshape(1, 1).to(torch.float32),
             pbc=torch.tensor(
                 [
                     True,
