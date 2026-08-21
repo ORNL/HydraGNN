@@ -196,7 +196,7 @@ echo "RESULTS_DIR=$RESULTS_DIR"
 # ============================================================================
 
 _omnistat_started=0
-_omnistat_config="${HYDRAGNN_ROOT}/omnistat.hydragnn-external.config"
+_omnistat_config="${HYDRAGNN_ROOT}/scripts/hpc/olcf/frontier/omnistat/external.config"
 
 if [ -n "${OMNISTAT_WRAPPER:-}" ]; then
     if [ -f "$_omnistat_config" ]; then

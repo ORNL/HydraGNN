@@ -128,7 +128,7 @@ export datadir15=transition1x
 # (A) Setup omnistat sampling environment
 ml use /sw/frontier/amdsw/modulefiles/
 ml omnistat-wrapper
-export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/omnistat.hydragnn-external-fp64.config
+export OMNISTAT_CONFIG=$HYDRAGNN_ROOT/scripts/hpc/olcf/frontier/omnistat/external-fp64.config
 
 # (B) Enable data collectors and polling (1 sec interval)
 ${OMNISTAT_WRAPPER} usermode --start --interval 15
