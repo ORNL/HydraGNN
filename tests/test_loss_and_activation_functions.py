@@ -115,7 +115,16 @@ def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data
 # Test all supported activation function types.
 @pytest.mark.parametrize(
     "activation_function_type",
-    ["relu", "selu", "prelu", "elu", "lrelu_01", "lrelu_025", "lrelu_05"],
+    [
+        "relu",
+        "silu",
+        "selu",
+        "prelu",
+        "elu",
+        "lrelu_01",
+        "lrelu_025",
+        "lrelu_05",
+    ],
 )
 def pytest_activation_functions_multihead(
     activation_function_type, ci_input="ci_multihead.json", overwrite_data=False
@@ -128,7 +137,16 @@ def pytest_activation_functions_multihead(
 # Test all supported activation function types.
 @pytest.mark.parametrize(
     "activation_function_type",
-    ["relu", "selu", "prelu", "elu", "lrelu_01", "lrelu_025", "lrelu_05"],
+    [
+        "relu",
+        "silu",
+        "selu",
+        "prelu",
+        "elu",
+        "lrelu_01",
+        "lrelu_025",
+        "lrelu_05",
+    ],
 )
 def pytest_activation_functions_vectoroutput(
     activation_function_type, ci_input="ci_vectoroutput.json", overwrite_data=False
