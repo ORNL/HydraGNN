@@ -249,6 +249,23 @@ HydraGNN concatenates them along tensor dimension 1 in their JSON order. Thus,
 node attributes with dimensions 2 and 3 produce an `(N, 5)` tensor, while graph
 attributes with dimensions 1 and 4 produce a `(1, 5)` tensor per sample.
 
+Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
+`data.graph_attr`, `data.y`, or `data.y_loc` tensors in dataset importers.
+HydraGNN validates the named source attributes and builds those tensors when a
+sample is prepared from the schema:
+
+- node inputs become `data.x`;
+- edge inputs become `data.edge_attr`;
+- graph inputs become `data.graph_attr`;
+- outputs become the level-specific `data.node_output`, `data.edge_output`, and
+  `data.graph_output` tensors; and
+- all outputs are flattened in JSON order into `data.y`. `data.y_loc` stores
+  the boundaries needed to recover each configured output from `data.y`.
+
+The named source attributes remain on the PyG object after preparation. See the
+Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
+for the complete construction rules and a worked example.
+
   - `["Training"]`
     - `["num_epoch"]`  
       Examples: `75`, `100`, `250` (int)

@@ -352,6 +352,12 @@ HydraGNN provides extensive configuration options for building graph neural netw
 
 #### Variables
 
+The `Variables` section is the public contract between a dataset and
+HydraGNN. A dataset importer only stores named source tensors on each PyG
+`Data` object. It must not concatenate those tensors into `x`, `edge_attr`,
+`graph_attr`, or `y`; HydraGNN constructs those internal tensors from the
+schema.
+
 ```json
 {
     "Variables": {
@@ -365,6 +371,66 @@ HydraGNN provides extensive configuration options for building graph neural netw
     }
 }
 ```
+
+Every configured name must be an attribute of the PyG sample with exactly the
+declared shape:
+
+- a node attribute has shape `(N, dim)`, where `N` is the sample's node count;
+- an edge attribute has shape `(E, dim)`, where `E` is the number of columns in
+  `edge_index`; and
+- a graph attribute has shape `(1, dim)` for an individual sample.
+
+For example, the configuration above expects an importer to create data such
+as:
+
+```python
+data = Data(
+    node_features=node_features,  # (N, 3)
+    energy=energy,                # (1, 1)
+    forces=forces,                # (N, 3)
+    edge_index=edge_index,
+)
+```
+
+The importer does not set `data.x`, `data.y`, or `data.y_loc`. During schema
+preparation, HydraGNN validates the named tensors and creates its internal
+representation according to these rules:
+
+| JSON variables | Internal tensor | Construction |
+|---|---|---|
+| node inputs | `data.x` | concatenate columns in JSON order |
+| edge inputs | `data.edge_attr` | concatenate columns in JSON order |
+| graph inputs | `data.graph_attr` | concatenate columns in JSON order |
+| node outputs | `data.node_output` | concatenate columns in JSON order |
+| edge outputs | `data.edge_output` | concatenate columns in JSON order |
+| graph outputs | `data.graph_output` | concatenate columns in JSON order |
+| all outputs | `data.y` | flatten each output to `(-1, 1)`, then concatenate in overall JSON order |
+| output boundaries | `data.y_loc` | cumulative offsets delimiting each output inside `data.y` |
+
+As a more explicit input example:
+
+```json
+"inputs": [
+  {"name": "atomic_numbers", "level": "node", "dim": 1},
+  {"name": "positions", "level": "node", "dim": 3}
+]
+```
+
+causes HydraGNN to construct an `(N, 4)` internal node tensor equivalent to:
+
+```python
+data.x = torch.cat([data.atomic_numbers, data.positions], dim=1)
+```
+
+If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
+shape `(N, 3)`, HydraGNN constructs `data.y` with shape `(1 + 3*N, 1)` and
+`data.y_loc = [[0, 1, 1 + 3*N]]`. The offsets preserve the two output-head
+boundaries. The original attributes (`node_features`, `energy`, `forces`, and
+so on) remain available on the `Data` object.
+
+If a schema has no inputs or outputs at a particular level, HydraGNN removes a
+stale internal tensor for that level. This makes repeated schema preparation
+idempotent and prevents undeclared features from silently reaching the model.
 
 ### Global Attention Mechanisms
 
