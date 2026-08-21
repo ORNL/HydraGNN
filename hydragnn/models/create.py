@@ -909,7 +909,9 @@ def create_model(
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 
-    model.configure_atomistic_species_encoding(atomistic_species_enabled)
+    model.configure_atomistic_species_encoding(
+        atomistic_species_enabled, continuous_input_dim=original_input_dim
+    )
     model.atomistic_continuous_input_dim = original_input_dim
 
     # Apply interatomic potential enhancement if requested

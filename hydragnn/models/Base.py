@@ -12,7 +12,6 @@
 import torch
 from torch.nn import Embedding, ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
-import warnings
 from torch_geometric.nn import (
     BatchNorm,
     global_add_pool,
@@ -192,6 +191,7 @@ class Base(Module):
         self.atomistic_mode_enabled = False
         self.enable_atomistic_species_encoding = False
         self.species_embedding = None
+        self.atomistic_continuous_projection = None
 
         def _pool_graph_features(x_tensor, batch_tensor):
             if batch_tensor is None:
@@ -538,7 +538,9 @@ class Base(Module):
             )
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
-    def configure_atomistic_species_encoding(self, enabled: bool) -> None:
+    def configure_atomistic_species_encoding(
+        self, enabled: bool, continuous_input_dim: int = 0
+    ) -> None:
         """Configure categorical species handling for atomistic models.
 
         Stacks with a native encoder retain it; all other stacks use the common
@@ -550,41 +552,32 @@ class Base(Module):
         )
         if self.enable_atomistic_species_encoding:
             self.species_embedding = Embedding(119, self.hidden_dim, padding_idx=0)
+            if continuous_input_dim > 0:
+                self.atomistic_continuous_projection = Linear(
+                    continuous_input_dim, self.hidden_dim, bias=False
+                )
 
     @staticmethod
     def _atomic_numbers(data) -> torch.Tensor:
-        """Read and validate atomic numbers, with a legacy ``data.x`` fallback."""
-        if hasattr(data, "atomic_numbers") and data.atomic_numbers is not None:
-            values = data.atomic_numbers
-            if not torch.is_tensor(values):
-                raise TypeError("data.atomic_numbers must be a torch.Tensor")
-            integer_dtypes = {
-                torch.uint8,
-                torch.int8,
-                torch.int16,
-                torch.int32,
-                torch.int64,
-            }
-            if values.dtype not in integer_dtypes:
-                raise TypeError("data.atomic_numbers must have an integer dtype")
-            atomic_numbers = values.long().view(-1)
-        else:
-            if not hasattr(data, "x") or data.x is None or data.x.ndim != 2:
-                raise ValueError(
-                    "atomistic models require data.atomic_numbers or data.x[:, 0]"
-                )
-            values = data.x[:, 0]
-            warnings.warn(
-                "Reading atomic numbers from data.x[:, 0] is deprecated; store "
-                "categorical species in data.atomic_numbers instead",
-                DeprecationWarning,
-                stacklevel=2,
+        """Read and validate the canonical categorical atomic-number field."""
+        if not hasattr(data, "atomic_numbers") or data.atomic_numbers is None:
+            raise ValueError(
+                "categorical atomistic species encoding requires "
+                "data.atomic_numbers; data.x is not interpreted as species"
             )
-            if values.is_floating_point() and not torch.all(values == values.round()):
-                raise ValueError(
-                    "legacy atomic numbers in data.x[:, 0] must be integers"
-                )
-            atomic_numbers = values.long().view(-1)
+        values = data.atomic_numbers
+        if not torch.is_tensor(values):
+            raise TypeError("data.atomic_numbers must be a torch.Tensor")
+        integer_dtypes = {
+            torch.uint8,
+            torch.int8,
+            torch.int16,
+            torch.int32,
+            torch.int64,
+        }
+        if values.dtype not in integer_dtypes:
+            raise TypeError("data.atomic_numbers must have an integer dtype")
+        atomic_numbers = values.long().view(-1)
 
         if hasattr(data, "pos") and data.pos is not None:
             num_nodes = data.pos.shape[0]
@@ -616,7 +609,17 @@ class Base(Module):
         atomic_numbers = self._atomic_numbers(data)
         if self.species_embedding is None:
             raise RuntimeError("atomistic species embedding was not initialized")
-        return self.species_embedding(atomic_numbers)
+        features = self.species_embedding(atomic_numbers)
+        if self.atomistic_continuous_projection is not None:
+            if data.x.shape[1] != self.atomistic_continuous_projection.in_features:
+                raise ValueError(
+                    "data.x must contain only the configured continuous atom "
+                    "features when categorical species encoding is enabled; "
+                    f"expected {self.atomistic_continuous_projection.in_features} "
+                    f"features but received {data.x.shape[1]}"
+                )
+            features = features + self.atomistic_continuous_projection(data.x.float())
+        return features
 
     def _embedding(self, data):
         if not hasattr(data, "edge_shifts"):

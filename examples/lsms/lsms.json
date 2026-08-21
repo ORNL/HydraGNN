@@ -22,6 +22,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "PNA",
+            "enable_atomistic_species_encoding": true,
             "radius": 7,
             "max_neighbours": 100,
             "periodic_boundary_conditions": false,
@@ -43,7 +44,7 @@
             "task_weights": [1.0, 1.0, 1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
+            "input_node_features": [],
             "output_names": ["free_energy_scaled_num_nodes","charge_density", "magnetic_moment"],
             "output_index": [0, 1, 2],
             "type": ["graph","node","node"],

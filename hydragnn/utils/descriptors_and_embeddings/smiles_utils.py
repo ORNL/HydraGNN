@@ -120,6 +120,7 @@ def generate_graphdata_from_rdkit_molecule(
 
     data = Data(
         x=x,
+        atomic_numbers=z,
         edge_index=edge_index,
         edge_attr=edge_attr,
         y=y,
