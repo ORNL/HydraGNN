@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # setup_env.sh
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
-# Updated to ROCm 7.1 (module rocm/7.1.1) and PyTorch wheels from https://download.pytorch.org/whl/rocm7.1
 
 set -Eeuo pipefail
 
@@ -15,14 +14,45 @@ subbanner() { echo "-- $1"; }
 # =========================
 # Config (env-overridable)
 # =========================
-FRONTIER_ROCM_MODULE_VERSION="${FRONTIER_ROCM_MODULE_VERSION:-7.1.1}"
-FRONTIER_AMD_MIXED_MODULE_VERSION="${FRONTIER_AMD_MIXED_MODULE_VERSION:-7.1.1}"
-EXPECTED_ROCM_MM="${EXPECTED_ROCM_MM:-7.1}"
+FRONTIER_ROCM_MODULE_VERSION="${FRONTIER_ROCM_MODULE_VERSION:-6.4.0}"
+FRONTIER_AMD_MIXED_MODULE_VERSION="${FRONTIER_AMD_MIXED_MODULE_VERSION:-6.4.0}"
+EXPECTED_ROCM_MM="${EXPECTED_ROCM_MM:-6.4}"
 PYTORCH_ROCM_INDEX_URL="${PYTORCH_ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm${EXPECTED_ROCM_MM}}"
 PYTORCH_SCATTER_ROCM_REPO="${PYTORCH_SCATTER_ROCM_REPO:-https://github.com/Looong01/pytorch_scatter-rocm.git}"
 PYTORCH_SCATTER_ROCM_COMMIT="${PYTORCH_SCATTER_ROCM_COMMIT:-9799c51}"
 PYTORCH_SPARSE_ROCM_REPO="${PYTORCH_SPARSE_ROCM_REPO:-https://github.com/Looong01/pytorch_sparse-rocm.git}"
 PYTORCH_SPARSE_ROCM_COMMIT="${PYTORCH_SPARSE_ROCM_COMMIT:-2340737}"
+
+timeit() {
+  SECONDS=0
+  local start_time=$(date +"%T")
+  echo "[$start_time] Starting: $*" >&2
+  "$@"
+  local status=$?
+  local end_time=$(date +"%T")
+  echo "[$end_time] Finished: $* (Elapsed: ${SECONDS}s, Status: $status)" >&2
+  return $status
+}
+
+# Spinner function
+progress() {
+  local pid=$1
+  local delay=0.1
+
+  spinstr[0]="-"
+  spinstr[1]="\\"
+  spinstr[2]="|"
+  spinstr[3]="/"
+
+  echo -n "${spinstr[0]}"
+  while kill -0 $pid 2>/dev/null; do
+    for c in "${spinstr[@]}"; do
+      echo -ne "\b$c"
+      sleep $delay
+    done
+  done
+  echo -ne "\b"
+}
 
 banner "Starting HydraGNN environment setup ($(date))"
 
@@ -32,7 +62,7 @@ banner "Starting HydraGNN environment setup ($(date))"
 banner "Configure Frontier Modules"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
-source "${SCRIPT_DIR}/module_loads_frontier.sh"
+source "${SCRIPT_DIR}/module-loads.sh"
 load_frontier_modules "${FRONTIER_ROCM_MODULE_VERSION}" "${FRONTIER_AMD_MIXED_MODULE_VERSION}"
 
 # ============================================================
@@ -56,19 +86,25 @@ echo "Virtual environment path: $VENV_PATH"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 echo "Python version: ${PYTHON_VERSION}"
 
+RECREATE_ENV="${RECREATE_ENV:-0}"
+
 if ! command -v conda >/dev/null 2>&1; then
   echo "❌ Conda command not found. Ensure miniforge3 is properly loaded."
   exit 1
 fi
 
-if [[ -d "$VENV_PATH" ]]; then
+if [[ -d "$VENV_PATH" && "$RECREATE_ENV" -eq 1 ]]; then
   echo "Removing existing conda environment at: $VENV_PATH"
   source deactivate >/dev/null 2>&1 || true
   conda env remove -p "$VENV_PATH" -y || rm -rf "$VENV_PATH"
 fi
 
-echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
-conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
+if [[ -d "$VENV_PATH" ]]; then
+  echo "Conda environment already exists at $VENV_PATH"
+else
+  echo "Creating conda environment at $VENV_PATH with Python $PYTHON_VERSION"
+  conda create -y -p "$VENV_PATH" python="$PYTHON_VERSION"
+fi
 
 # shellcheck disable=SC1091
 source activate "$VENV_PATH"
@@ -114,23 +150,23 @@ assert_numpy_1264
 banner "Install Core Python Packages"
 
 pip_retry ninja
-pip_retry astunparse
-pip_retry expecttest
-pip_retry hypothesis
-pip_retry numpy==1.26.4
-pip_retry psutil==7.1.0
-pip_retry pyyaml
-pip_retry requests
-pip_retry setuptools
-pip_retry typing-extensions
-pip_retry sympy==1.14.0
-pip_retry filelock
-pip_retry networkx
-pip_retry jinja2
+pip_retry astunparse 
+pip_retry expecttest 
+pip_retry hypothesis 
+pip_retry numpy==1.26.4 
+pip_retry psutil==7.1.0 
+pip_retry pyyaml 
+pip_retry requests 
+pip_retry setuptools 
+pip_retry typing-extensions 
+pip_retry sympy==1.14.0 
+pip_retry filelock 
+pip_retry networkx 
+pip_retry jinja2 
 pip_retry tqdm==4.67.1
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1
-pip_retry pyparsing
+pip_retry scipy==1.14.1 
+pip_retry pyparsing 
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
@@ -144,10 +180,25 @@ pip_retry pymatgen
 pip_retry igraph
 pip_retry mendeleev==0.16.0
 pip_retry lmdb
-pip_retry h5py==3.14.0
+pip_retry h5py==3.14.0 
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
+
+# ============================================================
+# mpi4py
+# ============================================================
+banner "mpi4py (v4.1.1)"
+MPI4PY_FRONTIER="${INSTALL_ROOT}/MPI4PY-Frontier"
+export MPI4PY_FRONTIER
+mkdir -p "$MPI4PY_FRONTIER"
+cd "$MPI4PY_FRONTIER"
+
+git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
+pushd mpi4py >/dev/null
+rm -rf build
+CC=cc MPICC=cc pip_retry . --verbose
+popd >/dev/null
 
 # ============================================================
 # ROCm detection + ROCm-aware PyTorch
@@ -181,24 +232,16 @@ subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
 pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" torch torchvision
 assert_numpy_1264
 
-python - <<'PY'
+python - <<PY
 import torch
 print("torch.__version__ =", torch.__version__)
 print("torch.version.hip =", torch.version.hip)
-print("torch.cuda.is_available() =", torch.cuda.is_available())  # ROCm uses torch.cuda API
-print("torch.cuda.device_count() =", torch.cuda.device_count())
-if torch.cuda.device_count() > 0:
-    print("GPU[0] =", torch.cuda.get_device_name(0))
 PY
 
 # ============================================================
 # PyTorch-Geometric stack
 # ============================================================
 banner "PyTorch-Geometric Stack (ROCm ${ROCM_MM})"
-
-# Recommended for MI250X builds
-export PYTORCH_ROCM_ARCH="${PYTORCH_ROCM_ARCH:-gfx90a}"
-
 PYG_DIR_NAME="PyTorch-Geometric-${ROCM_MM}"
 PYG_FRONTIER="${INSTALL_ROOT}/${PYG_DIR_NAME}"
 export PYG_FRONTIER
@@ -216,177 +259,201 @@ assert_numpy_1264
 popd >/dev/null
 
 # --- pytorch_scatter (ROCm fork pinned) ---
-subbanner "pytorch_scatter (ROCm fork pinned to ${PYTORCH_SCATTER_ROCM_COMMIT}; temporary until upstream merges)"
-if [[ ! -d pytorch_scatter/.git ]]; then
-  # Official upstream (kept for reference; will switch back after merge):
-  # git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
-  # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive "${PYTORCH_SCATTER_ROCM_REPO}" pytorch_scatter
-fi
-pushd pytorch_scatter >/dev/null
-git fetch --all
-git checkout "${PYTORCH_SCATTER_ROCM_COMMIT}"
-git submodule update --init --recursive
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
-popd >/dev/null
+build_pytorch_scatter() {
+  subbanner "pytorch_scatter (ROCm fork pinned to ${PYTORCH_SCATTER_ROCM_COMMIT}; temporary until upstream merges)"
+  if [[ ! -d pytorch_scatter/.git ]]; then
+    # Official upstream (kept for reference; will switch back after merge):
+    # git clone --recursive git@github.com:rusty1s/pytorch_scatter.git
+    # Temporary ROCm fork (use until fixes merge upstream):
+    git clone --recursive "${PYTORCH_SCATTER_ROCM_REPO}" pytorch_scatter
+  fi
+  pushd pytorch_scatter >/dev/null
+  git fetch --all
+  git checkout "${PYTORCH_SCATTER_ROCM_COMMIT}"
+  git submodule update --init --recursive
+  rm -rf build
+  # If needed: export PYTORCH_ROCM_ARCH=gfx90a
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
+  popd >/dev/null
+}
 
-# --- pytorch_sparse (ROCm fork pinned) ---
-subbanner "pytorch_sparse (ROCm fork pinned to ${PYTORCH_SPARSE_ROCM_COMMIT}; temporary until upstream merges)"
-if [[ ! -d pytorch_sparse/.git ]]; then
-  # Official upstream (kept for reference; will switch back after merge):
-  # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
-  # Temporary ROCm fork (use until fixes merge upstream):
-  git clone --recursive "${PYTORCH_SPARSE_ROCM_REPO}" pytorch_sparse
-fi
-pushd pytorch_sparse >/dev/null
-git fetch --all
-git checkout "${PYTORCH_SPARSE_ROCM_COMMIT}"
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
-popd >/dev/null
+# --- pytorch_sparse (official pinned) ---
+build_pytorch_sparse() {
+  subbanner "pytorch_sparse (official @ 0.6.18-8-gcdbf561)"
+  if [[ ! -d pytorch_sparse/.git ]]; then
+    # Official upstream (kept for reference; will switch back after merge):
+    # git clone --recursive git@github.com:rusty1s/pytorch_sparse.git
+    # Temporary ROCm fork (use until fixes merge upstream):
+    git clone --recursive "${PYTORCH_SPARSE_ROCM_REPO}" pytorch_sparse
+  fi
+  pushd pytorch_sparse >/dev/null
+  git fetch --all
+  git checkout "${PYTORCH_SPARSE_ROCM_COMMIT}"
+  rm -rf build
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
+  popd >/dev/null
+}
 
 # --- pytorch_cluster (official pinned) ---
-subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
-if [[ ! -d pytorch_cluster/.git ]]; then
-  git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
-fi
-pushd pytorch_cluster >/dev/null
-git fetch --all
-git checkout 1.6.3-11-g4126a52
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-popd >/dev/null
+build_pytorch_cluster() {
+  subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
+  if [[ ! -d pytorch_cluster/.git ]]; then
+    git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
+  fi
+  pushd pytorch_cluster >/dev/null
+  git fetch --all
+  git checkout 1.6.3-11-g4126a52
+  rm -rf build
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  popd >/dev/null
+}
 
 # --- pytorch_spline_conv (official pinned) ---
-subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
-if [[ ! -d pytorch_spline_conv/.git ]]; then
-  git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
-fi
-pushd pytorch_spline_conv >/dev/null
-git fetch --all
-git checkout 1.2.2-9-ga6d1020
-rm -rf build
-CC=gcc CXX=g++ python setup.py build
-CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
-popd >/dev/null
+build_pytorch_spline_conv() {
+  subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
+  if [[ ! -d pytorch_spline_conv/.git ]]; then
+    git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
+  fi
+  pushd pytorch_spline_conv >/dev/null
+  git fetch --all
+  git checkout 1.2.2-9-ga6d1020
+  rm -rf build
+  CC=gcc CXX=g++ python setup.py build
+  CC=gcc CXX=g++ python setup.py install
+  assert_numpy_1264
+  popd >/dev/null
+}
 
-subbanner "Install e3nn"
-pip_retry e3nn --verbose
-assert_numpy_1264
+## parallel build
+banner "pytorch geometric dependencies build (in parallel)"
+timeit build_pytorch_scatter > build_pytorch_scatter.log & pid1=$!
+timeit build_pytorch_sparse > build_pytorch_sparse.log & pid2=$!
+timeit build_pytorch_cluster > build_pytorch_cluster.log & pid3=$!
+timeit build_pytorch_spline_conv > build_pytorch_spline_conv.log & pid4=$!
 
-# NOTE: unload ROCm for mpi4py build
-module unload craype-accel-amd-gfx90a
-module unload rocm
-#######
+for pid in $pid1 $pid2 $pid3 $pid4; do
+    progress $pid &
+done
+wait
 
 # ============================================================
-# mpi4py
+# e3nn and openequivariance
 # ============================================================
-banner "mpi4py (v4.1.1)"
-MPI4PY_FRONTIER="${INSTALL_ROOT}/MPI4PY-Frontier"
-export MPI4PY_FRONTIER
-mkdir -p "$MPI4PY_FRONTIER"
-cd "$MPI4PY_FRONTIER"
-
-git clone -b 4.1.1 https://github.com/mpi4py/mpi4py.git || true
-pushd mpi4py >/dev/null
-rm -rf build
-CC=cc MPICC=cc pip_retry . --verbose
-popd >/dev/null
+banner "Install e3nn and openequivariance"
+pip_retry e3nn openequivariance --verbose
+assert_numpy_1264
 
 # ============================================================
 # ADIOS2
 # ============================================================
-banner "ADIOS2 (v2.10.2)"
 ADIOS2_FRONTIER="${INSTALL_ROOT}/ADIOS2-Frontier"
 export ADIOS2_FRONTIER
-mkdir -p "$ADIOS2_FRONTIER"
-cd "$ADIOS2_FRONTIER"
+build_adios() {
+  banner "ADIOS2 (v2.10.2)"
+  mkdir -p "$ADIOS2_FRONTIER"
+  cd "$ADIOS2_FRONTIER"
 
-if [[ ! -d ADIOS2/.git ]]; then
-  git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
-fi
+  if [[ ! -d ADIOS2/.git ]]; then
+    git clone -b v2.10.2 https://github.com/ornladios/ADIOS2.git
+  fi
 
-mkdir -p adios2-build
+  mkdir -p adios2-build
 
-CC=cc CXX=CC FC=ftn \
-cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DBUILD_TESTING=OFF \
-    -DADIOS2_USE_MPI=ON \
-    -DADIOS2_USE_Fortran=OFF \
-    -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
-    -DADIOS2_BUILD_TESTING=OFF \
-    -DADIOS2_USE_HDF5=OFF \
-    -DADIOS2_USE_SST=OFF \
-    -DADIOS2_USE_BZip2=OFF \
-    -DADIOS2_USE_PNG=OFF \
-    -DADIOS2_USE_DataSpaces=OFF \
-    -DADIOS2_USE_Python=ON \
-    -DPython_EXECUTABLE=$(which python) \
-    -B adios2-build -S ADIOS2
+  CC=cc CXX=CC FC=ftn \
+  cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_TESTING=OFF \
+      -DADIOS2_USE_MPI=ON \
+      -DADIOS2_USE_Fortran=OFF \
+      -DADIOS2_BUILD_EXAMPLES_EXPERIMENTAL=OFF \
+      -DADIOS2_BUILD_TESTING=OFF \
+      -DADIOS2_USE_HDF5=OFF \
+      -DADIOS2_USE_SST=OFF \
+      -DADIOS2_USE_BZip2=OFF \
+      -DADIOS2_USE_PNG=OFF \
+      -DADIOS2_USE_DataSpaces=OFF \
+      -DADIOS2_USE_Python=ON \
+      -DPython_EXECUTABLE=$(which python) \
+      -B adios2-build -S ADIOS2
 
-cmake --build adios2-build -j32
-cmake --install adios2_build 2>/dev/null || cmake --install adios2-build
+  cmake --build adios2-build -j32
+  cmake --install adios2_build 2>/dev/null || cmake --install adios2-build
+}
 
 # ============================================================
 # DDStore
 # ============================================================
-banner "DDStore"
 DDSTORE_FRONTIER="${INSTALL_ROOT}/DDStore-Frontier"
 export DDSTORE_FRONTIER
-mkdir -p "$DDSTORE_FRONTIER"
-cd "$DDSTORE_FRONTIER"
+build_ddstore() {
+  banner "DDStore"
+  mkdir -p "$DDSTORE_FRONTIER"
+  cd "$DDSTORE_FRONTIER"
 
-git clone git@github.com:ORNL/DDStore.git || true
-pushd DDStore >/dev/null
-CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
-popd >/dev/null
+  git clone git@github.com:ORNL/DDStore.git || true
+  pushd DDStore >/dev/null
+  CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
+  popd >/dev/null
+}
 
 # ============================================================
 # DeepHyper
 # ============================================================
-banner "DeepHyper (develop branch)"
 DEEPHYPER_FRONTIER="${INSTALL_ROOT}/DeepHyperFrontier"
 export DEEPHYPER_FRONTIER
-mkdir -p "$DEEPHYPER_FRONTIER"
-cd "$DEEPHYPER_FRONTIER"
+build_deephyper() {
+  banner "DeepHyper (develop branch)"
+  mkdir -p "$DEEPHYPER_FRONTIER"
+  cd "$DEEPHYPER_FRONTIER"
 
-git clone https://github.com/deephyper/deephyper.git || true
-cd deephyper
-pip_retry . --verbose
-assert_numpy_1264
+  git clone https://github.com/deephyper/deephyper.git || true
+  cd deephyper
+  pip_retry -e . --verbose
+  assert_numpy_1264
+}
 
 # ============================================================
 # GPTL
 # ============================================================
-banner "GPTL"
 GPTL_FRONTIER="${INSTALL_ROOT}/GPTLFrontier"
 export GPTL_FRONTIER
-mkdir -p "$GPTL_FRONTIER"
-cd "$GPTL_FRONTIER"
+build_gptl() {
+  banner "GPTL"
+  mkdir -p "$GPTL_FRONTIER"
+  cd "$GPTL_FRONTIER"
 
-wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
-tar xvf gptl-8.1.1.tar.gz
-pushd gptl-8.1.1 >/dev/null
-./configure --prefix=$VENV_PATH --disable-libunwind CC=cc CXX=CC FC=ftn
-make install
-popd >/dev/null
+  wget https://github.com/jmrosinski/GPTL/releases/download/v8.1.1/gptl-8.1.1.tar.gz
+  tar xvf gptl-8.1.1.tar.gz
+  pushd gptl-8.1.1 >/dev/null
+  ./configure --prefix=$VENV_PATH --disable-libunwind CC=cc CXX=CC FC=ftn
+  make install
+  popd >/dev/null
 
-git clone https://github.com/jychoi-hpc/gptl4py.git || true
-pushd gptl4py >/dev/null
-GPTL_DIR=$VENV_PATH CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
-popd >/dev/null
+  git clone https://github.com/jychoi-hpc/gptl4py.git || true
+  pushd gptl4py >/dev/null
+  GPTL_DIR=$VENV_PATH CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
+  popd >/dev/null
+}
+
+## parallel build
+cd "$INSTALL_ROOT"
+banner "Adios, DDStore, DeepHyper, and GPTL build (in parallel)"
+timeit build_adios > build_adios.log & pid1=$!
+timeit build_ddstore > build_ddstore.log & pid2=$!
+timeit build_deephyper > build_deephyper.log & pid3=$!
+timeit build_gptl > build_gptl.log & pid4=$!
+for pid in $pid1 $pid2 $pid3 $pid4; do
+    progress $pid &
+done
+wait
 
 # ============================================================
 # Final Summary
@@ -397,7 +464,7 @@ Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_scatter fork: ${PYTORCH_SCATTER_ROCM_REPO} @ ${PYTORCH_SCATTER_ROCM_COMMIT} (temporary)
-  - pytorch_sparse fork:  ${PYTORCH_SPARSE_ROCM_REPO} @ ${PYTORCH_SPARSE_ROCM_COMMIT} (temporary)
+  - pytorch_sparse:       0.6.18-8-gcdbf561
   - pytorch_cluster:      1.6.3-11-g4126a52
   - pytorch_spline_conv:  1.2.2-9-ga6d1020
 MPI4PY:              $MPI4PY_FRONTIER

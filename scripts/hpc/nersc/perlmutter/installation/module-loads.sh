@@ -2,7 +2,7 @@
 
 # Shared module loader for Perlmutter installation scripts.
 # Usage:
-#   source ".../module_loads_perlmutter.sh"
+#   source ".../module-loads.sh"
 #   load_perlmutter_modules "12.4"
 
 # Paths are declared as env-overridable variables so callers can adjust

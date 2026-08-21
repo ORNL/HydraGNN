@@ -11,7 +11,7 @@
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo_root=$(cd "${script_dir}/../.." && pwd)
-source "${repo_root}/installation_DOE_supercomputers/olcf_proxy_env.sh"
+source "${repo_root}/scripts/hpc/olcf/proxy-env.sh"
 
 function cmd() {
     echo "$@"
@@ -49,7 +49,7 @@ HYDRAGNN_ROOT=/lustre/orion/mat746/proj-shared/mlupopa/HydraGNN
 # Load conda environemnt
 source /lustre/orion/mat746/proj-shared/mlupopa/module-to-load-frontier-rocm640.sh
 
-source activate /lustre/orion/mat746/proj-shared/mlupopa/HydraGNN/installation_DOE_supercomputers/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
+source activate /lustre/orion/mat746/proj-shared/mlupopa/HydraGNN/HydraGNN-Installation-Frontier-ROCm6.4/hydragnn_venv
 
 
 # setup_bb

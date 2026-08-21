@@ -27,7 +27,7 @@ On OLCF systems whose compute nodes require the CCS proxy, source the optional
 facility helper before invoking any dataset downloader:
 
 ```bash
-source installation_DOE_supercomputers/olcf_proxy_env.sh
+source scripts/hpc/olcf/proxy-env.sh
 ```
 
 Normal pull-request tests run a complete download, resume, redirect, checksum,

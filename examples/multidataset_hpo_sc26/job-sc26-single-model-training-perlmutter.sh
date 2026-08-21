@@ -18,7 +18,7 @@ function cmd() {
 
 # --- Paths (override with environment variables if needed) ---
 HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-/global/cfs/projectdirs/amsc001/cm2us/mlupopa/HydraGNN}
-VENV_PATH=${VENV_PATH:-$HYDRAGNN_ROOT/installation_DOE_supercomputers/HydraGNN-Installation-Perlmutter/hydragnn_venv}
+VENV_PATH=${VENV_PATH:-$HYDRAGNN_ROOT/HydraGNN-Installation-Perlmutter/hydragnn_venv}
 EXAMPLE_DIR=$HYDRAGNN_ROOT/examples/multidataset_hpo_sc26
 
 # --- Perlmutter module + conda setup ---

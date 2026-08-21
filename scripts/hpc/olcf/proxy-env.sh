@@ -11,7 +11,7 @@
 # Source this optional helper before downloading datasets from an OLCF system
 # whose compute nodes require the CCS proxy:
 #
-#   source installation_DOE_supercomputers/olcf_proxy_env.sh
+#   source scripts/hpc/olcf/proxy-env.sh
 
 export all_proxy="socks://proxy.ccs.ornl.gov:3128/"
 export ftp_proxy="ftp://proxy.ccs.ornl.gov:3128/"

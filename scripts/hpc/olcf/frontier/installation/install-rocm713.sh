@@ -5,7 +5,7 @@
 # wheels for AMD Instinct MI250X (gfx90a), per:
 #   https://rocm.docs.amd.com/en/7.13.0-preview/frameworks/pytorch/install.html
 #
-# Derived from hydragnn_installation_bash_script_frontier-rocm72.sh.
+# Derived from install-rocm72.sh.
 # Key changes vs ROCm 7.2:
 #   - Module stack:  rocm/7.13.0  amd-mixed/7.13.0
 #   - EXPECTED_ROCM_MM="7.13"
@@ -23,7 +23,7 @@
 #           ${VLLM_SRC_DIR} (must be cloned before running on a compute node).
 #
 # Usage:
-#   bash hydragnn_installation_bash_script_frontier-rocm713.sh
+#   bash scripts/hpc/olcf/frontier/installation/install-rocm713.sh
 #
 # Override variables:
 #   VENV_PATH             Override conda env path
