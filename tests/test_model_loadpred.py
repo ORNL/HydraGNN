@@ -122,9 +122,7 @@ def pytest_model_loadpred():
         with open(config_file, "r") as f:
             config = json.load(f)
         assert (
-            hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
-                config
-            )
+            hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(config)
             == log_name
         ), "Newly trained checkpoint configuration does not match its log name"
     unittest_model_prediction(config)
