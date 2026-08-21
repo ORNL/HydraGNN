@@ -4,19 +4,39 @@
     },
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"total": "./dataset/FePt_enthalpy"},
+        "path": {
+            "total": "./dataset/FePt_enthalpy"
+        },
         "format": "LSMS",
         "compositional_stratified_splitting": true,
         "rotational_invariance": false,
         "node_features": {
-            "name": ["num_of_protons","charge_density", "magnetic_moment"],
-            "dim": [1,1,1],
-            "column_index": [0,5,6]
+            "name": [
+                "num_of_protons",
+                "charge_density",
+                "magnetic_moment"
+            ],
+            "dim": [
+                1,
+                1,
+                1
+            ],
+            "column_index": [
+                0,
+                5,
+                6
+            ]
         },
-        "graph_features":{
-            "name": [ "free_energy_scaled_num_nodes"],
-            "dim": [1],
-            "column_index": [0]
+        "graph_features": {
+            "name": [
+                "free_energy_scaled_num_nodes"
+            ],
+            "dim": [
+                1
+            ],
+            "column_index": [
+                0
+            ]
         }
     },
     "NeuralNetwork": {
@@ -28,26 +48,29 @@
             "hidden_dim": 5,
             "num_conv_layers": 6,
             "output_heads": {
-                "graph":{
+                "graph": {
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 5,
                     "num_headlayers": 2,
-                    "dim_headlayers": [50,25]
+                    "dim_headlayers": [
+                        50,
+                        25
+                    ]
                 },
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [50,25],
+                    "dim_headlayers": [
+                        50,
+                        25
+                    ],
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0, 1.0, 1.0]
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0],
-            "output_names": ["free_energy_scaled_num_nodes","charge_density", "magnetic_moment"],
-            "output_index": [0, 1, 2],
-            "type": ["graph","node","node"],
-            "denormalize_output": true
+            "task_weights": [
+                1.0,
+                1.0,
+                1.0
+            ]
         },
         "Training": {
             "num_epoch": 200,
@@ -59,7 +82,7 @@
             "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             }
         }
     },
@@ -67,5 +90,31 @@
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "num_of_protons",
+                "level": "node",
+                "dim": 1
+            }
+        ],
+        "outputs": [
+            {
+                "name": "free_energy_scaled_num_nodes",
+                "level": "graph",
+                "dim": 1
+            },
+            {
+                "name": "charge_density",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "magnetic_moment",
+                "level": "node",
+                "dim": 1
+            }
+        ]
     }
 }

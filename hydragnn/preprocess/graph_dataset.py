@@ -25,8 +25,10 @@ from torch_geometric.transforms import (
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     get_radius_graph,
     get_radius_graph_pbc,
-    update_atom_features,
-    update_predicted_values,
+)
+from hydragnn.utils.input_config_parsing.variable_schema import (
+    parse_variable_schema,
+    prepare_data_from_schema,
 )
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.print.print_utils import iterate_tqdm, print_distributed
@@ -71,23 +73,9 @@ def prepare_graph_dataset(dataset, config, dist=False):
     """Prepare an explicit graph collection according to per-sample geometry."""
     architecture = config["NeuralNetwork"]["Architecture"]
     dataset_config = config["Dataset"]
-    variables = config["NeuralNetwork"]["Variables_of_interest"]
+    variables = config["Variables"]
+    variable_schema = parse_variable_schema(variables)
     verbosity = config["Verbosity"]["level"]
-
-    node_features = dataset_config["node_features"]
-    graph_features = dataset_config["graph_features"]
-    if not (
-        len(node_features["name"])
-        == len(node_features["dim"])
-        == len(node_features["column_index"])
-    ):
-        raise ValueError("Node feature names, dimensions, and columns must align")
-    if not (
-        len(graph_features["name"])
-        == len(graph_features["dim"])
-        == len(graph_features["column_index"])
-    ):
-        raise ValueError("Graph feature names, dimensions, and columns must align")
 
     if dataset_config["rotational_invariance"]:
         transform = NormalizeRotation(max_points=-1, sort=False)
@@ -126,14 +114,7 @@ def prepare_graph_dataset(dataset, config, dist=False):
         data.rel_pe = torch.abs(
             data.pe[data.edge_index[0]] - data.pe[data.edge_index[1]]
         )
-        update_predicted_values(
-            variables["type"],
-            variables["output_index"],
-            dataset_config["graph_features"]["dim"],
-            dataset_config["node_features"]["dim"],
-            data,
-        )
-        update_atom_features(variables["input_node_features"], data)
+        prepare_data_from_schema(data, variable_schema)
 
     percentage = variables.get("subsample_percentage")
     if percentage is not None:

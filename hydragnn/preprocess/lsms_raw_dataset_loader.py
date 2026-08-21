@@ -85,6 +85,18 @@ class LSMS_RawDataLoader(AbstractRawDataLoader):
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
         data_object = self.__charge_density_update_for_LSMS(data_object)
+        node_offset = 0
+        for name, dim in zip(self.node_feature_name, self.node_feature_dim):
+            setattr(data_object, name, data_object.x[:, node_offset : node_offset + dim])
+            node_offset += dim
+        graph_offset = 0
+        for name, dim in zip(self.graph_feature_name, self.graph_feature_dim):
+            setattr(
+                data_object,
+                name,
+                data_object.y[graph_offset : graph_offset + dim].reshape(1, dim),
+            )
+            graph_offset += dim
         return data_object
 
     def __charge_density_update_for_LSMS(self, data_object: Data):
