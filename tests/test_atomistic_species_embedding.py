@@ -62,9 +62,39 @@ GENERIC_MPNN_TYPES = (
     "MFC",
 )
 CUSTOM_EMBEDDING_MPNN_TYPES = ("PAINN", "PNAEq", "DimeNet", "SchNet", "PNAPlus")
+ATOMISTIC_EXAMPLE_DIRECTORIES = (
+    "LennardJones",
+    "lsms",
+    "alexandria",
+    "ani1_x",
+    "csce",
+    "dftb_uv_spectrum",
+    "eam",
+    "md17",
+    "mptrj",
+    "multibranch",
+    "multibranch_hpo",
+    "multidataset",
+    "multidataset_deepspeed",
+    "multidataset_hpo",
+    "multidataset_hpo_sc26",
+    "nabla2_dft",
+    "open_catalyst_2020",
+    "open_catalyst_2022",
+    "open_catalyst_2025",
+    "open_direct_air_capture_2023",
+    "open_materials_2024",
+    "open_molecules_2025",
+    "open_polymers_2026",
+    "qcml",
+    "qm7x",
+    "qm9",
+    "qm9_hpo",
+    "transition1x",
+)
 
 
-def _model(atomistic, mpnn_type="EGNN", species_encoding=False):
+def _model(atomistic, mpnn_type="EGNN", species_encoding=False, continuous_input_dim=0):
     heads = update_multibranch_heads(
         {
             "node": {
@@ -78,7 +108,7 @@ def _model(atomistic, mpnn_type="EGNN", species_encoding=False):
     )
     return create_model(
         mpnn_type=mpnn_type,
-        input_dim=1,
+        input_dim=(continuous_input_dim if atomistic or species_encoding else 1),
         hidden_dim=8,
         output_dim=[1],
         pe_dim=0,
@@ -174,6 +204,19 @@ def pytest_atomistic_property_model_can_enable_species_without_mlip_wrapper():
     assert torch.equal(features, model.species_embedding(data.atomic_numbers))
 
 
+def pytest_atomistic_species_embedding_fuses_only_continuous_data_x():
+    model = _model(atomistic=False, species_encoding=True, continuous_input_dim=2)
+    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+    data.x = torch.tensor([[0.1, 1.0], [0.2, 2.0], [0.3, 3.0]])
+
+    features = model._input_node_features(data)
+    expected = model.species_embedding(data.atomic_numbers)
+    expected = expected + model.atomistic_continuous_projection(data.x)
+
+    assert torch.equal(features, expected)
+    assert model.atomistic_continuous_projection.in_features == 2
+
+
 def pytest_qm9_property_example_provides_canonical_atomic_numbers():
     from examples.qm9.qm9 import qm9_pre_transform
 
@@ -201,6 +244,26 @@ def pytest_qm9_property_configs_enable_atomistic_species_encoding():
         assert config["NeuralNetwork"]["Architecture"][
             "enable_atomistic_species_encoding"
         ]
+
+
+def pytest_atomistic_example_configs_use_only_canonical_species_field():
+    examples = Path(__file__).resolve().parents[1] / "examples"
+    checked = []
+    for directory in ATOMISTIC_EXAMPLE_DIRECTORIES:
+        for config_path in (examples / directory).glob("*.json"):
+            with open(config_path, encoding="utf-8") as stream:
+                config = json.load(stream)
+            neural_network = config.get("NeuralNetwork", {})
+            architecture = neural_network.get("Architecture", {})
+            if "mpnn_type" not in architecture:
+                continue
+            checked.append(config_path)
+            assert architecture.get("enable_atomistic_species_encoding") is True
+            continuous_features = neural_network["Variables_of_interest"][
+                "input_node_features"
+            ]
+            assert 0 not in continuous_features
+    assert checked
 
 
 @pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)
@@ -276,13 +339,12 @@ def pytest_invalid_atomic_numbers_are_rejected(atomic_numbers, error):
         model._input_node_features(_data(atomic_numbers))
 
 
-def pytest_legacy_scalar_atomic_number_fallback_is_supported():
+def pytest_enabled_species_encoding_requires_atomic_numbers():
     model = _model(atomistic=True).model
     data = _data()
     del data.atomic_numbers
-    with pytest.warns(DeprecationWarning, match="data.atomic_numbers"):
-        features = model._input_node_features(data)
-    assert features.shape == (3, model.hidden_dim)
+    with pytest.raises(ValueError, match="requires data.atomic_numbers"):
+        model._input_node_features(data)
 
 
 def pytest_atomic_number_count_must_match_nodes():

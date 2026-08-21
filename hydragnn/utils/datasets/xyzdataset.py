@@ -60,6 +60,7 @@ class XYZDataset(AbstractRawDataset):
         data_object.supercell_size = tensor(ase_object.cell.array).float()
         data_object.pos = tensor(ase_object.arrays["positions"]).float()
         proton_numbers = np.expand_dims(ase_object.arrays["numbers"], axis=1)
+        data_object.atomic_numbers = tensor(ase_object.arrays["numbers"]).long()
         node_feature_matrix = proton_numbers
         data_object.x = tensor(node_feature_matrix).float()
 

@@ -5,6 +5,7 @@
   "NeuralNetwork": {
     "Architecture": {
       "mpnn_type": "EGNN",
+      "enable_atomistic_species_encoding": true,
       "edge_features": ["bond_length"],
       "max_neighbours": 50,
       "num_gaussians": 50,
@@ -41,7 +42,7 @@
       ]
     },
     "Variables_of_interest": {
-      "input_node_features": [0, 1, 2, 3],
+      "input_node_features": [1, 2, 3],
       "output_index": [
         0
       ],

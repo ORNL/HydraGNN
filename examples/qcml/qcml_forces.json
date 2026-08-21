@@ -3,6 +3,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
+            "enable_atomistic_species_encoding": true,
             "equivariance": true,
             "radius": 10.0,
             "max_neighbours": 10,
@@ -23,17 +24,17 @@
                 "node": {
                     "num_headlayers": 2,
                     "dim_headlayers": [200, 200],
-                    "type": "mlp",
+                    "type": "mlp"
                 }
             },
-            "task_weights": [1.0],
+            "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
+            "input_node_features": [1, 2, 3],
             "output_names": ["forces"],
             "output_index": [2],
             "output_dim": [3],
-            "type": ["node"],
+            "type": ["node"]
         },
         "Training": {
             "num_epoch": 50,
@@ -42,12 +43,12 @@
             "loss_function_type": "mae",
             "batch_size": 32,
             "continue": 0,
-            "Optimizer": {"type": "AdamW", "learning_rate": 1e-3},
-        },
+            "Optimizer": {"type": "AdamW", "learning_rate": 1e-3}
+        }
     },
     "Visualization": {
         "plot_init_solution": true,
         "plot_hist_solution": false,
-        "create_plots": true,
-    },
+        "create_plots": true
+    }
 }

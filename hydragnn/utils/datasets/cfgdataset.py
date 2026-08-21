@@ -64,6 +64,7 @@ class CFGDataset(AbstractRawDataset):
         data_object.supercell_size = tensor(ase_object.cell.array).float()
         data_object.pos = tensor(ase_object.arrays["positions"]).float()
         proton_numbers = np.expand_dims(ase_object.arrays["numbers"], axis=1)
+        data_object.atomic_numbers = tensor(ase_object.arrays["numbers"]).long()
         masses = np.expand_dims(ase_object.arrays["masses"], axis=1)
         c_peratom = np.expand_dims(ase_object.arrays["c_peratom"], axis=1)
         fx = np.expand_dims(ase_object.arrays["fx"], axis=1)
