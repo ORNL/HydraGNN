@@ -107,26 +107,44 @@ Below are the four main functionalities for running the code.
 1. Training a model, including continuing from a previously trained model using configuration options:
 ```python
 import hydragnn
-hydragnn.run_training("examples/configuration.json")
+from hydragnn.train import train_validate_test
+from hydragnn.utils.model import load_existing_model, save_model
+
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+    trainset, valset, testset, batch_size=32
+)
+train_validate_test(
+    model, optimizer, train_loader, val_loader, test_loader,
+    writer, scheduler, config["NeuralNetwork"], log_name, verbosity
+)
 ```
 2. Saving a model state:
 ```python
-import hydragnn
-model_name = model_checkpoint.pk
-hydragnn.save_model(model, optimizer, model_name, path="./logs/")
+model_name = "model_checkpoint"
+save_model(model, optimizer, model_name, path="./logs/")
 ```
 3. Loading a model state:
 ```python
-import hydragnn
-model_name = model_checkpoint.pk
-hydragnn.load_existing_model(model, model_name, path="./logs/")
+model_name = "model_checkpoint"
+load_existing_model(model, model_name, path="./logs/")
 ```
 4. Making predictions from a previously trained model:
 ```python
 import hydragnn
-hydragnn.run_prediction("examples/configuration.json", model)
+errors, task_errors, targets, predictions = hydragnn.train.test(
+    test_loader, model, verbosity
+)
 ```
-The `run_training` and `run_predictions` functions are convenient routines that encapsulate all the steps of the training process (data generation, data pre-processing, training of HydraGNN models, and use of trained HydraGNN models for inference) on toy problems, which are included in the CI test workflows. Both `run_training` and `run_predictions` require a JSON input file for configurable options. The `save_model` and `load_model` functions store and retrieve model checkpoints for continued training and subsequent inference. Ad-hoc example scripts where data pre-processing, training, and inference are done for specific datasets are provided in the `examples` folder.
+Dataset creation and preprocessing are explicit caller responsibilities. Pass prepared
+datasets to `create_dataloaders`, construct the model and optimizer explicitly, and
+call `train_validate_test` or `test`. This keeps application-specific data handling
+and orchestration visible to the caller. The `save_model` and `load_model` functions
+store and retrieve model checkpoints for continued training and inference.
+
+The former `run_training` and `run_prediction` convenience functions have been
+removed. Applications must now make dataset preparation, model construction, and
+training or inference orchestration explicit, as demonstrated by the scripts under
+`examples/`.
 
 ### Datasets
 

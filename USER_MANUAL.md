@@ -574,8 +574,8 @@ HydraGNN provides a complete training pipeline with extensive configuration opti
 ```python
 import hydragnn
 
-# Simple distributed training
-hydragnn.run_training("config.json")
+# Initialize distributed execution before constructing the distributed model.
+world_size, rank = hydragnn.utils.distributed.setup_ddp()
 ```
 
 #### MPI Execution
@@ -678,17 +678,20 @@ With `enable_interatomic_potential`, the training loss includes energy, per-atom
 
 ### Training Execution
 
-#### High-Level Training Interface
+#### Training Interface
 
 ```python
 import hydragnn
 
-# Train with configuration file
-hydragnn.run_training("examples/lsms/lsms.json")
-
-# Train with configuration dictionary
-config = {...}  # Configuration dictionary
-hydragnn.run_training(config)
+# Dataset parsing and splitting are application responsibilities.
+train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+    trainset, valset, testset, batch_size=32
+)
+# Construct the model, optimizer, scheduler, and writer explicitly, then train.
+hydragnn.train.train_validate_test(
+    model, optimizer, train_loader, val_loader, test_loader,
+    writer, scheduler, config["NeuralNetwork"], log_name, verbosity
+)
 ```
 
 #### Custom Training Loop
@@ -706,7 +709,7 @@ train_validate_test(
     writer=writer,
     scheduler=scheduler,
     config=config["NeuralNetwork"],
-    log_name=log_name,
+    model_with_config_name=log_name,
     verbosity=verbosity,
     create_plots=True
 )
@@ -774,10 +777,10 @@ load_existing_model_config(model, config["Training"], optimizer=optimizer)
 
 #### Running with DeepSpeed
 
-```python
-# Enable DeepSpeed during training
-hydragnn.run_training(config, use_deepspeed=True)
-```
+Initialize the model and optimizer with `deepspeed.initialize`, then pass the
+resulting engine and explicit loaders to `train_validate_test` with
+`use_deepspeed=True`. See `examples/ogb/train_gap.py` for the complete setup;
+HydraGNN no longer hides this initialization inside a convenience wrapper.
 
 ### FSDP (Fully Sharded Data Parallel) Integration
 
@@ -1319,7 +1322,10 @@ logging.basicConfig(
 #### Graceful Error Handling
 ```python
 try:
-    hydragnn.run_training(config)
+    hydragnn.train.train_validate_test(
+        model, optimizer, train_loader, val_loader, test_loader,
+        writer, scheduler, config["NeuralNetwork"], log_name, verbosity
+    )
 except Exception as e:
     logging.error(f"Training failed: {e}")
     # Save partial results

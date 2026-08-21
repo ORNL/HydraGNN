@@ -17,8 +17,10 @@ import hydragnn, tests
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from mpi4py import MPI
 from hydragnn.preprocess import graph_samples_checks_and_updates as gscu
-from hydragnn.preprocess import serialized_dataset_loader as sdl
+from hydragnn.preprocess import graph_dataset
 from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
+from tests._prediction_workflow import load_checkpoint_and_test
+from tests._training_workflow import train_and_checkpoint
 
 torch.manual_seed(97)
 
@@ -40,13 +42,15 @@ def add_graph_attr(monkeypatch):
         return res
 
     monkeypatch.setattr(gscu, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(sdl, "update_predicted_values", _wrapped)
+    monkeypatch.setattr(graph_dataset, "update_predicted_values", _wrapped)
     monkeypatch.setattr(pickledataset, "update_predicted_values", _wrapped)
     monkeypatch.setattr(distdataset, "update_predicted_values", _wrapped)
     monkeypatch.setattr(adiosdataset, "update_predicted_values", _wrapped)
     yield
     monkeypatch.setattr(gscu, "update_predicted_values", orig_update)
-    monkeypatch.setattr(sdl, "update_predicted_values", orig_update, raising=False)
+    monkeypatch.setattr(
+        graph_dataset, "update_predicted_values", orig_update, raising=False
+    )
     monkeypatch.setattr(
         pickledataset, "update_predicted_values", orig_update, raising=False
     )
@@ -154,14 +158,19 @@ def unittest_train_model_graphattr(
                     )
     MPI.COMM_WORLD.Barrier()
 
-    hydragnn.run_training(config, use_deepspeed)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    _, config = train_and_checkpoint(
+        config, train_loader, val_loader, test_loader, use_deepspeed
+    )
 
     (
         error,
         error_mse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.run_prediction(config, use_deepspeed)
+    ) = load_checkpoint_and_test(config, test_loader, use_deepspeed)
 
     thresholds = {
         "SAGE": [0.20, 0.20],

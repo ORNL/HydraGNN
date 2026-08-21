@@ -9,14 +9,9 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import json, os
-from functools import singledispatch
-
-from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import setup_ddp, get_distributed_model
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.input_config_parsing.config_utils import (
-    update_config,
     get_log_name_config,
     parse_deepspeed_config,
 )
@@ -31,33 +26,9 @@ except:
     deepspeed_available = False
 
 
-@singledispatch
-def run_prediction(config, use_deepspeed=False):
-    raise TypeError("Input must be filename string or configuration dictionary.")
-
-
-@run_prediction.register
-def _(config_file: str, use_deepspeed=False):
-
-    with open(config_file, "r") as f:
-        config = json.load(f)
-
-    run_prediction(config)
-
-
-@run_prediction.register
-def _(config: dict, use_deepspeed=False):
-
-    try:
-        os.environ["SERIALIZED_DATA_PATH"]
-    except:
-        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
+def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
+    """Exercise checkpoint loading and testing in integration tests."""
     world_size, world_rank = setup_ddp(use_deepspeed=use_deepspeed)
-
-    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
-
-    config = update_config(config, train_loader, val_loader, test_loader)
 
     model = create_model_config(
         config=config["NeuralNetwork"], verbosity=config["Verbosity"]["level"]

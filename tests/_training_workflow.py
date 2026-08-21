@@ -9,15 +9,13 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import os, json
-from functools import singledispatch
+import json
 
 import torch
 
 import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 from hydragnn.utils.distributed import (
     setup_ddp,
     get_distributed_model,
@@ -56,28 +54,10 @@ def _cast_optimizer_state(optimizer, dtype):
                 state[key] = value.to(dtype=dtype)
 
 
-@singledispatch
-def run_training(config, use_deepspeed=False):
-    raise TypeError("Input must be filename string or configuration dictionary.")
-
-
-@run_training.register
-def _(config_file: str, use_deepspeed=False):
-
-    with open(config_file, "r") as f:
-        config = json.load(f)
-
-    run_training(config)
-
-
-@run_training.register
-def _(config: dict, use_deepspeed=False):
-
-    try:
-        os.environ["SERIALIZED_DATA_PATH"]
-    except:
-        os.environ["SERIALIZED_DATA_PATH"] = os.getcwd()
-
+def train_and_checkpoint(
+    config, train_loader, val_loader, test_loader, use_deepspeed=False
+):
+    """Exercise HydraGNN's low-level training APIs in integration tests."""
     setup_log(get_log_name_config(config))
 
     training_cfg = config["NeuralNetwork"]["Training"]
@@ -86,8 +66,6 @@ def _(config: dict, use_deepspeed=False):
     torch.set_default_dtype(param_dtype)
 
     world_size, world_rank = setup_ddp(use_deepspeed=use_deepspeed)
-
-    train_loader, val_loader, test_loader = dataset_loading_and_splitting(config=config)
 
     config = update_config(config, train_loader, val_loader, test_loader)
     plot_init_solution = config["Visualization"]["plot_init_solution"]
@@ -209,3 +187,5 @@ def _(config: dict, use_deepspeed=False):
 
     if writer is not None:
         writer.close()
+
+    return model, config

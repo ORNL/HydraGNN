@@ -20,6 +20,8 @@ import shutil
 import hydragnn, tests
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from mpi4py import MPI
+from tests._prediction_workflow import load_checkpoint_and_test
+from tests._training_workflow import train_and_checkpoint
 
 
 # Main unit test function called by pytest wrappers.
@@ -127,19 +129,19 @@ def unittest_train_model(
                     )
     MPI.COMM_WORLD.Barrier()
 
-    # Since the config file uses PNA already, test the file overload here.
-    # All the other models need to use the locally modified dictionary.
-    if mpnn_type == "PNA" and not use_lengths:
-        hydragnn.run_training(config_file, use_deepspeed)
-    else:
-        hydragnn.run_training(config, use_deepspeed)
+    train_loader, val_loader, test_loader = (
+        hydragnn.preprocess.dataset_loading_and_splitting(config)
+    )
+    _, config = train_and_checkpoint(
+        config, train_loader, val_loader, test_loader, use_deepspeed
+    )
 
     (
         error,
         error_mse_task,
         true_values,
         predicted_values,
-    ) = hydragnn.run_prediction(config, use_deepspeed)
+    ) = load_checkpoint_and_test(config, test_loader, use_deepspeed)
 
     # Set RMSE and sample MAE error thresholds
     thresholds = {
