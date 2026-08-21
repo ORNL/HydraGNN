@@ -698,6 +698,24 @@ features. In interatomic-potential mode, generic stacks replace atomic numbers
 with a learned hidden-width embedding, while stacks such as MACE retain their
 native chemical species encoder. Reading atomic numbers from `data.x[:, 0]`
 remains available as a deprecated compatibility fallback.
+
+Atomistic property models that do not use the interatomic-potential wrapper can
+enable the same categorical handling independently:
+
+```json
+{
+    "Architecture": {
+        "enable_interatomic_potential": false,
+        "enable_atomistic_species_encoding": true
+    }
+}
+```
+
+Interatomic-potential mode always enables categorical species handling, so
+existing MLIP configurations receive it automatically. Encoder selection is
+not configurable:
+generic stacks use the common HydraGNN embedding and native species-aware
+stacks retain their own encoder.
 ```
 
 ### Training Execution

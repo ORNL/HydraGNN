@@ -12,6 +12,8 @@
 import pytest
 import torch
 from torch_geometric.data import Data
+import json
+from pathlib import Path
 
 from hydragnn.models.Base import Base
 from hydragnn.models.CGCNNStack import CGCNNStack
@@ -62,7 +64,7 @@ GENERIC_MPNN_TYPES = (
 CUSTOM_EMBEDDING_MPNN_TYPES = ("PAINN", "PNAEq", "DimeNet", "SchNet", "PNAPlus")
 
 
-def _model(atomistic, mpnn_type="EGNN"):
+def _model(atomistic, mpnn_type="EGNN", species_encoding=False):
     heads = update_multibranch_heads(
         {
             "node": {
@@ -105,6 +107,7 @@ def _model(atomistic, mpnn_type="EGNN"):
         num_before_skip=1,
         num_after_skip=1,
         enable_interatomic_potential=atomistic,
+        enable_atomistic_species_encoding=species_encoding,
         energy_weight=0.1,
         force_weight=1.0,
         use_gpu=False,
@@ -158,6 +161,46 @@ def pytest_atomistic_generic_input_is_a_hidden_width_species_embedding(mpnn_type
     assert model.model.species_embedding.num_embeddings == 119
     assert features.shape == (3, 8)
     assert torch.equal(features, model.model.species_embedding(data.atomic_numbers))
+
+
+def pytest_atomistic_property_model_can_enable_species_without_mlip_wrapper():
+    model = _model(atomistic=False, species_encoding=True)
+    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+    features, _, _ = model._embedding(data)
+
+    assert not hasattr(model, "model")
+    assert model.atomistic_mode_enabled
+    assert features.shape == (data.num_nodes, model.hidden_dim)
+    assert torch.equal(features, model.species_embedding(data.atomic_numbers))
+
+
+def pytest_qm9_property_example_provides_canonical_atomic_numbers():
+    from examples.qm9.qm9 import qm9_pre_transform
+
+    data = Data(
+        z=torch.tensor([6, 1, 1], dtype=torch.long),
+        y=torch.zeros(1, 19),
+        edge_index=torch.tensor([[0, 1, 2], [1, 2, 0]], dtype=torch.long),
+    )
+
+    def add_test_pe(sample):
+        sample.pe = torch.zeros(sample.num_nodes, 2)
+        return sample
+
+    transformed = qm9_pre_transform(data, add_test_pe)
+    assert torch.equal(transformed.atomic_numbers, data.z)
+    assert transformed.atomic_numbers.dtype == torch.long
+    assert transformed.atomic_numbers.ndim == 1
+
+
+def pytest_qm9_property_configs_enable_atomistic_species_encoding():
+    repository = Path(__file__).resolve().parents[1]
+    for relative_path in ("examples/qm9/qm9.json", "examples/qm9_hpo/qm9.json"):
+        with open(repository / relative_path, encoding="utf-8") as stream:
+            config = json.load(stream)
+        assert config["NeuralNetwork"]["Architecture"][
+            "enable_atomistic_species_encoding"
+        ]
 
 
 @pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)

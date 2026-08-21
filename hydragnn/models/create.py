@@ -91,6 +91,9 @@ def create_model_config(
         enable_interatomic_potential=config["Architecture"].get(
             "enable_interatomic_potential", False
         ),
+        enable_atomistic_species_encoding=config["Architecture"].get(
+            "enable_atomistic_species_encoding", False
+        ),
         energy_weight=config["Architecture"].get("energy_weight", 0.0),
         energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
         force_weight=config["Architecture"].get("force_weight", 0.0),
@@ -226,6 +229,7 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
+    enable_atomistic_species_encoding: bool = False,
     energy_weight: float = 0.0,
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
@@ -303,7 +307,10 @@ def create_model(
     stack_type = stack_types.get(mpnn_type)
     if stack_type is None:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
-    use_common_species_embedding = enable_interatomic_potential and (
+    atomistic_species_enabled = (
+        enable_interatomic_potential or enable_atomistic_species_encoding
+    )
+    use_common_species_embedding = atomistic_species_enabled and (
         not stack_type.uses_native_species_encoder
     )
     original_input_dim = input_dim
@@ -902,7 +909,7 @@ def create_model(
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 
-    model.configure_atomistic_species_encoding(enable_interatomic_potential)
+    model.configure_atomistic_species_encoding(atomistic_species_enabled)
     model.atomistic_continuous_input_dim = original_input_dim
 
     # Apply interatomic potential enhancement if requested

@@ -98,6 +98,7 @@ def build_random_structure(
 
     data = Data(
         x=x,
+        atomic_numbers=torch.tensor(atomic_numbers, dtype=torch.long),
         pos=pos,
         chemical_composition=chemical_composition,
         graph_attr=graph_attr,

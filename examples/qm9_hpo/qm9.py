@@ -32,6 +32,7 @@ def qm9_pre_transform(data, transform):
     # LPE
     data = transform(data)
     # Set descriptor as element type.
+    data.atomic_numbers = data.z.long().view(-1)
     data.x = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
     data.y = data.y[:, 10] / len(data.x)

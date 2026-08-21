@@ -8,6 +8,7 @@
             "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
             "mpnn_type": "SchNet",
+            "enable_atomistic_species_encoding": true,
             "radius": 7,
             "max_neighbours": 5,
             "periodic_boundary_conditions": false,
