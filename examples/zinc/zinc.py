@@ -37,7 +37,7 @@ filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zinc.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
-var_config = config["NeuralNetwork"]["Variables_of_interest"]
+var_config = config["Variables"]
 
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
@@ -57,8 +57,10 @@ lapPE = AddLaplacianEigenvectorPE(
 
 
 def zinc_pre_transform(data):
-    data.x = data.x.float().view(-1, 1)
-    data.edge_attr = data.edge_attr.float().view(-1, 1)
+    data.atom_type = data.x.float().view(-1, 1)
+    data.bond_type = data.edge_attr.float().view(-1, 1)
+    data.free_energy = data.y.reshape(1, 1)
+    del data.x, data.edge_attr, data.y
     data = lapPE(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
@@ -120,7 +122,7 @@ hydragnn.train.train_validate_test(
     test_loader,
     writer,
     scheduler,
-    config["NeuralNetwork"],
+    config,
     log_name,
     verbosity,
 )

@@ -33,9 +33,9 @@ def qm9_pre_transform(data, transform):
     # LPE
     data = transform(data)
     # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
+    data.atomic_numbers = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
-    data.y = data.y[:, 10] / len(data.x)
+    data.free_energy = data.y[:, 10:11] / data.num_nodes
     graph_features_dim = [1]
     node_feature_dim = [1]
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
@@ -171,7 +171,7 @@ def run(trial):
         test_loader,
         writer,
         scheduler,
-        trial_config["NeuralNetwork"],
+        trial_config,
         trial_log_name,
         verbosity,
         create_plots=False,

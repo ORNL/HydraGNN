@@ -30,9 +30,9 @@ import pandas as pd
 # Update each sample prior to loading.
 def qm9_pre_transform(data):
     # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
+    data.atomic_numbers = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
-    data.y = data.y[:, 10] / len(data.x)
+    data.free_energy = data.y[:, 10:11] / data.num_nodes
     graph_features_dim = [1]
     node_feature_dim = [1]
     return data
@@ -122,7 +122,7 @@ def objective(trial):
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     with open(filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
 
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.setup_ddp()

@@ -86,10 +86,9 @@ def pytest_equivariant_heads(example, mpnn_type, head_level, head_type, graph_po
             }
         }
         config["NeuralNetwork"]["Architecture"]["task_weights"] = [1]
-        var_cfg = config["NeuralNetwork"]["Variables_of_interest"]
-        var_cfg["type"] = ["graph"]
-        var_cfg["output_dim"] = [1]
-        var_cfg["output_index"] = [0]
+        config["Variables"]["outputs"] = [
+            {"name": "energy", "level": "graph", "dim": 1}
+        ]
 
     # Create temporary config file
     temp_dir = tempfile.mkdtemp()

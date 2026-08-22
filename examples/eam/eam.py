@@ -18,15 +18,10 @@ import hydragnn
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.cfgdataset import CFGDataset
-from hydragnn.utils.datasets.serializeddataset import (
-    SerializedWriter,
-    SerializedDataset,
-)
-from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.utils.datasets.serializeddataset import SerializedDataset
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
 except ImportError:
     pass
 
@@ -94,50 +89,9 @@ if __name__ == "__main__":
     fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
     config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
     if not args.loadexistingsplit:
-        total = CFGDataset(config)
-
-        trainset, valset, testset = split_dataset(
-            dataset=total,
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
+        raise ValueError(
+            "Provide pre-serialized PyG Data objects; HydraGNN does not parse CFG files."
         )
-        print(len(total), len(trainset), len(valset), len(testset))
-
-        if args.format == "adios":
-            fname = os.path.join(
-                os.path.dirname(__file__), "./dataset/%s.bp" % datasetname
-            )
-            adwriter = AdiosWriter(fname, MPI.COMM_SELF)
-            adwriter.add("trainset", trainset)
-            adwriter.add("valset", valset)
-            adwriter.add("testset", testset)
-            adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
-            adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
-            adwriter.save()
-        elif args.format == "pickle":
-            basedir = os.path.join(
-                os.path.dirname(__file__), "dataset", "serialized_dataset"
-            )
-            SerializedWriter(
-                trainset,
-                basedir,
-                datasetname,
-                "trainset",
-                minmax_node_feature=total.minmax_node_feature,
-                minmax_graph_feature=total.minmax_graph_feature,
-            )
-            SerializedWriter(
-                valset,
-                basedir,
-                datasetname,
-                "valset",
-            )
-            SerializedWriter(
-                testset,
-                basedir,
-                datasetname,
-                "testset",
-            )
     comm.Barrier()
     if args.preonly:
         sys.exit(0)
@@ -164,14 +118,6 @@ if __name__ == "__main__":
         testset = SerializedDataset(basedir, datasetname, "testset")
     else:
         raise ValueError("Unknown data format: %d" % args.format)
-    ## Set minmax
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_node_feature"
-    ] = trainset.minmax_node_feature
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_graph_feature"
-    ] = trainset.minmax_graph_feature
-
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
@@ -189,8 +135,8 @@ if __name__ == "__main__":
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_node_feature", None)
-    config["NeuralNetwork"]["Variables_of_interest"].pop("minmax_graph_feature", None)
+    config["Variables"].pop("minmax_node_feature", None)
+    config["Variables"].pop("minmax_graph_feature", None)
 
     verbosity = config["Verbosity"]["level"]
     model = hydragnn.models.create_model_config(
@@ -225,7 +171,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=True,

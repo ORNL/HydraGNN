@@ -40,14 +40,13 @@ def unscale_features_by_num_nodes(datasets_list, scaled_index_list, nodes_num_li
 
 
 def unscale_features_by_num_nodes_config(config, datasets_list, nodes_num_list):
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    output_names = var_config["output_names"]
+    from hydragnn.utils.input_config_parsing.variable_schema import get_variable_schema
+
+    output_names = [spec.name for spec in get_variable_schema(config).outputs]
     scaled_feature_index = [
         i for i in range(len(output_names)) if "_scaled_num_nodes" in output_names[i]
     ]
     if len(scaled_feature_index) > 0:
-        use_denorm = var_config["denormalize_output"]
-        assert use_denorm, "Cannot unscale features without 'denormalize_output'"
         datasets_list = unscale_features_by_num_nodes(
             datasets_list, scaled_feature_index, nodes_num_list
         )

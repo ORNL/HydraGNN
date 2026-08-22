@@ -79,7 +79,6 @@ transform_coordinates = Distance(norm=False, cat=False)
 # charge and spin are constant across Transition1x dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 class Transition1xDataset(AbstractBaseDataset):
@@ -187,8 +186,6 @@ class Transition1xDataset(AbstractBaseDataset):
             )
             total_energy_per_atom_tensor = total_energy_tensor.detach().clone() / natoms
 
-            x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
             # Calculate chemical composition
             atomic_number_list = atomic_numbers.tolist()
             assert len(atomic_number_list) == natoms
@@ -237,17 +234,10 @@ class Transition1xDataset(AbstractBaseDataset):
                 atomic_numbers=atomic_numbers,
                 chemical_composition=chemical_composition,
                 # smiles_string=smiles_string,
-                x=x,
                 energy=total_energy_tensor,
                 energy_per_atom=total_energy_per_atom_tensor,
                 forces=forces,
-                graph_attr=graph_attr,
             )
-
-            if self.energy_per_atom:
-                data_object.y = data_object.energy_per_atom
-            else:
-                data_object.y = data_object.energy
 
             data_object = self.radius_graph(data_object)
 
@@ -356,11 +346,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
 
     # Transformation to create positional and structural laplacian encoders
     """
@@ -588,7 +574,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

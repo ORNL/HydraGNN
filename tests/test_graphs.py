@@ -90,6 +90,9 @@ def unittest_train_model(
     # Only run with edge lengths for models that support them.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+        config["Variables"]["inputs"].append(
+            {"name": "edge_lengths", "level": "edge", "dim": 1}
+        )
 
     if rank == 0:
         num_samples_tot = 500
@@ -123,7 +126,7 @@ def unittest_train_model(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
+                if not any(name.endswith(".pt") for name in os.listdir(data_path)):
                     tests.deterministic_graph_data(
                         data_path, number_configurations=num_samples
                     )

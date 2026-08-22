@@ -1,65 +1,80 @@
 {
-  "Verbosity": {
-    "level": 2
-  },
-  "NeuralNetwork": {
-    "Architecture": {
-      "mpnn_type": "EGNN",
-      "edge_features": ["bond_length"],
-      "max_neighbours": 50,
-      "num_gaussians": 50,
-      "num_filters": 50,
-      "envelope_exponent": 5,
-      "int_emb_size": 64,
-      "basis_emb_size": 8,
-      "out_emb_size": 128,
-      "num_after_skip": 2,
-      "num_before_skip": 1,
-      "num_radial": 6,
-      "num_spherical": 7,
-      "radius": 5.0,
-      "hidden_dim": 200,
-      "num_conv_layers": 6,
-      "output_heads": {
-        "graph": {
-          "num_sharedlayers": 2,
-          "dim_sharedlayers": 200,
-          "num_headlayers": 2,
-          "dim_headlayers": [
-            1000,
-            1000
-          ]
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "EGNN",
+            "edge_features": [
+                "bond_length"
+            ],
+            "max_neighbours": 50,
+            "num_gaussians": 50,
+            "num_filters": 50,
+            "envelope_exponent": 5,
+            "int_emb_size": 64,
+            "basis_emb_size": 8,
+            "out_emb_size": 128,
+            "num_after_skip": 2,
+            "num_before_skip": 1,
+            "num_radial": 6,
+            "num_spherical": 7,
+            "radius": 5.0,
+            "hidden_dim": 200,
+            "num_conv_layers": 6,
+            "output_heads": {
+                "graph": {
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 200,
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        1000,
+                        1000
+                    ]
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        1000,
+                        1000
+                    ],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [
+                1
+            ]
         },
-        "node": {
-          "num_headlayers": 2,
-          "dim_headlayers": [1000,1000],
-          "type": "mlp"
+        "Training": {
+            "num_epoch": 3,
+            "batch_size": 1,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "Optimizer": {
+                "learning_rate": 0.001
+            }
         }
-      },
-      "task_weights": [
-        1
-      ]
     },
-    "Variables_of_interest": {
-      "input_node_features": [0, 1, 2, 3],
-      "output_index": [
-        0
-      ],
-      "type": [
-        "graph"
-      ],
-      "output_dim": [1],
-      "output_names": ["HLGAP"],
-      "denormalize_output": false
-    },
-    "Training": {
-      "num_epoch": 3,
-      "batch_size": 1,
-      "continue": 0,
-      "startfrom": "existing_model",
-      "Optimizer": {
-        "learning_rate": 0.001
-      }
+    "Variables": {
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "HLGAP",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
     }
-  }
 }

@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     graph_feature_names = ["total_energy"]
     graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "potential", "forces"]
+    node_feature_names = ["atomic_numbers", "potential", "forces"]
     node_feature_dims = [1, 1, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     ##################################################################################################################
@@ -108,19 +108,6 @@ if __name__ == "__main__":
         else config["NeuralNetwork"]["Architecture"]["mpnn_type"]
     )
     verbosity = config["Verbosity"]["level"]
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "graph_feature_names"
-    ] = graph_feature_names
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "graph_feature_dims"
-    ] = graph_feature_dims
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "node_feature_names"
-    ] = node_feature_names
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "node_feature_dims"
-    ] = node_feature_dims
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -238,7 +225,7 @@ if __name__ == "__main__":
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
-        var_config = config["NeuralNetwork"]["Variables_of_interest"]
+        var_config = config["Variables"]
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", preload=True, var_config=var_config
         )
@@ -318,7 +305,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

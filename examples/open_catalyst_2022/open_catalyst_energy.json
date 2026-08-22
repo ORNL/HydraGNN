@@ -18,25 +18,25 @@
             "num_radial": 6,
             "num_spherical": 7,
             "num_filters": 126,
-            "edge_features": ["length"],
+            "edge_features": [
+                "length"
+            ],
             "hidden_dim": 50,
             "num_conv_layers": 3,
             "output_heads": {
-                "graph":{
+                "graph": {
                     "num_sharedlayers": 2,
                     "dim_sharedlayers": 50,
                     "num_headlayers": 2,
-                    "dim_headlayers": [50,25]
+                    "dim_headlayers": [
+                        50,
+                        25
+                    ]
                 }
             },
-            "task_weights": [1.0]
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
-            "output_names": ["energy"],
-            "output_index": [0],
-            "output_dim": [1],
-            "type": ["graph"]
+            "task_weights": [
+                1.0
+            ]
         },
         "Training": {
             "num_epoch": 50,
@@ -46,7 +46,7 @@
             "continue": 0,
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             }
         }
     },
@@ -54,5 +54,27 @@
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "energy",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
     }
 }

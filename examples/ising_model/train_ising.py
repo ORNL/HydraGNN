@@ -26,7 +26,6 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.model import print_model
-from hydragnn.utils.datasets.lsmsdataset import LSMSDataset
 from hydragnn.utils.datasets.distdataset import DistDataset
 from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
@@ -233,102 +232,9 @@ if __name__ == "__main__":
     )
 
     if args.preonly:
-        """
-        Parallel ising data generation step:
-        1. Generate ising data (*.txt) in parallel (create_dataset_mpi)
-        2. Read raw dataset in parallel (*.txt) (RawDataset)
-        3. Split into a train, valid, and test set (split_dataset)
-        4. Save as Adios file in parallel
-        """
-        sys.setrecursionlimit(1000000)
-        dir = os.path.join(os.path.dirname(__file__), "./dataset/%s" % modelname)
-        if rank == 0:
-            if os.path.exists(dir):
-                shutil.rmtree(dir)
-            os.makedirs(dir)
-        comm.Barrier()
-
-        info("Generating ... ")
-        info("number_atoms_per_dimension", number_atoms_per_dimension)
-        info("configurational_histogram_cutoff", configurational_histogram_cutoff)
-
-        # Use sine function as non-linear extension of Ising model
-        # Use randomized scaling of the spin magnitudes
-        spin_func = lambda x: math.sin(math.pi * x / 2)
-        create_dataset_mpi(
-            number_atoms_per_dimension,
-            configurational_histogram_cutoff,
-            dir,
-            spin_function=spin_func,
-            scale_spin=True,
-            comm=comm,
-            seed=args.seed,
+        raise ValueError(
+            "Generate and serialize named PyG Data objects in application code before training."
         )
-        comm.Barrier()
-
-        config["Dataset"]["path"]["total"] = dir
-        total = LSMSDataset(config, dist=True, sampling=args.sampling)
-
-        trainset, valset, testset = split_dataset(
-            dataset=total,
-            perc_train=config["NeuralNetwork"]["Training"]["perc_train"],
-            stratify_splitting=config["Dataset"]["compositional_stratified_splitting"],
-        )
-        print(len(total), len(trainset), len(valset), len(testset))
-
-        deg = gather_deg(trainset)
-        config["pna_deg"] = deg
-
-        basedir = os.path.join(
-            os.path.dirname(__file__), "dataset", "%s.pickle" % modelname
-        )
-        attrs = dict()
-        if (
-            "normalize_features" in config["Dataset"]
-            and config["Dataset"]["normalize_features"]
-        ):
-            attrs["minmax_node_feature"] = total.minmax_node_feature
-        else:
-            attrs["minmax_node_feature"] = None
-        if (
-            "normalize_features" in config["Dataset"]
-            and config["Dataset"]["normalize_features"]
-        ):
-            attrs["minmax_graph_feature"] = total.minmax_graph_feature
-        else:
-            attrs["minmax_graph_feature"] = None
-        attrs["pna_deg"] = deg
-        SimplePickleWriter(
-            trainset,
-            basedir,
-            "trainset",
-            use_subdir=True,
-            attrs=attrs,
-        )
-        SimplePickleWriter(
-            valset,
-            basedir,
-            "valset",
-            use_subdir=True,
-        )
-        SimplePickleWriter(
-            testset,
-            basedir,
-            "testset",
-            use_subdir=True,
-        )
-
-        fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % modelname)
-        adwriter = AdiosWriter(fname, comm)
-        adwriter.add("trainset", trainset)
-        adwriter.add("valset", valset)
-        adwriter.add("testset", testset)
-        adwriter.add_global("minmax_node_feature", total.minmax_node_feature)
-        adwriter.add_global("minmax_graph_feature", total.minmax_graph_feature)
-        adwriter.add_global("pna_deg", deg)
-        adwriter.save()
-
-        sys.exit(0)
 
     tr.initialize()
     tr.disable()
@@ -386,18 +292,9 @@ if __name__ == "__main__":
     )
     timer.stop()
 
-    ## Set minmax read from bp file
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_node_feature"
-    ] = trainset.minmax_node_feature
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "minmax_graph_feature"
-    ] = trainset.minmax_graph_feature
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-    del config["NeuralNetwork"]["Variables_of_interest"]["minmax_node_feature"]
-    del config["NeuralNetwork"]["Variables_of_interest"]["minmax_graph_feature"]
     ## Good to sync with everyone right after DDStore setup
     comm.Barrier()
 
@@ -435,7 +332,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
     )

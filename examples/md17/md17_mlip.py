@@ -29,23 +29,15 @@ import hydragnn
 
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
-    # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
-    # Only predict energy (index 0 of 2 properties) for this run.
-    data.y = data.energy / len(data.x)
+    data.atomic_numbers = data.z.float().view(-1, 1)
     # Store forces for MLIP training
     data.forces = data.force
-    graph_features_dim = [1]
-    node_feature_dim = [1]
     data = compute_edges(data)
     data = transform(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
     target_pe = data.pe[data.edge_index[1]]
     data.rel_pe = torch.abs(source_pe - target_pe)  # Compute feature-wise difference
-    charge = 0.0
-    spin = 1.0
-    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
     return data
 
 
@@ -150,7 +142,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

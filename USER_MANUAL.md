@@ -161,19 +161,21 @@ dataset = AdiosDataset(filename, "trainset", comm)
 {
     "Dataset": {
         "name": "FePt_32atoms",
-        "path": {"total": "./dataset/FePt_enthalpy"},
-        "format": "LSMS",
-        "compositional_stratified_splitting": true,
-        "node_features": {
-            "name": ["num_of_protons", "charge_density", "magnetic_moment"],
-            "dim": [1, 1, 1],
-            "column_index": [0, 5, 6]
-        },
-        "graph_features": {
-            "name": ["free_energy_scaled_num_nodes"],
-            "dim": [1],
-            "column_index": [0]
+        "path": {
+            "train": "./dataset/FePt_train.pkl",
+            "validate": "./dataset/FePt_validate.pkl",
+            "test": "./dataset/FePt_test.pkl"
         }
+    },
+    "Variables": {
+        "inputs": [
+            {"name": "num_of_protons", "level": "node", "dim": 1}
+        ],
+        "outputs": [
+            {"name": "free_energy_per_atom", "level": "graph", "dim": 1},
+            {"name": "charge_density", "level": "node", "dim": 1},
+            {"name": "magnetic_moment", "level": "node", "dim": 1}
+        ]
     }
 }
 ```
@@ -224,19 +226,15 @@ The regression coefficients are stored in the ADIOS dataset under `energy_linear
 #### Writing Custom Data Loaders
 
 ```python
-from hydragnn.preprocess.raw_dataset_loader import RawDatasetLoader
+from torch_geometric.data import Data
 
-class CustomRawDataLoader(RawDatasetLoader):
-    def __init__(self, config):
-        super().__init__(config)
-    
-    def load_raw_data(self):
-        # Implement custom data loading logic
-        pass
-    
-    def get_data(self):
-        # Return processed torch_geometric.data.Data objects
-        return self.dataset
+# Users parse their source format and construct named PyG attributes.
+sample = Data(
+    atomic_numbers=atomic_numbers,  # (N, 1)
+    pos=positions,                  # (N, 3)
+    energy=energy,                  # (1, 1)
+    forces=forces,                  # (N, 3)
+)
 ```
 
 #### Data Serialization for Performance
@@ -352,20 +350,190 @@ HydraGNN provides extensive configuration options for building graph neural netw
 }
 ```
 
-#### Variables of Interest
+#### Variables
+
+The `Variables` section is the public contract between a dataset and
+HydraGNN. A dataset importer only stores named source tensors on each PyG
+`Data` object. It must not concatenate those tensors into `x`, `edge_attr`,
+`graph_attr`, or `y`; HydraGNN constructs those internal tensors from the
+schema.
 
 ```json
 {
-    "Variables_of_interest": {
-        "input_node_features": [0, 1, 2],     // Input feature indices
-        "output_names": ["energy", "forces"], // Output property names
-        "output_index": [0, 1],               // Output target indices
-        "type": ["graph", "node"],            // Prediction types
-        "output_dim": [1, 3],                 // Output dimensions
-        "denormalize_output": true            // Whether to denormalize predictions
+    "Variables": {
+        "inputs": [
+            {"name": "node_features", "level": "node", "dim": 3}
+        ],
+        "outputs": [
+            {"name": "energy", "level": "graph", "dim": 1},
+            {"name": "forces", "level": "node", "dim": 3}
+        ]
     }
 }
 ```
+
+Every configured name must be an attribute of the PyG sample with exactly the
+declared shape:
+
+- a node attribute has shape `(N, dim)`, where `N` is the sample's node count;
+- an edge attribute has shape `(E, dim)`, where `E` is the number of columns in
+  `edge_index`; and
+- a graph attribute has shape `(1, dim)` for an individual sample.
+
+For example, the configuration above expects an importer to create data such
+as:
+
+```python
+data = Data(
+    node_features=node_features,  # (N, 3)
+    energy=energy,                # (1, 1)
+    forces=forces,                # (N, 3)
+    edge_index=edge_index,
+)
+```
+
+The importer does not set `data.x`, `data.y`, or `data.y_loc`. During schema
+preparation, HydraGNN validates the named tensors and creates its internal
+representation according to these rules:
+
+| JSON variables | Internal tensor | Construction |
+|---|---|---|
+| node inputs with role `feature` | `data.x` | concatenate columns in JSON order |
+| node input with role `position` | `data.pos` | validate as `(N, 3)`; do not concatenate |
+| edge inputs | `data.edge_attr` | concatenate columns in JSON order |
+| graph inputs | `data.graph_attr` | concatenate columns in JSON order |
+| node outputs | `data.node_output` | concatenate columns in JSON order |
+| edge outputs | `data.edge_output` | concatenate columns in JSON order |
+| graph outputs | `data.graph_output` | concatenate columns in JSON order |
+| all outputs | `data.y` | flatten each output to `(-1, 1)`, then concatenate in overall JSON order |
+| output boundaries | `data.y_loc` | cumulative offsets delimiting each output inside `data.y` |
+
+As a more explicit input example:
+
+```json
+"inputs": [
+  {"name": "atomic_numbers", "level": "node", "dim": 1},
+  {"name": "pos", "level": "node", "dim": 3, "role": "position"}
+]
+```
+
+causes HydraGNN to validate `data.pos` as `(N, 3)` while constructing an
+`(N, 1)` internal node-feature tensor equivalent to:
+
+```python
+data.x = data.atomic_numbers
+```
+
+The `position` role is a geometric input contract, not a feature channel.
+HydraGNN keeps it in `data.pos`, excludes it from `data.x` and `input_dim`, and
+passes it separately to geometry-aware and equivariant models. Declaring `pos`
+without `"role": "position"` is rejected to prevent accidental loss of
+translation invariance or rotation equivariance.
+
+#### Geometric positions and equivariance
+
+Although Cartesian positions are model inputs, they must not be handled like
+ordinary invariant node features. A translation changes the numerical value of
+every coordinate, while a rotation mixes the x, y, and z components. Naively
+concatenating those components into `data.x` exposes coordinate-frame-dependent
+numbers as scalar feature channels and can invalidate the guarantees of an
+invariant or equivariant architecture.
+
+The required declaration is therefore:
+
+```json
+{"name": "pos", "level": "node", "dim": 3, "role": "position"}
+```
+
+and each PyG sample must provide:
+
+```python
+data.pos  # torch.Tensor with shape (data.num_nodes, 3)
+```
+
+During schema preparation, HydraGNN performs these operations separately:
+
+1. It validates `data.pos`, including its node count and three coordinate
+   columns, and preserves the tensor as `data.pos`.
+2. It concatenates only node inputs whose role is `feature` to construct
+   `data.x`.
+3. It computes `Architecture.input_dim` from those feature inputs only; the
+   three position dimensions are not included.
+4. It passes `data.pos` through the dedicated geometric path used by neighbor
+   construction, geometry-aware local message passing, equivariant global
+   attention, and energy-gradient force calculations. The original tensor and
+   its autograd relationship are preserved.
+
+For example, if `atomic_numbers` has dimension 1, `chemical_state` has
+dimension 4, and `pos` is the position input, the result is `data.x` with shape
+`(N, 5)` and a separate `data.pos` with shape `(N, 3)`—not `data.x` with shape
+`(N, 8)`. Dataset importers should assign the three named source attributes and
+must not perform either concatenation themselves.
+
+This is a general geometry contract, not an MLIP-only convention. Any
+HydraGNN model that relies on translation invariance or rotational
+invariance/equivariance should receive Cartesian coordinates this way.
+
+To prevent silent misuse, schema validation rejects all of the following:
+
+- `pos` declared without `"role": "position"`;
+- a position input whose name is not `pos`;
+- a position input that is not node-level or does not have `dim: 3`;
+- `role: "position"` on an output; and
+- a schema with no ordinary node feature input from which to build `data.x`.
+
+In particular, users must never work around this contract by manually
+concatenating `data.pos` into `data.x`.
+
+The names of HydraGNN's derived tensors are reserved and cannot be declared as
+source variables. This includes `x`, `edge_attr`, `graph_attr`, `y`, `y_loc`,
+`node_output`, `edge_output`, and `graph_output` (as well as structural PyG
+names managed internally). For example, declare a source input as
+`node_features`, not `x`; schema preparation preserves `data.node_features`
+and constructs `data.x` from it. Rejecting collisions guarantees that a named
+source attribute is never overwritten by the tensor derived from that source.
+
+The named schema intentionally does not provide compatibility with the removed
+`Variables_of_interest` format. In particular, `update_config_minmax` was tied
+to column indices (`input_node_features` and `output_index`) and has been
+removed from both `config_utils` and the package exports. Downstream code must
+not import it. Normalize named attributes explicitly in application-owned
+preprocessing and retain normalization statistics alongside the serialized
+dataset or application configuration.
+
+If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
+shape `(N, 3)`, HydraGNN constructs `data.y` with shape `(1 + 3*N, 1)` and
+`data.y_loc = [[0, 1, 1 + 3*N]]`. The offsets preserve the two output-head
+boundaries. The original attributes (`node_features`, `energy`, `forces`, and
+so on) remain available on the `Data` object.
+
+If a schema has no inputs or outputs at a particular level, HydraGNN removes a
+stale internal tensor for that level. This makes repeated schema preparation
+idempotent and prevents undeclared features from silently reaching the model.
+More precisely:
+
+- At least one node feature input is mandatory, so `data.x` is always reconstructed
+  from the declared node attributes. Any pre-existing `data.x` is overwritten.
+- When edge inputs are declared, `data.edge_attr` is reconstructed from them;
+  otherwise a pre-existing `data.edge_attr` is removed.
+- When graph inputs are declared, `data.graph_attr` is reconstructed from them;
+  otherwise a pre-existing `data.graph_attr` is removed.
+- When outputs are declared, HydraGNN reconstructs `data.y`, `data.y_loc`, and
+  the applicable level-specific output tensors. With no outputs, these internal
+  tensors are removed. A level-specific output tensor is also removed when the
+  current schema contains no outputs at that level.
+
+These removals apply only to HydraGNN's derived internal tensors. The named
+source attributes declared by the user remain on the PyG object. Consequently,
+third-party PyG samples may initially contain conventional attributes such as
+`x`, `edge_attr`, or `y`, but those attributes cannot bypass the current JSON
+schema or survive from a previous schema preparation unnoticed.
+
+Serialized PyG `.pt` samples are pickle-backed. Loading them with PyTorch may
+execute code embedded in the file, so HydraGNN treats these files as trusted
+local dataset artifacts. Do not train from a `.pt` dataset directory obtained
+from an untrusted source; inspect or convert such data through a safe format
+before loading it with HydraGNN.
 
 ### Global Attention Mechanisms
 
@@ -988,9 +1156,14 @@ Features:
     "Training": {
         "compute_grad_energy": true
     },
-    "Variables_of_interest": {
-        "output_names": ["energy", "forces"],
-        "type": ["graph", "node"]
+    "Variables": {
+        "inputs": [
+            {"name": "atomic_numbers", "level": "node", "dim": 1}
+        ],
+        "outputs": [
+            {"name": "energy", "level": "graph", "dim": 1},
+            {"name": "forces", "level": "node", "dim": 3}
+        ]
     }
 }
 ```
@@ -1000,32 +1173,20 @@ Features:
 #### Creating Custom Data Loaders
 
 ```python
-from hydragnn.preprocess.raw_dataset_loader import RawDatasetLoader
 import torch_geometric.data as pygdata
 
-class MyCustomLoader(RawDatasetLoader):
-    def __init__(self, config):
-        super().__init__(config)
-        
-    def load_raw_data(self):
-        # Load your custom data format
-        raw_data = self.load_my_format()
-        
-        # Convert to PyTorch Geometric format
-        self.dataset = []
-        for sample in raw_data:
-            data = pygdata.Data(
-                x=sample.node_features,
-                edge_index=sample.edge_indices,
-                edge_attr=sample.edge_features,
-                y=sample.targets,
-                pos=sample.positions
-            )
-            self.dataset.append(data)
-    
-    def load_my_format(self):
-        # Implement your data loading logic
-        pass
+# Parsing the external format is application code. Its result must be a
+# collection of PyG objects whose attribute names match the JSON Variables.
+dataset = [
+    pygdata.Data(
+        node_features=sample.node_features,
+        edge_index=sample.edge_indices,
+        bond_features=sample.edge_features,
+        positions=sample.positions,
+        target=sample.target,
+    )
+    for sample in parse_my_format(source)
+]
 ```
 
 ### 6. High-Performance Computing Deployment

@@ -33,7 +33,7 @@ mpi4py.rc.thread_level = "serialized"
 mpi4py.rc.threads = False
 
 # HydraGNN
-from hydragnn.utils.datasets.abstractrawdataset import AbstractBaseDataset
+from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distributed import nsplit
 from hydragnn.preprocess.graph_samples_checks_and_updates import get_radius_graph_pbc
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
@@ -159,6 +159,8 @@ class LJDataset(AbstractBaseDataset):
             1.0 / energy_pre_scaling_factor * torch.ones(num_nodes, 1)
         )
         forces = torch_data[:, [5, 6, 7]]
+        atomic_numbers = torch_data[:, [0]].to(torch.float32)
+        potential = torch_data[:, [4]].to(torch.float32)
         forces_pre_scaling_factor = 1.0
         forces_pre_scaled = forces * forces_pre_scaling_factor
 
@@ -172,12 +174,12 @@ class LJDataset(AbstractBaseDataset):
             forces=forces,
             forces_pre_scaled=forces_pre_scaled,
             pos=torch_data[:, [1, 2, 3]].to(torch.float32),
-            x=torch.cat([torch_data[:, [0, 4]]], axis=1).to(torch.float32),
-            y=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
+            atomic_numbers=atomic_numbers,
+            potential=potential,
             energy_per_atom=torch.tensor(energy_per_atom_pretransformed)
-            .unsqueeze(0)
+            .reshape(1, 1)
             .to(torch.float32),
-            energy=torch.tensor(total_energy).unsqueeze(0).to(torch.float32),
+            energy=torch.tensor(total_energy).reshape(1, 1).to(torch.float32),
             pbc=torch.tensor(
                 [
                     True,

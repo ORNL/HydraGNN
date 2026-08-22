@@ -79,12 +79,4 @@ def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
         precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
     )
 
-    ##output predictions with unit/not normalized
-    if config["NeuralNetwork"]["Variables_of_interest"]["denormalize_output"]:
-        true_values, predicted_values = output_denormalize(
-            config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"],
-            true_values,
-            predicted_values,
-        )
-
     return error, error_rmse_task, true_values, predicted_values

@@ -21,6 +21,7 @@ from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 from hydragnn.globalAtt.gps import redraw_performer_projections
+from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
 
 import os
 
@@ -197,6 +198,8 @@ def train_validate_test(
     compute_grad_energy=False,
     precision="fp32",
 ):
+    variable_schema = parse_variable_schema(config["Variables"])
+    config = config["NeuralNetwork"]
     num_epoch = config["Training"]["num_epoch"]
     EarlyStop = (
         config["Training"]["EarlyStopping"]
@@ -217,6 +220,7 @@ def train_validate_test(
     )
 
     precision, _, _ = resolve_precision(precision)
+    configured_output_names = [spec.name for spec in variable_schema.outputs]
 
     device = get_device()
     if compute_grad_energy:
@@ -228,7 +232,7 @@ def train_validate_test(
             model.module.force_weight,
         ]
         output_names = [
-            config["Variables_of_interest"]["output_names"][0],
+            configured_output_names[0],
             "energy_peratom",
             "forces",
         ]
@@ -236,7 +240,7 @@ def train_validate_test(
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
-        output_names = config["Variables_of_interest"]["output_names"]
+        output_names = configured_output_names
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -485,14 +489,6 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             num_tasks=num_tasks,
         )
-
-        ##output predictions with unit/not normalized
-        if config["Variables_of_interest"]["denormalize_output"]:
-            true_values, predicted_values = output_denormalize(
-                config["Variables_of_interest"]["y_minmax"],
-                true_values,
-                predicted_values,
-            )
 
     _, rank = get_comm_size_and_rank()
     if create_plots and rank == 0:

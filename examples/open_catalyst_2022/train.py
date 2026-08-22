@@ -83,7 +83,6 @@ transform_coordinates_pbc = PBCDistance(norm=False, cat=False)
 # charge and spin are constant across Open Catalyst 2022 dataset
 charge = 0.0  # neutral
 spin = 1.0  # singlet
-graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
 
 
 def ase_to_torch_geom(
@@ -138,8 +137,6 @@ def ase_to_torch_geom(
             atoms.get_forces(apply_constraint=False), dtype=torch.float32
         )
 
-        x = torch.cat((atomic_numbers, positions, forces), dim=1)
-
         data_object = Data(
             dataset_name="oc2022",
             natoms=natoms,
@@ -149,15 +146,9 @@ def ase_to_torch_geom(
             atomic_numbers=atomic_numbers,
             chemical_composition=chemical_composition,
             tags=tags,
-            x=x,
             energy=energy_tensor,
             energy_per_atom=energy_per_atom_tensor,
             forces=forces,
-            graph_attr=graph_attr,
-        )
-
-        data_object.y = (
-            data_object.energy_per_atom if energy_per_atom else data_object.energy
         )
 
         if data_object.pbc.any():
@@ -419,11 +410,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
 
     # Transformation to create positional and structural laplacian encoders
     """
@@ -683,7 +670,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

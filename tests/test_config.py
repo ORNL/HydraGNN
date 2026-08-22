@@ -9,8 +9,11 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
 import os, json
 import pytest
+
+from hydragnn.utils.input_config_parsing import get_log_name_config
 
 
 @pytest.mark.parametrize("config_file", ["lsms/lsms.json"])
@@ -26,15 +29,32 @@ def pytest_config(config_file):
             "name",
             "path",
             "format",
-            "num_nodes",
-            "node_features",
-            "graph_features",
         ],
-        "NeuralNetwork": ["Architecture", "Variables_of_interest", "Training"],
+        "NeuralNetwork": ["Architecture", "Training"],
+        "Variables": ["inputs", "outputs"],
     }
 
-    for category in expected.keys():
-        assert category in config, "Missing required input category"
+    for category_name, required_keys in expected.items():
+        assert category_name in config, "Missing required input category"
+        for key in required_keys:
+            assert (
+                key in config[category_name]
+            ), f"Missing required input {category_name}.{key}"
 
-        for input in category:
-            assert input in category, "Missing required input"
+
+def pytest_log_name_sanitizes_named_variables():
+    with open(os.path.join("tests", "inputs", "ci.json"), "r") as f:
+        config = json.load(f)
+
+    config = copy.deepcopy(config)
+    config["Variables"]["inputs"] = [
+        {"name": "../atomic species/unsafe", "level": "node", "dim": 1},
+        {"name": "a" * 100, "level": "graph", "dim": 1},
+    ]
+    log_name = get_log_name_config(config)
+    variable_part = log_name.split("-node_ft-", 1)[1].split("-task_weights-", 1)[0]
+
+    assert "/" not in variable_part
+    assert ".." not in variable_part
+    assert len(variable_part.split("-", 2)[1]) <= 48
+    assert not variable_part.endswith("-")

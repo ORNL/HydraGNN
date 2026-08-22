@@ -170,7 +170,7 @@ def train_and_checkpoint(
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         plot_init_solution,

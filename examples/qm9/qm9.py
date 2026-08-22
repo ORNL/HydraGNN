@@ -38,13 +38,9 @@ spin = 1.0
 def qm9_pre_transform(data, transform):
     # LPE
     data = transform(data)
-    # Set descriptor as element type.
-    data.x = data.z.float().view(-1, 1)
+    data.atomic_numbers = data.z.float().view(-1, 1)
     # Only predict free energy (index 10 of 19 properties) for this run.
-    data.y = data.y[:, 10] / len(data.x)
-    graph_features_dim = [1]
-    node_feature_dim = [1]
-    data.graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
+    data.free_energy = data.y[:, 10:11] / data.num_nodes
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
     target_pe = data.pe[data.edge_index[1]]
@@ -85,7 +81,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
 
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
 
     # Always initialize for multi-rank training.
     world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
@@ -156,7 +152,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
     )
