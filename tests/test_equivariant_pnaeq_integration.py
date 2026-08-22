@@ -9,6 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
+
 import pytest
 import torch
 from e3nn import o3
@@ -18,7 +20,7 @@ from hydragnn.models.create import create_model
 from hydragnn.utils.model import update_multibranch_heads
 
 
-def _create_model():
+def _create_model(**overrides):
     heads = update_multibranch_heads(
         {
             "graph": {
@@ -29,7 +31,7 @@ def _create_model():
             }
         }
     )
-    return create_model(
+    options = dict(
         mpnn_type="PNAEq",
         input_dim=1,
         hidden_dim=4,
@@ -51,6 +53,8 @@ def _create_model():
         equivariance=True,
         use_gpu=False,
     )
+    options.update(overrides)
+    return create_model(**options)
 
 
 def _data(positions, edge_shifts=None):
@@ -91,6 +95,34 @@ def test_pnaeq_equivariant_transformer_forward_backward_and_se3():
         for convolution in model.graph_convs
         for parameter in convolution.global_layer.parameters()
     )
+
+
+@pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
+def test_pnaeq_equivariant_transformer_coupling_modes_and_all_layers(
+    coupling_mode,
+):
+    model = _create_model(equivariant_attn_coupling_mode=coupling_mode)
+    positions = torch.randn(3, 3, requires_grad=True)
+
+    model(_data(positions))[0].sum().backward()
+
+    assert len(model.graph_convs) == 2
+    assert all(conv.coupling_mode == coupling_mode for conv in model.graph_convs)
+    assert all(
+        any(parameter.grad is not None for parameter in conv.global_layer.parameters())
+        for conv in model.graph_convs
+    )
+
+
+def test_pnaeq_equivariant_transformer_state_dict_round_trip():
+    model = _create_model().eval()
+    data = _data(torch.randn(3, 3))
+    expected = model(data)[0]
+
+    restored = _create_model().eval()
+    restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
+
+    torch.testing.assert_close(restored(data)[0], expected)
 
 
 def test_pnaeq_equivariant_transformer_rejects_periodic_images():

@@ -9,6 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
+
 import pytest
 import torch
 from e3nn import o3
@@ -22,7 +24,7 @@ from hydragnn.utils.input_config_parsing.config_utils import (
 from hydragnn.utils.model import update_multibranch_heads
 
 
-def _create_model():
+def _create_model(**overrides):
     heads = update_multibranch_heads(
         {
             "graph": {
@@ -33,7 +35,7 @@ def _create_model():
             }
         }
     )
-    return create_model(
+    options = dict(
         mpnn_type="MACE",
         input_dim=1,
         hidden_dim=2,
@@ -62,6 +64,8 @@ def _create_model():
         equivariant_attn_chunk_size=2,
         use_gpu=False,
     )
+    options.update(overrides)
+    return create_model(**options)
 
 
 def _data(positions, edge_shifts=None):
@@ -103,6 +107,48 @@ def test_mace_equivariant_transformer_forward_backward_and_se3():
         parameter.grad is not None
         for parameter in model.graph_convs[0].global_layer.parameters()
     )
+
+
+@pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
+def test_mace_equivariant_transformer_coupling_modes(coupling_mode):
+    model = _create_model(equivariant_attn_coupling_mode=coupling_mode)
+    positions = torch.randn(3, 3, requires_grad=True)
+
+    model(_data(positions))[0].sum().backward()
+
+    transformer_layers = [
+        conv
+        for conv in model.graph_convs
+        if isinstance(conv, EquivariantLocalGlobalConv)
+    ]
+    assert len(transformer_layers) == 1
+    assert transformer_layers[0].coupling_mode == coupling_mode
+    assert any(
+        parameter.grad is not None
+        for parameter in transformer_layers[0].global_layer.parameters()
+    )
+
+
+def test_mace_equivariant_transformer_dense_and_chunked_models_match():
+    dense = _create_model(equivariant_attn_chunk_size=None)
+    chunked = copy.deepcopy(dense)
+    for convolution in chunked.graph_convs:
+        if isinstance(convolution, EquivariantLocalGlobalConv):
+            convolution.global_layer.chunk_size = 2
+    positions = torch.randn(3, 3)
+
+    torch.testing.assert_close(chunked(_data(positions))[0], dense(_data(positions))[0])
+
+
+def test_mace_equivariant_transformer_state_dict_round_trip():
+    model = _create_model().eval()
+    data = _data(torch.randn(3, 3))
+    expected = model(data)[0]
+
+    restored = _create_model().eval()
+    restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
+
+    torch.testing.assert_close(restored(data)[0], expected)
 
 
 def test_mace_equivariant_transformer_rejects_periodic_images():

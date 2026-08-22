@@ -9,6 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
+
 import pytest
 import torch
 from e3nn import o3
@@ -21,7 +23,7 @@ from hydragnn.utils.input_config_parsing.config_utils import (
 from hydragnn.utils.model import update_multibranch_heads
 
 
-def _create_model(mpnn_type):
+def _create_model(mpnn_type, **overrides):
     heads = update_multibranch_heads(
         {
             "graph": {
@@ -48,7 +50,7 @@ def _create_model(mpnn_type):
             num_spherical=2,
             edge_dim=None,
         )
-    return create_model(
+    options = dict(
         mpnn_type=mpnn_type,
         input_dim=1,
         hidden_dim=4,
@@ -69,8 +71,10 @@ def _create_model(mpnn_type):
         equivariant_attn_allow_scalar_only=True,
         equivariant_attn_require_tensor_coupling=False,
         use_gpu=False,
-        **model_options,
     )
+    options.update(model_options)
+    options.update(overrides)
+    return create_model(**options)
 
 
 def _data(positions, edge_shifts=None):
@@ -113,6 +117,28 @@ def test_scalar_mpnn_equivariant_transformer_forward_backward_and_se3(mpnn_type)
         for convolution in model.graph_convs
         for parameter in convolution.global_layer.parameters()
     )
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+@pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
+def test_scalar_mpnn_equivariant_transformer_coupling_modes(mpnn_type, coupling_mode):
+    model = _create_model(mpnn_type, equivariant_attn_coupling_mode=coupling_mode)
+    output = model(_data(torch.randn(3, 3)))[0]
+
+    assert output.shape == (1, 1)
+    assert all(conv.coupling_mode == coupling_mode for conv in model.graph_convs)
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+def test_scalar_mpnn_equivariant_transformer_state_dict_round_trip(mpnn_type):
+    model = _create_model(mpnn_type).eval()
+    data = _data(torch.randn(3, 3))
+    expected = model(data)[0]
+
+    restored = _create_model(mpnn_type).eval()
+    restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
+
+    torch.testing.assert_close(restored(data)[0], expected)
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
