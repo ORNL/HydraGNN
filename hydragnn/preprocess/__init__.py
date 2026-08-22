@@ -35,7 +35,6 @@ from .load_data import (
     HydraDataLoader,
 )
 from .graph_dataset import (
-    load_and_prepare_graph_dataset,
+    load_prepared_graph_dataset,
     load_pickled_graphs,
-    prepare_graph_dataset,
 )

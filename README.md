@@ -329,6 +329,16 @@ The named source attributes remain on the PyG object after preparation. See the
 Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
 for the complete construction rules and a worked example.
 
+Schema preparation happens before a training-ready dataset is serialized. When
+that prepared dataset is later loaded from a HydraGNN pickle container, an
+ADIOS dataset, or a directory of PyG `.pt` samples, the stored graph is
+authoritative: HydraGNN uses its existing `x`, `edge_index`, `edge_attr`,
+`graph_attr`, `y`, `y_loc`, descriptors, and positional encodings without
+modifying them. Loading does not rebuild neighborhoods, renormalize edge
+lengths, rerun descriptor transforms, or compile named variables again. A
+change to any preprocessing choice therefore requires creation of a new
+prepared dataset.
+
 Source-variable names must not collide with HydraGNN's derived tensors. Names
 such as `x`, `edge_attr`, `graph_attr`, `y`, `y_loc`, `node_output`,
 `edge_output`, and `graph_output` are therefore rejected in both `inputs` and

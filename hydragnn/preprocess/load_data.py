@@ -24,9 +24,7 @@ try:
 except:
     from torch_geometric.data import DataLoader
 
-from hydragnn.preprocess.graph_dataset import (
-    load_and_prepare_graph_dataset,
-)
+from hydragnn.preprocess.graph_dataset import load_prepared_graph_dataset
 from hydragnn.preprocess.batch_sampler import (
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
@@ -442,8 +440,9 @@ def load_train_val_test_sets(config, isdist=False):
         else:
             serialized_data_path = os.environ.get("SERIALIZED_DATA_PATH", os.getcwd())
             files_dir = f"{serialized_data_path}/serialized_dataset/{config['Dataset']['name']}_{dataset_name}.pkl"
-        # loading serialized data and recalculating neighbourhoods depending on the radius and max num of neighbours
-        dataset = load_and_prepare_graph_dataset(files_dir, config, dist=isdist)
+        # Prepared artifacts are authoritative and are loaded without
+        # rebuilding or otherwise mutating their graph samples.
+        dataset = load_prepared_graph_dataset(files_dir)
 
         dataset_list.append(dataset)
         datasetname_list.append(dataset_name)

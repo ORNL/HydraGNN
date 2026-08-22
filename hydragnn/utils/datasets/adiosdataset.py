@@ -32,11 +32,6 @@ except ImportError:
 import torch_geometric.data
 import torch
 
-from hydragnn.utils.input_config_parsing.variable_schema import (
-    parse_variable_schema,
-    prepare_data_from_schema,
-)
-
 from multiprocessing.shared_memory import SharedMemory
 
 try:
@@ -784,10 +779,6 @@ class AdiosDataset(AbstractBaseDataset):
             self.f.__next__()
 
         ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
-        self.var_config = var_config
-
-        if self.var_config is not None:
-            self.variable_schema = parse_variable_schema(self.var_config)
 
     def _read_smiles_strings(self, label, f):
         """
@@ -854,10 +845,6 @@ class AdiosDataset(AbstractBaseDataset):
             val = None
         val = self.comm.bcast(val, root=0)
         return val
-
-    def update_data_object(self, data_object):
-        if self.var_config is not None:
-            prepare_data_from_schema(data_object, self.variable_schema)
 
     def setkeys(self, keys):
         for k in keys:
@@ -1017,7 +1004,6 @@ class AdiosDataset(AbstractBaseDataset):
             if self.enable_cache:
                 self.cache[idx] = data_object
 
-        self.update_data_object(data_object)
         return data_object
 
     def _get_from_cache_or_file(self, cache_search_key, f, vname):
