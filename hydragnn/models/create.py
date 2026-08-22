@@ -30,6 +30,8 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+from hydragnn.models.AllScAIPStack import AllScAIPStack
+from hydragnn.models.UMAStack import UMAStack
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -77,6 +79,9 @@ def create_model_config(
         num_gaussians=config["Architecture"]["num_gaussians"],
         num_filters=config["Architecture"]["num_filters"],
         radius=config["Architecture"]["radius"],
+        periodic_boundary_conditions=config["Architecture"].get(
+            "periodic_boundary_conditions", False
+        ),
         equivariance=config["Architecture"]["equivariance"],
         correlation=config["Architecture"]["correlation"],
         max_ell=config["Architecture"]["max_ell"],
@@ -115,6 +120,52 @@ def create_model_config(
         equivariant_attn_coupling_mode=config["Architecture"].get(
             "equivariant_attn_coupling_mode", "parallel"
         ),
+        # AllScAIP-specific
+        allscaip_num_heads=config["Architecture"]["allscaip_num_heads"],
+        allscaip_freq_list=config["Architecture"]["allscaip_freq_list"],
+        allscaip_atten_name=config["Architecture"]["allscaip_atten_name"],
+        allscaip_use_node_path=config["Architecture"]["allscaip_use_node_path"],
+        allscaip_use_sincx_mask=config["Architecture"]["allscaip_use_sincx_mask"],
+        allscaip_use_freq_mask=config["Architecture"]["allscaip_use_freq_mask"],
+        allscaip_max_num_elements=config["Architecture"]["allscaip_max_num_elements"],
+        allscaip_knn_soft=config["Architecture"]["allscaip_knn_soft"],
+        allscaip_distance_function=config["Architecture"]["allscaip_distance_function"],
+        allscaip_normalization=config["Architecture"]["allscaip_normalization"],
+        allscaip_mlp_dropout=config["Architecture"]["allscaip_mlp_dropout"],
+        allscaip_atten_dropout=config["Architecture"]["allscaip_atten_dropout"],
+        allscaip_use_residual_scaling=config["Architecture"][
+            "allscaip_use_residual_scaling"
+        ],
+        allscaip_regress_stress=config["Architecture"]["allscaip_regress_stress"],
+        allscaip_use_chunked_graph=config["Architecture"].get(
+            "allscaip_use_chunked_graph", False
+        ),
+        allscaip_graph_chunk_size=config["Architecture"].get(
+            "allscaip_graph_chunk_size", 512
+        ),
+        allscaip_knn_use_low_mem=config["Architecture"].get(
+            "allscaip_knn_use_low_mem", True
+        ),
+        allscaip_dataset_list=config["Architecture"]["allscaip_dataset_list"],
+        # UMA-specific
+        uma_mmax=config["Architecture"]["uma_mmax"],
+        uma_grid_resolution=config["Architecture"]["uma_grid_resolution"],
+        uma_edge_channels=config["Architecture"]["uma_edge_channels"],
+        uma_hidden_channels=config["Architecture"]["uma_hidden_channels"],
+        uma_norm_type=config["Architecture"]["uma_norm_type"],
+        uma_ff_type=config["Architecture"]["uma_ff_type"],
+        uma_use_chg_spin=config["Architecture"]["uma_use_chg_spin"],
+        uma_max_num_elements=config["Architecture"]["uma_max_num_elements"],
+        uma_variant=config["Architecture"]["uma_variant"],
+        uma_num_experts=config["Architecture"]["uma_num_experts"],
+        uma_moe_dropout=config["Architecture"]["uma_moe_dropout"],
+        uma_use_composition_embedding=config["Architecture"][
+            "uma_use_composition_embedding"
+        ],
+        uma_equivariant_vector_head=config["Architecture"][
+            "uma_equivariant_vector_head"
+        ],
+        uma_vector_head_index=config["Architecture"]["uma_vector_head_index"],
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -182,8 +233,43 @@ def create_model(
     equivariant_attn_require_tensor_coupling: bool = True,
     equivariant_attn_chunk_size: int | None = 512,
     equivariant_attn_coupling_mode: str = "parallel",
+    # AllScAIP-specific
+    allscaip_num_heads: int = 8,
+    allscaip_freq_list: List[int] = None,
+    allscaip_atten_name: str = "math",
+    allscaip_use_node_path: bool = True,
+    allscaip_use_sincx_mask: bool = True,
+    allscaip_use_freq_mask: bool = True,
+    allscaip_max_num_elements: int = 119,
+    allscaip_knn_soft: bool = True,
+    allscaip_distance_function: str = "gaussian",
+    allscaip_normalization: str = "rmsnorm",
+    allscaip_mlp_dropout: float = 0.0,
+    allscaip_atten_dropout: float = 0.0,
+    allscaip_use_residual_scaling: bool = True,
+    allscaip_regress_stress: bool = False,
+    allscaip_use_chunked_graph: bool = False,
+    allscaip_graph_chunk_size: int = 512,
+    allscaip_knn_use_low_mem: bool = True,
+    allscaip_dataset_list: List[str] = None,
+    # UMA-specific
+    uma_mmax: int = 2,
+    uma_grid_resolution: int = None,
+    uma_edge_channels: int = 128,
+    uma_hidden_channels: int = None,
+    uma_norm_type: str = "rms_norm_sh",
+    uma_ff_type: str = "grid",
+    uma_use_chg_spin: bool = False,
+    uma_max_num_elements: int = 100,
+    uma_variant: str = "S",
+    uma_num_experts: int = None,
+    uma_moe_dropout: float = 0.0,
+    uma_use_composition_embedding: bool = False,
+    uma_equivariant_vector_head: bool = False,
+    uma_vector_head_index: int = None,
     verbosity: int = 0,
     use_gpu: bool = True,
+    periodic_boundary_conditions: bool = False,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -661,6 +747,105 @@ def create_model(
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
+    elif mpnn_type == "AllScAIP":
+        assert radius is not None, "AllScAIP requires radius input."
+        assert max_neighbours is not None, "AllScAIP requires max_neighbours input."
+        model = AllScAIPStack(
+            # input_args / conv_args are consumed by Base.__init__ but are
+            # unused at runtime because AllScAIP performs its own message
+            # passing. We pass canonical strings for consistency.
+            "inv_node_feat, equiv_node_feat",
+            "inv_node_feat",
+            radius,
+            max_neighbours,
+            allscaip_num_heads,
+            allscaip_freq_list,
+            allscaip_atten_name,
+            allscaip_use_node_path,
+            allscaip_use_sincx_mask,
+            allscaip_use_freq_mask,
+            allscaip_max_num_elements,
+            allscaip_knn_soft,
+            allscaip_distance_function,
+            allscaip_normalization,
+            allscaip_mlp_dropout,
+            allscaip_atten_dropout,
+            allscaip_use_residual_scaling,
+            allscaip_regress_stress,
+            allscaip_dataset_list,
+            allscaip_use_chunked_graph,
+            allscaip_graph_chunk_size,
+            allscaip_knn_use_low_mem,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+    elif mpnn_type == "UMA":
+        assert radius is not None, "UMA requires radius input."
+        assert max_neighbours is not None, "UMA requires max_neighbours input."
+        assert max_ell is not None, "UMA requires max_ell input."
+        assert num_radial is not None, "UMA requires num_radial input."
+        model = UMAStack(
+            "inv_node_feat, equiv_node_feat, edge_index",
+            "inv_node_feat, edge_index",
+            radius,
+            max_neighbours,
+            max_ell,
+            num_radial,
+            uma_mmax,
+            uma_grid_resolution,
+            uma_edge_channels,
+            uma_hidden_channels,
+            uma_norm_type,
+            uma_ff_type,
+            uma_use_chg_spin,
+            uma_max_num_elements,
+            uma_variant,
+            uma_num_experts,
+            uma_moe_dropout,
+            uma_use_composition_embedding,
+            periodic_boundary_conditions,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            uma_equivariant_vector_head=uma_equivariant_vector_head,
+            uma_vector_head_index=uma_vector_head_index,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 

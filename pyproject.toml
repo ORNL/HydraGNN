@@ -1,0 +1,13 @@
+[tool.black]
+# The UMA backbone is vendored from fairchem-core (Meta, MIT) under
+# hydragnn/utils/model/uma/_vendored/. Import paths, package initializers, and
+# license headers are transformed by tools/vendor_uma.py; implementation code
+# is deliberately left in upstream formatting so it remains auditable.
+# Exclude it from black so neither CI's ``black .`` nor the pre-commit hook
+# (which passes explicit file paths) reformats the mirror. ``force-exclude`` is
+# honoured even when files are listed explicitly, unlike ``extend-exclude``.
+force-exclude = '''
+/(
+    hydragnn/utils/model/uma/_vendored
+)/
+'''

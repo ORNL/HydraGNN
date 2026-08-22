@@ -1,0 +1,11 @@
+# Dependencies required by specific model backbones that are NOT part of the
+# core HydraGNN install and are pulled in only when that model is used.
+#
+# These must be installed with pip build isolation ENABLED (i.e. WITHOUT the
+# `--no-build-isolation` flag used for the other requirements files), because
+# omegaconf depends on the sdist-only antlr4-python3-runtime, which needs to
+# build its own setuptools backend. See .github/workflows/CI.yml.
+
+# --- FAIRChem UMA backbone (hydragnn/utils/model/uma/_vendored) ---
+omegaconf # UMA backbone: DictConfig/ListConfig config types
+monty # UMA backbone: monty.dev.requires decorator

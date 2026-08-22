@@ -9,7 +9,7 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import os
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 # Note: setup() has access to cmd arguments of the setup.py script via sys.argv
 
@@ -60,7 +60,19 @@ setup(
     name="HydraGNN",
     version="4.0rc1",
     package_dir={"hydragnn": "hydragnn"},
-    packages=find_packages(),
+    packages=find_namespace_packages(include=["hydragnn", "hydragnn.*"]),
+    # Vendored FairChem UMA backbone ships non-Python resources (spherical
+    # harmonic / Wigner-D coefficient tensors and model metadata) that must be
+    # packaged alongside the sources so the backbone can be constructed.
+    include_package_data=True,
+    package_data={
+        "hydragnn": [
+            "utils/model/uma/_vendored/**/*.pt",
+            "utils/model/uma/_vendored/**/*.json",
+            "utils/model/uma/_vendored/*.md",
+            "utils/model/uma/_vendored/**/*.md",
+        ]
+    },
     install_requires=install_requires,
     extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph neural networks",

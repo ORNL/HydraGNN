@@ -38,7 +38,9 @@ def add_graph_attr(monkeypatch):
         if hasattr(data, "x") and data.x.numel() > 0:
             first_val = data.x[0, 0]
             matches = torch.isclose(data.x[:, 0], first_val)
-            data.graph_attr = matches.sum().unsqueeze(0).to(data.x.dtype)
+            charge = matches.sum().to(torch.float32)
+            spin = torch.ones(1, dtype=torch.float32)
+            data.graph_attr = torch.cat([charge.unsqueeze(0), spin])
         return res
 
     monkeypatch.setattr(gscu, "update_predicted_values", _wrapped)
@@ -89,6 +91,21 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"][
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode
+
+    # AllScAIP requires hidden_dim divisible by allscaip_num_heads; the unit-test
+    # configs use hidden_dim=8, so override the default (8) to a value that fits.
+    # The resulting head_dim=4 has no canonical FAIR-Chem frequency spectrum,
+    # so this generic training smoke test explicitly disables frequency masking.
+    if mpnn_type == "AllScAIP":
+        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 2
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = False
+
+    # UMA's eSCNMDBackbone allocates large irrep blocks; clamp the
+    # bookkeeping channels to keep the unit test cheap.
+    if mpnn_type == "UMA":
+        config["NeuralNetwork"]["Architecture"]["max_ell"] = 2
+        config["NeuralNetwork"]["Architecture"]["num_radial"] = 6
+        config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 16
 
     # Overwrite config settings if provided
     if overwrite_config:
@@ -186,6 +203,8 @@ def unittest_train_model_graphattr(
         "PNAEq": [0.60, 0.60],
         "PAINN": [0.60, 0.60],
         "MACE": [0.60, 0.70],
+        "AllScAIP": [0.20, 0.20],
+        "UMA": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -234,6 +253,8 @@ def unittest_train_model_graphattr(
         "PNAEq",
         "PAINN",
         "MACE",
+        "AllScAIP",
+        "UMA",
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])

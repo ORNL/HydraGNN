@@ -149,6 +149,72 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
     if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
+    # AllScAIP-specific defaults (used by AllScAIPStack via create_model).
+    # Backbone depth is taken from the standard ``num_conv_layers`` key.
+    if "allscaip_num_heads" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 8
+    if "allscaip_freq_list" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_freq_list"] = None
+    if "allscaip_atten_name" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_atten_name"] = "math"
+    if "allscaip_use_node_path" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_node_path"] = True
+    if "allscaip_use_sincx_mask" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_sincx_mask"] = True
+    if "allscaip_use_freq_mask" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = True
+    if "allscaip_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_max_num_elements"] = 119
+    if "allscaip_knn_soft" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_knn_soft"] = True
+    if "allscaip_distance_function" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"][
+            "allscaip_distance_function"
+        ] = "gaussian"
+    if "allscaip_normalization" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_normalization"] = "rmsnorm"
+    if "allscaip_mlp_dropout" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_mlp_dropout"] = 0.0
+    if "allscaip_atten_dropout" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_atten_dropout"] = 0.0
+    if "allscaip_use_residual_scaling" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_residual_scaling"] = True
+    if "allscaip_regress_stress" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_regress_stress"] = False
+    if "allscaip_dataset_list" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["allscaip_dataset_list"] = []
+
+    # UMA-specific defaults (used by UMAStack via create_model).
+    if "uma_mmax" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_mmax"] = 2
+    if "uma_grid_resolution" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_grid_resolution"] = None
+    if "uma_edge_channels" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 128
+    if "uma_hidden_channels" not in config["NeuralNetwork"]["Architecture"]:
+        # Default to None so UMAStack falls back to hidden_dim (sphere_channels).
+        config["NeuralNetwork"]["Architecture"]["uma_hidden_channels"] = None
+    if "uma_norm_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_norm_type"] = "rms_norm_sh"
+    if "uma_ff_type" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_ff_type"] = "grid"
+    if "uma_use_chg_spin" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_use_chg_spin"] = False
+    if "uma_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_max_num_elements"] = 100
+    if "uma_variant" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_variant"] = "S"
+    if "uma_num_experts" not in config["NeuralNetwork"]["Architecture"]:
+        # None -> UMAStack picks the per-variant default (M=8, L=32; S=0).
+        config["NeuralNetwork"]["Architecture"]["uma_num_experts"] = None
+    if "uma_moe_dropout" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_moe_dropout"] = 0.0
+    if "uma_use_composition_embedding" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_use_composition_embedding"] = False
+    if "uma_equivariant_vector_head" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_equivariant_vector_head"] = False
+    if "uma_vector_head_index" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["uma_vector_head_index"] = None
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
