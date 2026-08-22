@@ -14,7 +14,7 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 - **Multi-headed Prediction** for graph and node-level properties  
 - **Distributed Training** via DDP, FSDP (v1/v2), and DeepSpeed at supercomputing scale
 - **Convolutional Layers** as a hyperparameter  
-- **Geometric Equivariance** in convolution and prediction (EGNN, PaiNN, PNAEq, MACE, DimeNet)
+- **Geometric Equivariance** in convolution and prediction (AMP, EGNN, PaiNN, PNAEq, MACE, DimeNet)
 - **Global Attention** (GPS)
 - **Multiple Precision Training** (FP32, BF16, FP64)
 - **Machine-Learned Interatomic Potentials** with energy-conserving force prediction
@@ -169,7 +169,7 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
 - `["NeuralNetwork"]`
   - `["Architecture"]`
     - `["mpnn_type"]`  
-      Accepted types: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
+      Accepted types: `AMP`, `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
     - `["num_conv_layers"]`  
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["output_heads"]`  

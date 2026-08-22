@@ -329,6 +329,22 @@ HydraGNN provides extensive configuration options for building graph neural netw
    }
    ```
 
+7. **AMP (Anisotropic Message Passing v3)**
+   ```json
+   {
+       "mpnn_type": "AMP",
+       "hidden_dim": 128,
+       "num_conv_layers": 2,
+       "radius": 4.0,
+       "num_radial": 8,
+       "amp_edge_size": 32,
+       "amp_num_channels": 8,
+       "amp_envelope_p": 6.0,
+       "amp_max_z": 54,
+       "activation_function": "silu"
+   }
+   ```
+
 ### Output Head Configuration
 
 #### Multi-Task Learning Setup
@@ -912,6 +928,7 @@ Several architectures support geometric equivariance:
 - **PNAEq**: Equivariant variant of PNA
 - **MACE**: E(3)-equivariant multi-atomic cluster expansion
 - **DimeNet**: Directional message passing with angular information
+- **AMP**: SO(3)-invariant Cartesian-multipole message passing with equivariant forces
 
 ```json
 {

@@ -61,6 +61,7 @@ setup(
     version="4.0rc1",
     package_dir={"hydragnn": "hydragnn"},
     packages=find_packages(),
+    package_data={"hydragnn.utils.model.amp": ["LICENSE"]},
     install_requires=install_requires,
     extras_require={"test": test_requires},
     description="Distributed PyTorch implementation of multi-headed graph neural networks",

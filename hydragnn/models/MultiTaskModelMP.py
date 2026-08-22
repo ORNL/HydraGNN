@@ -51,6 +51,7 @@ class EncoderModel(nn.Module):
         self.graph_convs = base_model.graph_convs
         self.feature_layers = base_model.feature_layers
         self.activation_function = base_model.activation_function
+        self._post_conv = base_model._post_conv
         self.conv_checkpointing = base_model.conv_checkpointing
         self._apply_graph_conditioning = getattr(
             base_model, "_apply_graph_conditioning"
@@ -116,7 +117,7 @@ class EncoderModel(nn.Module):
                     equiv_node_feat=equiv_node_feat,
                     **conv_args,
                 )
-            inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
+            inv_node_feat = self._post_conv(inv_node_feat, feat_layer)
 
         return inv_node_feat, equiv_node_feat, conv_args
 

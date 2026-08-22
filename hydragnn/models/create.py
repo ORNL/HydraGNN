@@ -30,6 +30,7 @@ from hydragnn.models.EGCLStack import EGCLStack
 from hydragnn.models.PNAEqStack import PNAEqStack
 from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
+from hydragnn.models.AMPStack import AMPStack
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -82,6 +83,13 @@ def create_model_config(
         max_ell=config["Architecture"]["max_ell"],
         node_max_ell=config["Architecture"]["node_max_ell"],
         avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
+        amp_edge_size=config["Architecture"].get("amp_edge_size", 32),
+        amp_num_channels=config["Architecture"].get("amp_num_channels", 8),
+        amp_envelope_p=config["Architecture"].get("amp_envelope_p", 6.0),
+        amp_max_z=config["Architecture"].get("amp_max_z", 54),
+        amp_trainable_bessel=config["Architecture"].get(
+            "amp_trainable_bessel", False
+        ),
         conv_checkpointing=config["Training"]["conv_checkpointing"],
         enable_interatomic_potential=config["Architecture"].get(
             "enable_interatomic_potential", False
@@ -167,6 +175,11 @@ def create_model(
     max_ell: int = None,
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
+    amp_edge_size: int = 32,
+    amp_num_channels: int = 8,
+    amp_envelope_p: float = 6.0,
+    amp_max_z: int = 54,
+    amp_trainable_bessel: bool = False,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
     energy_weight: float = 0.0,
@@ -661,6 +674,47 @@ def create_model(
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
         )
+
+    elif mpnn_type == "AMP":
+        assert radius is not None, "AMP requires radius (short-range cutoff r_SR)."
+        assert (
+            num_radial is not None
+        ), "AMP requires num_radial (number of Bessel functions)."
+        amp_io_args = (
+            "inv_node_feat, equiv_node_feat, edge_index, rx1, rx2, envelope, edge_attr"
+        )
+        model = AMPStack(
+            amp_io_args,
+            amp_io_args,
+            num_radial,
+            radius,
+            amp_edge_size,
+            amp_num_channels,
+            amp_envelope_p,
+            amp_max_z,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            trainable_bessel=amp_trainable_bessel,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 

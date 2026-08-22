@@ -556,6 +556,15 @@ class Base(Module):
         else:
             return data.x, data.pos, conv_args
 
+    def _post_conv(self, inv_node_feat, feature_layer):
+        """Apply the model's normalization and activation after a convolution.
+
+        Architectures whose convolution already defines the complete node update
+        can override this hook.  Keeping the default here preserves the behavior
+        of all existing HydraGNN stacks.
+        """
+        return self.activation_function(feature_layer(inv_node_feat))
+
     def _freeze_conv(self):
         for module in [self.graph_convs, self.feature_layers]:
             for layer in module:
@@ -789,7 +798,7 @@ class Base(Module):
             inv_node_feat = self._apply_graph_conditioning(
                 inv_node_feat, batch_for_cond, data
             )
-            inv_node_feat = self.activation_function(feat_layer(inv_node_feat))
+            inv_node_feat = self._post_conv(inv_node_feat, feat_layer)
 
         x = inv_node_feat
         tr.stop("enc_forward")
