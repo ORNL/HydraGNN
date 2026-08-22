@@ -16,11 +16,6 @@ from mpi4py import MPI
 from hydragnn.utils.print.print_utils import log, iterate_tqdm
 
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
-from hydragnn.utils.input_config_parsing.variable_schema import (
-    parse_variable_schema,
-    prepare_data_from_schema,
-)
-
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 
@@ -41,10 +36,6 @@ class SimplePickleDataset(AbstractBaseDataset):
         self.label = label
         self.subset = subset
         self.preload = preload
-        self.var_config = var_config
-
-        if self.var_config is not None:
-            self.variable_schema = parse_variable_schema(self.var_config)
 
         fname = os.path.join(basedir, "%s-meta.pkl" % label)
         with open(fname, "rb") as f:
@@ -66,7 +57,6 @@ class SimplePickleDataset(AbstractBaseDataset):
         if self.preload:
             for i in range(self.ntotal):
                 data = self.read(i)
-                self.update_data_object(data)
                 self.dataset.append(data)
 
     def len(self):
@@ -94,12 +84,7 @@ class SimplePickleDataset(AbstractBaseDataset):
             dirfname = os.path.join(self.basedir, subdir, fname)
         with open(dirfname, "rb") as f:
             data_object = pickle.load(f)
-            self.update_data_object(data_object)
         return data_object
-
-    def update_data_object(self, data_object):
-        if self.var_config is not None:
-            prepare_data_from_schema(data_object, self.variable_schema)
 
 
 class SimplePickleWriter:
