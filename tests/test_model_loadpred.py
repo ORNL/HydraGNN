@@ -10,7 +10,6 @@
 ##############################################################################
 import os, json
 import torch
-import random
 import hydragnn
 from tests.test_graphs import unittest_train_model
 from hydragnn.utils.input_config_parsing.config_utils import update_config
@@ -47,19 +46,11 @@ def unittest_model_prediction(config):
     target_model.use_graph_attr_conditioning = False
 
     model.eval()
-    # two checkings
-    # 1. entire test set
     # Allow a small tolerance on MAE since inference here runs without graph conditioning
     thresholds = [0.25]
     _, _, true_values, predicted_values = hydragnn.train.test(
         test_loader, model, config["Verbosity"]["level"]
     )
-    # 2.check a random selected sample
-    isample = random.randrange(len(test_loader.dataset))
-    graph_sample = test_loader.dataset[isample].to(model.device)
-    true_sample = graph_sample.y.squeeze()
-    predicted_sample = model(graph_sample)
-    yloc = graph_sample.y_loc.squeeze()
 
     mae = torch.nn.L1Loss()
     for ihead in range(model.module.num_heads):
@@ -78,51 +69,28 @@ def pytest_model_loadpred():
     with open(config_file, "r") as f:
         config = json.load(f)
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = model_type
-    # get the directory of trained model
+    # Always create the checkpoint immediately before exercising the reload.
+    # Other parametrized model tests can share this log name while using
+    # architecture settings that the name does not encode, so reusing an
+    # existing artifact can silently load an unrelated model.
+    unittest_train_model(
+        config["NeuralNetwork"]["Architecture"]["mpnn_type"],
+        None,
+        None,
+        "ci_multihead.json",
+        False,
+        overwrite_data=True,
+    )
+
+    # Read the exact configuration saved with the fresh checkpoint.
     log_name = hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
         config
     )
-    modelfile = os.path.join("./logs/", log_name, log_name + ".pk")
-    # check if pretrained model and pkl datasets files exists
-    case_exist = True
     config_file = os.path.join("./logs/", log_name, "config.json")
-    if not (os.path.isfile(modelfile) and os.path.isfile(config_file)):
-        print("Model or configure file not found: ", modelfile, config_file)
-        case_exist = False
-    else:
-        with open(config_file, "r") as f:
-            saved_config = json.load(f)
-        saved_log_name = (
-            hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(
-                saved_config
-            )
-        )
-        if saved_log_name != log_name:
-            print(
-                "Saved configuration does not match requested checkpoint: ",
-                saved_log_name,
-                log_name,
-            )
-            case_exist = False
-        else:
-            config = saved_config
-            for dataset_name, raw_data_path in config["Dataset"]["path"].items():
-                if not os.path.isfile(raw_data_path):
-                    print(dataset_name, "datasets not found: ", raw_data_path)
-                    case_exist = False
-                    break
-    if not case_exist:
-        unittest_train_model(
-            config["NeuralNetwork"]["Architecture"]["mpnn_type"],
-            None,
-            None,
-            "ci_multihead.json",
-            False,
-        )
-        with open(config_file, "r") as f:
-            config = json.load(f)
-        assert (
-            hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(config)
-            == log_name
-        ), "Newly trained checkpoint configuration does not match its log name"
+    with open(config_file, "r") as f:
+        config = json.load(f)
+    assert (
+        hydragnn.utils.input_config_parsing.config_utils.get_log_name_config(config)
+        == log_name
+    ), "Newly trained checkpoint configuration does not match its log name"
     unittest_model_prediction(config)
