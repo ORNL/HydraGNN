@@ -3,3 +3,5 @@ pre-commit
 pytest==8.4.2
 pytest-mpi
 mendeleev==1.2.0
+# Native reference used by tests/test_fairchem_native_parity.py.
+fairchem-core==2.22.0

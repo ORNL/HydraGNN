@@ -53,6 +53,7 @@ MULTI_MODEL_LIST = os.environ["MULTI_MODEL_LIST"]
 NUM_EPOCH = int(os.environ["NUM_EPOCH"])
 BATCH_SIZE = int(os.environ["BATCH_SIZE"])
 HYDRAGNN_MAX_NUM_BATCH = int(os.environ["HYDRAGNN_MAX_NUM_BATCH"])
+PRECISION = os.environ.get("PRECISION", "fp64")
 
 
 def to_float(x):
@@ -99,7 +100,7 @@ def run(trial, dequed=None):
             f"--inputfile=gfm_mlip.json",
             f"--multi",
             f"--ddstore",
-            f"--precision=fp64",
+            f"--precision={PRECISION}",
             f"--multi_model_list={MULTI_MODEL_LIST}",
             f"--num_epoch={NUM_EPOCH}",
             f"--batch_size={BATCH_SIZE}",
@@ -269,6 +270,28 @@ if __name__ == "__main__":
             hyperparameters["learning_rate"] = (1e-5, 3e-3)
 
             hyperparameters["num_radial"] = (3, 12)
+        elif mpnn_type_list[0] == "AllScAIP":
+            # EScAIP/AllScAIP is an invariant attention model; scale attention width
+            # and depth rather than rotation order (Qu & Krishnapriyan, NeurIPS 2024).
+            # hidden_dim is restricted to multiples of 16 so it stays divisible by any
+            # allscaip_num_heads in {4, 8, 16}.
+            hyperparameters["hidden_dim"] = [128, 256, 384, 512, 768]
+            hyperparameters["num_conv_layers"] = (4, 8)
+            hyperparameters["allscaip_num_heads"] = [4, 8, 16]
+            hyperparameters["max_neighbours"] = (20, 30)
+            hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+            hyperparameters["learning_rate"] = (1e-4, 1e-3)
+        elif mpnn_type_list[0] == "UMA":
+            # UMA (equivariant, eSEN backbone): keep lmax/mmax fixed (=2, set in the
+            # training script) and add capacity via sphere_channels (hidden_dim) and
+            # edge_channels rather than lmax. Dense variant "S" is used (MoLE only pays
+            # off for multi-task/multi-dataset training).
+            hyperparameters["hidden_dim"] = [128, 256, 384, 512]
+            hyperparameters["num_conv_layers"] = (4, 8)
+            hyperparameters["uma_edge_channels"] = [64, 128, 256]
+            hyperparameters["max_neighbours"] = (20, 30)
+            hyperparameters["force_weight"] = [10.0, 50.0, 100.0]
+            hyperparameters["learning_rate"] = (1e-4, 1e-3)
         else:
             raise ValueError(f"Unsupported MPNN type: {mpnn_type_list[0]}")
 

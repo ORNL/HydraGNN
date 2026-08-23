@@ -1,0 +1,114 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "AllScAIP",
+            "enable_interatomic_potential": true,
+            "equivariance": false,
+            "radius": 5,
+            "max_neighbours": 5,
+            "num_gaussians": 50,
+            "radial_type": "bessel",
+            "envelope_exponent": 5,
+            "int_emb_size": 64,
+            "basis_emb_size": 8,
+            "out_emb_size": 128,
+            "num_after_skip": 2,
+            "num_before_skip": 1,
+            "num_radial": 6,
+            "num_spherical": 7,
+            "num_filters": 126,
+            "max_ell": 1,
+            "node_max_ell": 1,
+            "pe_dim": 1,
+            "global_attn_heads": 8,
+            "global_attn_engine": "",
+            "global_attn_type": "",
+            "graph_pooling": "add",
+            "hidden_dim": 32,
+            "num_conv_layers": 2,
+            "allscaip_num_heads": 4,
+            "allscaip_freq_list": [3, 1, 1, 1, 2],
+            "allscaip_atten_name": "math",
+            "allscaip_use_node_path": true,
+            "allscaip_use_sincx_mask": true,
+            "allscaip_use_freq_mask": true,
+            "allscaip_max_num_elements": 119,
+            "allscaip_knn_soft": true,
+            "allscaip_distance_function": "gaussian",
+            "allscaip_normalization": "rmsnorm",
+            "use_graph_attr_conditioning": true,
+            "graph_attr_conditioning_mode": "concat_node",
+            "output_heads": {
+                "graph": {
+                    "type": "mlp",
+                    "num_sharedlayers": 2,
+                    "dim_sharedlayers": 50,
+                    "num_headlayers": 3,
+                    "dim_headlayers": [
+                        128,
+                        128,
+                        128
+                    ]
+                }
+            },
+            "task_weights": [
+                1.0
+            ],
+            "energy_peratom_weight": 1.0,
+            "force_weight": 10.0,
+            "input_dim": 1,
+            "pna_deg": null,
+            "avg_num_neighbors": 13.735293601560318,
+            "edge_dim": 1,
+            "freeze_conv_layers": false,
+            "initial_bias": null,
+            "activation_function": "relu",
+            "SyncBatchNorm": false
+        },
+        "Variables_of_interest": {
+            "input_node_features": [
+                0
+            ],
+            "output_index": [
+                0
+            ],
+            "type": [
+                "graph"
+            ],
+            "output_dim": [
+                1
+            ],
+            "output_names": [
+                "graph_energy"
+            ],
+            "denormalize_output": false
+        },
+        "Training": {
+            "num_epoch": 1,
+            "EarlyStopping": true,
+            "perc_train": 0.9,
+            "loss_function_type": "mae",
+            "batch_size": 4,
+            "continue": 0,
+            "startfrom": "",
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.001
+            },
+            "conv_checkpointing": false,
+            "patience": 10,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "epoch_start": 0,
+            "precision": "fp32"
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}

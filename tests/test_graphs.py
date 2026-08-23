@@ -87,6 +87,21 @@ def unittest_train_model(
     if mpnn_type == "MFC" and ci_input == "ci_multihead.json":
         config["NeuralNetwork"]["Architecture"]["task_weights"][0] = 2
 
+    # AllScAIP requires hidden_dim divisible by allscaip_num_heads; the unit-test
+    # configs use hidden_dim=8, so override the default (8) to a value that fits.
+    # The resulting head_dim=4 has no canonical FAIR-Chem frequency spectrum,
+    # so this generic training smoke test explicitly disables frequency masking.
+    if mpnn_type == "AllScAIP":
+        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 2
+        config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = False
+
+    # UMA's eSCNMDBackbone allocates large irrep blocks; with hidden_dim=8 and
+    # max_ell=2 a small num_radial keeps the unit test reasonably fast.
+    if mpnn_type == "UMA":
+        config["NeuralNetwork"]["Architecture"]["max_ell"] = 2
+        config["NeuralNetwork"]["Architecture"]["num_radial"] = 6
+        config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 16
+
     # Only run with edge lengths for models that support them.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
@@ -158,6 +173,8 @@ def unittest_train_model(
         "PNAEq": [0.60, 0.60],
         "PAINN": [0.60, 0.60],
         "MACE": [0.60, 0.70],
+        "AllScAIP": [0.20, 0.20],
+        "UMA": [0.20, 0.20],
     }
     if use_lengths and ("vector" not in ci_input):
         thresholds["CGCNN"] = [0.175, 0.175]
@@ -221,6 +238,8 @@ def unittest_train_model(
         "PNAEq",
         "PAINN",
         "MACE",
+        "AllScAIP",
+        "UMA",
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
@@ -265,7 +284,9 @@ def pytest_train_mace_model_lengths(mpnn_type, overwrite_data=False):
 
 
 # Test across equivariant models
-@pytest.mark.parametrize("mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
+@pytest.mark.parametrize(
+    "mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE", "UMA"]
+)
 def pytest_train_equivariant_model(mpnn_type, overwrite_data=False):
     unittest_train_model(
         mpnn_type, None, None, "ci_equivariant.json", False, overwrite_data

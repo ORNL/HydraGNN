@@ -1,0 +1,85 @@
+{
+  "Verbosity": {
+    "level": 2
+  },
+  "Dataset": {
+    "name": "LJdataset",
+    "format": "XYZ",
+    "node_features": {
+      "name": ["atom_type", "forces"],
+      "dim": [1, 3],
+      "column_index": [0, 1]
+    },
+    "graph_features":{
+      "name": ["total_energy"],
+      "dim": [1],
+      "column_index": [0]
+    }
+  },
+  "NeuralNetwork": {
+    "Architecture": {
+      "periodic_boundary_conditions": true,
+      "mpnn_type": "UMA",
+      "equivariance": true,
+      "radius": 5.0,
+      "max_neighbours": 5,
+      "num_gaussians": 10,
+      "max_ell": 2,
+      "node_max_ell": 1,
+      "num_radial": 6,
+      "hidden_dim": 32,
+      "num_conv_layers": 2,
+      "uma_variant": "S",
+      "uma_mmax": 2,
+      "uma_grid_resolution": null,
+      "uma_edge_channels": 32,
+      "uma_hidden_channels": null,
+      "uma_norm_type": "rms_norm_sh",
+      "uma_ff_type": "grid",
+      "uma_use_chg_spin": false,
+      "uma_max_num_elements": 100,
+      "uma_equivariant_vector_head": true,
+      "uma_vector_head_index": null,
+      "enable_interatomic_potential": false,
+      "output_heads": {
+        "graph": {
+          "num_sharedlayers": 2,
+          "dim_sharedlayers": 20,
+          "num_headlayers": 2,
+          "dim_headlayers": [60,20],
+          "type": "mlp"
+        },
+        "node": {
+          "num_headlayers": 2,
+          "dim_headlayers": [60,20],
+          "type": "mlp"
+        }
+      },
+      "task_weights": [1, 1]
+    },
+    "Variables_of_interest": {
+      "input_node_features": [0],
+      "output_index": [0, 1],
+      "type": ["graph", "node"],
+      "output_dim": [1, 3],
+      "output_names": ["energy", "forces"]
+    },
+    "Training": {
+      "num_epoch": 25,
+      "batch_size": 64,
+      "perc_train": 0.7,
+      "patience": 20,
+      "early_stopping": true,
+      "Optimizer": {
+        "type": "Adam",
+        "learning_rate": 0.005
+      },
+      "conv_checkpointing": false
+    }
+  },
+  "Visualization": {
+    "plot_init_solution": true,
+    "plot_hist_solution": true,
+    "create_plots": true
+ }
+}

@@ -34,19 +34,26 @@ jobs:
         id: cache
         with:
           path: ~/.cache/pip
-          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
+          key: ${{ env.pythonLocation }}-${{ hashFiles('requirements-base.txt') }}-${{ hashFiles('requirements-dev.txt') }}-${{ hashFiles('requirements-specific-models.txt') }}-${{ hashFiles('requirements-torch.txt') }}-${{ hashFiles('requirements-pyg.txt') }}-${{ hashFiles('requirements-deepspeed.txt') }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel meson-python ninja cython
           python -m pip install numpy==2.2.6
-          python -m pip install --upgrade --no-build-isolation -v -r requirements-base.txt -r requirements-dev.txt
+          # Install HydraGNN's pinned PyTorch before fairchem-core (pulled in
+          # by requirements-dev.txt) so dependency resolution cannot select a
+          # different torch build for the native parity tests.
           python -m pip install --upgrade --no-build-isolation -v -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-base.txt -r requirements-dev.txt
+          # Model-specific backbone deps (e.g. FAIRChem UMA). Installed WITH
+          # build isolation so omegaconf's sdist-only antlr4-python3-runtime
+          # dependency can build its own backend -- see the file header.
+          python -m pip install -v --upgrade -r requirements-specific-models.txt
           python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.13.0+cpu.html
           python -m pip install --upgrade --no-build-isolation -v -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"
       - name: Show installed packages
         run: |
           echo "=== Installed package versions ==="
-          pip list | grep -E "(numpy|scipy|torch|scikit-learn|matplotlib|ase|tensorboard)"
+          pip list | grep -E "(fairchem|numpy|scipy|torch|scikit-learn|matplotlib|ase|tensorboard)"
       - name: Format black
         run: |
           black .
@@ -56,13 +63,17 @@ jobs:
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
           pip list
+          # Run native parity once, serially, and fail if the frozen FAIR-Chem
+          # reference is missing or resolves to an unexpected version.
+          python -c "import importlib.metadata as m; assert m.version('fairchem-core') == '2.22.0'"
+          python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py
           # Check if DeepSpeed is available
           if python -c "import deepspeed" 2>/dev/null; then
             echo "DeepSpeed available - running all tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native
-            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not fairchem"
+            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not fairchem"
           else
             echo "DeepSpeed not available - skipping GPU/DeepSpeed tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not gpu and not deepspeed"
-            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not gpu and not deepspeed"
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not gpu and not deepspeed and not fairchem"
+            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not gpu and not deepspeed and not fairchem"
           fi

@@ -29,15 +29,7 @@ except ImportError:
 
 
 def solve_least_squares_svd(A, b):
-    # Compute the SVD of A
-    U, S, Vt = np.linalg.svd(A, full_matrices=False)
-    # Compute the pseudo-inverse of S
-    S_inv = np.diag(1 / S)
-    # Compute the pseudo-inverse of A
-    A_pinv = np.dot(Vt.T, np.dot(S_inv, U.T))
-    # Solve for x using the pseudo-inverse
-    x = np.dot(A_pinv, b)
-    return x
+    return np.linalg.pinv(A) @ b
 
 
 if __name__ == "__main__":
@@ -45,6 +37,14 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument("modelname", help="modelname", type=str, default="ANI1x")
+    parser.add_argument(
+        "--input",
+        help="input ADIOS dataset path; defaults to dataset/<modelname>.bp",
+    )
+    parser.add_argument(
+        "--output",
+        help="output ADIOS dataset path; defaults to dataset/<modelname>-v2.bp",
+    )
     parser.add_argument(
         "--nsample_only",
         help="nsample only",
@@ -71,7 +71,9 @@ if __name__ == "__main__":
     comm_rank = comm.Get_rank()
     comm_size = comm.Get_size()
 
-    fname = os.path.join(os.path.dirname(__file__), "./dataset/%s.bp" % args.modelname)
+    fname = args.input or os.path.join(
+        os.path.dirname(__file__), "./dataset/%s.bp" % args.modelname
+    )
     print("fname:", fname)
     trainset = AdiosDataset(
         fname,
@@ -181,7 +183,7 @@ if __name__ == "__main__":
             np.savez(f"{args.modelname}_energy_rank_{comm_rank}.npz", energy=energy_arr)
 
     ## Writing
-    fname = os.path.join(
+    fname = args.output or os.path.join(
         os.path.dirname(__file__), "./dataset/%s-v2.bp" % args.modelname
     )
     if comm_rank == 0:
