@@ -42,7 +42,10 @@ HydraGNN is a distributed PyTorch implementation of multi-headed graph convoluti
 
 HydraGNN uses a modular requirements system for flexible and reproducible installation. The recommended way to install all necessary dependencies is to use the provided installation script:
 
-> **Python version:** Installation via `install_dependencies.sh` is currently tested and supported for **Python 3.10, 3.11, and 3.12** only.
+> **Python versions:** HydraGNN is tested and supported on **Python 3.11,
+> 3.12, and 3.14**. Other Python versions, including Python 3.13, are not
+> supported. Facility installation scripts default to Python 3.11 unless
+> documented otherwise for that system.
 
 #### Recommended: Automated Installation
 ```bash

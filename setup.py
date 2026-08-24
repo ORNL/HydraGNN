@@ -59,6 +59,13 @@ test_requires = parse_requirements("requirements-dev.txt")
 setup(
     name="HydraGNN",
     version="4.0rc1",
+    python_requires=">=3.11,<3.15,!=3.13.*",
+    classifiers=[
+        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.14",
+    ],
     package_dir={"hydragnn": "hydragnn"},
     packages=find_namespace_packages(include=["hydragnn", "hydragnn.*"]),
     # Vendored FairChem UMA backbone ships non-Python resources (spherical

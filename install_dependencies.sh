@@ -5,6 +5,16 @@
 
 set -e  # Exit on any error
 
+PYTHON_MINOR_VERSION=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+case "${PYTHON_MINOR_VERSION}" in
+    3.11|3.12|3.14)
+        ;;
+    *)
+        echo "Unsupported Python ${PYTHON_MINOR_VERSION}. HydraGNN supports Python 3.11, 3.12, and 3.14." >&2
+        exit 1
+        ;;
+esac
+
 echo "Installing HydraGNN dependencies with consistent settings..."
 
 # Install base dependencies
