@@ -13,6 +13,11 @@ import pytest
 import torch
 from torch_geometric.data import Batch, Data
 
+from hydragnn.preprocess.load_data import (
+    build_dataset_on_rank_zero,
+    create_dataloaders,
+)
+import hydragnn.preprocess.load_data as load_data_module
 from hydragnn.utils.input_config_parsing.variable_schema import (
     get_variable_schema,
     parse_variable_schema,
@@ -88,6 +93,78 @@ def pytest_graph_inputs_batch_to_one_row_per_graph():
     batch = Batch.from_data_list(samples)
 
     assert batch.graph_attr.shape == (2, 2)
+
+
+def pytest_dataloader_compiles_named_variables_before_pyg_collation():
+    samples = [_sample(), _sample(num_nodes=2)]
+
+    train_loader, _, _ = create_dataloaders(
+        samples,
+        samples,
+        samples,
+        batch_size=2,
+        train_sampler_shuffle=False,
+        variables=VARIABLES,
+    )
+    batch = next(iter(train_loader))
+
+    assert batch.x.shape == (5, 2)
+    assert batch.edge_attr.shape == (8, 2)
+    assert batch.graph_attr.shape == (2, 2)
+    assert batch.graph_output.shape == (2, 3)
+    assert batch.node_output.shape == (5, 4)
+    assert batch.y.shape == (26, 1)
+    assert batch.y_loc.shape == (2, 5)
+    assert samples[0].y is None
+    assert samples[0].x is None
+
+
+@pytest.mark.parametrize("rank", [0, 1])
+def pytest_dataset_cache_is_built_before_nonzero_ranks_open_it(monkeypatch, rank):
+    events = []
+    monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(load_data_module.dist, "get_world_size", lambda: 2)
+    monkeypatch.setattr(load_data_module.dist, "get_rank", lambda: rank)
+    monkeypatch.setattr(
+        load_data_module.dist,
+        "broadcast_object_list",
+        lambda status, src: events.append("broadcast"),
+    )
+    monkeypatch.setattr(
+        load_data_module.dist, "barrier", lambda: events.append("barrier")
+    )
+
+    def factory():
+        events.append("build" if rank == 0 else "open")
+        return "dataset"
+
+    assert build_dataset_on_rank_zero(factory) == "dataset"
+    if rank == 0:
+        assert events == ["build", "broadcast", "barrier"]
+    else:
+        assert events == ["broadcast", "barrier", "open"]
+
+
+def pytest_rank_zero_dataset_failure_is_broadcast_without_barrier(monkeypatch):
+    events = []
+    monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
+    monkeypatch.setattr(load_data_module.dist, "get_world_size", lambda: 2)
+    monkeypatch.setattr(load_data_module.dist, "get_rank", lambda: 0)
+    monkeypatch.setattr(
+        load_data_module.dist,
+        "broadcast_object_list",
+        lambda status, src: events.append(status[0]),
+    )
+    monkeypatch.setattr(
+        load_data_module.dist, "barrier", lambda: events.append("barrier")
+    )
+
+    with pytest.raises(RuntimeError, match="rank-zero failure"):
+        build_dataset_on_rank_zero(
+            lambda: (_ for _ in ()).throw(ValueError("rank-zero failure"))
+        )
+
+    assert events == ["ValueError: rank-zero failure"]
 
 
 @pytest.mark.parametrize(

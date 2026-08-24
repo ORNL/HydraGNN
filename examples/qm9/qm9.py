@@ -32,6 +32,7 @@ num_samples = 1000
 # charge and spin are constant across QM9 dataset
 charge = 0.0
 spin = 1.0
+QM9_CACHE_VERSION = "named-schema-v1"
 
 
 # Update each sample prior to loading.
@@ -50,6 +51,21 @@ def qm9_pre_transform(data, transform):
 
 def qm9_pre_filter(data):
     return data.idx < num_samples
+
+
+def validate_named_cache(dataset, variables, cache_root):
+    """Reject a processed cache that predates the declared named schema."""
+    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(variables)
+    sample = dataset[0]
+    try:
+        for spec in (*schema.inputs, *schema.outputs):
+            hydragnn.utils.input_config_parsing.validate_variable(sample, spec)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            f"Incompatible QM9 processed cache at '{cache_root}'. "
+            f"Expected the {QM9_CACHE_VERSION} named-variable format. "
+            "Remove that versioned cache and run again to rebuild it."
+        ) from error
 
 
 def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
@@ -101,11 +117,25 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     # Filter function above used to run quick example.
     # NOTE: data is moved to the device in the pre-transform.
     # NOTE: transforms/filters will NOT be re-run unless the qm9/processed/ directory is removed.
-    dataset = torch_geometric.datasets.QM9(
-        root="dataset/qm9",
-        pre_transform=lambda data: qm9_pre_transform(data, transform),
-        pre_filter=qm9_pre_filter,
-    )
+    try:
+        import rdkit  # noqa: F401
+    except ImportError as error:
+        raise ImportError(
+            "The QM9 example requires RDKit so it can process the raw QM9 "
+            "dataset; fallback to PyG's preprocessed artifact is disabled."
+        ) from error
+
+    cache_root = os.path.join("dataset", "qm9", QM9_CACHE_VERSION)
+
+    def build_dataset():
+        return torch_geometric.datasets.QM9(
+            root=cache_root,
+            pre_transform=lambda data: qm9_pre_transform(data, transform),
+            pre_filter=qm9_pre_filter,
+        )
+
+    dataset = hydragnn.preprocess.build_dataset_on_rank_zero(build_dataset)
+    validate_named_cache(dataset, config["Variables"], cache_root)
     train, val, test = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
@@ -115,7 +145,11 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.create_dataloaders(
-        train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+        train,
+        val,
+        test,
+        config["NeuralNetwork"]["Training"]["batch_size"],
+        variables=config["Variables"],
     )
 
     config = hydragnn.utils.input_config_parsing.update_config(

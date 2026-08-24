@@ -87,9 +87,7 @@ def test_prepared_pickle_is_loaded_without_modifying_graphs(tmp_path):
     torch.testing.assert_close(loaded[0].edge_index, graph.edge_index)
     torch.testing.assert_close(loaded[0].edge_attr, graph.edge_attr)
     torch.testing.assert_close(loaded[0].y, graph.y)
-    torch.testing.assert_close(
-        loaded[0].custom_descriptor, graph.custom_descriptor
-    )
+    torch.testing.assert_close(loaded[0].custom_descriptor, graph.custom_descriptor)
 
 
 def test_prepared_pt_directory_is_loaded_without_modifying_graphs(tmp_path):

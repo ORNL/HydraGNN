@@ -39,7 +39,14 @@ import pickle
 from hydragnn.utils.print.print_utils import log
 
 from torch_geometric.data import Batch
+from torch.utils.data import Dataset
 from torch.utils.data.dataloader import _DatasetKind
+
+from hydragnn.utils.input_config_parsing.variable_schema import (
+    VariableSchema,
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 
 from concurrent.futures import ThreadPoolExecutor
 import multiprocessing as mp
@@ -91,6 +98,65 @@ class SimpleDataLoader(DataLoader):
         index = next(self._sampler_iter)
         data = self._dataset_fetcher.fetch(index)  # may raise StopIteration
         return data
+
+
+class SchemaPreparedDataset(Dataset):
+    """Compile named variables on individual samples before PyG collation.
+
+    The wrapped sample is cloned so constructing internal ``x``, ``y``,
+    ``y_loc``, ``edge_attr``, and ``graph_attr`` tensors does not mutate an
+    in-memory source dataset. Delegating unknown attributes preserves dataset
+    metadata used by PNA and cost-aware batching.
+    """
+
+    def __init__(self, dataset, schema: VariableSchema):
+        self.dataset = dataset
+        self.schema = schema
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        data = self.dataset[index]
+        if not hasattr(data, "clone"):
+            raise TypeError("Named-variable datasets must return PyG Data objects")
+        return prepare_data_from_schema(data.clone(), self.schema)
+
+    def __getattr__(self, name):
+        if name in {"dataset", "schema"}:
+            raise AttributeError(name)
+        return getattr(self.dataset, name)
+
+
+def build_dataset_on_rank_zero(factory):
+    """Build a shared processed dataset once before other ranks open it.
+
+    ``factory`` must construct and return the dataset. Rank zero performs any
+    download or preprocessing, broadcasts a failure message when construction
+    fails, and then enters a barrier. Other ranks call the factory only after
+    that barrier, at which point the processed cache is complete.
+    """
+    if not dist.is_initialized() or dist.get_world_size() == 1:
+        return factory()
+
+    rank = dist.get_rank()
+    dataset = None
+    error = None
+    if rank == 0:
+        try:
+            dataset = factory()
+        except Exception as exception:
+            error = f"{type(exception).__name__}: {exception}"
+
+    status = [error]
+    dist.broadcast_object_list(status, src=0)
+    if status[0] is not None:
+        raise RuntimeError(f"Rank-zero dataset preprocessing failed: {status[0]}")
+
+    dist.barrier()
+    if rank != 0:
+        dataset = factory()
+    return dataset
 
 
 class HydraDataLoader(DataLoader):
@@ -243,7 +309,18 @@ def create_dataloaders(
     oversampling=False,
     num_samples=None,  ## tuple of number of samples (train, val, test)
     batching=None,
+    variables=None,
 ):
+    if variables is not None:
+        schema = (
+            variables
+            if isinstance(variables, VariableSchema)
+            else parse_variable_schema(variables)
+        )
+        trainset = SchemaPreparedDataset(trainset, schema)
+        valset = SchemaPreparedDataset(valset, schema)
+        testset = SchemaPreparedDataset(testset, schema)
+
     if batching and batching.get("mode", "fixed") != "fixed":
         if oversampling:
             raise ValueError("cost-aware batching cannot be combined with oversampling")
