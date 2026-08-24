@@ -32,9 +32,8 @@ To install required packages with only basic capability (`torch`,
 `torch_geometric`, and related packages)
 and to serialize+store the processed data for later sessions (`pickle5`):
 
-> **Python versions:** HydraGNN is tested and supported on **Python 3.11,
-> 3.12, and 3.14**. Other Python versions, including Python 3.13, are not
-> supported. Facility installation scripts default to Python 3.11 unless
+> **Python versions:** HydraGNN is tested and supported on **Python 3.11
+> through 3.14**. Facility installation scripts default to Python 3.11 unless
 > documented otherwise for that system.
 
 **Recommended approach - standard installation:**
