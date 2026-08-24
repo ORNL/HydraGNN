@@ -142,25 +142,30 @@ training can use [cost-aware batching](docs/cost_aware_batching.md).
 
 ### Supported Data Formats
 
-#### 1. Raw Data Formats
+#### 1. Raw source formats
 
-**LSMS Format**: For magnetic materials and alloy datasets
-- Used for datasets like FePt, CuAu, FeSi
-- Contains atomic positions, magnetic moments, and energies
-- Automatically processed into graph representations
-
-**CFG Format**: Configuration files for atomic structures
-- Standard format for molecular dynamics simulations
-- Contains atomic coordinates and properties
+HydraGNN does not parse application-specific raw formats such as LSMS or CFG.
+The application owns that parser and must convert every source record into a
+PyG `Data` object whose named attributes match the top-level JSON `Variables`
+schema. This separation prevents HydraGNN from guessing column meanings,
+units, dimensions, or target semantics. The `examples/lsms` and `examples/eam`
+workflows therefore require data that has already been converted and
+serialized; they do not provide raw LSMS or CFG ingestion.
 
 #### 2. Serialized Formats
 
-**Pickle Format**: Python-native serialization
+**Prepared pickle or per-sample PyG `.pt` data**:
 ```python
-# Loading pickle datasets
-from hydragnn.utils.datasets.serializeddataset import SerializedDataset
-dataset = SerializedDataset(basedir, dataset_name, "trainset")
+from hydragnn.preprocess.graph_dataset import load_prepared_graph_dataset
+
+dataset = load_prepared_graph_dataset("dataset/train.pkl")
+# A directory containing serialized PyG .pt samples is also accepted.
+# dataset = load_prepared_graph_dataset("dataset/train_samples")
 ```
+
+These files are pickle-backed and must come from a trusted source. The loader
+returns their stored graph objects without rebuilding connectivity, compiling
+named variables, normalizing features, or regenerating descriptors.
 
 **ADIOS2 Format**: High-performance binary format for large datasets
 ```python
@@ -201,7 +206,7 @@ dataset = AdiosDataset(filename, "trainset", comm)
 ```python
 from hydragnn.preprocess.load_data import dataset_loading_and_splitting
 
-# Load and split data automatically
+# Load prepared splits and construct data loaders
 train_loader, val_loader, test_loader = dataset_loading_and_splitting(config)
 ```
 
@@ -256,10 +261,16 @@ sample = Data(
 #### Data Serialization for Performance
 
 ```python
+from hydragnn.utils.input_config_parsing.variable_schema import (
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 from hydragnn.utils.datasets.serializeddataset import SerializedWriter
 
-# Save processed datasets for fast loading
-writer = SerializedWriter(dataset, basedir, dataset_name, "trainset")
+# Compile named source attributes before writing a training-ready artifact.
+schema = parse_variable_schema(config["Variables"])
+prepared = [prepare_data_from_schema(sample.clone(), schema) for sample in dataset]
+writer = SerializedWriter(prepared, basedir, dataset_name, "trainset")
 ```
 
 ---
@@ -517,6 +528,19 @@ not import it. Normalize named attributes explicitly in application-owned
 preprocessing and retain normalization statistics alongside the serialized
 dataset or application configuration.
 
+The migration is intentionally direct rather than compatibility-based:
+
+| Removed convention | Current replacement |
+|---|---|
+| `NeuralNetwork.Variables_of_interest` | top-level `Variables.inputs` and `Variables.outputs` |
+| feature and target column indices | exact named PyG attributes |
+| manual construction of `data.x` and target tensors | `prepare_data_from_schema` or `SchemaPreparedDataset` |
+| HydraGNN-owned CFG/LSMS parsing | application-owned parsing into PyG `Data` objects |
+| `update_config_minmax` | application-owned normalization of named attributes |
+
+There is no legacy fallback. A configuration or raw sample using the removed
+contract fails instead of being interpreted heuristically.
+
 If the outputs are `energy` with shape `(1, 1)` followed by `forces` with
 shape `(N, 3)`, HydraGNN constructs `data.y` with shape `(1 + 3*N, 1)` and
 `data.y_loc = [[0, 1, 1 + 3*N]]`. The offsets preserve the two output-head
@@ -544,6 +568,23 @@ source attributes declared by the user remain on the PyG object. Consequently,
 third-party PyG samples may initially contain conventional attributes such as
 `x`, `edge_attr`, or `y`, but those attributes cannot bypass the current JSON
 schema or survive from a previous schema preparation unnoticed.
+
+#### Reusing a prepared dataset
+
+Schema compilation is a preprocessing operation, not a load-time migration.
+Before serialization, each training-ready graph must already contain the
+internal tensors required by its configuration: `x`, `edge_index`, any
+declared `edge_attr` or `graph_attr`, and `y`/`y_loc` for configured outputs.
+Their column dimensions must agree with the architecture derived from the
+schema; in particular, `x.shape[1]` must equal `Architecture.input_dim`, and an
+edge feature tensor must have one row per edge and
+`Architecture.edge_dim` columns.
+
+When HydraGNN later opens a prepared pickle, `.pt`, ADIOS, or DDStore artifact,
+it treats those stored tensors as authoritative and does not recover missing
+named source attributes, rerun schema compilation, or reinterpret an older
+cache. If the schema or any preprocessing choice changes, create a new prepared
+artifact rather than silently adapting the old one.
 
 Serialized PyG `.pt` samples are pickle-backed. Loading them with PyTorch may
 execute code embedded in the file, so HydraGNN treats these files as trusted
@@ -1214,17 +1255,18 @@ Equivariance is automatically configured based on the selected `mpnn_type`.
 
 ### 1. Materials Property Prediction
 
-#### LSMS Dataset Example
+#### Training on preprocessed LSMS-derived data
 
 ```bash
 # Navigate to LSMS example
 cd examples/lsms
 
-# Train on magnetic materials dataset
-python lsms.py --inputfile lsms.json
+# The script requires an existing prepared split; it does not parse raw LSMS.
+python lsms.py --inputfile lsms.json --loadexistingsplit
 ```
 
 Configuration highlights:
+- Requires application-prepared PyG data serialized in a supported format
 - Predicts free energy, charge density, and magnetic moments
 - Uses PNA architecture with 6 convolution layers
 - Multi-task learning with graph and node predictions
@@ -1272,7 +1314,8 @@ Features:
     },
     "Variables": {
         "inputs": [
-            {"name": "atomic_numbers", "level": "node", "dim": 1}
+            {"name": "atomic_numbers", "level": "node", "dim": 1},
+            {"name": "pos", "level": "node", "dim": 3, "role": "position"}
         ],
         "outputs": [
             {"name": "energy", "level": "graph", "dim": 1},
@@ -1296,7 +1339,7 @@ dataset = [
         node_features=sample.node_features,
         edge_index=sample.edge_indices,
         bond_features=sample.edge_features,
-        positions=sample.positions,
+        pos=sample.positions,
         target=sample.target,
     )
     for sample in parse_my_format(source)
