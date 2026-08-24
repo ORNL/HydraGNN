@@ -57,7 +57,7 @@ def _sample(num_nodes=3):
     )
 
 
-def pytest_named_variables_compile_all_input_levels_and_outputs():
+def test_named_variables_compile_all_input_levels_and_outputs():
     data = _sample()
     original_pos = data.pos
     prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
@@ -74,7 +74,7 @@ def pytest_named_variables_compile_all_input_levels_and_outputs():
     assert hasattr(data, "species") and hasattr(data, "energy")
 
 
-def pytest_positions_do_not_change_invariant_node_features():
+def test_positions_do_not_change_invariant_node_features():
     schema = parse_variable_schema(VARIABLES)
     first = _sample()
     second = first.clone()
@@ -87,7 +87,7 @@ def pytest_positions_do_not_change_invariant_node_features():
     assert not torch.equal(first.pos, second.pos)
 
 
-def pytest_graph_inputs_batch_to_one_row_per_graph():
+def test_graph_inputs_batch_to_one_row_per_graph():
     schema = parse_variable_schema(VARIABLES)
     samples = [prepare_data_from_schema(_sample(), schema) for _ in range(2)]
     batch = Batch.from_data_list(samples)
@@ -95,7 +95,7 @@ def pytest_graph_inputs_batch_to_one_row_per_graph():
     assert batch.graph_attr.shape == (2, 2)
 
 
-def pytest_dataloader_compiles_named_variables_before_pyg_collation():
+def test_dataloader_compiles_named_variables_before_pyg_collation():
     samples = [_sample(), _sample(num_nodes=2)]
 
     train_loader, _, _ = create_dataloaders(
@@ -120,7 +120,7 @@ def pytest_dataloader_compiles_named_variables_before_pyg_collation():
 
 
 @pytest.mark.parametrize("rank", [0, 1])
-def pytest_dataset_cache_is_built_before_nonzero_ranks_open_it(monkeypatch, rank):
+def test_dataset_cache_is_built_before_nonzero_ranks_open_it(monkeypatch, rank):
     events = []
     monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
     monkeypatch.setattr(load_data_module.dist, "get_world_size", lambda: 2)
@@ -145,7 +145,7 @@ def pytest_dataset_cache_is_built_before_nonzero_ranks_open_it(monkeypatch, rank
         assert events == ["broadcast", "barrier", "open"]
 
 
-def pytest_rank_zero_dataset_failure_is_broadcast_without_barrier(monkeypatch):
+def test_rank_zero_dataset_failure_is_broadcast_without_barrier(monkeypatch):
     events = []
     monkeypatch.setattr(load_data_module.dist, "is_initialized", lambda: True)
     monkeypatch.setattr(load_data_module.dist, "get_world_size", lambda: 2)
@@ -176,7 +176,7 @@ def pytest_rank_zero_dataset_failure_is_broadcast_without_barrier(monkeypatch):
         ("energy", torch.randn(1), "shape (1, 1)"),
     ],
 )
-def pytest_named_variables_reject_wrong_shapes(attribute, value, message):
+def test_named_variables_reject_wrong_shapes(attribute, value, message):
     data = _sample()
     setattr(data, attribute, value)
 
@@ -186,7 +186,7 @@ def pytest_named_variables_reject_wrong_shapes(attribute, value, message):
         prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
 
 
-def pytest_named_variables_require_exact_attribute_name():
+def test_named_variables_require_exact_attribute_name():
     data = _sample()
     del data["forces"]
 
@@ -194,7 +194,7 @@ def pytest_named_variables_require_exact_attribute_name():
         prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
 
 
-def pytest_named_variable_schema_rejects_duplicate_names():
+def test_named_variable_schema_rejects_duplicate_names():
     variables = {**VARIABLES, "outputs": [VARIABLES["outputs"][0]] * 2}
     with pytest.raises(
         ValueError, match="Variable names within outputs must be unique: energy"
@@ -209,7 +209,7 @@ def pytest_named_variable_schema_rejects_duplicate_names():
         {"name": "pos", "level": "node", "dim": 3, "role": "feature"},
     ],
 )
-def pytest_pos_cannot_be_declared_as_an_ordinary_feature(position):
+def test_pos_cannot_be_declared_as_an_ordinary_feature(position):
     variables = {
         "inputs": [
             {"name": "species", "level": "node", "dim": 2},
@@ -229,7 +229,7 @@ def pytest_pos_cannot_be_declared_as_an_ordinary_feature(position):
         {"name": "pos", "level": "node", "dim": 2, "role": "position"},
     ],
 )
-def pytest_position_role_requires_pyg_pos_shape_contract(position):
+def test_position_role_requires_pyg_pos_shape_contract(position):
     variables = {
         "inputs": [
             {"name": "species", "level": "node", "dim": 2},
@@ -243,13 +243,13 @@ def pytest_position_role_requires_pyg_pos_shape_contract(position):
         parse_variable_schema(variables)
 
 
-def pytest_named_variable_configuration_is_required():
+def test_named_variable_configuration_is_required():
     with pytest.raises(ValueError, match="top-level Variables section is required"):
         get_variable_schema({"NeuralNetwork": {}})
 
 
 @pytest.mark.parametrize("group", ["inputs", "outputs"])
-def pytest_internal_derived_names_are_rejected(group):
+def test_internal_derived_names_are_rejected(group):
     variables = {
         "inputs": [{"name": "features", "level": "node", "dim": 2}],
         "outputs": [{"name": "target", "level": "node", "dim": 1}],
@@ -259,7 +259,7 @@ def pytest_internal_derived_names_are_rejected(group):
         parse_variable_schema(variables)
 
 
-def pytest_schema_recompilation_removes_stale_derived_attributes():
+def test_schema_recompilation_removes_stale_derived_attributes():
     data = _sample()
     prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
 

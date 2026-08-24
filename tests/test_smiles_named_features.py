@@ -23,7 +23,7 @@ from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
 from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
 
 
-def pytest_csce_smiles_features_are_compiled_from_named_attributes():
+def test_csce_smiles_features_are_compiled_from_named_attributes():
     config_path = Path(__file__).parents[1] / "examples" / "csce" / "csce_gap.json"
     with config_path.open() as stream:
         variables = json.load(stream)["Variables"]
@@ -48,7 +48,7 @@ def pytest_csce_smiles_features_are_compiled_from_named_attributes():
     assert data.bond_attributes.shape[1] == 4
 
 
-def pytest_smiles_edge_outputs_use_one_row_per_edge():
+def test_smiles_edge_outputs_use_one_row_per_edge():
     variables = {
         "inputs": [
             {"name": "atom_type", "level": "node", "dim": 6},
@@ -57,8 +57,8 @@ def pytest_smiles_edge_outputs_use_one_row_per_edge():
         "outputs": [{"name": "bond_target", "level": "edge", "dim": 1}],
     }
     node_types = {"C": 0, "F": 1, "H": 2, "N": 3, "O": 4, "S": 5}
-    # "CO" has two directed edges, one in each direction.
-    target = torch.tensor([[0.25], [0.75]], dtype=torch.float32)
+    # Adding explicit hydrogens gives methanol five bonds and ten directed edges.
+    target = torch.arange(10, dtype=torch.float32).reshape(-1, 1)
 
     data = generate_graphdata_from_smilestr(
         "CO", target, node_types, var_config=variables
@@ -69,7 +69,7 @@ def pytest_smiles_edge_outputs_use_one_row_per_edge():
     assert data.edge_output.shape == (data.num_edges, 1)
 
 
-def pytest_smiles_generation_accepts_a_preparsed_schema():
+def test_smiles_generation_accepts_a_preparsed_schema():
     variables = {
         "inputs": [
             {"name": "atom_type", "level": "node", "dim": 6},

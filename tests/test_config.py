@@ -47,7 +47,7 @@ def test_config(config_file):
             ), f"Missing required input {category_name}.{key}"
 
 
-def pytest_log_name_sanitizes_named_variables():
+def test_log_name_sanitizes_named_variables():
     with open(os.path.join("tests", "inputs", "ci.json"), "r") as f:
         config = json.load(f)
 
