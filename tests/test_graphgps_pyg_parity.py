@@ -85,7 +85,7 @@ def _copy_nonlocal_state(ours: HydraGPSConv, native: PyGGPSConv) -> None:
     ],
     ids=["balanced", "uneven", "single-graph"],
 )
-def pytest_graphgps_global_branch_matches_pyg(attn_type, batch):
+def test_graphgps_global_branch_matches_pyg(attn_type, batch):
     torch.manual_seed(23)
     native = PyGGPSConv(8, conv=None, heads=2, attn_type=attn_type).eval()
     ours = HydraGPSConv(8, conv=None, heads=2, attn_type=attn_type).eval()
@@ -101,7 +101,7 @@ def pytest_graphgps_global_branch_matches_pyg(attn_type, batch):
 
 
 @pytest.mark.parametrize("attn_type", ["multihead", "performer"])
-def pytest_graphgps_local_and_global_branches_match_pyg(attn_type):
+def test_graphgps_local_and_global_branches_match_pyg(attn_type):
     torch.manual_seed(29)
     native_local = GCNConv(8, 8)
     native = PyGGPSConv(8, conv=native_local, heads=2, attn_type=attn_type).eval()
@@ -123,7 +123,7 @@ def pytest_graphgps_local_and_global_branches_match_pyg(attn_type):
 
 
 @pytest.mark.parametrize("attn_type", ["multihead", "performer"])
-def pytest_graphgps_training_dropout_matches_pyg(attn_type):
+def test_graphgps_training_dropout_matches_pyg(attn_type):
     torch.manual_seed(31)
     native = PyGGPSConv(
         8, conv=None, heads=2, dropout=0.25, attn_type=attn_type
@@ -144,7 +144,7 @@ def pytest_graphgps_training_dropout_matches_pyg(attn_type):
 
 
 @pytest.mark.parametrize("attn_type", ["multihead", "performer"])
-def pytest_graphgps_input_gradients_match_pyg(attn_type):
+def test_graphgps_input_gradients_match_pyg(attn_type):
     torch.manual_seed(41)
     native = PyGGPSConv(8, conv=None, heads=2, attn_type=attn_type).eval()
     ours = HydraGPSConv(8, conv=None, heads=2, attn_type=attn_type).eval()
@@ -166,7 +166,7 @@ def pytest_graphgps_input_gradients_match_pyg(attn_type):
             assert torch.allclose(parameter.grad, native_gradient, atol=1e-6, rtol=1e-5)
 
 
-def pytest_graphgps_performer_model_factory_forward_and_backward():
+def test_graphgps_performer_model_factory_forward_and_backward():
     model = create_model(
         mpnn_type="GIN",
         input_dim=2,
@@ -212,7 +212,7 @@ def pytest_graphgps_performer_model_factory_forward_and_backward():
     assert isinstance(model.graph_convs[0], HydraGPSConv)
 
 
-def pytest_graphgps_performer_projection_redraw_is_step_based(monkeypatch):
+def test_graphgps_performer_projection_redraw_is_step_based(monkeypatch):
     layer = HydraGPSConv(8, conv=None, heads=2, attn_type="performer").train()
     redraw_count = 0
 
@@ -233,7 +233,7 @@ def pytest_graphgps_performer_projection_redraw_is_step_based(monkeypatch):
     assert redraw_count == 1
 
 
-def pytest_graphgps_reset_restarts_performer_redraw_schedule(monkeypatch):
+def test_graphgps_reset_restarts_performer_redraw_schedule(monkeypatch):
     layer = HydraGPSConv(8, conv=None, heads=2, attn_type="performer").train()
     redraw_count = 0
 
@@ -252,7 +252,7 @@ def pytest_graphgps_reset_restarts_performer_redraw_schedule(monkeypatch):
     assert redraw_count == redraws_after_reset + 1
 
 
-def pytest_graphgps_performer_projection_redraw_handles_multiple_layers(monkeypatch):
+def test_graphgps_performer_projection_redraw_handles_multiple_layers(monkeypatch):
     layers = torch.nn.ModuleList(
         [
             HydraGPSConv(8, conv=None, heads=2, attn_type="performer"),
@@ -274,7 +274,7 @@ def pytest_graphgps_performer_projection_redraw_handles_multiple_layers(monkeypa
     assert redraw_counts == [1, 1]
 
 
-def pytest_graphgps_performer_projection_redraw_rejects_invalid_interval():
+def test_graphgps_performer_projection_redraw_rejects_invalid_interval():
     layer = HydraGPSConv(8, conv=None, heads=2, attn_type="performer").train()
 
     with pytest.raises(ValueError, match="positive or None"):

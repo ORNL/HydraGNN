@@ -70,7 +70,7 @@ def _data(positions, edge_shifts=None):
     )
 
 
-def pytest_painn_equivariant_transformer_forward_backward_and_rotation():
+def test_painn_equivariant_transformer_forward_backward_and_rotation():
     torch.manual_seed(31)
     model = _create_model()
     assert all(conv.coupling_mode == "parallel" for conv in model.graph_convs)
@@ -96,7 +96,7 @@ def pytest_painn_equivariant_transformer_forward_backward_and_rotation():
     )
 
 
-def pytest_painn_equivariant_transformer_rejects_periodic_images():
+def test_painn_equivariant_transformer_rejects_periodic_images():
     model = _create_model()
     positions = torch.randn(3, 3)
     shifts = torch.zeros(6, 3)
@@ -106,7 +106,7 @@ def pytest_painn_equivariant_transformer_rejects_periodic_images():
         model(_data(positions, edge_shifts=shifts))
 
 
-def pytest_equivariant_transformer_config_rejects_untested_model_integration():
+def test_equivariant_transformer_config_rejects_untested_model_integration():
     config = {
         "global_attn_engine": "EquivariantTransformer",
         "mpnn_type": "EGNN",
@@ -121,7 +121,7 @@ def pytest_equivariant_transformer_config_rejects_untested_model_integration():
         validate_equivariant_transformer_config(config)
 
 
-def pytest_equivariant_transformer_config_rejects_unknown_coupling_mode():
+def test_equivariant_transformer_config_rejects_unknown_coupling_mode():
     config = {
         "global_attn_engine": "EquivariantTransformer",
         "mpnn_type": "PAINN",

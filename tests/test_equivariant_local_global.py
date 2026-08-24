@@ -62,7 +62,7 @@ def _layer(coupling_mode):
     ("coupling_mode", "expected_scale", "expected_global_input_scale"),
     [("parallel", 5.0, 1.0), ("sequential", 6.0, 2.0)],
 )
-def pytest_equivariant_local_global_coupling_branch_isolation(
+def test_equivariant_local_global_coupling_branch_isolation(
     coupling_mode, expected_scale, expected_global_input_scale
 ):
     layer = _layer(coupling_mode)
@@ -84,7 +84,7 @@ def pytest_equivariant_local_global_coupling_branch_isolation(
 
 
 @pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
-def pytest_equivariant_local_global_modes_preserve_se3_and_backward(coupling_mode):
+def test_equivariant_local_global_modes_preserve_se3_and_backward(coupling_mode):
     torch.manual_seed(41)
     layer = _layer(coupling_mode)
     scalars = torch.randn(4, 2, dtype=torch.float64, requires_grad=True)
@@ -119,6 +119,6 @@ def pytest_equivariant_local_global_modes_preserve_se3_and_backward(coupling_mod
     )
 
 
-def pytest_equivariant_local_global_rejects_unknown_coupling_mode():
+def test_equivariant_local_global_rejects_unknown_coupling_mode():
     with pytest.raises(ValueError, match="parallel.*sequential"):
         _layer("unknown")

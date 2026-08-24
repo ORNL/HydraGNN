@@ -258,7 +258,7 @@ def unittest_train_model_graphattr(
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model_graphattr(
+def test_train_model_graphattr(
     mpnn_type, ci_input, graph_attr_conditioning_mode, overwrite_data=False
 ):
     unittest_train_model_graphattr(
@@ -277,7 +277,7 @@ def pytest_train_model_graphattr(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
-def pytest_train_model_graphattr_lengths(
+def test_train_model_graphattr_lengths(
     mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
 ):
     unittest_train_model_graphattr(
@@ -301,7 +301,7 @@ def pytest_train_model_graphattr_lengths(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
-def pytest_train_model_graphattr_lengths_global_attention(
+def test_train_model_graphattr_lengths_global_attention(
     mpnn_type,
     global_attn_engine,
     global_attn_type,
@@ -324,7 +324,7 @@ def pytest_train_model_graphattr_lengths_global_attention(
     "mpnn_type",
     ["MACE"],
 )
-def pytest_train_mace_model_graphattr_lengths(
+def test_train_mace_model_graphattr_lengths(
     mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
 ):
     unittest_train_model_graphattr(
@@ -340,7 +340,7 @@ def pytest_train_mace_model_graphattr_lengths(
 
 @pytest.mark.parametrize("graph_attr_conditioning_mode", CONDITIONING_MODES)
 @pytest.mark.parametrize("mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE"])
-def pytest_train_equivariant_model_graphattr(
+def test_train_equivariant_model_graphattr(
     mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
 ):
     unittest_train_model_graphattr(
@@ -359,7 +359,7 @@ def pytest_train_equivariant_model_graphattr(
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "SchNet", "DimeNet", "EGNN", "PNAEq"],
 )
-def pytest_train_model_graphattr_vectoroutput(
+def test_train_model_graphattr_vectoroutput(
     mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
 ):
     unittest_train_model_graphattr(
@@ -390,7 +390,7 @@ def pytest_train_model_graphattr_vectoroutput(
         "PAINN",
     ],
 )
-def pytest_train_model_graphattr_conv_head(
+def test_train_model_graphattr_conv_head(
     mpnn_type, graph_attr_conditioning_mode, overwrite_data=False
 ):
     unittest_train_model_graphattr(

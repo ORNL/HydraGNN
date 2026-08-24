@@ -38,7 +38,7 @@ ENDPOINTS = {
 
 
 @pytest.mark.parametrize(("dataset", "url"), ENDPOINTS.items())
-def pytest_live_dataset_endpoint_supports_bounded_probe(dataset, url):
+def test_live_dataset_endpoint_supports_bounded_probe(dataset, url):
     request = Request(
         url,
         headers={"Range": "bytes=0-65535", "User-Agent": "HydraGNN-CI/1.0"},

@@ -24,7 +24,7 @@ import subprocess
     "mpnn_type", ["SchNet", "EGNN", "DimeNet", "PAINN", "PNAPlus", "MACE", "UMA"]
 )
 @pytest.mark.mpi_skip()
-def pytest_examples(example, mpnn_type):
+def test_examples(example, mpnn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")  # Assuming different model scripts
     python_exec = sys.executable
@@ -60,7 +60,7 @@ def pytest_examples(example, mpnn_type):
     ],
 )
 @pytest.mark.mpi_skip()
-def pytest_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pooling):
+def test_equivariant_heads(example, mpnn_type, head_level, head_type, graph_pooling):
     """Test equivariant models with different head placements (node vs graph) and pooling choices."""
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
@@ -129,7 +129,7 @@ def pytest_equivariant_heads(example, mpnn_type, head_level, head_type, graph_po
     ],
 )
 @pytest.mark.mpi_skip()
-def pytest_expanded_x_features(example, mpnn_type, head_type):
+def test_expanded_x_features(example, mpnn_type, head_type):
     """Test that MLP heads work correctly with expanded x features (including equiv_norm)."""
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")

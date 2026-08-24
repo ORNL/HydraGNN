@@ -198,7 +198,7 @@ def unittest_train_model(
 )
 @pytest.mark.parametrize("basis_function", ["bessel", "gaussian", "chebyshev"])
 @pytest.mark.parametrize("distance_transform", ["None", "Agnesi", "Soft"])
-def pytest_train_model_transforms(
+def test_train_model_transforms(
     model_type,
     basis_function,
     distance_transform,

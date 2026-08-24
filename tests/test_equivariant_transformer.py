@@ -27,7 +27,7 @@ def _sample(dtype=torch.float64):
     return irreps, features, positions, batch
 
 
-def pytest_equivariant_rms_norm_is_rotation_equivariant():
+def test_equivariant_rms_norm_is_rotation_equivariant():
     irreps, features, _, _ = _sample()
     norm = EquivariantRMSNorm(irreps).double()
     rotation = o3.rand_matrix(dtype=torch.float64)
@@ -45,7 +45,7 @@ def pytest_equivariant_rms_norm_is_rotation_equivariant():
     )
 
 
-def pytest_equivariant_transformer_layer_preserves_se3_equivariance():
+def test_equivariant_transformer_layer_preserves_se3_equivariance():
     torch.manual_seed(21)
     irreps, features, positions, batch = _sample()
     layer = EquivariantTransformerLayer(
@@ -70,7 +70,7 @@ def pytest_equivariant_transformer_layer_preserves_se3_equivariance():
     )
 
 
-def pytest_equivariant_transformer_layer_is_permutation_equivariant():
+def test_equivariant_transformer_layer_is_permutation_equivariant():
     torch.manual_seed(22)
     irreps, features, positions, batch = _sample()
     layer = EquivariantTransformerLayer(irreps, heads=2, lmax=1).double()
@@ -84,7 +84,7 @@ def pytest_equivariant_transformer_layer_is_permutation_equivariant():
     torch.testing.assert_close(permuted_output, output[permutation])
 
 
-def pytest_equivariant_transformer_layer_handles_singleton_graphs_and_backward():
+def test_equivariant_transformer_layer_handles_singleton_graphs_and_backward():
     torch.manual_seed(23)
     irreps = o3.Irreps("2x0e + 2x1o")
     features = torch.randn(2, irreps.dim, dtype=torch.float64, requires_grad=True)
@@ -109,7 +109,7 @@ def pytest_equivariant_transformer_layer_handles_singleton_graphs_and_backward()
         (torch.tensor([[0], [2]]), "cross-graph"),
     ],
 )
-def pytest_equivariant_transformer_layer_rejects_invalid_explicit_pairs(
+def test_equivariant_transformer_layer_rejects_invalid_explicit_pairs(
     edge_index, message
 ):
     irreps = o3.Irreps("1x0e + 1x1o")
@@ -122,7 +122,7 @@ def pytest_equivariant_transformer_layer_rejects_invalid_explicit_pairs(
         layer(features, positions, batch, edge_index=edge_index)
 
 
-def pytest_equivariant_transformer_rejects_tensor_coupling_without_tensor_irreps():
+def test_equivariant_transformer_rejects_tensor_coupling_without_tensor_irreps():
     with pytest.raises(ValueError, match="requires at least one non-scalar"):
         EquivariantTransformerLayer("4x0e")
 

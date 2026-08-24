@@ -15,7 +15,7 @@ import torch
 from hydragnn.globalAtt.complete_graph import complete_graph_edge_index
 
 
-def pytest_complete_graph_constructs_ordered_non_self_pairs():
+def test_complete_graph_constructs_ordered_non_self_pairs():
     edge_index = complete_graph_edge_index(torch.tensor([0, 0, 0]))
 
     expected = torch.tensor(
@@ -27,7 +27,7 @@ def pytest_complete_graph_constructs_ordered_non_self_pairs():
     assert torch.equal(edge_index, expected)
 
 
-def pytest_complete_graph_keeps_batched_graphs_isolated():
+def test_complete_graph_keeps_batched_graphs_isolated():
     batch = torch.tensor([3, 3, 8, 8, 8, 11])
     edge_index = complete_graph_edge_index(batch)
     source, target = edge_index
@@ -50,7 +50,7 @@ def pytest_complete_graph_keeps_batched_graphs_isolated():
     assert actual_pairs == expected_pairs
 
 
-def pytest_complete_graph_handles_empty_and_singleton_batches():
+def test_complete_graph_handles_empty_and_singleton_batches():
     empty = complete_graph_edge_index(torch.empty(0, dtype=torch.long))
     singletons = complete_graph_edge_index(torch.tensor([0, 2, 7]))
 
@@ -67,6 +67,6 @@ def pytest_complete_graph_handles_empty_and_singleton_batches():
         (torch.tensor([0, -1]), ValueError, "nonnegative"),
     ],
 )
-def pytest_complete_graph_rejects_invalid_batches(batch, error, message):
+def test_complete_graph_rejects_invalid_batches(batch, error, message):
     with pytest.raises(error, match=message):
         complete_graph_edge_index(batch)

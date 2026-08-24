@@ -212,7 +212,7 @@ def unittest_train_model_dataset_class_inheritance(
 ## FIXME: this is temporarily disabled to avoid multiple instantiations of DDP
 @pytest.mark.parametrize("model_type", ["PNA"])
 @pytest.mark.skip()
-def pytest_train_model_vectoroutput(model_type, overwrite_data=False):
+def test_train_model_vectoroutput(model_type, overwrite_data=False):
     unittest_train_model_dataset_class_inheritance(
         model_type, "ci_vectoroutput.json", True, overwrite_data
     )

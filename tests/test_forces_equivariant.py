@@ -231,7 +231,7 @@ def compute_forces(model, data):
     return forces
 
 
-def test_head_type_equivariance(
+def check_head_type_equivariance(
     mpnn_type,
     head_type,
     num_structures=5,
@@ -415,7 +415,7 @@ def compare_energy_only_precision(precisions=("bf16", "fp32", "fp64")):
         for mpnn_type in ["EGNN", "SchNet", "DimeNet", "PAINN", "PNAEq", "MACE", "UMA"]:
             try:
                 with autocast_ctx:
-                    max_error, rel_error = test_energy_only_equivariance(
+                    max_error, rel_error = check_energy_only_equivariance(
                         mpnn_type,
                         dtype_override=dtype,
                         allow_high_precision=False,
@@ -465,7 +465,7 @@ def compare_mlp_vs_conv_heads():
         print("-" * 50)
 
         for head_type in head_types:
-            max_error, relative_error = test_head_type_equivariance(
+            max_error, relative_error = check_head_type_equivariance(
                 mpnn_type, head_type
             )
             results[mpnn_type][head_type] = {
@@ -547,7 +547,7 @@ def compare_mlp_vs_conv_heads_precision(precisions=("bf16", "fp32", "fp64")):
                 results[mpnn_type] = {}
                 for head_type in head_types:
                     with autocast_ctx:
-                        max_error, rel_error = test_head_type_equivariance(
+                        max_error, rel_error = check_head_type_equivariance(
                             mpnn_type,
                             head_type,
                             dtype_override=dtype,
@@ -563,7 +563,7 @@ def compare_mlp_vs_conv_heads_precision(precisions=("bf16", "fp32", "fp64")):
     print("\n" + "=" * 70)
 
 
-def test_energy_only_equivariance(
+def check_energy_only_equivariance(
     mpnn_type,
     num_structures=4,
     num_rotations=3,
@@ -726,7 +726,7 @@ def compare_energy_only():
 
     for mpnn_type in ["EGNN", "SchNet", "DimeNet", "PAINN", "PNAEq", "MACE", "UMA"]:
         try:
-            max_error, rel_error = test_energy_only_equivariance(mpnn_type)
+            max_error, rel_error = check_energy_only_equivariance(mpnn_type)
             status = "PRESERVED" if max_error < 1e-4 else "BROKEN"
             print(f"{mpnn_type}: energy-only head")
             print(f"  Max error:      {max_error:.2e}")

@@ -31,7 +31,7 @@ class _Response(io.BytesIO):
         self.close()
 
 
-def pytest_download_file_resumes_partial_content(monkeypatch, tmp_path):
+def test_download_file_resumes_partial_content(monkeypatch, tmp_path):
     payload = b"complete dataset contents"
     destination = tmp_path / "dataset.bin"
     partial = tmp_path / "dataset.bin.part"
@@ -52,7 +52,7 @@ def pytest_download_file_resumes_partial_content(monkeypatch, tmp_path):
     assert not partial.exists()
 
 
-def pytest_download_file_restarts_if_server_ignores_range(monkeypatch, tmp_path):
+def test_download_file_restarts_if_server_ignores_range(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     (tmp_path / "dataset.bin.part").write_bytes(b"partial")
     payload = b"replacement"
@@ -65,7 +65,7 @@ def pytest_download_file_restarts_if_server_ignores_range(monkeypatch, tmp_path)
     assert destination.read_bytes() == payload
 
 
-def pytest_download_file_reuses_verified_destination(monkeypatch, tmp_path):
+def test_download_file_reuses_verified_destination(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     destination.write_bytes(b"already complete")
     monkeypatch.setattr(
@@ -83,7 +83,7 @@ def pytest_download_file_reuses_verified_destination(monkeypatch, tmp_path):
     )
 
 
-def pytest_download_file_rejects_existing_directory(monkeypatch, tmp_path):
+def test_download_file_rejects_existing_directory(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     destination.mkdir()
     monkeypatch.setattr(
@@ -95,7 +95,7 @@ def pytest_download_file_rejects_existing_directory(monkeypatch, tmp_path):
         download_file("https://example.invalid/dataset.bin", destination)
 
 
-def pytest_download_file_removes_partial_after_checksum_mismatch(monkeypatch, tmp_path):
+def test_download_file_removes_partial_after_checksum_mismatch(monkeypatch, tmp_path):
     destination = tmp_path / "dataset.bin"
     partial = tmp_path / "dataset.bin.part"
     monkeypatch.setattr(
@@ -121,7 +121,7 @@ def _write_tar(path: Path, member_name: str, data: bytes = b"data"):
         tar.addfile(info, io.BytesIO(data))
 
 
-def pytest_safe_extract_tar_streams_regular_files(monkeypatch, tmp_path):
+def test_safe_extract_tar_streams_regular_files(monkeypatch, tmp_path):
     archive = tmp_path / "dataset.tar.gz"
     _write_tar(archive, "split/sample.txt")
     monkeypatch.setattr(
@@ -134,7 +134,7 @@ def pytest_safe_extract_tar_streams_regular_files(monkeypatch, tmp_path):
     assert (destination / "split/sample.txt").read_bytes() == b"data"
 
 
-def pytest_safe_extract_tar_rejects_path_traversal(tmp_path):
+def test_safe_extract_tar_rejects_path_traversal(tmp_path):
     archive = tmp_path / "unsafe.tar.gz"
     _write_tar(archive, "../outside.txt")
 
@@ -150,7 +150,7 @@ def pytest_safe_extract_tar_rejects_path_traversal(tmp_path):
         (tarfile.CHRTYPE, "unsupported archive entry"),
     ],
 )
-def pytest_safe_extract_tar_rejects_links_and_special_entries(
+def test_safe_extract_tar_rejects_links_and_special_entries(
     tmp_path, member_type, message
 ):
     archive = tmp_path / "unsafe.tar.gz"

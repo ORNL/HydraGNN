@@ -31,7 +31,7 @@ def _random_node_embedding(num_nodes, lmax, channels, dtype):
 
 
 @pytest.mark.parametrize("num_vectors", [1, 3])
-def pytest_output_shape_and_gradient(num_vectors):
+def test_output_shape_and_gradient(num_vectors):
     torch.manual_seed(0)
     num_nodes, lmax, channels = 5, 2, 8
     head = _UMAEquivariantVectorHead(channels, num_vectors=num_vectors).to(
@@ -48,7 +48,7 @@ def pytest_output_shape_and_gradient(num_vectors):
     assert torch.isfinite(x.grad).all()
 
 
-def pytest_reads_only_l1_component():
+def test_reads_only_l1_component():
     """The head output must be invariant to changes in L>=2 channels and
     depend only on the L=0/L=1 block that SO3_Linear(lmax=1) consumes."""
     torch.manual_seed(1)
@@ -65,7 +65,7 @@ def pytest_reads_only_l1_component():
     assert torch.allclose(out_ref, out_perturbed, atol=1e-10)
 
 
-def pytest_equivariance_under_component_rotation():
+def test_equivariance_under_component_rotation():
     """Applying an orthogonal map R to the L=1 component axis of the input
     rotates the output vectors by the same R (equivariance)."""
     torch.manual_seed(2)
@@ -93,7 +93,7 @@ def pytest_equivariance_under_component_rotation():
     assert torch.allclose(out_rot, expected, atol=1e-9)
 
 
-def pytest_invalid_num_vectors_channel_shapes():
+def test_invalid_num_vectors_channel_shapes():
     """Constructing the head with mismatched channels still yields a valid
     module; forward with wrong channel count must raise."""
     head = _UMAEquivariantVectorHead(8, num_vectors=1).to(torch.float64)
@@ -176,7 +176,7 @@ def _make_batch(dtype):
     return Batch.from_data_list(graphs)
 
 
-def pytest_end_to_end_rotational_equivariance():
+def test_end_to_end_rotational_equivariance():
     """Through the real UMA backbone: rotating atomic positions rotates the
     equivariant vector-head output by the same rotation, while the scalar node
     head stays invariant."""
@@ -225,7 +225,7 @@ def pytest_end_to_end_rotational_equivariance():
         torch.set_default_dtype(prev_dtype)
 
 
-def pytest_uma_adapter_reads_charge_spin_from_graph_attr():
+def test_uma_adapter_reads_charge_spin_from_graph_attr():
     model = _build_uma_with_vector_head()
     batch = _make_batch(torch.get_default_dtype())
     batch.graph_attr = torch.tensor([2.0, 1.0, -1.0, 3.0])
@@ -247,7 +247,7 @@ def pytest_uma_adapter_reads_charge_spin_from_graph_attr():
         model._build_data_dict(batch)
 
 
-def pytest_uma_adapter_converts_periodic_edge_shifts():
+def test_uma_adapter_converts_periodic_edge_shifts():
     from torch_geometric.data import Batch, Data
 
     model = _build_uma_with_vector_head()
@@ -287,7 +287,7 @@ def pytest_uma_adapter_converts_periodic_edge_shifts():
     assert torch.allclose(uma_vectors, -hydragnn_vectors)
 
 
-def pytest_uma_adapter_rejects_nonperiodic_lattice_shift():
+def test_uma_adapter_rejects_nonperiodic_lattice_shift():
     model = _build_uma_with_vector_head()
     batch = _make_batch(torch.get_default_dtype())
     batch.cell = torch.eye(3).repeat(2, 1)

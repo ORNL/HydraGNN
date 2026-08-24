@@ -21,7 +21,7 @@ from hydragnn.globalAtt.equivariant_features import (
 )
 
 
-def pytest_scalar_vector_adapter_round_trip():
+def test_scalar_vector_adapter_round_trip():
     adapter = ScalarVectorIrrepsAdapter(channels=4)
     scalars = torch.randn(5, 4)
     vectors = torch.randn(5, 3, 4)
@@ -35,7 +35,7 @@ def pytest_scalar_vector_adapter_round_trip():
     assert torch.equal(decoded_vectors, vectors)
 
 
-def pytest_scalar_vector_adapter_is_rotation_equivariant():
+def test_scalar_vector_adapter_is_rotation_equivariant():
     adapter = ScalarVectorIrrepsAdapter(channels=3).double()
     scalars = torch.randn(7, 3, dtype=torch.float64)
     vectors = torch.randn(7, 3, 3, dtype=torch.float64)
@@ -65,21 +65,21 @@ def pytest_scalar_vector_adapter_is_rotation_equivariant():
         (torch.randn(2, 3), torch.randn(3, 3, 3), "equiv_node_feat"),
     ],
 )
-def pytest_scalar_vector_adapter_rejects_invalid_shapes(scalars, vectors, message):
+def test_scalar_vector_adapter_rejects_invalid_shapes(scalars, vectors, message):
     adapter = ScalarVectorIrrepsAdapter(channels=3)
 
     with pytest.raises(ValueError, match=message):
         adapter(scalars, vectors)
 
 
-def pytest_scalar_vector_adapter_rejects_mixed_dtypes():
+def test_scalar_vector_adapter_rejects_mixed_dtypes():
     adapter = ScalarVectorIrrepsAdapter(channels=3)
 
     with pytest.raises(ValueError, match="same dtype"):
         adapter(torch.randn(2, 3), torch.randn(2, 3, 3, dtype=torch.float64))
 
 
-def pytest_scalar_vector_adapter_rejects_invalid_encoded_width():
+def test_scalar_vector_adapter_rejects_invalid_encoded_width():
     adapter = ScalarVectorIrrepsAdapter(channels=3)
 
     with pytest.raises(ValueError, match="12 entries per node"):
@@ -87,7 +87,7 @@ def pytest_scalar_vector_adapter_rejects_invalid_encoded_width():
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
-def pytest_scalar_local_models_require_explicit_limited_mode(mpnn_type):
+def test_scalar_local_models_require_explicit_limited_mode(mpnn_type):
     with pytest.raises(ValueError, match="cannot provide tensor-valued"):
         create_local_feature_adapter(mpnn_type, channels=4, allow_scalar_only=True)
 
@@ -110,7 +110,7 @@ def pytest_scalar_local_models_require_explicit_limited_mode(mpnn_type):
     assert adapter.decode(adapter(features)) is features
 
 
-def pytest_schnet_scalar_mode_rejects_coordinate_updates():
+def test_schnet_scalar_mode_rejects_coordinate_updates():
     with pytest.raises(ValueError, match="coordinate updates"):
         create_local_feature_adapter(
             "SchNet",
@@ -121,13 +121,13 @@ def pytest_schnet_scalar_mode_rejects_coordinate_updates():
         )
 
 
-def pytest_equivariant_local_models_use_scalar_vector_adapter_without_opt_in():
+def test_equivariant_local_models_use_scalar_vector_adapter_without_opt_in():
     for mpnn_type in ("PAINN", "PNAEq"):
         adapter = create_local_feature_adapter(mpnn_type, channels=4)
         assert isinstance(adapter, ScalarVectorIrrepsAdapter)
 
 
-def pytest_mace_irreps_adapter_round_trip_and_rotation():
+def test_mace_irreps_adapter_round_trip_and_rotation():
     irreps = o3.Irreps("3x0e + 3x1o + 2x2e")
     adapter = IrrepsFeatureAdapter(irreps)
     features = torch.randn(5, irreps.dim, dtype=torch.float64)
@@ -147,12 +147,12 @@ def pytest_mace_irreps_adapter_round_trip_and_rotation():
     )
 
 
-def pytest_mace_irreps_adapter_rejects_nonleading_scalars():
+def test_mace_irreps_adapter_rejects_nonleading_scalars():
     with pytest.raises(ValueError, match="precede tensor irreps"):
         IrrepsFeatureAdapter("1x1o + 1x0e")
 
 
-def pytest_mace_parallel_input_zero_initializes_absent_tensor_irreps():
+def test_mace_parallel_input_zero_initializes_absent_tensor_irreps():
     adapter = IrrepsFeatureAdapter("2x0e + 2x1o")
     scalars = torch.randn(3, 2)
     features = adapter.encode_parallel_input(scalars, torch.empty(3, 0))
