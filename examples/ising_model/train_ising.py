@@ -21,7 +21,7 @@ from mpi4py import MPI
 import argparse
 
 import hydragnn
-from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm, log
+from hydragnn.utils.print.print_utils import log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.preprocess.load_data import split_dataset
@@ -32,8 +32,6 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
 )
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
-
-import numpy as np
 
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
@@ -47,101 +45,8 @@ import torch.distributed as dist
 random_state = 0
 torch.manual_seed(random_state)
 
-import warnings
-
-## For create_configurations
-import shutil
-from sympy.utilities.iterables import multiset_permutations
-import scipy.special
-import math
-
-from create_configurations import E_dimensionless
-
 import hydragnn.utils.profiling_and_tracing.tracer as tr
-from hydragnn.utils.distributed import nsplit
-
-
-def write_to_file(total_energy, atomic_features, count_config, dir, prefix):
-
-    numpy_string_total_value = np.array2string(total_energy)
-
-    filetxt = numpy_string_total_value
-
-    for index in range(0, atomic_features.shape[0]):
-        numpy_row = atomic_features[index, :]
-        numpy_string_row = np.array2string(
-            numpy_row, separator="\t", suppress_small=True
-        )
-        filetxt += "\n" + numpy_string_row.lstrip("[").rstrip("]")
-
-        filename = os.path.join(dir, prefix + str(count_config) + ".txt")
-        with open(filename, "w") as f:
-            f.write(filetxt)
-
-
-def create_dataset_mpi(
-    L,
-    histogram_cutoff,
-    dir,
-    spin_function=lambda x: x,
-    scale_spin=False,
-    comm=None,
-    seed=None,
-):
-    rank = comm.Get_rank()
-    comm_size = comm.Get_size()
-
-    if seed is not None:
-        np.random.seed(seed)
-
-    count_config = 0
-    rx = list(nsplit(range(0, L**3), comm_size))[rank]
-    info("rx", rx.start, rx.stop)
-    for num_downs in range(rx.start, rx.stop):
-        subdir = os.path.join(dir, str(num_downs))
-        os.makedirs(subdir, exist_ok=True)
-
-    for num_downs in iterate_tqdm(
-        range(rx.start, rx.stop), verbosity_level=2, desc="Creating dataset"
-    ):
-        prefix = "output_%d_" % num_downs
-        subdir = os.path.join(dir, str(num_downs))
-
-        primal_configuration = np.ones((L**3,))
-        for down in range(0, num_downs):
-            primal_configuration[down] = -1.0
-
-        # If the current composition has a total number of possible configurations above
-        # the hard cutoff threshold, a random configurational subset is picked
-        if scipy.special.binom(L**3, num_downs) > histogram_cutoff:
-            for num_config in range(0, histogram_cutoff):
-                config = np.random.permutation(primal_configuration)
-                config = np.reshape(config, (L, L, L))
-                total_energy, atomic_features = E_dimensionless(
-                    config, L, spin_function, scale_spin
-                )
-
-                write_to_file(
-                    total_energy, atomic_features, count_config, subdir, prefix
-                )
-
-                count_config = count_config + 1
-
-        # If the current composition has a total number of possible configurations smaller
-        # than the hard cutoff, then all possible permutations are generated
-        else:
-            for config in multiset_permutations(primal_configuration):
-                config = np.array(config)
-                config = np.reshape(config, (L, L, L))
-                total_energy, atomic_features = E_dimensionless(
-                    config, L, spin_function, scale_spin
-                )
-
-                write_to_file(
-                    total_energy, atomic_features, count_config, subdir, prefix
-                )
-
-                count_config = count_config + 1
+from ising_preprocess import prepare_ising_dataset
 
 
 def info(*args, logtype="info", sep=" "):
@@ -231,10 +136,62 @@ if __name__ == "__main__":
         configurational_histogram_cutoff,
     )
 
+    model_path = os.path.join(os.path.dirname(__file__), "dataset")
+    artifact_exists = (
+        os.path.isdir(os.path.join(model_path, f"{modelname}.pickle"))
+        if args.format == "pickle"
+        else os.path.exists(os.path.join(model_path, f"{modelname}.bp"))
+    )
+    if args.preonly or not artifact_exists:
+        preprocessing_error = None
+        if rank == 0:
+            try:
+                total = prepare_ising_dataset(
+                    number_atoms_per_dimension,
+                    configurational_histogram_cutoff,
+                    config,
+                    seed=args.seed,
+                    sampling=args.sampling,
+                )
+                trainset, valset, testset = split_dataset(
+                    total,
+                    config["NeuralNetwork"]["Training"]["perc_train"],
+                    config["Dataset"].get("compositional_stratified_splitting", False),
+                )
+                deg = gather_deg(trainset)
+                if args.format == "pickle":
+                    basedir = os.path.join(model_path, f"{modelname}.pickle")
+                    attrs = {"pna_deg": deg}
+                    for label, split in zip(
+                        ("trainset", "valset", "testset"),
+                        (trainset, valset, testset),
+                    ):
+                        SimplePickleWriter(
+                            split,
+                            basedir,
+                            label,
+                            use_subdir=True,
+                            comm=MPI.COMM_SELF,
+                            attrs=attrs if label == "trainset" else {},
+                        )
+                elif args.format == "adios":
+                    fname = os.path.join(model_path, f"{modelname}.bp")
+                    writer = AdiosWriter(fname, MPI.COMM_SELF)
+                    writer.add("trainset", trainset)
+                    writer.add("valset", valset)
+                    writer.add("testset", testset)
+                    writer.add_global("pna_deg", deg)
+                    writer.save()
+                else:
+                    raise ValueError(f"Unknown data format: {args.format}")
+            except Exception as error:
+                preprocessing_error = f"{type(error).__name__}: {error}"
+        preprocessing_error = comm.bcast(preprocessing_error, root=0)
+        if preprocessing_error is not None:
+            raise RuntimeError(f"Ising preprocessing failed: {preprocessing_error}")
+        comm.Barrier()
     if args.preonly:
-        raise ValueError(
-            "Generate and serialize named PyG Data objects in application code before training."
-        )
+        sys.exit(0)
 
     tr.initialize()
     tr.disable()

@@ -19,9 +19,10 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
 from hydragnn.utils.datasets.serializeddataset import SerializedDataset
+from eam_preprocess import prepare_eam_dataset, split_and_write_eam_dataset
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
 except ImportError:
     pass
 
@@ -47,6 +48,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--inputfile", help="input file", type=str, default="NiNb_EAM_energy.json"
+    )
+    parser.add_argument(
+        "--raw-data",
+        type=str,
+        default=None,
+        help="directory containing raw CFG records; defaults to Dataset.path.total",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -87,11 +94,40 @@ if __name__ == "__main__":
     os.environ["SERIALIZED_DATA_PATH"] = dirpwd + "/dataset"
     datasetname = config["Dataset"]["name"]
     fname_adios = dirpwd + "/dataset/%s.bp" % (datasetname)
-    config["Dataset"]["name"] = "%s_%d" % (datasetname, rank)
     if not args.loadexistingsplit:
-        raise ValueError(
-            "Provide pre-serialized PyG Data objects; HydraGNN does not parse CFG files."
-        )
+        preprocessing_error = None
+        if rank == 0:
+            try:
+                raw_data_path = args.raw_data or config["Dataset"]["path"].get("total")
+                if raw_data_path is None:
+                    raise ValueError(
+                        "EAM preprocessing requires --raw-data or Dataset.path.total"
+                    )
+                if not os.path.isabs(raw_data_path):
+                    raw_data_path = os.path.join(dirpwd, raw_data_path)
+                prepared = prepare_eam_dataset(raw_data_path, config)
+                if args.format == "pickle":
+                    basedir = os.path.join(dirpwd, "dataset", "serialized_dataset")
+                    split_and_write_eam_dataset(prepared, config, basedir)
+                elif args.format == "adios":
+                    splits = hydragnn.preprocess.split_dataset(
+                        prepared,
+                        config["NeuralNetwork"]["Training"]["perc_train"],
+                        config["Dataset"].get(
+                            "compositional_stratified_splitting", False
+                        ),
+                    )
+                    writer = AdiosWriter(fname_adios, MPI.COMM_SELF)
+                    for label, split in zip(("trainset", "valset", "testset"), splits):
+                        writer.add(label, split)
+                    writer.save()
+                else:
+                    raise ValueError(f"Unknown data format: {args.format}")
+            except Exception as error:
+                preprocessing_error = f"{type(error).__name__}: {error}"
+        preprocessing_error = comm.bcast(preprocessing_error, root=0)
+        if preprocessing_error is not None:
+            raise RuntimeError(f"EAM preprocessing failed: {preprocessing_error}")
     comm.Barrier()
     if args.preonly:
         sys.exit(0)

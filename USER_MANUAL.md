@@ -149,10 +149,10 @@ The application owns that parser and must convert every source record into a
 PyG `Data` object whose named attributes match the top-level JSON `Variables`
 schema. This separation prevents HydraGNN from guessing column meanings,
 units, dimensions, or target semantics. `examples/lsms/lsms_preprocess.py` is
-an example-owned LSMS converter and `examples/lsms/lsms.py` can invoke it;
-this convenience does not make LSMS parsing a HydraGNN core API. The EAM
-workflow still expects application-prepared data and does not provide raw CFG
-ingestion.
+an example-owned LSMS converter and `examples/lsms/lsms.py` can invoke it.
+Likewise, `examples/eam/eam_preprocess.py` owns the EAM CFG mapping, and the
+Ising example owns its synthetic-data generator. These conveniences do not
+make LSMS, CFG, or Ising parsing HydraGNN core APIs.
 
 #### 2. Serialized Formats
 
@@ -1279,6 +1279,33 @@ Configuration highlights:
 - Predicts free energy, charge density, and magnetic moments
 - Uses PNA architecture with 6 convolution layers
 - Multi-task learning with graph and node predictions
+
+#### EAM CFG and Ising preprocessing
+
+The EAM and Ising scripts follow the same preprocess/train contract. EAM reads
+CFG records through its example-owned field mapping; Ising generates named PyG
+samples directly rather than writing and reparsing intermediate text files.
+
+```bash
+# Parse CFG, compile the configured named variables, serialize, and train.
+python examples/eam/eam.py --raw-data /path/to/cfg-directory --pickle
+
+# Preprocess only, or reuse the resulting splits later.
+python examples/eam/eam.py --raw-data /path/to/cfg-directory --pickle --preonly
+python examples/eam/eam.py --pickle --loadexistingsplit
+
+# Generate, compile, and serialize Ising samples without training.
+python examples/ising_model/train_ising.py --pickle --preonly --natom 3 --cutoff 10
+
+# A later invocation reuses that matching artifact and starts training.
+python examples/ising_model/train_ising.py --pickle --natom 3 --cutoff 10
+```
+
+Only rank zero performs these example-owned preprocessing steps. Any error is
+broadcast before the MPI barrier so other ranks do not hang. `--preonly`
+stops after serialization; without it, EAM preprocesses unless
+`--loadexistingsplit` is given, while Ising automatically reuses the artifact
+matching `--natom`, `--cutoff`, and the selected storage format.
 
 ### 2. Molecular Property Prediction
 
