@@ -62,7 +62,7 @@ def unittest_model_prediction(config):
 
 
 # test loading and predictiong of a saved model from previous training
-def pytest_model_loadpred():
+def test_model_loadpred():
     model_type = "PNA"
     ci_input = "ci_multihead.json"
     config_file = os.path.join(os.getcwd(), "tests/inputs", ci_input)

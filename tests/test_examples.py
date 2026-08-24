@@ -39,7 +39,7 @@ import subprocess
 )
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+def test_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
     # Add the --mpnn_type argument for the subprocess call
@@ -77,7 +77,7 @@ def pytest_examples_energy(example, mpnn_type, global_attn_engine, global_attn_t
 )
 @pytest.mark.parametrize("example", ["LennardJones"])
 @pytest.mark.mpi_skip()
-def pytest_examples_grad_forces(example, mpnn_type):
+def test_examples_grad_forces(example, mpnn_type):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
 

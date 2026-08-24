@@ -32,7 +32,7 @@ def _sample(**updates):
     return Data(**values)
 
 
-def pytest_normalize_vasp_kbar_stress_and_expand_voigt():
+def test_normalize_vasp_kbar_stress_and_expand_voigt():
     stress = normalize_stress(
         [10.0, 20.0, 30.0, 4.0, 5.0, 6.0],
         source_unit="kbar",
@@ -50,7 +50,7 @@ def pytest_normalize_vasp_kbar_stress_and_expand_voigt():
     torch.testing.assert_close(stress, expected)
 
 
-def pytest_normalize_stress_preserves_ase_convention():
+def test_normalize_stress_preserves_ase_convention():
     stress = torch.tensor([[1.0, 0.2, 0.0], [0.2, 2.0, 0.3], [0.0, 0.3, 3.0]])
     output = normalize_stress(
         stress,
@@ -74,7 +74,7 @@ def pytest_normalize_stress_preserves_ase_convention():
         ),
     ],
 )
-def pytest_normalize_stress_rejects_malformed_input(stress, message):
+def test_normalize_stress_rejects_malformed_input(stress, message):
     with pytest.raises(ValueError, match=message):
         normalize_stress(
             stress,
@@ -83,7 +83,7 @@ def pytest_normalize_stress_rejects_malformed_input(stress, message):
         )
 
 
-def pytest_validate_materials_sample_accepts_consistent_data():
+def test_validate_materials_sample_accepts_consistent_data():
     sample = _sample()
     assert validate_materials_sample(sample, require_stress=True) is sample
 
@@ -97,6 +97,6 @@ def pytest_validate_materials_sample_accepts_consistent_data():
         ({"edge_index": torch.tensor([[0, 1], [0, 0]])}, "self-loops"),
     ],
 )
-def pytest_validate_materials_sample_rejects_invalid_data(updates, message):
+def test_validate_materials_sample_rejects_invalid_data(updates, message):
     with pytest.raises(ValueError, match=message):
         validate_materials_sample(_sample(**updates), require_stress=True)

@@ -107,7 +107,7 @@ def unittest_rotational_invariance(tol=1e-14):
 
 
 @pytest.mark.mpi_skip()
-def pytest_rotational_invariance():
+def test_rotational_invariance():
     # Test with (default) single precision
     unittest_rotational_invariance(tol=1e-4)
 

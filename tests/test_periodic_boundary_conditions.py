@@ -79,7 +79,7 @@ def unittest_periodic_boundary_conditions(
     assert ((dist <= config["Architecture"]["radius"]) & (dist >= 0.0)).all()
 
 
-def pytest_periodic_h2():
+def test_periodic_h2():
     config_file = "./tests/inputs/ci_periodic.json"
     with open(config_file, "r") as f:
         config = json.load(f)
@@ -98,7 +98,7 @@ def pytest_periodic_h2():
     unittest_periodic_boundary_conditions(config, data, 1, 2)
 
 
-def pytest_periodic_bcc_large():
+def test_periodic_bcc_large():
     config_file = "./tests/inputs/ci_periodic.json"
     with open(config_file, "r") as f:
         config = json.load(f)

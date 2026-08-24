@@ -90,7 +90,7 @@ def _data(positions, edge_shifts=None):
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
-def pytest_scalar_mpnn_equivariant_transformer_forward_backward_and_se3(mpnn_type):
+def test_scalar_mpnn_equivariant_transformer_forward_backward_and_se3(mpnn_type):
     torch.manual_seed(51)
     model = _create_model(mpnn_type)
     positions = torch.tensor(
@@ -116,7 +116,7 @@ def pytest_scalar_mpnn_equivariant_transformer_forward_backward_and_se3(mpnn_typ
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
-def pytest_scalar_mpnn_equivariant_transformer_rejects_periodic_images(mpnn_type):
+def test_scalar_mpnn_equivariant_transformer_rejects_periodic_images(mpnn_type):
     model = _create_model(mpnn_type)
     shifts = torch.zeros(6, 3)
     shifts[0, 2] = 2.0
@@ -126,7 +126,7 @@ def pytest_scalar_mpnn_equivariant_transformer_rejects_periodic_images(mpnn_type
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
-def pytest_scalar_mpnn_config_requires_both_safeguards(mpnn_type):
+def test_scalar_mpnn_config_requires_both_safeguards(mpnn_type):
     config = {
         "global_attn_engine": "EquivariantTransformer",
         "mpnn_type": mpnn_type,
@@ -147,7 +147,7 @@ def pytest_scalar_mpnn_config_requires_both_safeguards(mpnn_type):
         validate_equivariant_transformer_config(config)
 
 
-def pytest_schnet_config_rejects_coordinate_updates():
+def test_schnet_config_rejects_coordinate_updates():
     config = {
         "global_attn_engine": "EquivariantTransformer",
         "mpnn_type": "SchNet",

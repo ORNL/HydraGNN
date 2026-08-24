@@ -108,7 +108,7 @@ def unittest_loss_and_activation_functions(
 @pytest.mark.parametrize(
     "loss_function_type", ["mse", "mae", "rmse", "GaussianNLLLoss"]
 )
-def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
+def test_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data=False):
     if loss_function_type == "GaussianNLLLoss":
         ci_input = "ci_multihead.json"
     unittest_loss_and_activation_functions(
@@ -130,7 +130,7 @@ def pytest_loss_functions(loss_function_type, ci_input="ci.json", overwrite_data
         "lrelu_05",
     ],
 )
-def pytest_activation_functions_multihead(
+def test_activation_functions_multihead(
     activation_function_type, ci_input="ci_multihead.json", overwrite_data=False
 ):
     unittest_loss_and_activation_functions(
@@ -152,7 +152,7 @@ def pytest_activation_functions_multihead(
         "lrelu_05",
     ],
 )
-def pytest_activation_functions_vectoroutput(
+def test_activation_functions_vectoroutput(
     activation_function_type, ci_input="ci_vectoroutput.json", overwrite_data=False
 ):
     unittest_loss_and_activation_functions(

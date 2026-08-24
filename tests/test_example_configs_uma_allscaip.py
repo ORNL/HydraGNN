@@ -88,7 +88,7 @@ def _load_example_config(filename):
         ("LJ_AllScAIP.json", "AllScAIP", "AllScAIPStack"),
     ],
 )
-def pytest_example_config_builds_model(filename, expected_mpnn, expected_str):
+def test_example_config_builds_model(filename, expected_mpnn, expected_str):
     """The shipped UMA / AllScAIP example configs build a valid model."""
     os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = "0"
     prev_dtype = torch.get_default_dtype()
@@ -117,7 +117,7 @@ def pytest_example_config_builds_model(filename, expected_mpnn, expected_str):
 
 
 @pytest.mark.parametrize("uma_variant", ["S", "M", "L"])
-def pytest_uma_variant_config_builds_model(uma_variant):
+def test_uma_variant_config_builds_model(uma_variant):
     """The UMA example config builds for every S / M / L capacity tier."""
     os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = "0"
     prev_dtype = torch.get_default_dtype()
@@ -144,7 +144,7 @@ def pytest_uma_variant_config_builds_model(uma_variant):
         os.environ.pop("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE", None)
 
 
-def pytest_uma_equivariant_vector_head_config_builds_model():
+def test_uma_equivariant_vector_head_config_builds_model():
     """The equivariant-vector-head example config builds and wires the head.
 
     Mirrors ``LJ_UMA_equivariant_vector.json``: an energy graph head plus a

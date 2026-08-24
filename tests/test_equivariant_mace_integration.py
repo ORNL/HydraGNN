@@ -79,7 +79,7 @@ def _data(positions, edge_shifts=None):
     )
 
 
-def pytest_mace_equivariant_transformer_forward_backward_and_se3():
+def test_mace_equivariant_transformer_forward_backward_and_se3():
     torch.manual_seed(61)
     model = _create_model()
     positions = torch.tensor(
@@ -105,7 +105,7 @@ def pytest_mace_equivariant_transformer_forward_backward_and_se3():
     )
 
 
-def pytest_mace_equivariant_transformer_rejects_periodic_images():
+def test_mace_equivariant_transformer_rejects_periodic_images():
     model = _create_model()
     shifts = torch.zeros(6, 3)
     shifts[0, 0] = 3.0
@@ -114,7 +114,7 @@ def pytest_mace_equivariant_transformer_rejects_periodic_images():
         model(_data(torch.randn(3, 3), edge_shifts=shifts))
 
 
-def pytest_mace_config_requires_a_tensor_hidden_layer():
+def test_mace_config_requires_a_tensor_hidden_layer():
     config = {
         "global_attn_engine": "EquivariantTransformer",
         "mpnn_type": "MACE",

@@ -68,7 +68,7 @@ def _data(positions, edge_shifts=None):
     )
 
 
-def pytest_pnaeq_equivariant_transformer_forward_backward_and_se3():
+def test_pnaeq_equivariant_transformer_forward_backward_and_se3():
     torch.manual_seed(41)
     model = _create_model()
     positions = torch.tensor(
@@ -93,7 +93,7 @@ def pytest_pnaeq_equivariant_transformer_forward_backward_and_se3():
     )
 
 
-def pytest_pnaeq_equivariant_transformer_rejects_periodic_images():
+def test_pnaeq_equivariant_transformer_rejects_periodic_images():
     model = _create_model()
     positions = torch.randn(3, 3)
     shifts = torch.zeros(6, 3)

@@ -26,7 +26,7 @@ def _sample(dtype=torch.float64):
     return irreps, features, positions, batch
 
 
-def pytest_equivariant_attention_is_rotation_equivariant_and_translation_invariant():
+def test_equivariant_attention_is_rotation_equivariant_and_translation_invariant():
     torch.manual_seed(11)
     irreps, features, positions, batch = _sample()
     module = EquivariantAllToAllAttention(irreps, heads=2, lmax=1).double()
@@ -50,7 +50,7 @@ def pytest_equivariant_attention_is_rotation_equivariant_and_translation_invaria
     )
 
 
-def pytest_equivariant_attention_is_permutation_equivariant():
+def test_equivariant_attention_is_permutation_equivariant():
     torch.manual_seed(12)
     irreps, features, positions, batch = _sample()
     module = EquivariantAllToAllAttention(irreps, heads=2, lmax=1).double()
@@ -67,7 +67,7 @@ def pytest_equivariant_attention_is_permutation_equivariant():
     torch.testing.assert_close(permuted_output, output[permutation])
 
 
-def pytest_equivariant_attention_isolates_graphs_and_normalizes_each_target():
+def test_equivariant_attention_isolates_graphs_and_normalizes_each_target():
     torch.manual_seed(13)
     irreps, features, positions, batch = _sample()
     module = EquivariantAllToAllAttention(irreps, heads=3, lmax=1).double()
@@ -95,7 +95,7 @@ def pytest_equivariant_attention_isolates_graphs_and_normalizes_each_target():
         )
 
 
-def pytest_equivariant_attention_supports_backward_propagation():
+def test_equivariant_attention_supports_backward_propagation():
     torch.manual_seed(14)
     irreps, features, positions, batch = _sample()
     features.requires_grad_()
@@ -112,7 +112,7 @@ def pytest_equivariant_attention_supports_backward_propagation():
     assert all(parameter.grad is not None for parameter in module.parameters())
 
 
-def pytest_chunked_attention_matches_dense_outputs_and_gradients():
+def test_chunked_attention_matches_dense_outputs_and_gradients():
     torch.manual_seed(15)
     irreps = o3.Irreps("2x0e + 2x1o")
     dense_module = EquivariantAllToAllAttention(
@@ -152,7 +152,7 @@ def pytest_chunked_attention_matches_dense_outputs_and_gradients():
             )
 
 
-def pytest_chunked_attention_handles_interleaved_and_singleton_graphs():
+def test_chunked_attention_handles_interleaved_and_singleton_graphs():
     torch.manual_seed(16)
     irreps = o3.Irreps("1x0e + 1x1o")
     module = EquivariantAllToAllAttention(irreps, heads=1).double()

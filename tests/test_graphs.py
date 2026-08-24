@@ -243,7 +243,7 @@ def unittest_train_model(
     ],
 )
 @pytest.mark.parametrize("ci_input", ["ci.json", "ci_multihead.json"])
-def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
+def test_train_model(mpnn_type, ci_input, overwrite_data=False):
     unittest_train_model(mpnn_type, None, None, ci_input, False, overwrite_data)
 
 
@@ -252,7 +252,7 @@ def pytest_train_model(mpnn_type, ci_input, overwrite_data=False):
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
-def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
+def test_train_model_lengths(mpnn_type, overwrite_data=False):
     unittest_train_model(mpnn_type, None, None, "ci.json", True, overwrite_data)
 
 
@@ -266,7 +266,7 @@ def pytest_train_model_lengths(mpnn_type, overwrite_data=False):
     "mpnn_type",
     ["GAT", "PNA", "PNAPlus", "CGCNN", "SchNet", "DimeNet", "EGNN", "PNAEq", "PAINN"],
 )
-def pytest_train_model_lengths_global_attention(
+def test_train_model_lengths_global_attention(
     mpnn_type, global_attn_engine, global_attn_type, overwrite_data=False
 ):
     unittest_train_model(
@@ -279,7 +279,7 @@ def pytest_train_model_lengths_global_attention(
     "mpnn_type",
     ["MACE"],
 )
-def pytest_train_mace_model_lengths(mpnn_type, overwrite_data=False):
+def test_train_mace_model_lengths(mpnn_type, overwrite_data=False):
     unittest_train_model(mpnn_type, None, None, "ci.json", True, overwrite_data)
 
 
@@ -287,7 +287,7 @@ def pytest_train_mace_model_lengths(mpnn_type, overwrite_data=False):
 @pytest.mark.parametrize(
     "mpnn_type", ["EGNN", "SchNet", "PNAEq", "PAINN", "MACE", "UMA"]
 )
-def pytest_train_equivariant_model(mpnn_type, overwrite_data=False):
+def test_train_equivariant_model(mpnn_type, overwrite_data=False):
     unittest_train_model(
         mpnn_type, None, None, "ci_equivariant.json", False, overwrite_data
     )
@@ -306,7 +306,7 @@ def pytest_train_equivariant_model(mpnn_type, overwrite_data=False):
         "PNAEq",
     ],
 )
-def pytest_train_model_vectoroutput(mpnn_type, overwrite_data=False):
+def test_train_model_vectoroutput(mpnn_type, overwrite_data=False):
     unittest_train_model(
         mpnn_type, None, None, "ci_vectoroutput.json", True, overwrite_data
     )
@@ -328,7 +328,7 @@ def pytest_train_model_vectoroutput(mpnn_type, overwrite_data=False):
         "PAINN",
     ],
 )
-def pytest_train_model_conv_head(mpnn_type, overwrite_data=False):
+def test_train_model_conv_head(mpnn_type, overwrite_data=False):
     unittest_train_model(
         mpnn_type, None, None, "ci_conv_head.json", False, overwrite_data
     )

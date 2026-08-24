@@ -20,7 +20,7 @@ tvt = import_module("hydragnn.train.train_validate_test")
 pytestmark = pytest.mark.mpi_skip()
 
 
-def pytest_resolve_precision_aliases():
+def test_resolve_precision_aliases():
     prec, param_dtype, autocast_dtype = tvt.resolve_precision("bfloat16")
     assert prec == "bf16"
     assert (
@@ -39,7 +39,7 @@ def pytest_resolve_precision_aliases():
     assert autocast_dtype is None
 
 
-def pytest_move_batch_to_device_fp64(monkeypatch):
+def test_move_batch_to_device_fp64(monkeypatch):
     monkeypatch.setattr(tvt, "get_device", lambda: torch.device("cpu"))
     tensor = torch.ones(2, dtype=torch.float32)
     moved = tvt.move_batch_to_device(tensor, torch.float64)
@@ -47,7 +47,7 @@ def pytest_move_batch_to_device_fp64(monkeypatch):
     assert moved.device.type == "cpu"
 
 
-def pytest_bf16_autocast_cpu(monkeypatch):
+def test_bf16_autocast_cpu(monkeypatch):
     # Pretend only CPU is available but supports bfloat16
     monkeypatch.setattr(tvt, "get_device", lambda: torch.device("cpu"))
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)

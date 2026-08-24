@@ -31,7 +31,7 @@ def _load_example_module(module_path, module_name):
 @pytest.mark.parametrize("graph_attr_mode", ["concat_node", "film", "fuse_pool"])
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def pytest_examples_graph_attr(tmp_path, example, graph_attr_mode):
+def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
     examples_root = os.path.join(os.path.dirname(__file__), "..", "examples", example)
 
     if example == "qm9":

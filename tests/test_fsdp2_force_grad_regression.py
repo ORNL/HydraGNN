@@ -69,7 +69,7 @@ def _bf16_supported():
     "mpnn_type",
     ["EGNN", "DimeNet", "SchNet", "MACE", "PAINN", "PNAEq"],
 )
-def pytest_fsdp2_enhanced_wrapper_force_grad_regression(
+def test_fsdp2_enhanced_wrapper_force_grad_regression(
     monkeypatch, precision, mpnn_type
 ):
     has_cuda = torch.cuda.is_available()

@@ -29,7 +29,7 @@ def _archive_payload():
     return payload.getvalue()
 
 
-def pytest_downloader_cli_resumes_redirect_and_extracts(tmp_path):
+def test_downloader_cli_resumes_redirect_and_extracts(tmp_path):
     payload = _archive_payload()
 
     class Handler(BaseHTTPRequestHandler):
@@ -95,7 +95,7 @@ def pytest_downloader_cli_resumes_redirect_and_extracts(tmp_path):
     assert not archive.exists()
 
 
-def pytest_materials_download_entry_points_use_shared_transport():
+def test_materials_download_entry_points_use_shared_transport():
     repository = Path(__file__).parents[1]
     shell_consumers = {
         "examples/mptrj/download_data_andes.sh": "MPtrj_2022.9_full.json",

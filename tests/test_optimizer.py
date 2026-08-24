@@ -108,7 +108,7 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
     "use_zero_redundancy",
     [False, True],
 )
-def pytest_optimizers(
+def test_optimizers(
     optimizer_type, use_zero_redundancy, ci_input="ci.json", overwrite_data=False
 ):
     unittest_optimizers(optimizer_type, use_zero_redundancy, ci_input, overwrite_data)

@@ -61,5 +61,5 @@ def unittest_formation_enthalpy():
 
 
 @pytest.mark.mpi_skip()
-def pytest_formation_enthalpy():
+def test_formation_enthalpy():
     unittest_formation_enthalpy()

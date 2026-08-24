@@ -122,7 +122,7 @@ def _allscaip_adapter(*, batched: bool, periodic: bool) -> _FairChemAdapter:
 @pytest.mark.parametrize(
     "batched,periodic", [(False, False), (False, True), (True, False)]
 )
-def pytest_allscaip_backbone_node_representations(batched, periodic):
+def test_allscaip_backbone_node_representations(batched, periodic):
     torch.manual_seed(11)
     ours = AllScAIPBackbone(**_allscaip_config()).eval()
     native = NativeAllScAIPBackbone(**_allscaip_config()).eval()
@@ -139,7 +139,7 @@ def pytest_allscaip_backbone_node_representations(batched, periodic):
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def pytest_allscaip_output_normalization_matches_native(dtype):
+def test_allscaip_output_normalization_matches_native(dtype):
     torch.manual_seed(13)
     ours = get_normalization_layer(NormalizationType.RMSNorm)(64)
     native = native_get_normalization_layer(NativeNormalizationType.RMSNorm)(64)
@@ -152,7 +152,7 @@ def pytest_allscaip_output_normalization_matches_native(dtype):
 
 @pytest.mark.parametrize("periodic", [False, True])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
-def pytest_allscaip_neighbor_graph_matches_native(periodic, dtype):
+def test_allscaip_neighbor_graph_matches_native(periodic, dtype):
     ours_data = _allscaip_adapter(batched=True, periodic=periodic)
     native_data = _allscaip_adapter(batched=True, periodic=periodic)
     for data in (ours_data, native_data):
@@ -255,7 +255,7 @@ def _uma_data_dict(*, batched: bool, periodic: bool) -> _UMADataDict:
 @pytest.mark.parametrize(
     "batched,periodic", [(False, False), (False, True), (True, False)]
 )
-def pytest_uma_spherical_backbone_embeddings(batched, periodic):
+def test_uma_spherical_backbone_embeddings(batched, periodic):
     torch.manual_seed(17)
     ours = VendoredUMABackbone(**_uma_config()).eval()
     native = NativeUMABackbone(**_uma_config()).eval()
@@ -280,7 +280,7 @@ def pytest_uma_spherical_backbone_embeddings(batched, periodic):
     )
 
 
-def pytest_uma_backbone_position_gradients():
+def test_uma_backbone_position_gradients():
     torch.manual_seed(19)
     ours = VendoredUMABackbone(**_uma_config()).eval()
     native = NativeUMABackbone(**_uma_config()).eval()

@@ -16,7 +16,7 @@ from torch_geometric.data import Data
 from hydragnn.preprocess import graph_dataset
 
 
-def pytest_stratified_sampling_ignores_absent_species_bins(monkeypatch):
+def test_stratified_sampling_ignores_absent_species_bins(monkeypatch):
     observed = {}
 
     class RecordingSplitter:
@@ -42,14 +42,14 @@ def pytest_stratified_sampling_ignores_absent_species_bins(monkeypatch):
     assert observed["categories"] == [201, 201]
 
 
-def pytest_periodic_edges_require_cell():
+def test_periodic_edges_require_cell():
     data = Data(pos=torch.tensor([[0.0, 0.0, 0.0]]))
 
     with pytest.raises(ValueError, match="require data.cell"):
         graph_dataset._build_edges(data, 2.0, 8, periodic=True)
 
 
-def pytest_periodic_edges_are_constructed_from_cell():
+def test_periodic_edges_are_constructed_from_cell():
     data = Data(
         pos=torch.tensor([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]),
         cell=5.0 * torch.eye(3),
