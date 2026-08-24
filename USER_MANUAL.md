@@ -1061,7 +1061,7 @@ class MyCustomLoader(RawDatasetLoader):
 #SBATCH --gpu-bind=closest
 
 # Load modules and environment
-module load python/3.9
+module load python/3.11
 source hydragnn_env/bin/activate
 
 # Set environment variables
@@ -1366,4 +1366,4 @@ HydraGNN continues to evolve with new features and optimizations. Stay updated w
 ---
 
 *Last updated: April 2026*
-*Version: Compatible with HydraGNN v4.0*
+*Version: Compatible with HydraGNN v5.0*

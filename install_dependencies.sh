@@ -48,5 +48,6 @@ if [ "$1" == "all" ] || [ "$2" == "optional" ]; then
 fi
 
 echo "Installation complete!"
+echo "HydraGNN source version: $(python setup.py --version)"
 echo "Installed package versions:"
 python -m pip list | grep -E "(numpy|scipy|torch|scikit-learn|matplotlib|ase)"
