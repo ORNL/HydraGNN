@@ -19,9 +19,13 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.input_config_parsing.config_utils import get_log_name_config
 from hydragnn.utils.model import print_model
 from hydragnn.utils.datasets.serializeddataset import SerializedDataset
+from lsms_preprocess import (
+    prepare_lsms_dataset,
+    split_and_write_lsms_dataset,
+)
 
 try:
-    from hydragnn.utils.datasets.adiosdataset import AdiosDataset
+    from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
 except ImportError:
     pass
 
@@ -48,6 +52,15 @@ if __name__ == "__main__":
         "--preonly",
         action="store_true",
         help="preprocess only. Adios or pickle saving and no train",
+    )
+    parser.add_argument(
+        "--raw-data",
+        type=str,
+        default=None,
+        help=(
+            "directory of raw LSMS records; defaults to Dataset.path.total "
+            "when preprocessing"
+        ),
     )
     parser.add_argument("--inputfile", help="input file", type=str, default="lsms.json")
     group = parser.add_mutually_exclusive_group()
@@ -91,9 +104,40 @@ if __name__ == "__main__":
         config["Dataset"]["path"][dataset_type] = os.path.join(dirpwd, raw_data_path)
 
     if not args.loadexistingsplit:
-        raise ValueError(
-            "Provide pre-serialized PyG Data objects; HydraGNN does not parse LSMS files."
-        )
+        preprocessing_error = None
+        if rank == 0:
+            try:
+                raw_data_path = args.raw_data or config["Dataset"]["path"].get("total")
+                if raw_data_path is None:
+                    raise ValueError(
+                        "LSMS preprocessing requires --raw-data or "
+                        "Dataset.path.total"
+                    )
+                prepared = prepare_lsms_dataset(raw_data_path, config)
+                if args.format == "pickle":
+                    basedir = os.path.join(dirpwd, "dataset", "serialized_dataset")
+                    split_and_write_lsms_dataset(prepared, config, basedir)
+                elif args.format == "adios":
+                    trainset, valset, testset = hydragnn.preprocess.split_dataset(
+                        prepared,
+                        config["NeuralNetwork"]["Training"]["perc_train"],
+                        config["Dataset"].get(
+                            "compositional_stratified_splitting", False
+                        ),
+                    )
+                    fname = os.path.join(dirpwd, "dataset", f"{datasetname}.bp")
+                    adwriter = AdiosWriter(fname, MPI.COMM_SELF)
+                    adwriter.add("trainset", trainset)
+                    adwriter.add("valset", valset)
+                    adwriter.add("testset", testset)
+                    adwriter.save()
+                else:
+                    raise ValueError(f"Unknown data format: {args.format}")
+            except Exception as error:
+                preprocessing_error = f"{type(error).__name__}: {error}"
+        preprocessing_error = comm.bcast(preprocessing_error, root=0)
+        if preprocessing_error is not None:
+            raise RuntimeError(f"LSMS preprocessing failed: {preprocessing_error}")
     comm.Barrier()
     if args.preonly:
         sys.exit(0)

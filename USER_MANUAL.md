@@ -148,9 +148,11 @@ HydraGNN does not parse application-specific raw formats such as LSMS or CFG.
 The application owns that parser and must convert every source record into a
 PyG `Data` object whose named attributes match the top-level JSON `Variables`
 schema. This separation prevents HydraGNN from guessing column meanings,
-units, dimensions, or target semantics. The `examples/lsms` and `examples/eam`
-workflows therefore require data that has already been converted and
-serialized; they do not provide raw LSMS or CFG ingestion.
+units, dimensions, or target semantics. `examples/lsms/lsms_preprocess.py` is
+an example-owned LSMS converter and `examples/lsms/lsms.py` can invoke it;
+this convenience does not make LSMS parsing a HydraGNN core API. The EAM
+workflow still expects application-prepared data and does not provide raw CFG
+ingestion.
 
 #### 2. Serialized Formats
 
@@ -1261,12 +1263,19 @@ Equivariance is automatically configured based on the selected `mpnn_type`.
 # Navigate to LSMS example
 cd examples/lsms
 
-# The script requires an existing prepared split; it does not parse raw LSMS.
+# Parse raw LSMS, compile named variables, write splits, and train.
+python lsms.py --raw-data ./dataset/FePt_enthalpy --pickle
+
+# Perform only the preprocessing and serialization stage.
+python lsms.py --raw-data ./dataset/FePt_enthalpy --pickle --preonly
+
+# Reuse existing prepared splits without parsing raw LSMS again.
 python lsms.py --inputfile lsms.json --loadexistingsplit
 ```
 
 Configuration highlights:
-- Requires application-prepared PyG data serialized in a supported format
+- Keeps LSMS parsing in the application example rather than HydraGNN core
+- Supports prepared pickle or ADIOS splits through the same training script
 - Predicts free energy, charge density, and magnetic moments
 - Uses PNA architecture with 6 convolution layers
 - Multi-task learning with graph and node predictions
