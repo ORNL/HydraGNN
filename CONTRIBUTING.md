@@ -2,7 +2,7 @@
 
 Contributing to HydraGNN is easy: just open a [pull
 request](https://help.github.com/articles/using-pull-requests/). Make
-`master` the destination branch on the [HydraGNN
+`main` the destination branch on the [HydraGNN
 repository](https://github.com/ORNL/HydraGNN) and allow edits from
 maintainers in the pull request.
 
@@ -35,3 +35,18 @@ directory.
 
 HydraGNN uses `pytest` to test. You can run `python -m pytest` from the top level
 directory.
+
+Pytest follows its standard discovery convention in this repository: test files
+are named `test_*.py`, test functions are named `test_*`, and test classes are
+named `Test*`. Name reusable helpers `check_*` or `_helper_*` so pytest does not
+collect them as tests.
+
+Before submitting a pull request, verify both discovery and execution:
+
+```bash
+python -m pytest tests --collect-only -q
+python -m pytest tests
+```
+
+The collection check is important: a valid-looking function with the wrong name
+otherwise receives no test coverage.

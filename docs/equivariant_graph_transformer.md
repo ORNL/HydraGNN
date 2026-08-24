@@ -3,7 +3,7 @@
 ## Scope
 
 HydraGNN's `GPS` global-attention engine applies scalar attention to invariant
-node channels. The proposed `EquivariantTransformer` engine is an alternative
+node channels. The `EquivariantTransformer` engine is an alternative
 GraphGPS-style hybrid: every layer combines a local equivariant MPNN update
 with an explicitly SE(3)-equivariant, all-to-all attention update.
 
@@ -124,9 +124,9 @@ selected. For SchNet it also rejects coordinate-update mode
 (`Architecture.equivariance=true`) because raw coordinates are not
 translation-invariant latent tensor features.
 
-## Required tests
+## Verification coverage
 
-The engine is not complete until tests cover:
+The regression suite verifies:
 
 1. rotation equivariance for every output irrep;
 2. translation invariance;

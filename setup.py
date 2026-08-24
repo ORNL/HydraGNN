@@ -55,10 +55,21 @@ def get_install_requires():
 
 install_requires = get_install_requires()
 test_requires = parse_requirements("requirements-dev.txt")
+version_namespace = {}
+with open(os.path.join(os.path.dirname(__file__), "hydragnn", "_version.py")) as f:
+    exec(f.read(), version_namespace)
 
 setup(
     name="HydraGNN",
-    version="4.0rc1",
+    version=version_namespace["__version__"],
+    python_requires=">=3.11,<3.15",
+    classifiers=[
+        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+    ],
     package_dir={"hydragnn": "hydragnn"},
     packages=find_namespace_packages(include=["hydragnn", "hydragnn.*"]),
     # Vendored FairChem UMA backbone ships non-Python resources (spherical

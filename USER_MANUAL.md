@@ -42,7 +42,9 @@ HydraGNN is a distributed PyTorch implementation of multi-headed graph convoluti
 
 HydraGNN uses a modular requirements system for flexible and reproducible installation. The recommended way to install all necessary dependencies is to use the provided installation script:
 
-> **Python version:** Installation via `install_dependencies.sh` is currently tested and supported for **Python 3.10, 3.11, and 3.12** only.
+> **Python versions:** HydraGNN is tested and supported on **Python 3.11
+> through 3.14**. Facility installation scripts default to Python 3.11 unless
+> documented otherwise for that system.
 
 #### Recommended: Automated Installation
 ```bash
@@ -123,6 +125,20 @@ Tested installation scripts are organized by facility and system under
 ## Data Pre-processing
 
 HydraGNN supports multiple data formats and provides comprehensive preprocessing capabilities.
+
+Dataset creation and application-specific preprocessing are caller
+responsibilities. HydraGNN training consumes prepared PyG graph samples; the
+legacy `run_training`, `run_prediction`, and `SerializedDataLoader`
+orchestration APIs have been removed. Prepared pickle, per-sample `.pt`, ADIOS,
+and DDStore-backed datasets remain available through their current loaders.
+Loading an already prepared dataset does not silently reconstruct, renormalize,
+or otherwise mutate its stored features. Rebuild the dataset explicitly when
+its preprocessing contract changes.
+
+Reusable data utilities are documented in
+[dataset downloads](docs/dataset_downloads.md) and
+[materials preprocessing](docs/materials_preprocessing.md). Variable-size graph
+training can use [cost-aware batching](docs/cost_aware_batching.md).
 
 ### Supported Data Formats
 
@@ -1045,7 +1061,7 @@ class MyCustomLoader(RawDatasetLoader):
 #SBATCH --gpu-bind=closest
 
 # Load modules and environment
-module load python/3.9
+module load python/3.11
 source hydragnn_env/bin/activate
 
 # Set environment variables
@@ -1350,4 +1366,4 @@ HydraGNN continues to evolve with new features and optimizations. Stay updated w
 ---
 
 *Last updated: April 2026*
-*Version: Compatible with HydraGNN v4.0*
+*Version: Compatible with HydraGNN v5.0*

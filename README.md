@@ -32,7 +32,9 @@ To install required packages with only basic capability (`torch`,
 `torch_geometric`, and related packages)
 and to serialize+store the processed data for later sessions (`pickle5`):
 
-> **Python version:** Installation via `install_dependencies.sh` is currently tested and supported for **Python 3.10, 3.11, and 3.12** only.
+> **Python versions:** HydraGNN is tested and supported on **Python 3.11
+> through 3.14**. Facility installation scripts default to Python 3.11 unless
+> documented otherwise for that system.
 
 **Recommended approach - standard installation:**
 ```bash
@@ -169,13 +171,13 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
 - `["NeuralNetwork"]`
   - `["Architecture"]`
     - `["mpnn_type"]`  
-      Accepted types: `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet` (str)
+      Accepted types: `AllScAIP`, `CGCNN`, `DimeNet`, `EGNN`, `GAT`, `GIN`, `MACE`, `MFC`, `PAINN`, `PNAEq`, `PNAPlus`, `PNA`, `SAGE`, `SchNet`, `UMA` (str)
     - `["num_conv_layers"]`  
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["output_heads"]`  
       Task types: `node`, `graph` (int)
     - `["global_attn_engine"]`
-      Accepted types: `GPS`, `None`
+      Accepted types: `EquivariantTransformer`, `GPS`, `None`
     - `["global_attn_type"]`
       Accepted types: `multihead`, `performer`
     - `["pe_dim"]`
@@ -220,6 +222,16 @@ training batch more than once. For example:
 When GPS wraps an equivariant HydraGNN model, global attention operates only
 on invariant node channels. Equivariant channels are updated by the local MPNN
 and propagated alongside the globally attended invariant representation.
+
+### Feature guides
+
+- [GraphGPS and Performer configuration](#configurable-settings)
+- [Equivariant all-to-all graph Transformer](docs/equivariant_graph_transformer.md)
+- [UMA and AllScAIP integration](docs/uma_allscaip.md)
+- [Cost-aware graph batching](docs/cost_aware_batching.md)
+- [Reusable dataset downloads](docs/dataset_downloads.md)
+- [Materials preprocessing](docs/materials_preprocessing.md)
+- [HPC facility assets](scripts/hpc/README.md)
 
   - `["Variables of Interest"]`
     - `["input_node_features"]`  
