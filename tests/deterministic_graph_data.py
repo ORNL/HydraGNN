@@ -14,8 +14,30 @@ import shutil
 import math
 import torch
 import numpy
+from pathlib import Path
 from torch_geometric.data import Data
 from sklearn.neighbors import KNeighborsRegressor
+
+
+def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
+    """Reuse a named-data fixture cache or rebuild an incompatible old cache."""
+    directory = Path(path)
+    directory.mkdir(parents=True, exist_ok=True)
+    samples = sorted(directory.glob("*.pt"))
+    cache_valid = len(samples) == number_configurations
+    if cache_valid:
+        first = torch.load(samples[0], weights_only=False)
+        cache_valid = all(
+            hasattr(first, name)
+            for name in ("node_features", "sum_x_x2_x3", "edge_index", "edge_lengths")
+        )
+    if cache_valid:
+        return
+    for sample in samples:
+        sample.unlink()
+    deterministic_graph_data(
+        str(directory), number_configurations=number_configurations, **kwargs
+    )
 
 
 def deterministic_graph_data(
@@ -201,5 +223,16 @@ def create_configuration(
         .reshape(1, 1)
         .float(),
         pos=positions.float(),
+    )
+    distances = torch.cdist(data.pos, data.pos)
+    distances.fill_diagonal_(float("inf"))
+    neighbors = distances.topk(
+        min(number_neighbors, number_nodes - 1), largest=False
+    ).indices
+    targets = torch.arange(number_nodes).repeat_interleave(neighbors.shape[1])
+    sources = neighbors.reshape(-1)
+    data.edge_index = torch.stack((sources, targets))
+    data.edge_lengths = torch.linalg.vector_norm(
+        data.pos[sources] - data.pos[targets], dim=1, keepdim=True
     )
     return data

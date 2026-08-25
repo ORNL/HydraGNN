@@ -141,10 +141,7 @@ def unittest_train_model(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not any(name.endswith(".pt") for name in os.listdir(data_path)):
-                    tests.deterministic_graph_data(
-                        data_path, number_configurations=num_samples
-                    )
+                tests.ensure_deterministic_graph_data(data_path, num_samples)
     MPI.COMM_WORLD.Barrier()
 
     train_loader, val_loader, test_loader = (

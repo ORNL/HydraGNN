@@ -136,6 +136,20 @@ if __name__ == "__main__":
     if args.format == "pickle":
         basedir = os.path.join(dirpwd, "dataset", "%s.pickle" % modelname)
         dataset_exists = os.path.exists(os.path.join(dirpwd, "dataset/LJ.pickle"))
+        if dataset_exists:
+            try:
+                cached = SimplePickleDataset(basedir=basedir, label="trainset")
+                sample = cached[0]
+                required_names = {
+                    spec["name"]
+                    for group in ("inputs", "outputs")
+                    for spec in config["Variables"][group]
+                }
+                dataset_exists = all(hasattr(sample, name) for name in required_names)
+                if not dataset_exists:
+                    info("Rebuilding an incompatible pre-named-variable LJ cache")
+            except (FileNotFoundError, EOFError, AttributeError, IndexError):
+                dataset_exists = False
     if args.format == "adios":
         fname = os.path.join(dirpwd, "./dataset/%s.bp" % modelname)
         dataset_exists = os.path.exists(
@@ -263,7 +277,11 @@ if __name__ == "__main__":
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
+        trainset,
+        valset,
+        testset,
+        config["NeuralNetwork"]["Training"]["batch_size"],
+        variables=config["Variables"],
     )
 
     config = hydragnn.utils.input_config_parsing.update_config(

@@ -294,6 +294,7 @@ def dataset_loading_and_splitting(config: {}):
         testset,
         batch_size=config["NeuralNetwork"]["Training"]["batch_size"],
         batching=config["NeuralNetwork"]["Training"].get("Batching"),
+        variables=config["Variables"],
     )
 
 
