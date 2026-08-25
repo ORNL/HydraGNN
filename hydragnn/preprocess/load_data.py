@@ -550,7 +550,11 @@ def total_to_train_val_test_pkls(config, isdist=False):
         # is not materialized at once. Compositional stratification needs the
         # samples themselves and therefore retains the eager path.
         if config["Dataset"]["compositional_stratified_splitting"]:
-            dataset_total = [_load_trusted_pyg_sample(path) for path in paths]
+            schema = parse_variable_schema(config["Variables"])
+            dataset_total = [
+                prepare_data_from_schema(_load_trusted_pyg_sample(path), schema)
+                for path in paths
+            ]
             samples_are_paths = False
         else:
             dataset_total = paths

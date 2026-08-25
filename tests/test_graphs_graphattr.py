@@ -48,9 +48,12 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
     config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
-    config["Variables"]["inputs"].append(
-        {"name": "global_conditioning", "level": "graph", "dim": 1}
+    graph_input = (
+        {"name": "uma_charge_spin", "level": "graph", "dim": 2}
+        if mpnn_type == "UMA"
+        else {"name": "global_conditioning", "level": "graph", "dim": 1}
     )
+    config["Variables"]["inputs"].append(graph_input)
     config["NeuralNetwork"]["Architecture"][
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode
@@ -95,7 +98,12 @@ def unittest_train_model_graphattr(
                 + dataset_name
                 + ".pkl"
             )
-        if os.path.exists(pkl_file):
+        required_names = {
+            spec["name"]
+            for group in ("inputs", "outputs")
+            for spec in config["Variables"][group]
+        }
+        if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
 
     # Only run with edge lengths for models that support them.

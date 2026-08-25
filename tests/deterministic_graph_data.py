@@ -13,10 +13,25 @@ import os
 import shutil
 import math
 import torch
+import pickle
 import numpy
 from pathlib import Path
 from torch_geometric.data import Data
 from sklearn.neighbors import KNeighborsRegressor
+
+
+def prepared_pickle_has_attributes(path, required_names):
+    """Return whether a trusted test pickle satisfies the named-data contract."""
+    try:
+        with open(path, "rb") as stream:
+            pickle.load(stream)
+            pickle.load(stream)
+            dataset = pickle.load(stream)
+        return bool(dataset) and all(
+            hasattr(dataset[0], name) for name in required_names
+        )
+    except (FileNotFoundError, EOFError, pickle.UnpicklingError):
+        return False
 
 
 def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
@@ -29,8 +44,16 @@ def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
         first = torch.load(samples[0], weights_only=False)
         cache_valid = all(
             hasattr(first, name)
-            for name in ("node_features", "sum_x_x2_x3", "edge_index", "edge_lengths")
+            for name in (
+                "node_features",
+                "sum_x_x2_x3",
+                "edge_index",
+                "edge_lengths",
+                "pe",
+                "rel_pe",
+            )
         )
+        cache_valid = cache_valid and first.pe.shape[1] == 1
     if cache_valid:
         return
     for sample in samples:
@@ -222,6 +245,7 @@ def create_configuration(
         .sum()
         .reshape(1, 1)
         .float(),
+        uma_charge_spin=torch.zeros(1, 2),
         pos=positions.float(),
     )
     distances = torch.cdist(data.pos, data.pos)
@@ -235,4 +259,10 @@ def create_configuration(
     data.edge_lengths = torch.linalg.vector_norm(
         data.pos[sources] - data.pos[targets], dim=1, keepdim=True
     )
+    # The global-attention test configurations request one positional channel.
+    # The deterministic fixture owns this descriptor;
+    # the production loader must not silently synthesize them.
+    centered = data.pos - data.pos.mean(dim=0, keepdim=True)
+    data.pe = centered[:, :1]
+    data.rel_pe = data.pe[sources] - data.pe[targets]
     return data
