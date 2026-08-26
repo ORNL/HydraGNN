@@ -13,6 +13,7 @@ import pickle
 import time
 import os
 from io import BytesIO
+from threading import Lock
 
 from hydragnn.utils.print.print_utils import log, log0, iterate_tqdm
 
@@ -153,6 +154,7 @@ class AdiosWriter:
 
             self.io.DefineAttribute("%s/ndata" % label, np.array(sum(ns)))
             total_ns += sum(ns)
+            node_total_written = False
 
             if len(self.dataset[label]) > 0:
                 data = self.dataset[label][0]
@@ -236,6 +238,17 @@ class AdiosWriter:
 
                 vcount = np.array([x.shape[vdim] for x in arr_list])
                 assert len(vcount) == len(self.dataset[label])
+
+                if not node_total_written and k in ("x", "pos") and vdim == 0:
+                    local_node_total = int(vcount.sum())
+                    global_node_total = self.comm.allreduce(
+                        local_node_total, op=MPI.SUM
+                    )
+                    self.io.DefineAttribute(
+                        f"{label}/total_node_count",
+                        np.array(global_node_total, dtype=np.int64),
+                    )
+                    node_total_written = True
 
                 offset_arr = np.zeros_like(vcount)
                 offset_arr[1:] = np.cumsum(vcount)[:-1]
@@ -407,6 +420,8 @@ class AdiosDataset(AbstractBaseDataset):
         self.comm = comm
         self.rank = self.comm.Get_rank()
         self.comm_size = self.comm.Get_size()
+        self._node_count_reader = None
+        self._node_count_reader_lock = Lock()
 
         # Cache adios variables 'variable_count' and 'variable_offset' to speed up reading
         self._adios_file_metadata_cache = dict()
@@ -481,6 +496,13 @@ class AdiosDataset(AbstractBaseDataset):
                 self.setkeys(keys)
 
             self.ndata = self.read_attribute0(f, "%s/ndata" % label).item()
+
+            total_node_attribute = f"{label}/total_node_count"
+            self.total_node_count = None
+            if self.subset is None and total_node_attribute in self.attrs:
+                self.total_node_count = int(
+                    self.read_attribute0(f, total_node_attribute).item()
+                )
 
             if "minmax_graph_feature" in self.attrs:
                 self.minmax_graph_feature = self.read_attribute0(
@@ -905,6 +927,79 @@ class AdiosDataset(AbstractBaseDataset):
         else:
             return self.ndata
 
+    def read_node_counts(self, indices):
+        """Return selected counts through bounded, coalesced ADIOS reads."""
+        requested = [int(index) for index in indices]
+        if not requested:
+            return []
+        if any(index < 0 or index >= self.len() for index in requested):
+            raise IndexError("node-count index is outside the dataset")
+
+        values_by_index = {}
+        unique = sorted(set(requested))
+        start = unique[0]
+        stop = start + 1
+        for index in unique[1:]:
+            if index == stop:
+                stop += 1
+            else:
+                values = self.read_node_counts_range(start, stop - start)
+                values_by_index.update(
+                    (start + offset, value)
+                    for offset, value in enumerate(values)
+                )
+                start, stop = index, index + 1
+        values = self.read_node_counts_range(start, stop - start)
+        values_by_index.update(
+            (start + offset, value) for offset, value in enumerate(values)
+        )
+        return [values_by_index[index] for index in requested]
+
+    def read_node_counts_range(self, start, count):
+        """Return one contiguous range using a persistent metadata reader."""
+        start = int(start)
+        count = int(count)
+        if start < 0 or count < 0 or start + count > self.len():
+            raise IndexError("node-count range is outside the dataset")
+        if count == 0:
+            return []
+
+        key = next(
+            (
+                key
+                for key in ("x", "pos")
+                if key in self.variable_count and self.variable_dim.get(key) == 0
+            ),
+            None,
+        )
+        if key is None:
+            raise ValueError("ADIOS dataset has no node-indexed x or pos metadata")
+
+        physical_start = self.subset[start] if self.subset is not None else start
+        with self._node_count_reader_lock:
+            if self._node_count_reader is None:
+                self._node_count_reader = adios2_open(
+                    self.filename, "r", MPI.COMM_SELF
+                )
+                self._node_count_reader.__next__()
+            values = self._node_count_reader.read(
+                f"{self.label}/{key}/variable_count",
+                [physical_start],
+                [count],
+            )
+        return [int(value) for value in values]
+
+    def close_node_count_reader(self):
+        """Close the sampler's persistent ADIOS metadata reader."""
+        with self._node_count_reader_lock:
+            if self._node_count_reader is not None:
+                self._node_count_reader.close()
+                self._node_count_reader = None
+
+    def get_total_node_count(self):
+        """Return a stored exact aggregate, or None for old/subset datasets."""
+        return self.total_node_count
+
     @tr.profile("get")
     def get(self, i):
         """
@@ -1067,6 +1162,7 @@ class AdiosDataset(AbstractBaseDataset):
         if self.use_ddstore:
             self.ddstore.free()
         try:
+            self.close_node_count_reader()
             if not self.preload and not self.shmem:
                 self.f.close()
             self.unlink(self)
@@ -1148,3 +1244,23 @@ class AdiosMultiDataset(AbstractBaseDataset):
             else:
                 i -= dataset.len()
         raise IndexError("Index out of range")
+
+    def read_node_counts(self, indices):
+        values = []
+        lengths = [dataset.len() for dataset in self.datasets]
+        for requested in indices:
+            index = int(requested)
+            for dataset, length in zip(self.datasets, lengths):
+                if index < length:
+                    values.append(dataset.read_node_counts([index])[0])
+                    break
+                index -= length
+            else:
+                raise IndexError(requested)
+        return values
+
+    def get_total_node_count(self):
+        totals = [dataset.get_total_node_count() for dataset in self.datasets]
+        if any(total is None for total in totals):
+            return None
+        return sum(totals)

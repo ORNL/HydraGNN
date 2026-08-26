@@ -15,7 +15,7 @@ import torch
 
 from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.postprocess.visualizer import Visualizer
-from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
+from hydragnn.utils.print.print_utils import log, print_distributed, iterate_tqdm
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
 from hydragnn.utils.distributed import get_device, check_remaining
@@ -333,6 +333,16 @@ def train_validate_test(
     timer.start()
 
     epoch_start = config["Training"].get("epoch_start", 0)
+    train_batch_sampler = getattr(train_loader, "batch_sampler", None)
+    if (
+        getattr(train_batch_sampler, "is_streaming_node_budget", False)
+        and config["Training"].get("continue", False)
+    ):
+        print_distributed(
+            verbosity,
+            "Checkpoint loading does not restore streaming sampler state; "
+            "training starts a fresh deterministic sample stream.",
+        )
     for epoch in range(epoch_start, num_epoch):
         os.environ["HYDRAGNN_EPOCH"] = str(epoch)
         ## timer per epoch
@@ -700,6 +710,17 @@ def train(
 
     local_nbatch = get_nbatch(loader)
     nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MIN)
+    batch_sampler = getattr(loader, "batch_sampler", None)
+    streaming_node_budget = bool(
+        getattr(batch_sampler, "is_streaming_node_budget", False)
+    )
+    if streaming_node_budget:
+        max_nbatch = MPI.COMM_WORLD.allreduce(local_nbatch, op=MPI.MAX)
+        if nbatch != max_nbatch:
+            raise RuntimeError(
+                "streaming_node_budget requires identical steps_per_epoch on "
+                f"all ranks; observed range [{nbatch}, {max_nbatch}]"
+            )
     syncopt = {"cudasync": False}
     ## 0: default (no detailed tracing), 1: sync tracing
     trace_level = int(os.getenv("HYDRAGNN_TRACE_LEVEL", "0"))
@@ -825,6 +846,90 @@ def train(
                 tr.stop("epoch_begin")
     if use_ddstore:
         loader.dataset.ddstore.epoch_end()
+
+    if streaming_node_budget:
+        stats = batch_sampler.statistics()
+        log(f"Streaming sampler rank-local statistics: {stats}")
+        global_samples = MPI.COMM_WORLD.allreduce(
+            stats.emitted_samples, op=MPI.SUM
+        )
+        global_nodes = MPI.COMM_WORLD.allreduce(stats.emitted_nodes, op=MPI.SUM)
+        global_boundaries = MPI.COMM_WORLD.allreduce(
+            stats.traversal_boundaries, op=MPI.SUM
+        )
+        global_skipped = MPI.COMM_WORLD.allreduce(
+            stats.skipped_samples, op=MPI.SUM
+        )
+        global_deferred = MPI.COMM_WORLD.allreduce(
+            stats.deferred_samples, op=MPI.SUM
+        )
+        global_oversized = MPI.COMM_WORLD.allreduce(
+            stats.oversized_samples, op=MPI.SUM
+        )
+        global_metadata_requests = MPI.COMM_WORLD.allreduce(
+            stats.metadata_requests, op=MPI.SUM
+        )
+        global_metadata_hits = MPI.COMM_WORLD.allreduce(
+            stats.metadata_cache_hits, op=MPI.SUM
+        )
+        minimum_start_traversal = MPI.COMM_WORLD.allreduce(
+            stats.start_traversal, op=MPI.MIN
+        )
+        maximum_start_traversal = MPI.COMM_WORLD.allreduce(
+            stats.start_traversal, op=MPI.MAX
+        )
+        minimum_end_traversal = MPI.COMM_WORLD.allreduce(
+            stats.end_traversal, op=MPI.MIN
+        )
+        maximum_end_traversal = MPI.COMM_WORLD.allreduce(
+            stats.end_traversal, op=MPI.MAX
+        )
+        min_utilization = MPI.COMM_WORLD.allreduce(
+            stats.min_utilization, op=MPI.MIN
+        )
+        max_utilization = MPI.COMM_WORLD.allreduce(
+            stats.max_utilization, op=MPI.MAX
+        )
+        mean_utilization = MPI.COMM_WORLD.allreduce(
+            stats.mean_utilization, op=MPI.SUM
+        ) / MPI.COMM_WORLD.Get_size()
+        local_prefetch_depth = getattr(loader, "max_prefetch_depth", None)
+        if local_prefetch_depth is None:
+            worker_count = int(getattr(loader, "num_workers", 0))
+            prefetch_factor = getattr(loader, "prefetch_factor", None)
+            local_prefetch_depth = (
+                worker_count * int(prefetch_factor or 0) if worker_count else 0
+            )
+        max_prefetch_depth = MPI.COMM_WORLD.allreduce(
+            local_prefetch_depth, op=MPI.MAX
+        )
+        print_distributed(
+            verbosity,
+            "Streaming sampler aggregate:",
+            {
+                "steps_per_rank": stats.configured_steps,
+                "graphs": global_samples,
+                "nodes": global_nodes,
+                "traversal_boundaries": global_boundaries,
+                "start_traversal_range": (
+                    minimum_start_traversal,
+                    maximum_start_traversal,
+                ),
+                "end_traversal_range": (
+                    minimum_end_traversal,
+                    maximum_end_traversal,
+                ),
+                "deferred_samples": global_deferred,
+                "oversized_samples": global_oversized,
+                "skipped_samples": global_skipped,
+                "metadata_requests": global_metadata_requests,
+                "metadata_cache_hits": global_metadata_hits,
+                "utilization_mean": mean_utilization,
+                "utilization_min": min_utilization,
+                "utilization_max": max_utilization,
+                "max_prefetch_depth": max_prefetch_depth,
+            },
+        )
 
     train_error = total_error / num_samples_local
     tasks_error = tasks_error / num_samples_local

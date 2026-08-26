@@ -27,8 +27,12 @@ from .batch_sampler import (
     BatchStatistics,
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
+    NodeCountProvider,
+    StreamingBatchStatistics,
+    StreamingNodeBudgetBatchSampler,
     graph_node_cost,
     graph_node_costs,
+    stateless_permute_index,
 )
 
 from .load_data import (

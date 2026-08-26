@@ -63,10 +63,43 @@ def update_config(config, train_loader, val_loader, test_loader):
     batching = config["NeuralNetwork"]["Training"].get("Batching")
     if batching is not None:
         mode = batching.get("mode", "fixed")
-        if mode not in {"fixed", "node_budget"}:
+        if mode not in {"fixed", "node_budget", "streaming_node_budget"}:
             raise ValueError(f"unsupported batching mode: {mode}")
-        if mode == "node_budget" and "max_nodes" not in batching:
-            raise ValueError("node_budget batching requires max_nodes")
+        if (
+            mode in {"node_budget", "streaming_node_budget"}
+            and "max_nodes" not in batching
+        ):
+            raise ValueError(f"{mode} batching requires max_nodes")
+        if mode == "streaming_node_budget":
+            if "drop_last" in batching:
+                raise ValueError("streaming_node_budget does not accept drop_last")
+            if batching["max_nodes"] <= 0:
+                raise ValueError("max_nodes must be positive")
+            if "steps_per_epoch" in batching and batching["steps_per_epoch"] <= 0:
+                raise ValueError("steps_per_epoch must be positive")
+            target = batching.get("target_nodes", batching["max_nodes"])
+            if target <= 0 or target > batching["max_nodes"]:
+                raise ValueError(
+                    "target_nodes must be positive and cannot exceed max_nodes"
+                )
+            for name in ("metadata_chunk_size", "prefetch_batches"):
+                if name in batching and batching[name] <= 0:
+                    raise ValueError(f"{name} must be positive")
+            if batching.get("forward_window", 1) < 0:
+                raise ValueError("forward_window cannot be negative")
+            if (
+                batching.get("max_graphs") is not None
+                and batching["max_graphs"] <= 0
+            ):
+                raise ValueError("max_graphs must be positive")
+            if batching.get("oversized_sample", "error") not in {
+                "error",
+                "single",
+                "skip",
+            }:
+                raise ValueError(
+                    "oversized_sample must be one of: error, single, skip"
+                )
 
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(

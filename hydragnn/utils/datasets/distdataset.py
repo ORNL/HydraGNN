@@ -161,6 +161,7 @@ class DistDataset(AbstractBaseDataset):
         self.variable_dtype = dict()
         self.variable_count = dict()
         self.variable_offset = dict()
+        self.total_node_count = None
         self.data = dict()
         nbytes = 0
         for k in self.keys:
@@ -208,6 +209,12 @@ class DistDataset(AbstractBaseDataset):
             # vcount_list = allgatherv_numpy(vcount, comm=self.ddstore_comm)
             vcount = np.hstack(vcount_list).astype(np.int64)
             self.variable_count[k] = vcount
+            if (
+                self.total_node_count is None
+                and k in ("x", "pos")
+                and vdim == 0
+            ):
+                self.total_node_count = int(vcount.sum())
 
             offset_arr = np.zeros_like(vcount)
             offset_arr[1:] = np.cumsum(vcount)[:-1]
@@ -321,6 +328,15 @@ class DistDataset(AbstractBaseDataset):
         raise ValueError(
             "DDStore dataset has no node-indexed x or pos metadata for batching"
         )
+
+    def read_node_counts(self, indices):
+        """Return selected resident DDStore node-count metadata."""
+        counts = self.get_node_counts()
+        return [int(counts[int(index)]) for index in indices]
+
+    def get_total_node_count(self):
+        """Return the exact global node total from resident metadata."""
+        return self.total_node_count
 
     def update_data_object(self, data_object):
         if self.var_config is not None:

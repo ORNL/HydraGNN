@@ -11,6 +11,7 @@
 
 import os
 import socket
+from collections import deque
 
 import random
 
@@ -30,6 +31,7 @@ from hydragnn.preprocess.graph_dataset import (
 from hydragnn.preprocess.batch_sampler import (
     CostAwareBatchSampler,
     DistributedCostAwareBatchSampler,
+    StreamingNodeBudgetBatchSampler,
 )
 from hydragnn.preprocess.lsms_raw_dataset_loader import LSMS_RawDataLoader
 from hydragnn.preprocess.cfg_raw_dataset_loader import CFG_RawDataLoader
@@ -47,7 +49,6 @@ from torch.utils.data.dataloader import _DatasetKind
 
 from concurrent.futures import ThreadPoolExecutor
 import multiprocessing as mp
-import queue
 import re
 
 
@@ -106,6 +107,14 @@ class HydraDataLoader(DataLoader):
     """
 
     def __init__(self, dataset, **kwargs):
+        self.prefetch_batches = int(
+            kwargs.pop(
+                "prefetch_batches",
+                max(1, 2 * int(kwargs.get("num_workers", 0))),
+            )
+        )
+        if self.prefetch_batches <= 0:
+            raise ValueError("prefetch_batches must be positive")
         super(HydraDataLoader, self).__init__(dataset, **kwargs)
         self._dataset_fetcher = _DatasetKind.create_fetcher(
             self._dataset_kind,
@@ -115,8 +124,10 @@ class HydraDataLoader(DataLoader):
             self.drop_last,
         )
 
-        ## List of threads job (futures)
-        self.fs = queue.Queue()
+        self._futures = deque()
+        self._executor = None
+        self._submit_index = 0
+        self.max_prefetch_depth = 0
 
         log("num_workers:", self.num_workers)
         log("len:", len(self._index_sampler))
@@ -172,43 +183,67 @@ class HydraDataLoader(DataLoader):
 
     def __iter__(self):
         log("Iterator reset")
-        ## Check previous futures
-        if self.fs.qsize() > 0:
-            log("Clearn previous futures:", self.fs.qsize())
-            for future in iter(self.fs.get, None):
-                future.cancel()
-
-        ## Resetting
+        self._shutdown_executor()
         self._num_yielded = 0
         self._sampler_iter = iter(self._index_sampler)
-        self.fs_iter = iter(self.fs.get, None)
         counter = mp.Value("i", 0)
-        executor = ThreadPoolExecutor(
-            max_workers=self.num_workers,
+        self._executor = ThreadPoolExecutor(
+            max_workers=max(1, self.num_workers),
             initializer=self.worker_init,
             initargs=(counter,),
         )
-        for i in range(len(self._index_sampler)):
-            index = next(self._sampler_iter)
-            future = executor.submit(
-                self.fetch,
-                self.dataset,
-                i,
-                index,
-                pin_memory=self.pin_memory,
-            )
-            self.fs.put(future)
-        self.fs.put(None)
-        # log ("Submit all done.")
+        self._submit_index = 0
+        self._futures.clear()
+        for _ in range(self.prefetch_batches):
+            if not self._submit_one():
+                break
         return self
 
+    def _submit_one(self):
+        try:
+            index = next(self._sampler_iter)
+        except StopIteration:
+            return False
+        future = self._executor.submit(
+            self.fetch,
+            self.dataset,
+            self._submit_index,
+            index,
+            pin_memory=self.pin_memory,
+        )
+        self._submit_index += 1
+        self._futures.append(future)
+        self.max_prefetch_depth = max(self.max_prefetch_depth, len(self._futures))
+        return True
+
+    def _shutdown_executor(self):
+        while self._futures:
+            self._futures.popleft().cancel()
+        if self._executor is not None:
+            self._executor.shutdown(wait=True, cancel_futures=True)
+            self._executor = None
+
     def __next__(self):
-        # log ("Getting next", self._num_yielded)
-        future = next(self.fs_iter)
-        ibatch, data = future.result()
-        # log (f"Future done: ibatch={ibatch}", data.num_graphs)
+        if not self._futures:
+            self._shutdown_executor()
+            raise StopIteration
+        future = self._futures.popleft()
+        try:
+            _, data = future.result()
+        except BaseException:
+            self._shutdown_executor()
+            raise
         self._num_yielded += 1
+        self._submit_one()
+        if not self._futures and self._submit_index == self._num_yielded:
+            self._shutdown_executor()
         return data
+
+    def __del__(self):
+        try:
+            self._shutdown_executor()
+        except Exception:
+            pass
 
 
 def dataset_loading_and_splitting(config: {}):
@@ -244,6 +279,94 @@ def create_dataloaders(
     num_samples=None,  ## tuple of number of samples (train, val, test)
     batching=None,
 ):
+    if batching and batching.get("mode", "fixed") == "streaming_node_budget":
+        if "max_nodes" not in batching:
+            raise ValueError("streaming_node_budget batching requires max_nodes")
+        if oversampling:
+            raise ValueError(
+                "streaming node-budget batching cannot be combined with oversampling"
+            )
+        if "drop_last" in batching:
+            raise ValueError("streaming_node_budget does not accept drop_last")
+        if int(batching.get("prefetch_batches", 1)) <= 0:
+            raise ValueError("prefetch_batches must be positive")
+
+        group_size = 1
+        group_rank = 0
+        if dist.is_initialized():
+            if group is None:
+                group = dist.group.WORLD
+            if isinstance(group, dist.ProcessGroup):
+                group_size = dist.get_world_size(group=group)
+                group_rank = dist.get_rank(group=group)
+            elif isinstance(group, MPI.Comm):
+                group_size = group.Get_size()
+                group_rank = group.Get_rank()
+            else:
+                raise ValueError("Unsupported group type for distributed sampling")
+
+        num_workers = int(os.getenv("HYDRAGNN_NUM_WORKERS", "0"))
+        use_custom_loader = dist.is_initialized() and int(
+            os.getenv("HYDRAGNN_CUSTOM_DATALOADER", "0")
+        )
+
+        train_sampler = StreamingNodeBudgetBatchSampler(
+            trainset,
+            max_nodes=batching["max_nodes"],
+            target_nodes=batching.get("target_nodes"),
+            steps_per_epoch=batching.get("steps_per_epoch"),
+            num_replicas=group_size,
+            rank=group_rank,
+            max_graphs=batching.get("max_graphs"),
+            metadata_chunk_size=batching.get("metadata_chunk_size", 32),
+            metadata_cache_size=batching.get("metadata_cache_size"),
+            forward_window=batching.get("forward_window", 1),
+            shuffle=batching.get("shuffle", train_sampler_shuffle),
+            seed=batching.get("seed", 0),
+            oversized_sample=batching.get("oversized_sample", "error"),
+        )
+
+        train_loader_type = HydraDataLoader if use_custom_loader else DataLoader
+        train_loader_kwargs = {
+            "batch_sampler": train_sampler,
+            "num_workers": num_workers,
+            "pin_memory": dist.is_initialized(),
+            "persistent_workers": False,
+        }
+        if use_custom_loader:
+            train_loader_kwargs["prefetch_batches"] = batching.get(
+                "prefetch_batches", max(1, 2 * num_workers)
+            )
+        train_loader = train_loader_type(trainset, **train_loader_kwargs)
+
+        finite_sampler_type = CostAwareBatchSampler
+        finite_distributed_options = {}
+        if dist.is_initialized():
+            finite_sampler_type = DistributedCostAwareBatchSampler
+            finite_distributed_options = {
+                "num_replicas": group_size,
+                "rank": group_rank,
+                "pad_batches": True,
+            }
+
+        def make_finite_loader(dataset, shuffle):
+            sampler = finite_sampler_type(
+                dataset,
+                max_cost=batching["max_nodes"],
+                max_graphs=batching.get("max_graphs"),
+                shuffle=shuffle,
+                seed=batching.get("seed", 0),
+                oversized_sample=batching.get("oversized_sample", "error"),
+                **finite_distributed_options,
+            )
+            return DataLoader(dataset, batch_sampler=sampler)
+
+        return (
+            train_loader,
+            make_finite_loader(valset, val_sampler_shuffle),
+            make_finite_loader(testset, test_sampler_shuffle),
+        )
+
     if batching and batching.get("mode", "fixed") != "fixed":
         if oversampling:
             raise ValueError("cost-aware batching cannot be combined with oversampling")
