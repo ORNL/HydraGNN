@@ -17,6 +17,8 @@ import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
 from itertools import islice
+from pathlib import Path
+import shutil
 
 # deprecated in torch_geometric 2.0
 try:
@@ -34,6 +36,10 @@ num_samples = 1000
 charge = 0.0
 spin = 1.0
 QM9_CACHE_VERSION = "named-schema-v2-raw-subset"
+QM9_LEGACY_CACHE_DIRECTORIES = (
+    "named-schema-v1",
+    "named-schema-v2-raw-subset",
+)
 
 
 # Update each sample prior to loading.
@@ -82,6 +88,30 @@ def build_qm9_from_raw(root, pre_transform, pre_filter=qm9_pre_filter):
         Chem.SDMolSupplier = original_supplier
 
 
+def prepare_qm9_cache(cache_root):
+    """Keep one raw cache and invalidate only incompatible processed data."""
+    root = Path(cache_root)
+    for directory_name in QM9_LEGACY_CACHE_DIRECTORIES:
+        legacy = root / directory_name
+        if legacy.is_dir():
+            shutil.rmtree(legacy)
+
+    processed = root / "processed"
+    marker = processed / ".hydragnn-cache-version"
+    current_version = None
+    if marker.is_file():
+        current_version = marker.read_text(encoding="utf-8").strip()
+    if processed.is_dir() and current_version != QM9_CACHE_VERSION:
+        shutil.rmtree(processed)
+
+
+def mark_qm9_cache_current(cache_root):
+    """Record the schema version after PyG finishes processing successfully."""
+    marker = Path(cache_root) / "processed" / ".hydragnn-cache-version"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(QM9_CACHE_VERSION + "\n", encoding="utf-8")
+
+
 def validate_named_cache(dataset, variables, cache_root):
     """Reject a processed cache that predates the declared named schema."""
     schema = hydragnn.utils.input_config_parsing.parse_variable_schema(variables)
@@ -93,7 +123,7 @@ def validate_named_cache(dataset, variables, cache_root):
         raise RuntimeError(
             f"Incompatible QM9 processed cache at '{cache_root}'. "
             f"Expected the {QM9_CACHE_VERSION} named-variable format. "
-            "Remove that versioned cache and run again to rebuild it."
+            "The processed cache must be rebuilt from the retained raw files."
         ) from error
 
 
@@ -154,14 +184,17 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
             "dataset; fallback to PyG's preprocessed artifact is disabled."
         ) from error
 
-    cache_root = os.path.join("dataset", "qm9", QM9_CACHE_VERSION)
+    cache_root = os.path.join("dataset", "qm9")
 
     def build_dataset():
-        return build_qm9_from_raw(
+        prepare_qm9_cache(cache_root)
+        result = build_qm9_from_raw(
             root=cache_root,
             pre_transform=lambda data: qm9_pre_transform(data, transform),
             pre_filter=qm9_pre_filter,
         )
+        mark_qm9_cache_current(cache_root)
+        return result
 
     dataset = hydragnn.preprocess.build_dataset_on_rank_zero(build_dataset)
     validate_named_cache(dataset, config["Variables"], cache_root)
