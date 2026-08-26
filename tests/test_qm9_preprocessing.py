@@ -10,21 +10,26 @@
 ##############################################################################
 import json
 
+import pytest
 import torch
-from rdkit import Chem
-from rdkit.Chem import AllChem
 
 from examples.qm9 import qm9
-from examples.qm9.qm9_raw_processor import RobustQM9
 
 
 def _processor(report_directory):
+    pytest.importorskip("rdkit", reason="raw QM9 preprocessing requires RDKit")
+    from examples.qm9.qm9_raw_processor import RobustQM9
+
     processor = object.__new__(RobustQM9)
     processor.report_directory = report_directory
     return processor
 
 
 def test_qm9_conversion_preserves_original_target_index(tmp_path):
+    pytest.importorskip("rdkit", reason="raw QM9 preprocessing requires RDKit")
+    from rdkit import Chem
+    from rdkit.Chem import AllChem
+
     molecule = Chem.AddHs(Chem.MolFromSmiles("C"))
     assert AllChem.EmbedMolecule(molecule, randomSeed=0) == 0
     molecule.SetProp("_Name", "methane")

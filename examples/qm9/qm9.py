@@ -18,11 +18,6 @@ from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
 from pathlib import Path
 
-try:
-    from .qm9_raw_processor import RobustQM9
-except ImportError:
-    from qm9_raw_processor import RobustQM9
-
 # deprecated in torch_geometric 2.0
 try:
     from torch_geometric.loader import DataLoader
@@ -74,6 +69,14 @@ def build_qm9_from_raw(
     report_directory=None,
 ):
     """Build QM9 from raw records with explicit rejection reporting."""
+    # RDKit is required only when raw QM9 records are converted.  Keep this
+    # import local so configuration, cache-management, and HPO workflows can
+    # use this module without installing the optional QM9 dependency.
+    if __package__:
+        from .qm9_raw_processor import RobustQM9
+    else:
+        from qm9_raw_processor import RobustQM9
+
     return RobustQM9(
         root=root,
         pre_transform=pre_transform,
