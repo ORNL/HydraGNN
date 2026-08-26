@@ -165,13 +165,12 @@ class SCFStack(Base):
 
     def _embedding(self, data):
         super()._embedding(data)
-
-        if self.global_attn_engine == "EquivariantTransformer" and torch.any(
-            data.edge_shifts != 0
-        ):
-            raise ValueError(
-                "EquivariantTransformer does not yet support periodic images"
-            )
+        equivariant_geometry = None
+        if self.global_attn_engine == "EquivariantTransformer":
+            # Capture periodic metadata before the legacy coordinate-update
+            # branch replaces local edge shifts. Global explicit-image
+            # attention must follow the user's original PBC declaration.
+            equivariant_geometry = self._equivariant_attention_geometry(data)
 
         gps_edge_encodings = self.global_attn_engine == "GPS" and self.is_edge_model
         if (self.use_edge_attr or gps_edge_encodings) and self.equivariance:
@@ -206,18 +205,7 @@ class SCFStack(Base):
             }
 
         if self.global_attn_engine == "EquivariantTransformer":
-            conv_args.update(
-                {
-                    "positions": data.pos,
-                    "graph_batch": (
-                        data.batch
-                        if data.batch is not None
-                        else torch.zeros(
-                            data.pos.shape[0], dtype=torch.long, device=data.pos.device
-                        )
-                    ),
-                }
-            )
+            conv_args.update(equivariant_geometry)
 
         if self.use_global_attn:
             if self.global_attn_engine == "EquivariantTransformer":

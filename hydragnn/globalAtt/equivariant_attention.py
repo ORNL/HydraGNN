@@ -174,6 +174,85 @@ class EquivariantAllToAllAttention(torch.nn.Module):
             return node_features.new_zeros((0, self.irreps.dim))
         return torch.cat(outputs, dim=0)
 
+    def forward_bipartite_chunked(
+        self,
+        query_features: torch.Tensor,
+        query_positions: torch.Tensor,
+        query_batch: torch.Tensor,
+        source_features: torch.Tensor,
+        source_positions: torch.Tensor,
+        source_batch: torch.Tensor,
+        source_base_index: torch.Tensor,
+        source_is_central: torch.Tensor,
+        chunk_size: int,
+    ) -> torch.Tensor:
+        """Attend from central queries to explicit image-expanded sources.
+
+        The source and query domains deliberately differ. Only the zero-shift
+        copy of a query atom is excluded as a self-pair; nonzero periodic images
+        of that same atom are physical, distinct attention sources.
+        """
+        if not isinstance(chunk_size, int) or isinstance(chunk_size, bool):
+            raise TypeError("chunk_size must be an integer")
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be positive")
+        self._validate_bipartite_inputs(
+            query_features,
+            query_positions,
+            query_batch,
+            source_features,
+            source_positions,
+            source_batch,
+            source_base_index,
+            source_is_central,
+        )
+        num_queries = query_features.shape[0]
+        queries = self.query(query_features).reshape(
+            num_queries, self.heads, self.irreps.dim
+        )
+        keys = self.key(source_features).reshape(
+            source_features.shape[0], self.heads, self.irreps.dim
+        )
+        query_indices = torch.arange(num_queries, device=query_batch.device)
+        source_indices = torch.arange(
+            source_features.shape[0], device=query_batch.device
+        )
+        outputs = []
+
+        for start in range(0, num_queries, chunk_size):
+            stop = min(start + chunk_size, num_queries)
+            targets = query_indices[start:stop]
+            pair_blocks = []
+            for target in targets:
+                allowed = source_batch == query_batch[target]
+                allowed &= ~(source_is_central & (source_base_index == target))
+                sources = source_indices[allowed]
+                pair_blocks.append(
+                    torch.stack((sources, target.expand(sources.shape[0])))
+                )
+            edge_index = torch.cat(pair_blocks, dim=1)
+            source, target = edge_index
+            logits = (queries[target] * keys[source]).sum(dim=-1)
+            logits = logits / math.sqrt(self.irreps.dim)
+            attention = softmax(logits, index=target, num_nodes=num_queries)
+            values = self._bipartite_values(
+                source_features,
+                source_positions,
+                query_positions,
+                edge_index,
+            )
+            messages = attention.unsqueeze(-1) * values
+            aggregated = query_features.new_zeros(
+                (targets.numel(), self.heads, self.irreps.dim)
+            )
+            aggregated.index_add_(0, target - start, messages)
+            outputs.append(
+                self.output(aggregated.reshape(targets.numel(), self.head_irreps.dim))
+            )
+        if not outputs:
+            return query_features.new_zeros((0, self.irreps.dim))
+        return torch.cat(outputs, dim=0)
+
     def _values(
         self,
         node_features: torch.Tensor,
@@ -203,6 +282,93 @@ class EquivariantAllToAllAttention(torch.nn.Module):
             ],
             dim=1,
         )
+
+    def _bipartite_values(
+        self,
+        source_features: torch.Tensor,
+        source_positions: torch.Tensor,
+        query_positions: torch.Tensor,
+        edge_index: torch.Tensor,
+    ) -> torch.Tensor:
+        source, target = edge_index
+        # Do not minimum-image wrap this displacement. Each source coordinate
+        # already identifies a particular periodic image, so wrapping here
+        # would collapse distinct keys and corrupt the attention softmax.
+        relative = source_positions[source] - query_positions[target]
+        distances = torch.linalg.vector_norm(relative, dim=-1)
+        spherical_harmonics = o3.spherical_harmonics(
+            self.sh_irreps,
+            relative,
+            normalize=True,
+            normalization="component",
+        )
+        radial = self._radial_basis(distances)
+        weights = self.radial_mlp(radial).reshape(
+            edge_index.shape[1], self.heads, self.value_tensor_product.weight_numel
+        )
+        return torch.stack(
+            [
+                self.value_tensor_product(
+                    source_features[source], spherical_harmonics, weights[:, head]
+                )
+                for head in range(self.heads)
+            ],
+            dim=1,
+        )
+
+    def _validate_bipartite_inputs(
+        self,
+        query_features,
+        query_positions,
+        query_batch,
+        source_features,
+        source_positions,
+        source_batch,
+        source_base_index,
+        source_is_central,
+    ):
+        if query_features.ndim != 2 or query_features.shape[1] != self.irreps.dim:
+            raise ValueError("query_features have an incompatible shape")
+        if source_features.ndim != 2 or source_features.shape[1] != self.irreps.dim:
+            raise ValueError("source_features have an incompatible shape")
+        if query_positions.shape != (query_features.shape[0], 3):
+            raise ValueError("query_positions must have shape [N_query, 3]")
+        if source_positions.shape != (source_features.shape[0], 3):
+            raise ValueError("source_positions must have shape [N_source, 3]")
+        if query_batch.shape != (query_features.shape[0],):
+            raise ValueError("query_batch must have one entry per query")
+        source_count = source_features.shape[0]
+        for name, value in (
+            ("source_batch", source_batch),
+            ("source_base_index", source_base_index),
+            ("source_is_central", source_is_central),
+        ):
+            if value.shape != (source_count,):
+                raise ValueError(f"{name} must have one entry per source")
+        if query_batch.dtype != torch.long or source_batch.dtype != torch.long:
+            raise TypeError("query and source batch tensors must use torch.long")
+        if source_base_index.dtype != torch.long:
+            raise TypeError("source_base_index must use torch.long")
+        if source_is_central.dtype != torch.bool:
+            raise TypeError("source_is_central must use torch.bool")
+        tensors = (
+            query_features,
+            query_positions,
+            query_batch,
+            source_features,
+            source_positions,
+            source_batch,
+            source_base_index,
+            source_is_central,
+        )
+        if any(value.device != query_features.device for value in tensors):
+            raise ValueError("all periodic attention tensors must share a device")
+        if query_features.dtype != query_positions.dtype:
+            raise ValueError("query features and positions must share a dtype")
+        if source_features.dtype != query_features.dtype:
+            raise ValueError("query and source features must share a dtype")
+        if source_positions.dtype != query_positions.dtype:
+            raise ValueError("query and source positions must share a dtype")
 
     @staticmethod
     def _edges_for_targets(

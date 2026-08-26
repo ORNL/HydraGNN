@@ -189,14 +189,34 @@ def test_painn_equivariant_transformer_supports_graph_conditioning(
     assert all(parameter.grad is not None for parameter in conditioner_parameters)
 
 
-def test_painn_equivariant_transformer_rejects_periodic_images():
+def test_painn_equivariant_transformer_requires_explicit_periodic_opt_in():
     model = _create_model()
     positions = torch.randn(3, 3)
     shifts = torch.zeros(6, 3)
     shifts[0, 0] = 2.0
 
-    with pytest.raises(ValueError, match="periodic images"):
+    with pytest.raises(ValueError, match="equivariant_attn_periodic=true"):
         model(_data(positions, edge_shifts=shifts))
+
+
+def test_painn_equivariant_transformer_supports_explicit_periodic_images():
+    model = _create_model(
+        equivariant_attn_periodic=True,
+        equivariant_attn_periodic_replication=[1, 0, 0],
+        equivariant_attn_chunk_size=2,
+    )
+    shifts = torch.zeros(6, 3)
+    shifts[0, 0] = 1.0
+    shifts[1, 0] = -1.0
+    data = _data(torch.randn(3, 3), edge_shifts=shifts)
+    data.cell = torch.eye(3).unsqueeze(0)
+    data.pbc = torch.tensor([[True, False, False]])
+
+    output = model(data)[0]
+    output.sum().backward()
+
+    assert output.shape == (1, 1)
+    assert all(parameter.grad is not None for parameter in model.parameters())
 
 
 def test_equivariant_transformer_config_rejects_untested_model_integration():

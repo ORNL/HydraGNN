@@ -68,10 +68,50 @@ All ordered non-self pairs are constructed independently for each graph in a
 batch. Cross-graph attention is forbidden. Self-attention is handled by the
 residual path rather than by zero-length geometric edges.
 
-The first implementation targets finite, non-periodic systems. Periodic
-all-to-all attention requires an explicit image convention or a lattice-aware
-long-range formulation; silently applying a minimum-image displacement is not
-equivalent to an infinite periodic interaction.
+### Periodic convention
+
+Periodic attention is opt-in and follows an explicit finite-supercell
+convention. This is a collection of modeling choices rather than an incidental
+implementation detail:
+
+1. Atoms in the supplied cell are the only queries and the only outputs.
+   Replicated atoms are keys and values only. Graph pooling therefore remains
+   over central atoms and does not multiply an extensive prediction by the
+   number of images.
+2. The default replication count is one in each periodic lattice direction.
+   For a fully periodic cell this produces a `3 x 3 x 3` source supercell.
+   Non-periodic directions are never replicated. The count is configurable so
+   users can measure convergence rather than assuming this default is exact.
+3. Every source in the selected supercell participates in attention. There is
+   no radius cutoff: introducing one would turn the global branch into another
+   local neighborhood operation. The finite supercell itself is the explicit
+   approximation to the infinite crystal.
+4. Image positions are constructed as `r_j + n @ cell`, where `n` is an
+   integer lattice shift. The resulting displacement is used directly. It is
+   **never minimum-image wrapped**. Minimum-image wrapping would collapse
+   different explicit images onto the same displacement, duplicate equivalent
+   keys, and alter the softmax denominator.
+5. One softmax per query and attention head spans all selected images in that
+   query's graph. This preserves the Transformer defined by the non-periodic
+   implementation, but it also means changing the replication extent changes
+   both the source set and its normalization. Supercell convergence must be
+   evaluated for the application.
+6. Replicas are differentiable functions of the original positions and cell;
+   they are not independent coordinates. Energy gradients therefore accumulate
+   image contributions onto central atoms, and cell gradients remain available
+   for a separately defined stress conversion.
+
+The implementation deliberately does not silently wrap input coordinates into
+a canonical cell. Such wrapping uses discontinuous integer choices at cell
+boundaries and can obscure errors in prepared data. Callers must provide the
+intended central-cell representation explicitly.
+
+A finite explicit supercell cannot be exactly invariant to every equivalent
+choice of unit-cell origin or basis. Rewrapping an atom can shift which boundary
+images lie inside a finite image range. Exact invariance would require an
+infinite image sum or a pair-centered/minimum-image convention; the latter is
+explicitly rejected here. Increasing the replication count supplies a
+systematic convergence check, not a proof of infinite-lattice equivalence.
 
 The dense reference path materializes the complete edge set for correctness
 tests. Production execution chunks target nodes and constructs only the pairs
@@ -94,6 +134,8 @@ The engine is selected with:
       "equivariant_attn_num_radial": 32,
       "equivariant_attn_chunk_size": 512,
       "equivariant_attn_coupling_mode": "parallel",
+      "equivariant_attn_periodic": true,
+      "equivariant_attn_periodic_replication": [1, 1, 1],
       "equivariant_attn_allow_scalar_only": false,
       "equivariant_attn_require_tensor_coupling": true
     }
@@ -113,6 +155,15 @@ the same input and adds their outputs in the shared irrep representation. This
 matches GraphGPS's local/global organization while preserving equivariance.
 `"sequential"` retains the earlier local-MPNN-then-global-Transformer flow for
 experiments and compatibility with models trained using that architecture.
+
+`equivariant_attn_periodic` defaults to `false`. When enabled, every sample
+must provide `data.cell` and `data.pbc`; batched forms must contain one `3 x 3`
+cell and one length-three PBC mask per graph. The replication option accepts one
+nonnegative integer for all axes or a length-three list. Counts on axes whose
+PBC flag is false are ignored. A value of zero selects only the central image
+on that axis. Nonzero local `edge_shifts` are rejected unless periodic global
+attention is explicitly enabled, preventing an accidental change of physical
+semantics.
 
 `equivariant_attn_allow_scalar_only` must be set to `true` for SchNet or
 DimeNet, and `equivariant_attn_require_tensor_coupling` must be set to `false`.
@@ -136,7 +187,19 @@ The regression suite verifies:
 6. PaiNN/PNAEq and MACE adapter round trips;
 7. forward and backward integration with each supported local MPNN;
 8. invariant energy and equivariant energy-gradient forces; and
-9. clear rejection of scalar-only, EGNN, and unsupported periodic inputs.
+9. explicit-image construction without minimum-image wrapping;
+10. central-query output cardinality, configurable image extent, and cell
+    gradients; and
+11. clear rejection of scalar-only misuse, EGNN, and periodic inputs without
+    explicit opt-in or required metadata.
+
+Periodic full-model forward/backward tests cover PaiNN, PNAEq, and MACE tensor
+coupling as well as the explicitly restricted SchNet and DimeNet scalar-only
+adapters. EGNN is not included because its equivariant state consists of
+updated coordinates rather than translation-invariant latent irreps. Passing
+those absolute coordinates through the current tensor adapter would violate
+the global Transformer's translation-invariance contract; EGNN requires a
+separately designed coordinate-state adapter before integration can be enabled.
 
 All symmetry tests must use multiple random transformations and nontrivial
 features; shape-only smoke tests are insufficient.

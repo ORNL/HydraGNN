@@ -142,13 +142,41 @@ def test_scalar_mpnn_equivariant_transformer_state_dict_round_trip(mpnn_type):
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
-def test_scalar_mpnn_equivariant_transformer_rejects_periodic_images(mpnn_type):
+def test_scalar_mpnn_equivariant_transformer_requires_periodic_opt_in(mpnn_type):
     model = _create_model(mpnn_type)
     shifts = torch.zeros(6, 3)
     shifts[0, 2] = 2.0
 
-    with pytest.raises(ValueError, match="periodic images"):
+    with pytest.raises(ValueError, match="equivariant_attn_periodic=true"):
         model(_data(torch.randn(3, 3), edge_shifts=shifts))
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+def test_scalar_mpnn_periodic_full_model_forward_backward(mpnn_type):
+    model = _create_model(
+        mpnn_type,
+        equivariant_attn_periodic=True,
+        equivariant_attn_periodic_replication=[1, 0, 0],
+        equivariant_attn_chunk_size=2,
+    )
+    shifts = torch.zeros(6, 3)
+    shifts[0, 0], shifts[1, 0] = 1.0, -1.0
+    positions = torch.randn(3, 3, requires_grad=True)
+    data = _data(positions, edge_shifts=shifts)
+    cell = torch.eye(3, requires_grad=True)
+    data.cell = cell.unsqueeze(0)
+    data.pbc = torch.tensor([[True, False, False]])
+
+    output = model(data)[0]
+    output.square().sum().backward()
+
+    assert output.shape == (1, 1)
+    assert positions.grad is not None and torch.isfinite(positions.grad).all()
+    assert cell.grad is not None and torch.isfinite(cell.grad).all()
+    assert all(
+        any(parameter.grad is not None for parameter in conv.global_layer.parameters())
+        for conv in model.graph_convs
+    )
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])

@@ -151,13 +151,43 @@ def test_mace_equivariant_transformer_state_dict_round_trip():
     torch.testing.assert_close(restored(data)[0], expected)
 
 
-def test_mace_equivariant_transformer_rejects_periodic_images():
+def test_mace_equivariant_transformer_requires_explicit_periodic_opt_in():
     model = _create_model()
     shifts = torch.zeros(6, 3)
     shifts[0, 0] = 3.0
 
-    with pytest.raises(ValueError, match="periodic images"):
+    with pytest.raises(ValueError, match="equivariant_attn_periodic=true"):
         model(_data(torch.randn(3, 3), edge_shifts=shifts))
+
+
+def test_mace_equivariant_transformer_periodic_full_model_forward_backward():
+    model = _create_model(
+        equivariant_attn_periodic=True,
+        equivariant_attn_periodic_replication=[1, 0, 0],
+    )
+    shifts = torch.zeros(6, 3)
+    shifts[0, 0], shifts[1, 0] = 1.0, -1.0
+    positions = torch.randn(3, 3, requires_grad=True)
+    data = _data(positions, edge_shifts=shifts)
+    cell = torch.eye(3, requires_grad=True)
+    data.cell = cell.unsqueeze(0)
+    data.pbc = torch.tensor([[True, False, False]])
+
+    output = model(data)[0]
+    output.square().sum().backward()
+
+    assert output.shape == (1, 1)
+    assert positions.grad is not None and torch.isfinite(positions.grad).all()
+    assert cell.grad is not None and torch.isfinite(cell.grad).all()
+    transformer = next(
+        conv
+        for conv in model.graph_convs
+        if isinstance(conv, EquivariantLocalGlobalConv)
+    )
+    assert any(
+        parameter.grad is not None
+        for parameter in transformer.global_layer.parameters()
+    )
 
 
 def test_mace_config_requires_a_tensor_hidden_layer():
