@@ -16,6 +16,7 @@ import torch.distributed as dist
 import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
+from itertools import islice
 
 # deprecated in torch_geometric 2.0
 try:
@@ -32,7 +33,7 @@ num_samples = 1000
 # charge and spin are constant across QM9 dataset
 charge = 0.0
 spin = 1.0
-QM9_CACHE_VERSION = "named-schema-v1"
+QM9_CACHE_VERSION = "named-schema-v2-raw-subset"
 
 
 # Update each sample prior to loading.
@@ -51,6 +52,34 @@ def qm9_pre_transform(data, transform):
 
 def qm9_pre_filter(data):
     return data.idx < num_samples
+
+
+def build_qm9_from_raw(root, pre_transform, pre_filter=qm9_pre_filter):
+    """Build the example's bounded subset from the official raw QM9 files.
+
+    PyG applies ``pre_filter`` only after constructing every molecule in the
+    SDF. RDKit can return ``None`` for a malformed record later in the full
+    archive, even though this example needs only the first ``num_samples``
+    records. Limit the raw supplier itself so irrelevant later records cannot
+    abort subset preprocessing. This still downloads and parses the official
+    raw QM9 source; it does not use PyG's preprocessed fallback artifact.
+    """
+    from rdkit import Chem
+
+    original_supplier = Chem.SDMolSupplier
+
+    def bounded_supplier(*args, **kwargs):
+        return islice(original_supplier(*args, **kwargs), num_samples)
+
+    Chem.SDMolSupplier = bounded_supplier
+    try:
+        return torch_geometric.datasets.QM9(
+            root=root,
+            pre_transform=pre_transform,
+            pre_filter=pre_filter,
+        )
+    finally:
+        Chem.SDMolSupplier = original_supplier
 
 
 def validate_named_cache(dataset, variables, cache_root):
@@ -128,7 +157,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     cache_root = os.path.join("dataset", "qm9", QM9_CACHE_VERSION)
 
     def build_dataset():
-        return torch_geometric.datasets.QM9(
+        return build_qm9_from_raw(
             root=cache_root,
             pre_transform=lambda data: qm9_pre_transform(data, transform),
             pre_filter=qm9_pre_filter,

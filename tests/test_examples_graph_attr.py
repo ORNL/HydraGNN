@@ -47,7 +47,7 @@ def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
         transform = AddLaplacianEigenvectorPE(
             k=pe_dim, attr_name="pe", is_undirected=True
         )
-        dataset = torch_geometric.datasets.QM9(
+        dataset = qm9_module.build_qm9_from_raw(
             root=os.path.join(tmp_path, "qm9"),
             pre_transform=lambda data: qm9_module.qm9_pre_transform(data, transform),
             pre_filter=qm9_module.qm9_pre_filter,
