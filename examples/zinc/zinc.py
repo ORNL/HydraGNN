@@ -26,6 +26,8 @@ except:
 
 import hydragnn
 
+ZINC_CACHE_VERSION = "named-schema-v1:subset"
+
 # Set this path for output.
 try:
     os.environ["SERIALIZED_DATA_PATH"]
@@ -69,22 +71,36 @@ def zinc_pre_transform(data):
     return data
 
 
-train = ZINC(
-    root="dataset/zinc", subset=True, split="train", pre_transform=zinc_pre_transform
-)
-val = ZINC(
-    root="dataset/zinc", subset=True, split="val", pre_transform=zinc_pre_transform
-)
-test = ZINC(
-    root="dataset/zinc", subset=True, split="test", pre_transform=zinc_pre_transform
-)
+cache_root = "dataset/zinc"
+
+
+def build_datasets():
+    hydragnn.utils.datasets.prepare_pyg_cache(cache_root, ZINC_CACHE_VERSION)
+    datasets = tuple(
+        ZINC(
+            root=cache_root,
+            subset=True,
+            split=split,
+            pre_transform=zinc_pre_transform,
+        )
+        for split in ("train", "val", "test")
+    )
+    hydragnn.utils.datasets.mark_pyg_cache_current(cache_root, ZINC_CACHE_VERSION)
+    return datasets
+
+
+train, val, test = hydragnn.preprocess.build_dataset_on_rank_zero(build_datasets)
 
 (
     train_loader,
     val_loader,
     test_loader,
 ) = hydragnn.preprocess.create_dataloaders(
-    train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+    train,
+    val,
+    test,
+    config["NeuralNetwork"]["Training"]["batch_size"],
+    variables=config["Variables"],
 )
 
 config = hydragnn.utils.input_config_parsing.update_config(

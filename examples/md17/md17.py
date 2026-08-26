@@ -29,7 +29,8 @@ import hydragnn
 # charge and spin are constant across MD17 dataset
 charge = 0.0
 spin = 1.0
-MD17_CACHE_VERSION = "named-schema-v1"
+MD17_CACHE_VERSION = "named-schema-v2:energy-per-atom:subset-25pct"
+MD17_LEGACY_CACHE_DIRECTORIES = ("named-schema-v1",)
 
 
 # Update each sample prior to loading.
@@ -61,7 +62,7 @@ def validate_named_cache(dataset, variables, cache_root):
         raise RuntimeError(
             f"Incompatible MD17 processed cache at '{cache_root}'. "
             f"Expected the {MD17_CACHE_VERSION} named-variable format. "
-            "Remove that versioned cache and run again to rebuild it."
+            "The processed cache must be rebuilt from the retained raw file."
         ) from error
 
 
@@ -113,10 +114,13 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     # Fix for MD17 datasets
     torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
 
-    cache_root = os.path.join("dataset", "md17", MD17_CACHE_VERSION)
+    cache_root = os.path.join("dataset", "md17")
 
     def build_dataset():
-        return torch_geometric.datasets.MD17(
+        hydragnn.utils.datasets.prepare_pyg_cache(
+            cache_root, MD17_CACHE_VERSION, MD17_LEGACY_CACHE_DIRECTORIES
+        )
+        result = torch_geometric.datasets.MD17(
             root=cache_root,
             name="uracil",
             pre_transform=lambda data: md17_pre_transform(
@@ -124,6 +128,8 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
             ),
             pre_filter=md17_pre_filter,
         )
+        hydragnn.utils.datasets.mark_pyg_cache_current(cache_root, MD17_CACHE_VERSION)
+        return result
 
     dataset = hydragnn.preprocess.build_dataset_on_rank_zero(build_dataset)
     validate_named_cache(dataset, config["Variables"], cache_root)

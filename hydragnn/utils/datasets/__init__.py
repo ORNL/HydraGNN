@@ -22,4 +22,5 @@ from .compositional_data_splitting import (
 )
 from .distdataset import DistDataset
 from .pickledataset import SimplePickleDataset, SimplePickleWriter
+from .pyg_cache import mark_pyg_cache_current, prepare_pyg_cache
 from .serializeddataset import SerializedDataset, SerializedWriter

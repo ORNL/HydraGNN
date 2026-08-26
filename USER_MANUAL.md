@@ -594,6 +594,23 @@ local dataset artifacts. Do not train from a `.pt` dataset directory obtained
 from an untrusted source; inspect or convert such data through a safe format
 before loading it with HydraGNN.
 
+#### PyG example cache lifecycle
+
+The QM9, MD17, MD17-MLIP, and ZINC examples keep downloaded source files in one
+stable `dataset/<name>/raw` directory. A small marker identifies the exact
+schema and preprocessing mode represented by `dataset/<name>/processed`. When
+that format changes, HydraGNN removes and rebuilds only `processed`; it retains
+the raw download. Legacy version-named MD17 and QM9 directories are collapsed
+into this layout by moving their raw files before the obsolete directory is
+removed.
+
+The standard and MLIP MD17 examples intentionally have distinct processed
+format identifiers because their targets and transforms differ. Running one
+after the other therefore replaces the incompatible processed representation;
+it does not create another copy of the MD17 raw archive. Dataset construction
+is performed on rank zero before a barrier so distributed runs do not race
+while migrating, downloading, or rebuilding a cache.
+
 ### Global Attention Mechanisms
 
 #### GPS (Graph Positional and Structural Attention)
@@ -1312,12 +1329,37 @@ matching `--natom`, `--cutoff`, and the selected storage format.
 #### QM9 Dataset Example
 
 ```bash
-# Train on QM9 molecular dataset
-cd examples/qm9
-python qm9.py --inputfile qm9.json
+# From the repository root, preprocess the first 1,000 raw QM9 records and train.
+python examples/qm9/qm9.py
+
+# Convert the complete official raw archive, report rejected molecules, and exit.
+python examples/qm9/qm9.py --qm9-preprocess-all \
+  --qm9-invalid-molecule-policy report_and_skip
+
+# Optionally fail after more than 20 rejected records.
+python examples/qm9/qm9.py --qm9-preprocess-all \
+  --qm9-max-rejected-molecules 20
 ```
 
+HydraGNN downloads and processes the official raw QM9 archive; it does not use
+PyG's preprocessed QM9 artifact. The full conversion records every official
+QM9 exclusion and every failed conversion in
+`dataset/qm9/preprocessing_report/full/unconverted_molecules.jsonl`, with the
+original zero-based SDF record index, one-based QM9 ID, molecule name when
+available, failure stage, exception type, and reason. A machine-readable run
+summary is written beside it as `summary.json`. RDKit may additionally emit a
+more detailed chemical parsing diagnostic on standard error.
+
+Rejected molecules do not stop conversion under the default
+`report_and_skip` policy. Targets are selected using the original SDF record
+index, so skipping one molecule cannot shift the targets of later molecules.
+Use `--qm9-invalid-molecule-policy error` for fail-fast behavior. Full and
+1,000-record modes share the downloaded raw archive; switching modes replaces
+only the incompatible processed cache rather than accumulating versioned
+dataset copies. Reports are retained because they are small provenance records.
+
 Key features:
+
 - Molecular graph representation
 - Multiple molecular properties
 - Rotational invariance for molecules

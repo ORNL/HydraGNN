@@ -8,27 +8,57 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+import json
+
+import torch
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from examples.qm9 import qm9
+from examples.qm9.qm9_raw_processor import RobustQM9
 
 
-def test_qm9_raw_builder_limits_supplier_before_pyg_processing(monkeypatch):
-    original_supplier = Chem.SDMolSupplier
-    monkeypatch.setattr(Chem, "SDMolSupplier", lambda *args, **kwargs: range(5000))
+def _processor(report_directory):
+    processor = object.__new__(RobustQM9)
+    processor.report_directory = report_directory
+    return processor
 
-    observed = {}
 
-    def fake_qm9(**kwargs):
-        observed["records"] = list(Chem.SDMolSupplier("raw.sdf"))
-        return kwargs
+def test_qm9_conversion_preserves_original_target_index(tmp_path):
+    molecule = Chem.AddHs(Chem.MolFromSmiles("C"))
+    assert AllChem.EmbedMolecule(molecule, randomSeed=0) == 0
+    molecule.SetProp("_Name", "methane")
+    targets = torch.arange(3 * 19, dtype=torch.float).reshape(3, 19)
 
-    monkeypatch.setattr(qm9.torch_geometric.datasets, "QM9", fake_qm9)
-    result = qm9.build_qm9_from_raw("cache", pre_transform=lambda data: data)
+    data = _processor(tmp_path)._convert_molecule(molecule, 1, targets)
 
-    assert len(observed["records"]) == qm9.num_samples
-    assert result["root"] == "cache"
-    assert Chem.SDMolSupplier is not original_supplier
+    assert data.idx == 1
+    assert data.name == "methane"
+    torch.testing.assert_close(data.y, targets[1].unsqueeze(0))
+
+
+def test_qm9_rejection_report_records_identity_stage_and_reason(tmp_path):
+    processor = _processor(tmp_path)
+    failure = processor._failure(
+        17, "conversion", "conversion failed", ValueError("bad valence"), "mol-18"
+    )
+    summary = {"converted": 17, "rejected": 1, "completed": True}
+
+    processor._write_reports([failure], summary)
+
+    records = [
+        json.loads(line)
+        for line in (tmp_path / "unconverted_molecules.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert records == [failure]
+    assert records[0]["record_index"] == 17
+    assert records[0]["qm9_id"] == 18
+    assert records[0]["stage"] == "conversion"
+    assert records[0]["exception"] == "ValueError"
+    assert records[0]["reason"] == "bad valence"
+    assert json.loads((tmp_path / "summary.json").read_text()) == summary
 
 
 def test_qm9_cache_reuses_raw_and_removes_obsolete_processed_data(tmp_path):
@@ -45,7 +75,7 @@ def test_qm9_cache_reuses_raw_and_removes_obsolete_processed_data(tmp_path):
         legacy.mkdir()
         (legacy / "duplicate.raw").write_text("duplicate", encoding="utf-8")
 
-    qm9.prepare_qm9_cache(tmp_path)
+    qm9.prepare_qm9_cache(tmp_path, "expected-mode")
 
     assert raw_file.read_text(encoding="utf-8") == "raw data"
     assert not processed.exists()
@@ -54,13 +84,16 @@ def test_qm9_cache_reuses_raw_and_removes_obsolete_processed_data(tmp_path):
     )
 
 
-def test_qm9_cache_keeps_matching_processed_data(tmp_path):
+def test_qm9_cache_keeps_only_matching_mode(tmp_path):
     processed = tmp_path / "processed"
     processed.mkdir()
     artifact = processed / "data_v3.pt"
     artifact.write_text("current", encoding="utf-8")
-    qm9.mark_qm9_cache_current(tmp_path)
+    qm9.mark_qm9_cache_current(tmp_path, "subset-1000")
 
-    qm9.prepare_qm9_cache(tmp_path)
+    qm9.prepare_qm9_cache(tmp_path, "subset-1000")
 
     assert artifact.read_text(encoding="utf-8") == "current"
+
+    qm9.prepare_qm9_cache(tmp_path, "full")
+    assert not processed.exists()

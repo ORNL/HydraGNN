@@ -16,9 +16,12 @@ import torch.distributed as dist
 import torch_geometric
 from torch_geometric.transforms import AddLaplacianEigenvectorPE
 import argparse
-from itertools import islice
 from pathlib import Path
-import shutil
+
+try:
+    from .qm9_raw_processor import RobustQM9
+except ImportError:
+    from qm9_raw_processor import RobustQM9
 
 # deprecated in torch_geometric 2.0
 try:
@@ -35,7 +38,7 @@ num_samples = 1000
 # charge and spin are constant across QM9 dataset
 charge = 0.0
 spin = 1.0
-QM9_CACHE_VERSION = "named-schema-v2-raw-subset"
+QM9_CACHE_VERSION = "named-schema-v3-robust-raw"
 QM9_LEGACY_CACHE_DIRECTORIES = (
     "named-schema-v1",
     "named-schema-v2-raw-subset",
@@ -60,56 +63,38 @@ def qm9_pre_filter(data):
     return data.idx < num_samples
 
 
-def build_qm9_from_raw(root, pre_transform, pre_filter=qm9_pre_filter):
-    """Build the example's bounded subset from the official raw QM9 files.
-
-    PyG applies ``pre_filter`` only after constructing every molecule in the
-    SDF. RDKit can return ``None`` for a malformed record later in the full
-    archive, even though this example needs only the first ``num_samples``
-    records. Limit the raw supplier itself so irrelevant later records cannot
-    abort subset preprocessing. This still downloads and parses the official
-    raw QM9 source; it does not use PyG's preprocessed fallback artifact.
-    """
-    from rdkit import Chem
-
-    original_supplier = Chem.SDMolSupplier
-
-    def bounded_supplier(*args, **kwargs):
-        return islice(original_supplier(*args, **kwargs), num_samples)
-
-    Chem.SDMolSupplier = bounded_supplier
-    try:
-        return torch_geometric.datasets.QM9(
-            root=root,
-            pre_transform=pre_transform,
-            pre_filter=pre_filter,
-        )
-    finally:
-        Chem.SDMolSupplier = original_supplier
+def build_qm9_from_raw(
+    root,
+    pre_transform,
+    pre_filter=qm9_pre_filter,
+    *,
+    max_records=num_samples,
+    invalid_molecule_policy="report_and_skip",
+    max_rejected_molecules=None,
+    report_directory=None,
+):
+    """Build QM9 from raw records with explicit rejection reporting."""
+    return RobustQM9(
+        root=root,
+        pre_transform=pre_transform,
+        pre_filter=pre_filter,
+        max_records=max_records,
+        invalid_molecule_policy=invalid_molecule_policy,
+        max_rejected_molecules=max_rejected_molecules,
+        report_directory=report_directory,
+    )
 
 
-def prepare_qm9_cache(cache_root):
+def prepare_qm9_cache(cache_root, expected_version=QM9_CACHE_VERSION):
     """Keep one raw cache and invalidate only incompatible processed data."""
-    root = Path(cache_root)
-    for directory_name in QM9_LEGACY_CACHE_DIRECTORIES:
-        legacy = root / directory_name
-        if legacy.is_dir():
-            shutil.rmtree(legacy)
-
-    processed = root / "processed"
-    marker = processed / ".hydragnn-cache-version"
-    current_version = None
-    if marker.is_file():
-        current_version = marker.read_text(encoding="utf-8").strip()
-    if processed.is_dir() and current_version != QM9_CACHE_VERSION:
-        shutil.rmtree(processed)
+    hydragnn.utils.datasets.prepare_pyg_cache(
+        cache_root, expected_version, QM9_LEGACY_CACHE_DIRECTORIES
+    )
 
 
-def mark_qm9_cache_current(cache_root):
+def mark_qm9_cache_current(cache_root, version=QM9_CACHE_VERSION):
     """Record the schema version after PyG finishes processing successfully."""
-    marker = Path(cache_root) / "processed" / ".hydragnn-cache-version"
-    marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(QM9_CACHE_VERSION + "\n", encoding="utf-8")
+    hydragnn.utils.datasets.mark_pyg_cache_current(cache_root, version)
 
 
 def validate_named_cache(dataset, variables, cache_root):
@@ -127,7 +112,14 @@ def validate_named_cache(dataset, variables, cache_root):
         ) from error
 
 
-def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
+def main(
+    mpnn_type=None,
+    global_attn_engine=None,
+    global_attn_type=None,
+    qm9_preprocess_all=False,
+    qm9_invalid_molecule_policy="report_and_skip",
+    qm9_max_rejected_molecules=None,
+):
     # FIX random seed
     random_state = 0
     torch.manual_seed(random_state)
@@ -185,19 +177,29 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
         ) from error
 
     cache_root = os.path.join("dataset", "qm9")
+    cache_mode = "full" if qm9_preprocess_all else f"subset-{num_samples}"
+    cache_version = f"{QM9_CACHE_VERSION}:{cache_mode}"
 
     def build_dataset():
-        prepare_qm9_cache(cache_root)
+        prepare_qm9_cache(cache_root, cache_version)
         result = build_qm9_from_raw(
             root=cache_root,
             pre_transform=lambda data: qm9_pre_transform(data, transform),
-            pre_filter=qm9_pre_filter,
+            pre_filter=None if qm9_preprocess_all else qm9_pre_filter,
+            max_records=None if qm9_preprocess_all else num_samples,
+            invalid_molecule_policy=qm9_invalid_molecule_policy,
+            max_rejected_molecules=qm9_max_rejected_molecules,
+            report_directory=Path(cache_root) / "preprocessing_report" / cache_mode,
         )
-        mark_qm9_cache_current(cache_root)
+        mark_qm9_cache_current(cache_root, cache_version)
         return result
 
     dataset = hydragnn.preprocess.build_dataset_on_rank_zero(build_dataset)
     validate_named_cache(dataset, config["Variables"], cache_root)
+    if qm9_preprocess_all:
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        return
     train, val, test = hydragnn.preprocess.split_dataset(
         dataset, config["NeuralNetwork"]["Training"]["perc_train"], False
     )
@@ -282,10 +284,24 @@ if __name__ == "__main__":
         default=None,
         help="Specify the global attention type (default: None).",
     )
+    parser.add_argument(
+        "--qm9-preprocess-all",
+        action="store_true",
+        help="convert the complete raw QM9 archive, write reports, and exit",
+    )
+    parser.add_argument(
+        "--qm9-invalid-molecule-policy",
+        choices=("report_and_skip", "error"),
+        default="report_and_skip",
+    )
+    parser.add_argument("--qm9-max-rejected-molecules", type=int, default=None)
     args = parser.parse_args()
 
     main(
         mpnn_type=args.mpnn_type,
         global_attn_engine=args.global_attn_engine,
         global_attn_type=args.global_attn_type,
+        qm9_preprocess_all=args.qm9_preprocess_all,
+        qm9_invalid_molecule_policy=args.qm9_invalid_molecule_policy,
+        qm9_max_rejected_molecules=args.qm9_max_rejected_molecules,
     )

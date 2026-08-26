@@ -78,8 +78,8 @@
         ],
         "outputs": [
             {
-                "name": "graph_energy",
-                "level": "node",
+                "name": "energy",
+                "level": "graph",
                 "dim": 1
             }
         ]
