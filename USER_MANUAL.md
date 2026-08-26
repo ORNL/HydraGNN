@@ -1224,10 +1224,25 @@ python gfm_deephyper_multi.py
 ```bash
 # Example: QM9 HPO with Optuna
 cd examples/qm9_hpo
-python qm9_optuna.py
+python qm9_optuna.py --num-trials 5
+
+# Or use the single-process DeepHyper adapter.
+python qm9_deephyper.py --max-evals 10 --timeout 1200
 ```
 
 See the `examples/qm9_hpo/`, `examples/multidataset_hpo/`, and `examples/multidataset_hpo_sc26/` directories for working HPO examples.
+
+The QM9 HPO adapters share one workflow and the primary QM9 example's robust
+raw-data cache. Dataset construction happens after distributed initialization,
+on rank zero, rather than when an HPO module is imported. Each trial receives a
+deep copy of the JSON configuration, so sampled architecture values cannot leak
+into later trials. Optuna and DeepHyper now supply only search parameters and
+orchestration; named-variable loaders, model construction, training, and
+validation are handled identically by the shared workflow. The Frontier
+multi-trial launcher invokes the same single-trial entry point and parses its
+explicit `Validation Loss` result. It completes shared-cache preprocessing
+before launching concurrent `srun` jobs, preventing independent trials from
+racing to construct the same processed dataset.
 
 ### Global Attention with Transformers
 
