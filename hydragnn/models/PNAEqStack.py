@@ -213,22 +213,7 @@ class PNAEqStack(Base):
         }
 
         if self.global_attn_engine == "EquivariantTransformer":
-            if torch.any(data.edge_shifts != 0):
-                raise ValueError(
-                    "EquivariantTransformer does not yet support periodic images"
-                )
-            conv_args.update(
-                {
-                    "positions": data.pos,
-                    "graph_batch": (
-                        data.batch
-                        if data.batch is not None
-                        else torch.zeros(
-                            data.pos.shape[0], dtype=torch.long, device=data.pos.device
-                        )
-                    ),
-                }
-            )
+            conv_args.update(self._equivariant_attention_geometry(data))
 
         if self.use_edge_attr:
             assert (

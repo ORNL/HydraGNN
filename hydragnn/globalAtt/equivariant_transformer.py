@@ -14,6 +14,7 @@ from e3nn import nn, o3
 
 from hydragnn.globalAtt.complete_graph import complete_graph_edge_index
 from hydragnn.globalAtt.equivariant_attention import EquivariantAllToAllAttention
+from hydragnn.globalAtt.periodic_supercell import build_periodic_attention_sources
 
 
 class EquivariantRMSNorm(torch.nn.Module):
@@ -166,6 +167,47 @@ class EquivariantTransformerLayer(torch.nn.Module):
             )
         else:
             attention_output = self.attention(normalized, positions, edge_index)
+        return node_features + attention_output
+
+    def forward_periodic_attention(
+        self,
+        node_features: torch.Tensor,
+        positions: torch.Tensor,
+        batch: torch.Tensor,
+        cell: torch.Tensor,
+        pbc: torch.Tensor,
+        replication: int | tuple[int, int, int] | list[int] = 1,
+    ) -> torch.Tensor:
+        """Apply central-query attention over explicit periodic images.
+
+        This is intentionally not minimum-image attention. The selected image
+        extent defines a finite supercell; every image is a separate softmax
+        source, while only original-cell nodes receive residual updates.
+        """
+        if batch.ndim != 1 or batch.shape[0] != node_features.shape[0]:
+            raise ValueError("batch must contain one graph identifier per node")
+        if batch.dtype != torch.long:
+            raise TypeError("batch must have dtype torch.long")
+        if node_features.device != positions.device or positions.device != batch.device:
+            raise ValueError("features, positions, and batch must share a device")
+        if node_features.dtype != positions.dtype:
+            raise ValueError("features and positions must have the same dtype")
+        normalized = self.attention_norm(node_features)
+        sources = build_periodic_attention_sources(
+            normalized, positions, batch, cell, pbc, replication
+        )
+        chunk_size = self.chunk_size or max(node_features.shape[0], 1)
+        attention_output = self.attention.forward_bipartite_chunked(
+            normalized,
+            positions,
+            batch,
+            sources.features,
+            sources.positions,
+            sources.batch,
+            sources.base_index,
+            sources.is_central_image,
+            chunk_size,
+        )
         return node_features + attention_output
 
     def forward_feedforward(self, node_features: torch.Tensor) -> torch.Tensor:

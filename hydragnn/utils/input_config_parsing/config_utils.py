@@ -58,6 +58,8 @@ def update_config(config, train_loader, val_loader, test_loader):
     architecture.setdefault("equivariant_attn_require_tensor_coupling", True)
     architecture.setdefault("equivariant_attn_chunk_size", 512)
     architecture.setdefault("equivariant_attn_coupling_mode", "parallel")
+    architecture.setdefault("equivariant_attn_periodic", False)
+    architecture.setdefault("equivariant_attn_periodic_replication", 1)
     validate_equivariant_transformer_config(architecture)
 
     batching = config["NeuralNetwork"]["Training"].get("Batching")
@@ -285,6 +287,23 @@ def validate_equivariant_transformer_config(config):
     }:
         raise ValueError(
             "equivariant_attn_coupling_mode must be 'parallel' or 'sequential'"
+        )
+    if not isinstance(config.get("equivariant_attn_periodic", False), bool):
+        raise TypeError("equivariant_attn_periodic must be a boolean")
+    replication = config.get("equivariant_attn_periodic_replication", 1)
+    if isinstance(replication, int) and not isinstance(replication, bool):
+        replication = [replication] * 3
+    if (
+        not isinstance(replication, (list, tuple))
+        or len(replication) != 3
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in replication
+        )
+    ):
+        raise ValueError(
+            "equivariant_attn_periodic_replication must be a nonnegative "
+            "integer or a length-3 list of nonnegative integers"
         )
     if (
         mpnn_type in {"PAINN", "PNAEq", "MACE"}

@@ -43,6 +43,8 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         require_tensor_coupling: bool,
         local_equivariance: bool,
         chunk_size: int | None,
+        periodic: bool = False,
+        periodic_replication: int | tuple[int, int, int] | list[int] = 1,
         coupling_mode: str = "parallel",
         irreps: str | None = None,
     ):
@@ -50,6 +52,8 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         if coupling_mode not in {"parallel", "sequential"}:
             raise ValueError("coupling_mode must be 'parallel' or 'sequential'")
         self.coupling_mode = coupling_mode
+        self.periodic = periodic
+        self.periodic_replication = periodic_replication
         self.conv = conv
         if mpnn_type == "MACE":
             if irreps is None:
@@ -79,6 +83,8 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
         equiv_node_feat: torch.Tensor,
         positions: torch.Tensor | None = None,
         graph_batch: torch.Tensor | None = None,
+        cell: torch.Tensor | None = None,
+        pbc: torch.Tensor | None = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Run local and global updates without passing global data locally."""
@@ -105,24 +111,44 @@ class EquivariantLocalGlobalConv(torch.nn.Module):
                     global_input = self.adapter(
                         input_inv_node_feat, input_equiv_node_feat
                     )
-                global_features = self.global_layer.forward_attention(
-                    global_input, positions, graph_batch
+                global_features = self._global_attention(
+                    global_input, positions, graph_batch, cell, pbc
                 )
                 features = self.global_layer.forward_feedforward(
                     local_features + global_features
                 )
             else:
-                features = self.global_layer(local_features, positions, graph_batch)
+                features = self.global_layer.forward_feedforward(
+                    self._global_attention(
+                        local_features, positions, graph_batch, cell, pbc
+                    )
+                )
             return self.adapter.decode(features)
 
         local_features = self.adapter(local_inv_node_feat)
         if self.coupling_mode == "parallel":
-            global_features = self.global_layer.forward_attention(
-                self.adapter(input_inv_node_feat), positions, graph_batch
+            global_features = self._global_attention(
+                self.adapter(input_inv_node_feat), positions, graph_batch, cell, pbc
             )
             features = self.global_layer.forward_feedforward(
                 local_features + global_features
             )
         else:
-            features = self.global_layer(local_features, positions, graph_batch)
+            features = self.global_layer.forward_feedforward(
+                self._global_attention(
+                    local_features, positions, graph_batch, cell, pbc
+                )
+            )
         return self.adapter.decode(features), local_equiv_node_feat
+
+    def _global_attention(self, features, positions, graph_batch, cell, pbc):
+        if self.periodic:
+            return self.global_layer.forward_periodic_attention(
+                features,
+                positions,
+                graph_batch,
+                cell,
+                pbc,
+                self.periodic_replication,
+            )
+        return self.global_layer.forward_attention(features, positions, graph_batch)

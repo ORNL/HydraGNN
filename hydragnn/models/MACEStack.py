@@ -434,13 +434,6 @@ class MACEStack(Base):
             data.pos is not None
         ), "MACE requires node positions (data.pos) to be set."
 
-        if self.global_attn_engine == "EquivariantTransformer" and torch.any(
-            data.edge_shifts != 0
-        ):
-            raise ValueError(
-                "EquivariantTransformer does not yet support periodic images"
-            )
-
         # Center positions at 0 per graph. This is a requirement for equivariant models that
         # initialize the spherical harmonics, since the initial spherical harmonic projection
         # uses the nodal position vector  x/||x|| as the input to the spherical harmonics.
@@ -486,18 +479,7 @@ class MACEStack(Base):
         }
 
         if self.global_attn_engine == "EquivariantTransformer":
-            conv_args.update(
-                {
-                    "positions": data.pos,
-                    "graph_batch": (
-                        data.batch
-                        if data.batch is not None
-                        else torch.zeros(
-                            data.pos.shape[0], dtype=torch.long, device=data.pos.device
-                        )
-                    ),
-                }
-            )
+            conv_args.update(self._equivariant_attention_geometry(data))
 
         if self.use_global_attn:
             if self.global_attn_engine == "EquivariantTransformer":

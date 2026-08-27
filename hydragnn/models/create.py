@@ -120,6 +120,12 @@ def create_model_config(
         equivariant_attn_coupling_mode=config["Architecture"].get(
             "equivariant_attn_coupling_mode", "parallel"
         ),
+        equivariant_attn_periodic=config["Architecture"].get(
+            "equivariant_attn_periodic", False
+        ),
+        equivariant_attn_periodic_replication=config["Architecture"].get(
+            "equivariant_attn_periodic_replication", 1
+        ),
         # AllScAIP-specific
         allscaip_num_heads=config["Architecture"]["allscaip_num_heads"],
         allscaip_freq_list=config["Architecture"]["allscaip_freq_list"],
@@ -233,6 +239,8 @@ def create_model(
     equivariant_attn_require_tensor_coupling: bool = True,
     equivariant_attn_chunk_size: int | None = 512,
     equivariant_attn_coupling_mode: str = "parallel",
+    equivariant_attn_periodic: bool = False,
+    equivariant_attn_periodic_replication: int | list[int] = 1,
     # AllScAIP-specific
     allscaip_num_heads: int = 8,
     allscaip_freq_list: List[int] = None,
@@ -525,6 +533,10 @@ def create_model(
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
+            equivariant_attn_periodic=equivariant_attn_periodic,
+            equivariant_attn_periodic_replication=(
+                equivariant_attn_periodic_replication
+            ),
         )
 
     elif mpnn_type == "DimeNet":
@@ -584,6 +596,10 @@ def create_model(
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
+            equivariant_attn_periodic=equivariant_attn_periodic,
+            equivariant_attn_periodic_replication=(
+                equivariant_attn_periodic_replication
+            ),
         )
 
     elif mpnn_type == "EGNN":
@@ -652,6 +668,10 @@ def create_model(
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
+            equivariant_attn_periodic=equivariant_attn_periodic,
+            equivariant_attn_periodic_replication=(
+                equivariant_attn_periodic_replication
+            ),
         )
 
     elif mpnn_type == "PNAEq":
@@ -693,6 +713,10 @@ def create_model(
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
+            equivariant_attn_periodic=equivariant_attn_periodic,
+            equivariant_attn_periodic_replication=(
+                equivariant_attn_periodic_replication
+            ),
         )
 
     elif mpnn_type == "MACE":
@@ -746,6 +770,10 @@ def create_model(
             ),
             equivariant_attn_chunk_size=equivariant_attn_chunk_size,
             equivariant_attn_coupling_mode=equivariant_attn_coupling_mode,
+            equivariant_attn_periodic=equivariant_attn_periodic,
+            equivariant_attn_periodic_replication=(
+                equivariant_attn_periodic_replication
+            ),
         )
     elif mpnn_type == "AllScAIP":
         assert radius is not None, "AllScAIP requires radius input."

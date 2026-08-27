@@ -9,6 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
+
 import pytest
 import torch
 from e3nn import o3
@@ -21,7 +23,7 @@ from hydragnn.utils.input_config_parsing.config_utils import (
 from hydragnn.utils.model import update_multibranch_heads
 
 
-def _create_model(mpnn_type):
+def _create_model(mpnn_type, **overrides):
     heads = update_multibranch_heads(
         {
             "graph": {
@@ -48,7 +50,7 @@ def _create_model(mpnn_type):
             num_spherical=2,
             edge_dim=None,
         )
-    return create_model(
+    options = dict(
         mpnn_type=mpnn_type,
         input_dim=1,
         hidden_dim=4,
@@ -69,8 +71,10 @@ def _create_model(mpnn_type):
         equivariant_attn_allow_scalar_only=True,
         equivariant_attn_require_tensor_coupling=False,
         use_gpu=False,
-        **model_options,
     )
+    options.update(model_options)
+    options.update(overrides)
+    return create_model(**options)
 
 
 def _data(positions, edge_shifts=None):
@@ -116,13 +120,72 @@ def test_scalar_mpnn_equivariant_transformer_forward_backward_and_se3(mpnn_type)
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
-def test_scalar_mpnn_equivariant_transformer_rejects_periodic_images(mpnn_type):
+@pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
+def test_scalar_mpnn_equivariant_transformer_coupling_modes(mpnn_type, coupling_mode):
+    model = _create_model(mpnn_type, equivariant_attn_coupling_mode=coupling_mode)
+    output = model(_data(torch.randn(3, 3)))[0]
+
+    assert output.shape == (1, 1)
+    assert all(conv.coupling_mode == coupling_mode for conv in model.graph_convs)
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+def test_scalar_mpnn_equivariant_transformer_state_dict_round_trip(mpnn_type):
+    model = _create_model(mpnn_type).eval()
+    data = _data(torch.randn(3, 3))
+    expected = model(data)[0]
+
+    restored = _create_model(mpnn_type).eval()
+    with torch.no_grad():
+        for parameter in restored.parameters():
+            if parameter.is_floating_point():
+                parameter.add_(1.0)
+    assert any(
+        not torch.equal(value, restored.state_dict()[name])
+        for name, value in model.state_dict().items()
+        if value.is_floating_point()
+    )
+    restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
+
+    torch.testing.assert_close(restored(data)[0], expected)
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+def test_scalar_mpnn_equivariant_transformer_requires_periodic_opt_in(mpnn_type):
     model = _create_model(mpnn_type)
     shifts = torch.zeros(6, 3)
     shifts[0, 2] = 2.0
 
-    with pytest.raises(ValueError, match="periodic images"):
+    with pytest.raises(ValueError, match="equivariant_attn_periodic=true"):
         model(_data(torch.randn(3, 3), edge_shifts=shifts))
+
+
+@pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])
+def test_scalar_mpnn_periodic_full_model_forward_backward(mpnn_type):
+    model = _create_model(
+        mpnn_type,
+        equivariant_attn_periodic=True,
+        equivariant_attn_periodic_replication=[1, 0, 0],
+        equivariant_attn_chunk_size=2,
+    )
+    shifts = torch.zeros(6, 3)
+    shifts[0, 0], shifts[1, 0] = 1.0, -1.0
+    positions = torch.randn(3, 3, requires_grad=True)
+    data = _data(positions, edge_shifts=shifts)
+    cell = torch.eye(3, requires_grad=True)
+    data.cell = cell.unsqueeze(0)
+    data.pbc = torch.tensor([[True, False, False]])
+
+    output = model(data)[0]
+    output.square().sum().backward()
+
+    assert output.shape == (1, 1)
+    assert positions.grad is not None and torch.isfinite(positions.grad).all()
+    assert cell.grad is not None and torch.isfinite(cell.grad).all()
+    assert all(
+        any(parameter.grad is not None for parameter in conv.global_layer.parameters())
+        for conv in model.graph_convs
+    )
 
 
 @pytest.mark.parametrize("mpnn_type", ["SchNet", "DimeNet"])

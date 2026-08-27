@@ -69,6 +69,8 @@ class Base(Module):
         equivariant_attn_require_tensor_coupling: bool = True,
         equivariant_attn_chunk_size: int | None = 512,
         equivariant_attn_coupling_mode: str = "parallel",
+        equivariant_attn_periodic: bool = False,
+        equivariant_attn_periodic_replication: int | list[int] = 1,
     ):
         super().__init__()
         self.device = get_device()
@@ -93,6 +95,10 @@ class Base(Module):
         )
         self.equivariant_attn_chunk_size = equivariant_attn_chunk_size
         self.equivariant_attn_coupling_mode = equivariant_attn_coupling_mode
+        self.equivariant_attn_periodic = equivariant_attn_periodic
+        self.equivariant_attn_periodic_replication = (
+            equivariant_attn_periodic_replication
+        )
         self.num_conv_layers = num_conv_layers
         self.graph_convs = ModuleList()
         self.feature_layers = ModuleList()
@@ -295,6 +301,8 @@ class Base(Module):
                     ),
                     local_equivariance=self.equivariance,
                     chunk_size=self.equivariant_attn_chunk_size,
+                    periodic=self.equivariant_attn_periodic,
+                    periodic_replication=(self.equivariant_attn_periodic_replication),
                     coupling_mode=self.equivariant_attn_coupling_mode,
                     irreps=irreps,
                 )
@@ -555,6 +563,31 @@ class Base(Module):
             return x, data.pos, conv_args
         else:
             return data.x, data.pos, conv_args
+
+    def _equivariant_attention_geometry(self, data):
+        """Collect global-attention geometry under the configured PBC policy."""
+        batch = (
+            data.batch
+            if data.batch is not None
+            else torch.zeros(
+                data.pos.shape[0], dtype=torch.long, device=data.pos.device
+            )
+        )
+        has_periodic_edges = hasattr(data, "edge_shifts") and torch.any(
+            data.edge_shifts != 0
+        )
+        if has_periodic_edges and not self.equivariant_attn_periodic:
+            raise ValueError(
+                "nonzero periodic edge shifts require " "equivariant_attn_periodic=true"
+            )
+        geometry = {"positions": data.pos, "graph_batch": batch}
+        if self.equivariant_attn_periodic:
+            if not hasattr(data, "cell") or not hasattr(data, "pbc"):
+                raise ValueError(
+                    "periodic equivariant attention requires data.cell and data.pbc"
+                )
+            geometry.update({"cell": data.cell, "pbc": data.pbc})
+        return geometry
 
     def _freeze_conv(self):
         for module in [self.graph_convs, self.feature_layers]:

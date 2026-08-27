@@ -9,6 +9,8 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import copy
+
 import pytest
 import torch
 from e3nn import o3
@@ -22,7 +24,7 @@ from hydragnn.utils.input_config_parsing.config_utils import (
 from hydragnn.utils.model import update_multibranch_heads
 
 
-def _create_model():
+def _create_model(**overrides):
     heads = update_multibranch_heads(
         {
             "graph": {
@@ -33,7 +35,7 @@ def _create_model():
             }
         }
     )
-    return create_model(
+    options = dict(
         mpnn_type="MACE",
         input_dim=1,
         hidden_dim=2,
@@ -62,6 +64,8 @@ def _create_model():
         equivariant_attn_chunk_size=2,
         use_gpu=False,
     )
+    options.update(overrides)
+    return create_model(**options)
 
 
 def _data(positions, edge_shifts=None):
@@ -105,13 +109,94 @@ def test_mace_equivariant_transformer_forward_backward_and_se3():
     )
 
 
-def test_mace_equivariant_transformer_rejects_periodic_images():
+@pytest.mark.parametrize("coupling_mode", ["parallel", "sequential"])
+def test_mace_equivariant_transformer_coupling_modes(coupling_mode):
+    model = _create_model(equivariant_attn_coupling_mode=coupling_mode)
+    positions = torch.randn(3, 3, requires_grad=True)
+
+    model(_data(positions))[0].sum().backward()
+
+    transformer_layers = [
+        conv
+        for conv in model.graph_convs
+        if isinstance(conv, EquivariantLocalGlobalConv)
+    ]
+    assert len(transformer_layers) == 1
+    assert transformer_layers[0].coupling_mode == coupling_mode
+    assert any(
+        parameter.grad is not None
+        for parameter in transformer_layers[0].global_layer.parameters()
+    )
+
+
+def test_mace_equivariant_transformer_dense_and_chunked_models_match():
+    dense = _create_model(equivariant_attn_chunk_size=None)
+    chunked = copy.deepcopy(dense)
+    for convolution in chunked.graph_convs:
+        if isinstance(convolution, EquivariantLocalGlobalConv):
+            convolution.global_layer.chunk_size = 2
+    positions = torch.randn(3, 3)
+
+    torch.testing.assert_close(chunked(_data(positions))[0], dense(_data(positions))[0])
+
+
+def test_mace_equivariant_transformer_state_dict_round_trip():
+    model = _create_model().eval()
+    data = _data(torch.randn(3, 3))
+    expected = model(data)[0]
+
+    restored = _create_model().eval()
+    with torch.no_grad():
+        for parameter in restored.parameters():
+            if parameter.is_floating_point():
+                parameter.add_(1.0)
+    assert any(
+        not torch.equal(value, restored.state_dict()[name])
+        for name, value in model.state_dict().items()
+        if value.is_floating_point()
+    )
+    restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
+
+    torch.testing.assert_close(restored(data)[0], expected)
+
+
+def test_mace_equivariant_transformer_requires_explicit_periodic_opt_in():
     model = _create_model()
     shifts = torch.zeros(6, 3)
     shifts[0, 0] = 3.0
 
-    with pytest.raises(ValueError, match="periodic images"):
+    with pytest.raises(ValueError, match="equivariant_attn_periodic=true"):
         model(_data(torch.randn(3, 3), edge_shifts=shifts))
+
+
+def test_mace_equivariant_transformer_periodic_full_model_forward_backward():
+    model = _create_model(
+        equivariant_attn_periodic=True,
+        equivariant_attn_periodic_replication=[1, 0, 0],
+    )
+    shifts = torch.zeros(6, 3)
+    shifts[0, 0], shifts[1, 0] = 1.0, -1.0
+    positions = torch.randn(3, 3, requires_grad=True)
+    data = _data(positions, edge_shifts=shifts)
+    cell = torch.eye(3, requires_grad=True)
+    data.cell = cell.unsqueeze(0)
+    data.pbc = torch.tensor([[True, False, False]])
+
+    output = model(data)[0]
+    output.square().sum().backward()
+
+    assert output.shape == (1, 1)
+    assert positions.grad is not None and torch.isfinite(positions.grad).all()
+    assert cell.grad is not None and torch.isfinite(cell.grad).all()
+    transformer = next(
+        conv
+        for conv in model.graph_convs
+        if isinstance(conv, EquivariantLocalGlobalConv)
+    )
+    assert any(
+        parameter.grad is not None
+        for parameter in transformer.global_layer.parameters()
+    )
 
 
 def test_mace_config_requires_a_tensor_hidden_layer():
