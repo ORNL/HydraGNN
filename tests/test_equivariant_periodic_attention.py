@@ -170,6 +170,28 @@ def test_periodic_attention_validates_inputs_before_building_sources():
         )
 
 
+def test_periodic_bipartite_edges_group_targets_and_keep_noncentral_self_images():
+    layer = EquivariantTransformerLayer("4x0e", heads=1, require_tensor_coupling=False)
+    query_batch = torch.tensor([0, 1, 0])
+    source_batch = torch.tensor([0, 0, 1, 0, 0])
+    source_base_index = torch.tensor([0, 0, 1, 2, 2])
+    source_is_central = torch.tensor([True, False, True, True, False])
+    targets = torch.arange(3)
+    sources = torch.arange(5)
+
+    edge_index = layer.attention._bipartite_edges_for_targets(
+        query_batch,
+        source_batch,
+        source_base_index,
+        source_is_central,
+        targets,
+        sources,
+    )
+
+    expected = torch.tensor([[1, 3, 4, 0, 1, 4], [0, 0, 0, 2, 2, 2]])
+    torch.testing.assert_close(edge_index, expected)
+
+
 def test_periodic_configuration_validates_replication_convention():
     config = {
         "global_attn_engine": "EquivariantTransformer",

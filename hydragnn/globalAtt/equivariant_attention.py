@@ -222,15 +222,14 @@ class EquivariantAllToAllAttention(torch.nn.Module):
         for start in range(0, num_queries, chunk_size):
             stop = min(start + chunk_size, num_queries)
             targets = query_indices[start:stop]
-            pair_blocks = []
-            for target in targets:
-                allowed = source_batch == query_batch[target]
-                allowed &= ~(source_is_central & (source_base_index == target))
-                sources = source_indices[allowed]
-                pair_blocks.append(
-                    torch.stack((sources, target.expand(sources.shape[0])))
-                )
-            edge_index = torch.cat(pair_blocks, dim=1)
+            edge_index = self._bipartite_edges_for_targets(
+                query_batch,
+                source_batch,
+                source_base_index,
+                source_is_central,
+                targets,
+                source_indices,
+            )
             source, target = edge_index
             logits = (queries[target] * keys[source]).sum(dim=-1)
             logits = logits / math.sqrt(self.irreps.dim)
@@ -252,6 +251,29 @@ class EquivariantAllToAllAttention(torch.nn.Module):
         if not outputs:
             return query_features.new_zeros((0, self.irreps.dim))
         return torch.cat(outputs, dim=0)
+
+    @staticmethod
+    def _bipartite_edges_for_targets(
+        query_batch,
+        source_batch,
+        source_base_index,
+        source_is_central,
+        targets,
+        source_indices,
+    ):
+        """Build periodic query/source pairs with one tensor product per graph."""
+        pair_blocks = []
+        target_graphs = query_batch[targets]
+        for graph_id in torch.unique(target_graphs, sorted=True):
+            graph_targets = targets[target_graphs == graph_id]
+            graph_sources = source_indices[source_batch == graph_id]
+            source = graph_sources.repeat(graph_targets.numel())
+            target = graph_targets.repeat_interleave(graph_sources.numel())
+            keep = ~(source_is_central[source] & (source_base_index[source] == target))
+            pair_blocks.append(torch.stack((source[keep], target[keep])))
+        if not pair_blocks:
+            return source_indices.new_empty((2, 0))
+        return torch.cat(pair_blocks, dim=1)
 
     def _values(
         self,
