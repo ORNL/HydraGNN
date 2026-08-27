@@ -72,9 +72,15 @@ def build_qm9_from_raw(
     # RDKit is required only when raw QM9 records are converted.  Keep this
     # import local so configuration, cache-management, and HPO workflows can
     # use this module without installing the optional QM9 dependency.
-    if __package__:
-        from .qm9_raw_processor import RobustQM9
-    else:
+    try:
+        # This absolute import also works when tests load qm9.py directly from
+        # its file path, in which case Python does not set package context.
+        from examples.qm9.qm9_raw_processor import RobustQM9
+    except ModuleNotFoundError as error:
+        # A directly executed ``python examples/qm9/qm9.py`` places this
+        # directory, rather than the repository root, on sys.path.
+        if error.name != "examples":
+            raise
         from qm9_raw_processor import RobustQM9
 
     return RobustQM9(
