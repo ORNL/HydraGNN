@@ -80,6 +80,11 @@ pip install -r requirements-dev.txt
 Detailed dependency installation instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Install)
 
+The synthetic datasets used by model-quality CI tests have an explicit,
+versioned generation and normalization contract. Contributors changing test
+data or numerical quality thresholds should first read
+[Unit-test data fixtures](docs/unit_test_data.md).
+
 
 ## Installation
 

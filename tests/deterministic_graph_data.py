@@ -8,6 +8,14 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
+"""Generate the synthetic graph fixtures used by model-quality CI tests.
+
+The fixture intentionally owns operations that the retired tabular test-data
+loader used to perform: deterministic graph construction, named target and
+descriptor creation, split-wide feature scaling, and edge-length scaling. The
+production named-data loader does none of these implicitly. See
+``docs/unit_test_data.md`` for the complete contract and migration rules.
+"""
 
 import os
 import shutil
@@ -18,6 +26,8 @@ import numpy
 from pathlib import Path
 from torch_geometric.data import Data
 from sklearn.neighbors import KNeighborsRegressor
+
+DETERMINISTIC_GRAPH_DATA_VERSION = 2
 
 
 def prepared_pickle_has_attributes(path, required_names):
@@ -35,7 +45,12 @@ def prepared_pickle_has_attributes(path, required_names):
 
 
 def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
-    """Reuse a named-data fixture cache or rebuild an incompatible old cache."""
+    """Reuse a compatible fixture cache or rebuild it from deterministic inputs.
+
+    Any semantic fixture change must increment
+    :data:`DETERMINISTIC_GRAPH_DATA_VERSION`. This prevents local or CI runs
+    from comparing models trained on different cached representations.
+    """
     directory = Path(path)
     directory.mkdir(parents=True, exist_ok=True)
     samples = sorted(directory.glob("*.pt"))
@@ -55,6 +70,10 @@ def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
             )
         )
         cache_valid = cache_valid and first.pe.shape[1] == 1
+        cache_valid = cache_valid and (
+            getattr(first, "fixture_schema_version", None)
+            == DETERMINISTIC_GRAPH_DATA_VERSION
+        )
     if cache_valid:
         return
     for sample in samples:
@@ -77,6 +96,14 @@ def deterministic_graph_data(
     linear_only=False,
     seed: int = 43,
 ):
+    """Create one independently normalized synthetic dataset split.
+
+    Random structure sizes and species use a private generator seeded by
+    ``seed + configuration_start``. Node attributes and targets are min-max
+    scaled over this call's samples; edge lengths are divided by this call's
+    maximum edge length. Train, validation, and test calls therefore reproduce
+    the retired loader's split-local preprocessing.
+    """
     if types == None:
         types = range(number_types)
 
@@ -142,6 +169,14 @@ def deterministic_graph_data(
             value = getattr(data, name)
             setattr(data, name, (value - minimum) / scale if scale else value * 0)
 
+    # The retired loader divided edge distances by the maximum over the whole
+    # split. Preserve that exact fixture behavior while leaving production
+    # named-schema loading free of implicit normalization.
+    max_edge_length = max(data.edge_lengths.max() for data in samples)
+    for data in samples:
+        data.edge_lengths = data.edge_lengths / max_edge_length
+        data.fixture_schema_version = DETERMINISTIC_GRAPH_DATA_VERSION
+
     for configuration, data in enumerate(samples):
         filename = os.path.join(
             path, "output" + str(configuration + configuration_start) + ".pt"
@@ -160,6 +195,7 @@ def create_configuration(
     linear_only,
     generator,
 ):
+    """Build one BCC graph and its unnormalized named attributes."""
     ###############################################################################################
     ###################################   STRUCTURE OF THE DATA  ##################################
     ###############################################################################################

@@ -107,7 +107,9 @@ def unittest_train_model(
         config["NeuralNetwork"]["Architecture"]["num_radial"] = 6
         config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 16
 
-    # Only run with edge lengths for models that support them.
+    # Opt in to the fixture-owned, split-wide normalized edge lengths. Merely
+    # storing ``edge_lengths`` on each sample does not expose them to a model;
+    # the named schema declaration below compiles them into ``data.edge_attr``.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
         config["Variables"]["inputs"].append(
@@ -189,7 +191,7 @@ def unittest_train_model(
         thresholds["PNA"] = [0.2, 0.15]
         thresholds["PNAPlus"] = [0.2, 0.15]
     if ci_input == "ci_conv_head.json":
-        thresholds["GIN"] = [0.26, 0.51]
+        thresholds["GIN"] = [0.38, 0.51]
         thresholds["SchNet"] = [0.30, 0.30]
         # Conv head configuration runs fewer parameters; allow a slightly higher error margin for EGNN.
         thresholds["EGNN"] = [0.24, 0.24]

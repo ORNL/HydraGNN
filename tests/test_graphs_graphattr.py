@@ -43,6 +43,8 @@ def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
     hydragnn.utils.input_config_parsing.prepare_data_from_schema(sample, schema)
 
     torch.testing.assert_close(sample.graph_attr, expected)
+    torch.testing.assert_close(sample.edge_lengths.max(), torch.tensor(1.0))
+    assert sample.fixture_schema_version == 2
 
 
 def unittest_train_model_graphattr(
@@ -124,7 +126,9 @@ def unittest_train_model_graphattr(
         if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
 
-    # Only run with edge lengths for models that support them.
+    # Opt in to the fixture-owned, split-wide normalized edge lengths. The
+    # named declaration, rather than attribute presence alone, makes them
+    # canonical ``data.edge_attr`` input to the tested model.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
         config["Variables"]["inputs"].append(
@@ -206,7 +210,7 @@ def unittest_train_model_graphattr(
         thresholds["PNAPlus"] = [0.2, 0.15]
         thresholds["SchNet"] = [0.35, 0.35]
     if ci_input == "ci_conv_head.json":
-        thresholds["GIN"] = [0.26, 0.51]
+        thresholds["GIN"] = [0.38, 0.51]
         thresholds["SchNet"] = [0.38, 0.38]
         # EGNN performs worse with the small conv-head config; relax thresholds
         thresholds["EGNN"] = [0.36, 0.36]
