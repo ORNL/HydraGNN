@@ -146,6 +146,15 @@ def test_mace_equivariant_transformer_state_dict_round_trip():
     expected = model(data)[0]
 
     restored = _create_model().eval()
+    with torch.no_grad():
+        for parameter in restored.parameters():
+            if parameter.is_floating_point():
+                parameter.add_(1.0)
+    assert any(
+        not torch.equal(value, restored.state_dict()[name])
+        for name, value in model.state_dict().items()
+        if value.is_floating_point()
+    )
     restored.load_state_dict(copy.deepcopy(model.state_dict()), strict=True)
 
     torch.testing.assert_close(restored(data)[0], expected)
