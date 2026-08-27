@@ -24,6 +24,27 @@ torch.manual_seed(97)
 CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]
 
 
+def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
+    tests.deterministic_graph_data(str(tmp_path), number_configurations=1)
+    sample_path = next(tmp_path.glob("*.pt"))
+    sample = torch.load(sample_path, weights_only=False)
+    expected_count = (sample.node_features == sample.node_features[0]).sum().float()
+    expected = torch.stack((expected_count, expected_count.new_tensor(1.0))).view(1, 2)
+    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(
+        {
+            "inputs": [
+                {"name": "node_features", "level": "node", "dim": 1},
+                {"name": "graph_conditioning", "level": "graph", "dim": 2},
+            ],
+            "outputs": [],
+        }
+    )
+
+    hydragnn.utils.input_config_parsing.prepare_data_from_schema(sample, schema)
+
+    torch.testing.assert_close(sample.graph_attr, expected)
+
+
 def unittest_train_model_graphattr(
     mpnn_type,
     global_attn_engine,
@@ -48,12 +69,9 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
     config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
-    graph_input = (
-        {"name": "uma_charge_spin", "level": "graph", "dim": 2}
-        if mpnn_type == "UMA"
-        else {"name": "global_conditioning", "level": "graph", "dim": 1}
+    config["Variables"]["inputs"].append(
+        {"name": "graph_conditioning", "level": "graph", "dim": 2}
     )
-    config["Variables"]["inputs"].append(graph_input)
     config["NeuralNetwork"]["Architecture"][
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode

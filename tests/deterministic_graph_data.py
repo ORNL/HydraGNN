@@ -47,6 +47,7 @@ def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
             for name in (
                 "node_features",
                 "sum_x_x2_x3",
+                "graph_conditioning",
                 "edge_index",
                 "edge_lengths",
                 "pe",
@@ -230,6 +231,7 @@ def create_configuration(
     total_value_linear = (
         total_value if linear_only else total_value_linear.reshape(1, 1).float()
     )
+    conditioning_count = (node_feature == node_feature[0]).sum().reshape(1, 1).float()
     data = Data(
         node_features=node_feature.float(),
         x_target=node_feature.float(),
@@ -241,11 +243,9 @@ def create_configuration(
         sum=total_value,
         sums_vec=torch.cat((total_value, total_value_linear), dim=1),
         sum_linear=total_value_linear,
-        global_conditioning=(node_feature == node_feature[0])
-        .sum()
-        .reshape(1, 1)
-        .float(),
-        uma_charge_spin=torch.zeros(1, 2),
+        graph_conditioning=torch.cat(
+            (conditioning_count, torch.ones_like(conditioning_count)), dim=1
+        ),
         pos=positions.float(),
     )
     distances = torch.cdist(data.pos, data.pos)
