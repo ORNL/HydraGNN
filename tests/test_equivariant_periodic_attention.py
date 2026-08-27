@@ -148,6 +148,28 @@ def test_periodic_attention_keeps_batched_graphs_independent():
     torch.testing.assert_close(together, separate)
 
 
+def test_periodic_attention_validates_inputs_before_building_sources():
+    layer = EquivariantTransformerLayer(
+        "4x0e", heads=1, require_tensor_coupling=False
+    ).double()
+    features, positions, batch, cell, pbc = _periodic_inputs()
+
+    with pytest.raises(TypeError, match="batch must have dtype torch.long"):
+        layer.forward_periodic_attention(
+            features, positions, batch.to(torch.int32), cell, pbc
+        )
+    with pytest.raises(
+        ValueError, match="features and positions must have the same dtype"
+    ):
+        layer.forward_periodic_attention(features, positions.float(), batch, cell, pbc)
+    with pytest.raises(
+        ValueError, match="features, positions, and batch must share a device"
+    ):
+        layer.forward_periodic_attention(
+            features, positions, batch.to("meta"), cell, pbc
+        )
+
+
 def test_periodic_configuration_validates_replication_convention():
     config = {
         "global_attn_engine": "EquivariantTransformer",

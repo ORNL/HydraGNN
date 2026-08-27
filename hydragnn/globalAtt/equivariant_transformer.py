@@ -186,6 +186,12 @@ class EquivariantTransformerLayer(torch.nn.Module):
         """
         if batch.ndim != 1 or batch.shape[0] != node_features.shape[0]:
             raise ValueError("batch must contain one graph identifier per node")
+        if batch.dtype != torch.long:
+            raise TypeError("batch must have dtype torch.long")
+        if node_features.device != positions.device or positions.device != batch.device:
+            raise ValueError("features, positions, and batch must share a device")
+        if node_features.dtype != positions.dtype:
+            raise ValueError("features and positions must have the same dtype")
         normalized = self.attention_norm(node_features)
         sources = build_periodic_attention_sources(
             normalized, positions, batch, cell, pbc, replication
