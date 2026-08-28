@@ -571,9 +571,9 @@ class HydraPostLocalSGDOptimizer(PostLocalSGDOptimizer):
         self.optimizer_state_policy = optimizer_state_policy
         self.optimizer_state_bucket_bytes = optimizer_state_bucket_bytes
 
-    def step(self):
+    def step(self, *args, **kwargs):
         averaging_step = self.averager.step
-        super().step()
+        loss = super().step(*args, **kwargs)
         parameters_were_averaged = (
             averaging_step >= self.averager.warmup_steps
             and (averaging_step - self.averager.warmup_steps) % self.averager.period
@@ -581,7 +581,7 @@ class HydraPostLocalSGDOptimizer(PostLocalSGDOptimizer):
         )
         if parameters_were_averaged:
             _synchronize_optimizer_state(self)
-
+        return loss
 
 def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbosity=0):
     """Enable PyTorch post-local SGD for an ordinary DDP model.
