@@ -12,12 +12,14 @@
 import os
 import re
 import warnings
+import hashlib
 
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
 from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.optim import PostLocalSGDOptimizer
 
 from hydragnn.utils.print.print_utils import print_distributed
 
@@ -413,14 +415,183 @@ def _local_sgd_training_config(config):
     return local_sgd
 
 
+_OPTIMIZER_STATE_REDUCTIONS = {
+    torch.optim.SGD: {"momentum_buffer": "mean"},
+    torch.optim.Adam: {"exp_avg": "mean", "exp_avg_sq": "mean"},
+    torch.optim.AdamW: {"exp_avg": "mean", "exp_avg_sq": "mean"},
+    torch.optim.Adamax: {"exp_avg": "mean", "exp_inf": "max"},
+    torch.optim.Adagrad: {"sum": "mean"},
+    torch.optim.Adadelta: {"square_avg": "mean", "acc_delta": "mean"},
+    torch.optim.RMSprop: {
+        "square_avg": "mean",
+        "momentum_buffer": "mean",
+        "grad_avg": "mean",
+    },
+}
+
+
+def _optimizer_state_reductions(optimizer):
+    reductions = _OPTIMIZER_STATE_REDUCTIONS.get(type(optimizer))
+    if reductions is None:
+        raise ValueError(
+            "synchronized LocalSGD optimizer state is unsupported for "
+            f"{type(optimizer).__name__}; use optimizer_state_policy='local'"
+        )
+    return reductions
+
+
+def _reduce_optimizer_tensor_bucket(tensors, operation, process_group, bucket_bytes):
+    """Reduce state tensors in bounded flat buckets and copy results in place."""
+    if not tensors:
+        return
+    world_size = dist.get_world_size(process_group)
+    current = []
+    current_bytes = 0
+
+    def reduce_current():
+        nonlocal current, current_bytes
+        if not current:
+            return
+        flat = torch.cat(current)
+        reduce_op = dist.ReduceOp.SUM if operation == "mean" else dist.ReduceOp.MAX
+        dist.all_reduce(flat, op=reduce_op, group=process_group)
+        if operation == "mean":
+            flat.div_(world_size)
+        offset = 0
+        for view in current:
+            count = view.numel()
+            view.copy_(flat[offset : offset + count])
+            offset += count
+        current = []
+        current_bytes = 0
+
+    for tensor in tensors:
+        if not tensor.is_contiguous():
+            raise ValueError("optimizer state tensors must be contiguous")
+        flat_tensor = tensor.view(-1)
+        max_elements = max(bucket_bytes // tensor.element_size(), 1)
+        for start in range(0, flat_tensor.numel(), max_elements):
+            view = flat_tensor[start : start + max_elements]
+            view_bytes = view.numel() * view.element_size()
+            if current and current_bytes + view_bytes > bucket_bytes:
+                reduce_current()
+            current.append(view)
+            current_bytes += view_bytes
+    reduce_current()
+
+
+def _synchronize_optimizer_state(optimizer):
+    """Apply the registered optimizer-specific state synchronization policy."""
+    if optimizer.optimizer_state_policy != "synchronize":
+        return
+
+    base_optimizer = optimizer.optim
+    reductions = _optimizer_state_reductions(base_optimizer)
+    process_group = (
+        optimizer.averager.process_group
+        if optimizer.averager.process_group is not None
+        else dist.group.WORLD
+    )
+    parameters = [
+        parameter
+        for group in base_optimizer.param_groups
+        for parameter in group["params"]
+    ]
+    if not parameters:
+        return
+
+    signature = []
+    step_values = []
+    tensors = {}
+    for parameter_index, parameter in enumerate(parameters):
+        state = base_optimizer.state.get(parameter, {})
+        entries = []
+        for key in sorted(state):
+            value = state[key]
+            if torch.is_tensor(value):
+                entries.append((key, tuple(value.shape), str(value.dtype)))
+            else:
+                entries.append((key, type(value).__name__))
+            if key == "step":
+                if not torch.is_tensor(value) or value.numel() != 1:
+                    raise ValueError("optimizer step state must be a scalar tensor")
+                step_values.append(int(value.item()))
+            elif key in reductions:
+                if not torch.is_tensor(value):
+                    raise TypeError(f"optimizer state {key!r} must be a tensor")
+                bucket_key = (reductions[key], value.device, value.dtype)
+                tensors.setdefault(bucket_key, []).append(value)
+        signature.append((parameter_index, tuple(entries)))
+
+    signature_hash = int.from_bytes(
+        hashlib.sha256(repr(signature).encode("utf-8")).digest()[:8], "big"
+    ) & ((1 << 62) - 1)
+    local_step_min = min(step_values, default=-1)
+    local_step_max = max(step_values, default=-1)
+    probe = torch.tensor(
+        [signature_hash, -signature_hash, local_step_max, -local_step_min],
+        dtype=torch.int64,
+        device=parameters[0].device,
+    )
+    dist.all_reduce(probe, op=dist.ReduceOp.MAX, group=process_group)
+    if int(probe[0]) != -int(probe[1]):
+        raise RuntimeError("optimizer state structure differs across ranks")
+    if int(probe[2]) != -int(probe[3]):
+        raise RuntimeError("optimizer step counters differ across ranks")
+
+    allowed_keys = set(reductions) | {"step"}
+    for _, entries in signature:
+        unknown = {entry[0] for entry in entries} - allowed_keys
+        if unknown:
+            raise ValueError(
+                f"unsupported state keys for {type(base_optimizer).__name__}: "
+                f"{sorted(unknown)}"
+            )
+
+    for (operation, _, _), values in tensors.items():
+        _reduce_optimizer_tensor_bucket(
+            values,
+            operation,
+            process_group,
+            optimizer.optimizer_state_bucket_bytes,
+        )
+
+
+class HydraPostLocalSGDOptimizer(PostLocalSGDOptimizer):
+    """Post-local-SGD optimizer with optional strict state synchronization."""
+
+    def __init__(
+        self,
+        optim,
+        averager,
+        optimizer_state_policy="local",
+        optimizer_state_bucket_bytes=25 * 1024 * 1024,
+    ):
+        super().__init__(optim=optim, averager=averager)
+        self.optimizer_state_policy = optimizer_state_policy
+        self.optimizer_state_bucket_bytes = optimizer_state_bucket_bytes
+
+    def step(self):
+        averaging_step = self.averager.step
+        super().step()
+        parameters_were_averaged = (
+            averaging_step >= self.averager.warmup_steps
+            and (averaging_step - self.averager.warmup_steps) % self.averager.period
+            == 0
+        )
+        if parameters_were_averaged:
+            _synchronize_optimizer_state(self)
+
+
 def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbosity=0):
     """Enable PyTorch post-local SGD for an ordinary DDP model.
 
     During ``warmup_steps``, DDP averages gradients globally on every backward
     pass. Afterwards, gradient all-reduce is disabled so each rank takes local
     optimizer steps, while ``PostLocalSGDOptimizer`` averages model parameters
-    globally every ``synchronization_period`` steps. Optimizer state (for
-    example Adam moments) remains rank-local by design.
+    globally every ``synchronization_period`` steps. Optimizer state remains
+    rank-local by default; the optional synchronized policy applies explicit
+    optimizer-specific reductions at the same synchronization points.
 
     The function is deliberately restricted to ordinary DDP. FSDP, DeepSpeed,
     model-parallel wrappers, SyncBatchNorm, and ZeroRedundancyOptimizer have
@@ -443,15 +614,15 @@ def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbos
     if neural_network.get("Architecture", {}).get("SyncBatchNorm", False):
         raise ValueError("Training.LocalSGD is not supported with SyncBatchNorm")
 
-    from torch.distributed.optim import (
-        PostLocalSGDOptimizer,
-        ZeroRedundancyOptimizer,
-    )
+    from torch.distributed.optim import ZeroRedundancyOptimizer
 
     if isinstance(optimizer, ZeroRedundancyOptimizer):
         raise ValueError(
             "Training.LocalSGD is not supported with ZeroRedundancyOptimizer"
         )
+    optimizer_state_policy = local_sgd["optimizer_state_policy"]
+    if optimizer_state_policy == "synchronize":
+        _optimizer_state_reductions(optimizer)
 
     from torch.distributed.algorithms.ddp_comm_hooks import post_localSGD_hook
     from torch.distributed.algorithms.model_averaging.averagers import (
@@ -473,21 +644,24 @@ def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbos
         warmup_steps=warmup_steps,
         process_group=None,
     )
-    optimizer = PostLocalSGDOptimizer(optim=optimizer, averager=averager)
+    optimizer = HydraPostLocalSGDOptimizer(
+        optim=optimizer,
+        averager=averager,
+        optimizer_state_policy=optimizer_state_policy,
+        optimizer_state_bucket_bytes=local_sgd["optimizer_state_bucket_bytes"],
+    )
     print_distributed(
         verbosity,
         "Post-local SGD enabled: "
         f"warmup_steps={warmup_steps}, "
         f"synchronization_period={synchronization_period}, "
-        "optimizer_state=rank-local",
+        f"optimizer_state_policy={optimizer_state_policy}",
     )
     return model, optimizer
 
 
 def synchronize_local_sgd_parameters(optimizer):
     """Average replicas at an epoch boundary when an average is still pending."""
-    from torch.distributed.optim import PostLocalSGDOptimizer
-
     if not isinstance(optimizer, PostLocalSGDOptimizer):
         return False
 
@@ -513,6 +687,8 @@ def synchronize_local_sgd_parameters(optimizer):
         else dist.group.WORLD
     )
     utils.average_parameters_or_parameter_groups(optimizer.param_groups, process_group)
+    if isinstance(optimizer, HydraPostLocalSGDOptimizer):
+        _synchronize_optimizer_state(optimizer)
     optimizer._hydragnn_last_forced_sync_step = averager.step
     return True
 

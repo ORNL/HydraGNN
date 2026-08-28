@@ -812,7 +812,9 @@ frequency after a synchronized warm-up:
             "LocalSGD": {
                 "enabled": true,
                 "warmup_steps": 100,
-                "synchronization_period": 4
+                "synchronization_period": 4,
+                "optimizer_state_policy": "local",
+                "optimizer_state_bucket_bytes": 26214400
             }
         }
     }
@@ -836,10 +838,39 @@ greater than `1` provide the communication reduction.
 This option changes the optimization algorithm rather than merely optimizing
 DDP communication. Replicas intentionally diverge between parameter averages.
 PyTorch's `PostLocalSGDOptimizer` accepts standard optimizers such as SGD,
-AdamW, and RMSprop, but only model parameters are averaged. Persistent
-optimizer state—such as momentum buffers or Adam first/second moments—remains
-rank-local. Larger periods can therefore affect convergence, especially for
-adaptive optimizers or non-identically distributed data.
+AdamW, and RMSprop. `optimizer_state_policy` controls persistent state:
+
+- `"local"` (default) matches native PyTorch post-local SGD. Momentum buffers,
+  adaptive moments, and other optimizer history remain rank-local.
+- `"synchronize"` applies optimizer-specific reductions whenever model
+  parameters are averaged. This costs additional collectives and communication
+  but restarts replicas with the same model and optimizer history.
+
+HydraGNN uses the following strict synchronized-state policies:
+
+| Optimizer | State synchronization |
+| --- | --- |
+| SGD | mean `momentum_buffer` when present |
+| Adam / AdamW | mean `exp_avg` and `exp_avg_sq`; require equal `step` |
+| Adamax | mean `exp_avg`; elementwise maximum `exp_inf`; require equal `step` |
+| Adagrad | mean `sum`; require equal `step` |
+| Adadelta | mean `square_avg` and `acc_delta`; require equal `step` |
+| RMSprop | mean `square_avg` and optional `momentum_buffer`/`grad_avg`; require equal `step` |
+
+Unknown optimizers or state keys fail explicitly under `"synchronize"` rather
+than being silently ignored. FusedLAMB is currently unsupported for state
+synchronization. `optimizer_state_bucket_bytes` bounds the temporary flat
+communication buckets used to combine compatible state tensors; it must be a
+positive integer and defaults to 25 MiB. State tensors are bucketed by
+reduction, device, and dtype. State layouts and step counters are collectively
+checked before tensor reductions.
+
+The local policy communicates less. Larger periods can cause the model and
+rank-local optimizer history to become inconsistent after parameter averaging,
+especially for adaptive optimizers or non-identically distributed data. The
+synchronized policy avoids that mismatch but can substantially increase
+communication—for Adam-like methods, two additional parameter-sized moment
+buffers are transferred at every synchronization point.
 
 HydraGNN stores the model-averager step in optimizer checkpoints so resumed
 runs retain the warm-up and averaging schedule. All ranks must execute the same
@@ -849,6 +880,10 @@ data-preprocessing collectives, and checkpoint coordination are unaffected.
 If an epoch ends between scheduled averages, HydraGNN performs one conditional
 parameter average before validation/checkpointing; no extra collective is
 issued when the last optimizer step already performed the scheduled average.
+With synchronized optimizer state, a single-rank checkpoint is sufficient
+because all replicas have identical state at checkpoint time. With local state,
+the checkpoint contains the checkpoint-writing rank's optimizer history; all
+ranks load that history on resume and then diverge during later local steps.
 
 Post-local SGD currently supports ordinary PyTorch DDP only. HydraGNN rejects
 combinations with FSDP, DeepSpeed, `SyncBatchNorm`, task/model-parallel wrappers,

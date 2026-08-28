@@ -260,7 +260,8 @@ and propagated alongside the globally attended invariant representation.
       Optional post-local-SGD configuration for ordinary DDP. Set `enabled`,
       `warmup_steps`, and `synchronization_period` to replace per-step global
       gradient averaging after warm-up with periodic model-parameter averaging.
-      Optimizer state remains rank-local; see the User Manual for constraints.
+      `optimizer_state_policy` selects rank-local state (default) or strict
+      optimizer-aware synchronization; see the User Manual for constraints.
 
 
 ### Citations

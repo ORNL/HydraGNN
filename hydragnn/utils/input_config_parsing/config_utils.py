@@ -349,6 +349,8 @@ def validate_local_sgd_config(training):
 
     local_sgd.setdefault("warmup_steps", 0)
     local_sgd.setdefault("synchronization_period", 1)
+    local_sgd.setdefault("optimizer_state_policy", "local")
+    local_sgd.setdefault("optimizer_state_bucket_bytes", 25 * 1024 * 1024)
     if (
         isinstance(local_sgd["warmup_steps"], bool)
         or not isinstance(local_sgd["warmup_steps"], int)
@@ -362,6 +364,20 @@ def validate_local_sgd_config(training):
     ):
         raise ValueError(
             "Training.LocalSGD.synchronization_period must be an integer >= 1"
+        )
+    if local_sgd["optimizer_state_policy"] not in {"local", "synchronize"}:
+        raise ValueError(
+            "Training.LocalSGD.optimizer_state_policy must be 'local' or "
+            "'synchronize'"
+        )
+    bucket_bytes = local_sgd["optimizer_state_bucket_bytes"]
+    if (
+        isinstance(bucket_bytes, bool)
+        or not isinstance(bucket_bytes, int)
+        or bucket_bytes < 1
+    ):
+        raise ValueError(
+            "Training.LocalSGD.optimizer_state_bucket_bytes must be an integer >= 1"
         )
 
 
