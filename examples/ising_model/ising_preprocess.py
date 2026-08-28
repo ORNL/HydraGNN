@@ -30,7 +30,8 @@ from hydragnn.utils.input_config_parsing.variable_schema import (
 
 
 def _configurations(length, cutoff, rng):
-    for num_downs in range(length**3):
+    # Include both fully polarized endpoint classes: zero and N down spins.
+    for num_downs in range(length**3 + 1):
         primal = np.ones(length**3)
         primal[:num_downs] = -1.0
         if scipy.special.binom(length**3, num_downs) > cutoff:

@@ -11,7 +11,20 @@
 import json
 from pathlib import Path
 
-from examples.ising_model.ising_preprocess import prepare_ising_dataset
+import numpy as np
+
+from examples.ising_model.ising_preprocess import (
+    _configurations,
+    prepare_ising_dataset,
+)
+
+
+def test_ising_generator_includes_both_fully_polarized_configurations():
+    configurations = list(_configurations(1, 1, np.random.RandomState(7)))
+
+    assert len(configurations) == 2
+    assert configurations[0].item() == 1.0
+    assert configurations[1].item() == -1.0
 
 
 def test_ising_generator_compiles_named_attributes():

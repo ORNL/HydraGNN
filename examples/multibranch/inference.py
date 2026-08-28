@@ -483,7 +483,7 @@ if __name__ == "__main__":
                 predicted_values
             ), "inconsistent number of heads, %d!=%d" % (
                 len(true_values),
-                len(len(predicted_values)),
+                len(predicted_values),
             )
             for ihead, output in enumerate(config["Variables"]["outputs"]):
                 output_name = output["name"]
