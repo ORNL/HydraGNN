@@ -583,6 +583,7 @@ class HydraPostLocalSGDOptimizer(PostLocalSGDOptimizer):
             _synchronize_optimizer_state(self)
         return loss
 
+
 def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbosity=0):
     """Enable PyTorch post-local SGD for an ordinary DDP model.
 
