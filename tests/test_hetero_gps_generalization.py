@@ -186,3 +186,63 @@ def test_hetero_gps_attention_isolation_across_graphs():
 
     assert torch.allclose(out_ref["a"][0], out_perturbed["a"][0], atol=1e-6, rtol=1e-6)
     assert torch.allclose(out_ref["b"][0], out_perturbed["b"][0], atol=1e-6, rtol=1e-6)
+
+
+def test_hetero_gps_attention_node_types_default_to_all_types():
+    metadata = (["a", "b"], [("a", "r", "a")])
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+    )
+
+    assert conv.attn_node_types == ["a", "b"]
+
+
+def test_hetero_gps_attention_node_types_can_be_configured_independently():
+    metadata = (["a", "b"], [("a", "r", "a")])
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+        attn_node_types=["b"],
+    )
+    x_dict = {
+        "a": torch.randn(2, 4),
+        "b": torch.randn(3, 4),
+    }
+    batch_dict = {
+        "a": torch.zeros(2, dtype=torch.long),
+        "b": torch.zeros(3, dtype=torch.long),
+    }
+
+    _, _, split_sizes, pack_node_types = conv._pack_x_dict(x_dict, batch_dict)
+
+    assert conv.attn_node_types == ["b"]
+    assert pack_node_types == ["b"]
+    assert split_sizes == [3]
+
+
+def test_hetero_gps_rejects_unknown_attention_node_types():
+    metadata = (["a", "b"], [("a", "r", "a")])
+
+    try:
+        HeteroGPSConv(
+            channels=4,
+            metadata=metadata,
+            conv=None,
+            heads=1,
+            dropout=0.0,
+            attn_type="multihead",
+            attn_node_types=["missing"],
+        )
+    except ValueError as exc:
+        assert "Unknown attention node types" in str(exc)
+    else:
+        raise AssertionError("Expected unknown attention node type to be rejected.")

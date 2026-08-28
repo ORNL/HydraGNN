@@ -109,10 +109,14 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["global_attn_heads"] = 0
     if "attn_only" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["attn_only"] = False
+    if "attn_node_types" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["attn_node_types"] = None
     if "pe_dim" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
     if "pe_encoder" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_encoder"] = "laplacian"
+    if "positional_encodings" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["positional_encodings"] = None
     if "communicability_method" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["communicability_method"] = "katz"
     if "communicability_alpha_min" not in config["NeuralNetwork"]["Architecture"]:
