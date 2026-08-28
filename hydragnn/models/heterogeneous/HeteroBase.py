@@ -10,7 +10,7 @@
 ##############################################################################
 
 import torch
-from torch.nn import Module, ModuleList, ModuleDict, Linear, Sequential
+from torch.nn import Module, ModuleList, ModuleDict, Linear, Parameter, Sequential
 from torch_geometric.nn import (
     BatchNorm,
     HeteroConv,
@@ -64,6 +64,9 @@ class HeteroBase(Module):
         node_input_dims: dict | None = None,
         metadata=None,
         attn_only: bool = False,
+        attn_node_types: list[str] | None = None,
+        pe_encoder: str | None = None,
+        positional_encodings: dict | None = None,
     ):
         super().__init__()
 
@@ -79,6 +82,8 @@ class HeteroBase(Module):
         self.node_embedders = ModuleDict()
         self._node_input_dims = node_input_dims
         self.node_target_type = node_target_type
+        self.attn_node_types = attn_node_types
+        self.positional_encodings = positional_encodings or {}
         self.share_relation_weights = share_relation_weights
         self._metadata = metadata
         self._initialized = False
@@ -108,6 +113,173 @@ class HeteroBase(Module):
         self.activation_function = activation_function_selection(
             activation_function_type
         )
+
+        active_pe_sources = self.positional_encodings.get("use", [])
+        if isinstance(active_pe_sources, str):
+            active_pe_sources = [active_pe_sources]
+        aliases = {
+            "lpe": "laplacian",
+            "topological_laplacian": "laplacian",
+            "resistance": "effective_resistance",
+            "er": "effective_resistance",
+            "dc_summary": "effective_resistance",
+            "impedance": "effective_impedance",
+            "ac_summary": "effective_impedance",
+            "resistance_rpe": "effective_resistance_rpe",
+            "er_rpe": "effective_resistance_rpe",
+            "resistance_qk": "effective_resistance_qk",
+            "er_qk": "effective_resistance_qk",
+            "impedance_rpe": "effective_impedance_rpe",
+            "ei_rpe": "effective_impedance_rpe",
+            "svd_ybus": "ybus_svd",
+        }
+        self.active_pe_sources = {
+            aliases.get(str(source).lower(), str(source).lower())
+            for source in active_pe_sources
+        }
+        if (
+            not self.active_pe_sources
+            and str(pe_encoder or "").lower() in {"svd_ybus", "ybus_svd"}
+            and int(pe_dim) > 0
+        ):
+            self.active_pe_sources.add("ybus_svd")
+
+        laplacian_config = self.positional_encodings.get("laplacian", {})
+        self.laplacian_pe_dim = (
+            int(laplacian_config.get("dim", 8))
+            if "laplacian" in self.active_pe_sources
+            else 0
+        )
+        self.laplacian_random_sign_flip = bool(
+            laplacian_config.get("random_sign_flip", False)
+        )
+        self.effective_resistance_pe_dim = (
+            len(
+                self.positional_encodings.get("effective_resistance", {}).get(
+                    "statistics", ["min", "max", "std", "median", "mean"]
+                )
+            )
+            if "effective_resistance" in self.active_pe_sources
+            else 0
+        )
+        self.effective_impedance_pe_dim = (
+            2
+            * len(
+                self.positional_encodings.get("effective_impedance", {}).get(
+                    "statistics", ["min", "max", "std", "median", "mean"]
+                )
+            )
+            if "effective_impedance" in self.active_pe_sources
+            else 0
+        )
+        self.svd_rpe_dim = (
+            int(
+                self.positional_encodings.get("ybus_svd", {}).get("dim", pe_dim)
+            )
+            if "ybus_svd" in self.active_pe_sources
+            else 0
+        )
+        resistance_qk_config = self.positional_encodings.get(
+            "effective_resistance_qk", {}
+        )
+        self.resistance_qk_dim = (
+            int(resistance_qk_config.get("dim", 8))
+            if "effective_resistance_qk" in self.active_pe_sources
+            else 0
+        )
+        self.resistance_qk_placement = str(
+            resistance_qk_config.get("placement", "qk")
+        ).lower()
+        if self.resistance_qk_placement not in {"input", "qk", "both"}:
+            raise ValueError(
+                "effective_resistance_qk.placement must be 'input', 'qk', or "
+                "'both'."
+            )
+        self.resistance_qk_input_dim = (
+            self.resistance_qk_dim
+            if self.resistance_qk_placement in {"input", "both"}
+            else 0
+        )
+        self.resistance_qk_attention_dim = (
+            self.resistance_qk_dim
+            if self.resistance_qk_placement in {"qk", "both"}
+            else 0
+        )
+
+        direct_rpe_sources = self.active_pe_sources & {
+            "effective_resistance_rpe",
+            "effective_impedance_rpe",
+        }
+        attention_rpe_count = (
+            len(direct_rpe_sources)
+            + int(self.svd_rpe_dim > 0)
+            + int(self.resistance_qk_attention_dim > 0)
+        )
+        if attention_rpe_count > 1:
+            raise ValueError("Only one attention RPE can be active at a time.")
+        self.direct_rpe_source = (
+            next(iter(direct_rpe_sources)) if direct_rpe_sources else None
+        )
+        direct_rpe_config = self.positional_encodings.get(
+            self.direct_rpe_source, {}
+        )
+        self.direct_rpe_dim = (
+            int(direct_rpe_config.get("feature_dim", 1))
+            if self.direct_rpe_source is not None
+            else 0
+        )
+        self.direct_rpe_hidden_dim = (
+            int(direct_rpe_config.get("mlp_hidden_dim", 8))
+            if self.direct_rpe_source is not None
+            else 0
+        )
+        self.direct_rpe_zero_diagonal = bool(
+            direct_rpe_config.get("zero_diagonal_bias", True)
+        )
+        self._direct_rpe_device_cache = {}
+        if self.direct_rpe_source is not None:
+            if not self.use_global_attn or self.global_attn_type != "multihead":
+                raise ValueError(
+                    "Direct OPF RPE requires global multihead attention."
+                )
+            if self.attn_node_types != ["bus"]:
+                raise ValueError(
+                    "Direct OPF RPE currently requires attn_node_types=['bus']."
+                )
+
+        self.resistance_qk_coefficient = None
+        if self.resistance_qk_attention_dim > 0:
+            if not self.use_global_attn or self.global_attn_type != "performer":
+                raise ValueError(
+                    "Effective-resistance Q/K augmentation requires global "
+                    "Performer attention."
+                )
+            if self.attn_node_types != ["bus"]:
+                raise ValueError(
+                    "Effective-resistance Q/K augmentation requires "
+                    "attn_node_types=['bus']."
+                )
+            self.resistance_qk_coefficient = Parameter(
+                torch.tensor(
+                    float(resistance_qk_config.get("coefficient_init", 0.0)),
+                    dtype=torch.float32,
+                )
+            )
+
+        # Each Laplacian mode contributes its node value and graph eigenvalue.
+        self.bus_input_pe_dim = (
+            2 * self.laplacian_pe_dim
+            + self.effective_resistance_pe_dim
+            + self.effective_impedance_pe_dim
+            + self.resistance_qk_input_dim
+        )
+        self.bus_pe_fuser = None
+        if self.bus_input_pe_dim > 0:
+            self.bus_pe_fuser = Sequential(
+                Linear(self.hidden_dim + self.bus_input_pe_dim, self.hidden_dim),
+                activation_function_selection(activation_function_type),
+                Linear(self.hidden_dim, self.hidden_dim),
+            )
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_dim = int(graph_attr_dim)
@@ -351,6 +523,12 @@ class HeteroBase(Module):
                 heads=self.global_attn_heads,
                 dropout=self.dropout,
                 attn_type=self.global_attn_type,
+                attn_node_types=self.attn_node_types,
+                pe_dim=self.svd_rpe_dim,
+                direct_rpe_dim=self.direct_rpe_dim,
+                rpe_hidden_dim=self.direct_rpe_hidden_dim,
+                rpe_zero_diagonal=self.direct_rpe_zero_diagonal,
+                resistance_qk_dim=self.resistance_qk_attention_dim,
             )
         raise ValueError(f"Unsupported global_attn_engine: {self.global_attn_engine}")
 
@@ -574,6 +752,127 @@ class HeteroBase(Module):
             edge_attr_dict = None
         return edge_attr_dict
 
+    def _apply_laplacian_sign_flip(self, eigenvectors, batch):
+        """Flip each graph/eigenmode once, never independently per node."""
+
+        if not (self.training and self.laplacian_random_sign_flip):
+            return eigenvectors
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        if num_graphs == 0:
+            return eigenvectors
+        signs = torch.randint(
+            0,
+            2,
+            (num_graphs, eigenvectors.size(1)),
+            device=eigenvectors.device,
+        )
+        signs = signs.to(eigenvectors.dtype).mul_(2.0).sub_(1.0)
+        return eigenvectors * signs[batch]
+
+    @staticmethod
+    def _expand_graph_eigenvalues(eigenvalues, batch, num_nodes, width):
+        if eigenvalues.dim() == 1:
+            eigenvalues = eigenvalues.view(-1, width)
+        if eigenvalues.dim() != 2 or eigenvalues.size(1) != width:
+            raise ValueError(
+                f"Expected Laplacian eigenvalues with width {width}, got "
+                f"shape {tuple(eigenvalues.shape)}."
+            )
+        if eigenvalues.size(0) == num_nodes:
+            return eigenvalues
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        if eigenvalues.size(0) == num_graphs:
+            return eigenvalues[batch]
+        if eigenvalues.size(0) == 1:
+            return eigenvalues.expand(num_nodes, -1)
+        raise ValueError(
+            "Laplacian eigenvalue rows must be one per node or one per graph; "
+            f"got {eigenvalues.size(0)} rows for {num_nodes} nodes and "
+            f"{num_graphs} graphs."
+        )
+
+    def _collect_bus_input_pe(self, data, batch, device, dtype):
+        pieces = []
+        bus_store = data["bus"]
+        num_bus = int(batch.numel())
+
+        if self.laplacian_pe_dim > 0:
+            eigenvectors = getattr(bus_store, "lap_eigvec", None)
+            eigenvalues = getattr(bus_store, "lap_eigval", None)
+            if eigenvectors is None or eigenvalues is None:
+                raise ValueError(
+                    "Laplacian PE is enabled, but the batch is missing "
+                    "bus.lap_eigvec or bus.lap_eigval. Re-run OPF preprocessing."
+                )
+            eigenvectors = eigenvectors.to(device=device, dtype=dtype)
+            eigenvalues = eigenvalues.to(device=device, dtype=dtype)
+            if eigenvectors.shape != (num_bus, self.laplacian_pe_dim):
+                raise ValueError(
+                    "Expected bus Laplacian eigenvectors with shape "
+                    f"({num_bus}, {self.laplacian_pe_dim}), got "
+                    f"{tuple(eigenvectors.shape)}."
+                )
+            eigenvectors = self._apply_laplacian_sign_flip(eigenvectors, batch)
+            node_eigenvalues = self._expand_graph_eigenvalues(
+                eigenvalues,
+                batch,
+                num_bus,
+                self.laplacian_pe_dim,
+            )
+            pieces.extend((eigenvectors, node_eigenvalues))
+
+        if self.effective_resistance_pe_dim > 0:
+            resistance = getattr(bus_store, "effective_resistance_pe", None)
+            if resistance is None:
+                raise ValueError(
+                    "Effective-resistance PE is enabled, but the batch is missing "
+                    "bus.effective_resistance_pe. Re-run OPF preprocessing."
+                )
+            resistance = resistance.to(device=device, dtype=dtype)
+            expected = (num_bus, self.effective_resistance_pe_dim)
+            if resistance.shape != expected:
+                raise ValueError(
+                    f"Expected effective-resistance PE shape {expected}, got "
+                    f"{tuple(resistance.shape)}."
+                )
+            pieces.append(resistance)
+
+        if self.effective_impedance_pe_dim > 0:
+            impedance = getattr(bus_store, "effective_impedance_pe", None)
+            if impedance is None:
+                raise ValueError(
+                    "Effective-impedance PE is enabled, but the batch is missing "
+                    "bus.effective_impedance_pe. Re-run OPF preprocessing."
+                )
+            impedance = impedance.to(device=device, dtype=dtype)
+            expected = (num_bus, self.effective_impedance_pe_dim)
+            if impedance.shape != expected:
+                raise ValueError(
+                    f"Expected effective-impedance PE shape {expected}, got "
+                    f"{tuple(impedance.shape)}."
+                )
+            pieces.append(impedance)
+
+        if self.resistance_qk_input_dim > 0:
+            coordinates = getattr(bus_store, "effective_resistance_qk", None)
+            if coordinates is None:
+                raise ValueError(
+                    "Effective-resistance input PE is enabled, but the batch is "
+                    "missing bus.effective_resistance_qk. Re-run OPF preprocessing."
+                )
+            coordinates = coordinates.to(device=device, dtype=dtype)
+            expected = (num_bus, self.resistance_qk_input_dim)
+            if tuple(coordinates.shape) != expected:
+                raise ValueError(
+                    f"Expected effective-resistance input coordinates {expected}, "
+                    f"got {tuple(coordinates.shape)}."
+                )
+            pieces.append(coordinates)
+
+        if not pieces:
+            return None
+        return torch.cat(pieces, dim=-1)
+
     def _prepare_node_features(self, data):
         """Prepare invariant node features and batch vectors for hetero forward.
 
@@ -597,6 +896,8 @@ class HeteroBase(Module):
                 "Expected one of: inv_node_feat_dict, x_dict."
             )
 
+        batch_dict = self._get_batch_dict(data, inv_node_feat_dict)
+
         # Ensure each node type uses the shared hidden width before message passing.
         self._ensure_node_embedders(inv_node_feat_dict)
         embedded_dict = {}
@@ -606,9 +907,19 @@ class HeteroBase(Module):
                 embedder = embedder.to(x.device)
                 self.node_embedders[node_type] = embedder
             x = x.to(dtype=embedder.weight.dtype)
-            embedded_dict[node_type] = embedder(x)
+            embedded = embedder(x)
+            if node_type == "bus" and self.bus_pe_fuser is not None:
+                positional = self._collect_bus_input_pe(
+                    data,
+                    batch_dict[node_type],
+                    device=embedded.device,
+                    dtype=embedded.dtype,
+                )
+                embedded = self.bus_pe_fuser(
+                    torch.cat((embedded, positional), dim=-1)
+                )
+            embedded_dict[node_type] = embedded
 
-        batch_dict = self._get_batch_dict(data, embedded_dict)
         return embedded_dict, batch_dict
 
     def _get_equiv_node_feat_dict(self, data):
@@ -621,6 +932,119 @@ class HeteroBase(Module):
             if equiv_dict is not None:
                 return equiv_dict
         return None
+
+    def _get_svd_rpe_dict(self, data):
+        """Collect bus SVD factors stored by OPF preprocessing."""
+        if self.svd_rpe_dim <= 0:
+            return None
+        result = {}
+        for node_type in self.attn_node_types or data.node_types:
+            store = data[node_type]
+            names = {
+                "u_real": "svd_u_real",
+                "u_imag": "svd_u_imag",
+                "v_real": "svd_v_real",
+                "v_imag": "svd_v_imag",
+                "s": "svd_s",
+            }
+            values = {}
+            for short_name, attr_name in names.items():
+                value = getattr(store, attr_name, None)
+                if value is None:
+                    raise ValueError(
+                        f"Ybus SVD-RPE dim={self.svd_rpe_dim}, but node type "
+                        f"'{node_type}' is "
+                        f"missing '{attr_name}'. Re-run SVD-RPE preprocessing."
+                    )
+                values[short_name] = value
+            result[node_type] = values
+        return result
+
+    def _get_resistance_qk(self, data, device, dtype):
+        """Return packed bus resistance coordinates for Performer attention."""
+
+        if self.resistance_qk_dim <= 0:
+            return None
+        coordinates = getattr(data["bus"], "effective_resistance_qk", None)
+        if coordinates is None:
+            raise ValueError(
+                "Effective-resistance Q/K augmentation is enabled, but the batch "
+                "is missing bus.effective_resistance_qk. Re-run OPF preprocessing."
+            )
+        expected = (int(data["bus"].x.size(0)), self.resistance_qk_dim)
+        if tuple(coordinates.shape) != expected:
+            raise ValueError(
+                f"Expected bus.effective_resistance_qk shape {expected}, got "
+                f"{tuple(coordinates.shape)}."
+            )
+        return coordinates.to(device=device, dtype=dtype)
+
+    @staticmethod
+    def _load_pairwise_rpe_artifact(path):
+        try:
+            artifact = torch.load(path, map_location="cpu", weights_only=True)
+        except TypeError:
+            artifact = torch.load(path, map_location="cpu")
+        if not isinstance(artifact, dict) or "pairwise_rpe" not in artifact:
+            raise ValueError(
+                f"Pairwise RPE cache '{path}' does not contain 'pairwise_rpe'."
+            )
+        return artifact["pairwise_rpe"]
+
+    def _get_direct_pairwise_rpe(self, data, batch, device, dtype):
+        """Load one topology-level pair tensor per graph in the batch."""
+
+        if self.direct_rpe_source is None:
+            return None
+        store = data["bus"]
+        tensor_attr = self.direct_rpe_source
+        path_attr = f"{self.direct_rpe_source}_path"
+        embedded = getattr(store, tensor_attr, None)
+        paths = getattr(store, path_attr, None)
+
+        num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
+        counts = torch.bincount(batch, minlength=num_graphs).detach().cpu().tolist()
+        matrices = []
+        if paths is not None:
+            if isinstance(paths, str):
+                paths = [paths]
+            else:
+                paths = list(paths)
+            if len(paths) != num_graphs:
+                raise ValueError(
+                    f"Expected {num_graphs} pairwise RPE cache paths, got "
+                    f"{len(paths)}."
+                )
+            for path in paths:
+                cache_key = (str(path), str(device), str(dtype))
+                matrix = self._direct_rpe_device_cache.get(cache_key)
+                if matrix is None:
+                    matrix = self._load_pairwise_rpe_artifact(path).to(
+                        device=device, dtype=dtype
+                    )
+                    self._direct_rpe_device_cache[cache_key] = matrix
+                matrices.append(matrix)
+        elif embedded is not None:
+            if num_graphs != 1 or embedded.dim() != 3:
+                raise ValueError(
+                    "In-memory pairwise RPE currently supports one graph; use "
+                    "topology-level cache paths for batched graphs."
+                )
+            matrices = [embedded.to(device=device, dtype=dtype)]
+        else:
+            raise ValueError(
+                f"{self.direct_rpe_source} is enabled, but the batch has neither "
+                f"bus.{tensor_attr} nor bus.{path_attr}. Re-run OPF preprocessing."
+            )
+
+        for graph_index, (matrix, count) in enumerate(zip(matrices, counts)):
+            expected = (count, count, self.direct_rpe_dim)
+            if tuple(matrix.shape) != expected:
+                raise ValueError(
+                    f"Expected pairwise RPE graph {graph_index} shape {expected}, "
+                    f"got {tuple(matrix.shape)}."
+                )
+        return matrices
 
     def _pool_hetero_graph_features(self, x_dict, batch_dict):
         num_graphs = max(
@@ -845,6 +1269,26 @@ class HeteroBase(Module):
 
         x_dict, batch_dict = self._prepare_node_features(data)
         equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
+        svd_rpe_dict = self._get_svd_rpe_dict(data) if self.use_global_attn else None
+        direct_pairwise_rpe = (
+            self._get_direct_pairwise_rpe(
+                data,
+                batch_dict["bus"],
+                device=x_dict["bus"].device,
+                dtype=x_dict["bus"].dtype,
+            )
+            if self.use_global_attn and self.direct_rpe_source is not None
+            else None
+        )
+        resistance_qk = (
+            self._get_resistance_qk(
+                data,
+                device=x_dict["bus"].device,
+                dtype=x_dict["bus"].dtype,
+            )
+            if self.use_global_attn and self.resistance_qk_attention_dim > 0
+            else None
+        )
 
         edge_attr_dict = self._get_edge_attr_dict(data)
 
@@ -856,6 +1300,10 @@ class HeteroBase(Module):
                     edge_index_dict=data.edge_index_dict,
                     batch_dict=batch_dict,
                     edge_attr_dict=edge_attr_dict,
+                    svd_rpe_dict=svd_rpe_dict,
+                    direct_pairwise_rpe=direct_pairwise_rpe,
+                    resistance_qk=resistance_qk,
+                    resistance_coefficient=self.resistance_qk_coefficient,
                 )
             elif edge_attr_dict is None:
                 x_dict = conv(x_dict, data.edge_index_dict)

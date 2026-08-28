@@ -133,6 +133,10 @@ from opf_solution_utils import (
     resolve_edge_feature_schema,
     resolve_node_target_type as _resolve_node_target_type,
 )
+from opf_svd_rpe import (
+    OPFSpectralPEPreprocessor,
+    resolve_opf_positional_encoding_config,
+)
 
 from hydragnn.utils.datasets.hdf5dataset import HDF5Writer, HDF5Dataset
 
@@ -323,6 +327,7 @@ def _prepare_sample(
     to_homogeneous: bool = False,
     edge_dim=None,
     edge_feature_schema=None,
+    spectral_pe_preprocessor=None,
 ):
     data.y = _build_solution_target(data, node_target_type)
     _ensure_node_y_loc(data)
@@ -334,6 +339,8 @@ def _prepare_sample(
     data, _ = assemble_edge_attr(
         data, edge_dim=edge_dim, feature_schema=edge_feature_schema
     )
+    if spectral_pe_preprocessor is not None and spectral_pe_preprocessor.enabled:
+        spectral_pe_preprocessor(data, case_name=case_name)
     if not to_homogeneous:
         return data
     _validate_node_stores_for_homogeneous(data)
@@ -541,6 +548,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--num_epoch", type=int, default=None)
+    parser.add_argument(
+        "--resume_from",
+        type=str,
+        default=None,
+        help="Load model and optimizer state from logs/<name>/<name>.pk.",
+    )
+    parser.add_argument(
+        "--epoch_start",
+        type=int,
+        default=None,
+        help="First epoch index to run when resuming from a checkpoint.",
+    )
     parser.add_argument("--modelname", type=str, default="OPF_Solution_Hetero")
     parser.add_argument("--mpnn_type", type=str, default=None)
     parser.add_argument("--hidden_dim", type=int, default=None)
@@ -652,6 +671,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    if (args.resume_from is None) != (args.epoch_start is None):
+        parser.error("--resume_from and --epoch_start must be provided together.")
+    if args.epoch_start is not None and args.epoch_start < 0:
+        parser.error("--epoch_start must be non-negative.")
+
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, args.data_root)
     input_filename = os.path.join(dirpwd, args.inputfile)
@@ -660,6 +684,16 @@ if __name__ == "__main__":
         config = json.load(f)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
+    opf_pe_config = resolve_opf_positional_encoding_config(arch_config)
+    spectral_pe_preprocessor = OPFSpectralPEPreprocessor(
+        arch_config,
+        cache_dir=os.path.join(datadir, "spectral_pe_cache"),
+    )
+    if opf_pe_config["precompute"] and args.format == "adios":
+        raise ValueError(
+            "OPF spectral positional encodings require HDF5 or pickle; ADIOS "
+            "homogeneous conversion cannot preserve bus-only PE tensors."
+        )
 
     # CLI overrides for HPO
     for param in ("mpnn_type", "hidden_dim", "num_conv_layers"):
@@ -676,6 +710,10 @@ if __name__ == "__main__":
         config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
 
     training_config = config.setdefault("NeuralNetwork", {}).setdefault("Training", {})
+    if args.resume_from is not None:
+        training_config["continue"] = 1
+        training_config["startfrom"] = args.resume_from
+        training_config["epoch_start"] = args.epoch_start
 
     # Apply CLI overrides for domain loss.  Any CLI flag takes precedence over
     # whatever is stored in the input config.
@@ -902,6 +940,7 @@ if __name__ == "__main__":
                                 store_homogeneous,
                                 edge_dim=edge_dim,
                                 edge_feature_schema=edge_feature_schema,
+                                spectral_pe_preprocessor=spectral_pe_preprocessor,
                             )
                         )
                         local_count += 1
@@ -932,6 +971,7 @@ if __name__ == "__main__":
                                 store_homogeneous,
                                 edge_dim=edge_dim,
                                 edge_feature_schema=edge_feature_schema,
+                                spectral_pe_preprocessor=spectral_pe_preprocessor,
                             )
                         )
                         local_count += 1
@@ -1112,6 +1152,7 @@ if __name__ == "__main__":
                         store_homogeneous,
                         edge_dim=edge_dim,
                         edge_feature_schema=edge_feature_schema,
+                        spectral_pe_preprocessor=spectral_pe_preprocessor,
                     )
                 )
             if remaining_caps["train"] is not None:
@@ -1141,6 +1182,7 @@ if __name__ == "__main__":
                         store_homogeneous,
                         edge_dim=edge_dim,
                         edge_feature_schema=edge_feature_schema,
+                        spectral_pe_preprocessor=spectral_pe_preprocessor,
                     )
                 )
             if remaining_caps["val"] is not None:
@@ -1170,6 +1212,7 @@ if __name__ == "__main__":
                         store_homogeneous,
                         edge_dim=edge_dim,
                         edge_feature_schema=edge_feature_schema,
+                        spectral_pe_preprocessor=spectral_pe_preprocessor,
                     )
                 )
             if remaining_caps["test"] is not None:
