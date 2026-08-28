@@ -148,8 +148,9 @@ def _synchronized_optimizer_state_worker(rank, world_size, rendezvous_file):
                     warmup_steps=0,
                     synchronization_period=1,
                     optimizer_state_policy="synchronize",
-                    # Exercise multiple bounded buckets even for this tiny model.
-                    optimizer_state_bucket_bytes=4,
+                    # A sub-element request is clamped to one element and still
+                    # exercises multiple bounded buckets for this tiny model.
+                    optimizer_state_bucket_bytes=1,
                 ),
             )
 

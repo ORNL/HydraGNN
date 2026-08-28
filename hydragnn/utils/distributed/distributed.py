@@ -441,7 +441,11 @@ def _optimizer_state_reductions(optimizer):
 
 
 def _reduce_optimizer_tensor_bucket(tensors, operation, process_group, bucket_bytes):
-    """Reduce state tensors in bounded flat buckets and copy results in place."""
+    """Reduce state tensors in bounded flat buckets and copy results in place.
+
+    A bucket must hold at least one tensor element, so the effective byte bound
+    is clamped to the element size when a smaller value is requested.
+    """
     if not tensors:
         return
     world_size = dist.get_world_size(process_group)
@@ -469,11 +473,12 @@ def _reduce_optimizer_tensor_bucket(tensors, operation, process_group, bucket_by
         if not tensor.is_contiguous():
             raise ValueError("optimizer state tensors must be contiguous")
         flat_tensor = tensor.view(-1)
-        max_elements = max(bucket_bytes // tensor.element_size(), 1)
+        effective_bucket_bytes = max(bucket_bytes, tensor.element_size())
+        max_elements = effective_bucket_bytes // tensor.element_size()
         for start in range(0, flat_tensor.numel(), max_elements):
             view = flat_tensor[start : start + max_elements]
             view_bytes = view.numel() * view.element_size()
-            if current and current_bytes + view_bytes > bucket_bytes:
+            if current and current_bytes + view_bytes > effective_bucket_bytes:
                 reduce_current()
             current.append(view)
             current_bytes += view_bytes
