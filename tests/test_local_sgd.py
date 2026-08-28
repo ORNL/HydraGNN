@@ -63,7 +63,7 @@ def _local_sgd_worker(rank, world_size, rendezvous_file):
         model, optimizer = configure_local_sgd(model, base_optimizer, _config())
 
         synchronization = []
-        for _ in range(5):
+        for step in range(5):
             optimizer.zero_grad()
             inputs = torch.ones(1, 1)
             targets = torch.tensor([[float(2 * rank)]])
@@ -71,6 +71,10 @@ def _local_sgd_worker(rank, world_size, rendezvous_file):
             loss.backward()
             optimizer.step()
             synchronization.append(_all_parameters_match(model))
+            if step == 0:
+                # The first step is still in globally synchronized DDP warm-up;
+                # epoch-boundary handling must not add a parameter collective.
+                assert not synchronize_local_sgd_parameters(optimizer)
 
         # Step 0 uses global DDP gradient averaging. Step 1 is the first local
         # update and also the first periodic parameter average. Step 2 remains

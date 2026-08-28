@@ -492,6 +492,10 @@ def synchronize_local_sgd_parameters(optimizer):
         return False
 
     averager = optimizer.averager
+    # DDP globally averages gradients throughout warm-up, so replicas are
+    # already identical and an additional parameter collective is redundant.
+    if averager.step <= averager.warmup_steps:
+        return False
     if getattr(optimizer, "_hydragnn_last_forced_sync_step", None) == averager.step:
         return False
     last_step = averager.step - 1
