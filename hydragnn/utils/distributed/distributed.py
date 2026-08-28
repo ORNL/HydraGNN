@@ -398,6 +398,121 @@ def is_model_distributed(model):
     return isinstance(model, torch.nn.parallel.distributed.DistributedDataParallel)
 
 
+def _local_sgd_training_config(config):
+    """Return the Local-SGD subsection from a full or neural-network config."""
+    if config is None:
+        return {"enabled": False}
+    neural_network = config.get("NeuralNetwork", config)
+    training = neural_network.get("Training", {})
+    from hydragnn.utils.input_config_parsing.config_utils import (
+        validate_local_sgd_config,
+    )
+
+    validate_local_sgd_config(training)
+    local_sgd = training.get("LocalSGD", {})
+    return local_sgd
+
+
+def configure_local_sgd(model, optimizer, config, *, use_deepspeed=False, verbosity=0):
+    """Enable PyTorch post-local SGD for an ordinary DDP model.
+
+    During ``warmup_steps``, DDP averages gradients globally on every backward
+    pass. Afterwards, gradient all-reduce is disabled so each rank takes local
+    optimizer steps, while ``PostLocalSGDOptimizer`` averages model parameters
+    globally every ``synchronization_period`` steps. Optimizer state (for
+    example Adam moments) remains rank-local by design.
+
+    The function is deliberately restricted to ordinary DDP. FSDP, DeepSpeed,
+    model-parallel wrappers, SyncBatchNorm, and ZeroRedundancyOptimizer have
+    different collective/state semantics and must not silently enter this mode.
+    """
+    local_sgd = _local_sgd_training_config(config)
+    if not local_sgd.get("enabled", False):
+        return model, optimizer
+
+    if use_deepspeed:
+        raise ValueError("Training.LocalSGD is not supported with DeepSpeed")
+    if bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))):
+        raise ValueError("Training.LocalSGD is not supported with FSDP")
+    if not dist.is_initialized() or dist.get_world_size() < 2:
+        raise ValueError("Training.LocalSGD requires at least two distributed ranks")
+    if not isinstance(model, DDP):
+        raise TypeError("Training.LocalSGD requires an ordinary PyTorch DDP model")
+
+    neural_network = config.get("NeuralNetwork", config)
+    if neural_network.get("Architecture", {}).get("SyncBatchNorm", False):
+        raise ValueError("Training.LocalSGD is not supported with SyncBatchNorm")
+
+    from torch.distributed.optim import (
+        PostLocalSGDOptimizer,
+        ZeroRedundancyOptimizer,
+    )
+
+    if isinstance(optimizer, ZeroRedundancyOptimizer):
+        raise ValueError(
+            "Training.LocalSGD is not supported with ZeroRedundancyOptimizer"
+        )
+
+    from torch.distributed.algorithms.ddp_comm_hooks import post_localSGD_hook
+    from torch.distributed.algorithms.model_averaging.averagers import (
+        PeriodicModelAverager,
+    )
+
+    warmup_steps = local_sgd["warmup_steps"]
+    synchronization_period = local_sgd["synchronization_period"]
+    state = post_localSGD_hook.PostLocalSGDState(
+        process_group=None,
+        subgroup=None,
+        start_localSGD_iter=warmup_steps,
+        post_local_gradient_allreduce=False,
+    )
+    model.register_comm_hook(state, post_localSGD_hook.post_localSGD_hook)
+
+    averager = PeriodicModelAverager(
+        period=synchronization_period,
+        warmup_steps=warmup_steps,
+        process_group=None,
+    )
+    optimizer = PostLocalSGDOptimizer(optim=optimizer, averager=averager)
+    print_distributed(
+        verbosity,
+        "Post-local SGD enabled: "
+        f"warmup_steps={warmup_steps}, "
+        f"synchronization_period={synchronization_period}, "
+        "optimizer_state=rank-local",
+    )
+    return model, optimizer
+
+
+def synchronize_local_sgd_parameters(optimizer):
+    """Average replicas at an epoch boundary when an average is still pending."""
+    from torch.distributed.optim import PostLocalSGDOptimizer
+
+    if not isinstance(optimizer, PostLocalSGDOptimizer):
+        return False
+
+    averager = optimizer.averager
+    if getattr(optimizer, "_hydragnn_last_forced_sync_step", None) == averager.step:
+        return False
+    last_step = averager.step - 1
+    last_step_was_averaged = last_step >= averager.warmup_steps and (
+        (last_step - averager.warmup_steps) % averager.period == 0
+    )
+    if last_step_was_averaged:
+        return False
+
+    from torch.distributed.algorithms.model_averaging import utils
+
+    process_group = (
+        averager.process_group
+        if averager.process_group is not None
+        else dist.group.WORLD
+    )
+    utils.average_parameters_or_parameter_groups(optimizer.param_groups, process_group)
+    optimizer._hydragnn_last_forced_sync_step = averager.step
+    return True
+
+
 def get_distributed_model(
     model,
     verbosity=0,
@@ -498,6 +613,9 @@ def distributed_model_wrapper(
     bf16=False,
     precision="fp32",
 ):
+    local_sgd = _local_sgd_training_config(config)
+    if local_sgd.get("enabled", False) and use_deepspeed:
+        raise ValueError("Training.LocalSGD is not supported with DeepSpeed")
 
     if hasattr(torch, "xpu") and torch.xpu.is_available():
         print_distributed(
@@ -563,6 +681,14 @@ def distributed_model_wrapper(
             sync_batch_norm=sync_batch_norm,
             find_unused_parameters=find_unused_parameters,
             enhanced_model=enhanced_model_detected,
+        )
+
+        model, optimizer = configure_local_sgd(
+            model,
+            optimizer,
+            config,
+            use_deepspeed=use_deepspeed,
+            verbosity=verbosity,
         )
 
     return model, optimizer

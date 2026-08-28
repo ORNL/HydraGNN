@@ -799,6 +799,69 @@ resulting engine and explicit loaders to `train_validate_test` with
 `use_deepspeed=True`. See `examples/ogb/train_gap.py` for the complete setup;
 HydraGNN no longer hides this initialization inside a convenience wrapper.
 
+### Infrequent synchronization with post-local SGD
+
+Ordinary DDP averages gradients on every backward pass. HydraGNN can instead
+use PyTorch's native post-local-SGD components to reduce global collective
+frequency after a synchronized warm-up:
+
+```json
+{
+    "NeuralNetwork": {
+        "Training": {
+            "LocalSGD": {
+                "enabled": true,
+                "warmup_steps": 100,
+                "synchronization_period": 4
+            }
+        }
+    }
+}
+```
+
+Both integer values count optimizer steps, not epochs:
+
+- `warmup_steps` must be nonnegative. Before this many steps, DDP globally
+  averages gradients after every backward pass.
+- `synchronization_period` must be positive. After warm-up, gradient
+  all-reduce is disabled and every rank applies its optimizer locally. Model
+  parameters are globally averaged at the first local step and every stated
+  number of local steps thereafter.
+
+The default is `{"enabled": false}`, which retains conventional synchronous
+DDP. A period of `1` averages parameters after every local optimizer step and
+therefore does not reduce the number of global parameter collectives; values
+greater than `1` provide the communication reduction.
+
+This option changes the optimization algorithm rather than merely optimizing
+DDP communication. Replicas intentionally diverge between parameter averages.
+PyTorch's `PostLocalSGDOptimizer` accepts standard optimizers such as SGD,
+AdamW, and RMSprop, but only model parameters are averaged. Persistent
+optimizer state—such as momentum buffers or Adam first/second moments—remains
+rank-local. Larger periods can therefore affect convergence, especially for
+adaptive optimizers or non-identically distributed data.
+
+HydraGNN stores the model-averager step in optimizer checkpoints so resumed
+runs retain the warm-up and averaging schedule. All ranks must execute the same
+number of optimizer steps. The setting only changes training-time gradient and
+parameter synchronization; validation/test reductions, metric collectives,
+data-preprocessing collectives, and checkpoint coordination are unaffected.
+If an epoch ends between scheduled averages, HydraGNN performs one conditional
+parameter average before validation/checkpointing; no extra collective is
+issued when the last optimizer step already performed the scheduled average.
+
+Post-local SGD currently supports ordinary PyTorch DDP only. HydraGNN rejects
+combinations with FSDP, DeepSpeed, `SyncBatchNorm`, task/model-parallel wrappers,
+or `ZeroRedundancyOptimizer` rather than silently applying different semantics.
+Pass the full configuration to the distributed wrapper so it can configure the
+DDP communication hook before checkpoint loading:
+
+```python
+model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
+    model, optimizer, verbosity, config=config
+)
+```
+
 ### FSDP (Fully Sharded Data Parallel) Integration
 
 Pytorch's FSDP (Fully Sharded Data Parallel) provides functionality similar to DeepSpeed ZeRO. 

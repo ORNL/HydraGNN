@@ -70,6 +70,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         if mode == "node_budget" and "max_nodes" not in batching:
             raise ValueError("node_budget batching requires max_nodes")
 
+    validate_local_sgd_config(config["NeuralNetwork"]["Training"])
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
@@ -331,6 +333,35 @@ def validate_equivariant_transformer_config(config):
         raise ValueError(
             "MACE with EquivariantTransformer requires at least two convolution "
             "layers because MACE's final layer contains scalar irreps only"
+        )
+
+
+def validate_local_sgd_config(training):
+    """Validate and fill defaults for optional post-local-SGD training."""
+    local_sgd = training.setdefault("LocalSGD", {"enabled": False})
+    if not isinstance(local_sgd, dict):
+        raise TypeError("Training.LocalSGD must be a JSON object")
+    local_sgd.setdefault("enabled", False)
+    if not isinstance(local_sgd["enabled"], bool):
+        raise TypeError("Training.LocalSGD.enabled must be a boolean")
+    if not local_sgd["enabled"]:
+        return
+
+    local_sgd.setdefault("warmup_steps", 0)
+    local_sgd.setdefault("synchronization_period", 1)
+    if (
+        isinstance(local_sgd["warmup_steps"], bool)
+        or not isinstance(local_sgd["warmup_steps"], int)
+        or local_sgd["warmup_steps"] < 0
+    ):
+        raise ValueError("Training.LocalSGD.warmup_steps must be an integer >= 0")
+    if (
+        isinstance(local_sgd["synchronization_period"], bool)
+        or not isinstance(local_sgd["synchronization_period"], int)
+        or local_sgd["synchronization_period"] < 1
+    ):
+        raise ValueError(
+            "Training.LocalSGD.synchronization_period must be an integer >= 1"
         )
 
 

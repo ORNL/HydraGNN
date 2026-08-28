@@ -256,6 +256,11 @@ and propagated alongside the globally attended invariant representation.
       Training precision: `"fp32"`, `"bf16"`, `"fp64"` (str, default `"fp32"`)
     - `["conv_checkpointing"]`  
       Enable gradient checkpointing to reduce memory usage (bool, default `false`)
+    - `["LocalSGD"]`
+      Optional post-local-SGD configuration for ordinary DDP. Set `enabled`,
+      `warmup_steps`, and `synchronization_period` to replace per-step global
+      gradient averaging after warm-up with periodic model-parameter averaging.
+      Optimizer state remains rank-local; see the User Manual for constraints.
 
 
 ### Citations

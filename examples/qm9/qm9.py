@@ -138,7 +138,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     )
 
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity
+        model, optimizer, verbosity, config=config
     )
 
     # Run training with the given model and qm9 datasets.

@@ -19,6 +19,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from hydragnn.utils.distributed import (
     setup_ddp,
     get_distributed_model,
+    configure_local_sgd,
 )
 from hydragnn.utils.distributed import print_peak_memory
 from hydragnn.utils.model import (
@@ -93,6 +94,7 @@ def train_and_checkpoint(
         optimizer = select_optimizer(
             model, config["NeuralNetwork"]["Training"]["Optimizer"]
         )
+        model, optimizer = configure_local_sgd(model, optimizer, config)
 
         scheduler = ReduceLROnPlateau(
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001

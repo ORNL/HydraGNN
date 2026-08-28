@@ -18,6 +18,8 @@ from .distributed import (
     is_model_distributed,
     get_distributed_model,
     distributed_model_wrapper,
+    configure_local_sgd,
+    synchronize_local_sgd_parameters,
     setup_ddp,
     nsplit,
     comm_reduce,

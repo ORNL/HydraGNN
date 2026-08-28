@@ -497,7 +497,7 @@ if __name__ == "__main__":
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
         model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-            model, optimizer, verbosity
+            model, optimizer, verbosity, config=config
         )
 
     # Print details of neural network architecture
