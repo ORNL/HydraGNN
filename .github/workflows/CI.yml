@@ -25,7 +25,13 @@ jobs:
           - suite: serial
             python: "3.14"
           - suite: mpi
+            python: "3.11"
+          - suite: mpi
             python: "3.12"
+          - suite: mpi
+            python: "3.13"
+          - suite: mpi
+            python: "3.14"
 
     steps:
       - name: Setup Python
