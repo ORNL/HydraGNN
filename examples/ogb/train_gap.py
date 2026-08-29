@@ -298,8 +298,6 @@ if __name__ == "__main__":
     parser.set_defaults(format="adios")
     args = parser.parse_args()
 
-    graph_feature_names = ["GAP"]
-    graph_feature_dim = [1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset/")
     ##################################################################################################################
@@ -547,9 +545,7 @@ if __name__ == "__main__":
             ihead = 0
             head_true = np.asarray(true_values[ihead].cpu()).squeeze()
             head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
-            ifeat = ihead
-            outtype = var_config["outputs"][ihead]["level"]
-            varname = graph_feature_names[ifeat]
+            varname = var_config["outputs"][ihead]["name"]
 
             ax = axs[isub]
             error_mae = np.mean(np.abs(head_pred - head_true))
