@@ -161,7 +161,7 @@ class DIMEStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
+        node_features, _, _ = super()._embedding(data)
 
         assert (
             data.pos is not None
@@ -215,11 +215,11 @@ class DIMEStack(Base):
                     raise ValueError(
                         "EquivariantTransformer requires invariant node features"
                     )
-                x = self.node_emb(data.x.float())
+                x = self.node_emb(node_features.float())
             else:
                 x = self.pos_emb(data.pe)
                 if self.input_dim:
-                    x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                    x = torch.cat((self.node_emb(node_features.float()), x), 1)
                     x = self.node_lin(x)
 
             if self.is_edge_model and self.global_attn_engine == "GPS":
@@ -230,7 +230,7 @@ class DIMEStack(Base):
                 conv_args.update({"edge_attr": e})
             return x, data.pos, conv_args
         else:
-            return data.x, data.pos, conv_args
+            return node_features, data.pos, conv_args
 
 
 """

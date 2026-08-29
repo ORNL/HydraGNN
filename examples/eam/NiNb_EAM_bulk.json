@@ -22,6 +22,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "PNA",
+            "enable_atomistic_species_encoding": true,
             "radius": 3.0,
             "max_neighbours": 100000,
 	    "edge_features": ["lengths"],
@@ -44,7 +45,7 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0],
+            "input_node_features": [],
             "output_names": ["bulk_modulus"],
             "output_index": [0],
             "type": ["graph"],

@@ -5,6 +5,7 @@
   "NeuralNetwork": {
     "Architecture": {
       "mpnn_type": "PNA",
+      "enable_atomistic_species_encoding": true,
       "max_neighbours": 20,
       "hidden_dim": 200,
       "num_conv_layers": 6,
@@ -24,20 +25,7 @@
       ]
     },
     "Variables_of_interest": {
-      "input_node_features": [
-        0,
-        1,
-        2,
-        3,
-        4,
-        5,
-        6,
-        7,
-        8,
-        9,
-        10,
-        11
-      ],
+      "input_node_features": [7, 8, 9, 10, 11],
       "output_index": [
         0
       ],

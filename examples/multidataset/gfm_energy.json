@@ -5,6 +5,7 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
+            "enable_atomistic_species_encoding": true,
             "equivariance": true,
             "radius": 5.0,
             "max_neighbours": 100000,
@@ -32,7 +33,7 @@
             "task_weights": [1.0]
         },
         "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
+            "input_node_features": [1, 2, 3],
             "output_names": ["energy"],
             "output_index": [0],
             "output_dim": [1],

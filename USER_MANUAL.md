@@ -691,6 +691,43 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
 ```
 
 With `enable_interatomic_potential`, the training loss includes energy, per-atom energy, and force components. Set `compute_grad_energy` to `true` to derive forces via automatic differentiation of the energy prediction.
+
+Atomistic datasets should store integer atomic numbers from 1 through 118 in
+`data.atomic_numbers`; `data.x` remains reserved for generic or continuous node
+features. In interatomic-potential mode, generic stacks replace atomic numbers
+with a learned hidden-width embedding, while stacks such as MACE retain their
+native chemical species encoder. Reading atomic numbers from `data.x[:, 0]`
+is not allowed while categorical species encoding is enabled; a missing
+`data.atomic_numbers` field raises an error. When species encoding is disabled,
+HydraGNN preserves the existing `data.x` feature path unchanged.
+
+Atomistic property models that do not use the interatomic-potential wrapper can
+enable the same categorical handling independently:
+
+```json
+{
+    "Architecture": {
+        "enable_interatomic_potential": false,
+        "enable_atomistic_species_encoding": true
+    }
+}
+```
+
+Interatomic-potential mode always enables categorical species handling, so
+existing MLIP configurations receive it automatically. Encoder selection is
+not configurable:
+generic stacks use the common HydraGNN embedding and native species-aware
+stacks retain their own encoder.
+
+When an atomistic model also uses continuous node attributes, list only those
+continuous columns in `input_node_features`. Do not include the atomic-number
+column: species identity comes exclusively from `data.atomic_numbers`. HydraGNN
+projects the selected continuous attributes to `hidden_dim` and adds them to
+the categorical species embedding before the first message-passing layer.
+Previously serialized atomistic datasets that do not contain
+`atomic_numbers` must be regenerated before enabling categorical species
+encoding; the enabled path intentionally does not recover species from
+`data.x`.
 ```
 
 ### Training Execution

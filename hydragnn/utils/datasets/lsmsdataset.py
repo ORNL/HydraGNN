@@ -70,6 +70,7 @@ class LSMSDataset(AbstractRawDataset):
 
         data_object.pos = tensor(node_position_matrix)
         data_object.x = tensor(node_feature_matrix)
+        data_object.atomic_numbers = data_object.x[:, 0].long()
         data_object = self.__charge_density_update_for_LSMS(data_object)
         return data_object
 

@@ -72,6 +72,8 @@ import math
 
 @compile_mode("script")
 class MACEStack(Base):
+    uses_native_species_encoder = True
+
     def __init__(
         self,
         input_args,
@@ -453,7 +455,15 @@ class MACEStack(Base):
         # Create node_attrs from atomic numbers. Later on it may contain more information
         ## Node attrs are intrinsic properties of the atoms. Currently, MACE only supports atomic number node attributes
         ## data.node_attrs is already used in another place, so has been renamed to data.node_attributes from MACE and same with other data variable names
-        data.node_attributes = process_node_attributes(data["x"], self.num_elements).to(
+        if self.atomistic_mode_enabled:
+            species = self._atomic_numbers(data)
+        else:
+            species = (
+                data.atomic_numbers
+                if hasattr(data, "atomic_numbers") and data.atomic_numbers is not None
+                else data["x"]
+            )
+        data.node_attributes = process_node_attributes(species, self.num_elements).to(
             device=param_device, dtype=param_dtype
         )
 

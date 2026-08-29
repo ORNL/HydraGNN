@@ -109,7 +109,7 @@ class EGCLStack(Base):
             )
 
     def _embedding(self, data):
-        super()._embedding(data)
+        node_features, _, _ = super()._embedding(data)
 
         if not hasattr(data, "edge_shifts") or data.edge_shifts is None:
             data.edge_shifts = torch.zeros(
@@ -132,11 +132,7 @@ class EGCLStack(Base):
 
         if self.use_global_attn:
             # encode node positional embeddings
-            x = self.pos_emb(data.pe)
-            # if node features are available, genrate mebeddings, concatenate with positional embeddings and map to hidden dim
-            if self.input_dim:
-                x = torch.cat((self.node_emb(data.x.float()), x), 1)
-                x = self.node_lin(x)
+            x = node_features
             # repeat for edge features and relative edge encodings
             if self.is_edge_model:
                 e = self.rel_pos_emb(data.rel_pe)
@@ -146,7 +142,7 @@ class EGCLStack(Base):
                 conv_args.update({"edge_attr": e})
             return x, data.pos, conv_args
         else:
-            return data.x, data.pos, conv_args
+            return node_features, data.pos, conv_args
 
     def __str__(self):
         return "EGCLStack"

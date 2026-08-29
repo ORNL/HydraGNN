@@ -30,6 +30,7 @@ import hydragnn
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
     # Set descriptor as element type.
+    data.atomic_numbers = data.z.long().view(-1)
     data.x = data.z.float().view(-1, 1)
     # Only predict energy (index 0 of 2 properties) for this run.
     data.y = data.energy / len(data.x)

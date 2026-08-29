@@ -234,7 +234,7 @@ class Transition1xDataset(AbstractBaseDataset):
                 pbc=pbc,  # even if not needed, pbc needs to be defined because ADIOS requires consistency across datasets
                 # edge_index=None,
                 # edge_attr=None,
-                atomic_numbers=atomic_numbers,
+                atomic_numbers=atomic_numbers.long().view(-1),
                 chemical_composition=chemical_composition,
                 # smiles_string=smiles_string,
                 x=x,
