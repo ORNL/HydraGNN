@@ -9,17 +9,14 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-import os
-import tempfile
-
 import pytest
 import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 from hydragnn.utils.distributed import (
     configure_local_sgd,
+    setup_ddp,
     synchronize_local_sgd_parameters,
 )
 from hydragnn.utils.input_config_parsing.config_utils import (
@@ -56,13 +53,14 @@ def _all_parameters_match(model):
     return all(torch.equal(gathered[0], other) for other in gathered[1:])
 
 
-def _local_sgd_worker(rank, world_size, rendezvous_file):
-    dist.init_process_group(
-        "gloo",
-        init_method=f"file://{rendezvous_file}",
-        rank=rank,
-        world_size=world_size,
-    )
+def _local_sgd_worker(rank, world_size, rendezvous_file=None):
+    if rendezvous_file is not None:
+        dist.init_process_group(
+            "gloo",
+            init_method=f"file://{rendezvous_file}",
+            rank=rank,
+            world_size=world_size,
+        )
     try:
         torch.manual_seed(7)
         model = DDP(torch.nn.Linear(1, 1, bias=False))
@@ -98,16 +96,20 @@ def _local_sgd_worker(rank, world_size, rendezvous_file):
         dist.all_gather(gathered_state, exp_avg)
         assert not torch.equal(gathered_state[0], gathered_state[1])
     finally:
-        dist.destroy_process_group()
+        # Standalone callers own their temporary process group. MPI tests use
+        # HydraGNN's normal setup_ddp lifecycle and leave the shared group up.
+        if rendezvous_file is not None:
+            dist.destroy_process_group()
 
 
-def _synchronized_optimizer_state_worker(rank, world_size, rendezvous_file):
-    dist.init_process_group(
-        "gloo",
-        init_method=f"file://{rendezvous_file}",
-        rank=rank,
-        world_size=world_size,
-    )
+def _synchronized_optimizer_state_worker(rank, world_size, rendezvous_file=None):
+    if rendezvous_file is not None:
+        dist.init_process_group(
+            "gloo",
+            init_method=f"file://{rendezvous_file}",
+            rank=rank,
+            world_size=world_size,
+        )
     try:
         optimizers = (
             (torch.optim.SGD, {"momentum": 0.9}),
@@ -223,39 +225,22 @@ def _synchronized_optimizer_state_worker(rank, world_size, rendezvous_file):
         with pytest.raises(ValueError, match="unknown_history"):
             optimizer.step()
     finally:
-        dist.destroy_process_group()
+        if rendezvous_file is not None:
+            dist.destroy_process_group()
 
 
+@pytest.mark.mpi
 def test_local_sgd_reduces_gradient_sync_and_periodically_averages_parameters():
-    with tempfile.NamedTemporaryFile(delete=False) as rendezvous:
-        rendezvous_file = rendezvous.name
-    try:
-        mp.start_processes(
-            _local_sgd_worker,
-            args=(2, rendezvous_file),
-            nprocs=2,
-            join=True,
-            start_method="spawn",
-        )
-    finally:
-        if os.path.exists(rendezvous_file):
-            os.unlink(rendezvous_file)
+    world_size, rank = setup_ddp()
+    assert world_size == 2
+    _local_sgd_worker(rank, world_size)
 
 
+@pytest.mark.mpi
 def test_local_sgd_synchronizes_supported_optimizer_state_policies():
-    with tempfile.NamedTemporaryFile(delete=False) as rendezvous:
-        rendezvous_file = rendezvous.name
-    try:
-        mp.start_processes(
-            _synchronized_optimizer_state_worker,
-            args=(2, rendezvous_file),
-            nprocs=2,
-            join=True,
-            start_method="spawn",
-        )
-    finally:
-        if os.path.exists(rendezvous_file):
-            os.unlink(rendezvous_file)
+    world_size, rank = setup_ddp()
+    assert world_size == 2
+    _synchronized_optimizer_state_worker(rank, world_size)
 
 
 def test_local_sgd_defaults_preserve_synchronous_training():
