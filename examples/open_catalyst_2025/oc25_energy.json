@@ -38,26 +38,6 @@
                 1.0
             ]
         },
-        "Variables_of_interest": {
-            "input_node_features": [
-                0,
-                1,
-                2,
-                3
-            ],
-            "output_names": [
-                "energy"
-            ],
-            "output_index": [
-                0
-            ],
-            "output_dim": [
-                1
-            ],
-            "type": [
-                "graph"
-            ]
-        },
         "Training": {
             "num_epoch": 50,
             "perc_train": 0.8,
@@ -74,5 +54,27 @@
         "plot_init_solution": true,
         "plot_hist_solution": false,
         "create_plots": true
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "energy",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
     }
 }

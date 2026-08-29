@@ -26,6 +26,8 @@ except:
 
 import hydragnn
 
+ZINC_CACHE_VERSION = "named-schema-v1:subset"
+
 # Set this path for output.
 try:
     os.environ["SERIALIZED_DATA_PATH"]
@@ -37,7 +39,7 @@ filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "zinc.json")
 with open(filename, "r") as f:
     config = json.load(f)
 verbosity = config["Verbosity"]["level"]
-var_config = config["NeuralNetwork"]["Variables_of_interest"]
+var_config = config["Variables"]
 
 # Always initialize for multi-rank training.
 world_size, world_rank = hydragnn.utils.distributed.setup_ddp()
@@ -57,8 +59,10 @@ lapPE = AddLaplacianEigenvectorPE(
 
 
 def zinc_pre_transform(data):
-    data.x = data.x.float().view(-1, 1)
-    data.edge_attr = data.edge_attr.float().view(-1, 1)
+    data.atom_type = data.x.float().view(-1, 1)
+    data.bond_type = data.edge_attr.float().view(-1, 1)
+    data.free_energy = data.y.reshape(1, 1)
+    del data.x, data.edge_attr, data.y
     data = lapPE(data)
     # gps requires relative edge features, introduced rel_lapPe as edge encodings
     source_pe = data.pe[data.edge_index[0]]
@@ -67,22 +71,36 @@ def zinc_pre_transform(data):
     return data
 
 
-train = ZINC(
-    root="dataset/zinc", subset=True, split="train", pre_transform=zinc_pre_transform
-)
-val = ZINC(
-    root="dataset/zinc", subset=True, split="val", pre_transform=zinc_pre_transform
-)
-test = ZINC(
-    root="dataset/zinc", subset=True, split="test", pre_transform=zinc_pre_transform
-)
+cache_root = "dataset/zinc"
+
+
+def build_datasets():
+    hydragnn.utils.datasets.prepare_pyg_cache(cache_root, ZINC_CACHE_VERSION)
+    datasets = tuple(
+        ZINC(
+            root=cache_root,
+            subset=True,
+            split=split,
+            pre_transform=zinc_pre_transform,
+        )
+        for split in ("train", "val", "test")
+    )
+    hydragnn.utils.datasets.mark_pyg_cache_current(cache_root, ZINC_CACHE_VERSION)
+    return datasets
+
+
+train, val, test = hydragnn.preprocess.build_dataset_on_rank_zero(build_datasets)
 
 (
     train_loader,
     val_loader,
     test_loader,
 ) = hydragnn.preprocess.create_dataloaders(
-    train, val, test, config["NeuralNetwork"]["Training"]["batch_size"]
+    train,
+    val,
+    test,
+    config["NeuralNetwork"]["Training"]["batch_size"],
+    variables=config["Variables"],
 )
 
 config = hydragnn.utils.input_config_parsing.update_config(
@@ -120,7 +138,7 @@ hydragnn.train.train_validate_test(
     test_loader,
     writer,
     scheduler,
-    config["NeuralNetwork"],
+    config,
     log_name,
     verbosity,
 )

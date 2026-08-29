@@ -164,7 +164,7 @@ if __name__ == "__main__":
         raise ValueError(f"Cannot find config file {input_filename}")
     with open(input_filename, "r") as f:
         config = json.load(f)
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
+    var_config = config["Variables"]
     verbosity = config["Verbosity"]["level"]
     config["NeuralNetwork"]["Training"]["num_epoch"] = 1
     ##################################################################################################################
@@ -469,7 +469,7 @@ if __name__ == "__main__":
     model.eval()
     datasetname = os.path.basename(mymodel)[:-3]
     ##################################################################################################################
-    nheads = len(config["NeuralNetwork"]["Variables_of_interest"]["output_names"])
+    nheads = len(config["Variables"]["outputs"])
     fig, axs = plt.subplots(1, nheads, figsize=(14, 6))
     for icol, (loader, setname) in enumerate(zip([test_loader], ["test"])):
         total_error, tasks_error, true_values, predicted_values = test(
@@ -483,20 +483,17 @@ if __name__ == "__main__":
                 predicted_values
             ), "inconsistent number of heads, %d!=%d" % (
                 len(true_values),
-                len(len(predicted_values)),
+                len(predicted_values),
             )
-            for ihead, (output_name, output_type, output_dim) in enumerate(
-                zip(
-                    config["NeuralNetwork"]["Variables_of_interest"]["output_names"],
-                    config["NeuralNetwork"]["Variables_of_interest"]["type"],
-                    config["NeuralNetwork"]["Variables_of_interest"]["output_dim"],
-                )
-            ):
+            for ihead, output in enumerate(config["Variables"]["outputs"]):
+                output_name = output["name"]
+                output_type = output["level"]
+                output_dim = output["dim"]
                 head_true = true_values[ihead].cpu().squeeze().numpy()
                 head_pred = predicted_values[ihead].cpu().squeeze().numpy()
-                ifeat = var_config["output_index"][ihead]
-                outtype = var_config["type"][ihead]
-                varname = var_config["output_names"][ihead]
+                ifeat = ihead
+                outtype = var_config["outputs"][ihead]["level"]
+                varname = var_config["outputs"][ihead]["name"]
 
                 ax = axs[ihead]
                 error_mae = np.mean(np.abs(head_pred - head_true))

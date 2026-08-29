@@ -10,9 +10,7 @@
 ##############################################################################
 
 import json, os
-import sys
 import logging
-import pickle
 from tqdm import tqdm
 from mpi4py import MPI
 import argparse
@@ -21,56 +19,18 @@ import torch
 import numpy as np
 
 import hydragnn
-from hydragnn.utils.time_utils import Timer
+from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.model import load_existing_model
-from hydragnn.utils.pickledataset import SimplePickleDataset
-from hydragnn.utils.config_utils import (
-    update_config,
-)
+from hydragnn.utils.datasets import SimplePickleDataset
+from hydragnn.utils.input_config_parsing import get_log_name_config
 from hydragnn.models.create import create_model_config
-from hydragnn.preprocess import create_dataloaders
 
 from scipy.interpolate import griddata
-
-try:
-    from hydragnn.utils.adiosdataset import AdiosWriter, AdiosDataset
-except ImportError:
-    pass
 
 import matplotlib.pyplot as plt
 
 plt.rcParams.update({"font.size": 16})
-
-
-def get_log_name_config(config):
-    return (
-        config["NeuralNetwork"]["Architecture"]["model_type"]
-        + "-r-"
-        + str(config["NeuralNetwork"]["Architecture"]["radius"])
-        + "-ncl-"
-        + str(config["NeuralNetwork"]["Architecture"]["num_conv_layers"])
-        + "-hd-"
-        + str(config["NeuralNetwork"]["Architecture"]["hidden_dim"])
-        + "-ne-"
-        + str(config["NeuralNetwork"]["Training"]["num_epoch"])
-        + "-lr-"
-        + str(config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"])
-        + "-bs-"
-        + str(config["NeuralNetwork"]["Training"]["batch_size"])
-        + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
-        + "-task_weights-"
-        + "".join(
-            str(weigh) + "-"
-            for weigh in config["NeuralNetwork"]["Architecture"]["task_weights"]
-        )
-    )
 
 
 def getcolordensity(xdata, ydata):
@@ -154,17 +114,17 @@ if __name__ == "__main__":
         trainset = SimplePickleDataset(
             basedir=basedir,
             label="trainset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         valset = SimplePickleDataset(
             basedir=basedir,
             label="valset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         testset = SimplePickleDataset(
             basedir=basedir,
             label="testset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         pna_deg = trainset.pna_deg
     else:
@@ -181,11 +141,10 @@ if __name__ == "__main__":
     model.eval()
 
     variable_index = 0
-    for output_name, output_type, output_dim in zip(
-        config["NeuralNetwork"]["Variables_of_interest"]["output_names"],
-        config["NeuralNetwork"]["Variables_of_interest"]["type"],
-        config["NeuralNetwork"]["Variables_of_interest"]["output_dim"],
-    ):
+    for output in config["Variables"]["outputs"]:
+        output_name = output["name"]
+        output_type = output["level"]
+        output_dim = output["dim"]
 
         test_MAE = 0.0
 

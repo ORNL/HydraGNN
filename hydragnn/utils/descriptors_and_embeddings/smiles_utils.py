@@ -20,6 +20,11 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.data import Data
 import hydragnn
+from hydragnn.utils.input_config_parsing.variable_schema import (
+    VariableSchema,
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 
 ##################################################################################################################
 ##################################################################################################################
@@ -108,30 +113,57 @@ def generate_graphdata_from_rdkit_molecule(
         .contiguous()
     )
 
-    x = torch.cat([x1.to(torch.float), x2], dim=-1)
+    atom_type = x1.to(torch.float)
+    atom_descriptors = x2
 
     if atomicdescriptors_torch_tensor is not None:
         assert (
-            atomicdescriptors_torch_tensor.shape[0] == x.shape[0]
+            atomicdescriptors_torch_tensor.shape[0] == atom_type.shape[0]
         ), "tensor of atomic descriptors MUST have the number of rows equal to the number of atoms in the molecule"
-        x = torch.cat([x, atomicdescriptors_torch_tensor], dim=-1).to(torch.float)
-
-    y = ytarget  # .squeeze()
+        atom_descriptors = torch.cat(
+            [atom_descriptors, atomicdescriptors_torch_tensor], dim=-1
+        ).to(torch.float)
 
     data = Data(
-        x=x,
+        atom_type=atom_type,
+        atom_descriptors=atom_descriptors,
         edge_index=edge_index,
-        edge_attr=edge_attr,
-        y=y,
-        **{"dataset_name": None, "smiles": None}
+        bond_attributes=edge_attr,
+        **{"dataset_name": None, "smiles": None},
     )
-    if var_config is not None:
-        hydragnn.preprocess.update_predicted_values(
-            var_config["type"],
-            var_config["output_index"],
-            var_config["graph_feature_dims"],
-            var_config["input_node_feature_dims"],
-            data,
+    if var_config is None:
+        data.x = torch.cat([atom_type, atom_descriptors], dim=-1)
+        data.edge_attr = edge_attr
+        data.y = ytarget
+    else:
+        schema = (
+            var_config
+            if isinstance(var_config, VariableSchema)
+            else parse_variable_schema(var_config)
         )
+        offset = 0
+        flat_targets = ytarget.reshape(-1)
+        for spec in schema.outputs:
+            if spec.level == "node":
+                rows = data.num_nodes
+            elif spec.level == "edge":
+                rows = data.num_edges
+            elif spec.level == "graph":
+                rows = 1
+            else:  # Defensive guard if VariableLevel is extended in the future.
+                raise ValueError(f"Unsupported output level: {spec.level}")
+            size = rows * spec.dim
+            setattr(
+                data,
+                spec.name,
+                flat_targets[offset : offset + size].reshape(rows, spec.dim),
+            )
+            offset += size
+        if offset != flat_targets.numel():
+            raise ValueError(
+                f"Configured outputs consume {offset} target values, but the "
+                f"sample provides {flat_targets.numel()}"
+            )
+        prepare_data_from_schema(data, schema)
 
     return data

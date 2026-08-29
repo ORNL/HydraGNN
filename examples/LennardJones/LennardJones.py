@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     graph_feature_names = ["total_energy"]
     graph_feature_dims = [1]
-    node_feature_names = ["atomic_number", "potential", "forces"]
+    node_feature_names = ["atomic_numbers", "potential", "forces"]
     node_feature_dims = [1, 1, 3]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     ##################################################################################################################
@@ -108,19 +108,6 @@ if __name__ == "__main__":
         else config["NeuralNetwork"]["Architecture"]["mpnn_type"]
     )
     verbosity = config["Verbosity"]["level"]
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "graph_feature_names"
-    ] = graph_feature_names
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "graph_feature_dims"
-    ] = graph_feature_dims
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "node_feature_names"
-    ] = node_feature_names
-    config["NeuralNetwork"]["Variables_of_interest"][
-        "node_feature_dims"
-    ] = node_feature_dims
-
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
@@ -149,6 +136,20 @@ if __name__ == "__main__":
     if args.format == "pickle":
         basedir = os.path.join(dirpwd, "dataset", "%s.pickle" % modelname)
         dataset_exists = os.path.exists(os.path.join(dirpwd, "dataset/LJ.pickle"))
+        if dataset_exists:
+            try:
+                cached = SimplePickleDataset(basedir=basedir, label="trainset")
+                sample = cached[0]
+                required_names = {
+                    spec["name"]
+                    for group in ("inputs", "outputs")
+                    for spec in config["Variables"][group]
+                }
+                dataset_exists = all(hasattr(sample, name) for name in required_names)
+                if not dataset_exists:
+                    info("Rebuilding an incompatible pre-named-variable LJ cache")
+            except (FileNotFoundError, EOFError, AttributeError, IndexError):
+                dataset_exists = False
     if args.format == "adios":
         fname = os.path.join(dirpwd, "./dataset/%s.bp" % modelname)
         dataset_exists = os.path.exists(
@@ -238,7 +239,7 @@ if __name__ == "__main__":
         testset = AdiosDataset(fname, "testset", comm, **opt)
     elif args.format == "pickle":
         info("Pickle load")
-        var_config = config["NeuralNetwork"]["Variables_of_interest"]
+        var_config = config["Variables"]
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", preload=True, var_config=var_config
         )
@@ -276,7 +277,11 @@ if __name__ == "__main__":
         val_loader,
         test_loader,
     ) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
+        trainset,
+        valset,
+        testset,
+        config["NeuralNetwork"]["Training"]["batch_size"],
+        variables=config["Variables"],
     )
 
     config = hydragnn.utils.input_config_parsing.update_config(
@@ -318,7 +323,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,

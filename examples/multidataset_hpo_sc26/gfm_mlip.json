@@ -58,24 +58,6 @@
             "activation_function": "relu",
             "SyncBatchNorm": false
         },
-        "Variables_of_interest": {
-            "input_node_features": [
-                0
-            ],
-            "output_index": [
-                0
-            ],
-            "type": [
-                "graph"
-            ],
-            "output_dim": [
-                1
-            ],
-            "output_names": [
-                "graph_energy"
-            ],
-            "denormalize_output": false
-        },
         "Training": {
             "num_epoch": 1,
             "EarlyStopping": true,
@@ -100,6 +82,27 @@
         "plot_init_solution": false,
         "plot_hist_solution": false,
         "create_plots": false
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "graph_energy",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
     }
 }
-

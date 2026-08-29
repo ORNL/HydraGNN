@@ -9,10 +9,13 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import os, json
+import pytest
 import torch
 import hydragnn
 from tests.test_graphs import unittest_train_model
 from hydragnn.utils.input_config_parsing.config_utils import update_config
+
+pytestmark = pytest.mark.mpi
 
 
 def unittest_model_prediction(config):

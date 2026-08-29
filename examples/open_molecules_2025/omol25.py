@@ -171,8 +171,6 @@ class OMol2025(AbstractBaseDataset):
                 cell = torch.eye(3, dtype=torch.float32)
                 pbc = torch.tensor([False, False, False], dtype=torch.bool)
 
-            x = torch.cat([atomic_numbers, pos, forces], dim=1)
-
             # Calculate chemical composition
             atomic_number_list = atomic_numbers.tolist()
             assert len(atomic_number_list) == natoms
@@ -183,8 +181,6 @@ class OMol2025(AbstractBaseDataset):
             # charge and spinfrom dataset info
             charge = atoms.info.get("charge", 0)
             spin = atoms.info.get("spin", 1)
-            graph_attr = torch.tensor([charge, spin], dtype=torch.float32)
-
             data_object = Data(
                 dataset_name="omol25",
                 natoms=natoms,
@@ -196,17 +192,10 @@ class OMol2025(AbstractBaseDataset):
                 atomic_numbers=atomic_numbers,
                 chemical_composition=chemical_composition,
                 smiles_string=None,
-                x=x,
                 energy=energy,
                 energy_per_atom=energy_per_atom,
                 forces=forces,
-                graph_attr=graph_attr,
             )
-
-            if self.energy_per_atom:
-                data_object.y = data_object.energy_per_atom
-            else:
-                data_object.y = data_object.energy
 
             if data_object.pbc.any():
                 try:
