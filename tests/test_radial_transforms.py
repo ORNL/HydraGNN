@@ -22,6 +22,8 @@ from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
 
+pytestmark = pytest.mark.mpi
+
 
 # Main unit test function called by pytest wrappers.
 ## Adapted from test_graphs.py ... Currently, only the single head model json is tested, although the multihead functionality remains.

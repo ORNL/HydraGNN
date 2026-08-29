@@ -17,6 +17,8 @@ import shutil
 import hydragnn, tests
 from tests._training_workflow import train_and_checkpoint
 
+pytestmark = pytest.mark.mpi
+
 
 # Loss function unit test called by pytest wrappers.
 # Note the intent of this test is to make sure all interfaces work - it does not assert anything

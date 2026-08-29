@@ -21,6 +21,8 @@ from tests._training_workflow import train_and_checkpoint
 
 torch.manual_seed(97)
 
+pytestmark = pytest.mark.mpi
+
 CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]
 
 

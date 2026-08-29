@@ -11,11 +11,21 @@ on:
 
 jobs:
   build:
-
+    name: ${{ matrix.suite }} (${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - suite: serial
+            python: "3.11"
+          - suite: serial
+            python: "3.12"
+          - suite: serial
+            python: "3.13"
+          - suite: serial
+            python: "3.14"
+          - suite: mpi
+            python: "3.12"
 
     steps:
       - name: Setup Python
@@ -58,7 +68,8 @@ jobs:
         run: |
           black .
           git diff --exit-code
-      - name: Run pytest
+      - name: Run serial pytest
+        if: matrix.suite == 'serial'
         run: |
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
@@ -69,11 +80,15 @@ jobs:
           python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py
           # Check if DeepSpeed is available
           if python -c "import deepspeed" 2>/dev/null; then
-            echo "DeepSpeed available - running all tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not fairchem"
-            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not fairchem"
+            echo "DeepSpeed available - running serial tests"
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not fairchem"
           else
             echo "DeepSpeed not available - skipping GPU/DeepSpeed tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not gpu and not deepspeed and not fairchem"
-            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not gpu and not deepspeed and not fairchem"
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not gpu and not deepspeed and not fairchem"
           fi
+      - name: Run MPI pytest
+        if: matrix.suite == 'mpi'
+        run: |
+          # FIXME: install
+          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
+          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native --with-mpi -m "mpi and not gpu and not deepspeed and not fairchem"

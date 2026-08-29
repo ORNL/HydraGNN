@@ -23,6 +23,8 @@ from mpi4py import MPI
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
 
+pytestmark = pytest.mark.mpi
+
 
 # Main unit test function called by pytest wrappers.
 def unittest_train_model(
