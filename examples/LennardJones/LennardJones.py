@@ -301,7 +301,7 @@ if __name__ == "__main__":
     )
 
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer, verbosity
+        model, optimizer, verbosity, config=config
     )
 
     hydragnn.utils.model.load_existing_model_config(

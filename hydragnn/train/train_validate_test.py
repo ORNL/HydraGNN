@@ -18,7 +18,11 @@ from hydragnn.postprocess.visualizer import Visualizer
 from hydragnn.utils.print.print_utils import print_distributed, iterate_tqdm
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.profiling_and_tracing.profile import Profiler
-from hydragnn.utils.distributed import get_device, check_remaining
+from hydragnn.utils.distributed import (
+    get_device,
+    check_remaining,
+    synchronize_local_sgd_parameters,
+)
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 from hydragnn.globalAtt.gps import redraw_performer_projections
 
@@ -368,6 +372,12 @@ def train_validate_test(
             tr.disable()
             if epoch == 0:
                 tr.reset()
+
+        # Validation, checkpoints, and the model returned after the final
+        # epoch must observe one globally consistent replica. Avoid a redundant
+        # collective when the last optimizer step already performed its
+        # scheduled post-local-SGD parameter average.
+        synchronize_local_sgd_parameters(optimizer)
 
         if int(os.getenv("HYDRAGNN_VALTEST", "1")) == 0:
             continue

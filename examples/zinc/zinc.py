@@ -101,7 +101,7 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 )
 
 model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-    model, optimizer, verbosity
+    model, optimizer, verbosity, config=config
 )
 
 hydragnn.utils.model.model.load_existing_model_config(
