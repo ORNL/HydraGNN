@@ -22,6 +22,39 @@ import warnings
 import json
 import torch
 
+_NATIVE_DISTANCE_CUTOFF_MODELS = {
+    "DimeNet",
+    "MACE",
+    "PAINN",
+    "PNAEq",
+    "PNAPlus",
+    "SchNet",
+}
+
+
+def validate_neighbor_list_config(architecture):
+    """Validate separation of physical and candidate-list cutoffs."""
+    radius = architecture.get("radius")
+    list_radius = architecture.get("neighbor_list_radius", radius)
+    overflow = architecture.get("neighbor_overflow", "truncate")
+
+    if overflow not in {"error", "truncate"}:
+        raise ValueError("neighbor_overflow must be 'error' or 'truncate'")
+    if list_radius is not None and list_radius <= 0:
+        raise ValueError("neighbor_list_radius must be positive")
+    if radius is not None and list_radius is not None and list_radius < radius:
+        raise ValueError("neighbor_list_radius must be greater than or equal to radius")
+    if (
+        radius is not None
+        and list_radius is not None
+        and list_radius > radius
+        and architecture.get("mpnn_type") not in _NATIVE_DISTANCE_CUTOFF_MODELS
+    ):
+        raise ValueError(
+            "A buffered neighbor list requires a model with a native physical "
+            f"cutoff; {architecture.get('mpnn_type')!r} is not registered as one"
+        )
+
 
 def update_config(config, train_loader, val_loader, test_loader):
     """check if config input consistent and update config with model and datasets"""
@@ -119,6 +152,13 @@ def update_config(config, train_loader, val_loader, test_loader):
 
     if "radius" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["radius"] = None
+    if "neighbor_list_radius" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["neighbor_list_radius"] = config[
+            "NeuralNetwork"
+        ]["Architecture"]["radius"]
+    if "neighbor_overflow" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["neighbor_overflow"] = "truncate"
+    validate_neighbor_list_config(config["NeuralNetwork"]["Architecture"])
     if "radial_type" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["radial_type"] = None
     if "distance_transform" not in config["NeuralNetwork"]["Architecture"]:

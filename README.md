@@ -180,6 +180,40 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Accepted types: `EquivariantTransformer`, `GPS`, `None`
     - `["global_attn_type"]`
       Accepted types: `multihead`, `performer`
+
+#### Smooth physical cutoffs and buffered neighbor lists
+
+HydraGNN can separate a model's physical interaction radius from the radius
+used to allocate candidate edges:
+
+```json
+"Architecture": {
+  "radius": 5.0,
+  "neighbor_list_radius": 5.5,
+  "max_neighbours": 128,
+  "neighbor_overflow": "error"
+}
+```
+
+`radius` remains the physical cutoff passed to the MPNN. The optional
+`neighbor_list_radius` is the larger candidate-list radius. It must be greater
+than or equal to `radius`; using a larger value is accepted only for a model
+registered as having its own distance cutoff (`SchNet`, `DimeNet`, `PAINN`,
+`PNAEq`, `PNAPlus`, or `MACE`). This prevents buffered edges from accidentally
+becoming physical interactions in a model without a native envelope.
+
+Set `neighbor_overflow` to `"error"` for force-, stress-, or Hessian-sensitive
+work. HydraGNN then detects when a node has more candidates than
+`max_neighbours` and fails instead of silently performing a discontinuous hard
+top-k truncation. `"truncate"` preserves the historical behavior and remains
+the default for existing configurations.
+
+Model implementations that need a C3 switching function can use
+`hydragnn.utils.model.SepticCutoff`. It is one below an onset radius, follows
+`1 - 35t^4 + 84t^5 - 70t^6 + 20t^7` through the switching interval, and is
+zero at the physical cutoff. HydraGNN does not automatically multiply this
+function into native model envelopes: doing so would double-taper interactions
+and alter reference architectures.
     - `["pe_dim"]`
       Dimension of positional encodings (int)
     - `["global_attn_heads"]`
