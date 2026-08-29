@@ -14,6 +14,7 @@ import pytest
 import torch
 
 import hydragnn, tests
+from tests.deterministic_graph_data import DETERMINISTIC_GRAPH_DATA_VERSION
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from mpi4py import MPI
 from tests._prediction_workflow import load_checkpoint_and_test
@@ -46,7 +47,22 @@ def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
 
     torch.testing.assert_close(sample.graph_attr, expected)
     torch.testing.assert_close(sample.edge_lengths.max(), torch.tensor(1.0))
-    assert sample.fixture_schema_version == 2
+    assert sample.fixture_schema_version == DETERMINISTIC_GRAPH_DATA_VERSION
+
+
+def test_deterministic_fixture_uses_historical_radius_graph(tmp_path):
+    tests.deterministic_graph_data(
+        str(tmp_path),
+        number_configurations=1,
+        unit_cell_x_range=[2, 3],
+        unit_cell_y_range=[2, 3],
+        unit_cell_z_range=[1, 2],
+    )
+    sample = torch.load(next(tmp_path.glob("*.pt")), weights_only=False)
+
+    # Two-neighbor KNN is used only to define the regression target. The model
+    # topology must retain the denser radius-2 graph from the original loader.
+    assert sample.edge_index.shape[1] > 2 * sample.num_nodes
 
 
 def unittest_train_model_graphattr(

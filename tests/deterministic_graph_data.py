@@ -25,9 +25,10 @@ import pickle
 import numpy
 from pathlib import Path
 from torch_geometric.data import Data
+from torch_geometric.transforms import RadiusGraph
 from sklearn.neighbors import KNeighborsRegressor
 
-DETERMINISTIC_GRAPH_DATA_VERSION = 2
+DETERMINISTIC_GRAPH_DATA_VERSION = 3
 
 
 def prepared_pickle_has_attributes(path, required_names):
@@ -284,14 +285,13 @@ def create_configuration(
         ),
         pos=positions.float(),
     )
-    distances = torch.cdist(data.pos, data.pos)
-    distances.fill_diagonal_(float("inf"))
-    neighbors = distances.topk(
-        min(number_neighbors, number_nodes - 1), largest=False
-    ).indices
-    targets = torch.arange(number_nodes).repeat_interleave(neighbors.shape[1])
-    sources = neighbors.reshape(-1)
-    data.edge_index = torch.stack((sources, targets))
+    # Match the graph used by the historical unit-test loading path. The
+    # two-neighbor KNN above defines the synthetic regression target; it never
+    # defined the message-passing topology, which was a radius-2 graph with at
+    # most 100 neighbors. Keeping these roles separate is essential to retain
+    # the established model-quality baselines.
+    data = RadiusGraph(r=2.0, loop=False, max_num_neighbors=100)(data)
+    sources, targets = data.edge_index
     data.edge_lengths = torch.linalg.vector_norm(
         data.pos[sources] - data.pos[targets], dim=1, keepdim=True
     )
