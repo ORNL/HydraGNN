@@ -223,8 +223,6 @@ if __name__ == "__main__":
     parser.add_argument("--everyone", action="store_true", help="gptimer")
     args = parser.parse_args()
 
-    graph_feature_names = ["GAP"]
-    graph_feature_dim = [1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datafile = os.path.join(dirpwd, "dataset/csce_gap_synth.csv")
     ##################################################################################################################
@@ -458,9 +456,8 @@ if __name__ == "__main__":
             ihead = 0
             head_true = np.asarray(true_values[ihead].cpu()).squeeze()
             head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
-            ifeat = ihead
-            outtype = var_config["outputs"][ihead]["level"]
-            varname = graph_feature_names[ifeat]
+            output_config = var_config.outputs[ihead]
+            varname = output_config.name
 
             ax = axs[isub]
             error_mae = np.mean(np.abs(head_pred - head_true))
