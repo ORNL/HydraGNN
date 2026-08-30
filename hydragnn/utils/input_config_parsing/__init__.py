@@ -15,6 +15,7 @@ from .config_utils import (
     get_log_name_config,
     save_config,
     parse_deepspeed_config,
+    sanitize_filename_component,
 )
 from .variable_schema import (
     VariableSchema,

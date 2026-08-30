@@ -28,8 +28,13 @@ from .variable_schema import get_variable_schema, schema_dimensions
 _UNSAFE_LOG_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
 
 
-def _sanitize_log_component(value, max_length=48):
-    """Return a bounded, filesystem-safe representation of a log component."""
+def sanitize_filename_component(value, max_length=48):
+    """Return a bounded, filesystem-safe representation of one path component.
+
+    The returned value never contains path separators or leading/trailing dots,
+    so configuration-derived labels can safely be used as filenames without
+    changing the original label shown to users in plots and logs.
+    """
     original = str(value)
     sanitized = _UNSAFE_LOG_COMPONENT.sub("-", original).strip("._-")
     if not sanitized:
@@ -466,7 +471,7 @@ def update_config_edge_dim(config):
 
 def get_log_name_config(config):
     input_names = "-".join(
-        _sanitize_log_component(spec.name)
+        sanitize_filename_component(spec.name)
         for spec in get_variable_schema(config).inputs
     )
     return (
