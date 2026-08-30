@@ -25,3 +25,6 @@ installation_DOE_supercomputers/HydraGNN-Installation-Frontier*/
 
 # Generated OPF model checkpoints are external experiment artifacts.
 /examples/opf/pretrained_models/**/*.pk
+
+# Generated OPF physics-experiment plots and summary tables.
+/examples/opf/physics-experiments/figures_*/
