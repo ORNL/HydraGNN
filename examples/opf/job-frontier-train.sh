@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J HydraGNN
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/job-hydragnn-grid-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/job-hydragnn-grid-%j.out

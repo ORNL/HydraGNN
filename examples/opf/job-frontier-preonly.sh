@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J HydraGNN
 #SBATCH -o job-hydragnn-grid-%j.out
 #SBATCH -e job-hydragnn-grid-%j.out

@@ -40,7 +40,7 @@ submit_debug() {
 
     local ID
     ID=$(sbatch \
-        --account=eng164 --partition=batch --qos=debug \
+        --account=LRN070 --partition=batch --qos=debug \
         --job-name="$LABEL" \
         --nodes=1 --time=02:00:00 \
         --output="${HYDRAGNN_ROOT}/${LABEL}-%j.out" \

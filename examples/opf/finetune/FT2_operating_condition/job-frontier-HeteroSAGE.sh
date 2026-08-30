@@ -3,7 +3,7 @@
 # Usage: sbatch FT2_operating_condition/job-frontier-HeteroSAGE.sh
 #   Override regime via SBATCH --export, e.g.:
 #     sbatch --export=ALL,FT_REGIME=partial FT2_operating_condition/job-frontier-HeteroSAGE.sh
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-FT2-HeteroSAGE
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT2_operating_condition-HeteroSAGE-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT2_operating_condition-HeteroSAGE-%j.out

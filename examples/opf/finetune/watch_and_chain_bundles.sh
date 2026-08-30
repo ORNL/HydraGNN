@@ -19,7 +19,7 @@ set -u
 HYDRAGNN_ROOT=/lustre/orion/lrn078/proj-shared/HydraGNN
 FT_DIR=$HYDRAGNN_ROOT/examples/opf/finetune
 
-ACCOUNT=eng164
+ACCOUNT=LRN070
 QOS=debug
 PARTITION=batch
 TIME=02:00:00

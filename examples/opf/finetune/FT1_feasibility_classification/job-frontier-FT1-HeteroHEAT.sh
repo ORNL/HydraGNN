@@ -16,7 +16,7 @@
 #  Override regime or phases:
 #    sbatch --export=ALL,FT_REGIME=partial,PHASES=train job-frontier-FT1-HeteroHEAT.sh
 # =============================================================================
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-FT1-HEAT
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/finetune-FT1-HEAT-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/finetune-FT1-HEAT-%j.out

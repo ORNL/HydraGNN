@@ -3,7 +3,7 @@
 # Usage: sbatch FT4_task_specific/job-frontier-HeteroHEAT.sh
 #   Override regime via SBATCH --export, e.g.:
 #     sbatch --export=ALL,FT_REGIME=partial FT4_task_specific/job-frontier-HeteroHEAT.sh
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-FT4-HeteroHEAT
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT4_task_specific-HeteroHEAT-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT4_task_specific-HeteroHEAT-%j.out

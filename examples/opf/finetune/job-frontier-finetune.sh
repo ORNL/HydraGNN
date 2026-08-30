@@ -15,7 +15,7 @@
 #  To run both phases in one job, set PHASES=preonly,train (default).
 #  To run only one phase: PHASES=preonly  or  PHASES=train
 # =============================================================================
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-FT
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/finetune-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/finetune-%j.out

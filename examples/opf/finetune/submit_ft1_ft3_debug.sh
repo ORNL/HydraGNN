@@ -25,7 +25,7 @@ HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-/lustre/orion/lrn078/proj-shared/HydraGNN}
 FT_DIR="$HYDRAGNN_ROOT/examples/opf/finetune"
 SLURM_OUT_DIR="$HYDRAGNN_ROOT"
 
-PROJECT=eng164
+PROJECT=LRN070
 PARTITION=debug
 N_NODES=2          # debug queue max
 WALL_TIME=00:30:00 # debug queue max

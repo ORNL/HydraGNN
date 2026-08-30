@@ -3,7 +3,7 @@
 # Usage: sbatch FT1_topology/job-frontier-HeteroHEAT.sh
 #   Override regime via SBATCH --export, e.g.:
 #     sbatch --export=ALL,FT_REGIME=partial FT1_topology/job-frontier-HeteroHEAT.sh
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-FT1-HeteroHEAT
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT1_topology-HeteroHEAT-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT1_topology-HeteroHEAT-%j.out

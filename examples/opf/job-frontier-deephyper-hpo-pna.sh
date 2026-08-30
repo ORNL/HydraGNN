@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-HPO-PNA
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/job-opf-hpo-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/job-opf-hpo-%j.out

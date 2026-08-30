@@ -3,7 +3,7 @@
 # Usage: sbatch FT3_contingency/job-frontier-HeteroHEAT.sh
 #   Override regime via SBATCH --export, e.g.:
 #     sbatch --export=ALL,FT_REGIME=partial FT3_contingency/job-frontier-HeteroHEAT.sh
-#SBATCH -A LRN078
+#SBATCH -A LRN070
 #SBATCH -J OPF-FT3-HeteroHEAT
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT3_contingency-HeteroHEAT-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT3_contingency-HeteroHEAT-%j.out

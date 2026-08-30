@@ -22,7 +22,7 @@ HYDRAGNN_ROOT=${HYDRAGNN_ROOT:-/lustre/orion/lrn078/proj-shared/HydraGNN}
 FT_DIR="$HYDRAGNN_ROOT/examples/opf/finetune"
 SLURM_OUT_DIR="$HYDRAGNN_ROOT"
 
-PROJECT=${PROJECT:-eng164}
+PROJECT=${PROJECT:-LRN070}
 PARTITION=${PARTITION:-batch}
 N_PER_RUN=${N_PER_RUN:-8}
 N_NODES=$((N_PER_RUN * 4))   # 32 total nodes per job

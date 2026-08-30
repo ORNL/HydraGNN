@@ -21,7 +21,7 @@ set -euo pipefail
 #    sbatch --export=ALL,FT_ARCH=HeteroSAGE,FT_METHOD=full \
 #           job-frontier-FT3-single-method.sh
 # =============================================================================
-#SBATCH -A eng164
+#SBATCH -A LRN070
 #SBATCH -J FT3-single
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT3-single-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT3-single-%j.out

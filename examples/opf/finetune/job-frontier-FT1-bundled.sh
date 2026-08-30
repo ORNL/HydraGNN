@@ -18,7 +18,7 @@
 #    sbatch --export=ALL,FT_ARCH=HeteroSAGE \
 #           job-frontier-FT1-bundled.sh
 # =============================================================================
-#SBATCH -A eng164
+#SBATCH -A LRN070
 #SBATCH -J FT1-bundled
 #SBATCH -o /lustre/orion/lrn078/proj-shared/HydraGNN/FT1-bundled-%j.out
 #SBATCH -e /lustre/orion/lrn078/proj-shared/HydraGNN/FT1-bundled-%j.out
