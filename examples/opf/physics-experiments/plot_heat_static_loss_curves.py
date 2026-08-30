@@ -16,7 +16,6 @@ os.environ.setdefault(
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
 KV_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_]*)=(?P<value>[0-9eE+\-.]+)")
 SPLIT_RE = re.compile(r"\bsplit=(?P<split>train|val|test)\b")
 COLORS = {
@@ -46,9 +45,7 @@ def _parse_breakdowns(path: Path) -> list[dict]:
 
 def _has_nonzero_multiplier(row: dict) -> bool:
     return any(
-        abs(float(value)) > 1e-12
-        for key, value in row.items()
-        if key.startswith("mu_")
+        abs(float(value)) > 1e-12 for key, value in row.items() if key.startswith("mu_")
     )
 
 
@@ -75,7 +72,9 @@ def _load_curves(baseline_log: Path, physics_job_output: Path) -> pd.DataFrame:
     expected = {"Basic MSE", "Static DC", "Static AC"}
     missing = expected - set(frame["model"].unique())
     if missing:
-        raise RuntimeError("Missing validation curves for: " + ", ".join(sorted(missing)))
+        raise RuntimeError(
+            "Missing validation curves for: " + ", ".join(sorted(missing))
+        )
     return frame.sort_values(["model", "epoch"])
 
 

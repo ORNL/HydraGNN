@@ -17,7 +17,6 @@ import pandas as pd
 
 from plot_heat_static_loss_curves import _parse_breakdowns, _save
 
-
 MODEL_WITH = "HeteroHEAT with Edge Attributes"
 MODEL_WITHOUT = "HeteroHEAT without Edge Attributes"
 MODELS = (MODEL_WITH, MODEL_WITHOUT)
@@ -43,13 +42,9 @@ def _load_validation_curves(with_log: Path, without_log: Path) -> pd.DataFrame:
         rows.extend({"model": model, **row} for row in validation)
 
     frame = pd.DataFrame(rows).sort_values(["model", "epoch"])
-    missing_metrics = [
-        metric for metric, _, _ in PANELS if metric not in frame.columns
-    ]
+    missing_metrics = [metric for metric, _, _ in PANELS if metric not in frame.columns]
     if missing_metrics:
-        raise RuntimeError(
-            "Missing violation metrics: " + ", ".join(missing_metrics)
-        )
+        raise RuntimeError("Missing violation metrics: " + ", ".join(missing_metrics))
     return frame
 
 

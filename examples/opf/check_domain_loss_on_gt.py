@@ -84,9 +84,9 @@ def load_sample(filepath):
 # ---------------------------------------------------------------------------
 # Penalty evaluation on ground-truth bus.y
 # ---------------------------------------------------------------------------
-VMIN_IDX, VMAX_IDX = 2, 3   # bus.x columns for v_min, v_max
-VM_IDX = 1                   # bus.y column for Vm
-VA_IDX = 0                   # bus.y column for Va
+VMIN_IDX, VMAX_IDX = 2, 3  # bus.x columns for v_min, v_max
+VM_IDX = 1  # bus.y column for Vm
+VA_IDX = 0  # bus.y column for Va
 
 # ac_line edge_attr indices
 AC_X_IDX, AC_RATE_A_IDX = 5, 6
@@ -98,23 +98,33 @@ TR_THETA_MIN_IDX, TR_THETA_MAX_IDX = 0, 1
 
 
 def evaluate(data):
-    bus_true = data["bus"].y   # shape [N_bus, 2]  (Va, Vm)
-    bus_x    = data["bus"].x   # shape [N_bus, 4]
+    bus_true = data["bus"].y  # shape [N_bus, 2]  (Va, Vm)
+    bus_x = data["bus"].x  # shape [N_bus, 4]
 
     results = {}
 
     # 1. Voltage bound: vmin <= Vm <= vmax
-    Vm    = bus_true[:, VM_IDX]
-    vmin  = bus_x[:, VMIN_IDX]
-    vmax  = bus_x[:, VMAX_IDX]
+    Vm = bus_true[:, VM_IDX]
+    vmin = bus_x[:, VMIN_IDX]
+    vmax = bus_x[:, VMAX_IDX]
     vbound = torch.mean(F.relu(vmin - Vm).pow(2) + F.relu(Vm - vmax).pow(2))
     results["voltage_bound"] = vbound.item()
 
     # 2. Angle difference limit: theta_min <= Va_i - Va_j <= theta_max
     Va = bus_true[:, VA_IDX]
     for rel, tmin_i, tmax_i, tag in [
-        (("bus", "ac_line",      "bus"), AC_THETA_MIN_IDX, AC_THETA_MAX_IDX, "ac_angle_diff"),
-        (("bus", "transformer",  "bus"), TR_THETA_MIN_IDX, TR_THETA_MAX_IDX, "tr_angle_diff"),
+        (
+            ("bus", "ac_line", "bus"),
+            AC_THETA_MIN_IDX,
+            AC_THETA_MAX_IDX,
+            "ac_angle_diff",
+        ),
+        (
+            ("bus", "transformer", "bus"),
+            TR_THETA_MIN_IDX,
+            TR_THETA_MAX_IDX,
+            "tr_angle_diff",
+        ),
     ]:
         if rel not in data.edge_types:
             continue
@@ -126,13 +136,15 @@ def evaluate(data):
         theta_max = ea[:, tmax_i]
         src, dst = ei
         delta = Va[src] - Va[dst]
-        p = torch.mean(F.relu(delta - theta_max).pow(2) + F.relu(theta_min - delta).pow(2))
+        p = torch.mean(
+            F.relu(delta - theta_max).pow(2) + F.relu(theta_min - delta).pow(2)
+        )
         results[tag] = p.item()
 
     # 3. DC thermal limit: |P_ij| = |(Va_i - Va_j) / x_ij| <= rate_a
     for rel, x_i, ra_i, tag in [
-        (("bus", "ac_line",     "bus"), AC_X_IDX,  AC_RATE_A_IDX,  "ac_line_flow"),
-        (("bus", "transformer", "bus"), TR_X_IDX,  TR_RATE_A_IDX,  "tr_line_flow"),
+        (("bus", "ac_line", "bus"), AC_X_IDX, AC_RATE_A_IDX, "ac_line_flow"),
+        (("bus", "transformer", "bus"), TR_X_IDX, TR_RATE_A_IDX, "tr_line_flow"),
     ]:
         if rel not in data.edge_types:
             continue
@@ -140,7 +152,7 @@ def evaluate(data):
         ei = getattr(data[rel], "edge_index", None)
         if ea is None or ei is None or ea.shape[1] <= max(x_i, ra_i):
             continue
-        x_ij   = ea[:, x_i].clamp(min=1e-6)
+        x_ij = ea[:, x_i].clamp(min=1e-6)
         rate_a = ea[:, ra_i].clamp(min=0.0)
         src, dst = ei
         P_ij = (Va[src] - Va[dst]) / x_ij
@@ -150,9 +162,7 @@ def evaluate(data):
     # 4. AC apparent-flow thermal limit: |S_ij| <= rate_a
     ac_flow_rels = [(("bus", "ac_line", "bus"), "ac", "ac_apparent_flow")]
     if args.include_transformer_ac_flow:
-        ac_flow_rels.append(
-            (("bus", "transformer", "bus"), "tr", "tr_apparent_flow")
-        )
+        ac_flow_rels.append((("bus", "transformer", "bus"), "tr", "tr_apparent_flow"))
     for rel, rel_tag, tag in ac_flow_rels:
         if rel not in data.edge_types:
             continue
@@ -199,9 +209,11 @@ eps = 1e-9
 for term in sorted(accum):
     vals = accum[term]
     mean_v = sum(vals) / len(vals)
-    max_v  = max(vals)
-    min_v  = min(vals)
+    max_v = max(vals)
+    min_v = min(vals)
     nonzero = sum(1 for v in vals if abs(v) > eps)
-    print(f"{term:<25}  {mean_v:>12.6e}  {max_v:>12.6e}  {min_v:>12.6e}  {nonzero:>10}/{len(vals)}")
+    print(
+        f"{term:<25}  {mean_v:>12.6e}  {max_v:>12.6e}  {min_v:>12.6e}  {nonzero:>10}/{len(vals)}"
+    )
 
 print(f"\nProcessed {n_ok}/{len(files)} samples successfully.")

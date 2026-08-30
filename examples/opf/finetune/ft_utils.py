@@ -17,10 +17,10 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-
 # ──────────────────────────────────────────────────────────────────────────────
 # TensorBoard + CSV writer wrapper
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class EpochCSVWriter:
     """Wraps a TensorBoard SummaryWriter and *simultaneously* writes every
@@ -80,6 +80,7 @@ class EpochCSVWriter:
 # ──────────────────────────────────────────────────────────────────────────────
 # Distributed evaluation helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _gather_tensors(comm, local_tensor):
     """MPI-gather a 2-D tensor from all ranks to rank 0.
@@ -143,8 +144,11 @@ def evaluate_ft1(model, test_loader, device, comm):
         return None
 
     from sklearn.metrics import (
-        accuracy_score, f1_score, precision_score,
-        recall_score, roc_auc_score,
+        accuracy_score,
+        f1_score,
+        precision_score,
+        recall_score,
+        roc_auc_score,
     )
 
     bce = F.binary_cross_entropy_with_logits(logits, labels).item()
@@ -156,18 +160,20 @@ def evaluate_ft1(model, test_loader, device, comm):
     has_both_classes = len(set(labels_int)) > 1
 
     return {
-        "bce":         bce,
-        "accuracy":    float(accuracy_score(labels_int, preds_bin)),
-        "precision":   float(precision_score(labels_int, preds_bin, zero_division=0)),
-        "recall":      float(recall_score(labels_int, preds_bin, zero_division=0)),
-        "f1":          float(f1_score(labels_int, preds_bin, zero_division=0)),
-        "auc_roc":     float(roc_auc_score(labels_np, probs_np)) if has_both_classes else None,
-        "n_samples":   int(len(labels_int)),
-        "n_feasible":  int(labels_int.sum()),
+        "bce": bce,
+        "accuracy": float(accuracy_score(labels_int, preds_bin)),
+        "precision": float(precision_score(labels_int, preds_bin, zero_division=0)),
+        "recall": float(recall_score(labels_int, preds_bin, zero_division=0)),
+        "f1": float(f1_score(labels_int, preds_bin, zero_division=0)),
+        "auc_roc": (
+            float(roc_auc_score(labels_np, probs_np)) if has_both_classes else None
+        ),
+        "n_samples": int(len(labels_int)),
+        "n_feasible": int(labels_int.sum()),
         "n_infeasible": int((1 - labels_int).sum()),
         # Store raw arrays for ROC / confusion matrix plots
-        "probs":       probs_np.tolist(),
-        "labels":      labels_int.tolist(),
+        "probs": probs_np.tolist(),
+        "labels": labels_int.tolist(),
     }
 
 
@@ -203,7 +209,7 @@ def evaluate_ft3(model, test_loader, device, comm, output_names=None):
             pred = model(data)
             if isinstance(pred, tuple):
                 pred = pred[0]
-            node_pred = pred[0].cpu().float()   # [total_nodes, out_dim]
+            node_pred = pred[0].cpu().float()  # [total_nodes, out_dim]
             node_true = data.y.cpu().float()
             if node_true.dim() == 1:
                 node_true = node_true.unsqueeze(1)
@@ -220,7 +226,7 @@ def evaluate_ft3(model, test_loader, device, comm, output_names=None):
         lp = torch.zeros(0, out_dim)
         lt = torch.zeros(0, out_dim)
 
-    preds   = _gather_tensors(comm, lp)
+    preds = _gather_tensors(comm, lp)
     targets = _gather_tensors(comm, lt)
 
     if comm.Get_rank() != 0:
@@ -229,7 +235,7 @@ def evaluate_ft3(model, test_loader, device, comm, output_names=None):
     out_dim = min(preds.shape[1], len(output_names))
     metrics = {
         "overall_mse": float(F.mse_loss(preds, targets).item()),
-        "n_nodes":     int(preds.shape[0]),
+        "n_nodes": int(preds.shape[0]),
     }
     for i, name in enumerate(output_names[:out_dim]):
         p = preds[:, i]
@@ -241,11 +247,11 @@ def evaluate_ft3(model, test_loader, device, comm, output_names=None):
         r2 = 1.0 - ss_res / (ss_tot + 1e-12)
         metrics[f"{name}_mse"] = mse
         metrics[f"{name}_mae"] = mae
-        metrics[f"{name}_r2"]  = float(r2)
+        metrics[f"{name}_r2"] = float(r2)
 
     # Store a subsample for scatter plots (max 2000 points per rank-0 data)
     sample_idx = torch.randperm(preds.shape[0])[:2000]
-    metrics["preds_sample"]   = preds[sample_idx].tolist()
+    metrics["preds_sample"] = preds[sample_idx].tolist()
     metrics["targets_sample"] = targets[sample_idx].tolist()
 
     return metrics
@@ -255,8 +261,10 @@ def evaluate_ft3(model, test_loader, device, comm, output_names=None):
 # Result persistence
 # ──────────────────────────────────────────────────────────────────────────────
 
-def save_run_results(log_name: str, run_meta: dict, test_metrics: dict,
-                     logs_root: str = "./logs"):
+
+def save_run_results(
+    log_name: str, run_meta: dict, test_metrics: dict, logs_root: str = "./logs"
+):
     """Write ``results.json`` for a single run into its log directory.
 
     Parameters
@@ -266,7 +274,7 @@ def save_run_results(log_name: str, run_meta: dict, test_metrics: dict,
     test_metrics : dict — output of evaluate_ft1 or evaluate_ft3
     logs_root : str — path to the logs directory (default ``"./logs"``)
     """
-    out_dir  = os.path.join(logs_root, log_name)
+    out_dir = os.path.join(logs_root, log_name)
     os.makedirs(out_dir, exist_ok=True)
     payload = {"log_name": log_name, "meta": run_meta, "test_metrics": test_metrics}
     path = os.path.join(out_dir, "results.json")
@@ -286,6 +294,7 @@ def _json_default(obj):
 # ──────────────────────────────────────────────────────────────────────────────
 # Checkpoint loading
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def load_best_or_last_checkpoint(log_name: str, model, logs_root: str = "./logs"):
     """Load the best checkpoint from a run's log directory.
@@ -357,13 +366,16 @@ def _find_best_epoch_from_csv(csv_path: str):
 
 def _load_ckpt(path: str, model) -> bool:
     from collections import OrderedDict
+
     try:
         ckpt = torch.load(path, map_location="cpu")
         sd = ckpt.get("model_state_dict", ckpt)
         target = model.module if hasattr(model, "module") else model
         own_keys = set(target.state_dict().keys())
         if own_keys and not next(iter(own_keys)).startswith("module"):
-            new_sd = OrderedDict((k.replace("module.", "", 1), v) for k, v in sd.items())
+            new_sd = OrderedDict(
+                (k.replace("module.", "", 1), v) for k, v in sd.items()
+            )
             sd = new_sd
         target.load_state_dict(sd, strict=False)
         print(f"[ft_utils] Loaded checkpoint: {path}")

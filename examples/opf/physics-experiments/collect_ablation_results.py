@@ -23,7 +23,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 EPOCH_RE = re.compile(
     r"Epoch:\s*(?P<epoch>\d+),\s*"
     r"Train Loss:\s*(?P<train>[0-9eE+\-.]+),\s*"
@@ -138,9 +137,7 @@ def _nearest_breakdown(
     exact = [row for row in candidates if row.get("epoch") == epoch]
     if exact:
         return exact[-1]
-    return min(
-        candidates, key=lambda row: abs(int(row.get("epoch", -10**9)) - epoch)
-    )
+    return min(candidates, key=lambda row: abs(int(row.get("epoch", -(10**9))) - epoch))
 
 
 def _final_breakdown(
@@ -159,7 +156,9 @@ def _nearest_epoch_time(
     exact = [row for row in epoch_times if row.get("epoch") == epoch]
     if exact:
         return exact[-1]
-    return min(epoch_times, key=lambda row: abs(int(row.get("epoch", -10**9)) - epoch))
+    return min(
+        epoch_times, key=lambda row: abs(int(row.get("epoch", -(10**9))) - epoch)
+    )
 
 
 def _config_meta(config: dict[str, Any]) -> dict[str, Any]:
@@ -412,7 +411,9 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]):
         path.write_text("", encoding="utf-8")
 
 
-def _write_outputs(rows: list[dict[str, Any]], details: list[dict[str, Any]], out_dir: Path):
+def _write_outputs(
+    rows: list[dict[str, Any]], details: list[dict[str, Any]], out_dir: Path
+):
     out_dir.mkdir(parents=True, exist_ok=True)
     csv_path = out_dir / "opf_ablation_summary.csv"
     json_path = out_dir / "opf_ablation_summary.json"
@@ -451,8 +452,12 @@ def _write_outputs(rows: list[dict[str, Any]], details: list[dict[str, Any]], ou
     print(f"[collect] CSV  -> {csv_path} ({len(rows)} rows)")
     print(f"[collect] JSON -> {json_path}")
     print(f"[collect] epochs CSV      -> {epochs_path} ({len(epoch_rows)} rows)")
-    print(f"[collect] epoch times CSV -> {epoch_times_path} ({len(epoch_time_rows)} rows)")
-    print(f"[collect] breakdowns CSV  -> {breakdowns_path} ({len(breakdown_rows)} rows)")
+    print(
+        f"[collect] epoch times CSV -> {epoch_times_path} ({len(epoch_time_rows)} rows)"
+    )
+    print(
+        f"[collect] breakdowns CSV  -> {breakdowns_path} ({len(breakdown_rows)} rows)"
+    )
 
 
 def _fmt(value: Any, width: int = 11) -> str:

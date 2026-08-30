@@ -9,6 +9,7 @@ samples for each fine-tuning method (full, partial, head_only, scratch).
 
 Outputs land in ``examples/opf/finetune/plots/``.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,10 +39,10 @@ FT3_METRICS = ["overall_mse"]
 
 METHOD_ORDER = ["full", "partial", "head_only", "scratch"]
 METHOD_STYLE = {
-    "full":      {"color": "#1f77b4", "marker": "o"},
-    "partial":   {"color": "#ff7f0e", "marker": "s"},
+    "full": {"color": "#1f77b4", "marker": "o"},
+    "partial": {"color": "#ff7f0e", "marker": "s"},
     "head_only": {"color": "#2ca02c", "marker": "^"},
-    "scratch":   {"color": "#d62728", "marker": "x"},
+    "scratch": {"color": "#d62728", "marker": "x"},
 }
 
 
@@ -81,8 +82,9 @@ def collect(logs_dir: Path) -> dict:
     return results
 
 
-def plot_one(task: str, arch: str, metric: str,
-             per_method: dict, out_path: Path) -> None:
+def plot_one(
+    task: str, arch: str, metric: str, per_method: dict, out_path: Path
+) -> None:
     """Draw a single sample-efficiency curve and write to ``out_path``."""
     fig, ax = plt.subplots(figsize=(7, 5))
     plotted_any = False
@@ -97,8 +99,14 @@ def plot_one(task: str, arch: str, metric: str,
             continue
         xs, ys = zip(*pairs)
         style = METHOD_STYLE[method]
-        ax.plot(xs, ys, label=method, linewidth=1.6,
-                marker=style["marker"], color=style["color"])
+        ax.plot(
+            xs,
+            ys,
+            label=method,
+            linewidth=1.6,
+            marker=style["marker"],
+            color=style["color"],
+        )
         plotted_any = True
 
     if not plotted_any:
@@ -121,12 +129,18 @@ def plot_one(task: str, arch: str, metric: str,
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--logs", type=Path,
-                    default=Path(__file__).parent / "logs",
-                    help="Path to logs directory")
-    ap.add_argument("--out", type=Path,
-                    default=Path(__file__).parent / "plots",
-                    help="Output directory for PNGs and aggregated CSV")
+    ap.add_argument(
+        "--logs",
+        type=Path,
+        default=Path(__file__).parent / "logs",
+        help="Path to logs directory",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=Path(__file__).parent / "plots",
+        help="Output directory for PNGs and aggregated CSV",
+    )
     args = ap.parse_args()
 
     args.out.mkdir(parents=True, exist_ok=True)

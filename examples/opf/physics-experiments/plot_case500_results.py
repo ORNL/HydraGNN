@@ -15,7 +15,6 @@ os.environ.setdefault(
 import matplotlib.pyplot as plt
 import pandas as pd
 
-
 ARCH_ORDER = ["HeteroHEAT", "HeteroSAGE", "HeteroGAT", "HeteroGIN", "HeteroRGAT"]
 PHYSICS_ORDER = [
     "heat_attr_case500_no_physics",
@@ -63,19 +62,33 @@ def _clean_arch(row) -> str:
 def _q1_edge_architecture(df: pd.DataFrame, out_dir: Path):
     q1 = df[df["domain_loss_mode"].eq("none")].copy()
     q1["arch_label"] = q1.apply(_clean_arch, axis=1)
-    q1["arch_order"] = q1["mpnn_type"].map({arch: i for i, arch in enumerate(ARCH_ORDER)})
+    q1["arch_order"] = q1["mpnn_type"].map(
+        {arch: i for i, arch in enumerate(ARCH_ORDER)}
+    )
     q1 = q1.sort_values(["arch_order", "edge_attr_enabled"])
 
-    pivot = q1.pivot(index="arch_label", columns="edge_attr_enabled", values="best_test_loss")
-    pivot = pivot.reindex([a.replace("Hetero", "") if a != "HeteroHEAT" else "HEAT" for a in ARCH_ORDER])
+    pivot = q1.pivot(
+        index="arch_label", columns="edge_attr_enabled", values="best_test_loss"
+    )
+    pivot = pivot.reindex(
+        [a.replace("Hetero", "") if a != "HeteroHEAT" else "HEAT" for a in ARCH_ORDER]
+    )
 
     fig, ax = plt.subplots(figsize=(9.5, 5.2))
     x = range(len(pivot.index))
     width = 0.36
     no_attr = pivot.get(False)
     attr = pivot.get(True)
-    ax.bar([i - width / 2 for i in x], no_attr, width, label="No Edge Attr", color=COLORS["no_attr"])
-    ax.bar([i + width / 2 for i in x], attr, width, label="Edge Attr", color=COLORS["attr"])
+    ax.bar(
+        [i - width / 2 for i in x],
+        no_attr,
+        width,
+        label="No Edge Attr",
+        color=COLORS["no_attr"],
+    )
+    ax.bar(
+        [i + width / 2 for i in x], attr, width, label="Edge Attr", color=COLORS["attr"]
+    )
     ax.set_yscale("log")
     ax.set_ylabel("Best Test Loss (log scale)")
     ax.set_title("Q1: Architecture and Edge-Attribute Effect")
@@ -92,11 +105,15 @@ def _q1_edge_architecture(df: pd.DataFrame, out_dir: Path):
             rows.append(
                 {
                     "arch_label": arch,
-                    "attr_improvement_percent": 100.0 * (vals.loc[False] - vals.loc[True]) / vals.loc[False],
+                    "attr_improvement_percent": 100.0
+                    * (vals.loc[False] - vals.loc[True])
+                    / vals.loc[False],
                 }
             )
     gain = pd.DataFrame(rows)
-    gain["arch_order"] = gain["arch_label"].map({"HEAT": 0, "SAGE": 1, "GAT": 2, "GIN": 3, "RGAT": 4})
+    gain["arch_order"] = gain["arch_label"].map(
+        {"HEAT": 0, "SAGE": 1, "GAT": 2, "GIN": 3, "RGAT": 4}
+    )
     gain = gain.sort_values("arch_order")
 
     fig, ax = plt.subplots(figsize=(8.2, 4.5))
@@ -111,7 +128,9 @@ def _q1_edge_architecture(df: pd.DataFrame, out_dir: Path):
 def _physics_subset(df: pd.DataFrame) -> pd.DataFrame:
     phys = df[df["log_name"].isin(PHYSICS_ORDER)].copy()
     phys["label"] = phys["log_name"].map(PHYSICS_LABELS)
-    phys["order"] = phys["log_name"].map({name: i for i, name in enumerate(PHYSICS_ORDER)})
+    phys["order"] = phys["log_name"].map(
+        {name: i for i, name in enumerate(PHYSICS_ORDER)}
+    )
     return phys.sort_values("order")
 
 
@@ -121,8 +140,20 @@ def _q2_q3_q4_physics(df: pd.DataFrame, out_dir: Path):
     fig, ax1 = plt.subplots(figsize=(9.5, 5.2))
     x = range(len(phys))
     width = 0.36
-    ax1.bar([i - width / 2 for i in x], phys["best_val_loss"], width, label="Best Val", color=COLORS["val"])
-    ax1.bar([i + width / 2 for i in x], phys["best_test_loss"], width, label="Best Test", color=COLORS["test"])
+    ax1.bar(
+        [i - width / 2 for i in x],
+        phys["best_val_loss"],
+        width,
+        label="Best Val",
+        color=COLORS["val"],
+    )
+    ax1.bar(
+        [i + width / 2 for i in x],
+        phys["best_test_loss"],
+        width,
+        label="Best Test",
+        color=COLORS["test"],
+    )
     ax1.set_yscale("log")
     ax1.set_ylabel("Loss (log scale)")
     ax1.set_title("Q2-Q4: Physics Loss Variants vs Accuracy")
@@ -142,10 +173,13 @@ def _q2_q3_q4_physics(df: pd.DataFrame, out_dir: Path):
     baseline = phys.loc[phys["log_name"].eq("heat_attr_case500_no_physics")].iloc[0]
     compare = phys[~phys["log_name"].eq("heat_attr_case500_no_physics")].copy()
     compare["test_loss_change_percent"] = (
-        100.0 * (compare["best_test_loss"] - baseline["best_test_loss"]) / baseline["best_test_loss"]
+        100.0
+        * (compare["best_test_loss"] - baseline["best_test_loss"])
+        / baseline["best_test_loss"]
     )
     compare["runtime_change_percent"] = (
-        100.0 * (compare["total_train_seconds"] - baseline["total_train_seconds"])
+        100.0
+        * (compare["total_train_seconds"] - baseline["total_train_seconds"])
         / baseline["total_train_seconds"]
     )
 
@@ -159,7 +193,12 @@ def _q2_q3_q4_physics(df: pd.DataFrame, out_dir: Path):
         color="#3a86ff",
     )
     for _, row in compare.iterrows():
-        ax.annotate(row["label"], (row["runtime_change_percent"], row["test_loss_change_percent"]), xytext=(6, 4), textcoords="offset points")
+        ax.annotate(
+            row["label"],
+            (row["runtime_change_percent"], row["test_loss_change_percent"]),
+            xytext=(6, 4),
+            textcoords="offset points",
+        )
     ax.set_xlabel("Runtime Change vs No Physics (%)")
     ax.set_ylabel("Best Test Loss Change vs No Physics (%)")
     ax.set_title("Q2-Q4: Accuracy-Cost Tradeoff")
@@ -174,13 +213,22 @@ def _learning_curves(epochs: pd.DataFrame, out_dir: Path):
         "heat_no_attr_case500_no_physics",
         "heterosage_attr_case500_no_physics",
     ]
-    labels = {**PHYSICS_LABELS, "heat_no_attr_case500_no_physics": "HEAT No Attr", "heterosage_attr_case500_no_physics": "SAGE Attr"}
+    labels = {
+        **PHYSICS_LABELS,
+        "heat_no_attr_case500_no_physics": "HEAT No Attr",
+        "heterosage_attr_case500_no_physics": "SAGE Attr",
+    }
     curve = epochs[epochs["log_name"].isin(selected)].copy()
 
     fig, ax = plt.subplots(figsize=(9.5, 5.2))
     for log_name, group in curve.groupby("log_name"):
         group = group.sort_values("epoch")
-        ax.plot(group["epoch"], group["val_loss"], label=labels.get(log_name, log_name), linewidth=1.8)
+        ax.plot(
+            group["epoch"],
+            group["val_loss"],
+            label=labels.get(log_name, log_name),
+            linewidth=1.8,
+        )
     ax.set_yscale("log")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Validation Loss (log scale)")

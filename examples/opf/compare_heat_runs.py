@@ -4,6 +4,7 @@
 Usage:
     python compare_heat_runs.py <baseline_run.log> <physics_run.log> [--json]
 """
+
 import json
 import re
 import sys

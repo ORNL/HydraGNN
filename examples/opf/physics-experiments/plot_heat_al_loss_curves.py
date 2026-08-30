@@ -21,7 +21,6 @@ from plot_heat_static_loss_curves import (
     _save,
 )
 
-
 COLORS = {
     "Basic MSE": "#2a9d8f",
     "AL DC": "#3a86ff",
@@ -30,10 +29,7 @@ COLORS = {
 
 
 def _load_curves(baseline_log: Path, physics_job_output: Path) -> pd.DataFrame:
-    rows = [
-        {"model": "Basic MSE", **row}
-        for row in _parse_breakdowns(baseline_log)
-    ]
+    rows = [{"model": "Basic MSE", **row} for row in _parse_breakdowns(baseline_log)]
 
     for row in _parse_breakdowns(physics_job_output):
         if not _has_nonzero_multiplier(row):
@@ -51,7 +47,9 @@ def _load_curves(baseline_log: Path, physics_job_output: Path) -> pd.DataFrame:
     expected = {"Basic MSE", "AL DC", "AL AC"}
     missing = expected - set(frame["model"].unique())
     if missing:
-        raise RuntimeError("Missing validation curves for: " + ", ".join(sorted(missing)))
+        raise RuntimeError(
+            "Missing validation curves for: " + ", ".join(sorted(missing))
+        )
     return frame.sort_values(["model", "epoch"])
 
 
