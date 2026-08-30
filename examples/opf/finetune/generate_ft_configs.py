@@ -9,6 +9,7 @@ FT1 is a graph-level binary feasibility classification task:
   - Preprocessing: run generate_infeasible_samples.py before training FT1
   - Loss: binary_cross_entropy_with_logits (BCE)
 """
+
 import json
 import os
 
@@ -127,30 +128,19 @@ def _base_arch_graph(mpnn_type, hd, nl, freeze_conv):
     }
 
 
-VOI_BUS = {
-    "input_node_features": [0, 1, 2, 3],
-    "graph_feature_names": ["context"],
-    "graph_feature_dims": [1],
-    "node_feature_names": ["node_features"],
-    "node_feature_dims": [4],
-    "output_names": ["bus_solution"],
-    "output_index": [0],
-    "output_dim": [2],
-    "type": ["node"],
-    "denormalize_output": False,
+VARIABLES_BUS = {
+    "inputs": [{"name": "node_features", "level": "node", "dim": 4}],
+    "outputs": [{"name": "bus_solution", "level": "node", "dim": 2}],
 }
 
-VOI_GEN = dict(VOI_BUS)
-VOI_GEN["output_names"] = ["generator_solution"]
-VOI_GEN["output_dim"] = [2]  # generator solution = [Pg, Qg] (active/reactive dispatch)
+VARIABLES_GEN = {
+    "inputs": [{"name": "node_features", "level": "node", "dim": 4}],
+    "outputs": [{"name": "generator_solution", "level": "node", "dim": 2}],
+}
 
-VOI_FEASIBILITY = {
-    "input_node_features": [0, 1, 2, 3],
-    "output_names": ["feasibility"],
-    "output_index": [0],
-    "output_dim": [1],
-    "type": ["graph"],
-    "denormalize_output": False,
+VARIABLES_FEASIBILITY = {
+    "inputs": [{"name": "node_features", "level": "node", "dim": 4}],
+    "outputs": [{"name": "feasibility", "level": "graph", "dim": 1}],
 }
 
 # Best HPO hyperparameters from Table VII of the manuscript
@@ -260,11 +250,9 @@ def generate_all():
 
                 if tgt == "graph":
                     # FT1: graph-level binary classification
-                    arch = _base_arch_graph(
-                        arch_name, ap["hd"], ap["nl"], freeze_conv
-                    )
+                    arch = _base_arch_graph(arch_name, ap["hd"], ap["nl"], freeze_conv)
                     training = _base_training_classify(lr, fm["epochs"], regime)
-                    voi = VOI_FEASIBILITY
+                    variables = VARIABLES_FEASIBILITY
                     # Shared dataset (arch-independent)
                     data_modelname = "FT1_feasibility_data"
                     cfg = {
@@ -275,9 +263,10 @@ def generate_all():
                         "Verbosity": {"level": 2},
                         "NeuralNetwork": {
                             "Architecture": arch,
-                            "Variables_of_interest": voi,
                             "Training": training,
                         },
+                        "Variables": variables,
+                        "Postprocessing": {"denormalize_output": False},
                         "Visualization": {
                             "plot_init_solution": False,
                             "plot_hist_solution": False,
@@ -288,9 +277,14 @@ def generate_all():
                     # FT2 / FT3 / FT4: node-level regression
                     out_dim = 2  # bus [Va, Vm] or generator [Pg, Qg]
                     node_target_type = tgt  # "bus" or "generator"
-                    voi = VOI_GEN if tgt == "generator" else VOI_BUS
+                    variables = VARIABLES_GEN if tgt == "generator" else VARIABLES_BUS
                     arch = _base_arch(
-                        arch_name, ap["hd"], ap["nl"], freeze_conv, node_target_type, out_dim
+                        arch_name,
+                        ap["hd"],
+                        ap["nl"],
+                        freeze_conv,
+                        node_target_type,
+                        out_dim,
                     )
                     training = _base_training(lr, fm["epochs"], regime)
                     cfg = {
@@ -304,9 +298,10 @@ def generate_all():
                         "Verbosity": {"level": 2},
                         "NeuralNetwork": {
                             "Architecture": arch,
-                            "Variables_of_interest": voi,
                             "Training": training,
                         },
+                        "Variables": variables,
+                        "Postprocessing": {"denormalize_output": False},
                         "Visualization": {
                             "plot_init_solution": False,
                             "plot_hist_solution": False,

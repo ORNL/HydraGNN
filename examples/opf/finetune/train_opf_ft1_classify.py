@@ -5,8 +5,8 @@ graph-level binary feasibility prediction.
 
 The dataset must first be generated with generate_infeasible_samples.py, which
 produces a balanced HDF5 dataset where:
-  - feasible samples: data.y = [1.0]  (original OPF solutions)
-  - infeasible samples: data.y = [0.0] (load features scaled by overload_factor)
+  - feasible samples: data.feasibility = [[1.0]]
+  - infeasible samples: data.feasibility = [[0.0]]
 
 The model uses a graph-level output head (pool all node embeddings → MLP → 1
 logit) with binary cross-entropy with logits loss.  Inference: sigmoid(logit)
@@ -50,17 +50,19 @@ from ft_utils import EpochCSVWriter, evaluate_ft1, save_run_results
 
 from opf_solution_utils import (
     EdgeAttrDatasetAdapter,
+    GraphTargetDatasetAdapter,
     OPFEnhancedModelWrapper,
     info,
 )
-
 
 # ---------------------------------------------------------------------------
 # Utility helpers (duplicated from train_opf_finetune.py for independence)
 # ---------------------------------------------------------------------------
 
+
 def _to_jsonable(obj):
     import numpy as np
+
     if isinstance(obj, torch.Tensor):
         return obj.item() if obj.numel() == 1 else obj.tolist()
     if isinstance(obj, np.ndarray):
@@ -127,7 +129,9 @@ def apply_freeze_regime(model, regime: str):
     )
 
 
-def load_pretrained_weights(model, pretrained_model_name: str, pretrained_model_dir: str):
+def load_pretrained_weights(
+    model, pretrained_model_name: str, pretrained_model_dir: str
+):
     """Load conv-layer weights from a pretrained node-level regression checkpoint.
 
     The prediction head is NOT loaded (strict=False), so the pretrained encoder
@@ -162,16 +166,18 @@ def load_pretrained_weights(model, pretrained_model_name: str, pretrained_model_
 
     missing, unexpected = target.load_state_dict(state_dict, strict=False)
     # Graph head keys will be missing (new head); report for transparency
-    head_keys   = [k for k in missing    if "heads_NN" in k or "graph_shared" in k]
-    other_miss  = [k for k in missing    if k not in head_keys]
+    head_keys = [k for k in missing if "heads_NN" in k or "graph_shared" in k]
+    other_miss = [k for k in missing if k not in head_keys]
     info(
         f"[FT1] Loaded weights: {len(missing)} missing keys "
         f"({len(head_keys)} graph-head keys expected), "
         f"{len(unexpected)} unexpected keys."
     )
     if other_miss:
-        info(f"[FT1]  Non-head missing keys: {other_miss[:5]}"
-             f"{'...' if len(other_miss) > 5 else ''}")
+        info(
+            f"[FT1]  Non-head missing keys: {other_miss[:5]}"
+            f"{'...' if len(other_miss) > 5 else ''}"
+        )
     info("[FT1] Pretrained encoder loaded successfully.")
 
 
@@ -206,8 +212,8 @@ if __name__ == "__main__":
         default="../dataset",
         help="Root directory containing the FT1 HDF5 dataset.",
     )
-    parser.add_argument("--num_epoch",     type=int,   default=None)
-    parser.add_argument("--batch_size",    type=int,   default=None)
+    parser.add_argument("--num_epoch", type=int, default=None)
+    parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--learning_rate", type=float, default=None)
     parser.add_argument(
         "--pretrained_model_dir",
@@ -251,9 +257,9 @@ if __name__ == "__main__":
 
     # ── Resolve paths ──────────────────────────────────────────────────────
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    input_filename        = os.path.join(script_dir, args.inputfile)
-    pretrained_model_dir  = os.path.join(script_dir, args.pretrained_model_dir)
-    data_root             = os.path.join(script_dir, args.data_root)
+    input_filename = os.path.join(script_dir, args.inputfile)
+    pretrained_model_dir = os.path.join(script_dir, args.pretrained_model_dir)
+    data_root = os.path.join(script_dir, args.data_root)
 
     with open(input_filename) as f:
         config = json.load(f)
@@ -264,17 +270,21 @@ if __name__ == "__main__":
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
     if args.learning_rate is not None:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"] = args.learning_rate
+        config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ] = args.learning_rate
 
     arch_config = config["NeuralNetwork"]["Architecture"]
-    edge_dim    = _resolve_edge_dim(config)
+    edge_dim = _resolve_edge_dim(config)
 
     # ── Distributed init ───────────────────────────────────────────────────
     hydragnn.utils.distributed.setup_ddp()
 
     # ── Log name ───────────────────────────────────────────────────────────
     ft_tag = f"{args.pretrained_model_name}_{args.finetune_regime}"
-    log_name = args.modelname if args.modelname is not None else f"FT1_classify_{ft_tag}"
+    log_name = (
+        args.modelname if args.modelname is not None else f"FT1_classify_{ft_tag}"
+    )
     hydragnn.utils.print.setup_log(log_name)
 
     # ── Load HDF5 dataset ──────────────────────────────────────────────────
@@ -290,14 +300,17 @@ if __name__ == "__main__":
         )
 
     trainset = HDF5Dataset(basedir, "trainset")
-    valset   = HDF5Dataset(basedir, "valset")
-    testset  = HDF5Dataset(basedir, "testset")
+    valset = HDF5Dataset(basedir, "valset")
+    testset = HDF5Dataset(basedir, "testset")
 
-    # Validate edge feature shapes (no node-level target injection needed —
-    # data.y is already the graph-level label set by generate_infeasible_samples.py)
+    # Validate edge features and derive HydraGNN's internal y tensor from the
+    # required named graph target.
     trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
-    valset   = EdgeAttrDatasetAdapter(valset,   edge_dim=edge_dim)
-    testset  = EdgeAttrDatasetAdapter(testset,  edge_dim=edge_dim)
+    valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
+    testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
+    trainset = GraphTargetDatasetAdapter(trainset, "feasibility")
+    valset = GraphTargetDatasetAdapter(valset, "feasibility")
+    testset = GraphTargetDatasetAdapter(testset, "feasibility")
 
     # Optionally truncate trainset for data-efficiency sweep
     if args.max_train_samples is not None and len(trainset) > args.max_train_samples:
@@ -314,20 +327,19 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
     sample0 = trainset[0]
-    info(
-        f"  Sample node types: {sample0.node_types}  |  "
-        f"y = {sample0.y.tolist()}"
-    )
+    info(f"  Sample node types: {sample0.node_types}  |  " f"y = {sample0.y.tolist()}")
 
     # ── DataLoaders ────────────────────────────────────────────────────────
-    (train_loader, val_loader, test_loader) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset,
+    train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+        trainset,
+        valset,
+        testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
     )
 
     # ── Update config from data ────────────────────────────────────────────
-    # update_config handles graph-level outputs without y_loc: it reads
-    # output_dim directly from config["Variables_of_interest"]["output_dim"].
+    # update_config derives output metadata from the strict top-level Variables
+    # schema; it never infers target dimensions from a sample.
     config = update_config(config, train_loader, val_loader, test_loader)
     arch_config = config["NeuralNetwork"]["Architecture"]
 
@@ -365,7 +377,7 @@ if __name__ == "__main__":
 
     # ── Optimizer ─────────────────────────────────────────────────────────
     trainable_params = [p for p in model.parameters() if p.requires_grad]
-    n_total     = sum(p.numel() for p in model.parameters())
+    n_total = sum(p.numel() for p in model.parameters())
     n_trainable = sum(p.numel() for p in trainable_params)
     info(
         f"[FT1] Regime '{args.finetune_regime}': "
@@ -381,7 +393,8 @@ if __name__ == "__main__":
 
     # ── DDP wrap ───────────────────────────────────────────────────────────
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer,
+        model,
+        optimizer,
         config["Verbosity"]["level"],
         find_unused_parameters=(args.finetune_regime != "full"),
     )
@@ -390,7 +403,7 @@ if __name__ == "__main__":
 
     # ── TensorBoard + CSV training-curve writer ───────────────────────────
     _tb_writer = model_utils.get_summary_writer(log_name)
-    _csv_path  = os.path.join("logs", log_name, "training_curve.csv")
+    _csv_path = os.path.join("logs", log_name, "training_curve.csv")
     writer = EpochCSVWriter(_tb_writer, _csv_path)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
@@ -404,7 +417,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,
@@ -430,13 +443,17 @@ if __name__ == "__main__":
         )
         run_meta = {
             "ft_strategy": "FT1_feasibility_classification",
-            "arch":         arch_config["mpnn_type"],
-            "regime":       args.finetune_regime,
-            "pretrained":   not args.no_pretrained,
-            "pretrained_model": args.pretrained_model_name if not args.no_pretrained else "none",
-            "num_epoch":    config["NeuralNetwork"]["Training"]["num_epoch"],
-            "learning_rate": config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"],
-            "config_file":  args.inputfile,
+            "arch": arch_config["mpnn_type"],
+            "regime": args.finetune_regime,
+            "pretrained": not args.no_pretrained,
+            "pretrained_model": (
+                args.pretrained_model_name if not args.no_pretrained else "none"
+            ),
+            "num_epoch": config["NeuralNetwork"]["Training"]["num_epoch"],
+            "learning_rate": config["NeuralNetwork"]["Training"]["Optimizer"][
+                "learning_rate"
+            ],
+            "config_file": args.inputfile,
         }
         save_run_results(log_name, run_meta, test_metrics)
 

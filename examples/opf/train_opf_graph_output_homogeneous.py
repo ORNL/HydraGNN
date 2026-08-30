@@ -17,7 +17,7 @@ from opf_nvme_utils import stage_case_to_nvme
 from opf_solution_utils import (
     assemble_edge_attr,
     resolve_edge_feature_schema,
-    validate_voi_node_features,
+    validate_named_opf_variables,
     info,
 )
 
@@ -583,24 +583,17 @@ if __name__ == "__main__":
         args.topological_perturbations,
     )
 
-    # Validate var_config from config — no auto-fill from data
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    validate_voi_node_features(config)
-    if (
-        not isinstance(var_config.get("graph_feature_dims"), list)
-        or len(var_config["graph_feature_dims"]) == 0
-    ):
-        raise RuntimeError(
-            "'graph_feature_dims' must be an explicit non-empty list in the config."
-        )
+    # The strict top-level schema is authoritative; no dimensions or
+    # variable names are inferred from the first sample.
+    validate_named_opf_variables(config)
 
     if args.format == "adios":
         if AdiosDataset is None:
             raise RuntimeError("adios2 is not available in this environment.")
         fname = os.path.join(datadir, f"{args.modelname}.bp")
-        trainset = AdiosDataset(fname, "trainset", comm, var_config=var_config)
-        valset = AdiosDataset(fname, "valset", comm, var_config=var_config)
-        testset = AdiosDataset(fname, "testset", comm, var_config=var_config)
+        trainset = AdiosDataset(fname, "trainset", comm, var_config=None)
+        valset = AdiosDataset(fname, "valset", comm, var_config=None)
+        testset = AdiosDataset(fname, "testset", comm, var_config=None)
     else:
         basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = SimplePickleDataset(
@@ -660,7 +653,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

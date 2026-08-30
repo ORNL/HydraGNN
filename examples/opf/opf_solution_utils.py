@@ -8,6 +8,8 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch_geometric.utils import degree
 
+from hydragnn.utils.input_config_parsing import get_variable_schema
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -206,7 +208,6 @@ class OPFDomainLoss(torch.nn.Module):
                 int(v) for v in self.voltage_bound_feature_indices
             )
 
-
     def _curriculum_scale(self) -> float:
         """Return a [0, 1] multiplier for domain-loss weights based on current epoch.
 
@@ -335,10 +336,7 @@ class OPFDomainLoss(torch.nn.Module):
                 voltage = bus_pred[:, self.voltage_output_index].reshape(-1)
                 # F.relu zeros out values that already satisfy the bound, so the gradient
                 # is zero for feasible predictions and proportional to the violation otherwise.
-                voltage_violation = (
-                    F.relu(lower - voltage)
-                    + F.relu(voltage - upper)
-                )
+                voltage_violation = F.relu(lower - voltage) + F.relu(voltage - upper)
                 bound_loss, bound_penalty = self._inequality_loss(
                     "voltage_bound",
                     voltage_violation,
@@ -377,9 +375,8 @@ class OPFDomainLoss(torch.nn.Module):
                 # feasible region [theta_min, theta_max], growing penalty outside it.
                 # No slack is needed here: verified empirically that this term is exactly
                 # zero on OPFDataset ground-truth solutions (Va and theta bounds share units).
-                angle_violation = (
-                    F.relu(delta_theta - theta_max)
-                    + F.relu(theta_min - delta_theta)
+                angle_violation = F.relu(delta_theta - theta_max) + F.relu(
+                    theta_min - delta_theta
                 )
                 angdiff_loss, angdiff_p = self._inequality_loss(
                     f"{rel_tag}_angle_diff",
@@ -401,7 +398,7 @@ class OPFDomainLoss(torch.nn.Module):
         if self.line_flow_weight > 0.0 and bus_pred.shape[-1] > self.va_output_index:
             Va = bus_pred[:, self.va_output_index].reshape(-1)
             for rel, x_idx, ra_idx, rel_tag in [
-                (("bus", "ac_line", "bus"),    5, 6, "ac"),
+                (("bus", "ac_line", "bus"), 5, 6, "ac"),
                 (("bus", "transformer", "bus"), 3, 4, "tr"),
             ]:
                 if rel not in data.edge_types:
@@ -410,11 +407,16 @@ class OPFDomainLoss(torch.nn.Module):
                 if ea is None:
                     ea = getattr(data[rel], "physics_edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
-                if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(x_idx, ra_idx):
+                if (
+                    ea is None
+                    or ei is None
+                    or ea.numel() == 0
+                    or ea.shape[1] <= max(x_idx, ra_idx)
+                ):
                     continue
                 # clamp x_ij away from zero to avoid division-by-zero in the DC formula;
                 # 1e-6 p.u. is several orders of magnitude below any physical reactance.
-                x_ij   = ea[:, x_idx].to(Va.device).clamp(min=1e-6)
+                x_ij = ea[:, x_idx].to(Va.device).clamp(min=1e-6)
                 # clamp rate_a to be non-negative; negative thermal limits are nonsensical
                 # and could arise from edge cases in dataset normalisation.
                 rate_a = ea[:, ra_idx].to(Va.device).clamp(min=0.0)
@@ -446,9 +448,8 @@ class OPFDomainLoss(torch.nn.Module):
         # predicted Va and Vm, unlike the DC line-flow term above. Transformer
         # AC flow is opt-in and uses the transformer tap ratio and phase shift
         # when those attributes are available in the OPFDataset edge schema.
-        if (
-            self.ac_line_flow_weight > 0.0
-            and bus_pred.shape[-1] > max(self.va_output_index, self.voltage_output_index)
+        if self.ac_line_flow_weight > 0.0 and bus_pred.shape[-1] > max(
+            self.va_output_index, self.voltage_output_index
         ):
             Va = bus_pred[:, self.va_output_index].reshape(-1)
             Vm = bus_pred[:, self.voltage_output_index].reshape(-1)
@@ -630,9 +631,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
 
                 # The configured HydraGNN logger writes to both the console and
                 # the run-specific run.log. Only rank 0 emits the global values.
-                logging.getLogger("hydragnn").info(
-                    "LossBreakdown " + "  ".join(parts)
-                )
+                logging.getLogger("hydragnn").info("LossBreakdown " + "  ".join(parts))
 
         # Every rank resets its local accumulators for the next epoch.
         self._epoch_accum.clear()
@@ -672,9 +671,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             )
 
         bus_true = value[head_index[0]].reshape_as(bus_pred).to(bus_pred.device)
-        angle_loss = circular_angle_mse(
-            bus_pred[:, va_idx], bus_true[:, va_idx]
-        )
+        angle_loss = circular_angle_mse(bus_pred[:, va_idx], bus_true[:, va_idx])
         magnitude_loss = F.mse_loss(bus_pred[:, vm_idx], bus_true[:, vm_idx])
         # Match the scale of the previous MSE over the two equally sized columns.
         bus_loss = 0.5 * (angle_loss + magnitude_loss)
@@ -757,6 +754,61 @@ def build_solution_target(data, node_target_type: str):
         return data.y[mask].to(torch.float32)
 
     raise RuntimeError(f"Node type '{node_target_type}' not found in OPF sample.")
+
+
+def compile_named_hetero_opf_sample(data, node_target_type: str | None = None):
+    """Build HydraGNN's internal tensors from named heterogeneous OPF fields.
+
+    Raw importers expose ``node_features`` on every node store, relation-specific
+    ``<relation>_features`` on featured edge stores, and named prediction targets.
+    This function is the single boundary that constructs PyG/HydraGNN's derived
+    ``x``, ``edge_attr``, and ``y`` tensors. The named source attributes remain
+    available for validation and reproducibility.
+    """
+    for node_type in data.node_types:
+        store = data[node_type]
+        if not hasattr(store, "node_features"):
+            if not hasattr(store, "x") or store.x is None:
+                raise ValueError(f"Node type '{node_type}' is missing node_features")
+            # OPFDataset is a format-specific importer whose public output uses
+            # x; name that raw tensor once at the HydraGNN import boundary.
+            store.node_features = store.x
+        features = store.node_features
+        if not isinstance(features, torch.Tensor) or features.ndim != 2:
+            raise ValueError(
+                f"{node_type}.node_features must have shape (N, dim); "
+                f"got {getattr(features, 'shape', None)}"
+            )
+        store.x = features
+
+    for edge_type in data.edge_types:
+        relation = edge_type[1]
+        store = data[edge_type]
+        source_name = f"{relation}_features"
+        if hasattr(store, source_name):
+            store.edge_attr = getattr(store, source_name)
+        elif hasattr(store, "edge_attr") and store.edge_attr is not None:
+            # Same format-import boundary as node-store x above.
+            setattr(store, source_name, store.edge_attr)
+
+    if not hasattr(data, "context"):
+        if not hasattr(data, "x") or data.x is None:
+            raise ValueError("Heterogeneous OPF sample is missing graph context")
+        data.context = data.x.reshape(1, -1)
+    data.graph_attr = data.context.reshape(1, -1).to(torch.float32)
+
+    if node_target_type is not None:
+        target_store = data[node_target_type]
+        target_name = f"{node_target_type}_solution"
+        if not hasattr(target_store, target_name):
+            if not hasattr(target_store, "y") or target_store.y is None:
+                raise ValueError(
+                    f"Node type '{node_target_type}' is missing {target_name}"
+                )
+            setattr(target_store, target_name, target_store.y)
+        target_store.y = getattr(target_store, target_name)
+        data.y = target_store.y.to(torch.float32)
+    return data
 
 
 def ensure_node_y_loc(data):
@@ -842,33 +894,25 @@ def resolve_edge_feature_schema(
     return tuple(schema)
 
 
-def validate_voi_node_features(config: dict, node_target_type: str | None = None):
-    """Validate that node feature config is fully specified.  Crash on anything missing."""
-    nn_config = config.get("NeuralNetwork")
-    if nn_config is None:
-        raise RuntimeError("Config is missing 'NeuralNetwork' section.")
-    var_config = nn_config.get("Variables_of_interest")
-    if var_config is None:
-        raise RuntimeError("Config is missing 'NeuralNetwork.Variables_of_interest'.")
-
-    input_node_features = var_config.get("input_node_features")
-    if not isinstance(input_node_features, list) or len(input_node_features) == 0:
-        raise RuntimeError(
-            "'input_node_features' must be an explicit non-empty list in the config."
+def validate_named_opf_variables(config: dict, node_target_type: str | None = None):
+    """Validate the strict named-variable contract used by OPF workflows."""
+    schema = get_variable_schema(config)
+    node_inputs = [spec for spec in schema.inputs if spec.level == "node"]
+    if len(node_inputs) != 1 or node_inputs[0].name != "node_features":
+        raise ValueError(
+            "OPF requires exactly one named node input called 'node_features'"
         )
-
-    node_feature_dims = var_config.get("node_feature_dims")
-    if not isinstance(node_feature_dims, list) or len(node_feature_dims) == 0:
-        raise RuntimeError(
-            "'node_feature_dims' must be an explicit non-empty list in the config."
-        )
-
-    if "node_feature_names" not in var_config:
-        raise RuntimeError(
-            "'node_feature_names' must be explicitly provided in the config."
-        )
-
-    return config
+    if node_target_type is not None:
+        node_outputs = [spec for spec in schema.outputs if spec.level == "node"]
+        if len(node_outputs) != 1:
+            raise ValueError("OPF node prediction requires exactly one node output")
+        expected_name = f"{node_target_type}_solution"
+        if node_outputs[0].name != expected_name:
+            raise ValueError(
+                f"OPF target '{node_target_type}' requires output name "
+                f"'{expected_name}', got '{node_outputs[0].name}'"
+            )
+    return schema
 
 
 def compute_pna_deg_for_hetero_dataset(dataset, verbosity: int = 2):
@@ -1199,6 +1243,9 @@ class HeteroFromHomogeneousDataset:
             hetero.y = data.y
         if hasattr(data, "graph_attr"):
             hetero.graph_attr = data.graph_attr
+        for name in ("context", "objective", "feasibility"):
+            if hasattr(data, name):
+                setattr(hetero, name, getattr(data, name))
         validate_edge_attr(hetero, self.edge_dim)
         return hetero
 
@@ -1257,15 +1304,48 @@ class NodeTargetDatasetAdapter:
             raise RuntimeError(
                 f"Node type '{self.node_target_type}' not found in OPF sample."
             )
-        if (
-            not hasattr(data[self.node_target_type], "y")
-            or data[self.node_target_type].y is None
-        ):
+        target_name = f"{self.node_target_type}_solution"
+        if not hasattr(data[self.node_target_type], target_name):
             raise RuntimeError(
-                f"No targets found for node type '{self.node_target_type}' in OPF sample."
+                f"Prepared OPF sample is missing named target "
+                f"'{self.node_target_type}.{target_name}'. Rebuild the dataset "
+                "with the current named-variable preprocessor."
             )
+        data[self.node_target_type].y = getattr(
+            data[self.node_target_type], target_name
+        )
         data.y = data[self.node_target_type].y
         ensure_node_y_loc(data)
+        return data
+
+    def __getattr__(self, name):
+        return getattr(self.base, name)
+
+
+class GraphTargetDatasetAdapter:
+    """Derive ``data.y`` from one required named graph-level target."""
+
+    def __init__(self, base, target_name: str):
+        self.base = base
+        self.target_name = target_name
+
+    def __len__(self):
+        return len(self.base)
+
+    def __getitem__(self, idx):
+        data = self.base[idx]
+        if not hasattr(data, self.target_name):
+            raise RuntimeError(
+                f"Prepared OPF sample is missing named graph target "
+                f"'{self.target_name}'"
+            )
+        target = getattr(data, self.target_name)
+        if not isinstance(target, torch.Tensor) or target.ndim != 2:
+            raise ValueError(
+                f"OPF graph target '{self.target_name}' must have shape "
+                f"(1, dim); got {getattr(target, 'shape', None)}"
+            )
+        data.y = target
         return data
 
     def __getattr__(self, name):
@@ -1306,13 +1386,15 @@ class NodeBatchAdapter:
                         f"'{self.node_target_type}' in batched OPF data."
                     )
 
-            if (
-                not hasattr(data[self.node_target_type], "y")
-                or data[self.node_target_type].y is None
-            ):
+            target_name = f"{self.node_target_type}_solution"
+            if not hasattr(data[self.node_target_type], target_name):
                 raise RuntimeError(
-                    f"No targets found for node type '{self.node_target_type}' in OPF sample."
+                    f"Prepared OPF batch is missing named target "
+                    f"'{self.node_target_type}.{target_name}'"
                 )
+            data[self.node_target_type].y = getattr(
+                data[self.node_target_type], target_name
+            )
             data.y = data[self.node_target_type].y
             ensure_node_y_loc(data)
             yield data

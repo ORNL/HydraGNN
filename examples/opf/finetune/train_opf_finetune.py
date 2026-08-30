@@ -46,7 +46,7 @@ from hydragnn.utils.model.model import load_existing_model
 from hydragnn.utils.model import print_model
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.input_config_parsing.config_utils import update_config
-from hydragnn.utils.input_config_parsing import save_config
+from hydragnn.utils.input_config_parsing import get_variable_schema, save_config
 
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 
@@ -59,18 +59,19 @@ from opf_solution_utils import (
     NodeTargetDatasetAdapter,
     OPFDomainLoss,
     compute_pna_deg_for_hetero_dataset,
-    validate_voi_node_features,
+    validate_named_opf_variables,
     info,
     resolve_node_target_type as _resolve_node_target_type,
 )
-
 
 # ---------------------------------------------------------------------------
 # Utility helpers
 # ---------------------------------------------------------------------------
 
+
 def _to_jsonable(obj):
     import numpy as np
+
     if isinstance(obj, torch.Tensor):
         return obj.item() if obj.numel() == 1 else obj.tolist()
     if isinstance(obj, np.ndarray):
@@ -116,7 +117,9 @@ def apply_freeze_regime(model, regime: str):
             if "heads_NN" not in name:
                 param.requires_grad_(False)
         n_trainable = sum(p.numel() for p in inner.parameters() if p.requires_grad)
-        info(f"[FT] head_only: {n_trainable:,} trainable parameters (prediction heads only)")
+        info(
+            f"[FT] head_only: {n_trainable:,} trainable parameters (prediction heads only)"
+        )
         return
 
     if regime == "partial":
@@ -126,9 +129,7 @@ def apply_freeze_regime(model, regime: str):
                 param.requires_grad_(False)
 
         n_conv = len(inner.graph_convs)
-        for i, (conv, feat) in enumerate(
-            zip(inner.graph_convs, inner.feature_layers)
-        ):
+        for i, (conv, feat) in enumerate(zip(inner.graph_convs, inner.feature_layers)):
             if i < n_conv - 1:  # freeze all but the last conv layer
                 for p in conv.parameters():
                     p.requires_grad_(False)
@@ -147,7 +148,9 @@ def apply_freeze_regime(model, regime: str):
     )
 
 
-def load_pretrained_weights(model, pretrained_model_name: str, pretrained_model_dir: str):
+def load_pretrained_weights(
+    model, pretrained_model_name: str, pretrained_model_dir: str
+):
     """Load model weights from a pretrained checkpoint, discarding optimizer state.
 
     Expects the checkpoint at:
@@ -181,9 +184,13 @@ def load_pretrained_weights(model, pretrained_model_name: str, pretrained_model_
 
     missing, unexpected = target.load_state_dict(state_dict, strict=False)
     if missing:
-        info(f"[FT] WARNING: missing keys in checkpoint: {missing[:5]}{'...' if len(missing) > 5 else ''}")
+        info(
+            f"[FT] WARNING: missing keys in checkpoint: {missing[:5]}{'...' if len(missing) > 5 else ''}"
+        )
     if unexpected:
-        info(f"[FT] WARNING: unexpected keys in checkpoint: {unexpected[:5]}{'...' if len(unexpected) > 5 else ''}")
+        info(
+            f"[FT] WARNING: unexpected keys in checkpoint: {unexpected[:5]}{'...' if len(unexpected) > 5 else ''}"
+        )
     info("[FT] Pretrained weights loaded successfully.")
 
 
@@ -349,7 +356,9 @@ if __name__ == "__main__":
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
     if args.learning_rate is not None:
-        config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"] = args.learning_rate
+        config["NeuralNetwork"]["Training"]["Optimizer"][
+            "learning_rate"
+        ] = args.learning_rate
 
     arch_config = config["NeuralNetwork"]["Architecture"]
 
@@ -371,11 +380,15 @@ if __name__ == "__main__":
     resume_epoch_start = 0
     resume_max_epoch = None
     if args.resume_if_exists:
-        resume_exists, resume_epoch_start, resume_max_epoch = detect_resume_state(log_name)
+        resume_exists, resume_epoch_start, resume_max_epoch = detect_resume_state(
+            log_name
+        )
         if resume_exists:
             config["NeuralNetwork"]["Training"]["epoch_start"] = resume_epoch_start
             if resume_max_epoch is None:
-                info(f"[FT] Found existing checkpoint for '{log_name}', resuming from epoch_start=0")
+                info(
+                    f"[FT] Found existing checkpoint for '{log_name}', resuming from epoch_start=0"
+                )
             else:
                 info(
                     f"[FT] Found existing checkpoint for '{log_name}' at epoch {resume_max_epoch}; "
@@ -408,15 +421,19 @@ if __name__ == "__main__":
     )
     args.node_target_type = resolved_node_target_type
     config["NeuralNetwork"]["Architecture"]["node_target_type"] = args.node_target_type
-    validate_voi_node_features(config, args.node_target_type)
+    validate_named_opf_variables(config, args.node_target_type)
 
     trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
-    valset   = EdgeAttrDatasetAdapter(valset,   edge_dim=edge_dim)
-    testset  = EdgeAttrDatasetAdapter(testset,  edge_dim=edge_dim)
+    valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
+    testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
 
-    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type, edge_dim=edge_dim)
-    valset   = NodeTargetDatasetAdapter(valset,   args.node_target_type, edge_dim=edge_dim)
-    testset  = NodeTargetDatasetAdapter(testset,  args.node_target_type, edge_dim=edge_dim)
+    trainset = NodeTargetDatasetAdapter(
+        trainset, args.node_target_type, edge_dim=edge_dim
+    )
+    valset = NodeTargetDatasetAdapter(valset, args.node_target_type, edge_dim=edge_dim)
+    testset = NodeTargetDatasetAdapter(
+        testset, args.node_target_type, edge_dim=edge_dim
+    )
 
     # Optionally truncate trainset for data-efficiency sweep
     if args.max_train_samples is not None and len(trainset) > args.max_train_samples:
@@ -433,13 +450,19 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    (train_loader, val_loader, test_loader) = hydragnn.preprocess.create_dataloaders(
-        trainset, valset, testset,
+    train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
+        trainset,
+        valset,
+        testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
     )
-    train_loader = NodeBatchAdapter(train_loader, args.node_target_type, edge_dim=edge_dim)
-    val_loader   = NodeBatchAdapter(val_loader,   args.node_target_type, edge_dim=edge_dim)
-    test_loader  = NodeBatchAdapter(test_loader,  args.node_target_type, edge_dim=edge_dim)
+    train_loader = NodeBatchAdapter(
+        train_loader, args.node_target_type, edge_dim=edge_dim
+    )
+    val_loader = NodeBatchAdapter(val_loader, args.node_target_type, edge_dim=edge_dim)
+    test_loader = NodeBatchAdapter(
+        test_loader, args.node_target_type, edge_dim=edge_dim
+    )
 
     config = update_config(config, train_loader, val_loader, test_loader)
     arch_config = config["NeuralNetwork"]["Architecture"]
@@ -455,7 +478,9 @@ if __name__ == "__main__":
     # ── Create model ───────────────────────────────────────────────────────
     node_input_dims = arch_config.get("node_input_dims")
     if node_input_dims is None:
-        raise RuntimeError("Missing NeuralNetwork.Architecture.node_input_dims in config.")
+        raise RuntimeError(
+            "Missing NeuralNetwork.Architecture.node_input_dims in config."
+        )
 
     try:
         metadata = trainset[0].metadata()
@@ -488,7 +513,7 @@ if __name__ == "__main__":
 
     # ── Create optimizer over trainable parameters only ────────────────────
     trainable_params = [p for p in model.parameters() if p.requires_grad]
-    n_total     = sum(p.numel() for p in model.parameters())
+    n_total = sum(p.numel() for p in model.parameters())
     n_trainable = sum(p.numel() for p in trainable_params)
     info(
         f"[FT] Regime '{args.finetune_regime}': "
@@ -505,12 +530,10 @@ if __name__ == "__main__":
     # ── Wrap in DDP ────────────────────────────────────────────────────────
     # Some FT3 configurations can leave a subset of parameters unused on a
     # given step, which can trigger DDP reduction errors when this flag is off.
-    info(
-        "[FT] DDP find_unused_parameters="
-        f"{args.ddp_find_unused_parameters}"
-    )
+    info("[FT] DDP find_unused_parameters=" f"{args.ddp_find_unused_parameters}")
     model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-        model, optimizer,
+        model,
+        optimizer,
         config["Verbosity"]["level"],
         find_unused_parameters=args.ddp_find_unused_parameters,
     )
@@ -532,7 +555,7 @@ if __name__ == "__main__":
 
     # ── TensorBoard + CSV training-curve writer ───────────────────────────
     _tb_writer = model_utils.get_summary_writer(log_name)
-    _csv_path  = os.path.join("logs", log_name, "training_curve.csv")
+    _csv_path = os.path.join("logs", log_name, "training_curve.csv")
     writer = EpochCSVWriter(_tb_writer, _csv_path)
 
     precision = config["NeuralNetwork"]["Training"].get("precision", "fp32")
@@ -546,7 +569,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,
@@ -564,8 +587,7 @@ if __name__ == "__main__":
 
     # ── Post-training regression evaluation ───────────────────────────────
     device = get_device()
-    _cfg_voi = config["NeuralNetwork"]["Variables_of_interest"]
-    _output_names = _cfg_voi.get("output_names", None)
+    _output_names = [spec.name for spec in get_variable_schema(config).outputs]
     if _output_names and len(_output_names) == 1:
         _out_dim = arch_config.get("output_dim", [2])[0]
         if args.node_target_type == "bus":
@@ -576,25 +598,32 @@ if __name__ == "__main__":
         _out_names = _output_names or ["dim_0", "dim_1"]
 
     info(f"[FT] Post-training regression eval on test set (dims: {_out_names})...")
-    test_metrics = evaluate_ft3(model, test_loader, device, comm,
-                                output_names=_out_names)
+    test_metrics = evaluate_ft3(
+        model, test_loader, device, comm, output_names=_out_names
+    )
 
     if rank == 0 and test_metrics is not None:
         _mse_strs = ", ".join(
             f"{n}_MSE={test_metrics.get(n + '_mse', float('nan')):.5f}"
             for n in _out_names
         )
-        info(f"[FT] Test metrics — {_mse_strs}  overall_MSE={test_metrics['overall_mse']:.5f}")
+        info(
+            f"[FT] Test metrics — {_mse_strs}  overall_MSE={test_metrics['overall_mse']:.5f}"
+        )
         run_meta = {
-            "ft_strategy":      config.get("_ft_strategy", "unknown"),
-            "arch":             arch_config["mpnn_type"],
-            "regime":           args.finetune_regime,
-            "pretrained":       not args.no_pretrained,
-            "pretrained_model": args.pretrained_model_name if not args.no_pretrained else "none",
+            "ft_strategy": config.get("_ft_strategy", "unknown"),
+            "arch": arch_config["mpnn_type"],
+            "regime": args.finetune_regime,
+            "pretrained": not args.no_pretrained,
+            "pretrained_model": (
+                args.pretrained_model_name if not args.no_pretrained else "none"
+            ),
             "node_target_type": args.node_target_type,
-            "num_epoch":        config["NeuralNetwork"]["Training"]["num_epoch"],
-            "learning_rate":    config["NeuralNetwork"]["Training"]["Optimizer"]["learning_rate"],
-            "config_file":      args.inputfile,
+            "num_epoch": config["NeuralNetwork"]["Training"]["num_epoch"],
+            "learning_rate": config["NeuralNetwork"]["Training"]["Optimizer"][
+                "learning_rate"
+            ],
+            "config_file": args.inputfile,
         }
         save_run_results(log_name, run_meta, test_metrics)
 

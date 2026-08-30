@@ -15,12 +15,14 @@ from __init__ import data_ops
 from opf_nvme_utils import stage_case_to_nvme
 from opf_solution_utils import (
     EdgeAttrDatasetAdapter,
+    GraphTargetDatasetAdapter,
     HeteroFromHomogeneousDataset,
     assemble_edge_attr,
+    compile_named_hetero_opf_sample,
     compute_pna_deg_for_hetero_dataset,
     info,
     resolve_edge_feature_schema,
-    validate_voi_node_features,
+    validate_named_opf_variables,
 )
 
 
@@ -112,8 +114,9 @@ def _prepare_sample(
     edge_dim=None,
     edge_feature_schema=None,
 ):
-    data.y = data.objective.view(1, 1).to(torch.float32)
-    data.graph_attr = data.x.view(1, -1).to(torch.float32)
+    data = compile_named_hetero_opf_sample(data)
+    data.objective = data.objective.view(1, 1).to(torch.float32)
+    data.y = data.objective
     data, _ = assemble_edge_attr(
         data, edge_dim=edge_dim, feature_schema=edge_feature_schema
     )
@@ -618,16 +621,9 @@ if __name__ == "__main__":
             args.topological_perturbations,
         )
 
-        # Validate var_config from config — no auto-fill from data
-        var_config = config["NeuralNetwork"]["Variables_of_interest"]
-        validate_voi_node_features(config)
-        if (
-            not isinstance(var_config.get("graph_feature_dims"), list)
-            or len(var_config["graph_feature_dims"]) == 0
-        ):
-            raise RuntimeError(
-                "'graph_feature_dims' must be an explicit non-empty list in the config."
-            )
+        # The strict top-level schema is authoritative; no dimensions or
+        # variable names are inferred from the first sample.
+        validate_named_opf_variables(config)
 
     if args.format == "adios":
         if AdiosDataset is None:
@@ -660,6 +656,9 @@ if __name__ == "__main__":
     trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
     valset = EdgeAttrDatasetAdapter(valset, edge_dim=edge_dim)
     testset = EdgeAttrDatasetAdapter(testset, edge_dim=edge_dim)
+    trainset = GraphTargetDatasetAdapter(trainset, "objective")
+    valset = GraphTargetDatasetAdapter(valset, "objective")
+    testset = GraphTargetDatasetAdapter(testset, "objective")
 
     (
         train_loader,
@@ -724,7 +723,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

@@ -12,26 +12,19 @@
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [32, 16],
+                    "dim_headlayers": [
+                        32,
+                        16
+                    ],
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0],
+            "task_weights": [
+                1.0
+            ],
             "hetero_pooling_mode": "sum",
             "node_target_type": "bus",
             "edge_dim": 11
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0, 1, 2, 3],
-            "graph_feature_names": ["context"],
-            "graph_feature_dims": [1],
-            "node_feature_names": ["node_features"],
-            "node_feature_dims": [4],
-            "output_names": ["bus_solution"],
-            "output_index": [0],
-            "output_dim": [2],
-            "type": ["node"],
-            "denormalize_output": false
         },
         "Training": {
             "num_epoch": 20,
@@ -44,7 +37,7 @@
             "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             }
         }
     },
@@ -52,5 +45,24 @@
         "plot_init_solution": false,
         "plot_hist_solution": false,
         "create_plots": false
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "node_features",
+                "level": "node",
+                "dim": 11
+            }
+        ],
+        "outputs": [
+            {
+                "name": "bus_solution",
+                "level": "node",
+                "dim": 2
+            }
+        ]
+    },
+    "Postprocessing": {
+        "denormalize_output": false
     }
 }

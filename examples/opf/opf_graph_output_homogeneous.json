@@ -14,24 +14,33 @@
                     "num_sharedlayers": 1,
                     "dim_sharedlayers": 64,
                     "num_headlayers": 2,
-                    "dim_headlayers": [32, 16]
+                    "dim_headlayers": [
+                        32,
+                        16
+                    ]
                 }
             },
-            "task_weights": [1.0],
+            "task_weights": [
+                1.0
+            ],
             "edge_dim": 15,
-            "edge_feature_names": ["r", "x", "b", "g", "b_fr", "b_to", "g_fr", "g_to", "rate_a", "rate_b", "rate_c", "tap", "shift", "angmin", "angmax"]
-        },
-        "Variables_of_interest": {
-            "input_node_features": [0],
-            "graph_feature_names": ["objective"],
-            "graph_feature_dims": [1],
-            "node_feature_names": ["node_features"],
-            "node_feature_dims": [1],
-            "output_index": [0],
-            "output_dim": [1],
-            "output_names": ["objective"],
-            "type": ["graph"],
-            "denormalize_output": false
+            "edge_feature_names": [
+                "r",
+                "x",
+                "b",
+                "g",
+                "b_fr",
+                "b_to",
+                "g_fr",
+                "g_to",
+                "rate_a",
+                "rate_b",
+                "rate_c",
+                "tap",
+                "shift",
+                "angmin",
+                "angmax"
+            ]
         },
         "Training": {
             "num_epoch": 2,
@@ -44,7 +53,7 @@
             "startfrom": "existing_model",
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
             }
         }
     },
@@ -52,5 +61,24 @@
         "plot_init_solution": false,
         "plot_hist_solution": false,
         "create_plots": false
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "node_features",
+                "level": "node",
+                "dim": 1
+            }
+        ],
+        "outputs": [
+            {
+                "name": "objective",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
+    },
+    "Postprocessing": {
+        "denormalize_output": false
     }
 }

@@ -66,39 +66,6 @@
             "SyncBatchNorm": false,
             "freeze_conv_layers": true
         },
-        "Variables_of_interest": {
-            "input_node_features": [
-                0,
-                1,
-                2,
-                3
-            ],
-            "graph_feature_names": [
-                "context"
-            ],
-            "graph_feature_dims": [
-                1
-            ],
-            "node_feature_names": [
-                "node_features"
-            ],
-            "node_feature_dims": [
-                4
-            ],
-            "output_names": [
-                "bus_solution"
-            ],
-            "output_index": [
-                0
-            ],
-            "output_dim": [
-                2
-            ],
-            "type": [
-                "node"
-            ],
-            "denormalize_output": false
-        },
         "Training": {
             "num_epoch": 50,
             "batch_size": 32,
@@ -133,5 +100,24 @@
         "plot_init_solution": false,
         "plot_hist_solution": false,
         "create_plots": false
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "node_features",
+                "level": "node",
+                "dim": 4
+            }
+        ],
+        "outputs": [
+            {
+                "name": "bus_solution",
+                "level": "node",
+                "dim": 2
+            }
+        ]
+    },
+    "Postprocessing": {
+        "denormalize_output": false
     }
 }

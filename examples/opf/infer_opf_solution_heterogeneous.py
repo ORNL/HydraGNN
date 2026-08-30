@@ -18,6 +18,7 @@ from hydragnn.postprocess.postprocess import output_denormalize
 from hydragnn.train.train_validate_test import test
 from hydragnn.utils.distributed import setup_ddp
 from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.utils.input_config_parsing import get_variable_schema
 from hydragnn.utils.model import load_existing_model
 
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
@@ -28,7 +29,7 @@ from opf_solution_utils import (
     NodeBatchAdapter,
     NodeTargetDatasetAdapter,
     compute_pna_deg_for_hetero_dataset,
-    validate_voi_node_features,
+    validate_named_opf_variables,
     info,
     resolve_edge_feature_schema,
     resolve_node_target_type,
@@ -226,7 +227,7 @@ if __name__ == "__main__":
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
             "node_target_type"
         ]
-    validate_voi_node_features(config, args.node_target_type)
+    validate_named_opf_variables(config, args.node_target_type)
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -271,7 +272,7 @@ if __name__ == "__main__":
     config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})[
         "node_target_type"
     ] = args.node_target_type
-    validate_voi_node_features(config, args.node_target_type)
+    validate_named_opf_variables(config, args.node_target_type)
 
     trainset = NodeTargetDatasetAdapter(
         trainset, args.node_target_type, edge_dim=edge_dim
@@ -342,9 +343,10 @@ if __name__ == "__main__":
         precision=config["NeuralNetwork"]["Training"].get("precision", "fp32"),
     )
 
-    if config["NeuralNetwork"]["Variables_of_interest"].get("denormalize_output"):
+    postprocessing = config.get("Postprocessing", {})
+    if postprocessing.get("denormalize_output"):
         true_values, predicted_values = output_denormalize(
-            config["NeuralNetwork"]["Variables_of_interest"]["y_minmax"],
+            postprocessing["y_minmax"],
             true_values,
             predicted_values,
         )
@@ -352,9 +354,9 @@ if __name__ == "__main__":
     if rank == 0:
         out_dir = os.path.join("./logs", args.modelname)
         os.makedirs(out_dir, exist_ok=True)
-        var_config = config["NeuralNetwork"]["Variables_of_interest"]
-        output_names = var_config.get("output_names", None)
-        output_dims = var_config.get("output_dim", None)
+        output_specs = get_variable_schema(config).outputs
+        output_names = [spec.name for spec in output_specs]
+        output_dims = [spec.dim for spec in output_specs]
 
         mae_metrics = []
         diagnostics_metrics = []

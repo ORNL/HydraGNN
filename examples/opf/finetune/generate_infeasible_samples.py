@@ -5,8 +5,8 @@ by a large overload factor, so that total demand exceeds total generation
 capacity — guaranteeing AC-OPF infeasibility without running a solver.
 
 The output is a balanced HDF5 dataset (50 % feasible, 50 % infeasible) with a
-graph-level binary label stored as ``data.y = torch.tensor([1.0])`` (feasible)
-or ``data.y = torch.tensor([0.0])`` (infeasible).
+graph-level binary label stored in the named ``data.feasibility`` attribute;
+``data.y`` is derived from that attribute for HydraGNN training.
 
 Usage (single rank, no MPI required)::
 
@@ -36,10 +36,10 @@ sys.path.insert(0, _OPF_DIR)
 
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset, HDF5Writer
 
-
 # ---------------------------------------------------------------------------
 # Sample manipulation helpers
 # ---------------------------------------------------------------------------
+
 
 def strip_node_targets(data):
     """Remove node-level prediction targets and y_loc; keep all node features."""
@@ -62,8 +62,13 @@ def make_infeasible(data, overload_factor: float):
     All other features (bus, generator, shunt, edge_attr) are unchanged.
     """
     infeasible = copy.deepcopy(data)
-    if "load" in infeasible.node_types and infeasible["load"].x is not None:
-        infeasible["load"].x = infeasible["load"].x * overload_factor
+    if "load" in infeasible.node_types:
+        if not hasattr(infeasible["load"], "node_features"):
+            raise ValueError("Prepared OPF sample is missing load.node_features")
+        infeasible["load"].node_features = (
+            infeasible["load"].node_features * overload_factor
+        )
+        infeasible["load"].x = infeasible["load"].node_features
     return infeasible
 
 
@@ -71,13 +76,15 @@ def label_samples(samples, label: float):
     """Assign graph-level feasibility label to a list of samples in-place."""
     y = torch.tensor([label], dtype=torch.float32)
     for s in samples:
-        s.y = y.clone()
+        s.feasibility = y.view(1, 1).clone()
+        s.y = s.feasibility
     return samples
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     comm = MPI.COMM_WORLD
@@ -174,10 +181,14 @@ def main():
                 if (n_seen % 5000) == 0:
                     print(f"  Scanned {n_seen} samples, kept {len(reservoir)}...")
         except Exception as exc:
-            print(f"  Warning: could not load split '{split}' from {args.src_dir}: {exc}")
+            print(
+                f"  Warning: could not load split '{split}' from {args.src_dir}: {exc}"
+            )
 
     all_feasible = reservoir
-    print(f"Loaded {len(all_feasible)} feasible samples from {args.src_dir} (scanned {n_seen} total)")
+    print(
+        f"Loaded {len(all_feasible)} feasible samples from {args.src_dir} (scanned {n_seen} total)"
+    )
 
     if len(all_feasible) == 0:
         raise RuntimeError("No feasible samples found in the source dataset.")
@@ -203,11 +214,11 @@ def main():
 
     # ── Split ──────────────────────────────────────────────────────────────
     n_train = int(args.train_frac * n_total)
-    n_val   = int(args.val_frac   * n_total)
+    n_val = int(args.val_frac * n_total)
     splits = {
         "trainset": mixed[:n_train],
-        "valset":   mixed[n_train : n_train + n_val],
-        "testset":  mixed[n_train + n_val :],
+        "valset": mixed[n_train : n_train + n_val],
+        "testset": mixed[n_train + n_val :],
     }
     for name, s in splits.items():
         label_counts = {

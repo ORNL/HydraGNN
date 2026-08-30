@@ -122,9 +122,9 @@ from opf_solution_utils import (
     NodeTargetDatasetAdapter,
     OPFDomainLoss,
     assemble_edge_attr,
-    build_solution_target as _build_solution_target,
+    compile_named_hetero_opf_sample,
     compute_pna_deg_for_hetero_dataset,
-    validate_voi_node_features,
+    validate_named_opf_variables,
     ensure_node_y_loc as _ensure_node_y_loc,
     info,
     resolve_edge_feature_schema,
@@ -206,18 +206,18 @@ def _raw_json_to_heterodata(filepath):
     metadata = obj["metadata"]
 
     data = HeteroData()
-    data.x = torch.tensor(grid["context"]).view(-1)
+    data.context = torch.tensor(grid["context"]).view(1, -1)
     data.objective = torch.tensor(metadata["objective"])
 
-    data["bus"].x = torch.tensor(grid["nodes"]["bus"])
-    data["bus"].y = torch.tensor(solution["nodes"]["bus"])
-    data["generator"].x = torch.tensor(grid["nodes"]["generator"])
-    data["generator"].y = torch.tensor(solution["nodes"]["generator"])
-    data["load"].x = torch.tensor(grid["nodes"]["load"])
-    data["shunt"].x = torch.tensor(grid["nodes"]["shunt"])
+    data["bus"].node_features = torch.tensor(grid["nodes"]["bus"])
+    data["bus"].bus_solution = torch.tensor(solution["nodes"]["bus"])
+    data["generator"].node_features = torch.tensor(grid["nodes"]["generator"])
+    data["generator"].generator_solution = torch.tensor(solution["nodes"]["generator"])
+    data["load"].node_features = torch.tensor(grid["nodes"]["load"])
+    data["shunt"].node_features = torch.tensor(grid["nodes"]["shunt"])
 
     data["bus", "ac_line", "bus"].edge_index = tg_opf.extract_edge_index(obj, "ac_line")
-    data["bus", "ac_line", "bus"].edge_attr = torch.tensor(
+    data["bus", "ac_line", "bus"].ac_line_features = torch.tensor(
         grid["edges"]["ac_line"]["features"]
     )
     data["bus", "ac_line", "bus"].edge_label = torch.tensor(
@@ -227,7 +227,7 @@ def _raw_json_to_heterodata(filepath):
     data["bus", "transformer", "bus"].edge_index = tg_opf.extract_edge_index(
         obj, "transformer"
     )
-    data["bus", "transformer", "bus"].edge_attr = torch.tensor(
+    data["bus", "transformer", "bus"].transformer_features = torch.tensor(
         grid["edges"]["transformer"]["features"]
     )
     data["bus", "transformer", "bus"].edge_label = torch.tensor(
@@ -237,9 +237,9 @@ def _raw_json_to_heterodata(filepath):
     data["generator", "generator_link", "bus"].edge_index = tg_opf.extract_edge_index(
         obj, "generator_link"
     )
-    data[
-        "bus", "generator_link", "generator"
-    ].edge_index = tg_opf.extract_edge_index_rev(obj, "generator_link")
+    data["bus", "generator_link", "generator"].edge_index = (
+        tg_opf.extract_edge_index_rev(obj, "generator_link")
+    )
     data["load", "load_link", "bus"].edge_index = tg_opf.extract_edge_index(
         obj, "load_link"
     )
@@ -321,9 +321,8 @@ def _prepare_sample(
     edge_dim=None,
     edge_feature_schema=None,
 ):
-    data.y = _build_solution_target(data, node_target_type)
+    data = compile_named_hetero_opf_sample(data, node_target_type)
     _ensure_node_y_loc(data)
-    data.graph_attr = data.x.view(1, -1).to(torch.float32)
     data.case_name = case_name
     _ensure_non_scalar_attrs(data)
     if hasattr(data, "num_nodes_dict"):
@@ -668,7 +667,11 @@ if __name__ == "__main__":
     # Apply CLI overrides for domain loss.  Any CLI flag takes precedence over
     # whatever is stored in the input config.
     _domain_cli_overrides = {
-        "enabled": True if args.enable_domain_loss else (False if args.disable_domain_loss else None),
+        "enabled": (
+            True
+            if args.enable_domain_loss
+            else (False if args.disable_domain_loss else None)
+        ),
         "voltage_bound_weight": args.domain_loss_voltage_bound_weight,
         "voltage_bound_feature_indices": (
             list(args.domain_loss_voltage_bound_feature_indices)
@@ -712,7 +715,7 @@ if __name__ == "__main__":
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
             "node_target_type"
         ]
-    validate_voi_node_features(config, args.node_target_type)
+    validate_named_opf_variables(config, args.node_target_type)
 
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
@@ -1272,7 +1275,7 @@ if __name__ == "__main__":
     config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})[
         "node_target_type"
     ] = args.node_target_type
-    validate_voi_node_features(config, args.node_target_type)
+    validate_named_opf_variables(config, args.node_target_type)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
 
@@ -1373,9 +1376,7 @@ if __name__ == "__main__":
             info(
                 f"[DomainLoss] config (enabled={dl_enabled}): "
                 + ", ".join(
-                    f"{k}={v}"
-                    for k, v in domain_loss_config.items()
-                    if k != "enabled"
+                    f"{k}={v}" for k, v in domain_loss_config.items() if k != "enabled"
                 )
             )
         if dl_enabled and rank == 0:
@@ -1422,7 +1423,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

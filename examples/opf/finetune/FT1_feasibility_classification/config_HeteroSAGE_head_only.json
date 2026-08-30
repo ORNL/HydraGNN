@@ -63,27 +63,6 @@
             "SyncBatchNorm": false,
             "freeze_conv_layers": true
         },
-        "Variables_of_interest": {
-            "input_node_features": [
-                0,
-                1,
-                2,
-                3
-            ],
-            "output_names": [
-                "feasibility"
-            ],
-            "output_index": [
-                0
-            ],
-            "output_dim": [
-                1
-            ],
-            "type": [
-                "graph"
-            ],
-            "denormalize_output": false
-        },
         "Training": {
             "num_epoch": 50,
             "batch_size": 32,
@@ -107,5 +86,24 @@
         "plot_init_solution": false,
         "plot_hist_solution": false,
         "create_plots": false
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "node_features",
+                "level": "node",
+                "dim": 4
+            }
+        ],
+        "outputs": [
+            {
+                "name": "feasibility",
+                "level": "graph",
+                "dim": 1
+            }
+        ]
+    },
+    "Postprocessing": {
+        "denormalize_output": false
     }
 }

@@ -47,6 +47,7 @@ def _to_jsonable(obj):
         return [_to_jsonable(v) for v in obj]
     return obj
 
+
 _DEFAULT_CASE_NAMES = [
     "pglib_opf_case14_ieee",
     "pglib_opf_case30_ieee",
@@ -807,18 +808,16 @@ if __name__ == "__main__":
         )
         args.node_target_type = resolved_node_target_type
 
-    # Sync input_node_features with the actual homogeneous data feature dim.
-    # After to_homogeneous(), x is zero-padded to the max feature dim across
-    # all node types, which is typically larger than the config's original
-    # input_node_features list.
+    # PyG zero-pads heterogeneous node types to a common width during
+    # conversion. The declared named input dimension must match that width;
+    # mutating the user's schema from the first sample is intentionally banned.
     actual_x_dim = trainset[0].x.shape[1]
-    voi = config["NeuralNetwork"]["Variables_of_interest"]
-    if len(voi["input_node_features"]) != actual_x_dim:
-        info(
-            f"Updating input_node_features: config has {len(voi['input_node_features'])} "
-            f"features but homogeneous data has {actual_x_dim} (zero-padded)."
+    input_spec = config["Variables"]["inputs"][0]
+    if input_spec["dim"] != actual_x_dim:
+        raise ValueError(
+            f"Variables.inputs[0].dim={input_spec['dim']} but homogeneous OPF "
+            f"data has width {actual_x_dim} after zero-padding"
         )
-        voi["input_node_features"] = list(range(actual_x_dim))
 
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -876,7 +875,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,
