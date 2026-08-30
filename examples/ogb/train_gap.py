@@ -34,7 +34,10 @@ from hydragnn.utils.model import print_model
 from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
-from hydragnn.utils.input_config_parsing.config_utils import parse_deepspeed_config
+from hydragnn.utils.input_config_parsing.config_utils import (
+    parse_deepspeed_config,
+    sanitize_filename_component,
+)
 from hydragnn.utils.distributed import get_deepspeed_init_args
 from hydragnn.utils.distributed import nsplit
 
@@ -570,7 +573,8 @@ if __name__ == "__main__":
                 "MAE: {:.2f}".format(error_mae),
             )
         if rank == 0:
-            fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
+            filename = sanitize_filename_component(varname) + "_all.png"
+            fig.savefig(os.path.join("logs", log_name, filename))
         plt.close()
 
     if args.shmem:

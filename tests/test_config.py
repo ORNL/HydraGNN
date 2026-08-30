@@ -14,7 +14,10 @@ import os, json
 import pytest
 
 import hydragnn
-from hydragnn.utils.input_config_parsing import get_log_name_config
+from hydragnn.utils.input_config_parsing import (
+    get_log_name_config,
+    sanitize_filename_component,
+)
 
 
 def test_input_config_parsing_is_exposed_through_utils():
@@ -63,3 +66,15 @@ def test_log_name_sanitizes_named_variables():
     assert ".." not in variable_part
     assert len(variable_part.split("-", 2)[1]) <= 48
     assert not variable_part.endswith("-")
+
+
+def test_filename_component_sanitizes_configured_variable_name():
+    original = "../atomic species\\unsafe"
+    sanitized = sanitize_filename_component(original)
+
+    assert "/" not in sanitized
+    assert "\\" not in sanitized
+    assert ".." not in sanitized
+    assert sanitized != original
+    assert len(sanitized) <= 48
+    assert sanitized == sanitize_filename_component(original)

@@ -23,7 +23,10 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.model import load_existing_model
 from hydragnn.utils.datasets import SimplePickleDataset
-from hydragnn.utils.input_config_parsing import get_log_name_config
+from hydragnn.utils.input_config_parsing import (
+    get_log_name_config,
+    sanitize_filename_component,
+)
 from hydragnn.models.create import create_model_config
 
 from scipy.interpolate import griddata
@@ -174,7 +177,8 @@ if __name__ == "__main__":
         plt.title(f"{output_name}")
         plt.draw()
         plt.tight_layout()
-        plt.savefig(f"./{output_name}_Scatterplot" + ".png", dpi=400)
+        filename = sanitize_filename_component(output_name) + "_Scatterplot.png"
+        plt.savefig(filename, dpi=400)
 
         print(f"Test MAE {output_name}: ", test_MAE)
 

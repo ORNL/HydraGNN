@@ -39,6 +39,7 @@ from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
     generate_graphdata_from_smilestr,
 )
 from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
+from hydragnn.utils.input_config_parsing import sanitize_filename_component
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.utils.distributed import nsplit
 import hydragnn.utils.profiling_and_tracing.tracer as tr
@@ -482,7 +483,8 @@ if __name__ == "__main__":
                 "MAE: {:.2f}".format(error_mae),
             )
         if rank == 0:
-            fig.savefig(os.path.join("logs", log_name, varname + "_all.png"))
+            filename = sanitize_filename_component(varname) + "_all.png"
+            fig.savefig(os.path.join("logs", log_name, filename))
         plt.close()
 
     if tr.has("GPTLTracer"):
