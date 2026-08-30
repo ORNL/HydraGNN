@@ -182,7 +182,7 @@ class _HeteroBatchAdapter:
         ("HeteroPNA", 3, [1, 2, 3, 2]),
     ],
 )
-def pytest_hetero_graph_head_forward(mpnn_type, edge_dim, pna_deg):
+def test_hetero_graph_head_forward(mpnn_type, edge_dim, pna_deg):
     data = _build_simple_hetero_graph(edge_dim=edge_dim)
 
     output_heads = {
@@ -237,7 +237,7 @@ def pytest_hetero_graph_head_forward(mpnn_type, edge_dim, pna_deg):
         ("HeteroPNA", 3, [1, 2, 3, 2]),
     ],
 )
-def pytest_hetero_node_conv_head_forward(mpnn_type, edge_dim, pna_deg):
+def test_hetero_node_conv_head_forward(mpnn_type, edge_dim, pna_deg):
     data = _build_simple_hetero_graph(edge_dim=edge_dim)
 
     output_heads = {
@@ -292,7 +292,7 @@ def pytest_hetero_node_conv_head_forward(mpnn_type, edge_dim, pna_deg):
         ("HeteroPNA", 3, [1, 2, 3, 2]),
     ],
 )
-def pytest_hetero_mpnn_training_randomized_dataset(mpnn_type, edge_dim, pna_deg):
+def test_hetero_mpnn_training_randomized_dataset(mpnn_type, edge_dim, pna_deg):
     torch.manual_seed(7)
 
     dataset = _build_random_hetero_dataset(
@@ -357,11 +357,16 @@ def pytest_hetero_mpnn_training_randomized_dataset(mpnn_type, edge_dim, pna_deg)
     )
 
     nn_config = {
-        "Training": {
-            "num_epoch": 10,
-            "conv_checkpointing": False,
+        "Variables": {
+            "inputs": [{"name": "node_features", "level": "node", "dim": 4}],
+            "outputs": [{"name": "target", "level": "graph", "dim": 1}],
         },
-        "Variables_of_interest": {"output_names": ["y"]},
+        "NeuralNetwork": {
+            "Training": {
+                "num_epoch": 10,
+                "conv_checkpointing": False,
+            }
+        },
     }
 
     log_name = "hetero_mpnn_randomized"
