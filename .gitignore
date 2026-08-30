@@ -22,3 +22,6 @@ installation_DOE_supercomputers/HydraGNN-Installation-Frontier*/
 
 # OPF crash dump
 /examples/opf/core
+
+# Generated OPF model checkpoints are external experiment artifacts.
+/examples/opf/pretrained_models/**/*.pk
