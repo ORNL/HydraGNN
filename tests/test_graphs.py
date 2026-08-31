@@ -88,6 +88,7 @@ def unittest_train_model(
         }
         if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
+    tests.synchronize_dataset_paths(config, MPI.COMM_WORLD)
 
     # In the unit test runs, it is found MFC favors graph-level features over node-level features, compared with other models;
     # hence here we decrease the loss weight coefficient for graph-level head in MFC.

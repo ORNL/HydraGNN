@@ -63,6 +63,7 @@ def unittest_loss_and_activation_functions(
         }
         if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
+    tests.synchronize_dataset_paths(config, MPI.COMM_WORLD)
 
     if rank == 0:
         num_samples_tot = 500

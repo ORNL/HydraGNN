@@ -45,6 +45,23 @@ def prepared_pickle_has_attributes(path, required_names):
         return False
 
 
+def synchronize_dataset_paths(config, comm):
+    """Use rank zero's cache selection on every test rank.
+
+    Prepared unit-test pickles are generated during the MPI test run. Letting
+    every rank inspect those files independently creates a race at test
+    boundaries: one rank may accept the cache while another observes a file
+    that is not yet visible and retains the raw directory path. The ranks then
+    enter dataset loading with different configurations and cannot complete
+    its collectives.
+    """
+    selected_paths = comm.bcast(
+        config["Dataset"]["path"] if comm.Get_rank() == 0 else None,
+        root=0,
+    )
+    config["Dataset"]["path"] = selected_paths
+
+
 def ensure_deterministic_graph_data(path, number_configurations, **kwargs):
     """Reuse a compatible fixture cache or rebuild it from deterministic inputs.
 

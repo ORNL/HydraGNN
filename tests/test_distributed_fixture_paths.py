@@ -8,13 +8,30 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from .deterministic_graph_data import (
-    deterministic_graph_data,
-    ensure_deterministic_graph_data,
-    prepared_pickle_has_attributes,
-    synchronize_dataset_paths,
-)
-from .test_config import test_config
-from .test_graphs import unittest_train_model
-from .test_enthalpy import unittest_formation_enthalpy
-from .test_atomicdescriptors import test_atomicdescriptors
+
+from tests.deterministic_graph_data import synchronize_dataset_paths
+
+
+class _NonRootComm:
+    def __init__(self, root_paths):
+        self.root_paths = root_paths
+        self.broadcast_value = object()
+
+    def Get_rank(self):
+        return 1
+
+    def bcast(self, value, root):
+        self.broadcast_value = value
+        assert root == 0
+        return self.root_paths
+
+
+def test_nonroot_uses_rank_zero_fixture_paths():
+    root_paths = {"total": "serialized_dataset/unit_test_multihead.pkl"}
+    config = {"Dataset": {"path": {"total": "dataset/unit_test_multihead"}}}
+    comm = _NonRootComm(root_paths)
+
+    synchronize_dataset_paths(config, comm)
+
+    assert comm.broadcast_value is None
+    assert config["Dataset"]["path"] == root_paths

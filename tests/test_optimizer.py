@@ -57,6 +57,7 @@ def unittest_optimizers(optimizer_type, use_zero, ci_input, overwrite_data=False
         }
         if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
+    tests.synchronize_dataset_paths(config, MPI.COMM_WORLD)
 
     if rank == 0:
         num_samples_tot = 500
