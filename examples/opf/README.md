@@ -1,5 +1,44 @@
 # Optimal power flow examples
 
+This directory provides heterogeneous and homogeneous optimal-power-flow
+workflows for preprocessing, training, inference, physics-informed losses,
+fine-tuning, and distributed hyperparameter optimization.
+
+Start with the focused documentation:
+
+- [OPF workflow](../../docs/opf_workflow.md)
+- [Heterogeneous models](../../docs/heterogeneous_models.md)
+- [OPF physics losses](../../docs/opf_physics_losses.md)
+- [OPF fine-tuning and HPO](../../docs/opf_finetuning.md)
+
+The principal entry points are:
+
+| Task | Entry point |
+| --- | --- |
+| Node-level preprocessing/training | `train_opf_solution_heterogeneous.py` |
+| Graph-level preprocessing/training | `train_opf_graph_output_heterogeneous.py` |
+| Inference | `infer_opf_solution_heterogeneous.py` |
+| Transfer learning | `finetune/train_opf_finetune.py` |
+| Feasibility classification | `finetune/train_opf_ft1_classify.py` |
+| Distributed HPO | `opf_deephyper_hpo.py` |
+
+Run each script with `--help` for its complete CLI. A minimal two-stage HDF5
+workflow is:
+
+```bash
+python examples/opf/train_opf_solution_heterogeneous.py \
+  --preonly --hdf5 --case_name pglib_opf_case14_ieee --num_groups 1
+
+python examples/opf/train_opf_solution_heterogeneous.py \
+  --hdf5 --case_name pglib_opf_case14_ieee --num_groups 1
+```
+
+For distributed facility runs, use the supplied job scripts only after checking
+the allocation, paths, modules, node count, and storage location for the target
+system.
+
+## Named-data contract
+
 OPF configurations use HydraGNN's strict top-level named-variable schema. For
 example, heterogeneous bus-solution training declares:
 

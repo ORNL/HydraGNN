@@ -77,8 +77,6 @@
             "startfrom": "existing_model",
             "DomainLoss": {
                 "enabled": false,
-                "smoothness_weight": 0.001,
-                "transformer_smoothness_weight": 0.001,
                 "voltage_bound_weight": 0.01,
                 "voltage_bound_feature_indices": [
                     2,
