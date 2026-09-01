@@ -11,6 +11,7 @@
 
 import os, json
 import pytest
+from mpi4py import MPI
 
 import shutil
 

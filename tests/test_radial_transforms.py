@@ -11,6 +11,7 @@
 
 import sys, os, json
 import pytest
+from mpi4py import MPI
 
 import torch
 
