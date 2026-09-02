@@ -217,18 +217,44 @@ if [[ "$ROCM_MM" != "$EXPECTED_ROCM_MM" ]]; then
   exit 1
 fi
 
-# ---- PyTorch ROCm 7.2 index URL ----
-PYTORCH_ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm7.2"
+# ---- Official PyTorch ROCm 7.2 wheels ----
+# Keep this matrix aligned with the official PyTorch ROCm 7.2 installation
+# command. Pinning the complete trio prevents pip from resolving a CPU wheel or
+# selecting mutually incompatible torch/vision/audio releases.
+PYTORCH_ROCM_INDEX_URL="${PYTORCH_ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm7.2}"
+TORCH_VERSION="${TORCH_VERSION:-2.11.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.26.0}"
+TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.11.0}"
 subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
-pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" torch torchvision
+echo "  torch==${TORCH_VERSION}"
+echo "  torchvision==${TORCHVISION_VERSION}"
+echo "  torchaudio==${TORCHAUDIO_VERSION}"
+pip_retry --force-reinstall \
+          --index-url "${PYTORCH_ROCM_INDEX_URL}" \
+          "torch==${TORCH_VERSION}" \
+          "torchvision==${TORCHVISION_VERSION}" \
+          "torchaudio==${TORCHAUDIO_VERSION}"
 assert_numpy_1264
 
-python - <<'PY'
+python - "${TORCH_VERSION}" "${EXPECTED_ROCM_MM}" <<'PY'
+import sys
 import torch
+
+expected_torch, expected_rocm = sys.argv[1:]
 print("torch.__version__ =", torch.__version__)
 print("torch.version.hip =", torch.version.hip)
 print("torch.cuda.is_available() =", torch.cuda.is_available())  # ROCm uses torch.cuda API
 print("torch.cuda.device_count() =", torch.cuda.device_count())
+
+assert torch.__version__.split("+")[0] == expected_torch, (
+    f"PyTorch is {torch.__version__}, expected {expected_torch}+rocm{expected_rocm}"
+)
+assert f"rocm{expected_rocm}" in torch.__version__, (
+    f"PyTorch wheel {torch.__version__} is not built for ROCm {expected_rocm}"
+)
+assert torch.version.hip and torch.version.hip.startswith(expected_rocm), (
+    f"PyTorch reports HIP {torch.version.hip!r}, expected ROCm {expected_rocm}"
+)
 if torch.cuda.device_count() > 0:
     print("GPU[0] =", torch.cuda.get_device_name(0))
 PY
@@ -577,6 +603,9 @@ Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 ROCm version:        ${ROCM_MM}
 PyTorch index:       ${PYTORCH_ROCM_INDEX_URL}
+  - torch:           ${TORCH_VERSION}+rocm${EXPECTED_ROCM_MM}
+  - torchvision:     ${TORCHVISION_VERSION}+rocm${EXPECTED_ROCM_MM}
+  - torchaudio:      ${TORCHAUDIO_VERSION}+rocm${EXPECTED_ROCM_MM}
 PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_scatter fork: https://github.com/Looong01/pytorch_scatter-rocm.git @ 9799c51 (temporary)
   - pytorch_sparse fork:  https://github.com/Looong01/pytorch_sparse-rocm.git @ 2340737 (temporary)
