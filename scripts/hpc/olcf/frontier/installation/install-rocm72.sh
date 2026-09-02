@@ -231,12 +231,13 @@ echo "  torchvision==${TORCHVISION_VERSION}"
 echo "  torchaudio==${TORCHAUDIO_VERSION}"
 pip_retry --force-reinstall \
           --index-url "${PYTORCH_ROCM_INDEX_URL}" \
+          --extra-index-url "https://pypi.org/simple" \
           "torch==${TORCH_VERSION}" \
           "torchvision==${TORCHVISION_VERSION}" \
           "torchaudio==${TORCHAUDIO_VERSION}"
 assert_numpy_1264
 
-python - "${TORCH_VERSION}" "${EXPECTED_ROCM_MM}" <<'PY'
+python - "${TORCH_VERSION%%+*}" "${EXPECTED_ROCM_MM}" <<'PY'
 import sys
 import torch
 
