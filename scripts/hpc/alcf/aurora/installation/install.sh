@@ -4,7 +4,7 @@
 # Aurora approach (with ADIOS2/DDStore build-from-source):
 # - PyTorch: use "module load frameworks" (do NOT pip-install torch wheels)
 # - PyG: install torch_geometric + ALWAYS rebuild CPU-only auxiliary deps per ALCF docs:
-#        torch_scatter, torch_sparse, torch_cluster, torch_spline_conv
+#        torch_scatter, torch_sparse, torch_cluster, torch_spline_conv (+ try pyg_lib)
 # - Robust Lmod/module handling under `set -u` (nohup-safe)
 # - Build ADIOS2 from source (MPI + Python) with DataSpaces engine OFF
 # - Ensure ADIOS2 Python module import works (fix nested install path issue)
@@ -406,7 +406,7 @@ echo "TORCH_VERSION = ${TORCH_VERSION}"
 echo "LD_LIBRARY_PATH prepended with TORCH_LIB"
 
 # ---- ALWAYS rebuild optional dependencies (CPU builds) ----
-banner "ALWAYS rebuild PyG auxiliary packages (CPU-only): scatter/sparse/cluster/spline_conv"
+banner "ALWAYS rebuild PyG auxiliary packages (CPU-only): scatter/sparse/cluster/spline_conv (+ try pyg_lib)"
 
 PYG_AUX_SRCDIR="${PYG_AUX_SRCDIR:-${INSTALL_ROOT}/pyg-aux-src}"
 mkdir -p "$PYG_AUX_SRCDIR"
@@ -459,13 +459,20 @@ for lib in "${libs[@]}"; do
   rm -rf "$LIB_NAME" 2>/dev/null || true
 done
 
+# Try pyg_lib from CPU wheel index; force reinstall if available
+echo "Attempting pyg_lib install from CPU wheel index (force reinstall if available)..."
+python -m pip install --upgrade-strategy only-if-needed \
+  -f "https://data.pyg.org/whl/torch-${TORCH_VERSION}%2Bcpu.html" \
+  --force-reinstall --no-deps pyg_lib || \
+  echo "⚠️  pyg_lib install failed (continuing)."
+
 popd >/dev/null
 
 python - <<'PY'
 import torch, torch_geometric
 print("torch =", torch.__version__)
 print("torch_geometric =", torch_geometric.__version__)
-mods = ["torch_scatter","torch_sparse","torch_cluster","torch_spline_conv"]
+mods = ["torch_scatter","torch_sparse","torch_cluster","torch_spline_conv","pyg_lib"]
 for m in mods:
     try:
         __import__(m)
@@ -575,6 +582,7 @@ ADIOS2:
 PyG:
   - torch_geometric installed
   - ALWAYS rebuilt (CPU-only): torch_scatter, torch_sparse, torch_cluster, torch_spline_conv
+  - pyg_lib attempted from CPU wheel index (force reinstall if available)
 
 To activate later:
   module reset

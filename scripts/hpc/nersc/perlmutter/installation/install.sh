@@ -18,6 +18,7 @@
 #   PYTHON_VERSION=3.11
 #   EXPECTED_CUDA_MM=12.9
 #   TORCH_CUDA_TAG=cu129
+#   BUILD_PYG_LIB=0   # default 0 (skip pyg-lib). set 1 to try building from source.
 #   TORCH_CUDA_ARCH_LIST=8.0
 #   MAX_JOBS=16
 #   INSTALL_ROOT=/some/path/HydraGNN-Installation-Perlmutter
@@ -224,7 +225,7 @@ mkdir -p "$PYG_PERLMUTTER"
 cd "$PYG_PERLMUTTER"
 
 subbanner "Uninstall any existing PyG components to avoid mixing wheels/source"
-pip uninstall -y torch-sparse torch-scatter torch-cluster torch-spline-conv torch-geometric >/dev/null 2>&1 || true
+pip uninstall -y pyg-lib torch-sparse torch-scatter torch-cluster torch-spline-conv torch-geometric >/dev/null 2>&1 || true
 
 subbanner "Build/install PyG compiled deps from source (no wheels)"
 # Note: torch-scatter built for you already; torch-sparse previously failed due to old GCC.
@@ -234,6 +235,15 @@ pip_retry --no-binary :all: --no-build-isolation torch-scatter
 pip_retry --no-binary :all: --no-build-isolation torch-sparse
 pip_retry --no-binary :all: --no-build-isolation torch-cluster
 pip_retry --no-binary :all: --no-build-isolation torch-spline-conv
+
+# pyg-lib is optional; many HydraGNN workloads run without it.
+BUILD_PYG_LIB="${BUILD_PYG_LIB:-0}"
+if [[ "$BUILD_PYG_LIB" -eq 1 ]]; then
+  subbanner "Build pyg-lib from source (optional; may fail depending on toolchain)"
+  pip_retry --no-binary :all: --no-build-isolation pyg-lib || true
+else
+  subbanner "Skipping pyg-lib (set BUILD_PYG_LIB=1 to attempt source build)"
+fi
 
 subbanner "Install torch-geometric (pure python wrapper package)"
 pip_retry torch-geometric
@@ -250,7 +260,7 @@ import torch_geometric
 print("torch:", torch.__version__)
 print("pyg:", torch_geometric.__version__)
 
-mods = ["torch_sparse", "torch_scatter", "torch_cluster", "torch_spline_conv"]
+mods = ["pyg_lib", "torch_sparse", "torch_scatter", "torch_cluster", "torch_spline_conv"]
 for m in mods:
     try:
         __import__(m)
@@ -385,6 +395,7 @@ PyTorch:
 
 PyTorch-Geometric:
   Built from source: torch-scatter, torch-sparse, torch-cluster, torch-spline-conv
+  pyg-lib:           $( [[ "${BUILD_PYG_LIB}" -eq 1 ]] && echo "attempted from source" || echo "skipped" )
 
 MPI4PY:              $MPI4PY_PERLMUTTER
 ADIOS2:              $ADIOS2_PERLMUTTER
