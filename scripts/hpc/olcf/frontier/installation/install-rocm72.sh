@@ -604,9 +604,9 @@ Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 ROCm version:        ${ROCM_MM}
 PyTorch index:       ${PYTORCH_ROCM_INDEX_URL}
-  - torch:           ${TORCH_VERSION}+rocm${EXPECTED_ROCM_MM}
-  - torchvision:     ${TORCHVISION_VERSION}+rocm${EXPECTED_ROCM_MM}
-  - torchaudio:      ${TORCHAUDIO_VERSION}+rocm${EXPECTED_ROCM_MM}
+  - torch:           ${TORCH_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
+  - torchvision:     ${TORCHVISION_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
+  - torchaudio:      ${TORCHAUDIO_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
 PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_scatter fork: https://github.com/Looong01/pytorch_scatter-rocm.git @ 9799c51 (temporary)
   - pytorch_sparse fork:  https://github.com/Looong01/pytorch_sparse-rocm.git @ 2340737 (temporary)
