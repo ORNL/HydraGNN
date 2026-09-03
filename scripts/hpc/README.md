@@ -37,7 +37,7 @@ scripts/hpc/nersc/perlmutter/installation/install.sh
 scripts/hpc/olcf/frontier/installation/install-rocm72.sh
 ```
 
-The generic installation currently selects NumPy 2.4.6, PyTorch 2.13.0,
+The generic `install_dependencies.sh` installation selects NumPy 2.4.6, PyTorch 2.13.0,
 torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
 or 2.14 so facility installers can retain tested accelerator wheels. Facility
 installers keep shared Python dependencies aligned but remain

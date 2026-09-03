@@ -35,7 +35,7 @@ PyTorch and PyTorch Geometric:
 > through 3.14**. Facility installation scripts default to Python 3.11 unless
 > documented otherwise for that system.
 
-The generic dependency baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
+The generic `install_dependencies.sh` baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
 torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
 or 2.14 so facility installers can retain their tested accelerator wheels. The
 requirements files are the authoritative source for the complete version set.
