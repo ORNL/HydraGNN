@@ -395,8 +395,7 @@ PY
 # PyTorch Geometric (base) + ALWAYS rebuild auxiliary deps (CPU-only)
 # ============================================================
 banner "Install PyTorch Geometric base (torch_geometric)"
-pip_retry torch_geometric
-
+pip_retry torch_geometric==2.8.0
 # ---- ALCF optional-deps prerequisites (TORCH_LIB + TORCH_VERSION) ----
 TORCH_LIB="$(python -c "import torch; print(torch.__file__)" | sed 's/__init__.py/lib/')"
 TORCH_VERSION="$(python -c "import torch; print(torch.__version__)" | sed 's/^\([0-9.]*\).*/\1/')"
@@ -485,22 +484,22 @@ PY
 # Additional python deps (NO torch install here!)
 # ============================================================
 banner "Install HydraGNN dependencies (do NOT install torch here)"
-pip_retry scipy pyyaml requests tqdm filelock psutil
+pip_retry "scipy==1.17.1" pyyaml requests "tqdm==4.70.0" filelock "psutil==7.1.0"
 pip_retry networkx jinja2
-pip_retry tensorboard scikit-learn pytest
-pip_retry ase h5py lmdb
+pip_retry "tensorboard==2.20.0" "scikit-learn==1.7.2" "pytest==8.4.2"
+pip_retry "ase==3.26.0" "h5py==3.16.0" lmdb
 
 # Keep numpy pinned and avoid it being bumped by scientific packages
 pip_retry "numpy==2.4.6"
 
-# Keep NumPy aligned with HydraGNN requirements after installing mendeleev
-pip_retry "mendeleev<1.1.0" || true
+# Keep mendeleev and NumPy aligned with HydraGNN requirements.
+pip_retry "mendeleev==1.2.0"
 
-pip_retry rdkit jarvis-tools pymatgen || true
+pip_retry "rdkit==2026.3.5" jarvis-tools pymatgen || true
 pip_retry igraph || true
 
-pip_retry e3nn openequivariance
-pip_retry vesin
+pip_retry e3nn==0.5.1 openequivariance
+pip_retry "vesin==0.4.2"
 pip_retry Cython
 pip_retry setuptools wheel
 

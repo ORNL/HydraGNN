@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env.sh
+# HydraGNN installation for Frontier with ROCm 7.1
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
 # Updated to ROCm 7.1 (module rocm/7.1.1) and PyTorch wheels from https://download.pytorch.org/whl/rocm7.1
 
@@ -127,24 +127,24 @@ pip_retry sympy==1.14.0
 pip_retry filelock
 pip_retry networkx
 pip_retry jinja2
-pip_retry tqdm==4.67.1
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
 pip_retry scipy==1.17.1
 pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 #pip_retry sqlite
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -210,6 +210,11 @@ if [[ ! -d pytorch_geometric/.git ]]; then
   git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+if ! git rev-parse -q --verify "refs/tags/2.8.0" >/dev/null; then
+  git fetch --tags --force
+fi
+git checkout 2.8.0
+git submodule update --init --recursive
 rm -rf build
 pip_retry . --verbose
 assert_numpy_pinned
@@ -281,7 +286,7 @@ assert_numpy_pinned
 popd >/dev/null
 
 subbanner "Install e3nn"
-pip_retry e3nn --verbose
+pip_retry e3nn==0.5.1 --verbose
 assert_numpy_pinned
 
 # NOTE: unload ROCm for mpi4py build

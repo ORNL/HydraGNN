@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env_rocm72.sh
+# HydraGNN installation for Frontier with ROCm 7.2
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
 # Updated to ROCm 7.2 (module rocm/7.2.0) and PyTorch wheels from https://download.pytorch.org/whl/rocm7.2
 #
@@ -165,24 +165,24 @@ pip_retry sympy==1.14.0
 pip_retry filelock
 pip_retry networkx
 pip_retry jinja2
-pip_retry tqdm==4.67.1
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
 pip_retry scipy==1.17.1
 pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 #pip_retry sqlite
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -219,22 +219,19 @@ fi
 
 # ---- Official PyTorch ROCm 7.2 wheels ----
 # Keep this matrix aligned with the official PyTorch ROCm 7.2 installation
-# command. Pinning the complete trio prevents pip from resolving a CPU wheel or
-# selecting mutually incompatible torch/vision/audio releases.
+# command. Pinning both packages prevents pip from resolving a CPU wheel or
+# selecting mutually incompatible torch/vision releases.
 PYTORCH_ROCM_INDEX_URL="${PYTORCH_ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm7.2}"
-TORCH_VERSION="${TORCH_VERSION:-2.11.0}"
-TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.26.0}"
-TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.11.0}"
+TORCH_VERSION="${TORCH_VERSION:-2.14.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.29.0}"
 subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
 echo "  torch==${TORCH_VERSION}"
 echo "  torchvision==${TORCHVISION_VERSION}"
-echo "  torchaudio==${TORCHAUDIO_VERSION}"
 pip_retry --force-reinstall \
           --index-url "${PYTORCH_ROCM_INDEX_URL}" \
           --extra-index-url "https://pypi.org/simple" \
           "torch==${TORCH_VERSION}" \
-          "torchvision==${TORCHVISION_VERSION}" \
-          "torchaudio==${TORCHAUDIO_VERSION}"
+          "torchvision==${TORCHVISION_VERSION}"
 assert_numpy_pinned
 
 python - "${TORCH_VERSION%%+*}" "${EXPECTED_ROCM_MM}" <<'PY'
@@ -279,6 +276,11 @@ if [[ ! -d pytorch_geometric/.git ]]; then
   git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+if ! git rev-parse -q --verify "refs/tags/2.8.0" >/dev/null; then
+  git fetch --tags --force
+fi
+git checkout 2.8.0
+git submodule update --init --recursive
 rm -rf build
 pip_retry . --verbose
 assert_numpy_pinned
@@ -350,7 +352,7 @@ assert_numpy_pinned
 popd >/dev/null
 
 subbanner "Install e3nn"
-pip_retry e3nn --verbose
+pip_retry e3nn==0.5.1 --verbose
 assert_numpy_pinned
 
 # NOTE: unload ROCm for mpi4py build
@@ -606,7 +608,6 @@ ROCm version:        ${ROCM_MM}
 PyTorch index:       ${PYTORCH_ROCM_INDEX_URL}
   - torch:           ${TORCH_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
   - torchvision:     ${TORCHVISION_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
-  - torchaudio:      ${TORCHAUDIO_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
 PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_scatter fork: https://github.com/Looong01/pytorch_scatter-rocm.git @ 9799c51 (temporary)
   - pytorch_sparse fork:  https://github.com/Looong01/pytorch_sparse-rocm.git @ 2340737 (temporary)
