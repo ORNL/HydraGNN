@@ -42,17 +42,17 @@ requirements files are the authoritative source for the complete version set.
 
 **Recommended approach - standard installation:**
 ```bash
-# Install all core dependencies (base + PyTorch + PyTorch Geometric)
-pip install -r requirements.txt
-
-# Or use the installation script
+# Install core, PyTorch, PyTorch Geometric, and model-specific dependencies
 ./install_dependencies.sh
 ```
 
 **Alternative manual approach:**
 ```bash
-# Install manually with consistent settings:
-pip install --no-build-isolation -v -r requirements.txt
+# Install the modular requirements in dependency order
+pip install --no-build-isolation -v -r requirements-base.txt
+pip install --no-build-isolation -v -r requirements-torch.txt
+pip install --no-build-isolation -v -r requirements-pyg.txt
+pip install -v -r requirements-specific-models.txt
 ```
 
 **Modular installation (choose what you need):**
