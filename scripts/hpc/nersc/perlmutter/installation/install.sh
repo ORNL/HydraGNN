@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env_perlmutter.sh
+# HydraGNN installation for Perlmutter
 # Complete automated setup for HydraGNN environment and dependencies on NERSC Perlmutter (CUDA/A100).
 #
 # CORRECTIONS INCLUDED:
@@ -10,8 +10,8 @@
 #     -> load gcc-native/13.2 and force CC/CXX to gcc/g++
 #
 # Usage:
-#   chmod +x setup_env_perlmutter.sh
-#   ./setup_env_perlmutter.sh
+#   chmod +x scripts/hpc/nersc/perlmutter/installation/install.sh
+#   scripts/hpc/nersc/perlmutter/installation/install.sh
 #
 # Optional env vars:
 #   VENV_PATH=/path/to/env
@@ -166,23 +166,23 @@ pip_retry sympy==1.14.0
 pip_retry filelock
 pip_retry networkx
 pip_retry jinja2
-pip_retry tqdm==4.67.1
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
 pip_retry scipy==1.17.1
 pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -246,11 +246,11 @@ else
 fi
 
 subbanner "Install torch-geometric (pure python wrapper package)"
-pip_retry torch-geometric
+pip_retry torch-geometric==2.8.0
 assert_numpy_pinned
 
 subbanner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
+pip_retry e3nn==0.5.1 openequivariance --verbose
 assert_numpy_pinned
 
 subbanner "PyG import sanity check"

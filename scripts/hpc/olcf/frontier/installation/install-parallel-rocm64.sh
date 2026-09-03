@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env.sh
+# HydraGNN parallel installation for Frontier with ROCm 6.4
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
 
 set -Eeuo pipefail
@@ -150,37 +150,37 @@ assert_numpy_pinned
 banner "Install Core Python Packages"
 
 pip_retry ninja
-pip_retry astunparse 
-pip_retry expecttest 
-pip_retry hypothesis 
+pip_retry astunparse
+pip_retry expecttest
+pip_retry hypothesis
 pip_retry numpy==2.4.6
-pip_retry psutil==7.1.0 
-pip_retry pyyaml 
-pip_retry requests 
-pip_retry setuptools 
-pip_retry typing-extensions 
-pip_retry sympy==1.14.0 
-pip_retry filelock 
-pip_retry networkx 
-pip_retry jinja2 
-pip_retry tqdm==4.67.1
+pip_retry psutil==7.1.0
+pip_retry pyyaml
+pip_retry requests
+pip_retry setuptools
+pip_retry typing-extensions
+pip_retry sympy==1.14.0
+pip_retry filelock
+pip_retry networkx
+pip_retry jinja2
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
 pip_retry scipy==1.17.1
-pip_retry pyparsing 
+pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 #pip_retry sqlite
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0 
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -253,6 +253,7 @@ if [[ ! -d pytorch_geometric/.git ]]; then
   git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+git checkout 2.8.0
 rm -rf build
 pip_retry . --verbose
 assert_numpy_pinned
@@ -348,7 +349,7 @@ wait
 # e3nn and openequivariance
 # ============================================================
 banner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
+pip_retry e3nn==0.5.1 openequivariance --verbose
 assert_numpy_pinned
 
 # ============================================================
