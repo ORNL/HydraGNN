@@ -115,7 +115,7 @@ fi
 # ============================================================
 # pip helpers + NumPy pin
 # ============================================================
-banner "pip Helpers and NumPy Pin (1.26.4)"
+banner "pip Helpers and NumPy Pin (2.4.6)"
 
 PIP_FLAGS=(--upgrade-strategy only-if-needed)
 
@@ -131,10 +131,10 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
-expected="1.26.4"
+expected="2.4.6"
 assert np.__version__==expected, f"NumPy is {np.__version__}, expected {expected}"
 PY
 }
@@ -142,9 +142,9 @@ PY
 subbanner "Upgrade pip/setuptools/wheel"
 pip_retry --disable-pip-version-check -U pip setuptools wheel
 
-subbanner "Install and pin numpy==1.26.4"
-pip_retry "numpy==1.26.4"
-assert_numpy_1264
+subbanner "Install and pin numpy==2.4.6"
+pip_retry "numpy==2.4.6"
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python deps
@@ -156,7 +156,7 @@ pip_retry cmake
 pip_retry astunparse
 pip_retry expecttest
 pip_retry hypothesis
-pip_retry numpy==1.26.4
+pip_retry numpy==2.4.6
 pip_retry psutil==7.1.0
 pip_retry pyyaml
 pip_retry requests
@@ -168,7 +168,7 @@ pip_retry networkx
 pip_retry jinja2
 pip_retry tqdm==4.67.1
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1
+pip_retry scipy==1.17.1
 pip_retry pyparsing
 pip_retry build
 pip_retry Cython
@@ -198,7 +198,7 @@ PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
 
 subbanner "Install PyTorch from ${PYTORCH_INDEX_URL}"
 pip_retry --index-url "${PYTORCH_INDEX_URL}" torch torchvision
-assert_numpy_1264
+assert_numpy_pinned
 
 python - <<'PY'
 import torch
@@ -247,11 +247,11 @@ fi
 
 subbanner "Install torch-geometric (pure python wrapper package)"
 pip_retry torch-geometric
-assert_numpy_1264
+assert_numpy_pinned
 
 subbanner "Install e3nn and openequivariance"
 pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 subbanner "PyG import sanity check"
 python - <<'PY'
@@ -349,7 +349,7 @@ cd "$DEEPHYPER_PERLMUTTER"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry -e . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL

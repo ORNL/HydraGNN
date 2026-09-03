@@ -145,14 +145,14 @@ PY
 echo "VENV_SITEPKG = $VENV_SITEPKG"
 
 # ============================================================
-# pip helpers + numpy pin (force venv numpy=1.26.4)
+# pip helpers + NumPy pin (force venv NumPy 2.4.6)
 # ============================================================
 banner "pip bootstrap"
 python -m pip install -U pip setuptools wheel
 
 CONSTRAINTS_FILE="${INSTALL_ROOT}/pip-constraints.txt"
 cat > "$CONSTRAINTS_FILE" <<'EOF'
-numpy==1.26.4
+numpy==2.4.6
 EOF
 export PIP_CONSTRAINT="$CONSTRAINTS_FILE"
 echo "PIP_CONSTRAINT = $PIP_CONSTRAINT"
@@ -243,8 +243,8 @@ pip_retry() {
   return 1
 }
 
-banner "Pin NumPy to 1.26.4 inside venv (shadow system-site numpy)"
-pip_retry "numpy==1.26.4"
+banner "Pin NumPy to 2.4.6 inside venv (shadow system-site NumPy)"
+pip_retry "numpy==2.4.6"
 python - <<'PY'
 import numpy as np
 print("numpy.__version__ =", np.__version__)
@@ -491,9 +491,9 @@ pip_retry tensorboard scikit-learn pytest
 pip_retry ase h5py lmdb
 
 # Keep numpy pinned and avoid it being bumped by scientific packages
-pip_retry "numpy==1.26.4"
+pip_retry "numpy==2.4.6"
 
-# Avoid numpy>=2 bump pressure from mendeleev in this environment
+# Keep NumPy aligned with HydraGNN requirements after installing mendeleev
 pip_retry "mendeleev<1.1.0" || true
 
 pip_retry rdkit jarvis-tools pymatgen || true
@@ -504,8 +504,8 @@ pip_retry vesin
 pip_retry Cython
 pip_retry setuptools wheel
 
-banner "Re-check NumPy pin (must be 1.26.4 in venv)"
-pip_retry "numpy==1.26.4"
+banner "Re-check NumPy pin (must be 2.4.6 in venv)"
+pip_retry "numpy==2.4.6"
 python - <<'PY'
 import numpy as np
 print("numpy.__version__ =", np.__version__)
@@ -572,7 +572,7 @@ cat <<EOF
 Base install:        $INSTALL_ROOT
 Venv (system-site):  $VENV_PATH
 Venv site-packages:  $VENV_SITEPKG
-Constraints:         $CONSTRAINTS_FILE (numpy==1.26.4)
+Constraints:         $CONSTRAINTS_FILE (numpy==2.4.6)
 
 ADIOS2:
   - source:   $ADIOS2_SRC @ $ADIOS2_VERSION
