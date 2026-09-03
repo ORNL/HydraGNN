@@ -5,6 +5,28 @@
 
 set -e  # Exit on any error
 
+INSTALL_DEV=0
+INSTALL_OPTIONAL=0
+for group in "$@"; do
+    case "${group}" in
+        all)
+            INSTALL_DEV=1
+            INSTALL_OPTIONAL=1
+            ;;
+        dev)
+            INSTALL_DEV=1
+            ;;
+        optional)
+            INSTALL_OPTIONAL=1
+            ;;
+        *)
+            echo "Unknown dependency group: ${group}" >&2
+            echo "Usage: $0 [all|dev|optional] [...]" >&2
+            exit 2
+            ;;
+    esac
+done
+
 PYTHON_MINOR_VERSION=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 case "${PYTHON_MINOR_VERSION}" in
     3.11|3.12|3.13|3.14)
@@ -30,7 +52,7 @@ echo "Installing PyTorch Geometric dependencies..."
 python -m pip install --no-build-isolation -v -r requirements-pyg.txt
 
 # Install development dependencies (optional)
-if [ "$1" == "dev" ]; then
+if [ "${INSTALL_DEV}" -eq 1 ]; then
     echo "Installing development dependencies..."
     python -m pip install --no-build-isolation -v -r requirements-dev.txt
 fi
@@ -42,7 +64,7 @@ echo "Installing model-specific backbone dependencies..."
 python -m pip install -v -r requirements-specific-models.txt
 
 # Install optional dependencies (optional)
-if [ "$1" == "all" ] || [ "$2" == "optional" ]; then
+if [ "${INSTALL_OPTIONAL}" -eq 1 ]; then
     echo "Installing optional dependencies..."
     python -m pip install --no-build-isolation -v -r requirements-optional.txt
 fi
