@@ -107,7 +107,7 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
 expected="2.4.6"
@@ -120,7 +120,7 @@ pip_retry --disable-pip-version-check -U pip setuptools wheel
 
 subbanner "Install and pin numpy==2.4.6"
 pip_retry "numpy==2.4.6"
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python dependencies
@@ -168,7 +168,7 @@ pip_retry vesin==0.4.2
 banner "Install CPU-only PyTorch"
 PYTORCH_CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"
 pip_retry --index-url "${PYTORCH_CPU_INDEX_URL}" torch torchvision
-assert_numpy_1264
+assert_numpy_pinned
 
 python - <<'PY'
 import torch
@@ -193,7 +193,7 @@ fi
 pushd pytorch_geometric >/dev/null
 rm -rf build
 pip_retry . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_scatter (official repo & stable ref for CPU) ---
@@ -208,7 +208,7 @@ git submodule update --init --recursive
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_sparse (official pinned) ---
@@ -222,7 +222,7 @@ git checkout 0.6.18-8-gcdbf561
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_cluster (official pinned) ---
@@ -236,7 +236,7 @@ git checkout 1.6.3-11-g4126a52
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_spline_conv (official pinned) ---
@@ -250,12 +250,12 @@ git checkout 1.2.2-9-ga6d1020
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 subbanner "Install e3nn and openequivariance"
 pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # mpi4py
@@ -333,7 +333,7 @@ cd "$DEEPHYPER_ANDES"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry -e . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL

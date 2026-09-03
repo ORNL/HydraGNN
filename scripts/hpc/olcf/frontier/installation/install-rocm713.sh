@@ -150,7 +150,7 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
 expected="2.4.6"
@@ -163,7 +163,7 @@ pip_retry --disable-pip-version-check -U pip setuptools wheel
 
 subbanner "Install and pin numpy==2.4.6"
 pip_retry "numpy==2.4.6"
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python dependencies
@@ -258,7 +258,7 @@ pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" \
           "torch==${TORCH_VERSION}" \
           "torchvision==${TORCHVISION_VERSION}" \
           "torchaudio==${TORCHAUDIO_VERSION}"
-assert_numpy_1264
+assert_numpy_pinned
 
 python - <<'PY'
 import torch
@@ -291,7 +291,7 @@ fi
 pushd pytorch_geometric >/dev/null
 rm -rf build
 pip_retry . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_scatter (ROCm fork pinned) ---
@@ -309,7 +309,7 @@ git submodule update --init --recursive
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
@@ -327,7 +327,7 @@ git checkout 2340737
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
@@ -342,7 +342,7 @@ git checkout 1.6.3-11-g4126a52
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_spline_conv (official pinned) ---
@@ -356,12 +356,12 @@ git checkout 1.2.2-9-ga6d1020
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 subbanner "Install e3nn"
 pip_retry e3nn --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # NOTE: unload ROCm for mpi4py build
 module unload craype-accel-amd-gfx90a
@@ -444,7 +444,7 @@ cd "$DEEPHYPER_FRONTIER"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL
@@ -525,7 +525,7 @@ else
     subbanner "vLLM ROCm requirements file not found; installing minimal build tooling"
     pip_retry cmake ninja packaging pybind11 setuptools_scm setuptools wheel amdsmi
   fi
-  assert_numpy_1264
+  assert_numpy_pinned
 
   subbanner "Building vLLM for gfx90a (ROCm 7.13.0)"
   cd "$VLLM_SRC_DIR"
@@ -546,7 +546,7 @@ import vllm
 print("vllm.__version__ =", vllm.__version__)
 PY
 
-  assert_numpy_1264
+  assert_numpy_pinned
 
   # Apply flashinfer ROCm patch (no libcudart; use libamdhip64 fallback).
   # vLLM's own cuda_wrapper.py already handles this, but flashinfer/comm/cuda_ipc.py

@@ -131,7 +131,7 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
 expected="2.4.6"
@@ -144,7 +144,7 @@ pip_retry --disable-pip-version-check -U pip setuptools wheel
 
 subbanner "Install and pin numpy==2.4.6"
 pip_retry "numpy==2.4.6"
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python deps
@@ -198,7 +198,7 @@ PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
 
 subbanner "Install PyTorch from ${PYTORCH_INDEX_URL}"
 pip_retry --index-url "${PYTORCH_INDEX_URL}" torch torchvision
-assert_numpy_1264
+assert_numpy_pinned
 
 python - <<'PY'
 import torch
@@ -247,11 +247,11 @@ fi
 
 subbanner "Install torch-geometric (pure python wrapper package)"
 pip_retry torch-geometric
-assert_numpy_1264
+assert_numpy_pinned
 
 subbanner "Install e3nn and openequivariance"
 pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 subbanner "PyG import sanity check"
 python - <<'PY'
@@ -349,7 +349,7 @@ cd "$DEEPHYPER_PERLMUTTER"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry -e . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL
