@@ -46,9 +46,10 @@ HydraGNN uses a modular requirements system for flexible and reproducible instal
 > through 3.14**. Facility installation scripts default to Python 3.11 unless
 > documented otherwise for that system.
 
-The generic dependency baseline currently uses NumPy 2.4.6, PyTorch 2.14.0,
-torchvision 0.29.0, and PyTorch Geometric 2.8.0. Refer to the modular
-requirements files for the complete authoritative version set.
+The generic dependency baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
+torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
+or 2.14 so facility installers can retain their tested accelerator wheels.
+Refer to the modular requirements files for the authoritative version set.
 
 #### Recommended: Automated Installation
 ```bash
@@ -147,7 +148,7 @@ Tested installation scripts are organized by facility and system under
 
 - **Frontier** (AMD, ROCm 6.4, 7.1, 7.2, and 7.13)
 - **Aurora** (Intel XPU)
-- **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.14 by default)
+- **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.13 by default)
 - **Andes** (CPU)
 
 Use the facility installer instead of `requirements-torch.txt` when preparing
