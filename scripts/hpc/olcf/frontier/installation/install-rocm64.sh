@@ -201,7 +201,11 @@ if [[ ! -d pytorch_geometric/.git ]]; then
   git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+if ! git rev-parse -q --verify "refs/tags/2.8.0" >/dev/null; then
+  git fetch --tags --force
+fi
 git checkout 2.8.0
+git submodule update --init --recursive
 rm -rf build
 pip_retry . --verbose
 assert_numpy_pinned
