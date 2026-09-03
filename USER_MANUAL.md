@@ -148,7 +148,7 @@ Tested installation scripts are organized by facility and system under
 
 - **Frontier** (AMD, ROCm 6.4, 7.1, 7.2, and 7.13)
 - **Aurora** (Intel XPU)
-- **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.13 by default)
+- **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.14 by default)
 - **Andes** (CPU)
 
 Use the facility installer instead of `requirements-torch.txt` when preparing

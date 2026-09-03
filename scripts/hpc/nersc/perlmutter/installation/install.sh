@@ -18,8 +18,8 @@
 #   PYTHON_VERSION=3.11
 #   EXPECTED_CUDA_MM=13.0
 #   TORCH_CUDA_TAG=cu130
-#   TORCH_VERSION=2.13.0
-#   TORCHVISION_VERSION=0.28.0
+#   TORCH_VERSION=2.14.0
+#   TORCHVISION_VERSION=0.29.0
 #   BUILD_PYG_LIB=0   # default 0 (skip pyg-lib). set 1 to try building from source.
 #   TORCH_CUDA_ARCH_LIST=8.0
 #   MAX_JOBS=16
@@ -197,8 +197,8 @@ banner "Install CUDA PyTorch (Before PyG)"
 # Match cudatoolkit/13.0 => cu130 wheels. Pin the package versions so the
 # platform installer remains consistent with requirements-torch.txt.
 TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu130}"
-TORCH_VERSION="${TORCH_VERSION:-2.13.0}"
-TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.28.0}"
+TORCH_VERSION="${TORCH_VERSION:-2.14.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.29.0}"
 PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
 
 subbanner "Install PyTorch from ${PYTORCH_INDEX_URL}"

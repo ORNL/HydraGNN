@@ -21,7 +21,7 @@ environment-variable overrides near the top of the file.
 | System | Script | Accelerator dependency selection |
 | --- | --- | --- |
 | Aurora | `alcf/aurora/installation/install.sh` | PyTorch/XPU stack supplied by the ALCF `frameworks` module |
-| Perlmutter | `nersc/perlmutter/installation/install.sh` | CUDA 13.0 (`cu130`), PyTorch 2.13.0, torchvision 0.28.0 |
+| Perlmutter | `nersc/perlmutter/installation/install.sh` | CUDA 13.0 (`cu130`), PyTorch 2.14.0, torchvision 0.29.0 |
 | Andes | `olcf/andes/installation/install.sh` | CPU PyTorch wheel |
 | Andes (parallel) | `olcf/andes/installation/install-parallel.sh` | CPU PyTorch wheel with parallel source builds |
 | Frontier ROCm 6.4 | `olcf/frontier/installation/install-rocm64.sh` | PyTorch wheels from the ROCm 6.4 index |
