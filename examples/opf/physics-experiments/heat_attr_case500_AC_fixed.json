@@ -1,0 +1,95 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "HeteroHEAT",
+            "hidden_dim": 64,
+            "num_conv_layers": 4,
+            "pe_dim": 0,
+            "max_neighbours": 100,
+            "hetero_attention_heads": 4,
+            "edge_dim": {
+                "ac_line": 9,
+                "transformer": 11
+            },
+            "node_input_dims": {
+                "bus": 4,
+                "generator": 11,
+                "load": 2,
+                "shunt": 2
+            },
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        32,
+                        16
+                    ],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [
+                1.0
+            ],
+            "hetero_pooling_mode": "sum",
+            "node_target_type": "bus",
+            "hetero_edge_type_emb_dim": 16,
+            "hetero_edge_attr_emb_dim": 16
+        },
+        "Training": {
+            "num_epoch": 50,
+            "batch_size": 32,
+            "patience": 10,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 1,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "DomainLoss": {
+                "enabled": true,
+                "mode": "static",
+                "voltage_bound_weight": 1.0,
+                "angle_diff_weight": 1.0,
+                "line_flow_weight": 0.0,
+                "ac_line_flow_weight": 1.0,
+                "voltage_bound_feature_indices": [
+                    2,
+                    3
+                ],
+                "voltage_output_index": 1,
+                "va_output_index": 0,
+                "include_transformer_ac_flow": true
+            },
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.001
+            }
+        }
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "node_features",
+                "level": "node",
+                "dim": 4
+            }
+        ],
+        "outputs": [
+            {
+                "name": "bus_solution",
+                "level": "node",
+                "dim": 2
+            }
+        ]
+    },
+    "Postprocessing": {
+        "denormalize_output": false
+    }
+}

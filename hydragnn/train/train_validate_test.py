@@ -80,13 +80,26 @@ def move_batch_to_device(data, param_dtype):
     device = get_device()
 
     if isinstance(data, torch.Tensor):
-        data = data.to(dtype=param_dtype)
+        return data.to(device=device, dtype=param_dtype)
     else:
-        for key, value in data.items():
-            if isinstance(value, torch.Tensor) and torch.is_floating_point(value):
-                data[key] = value.to(dtype=param_dtype)
+        data = data.to(device)
+        if hasattr(data, "stores"):
+            for store in data.stores:
+                for key, value in store.items():
+                    if isinstance(value, torch.Tensor):
+                        value = value.to(device=device)
+                        if torch.is_floating_point(value):
+                            value = value.to(dtype=param_dtype)
+                        store[key] = value
+        else:
+            for key, value in data.items():
+                if isinstance(value, torch.Tensor):
+                    value = value.to(device=device)
+                    if torch.is_floating_point(value):
+                        value = value.to(dtype=param_dtype)
+                    data[key] = value
 
-    return data.to(device)
+    return data
 
 
 def get_autocast_and_scaler(precision):
@@ -339,6 +352,8 @@ def train_validate_test(
 
     timer = Timer("train_validate_test")
     timer.start()
+    train_validate_wall_start = time.time()
+    epoch_wall_times = []
 
     epoch_start = config["Training"].get("epoch_start", 0)
     for epoch in range(epoch_start, num_epoch):
@@ -358,6 +373,7 @@ def train_validate_test(
         with profiler as prof:
             tr.enable()
             tr.start("train")
+            os.environ["HYDRAGNN_PHASE"] = "train"
             train_loss, train_taskserr = train(
                 train_loader,
                 model,
@@ -391,6 +407,7 @@ def train_validate_test(
         except TypeError:
             optimizer.zero_grad()
 
+        os.environ["HYDRAGNN_PHASE"] = "val"
         val_loss, val_taskserr = validate(
             val_loader,
             model,
@@ -400,6 +417,7 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
+        os.environ["HYDRAGNN_PHASE"] = "test"
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
             model,
@@ -434,6 +452,12 @@ def train_validate_test(
         )
         print_distributed(
             verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
+        )
+        epoch_wall_seconds = time.time() - t0
+        epoch_wall_times.append(epoch_wall_seconds)
+        print_distributed(
+            verbosity,
+            f"EpochTime epoch={epoch:02d} seconds={epoch_wall_seconds:.6f}",
         )
 
         total_loss_train[epoch] = train_loss
@@ -480,6 +504,18 @@ def train_validate_test(
                 break
 
     timer.stop()
+    total_wall_seconds = time.time() - train_validate_wall_start
+    if epoch_wall_times:
+        avg_epoch_seconds = sum(epoch_wall_times) / len(epoch_wall_times)
+    else:
+        avg_epoch_seconds = 0.0
+    print_distributed(
+        verbosity,
+        "TrainingTime "
+        f"total_seconds={total_wall_seconds:.6f} "
+        f"epochs={len(epoch_wall_times)} "
+        f"avg_epoch_seconds={avg_epoch_seconds:.6f}",
+    )
 
     if create_plots:
         # reduce loss statistics across all processes

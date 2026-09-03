@@ -143,6 +143,7 @@ def unittest_train_model_graphattr(
         }
         if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
+    tests.synchronize_dataset_paths(config, MPI.COMM_WORLD)
 
     # Opt in to the fixture-owned, split-wide normalized edge lengths. The
     # named declaration, rather than attribute presence alone, makes them

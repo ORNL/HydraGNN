@@ -250,6 +250,10 @@ and propagated alongside the globally attended invariant representation.
 - [Cost-aware graph batching](docs/cost_aware_batching.md)
 - [Reusable dataset downloads](docs/dataset_downloads.md)
 - [Materials preprocessing](docs/materials_preprocessing.md)
+- [Heterogeneous graph models](docs/heterogeneous_models.md)
+- [OPF data and training workflow](docs/opf_workflow.md)
+- [OPF physics-informed losses](docs/opf_physics_losses.md)
+- [OPF fine-tuning and HPO](docs/opf_finetuning.md)
 - [HPC facility assets](scripts/hpc/README.md)
 
   - top-level `["Variables"]`

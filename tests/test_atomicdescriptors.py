@@ -10,19 +10,17 @@
 ##############################################################################
 
 import os
-import pytest
-
 import subprocess
+import sys
+
+import pytest
 
 
 @pytest.mark.mpi_skip()
-def test_atomicdescriptors():
+def test_atomicdescriptors(tmp_path):
     file_path = os.path.join(
         os.path.dirname(__file__),
         "..",
         "hydragnn/utils/descriptors_and_embeddings/atomicdescriptors.py",
     )
-    return_code = subprocess.call(["python", file_path])
-
-    # Check the file ran without error.
-    assert return_code == 0
+    subprocess.run([sys.executable, file_path], cwd=tmp_path, check=True)

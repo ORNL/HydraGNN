@@ -207,10 +207,12 @@ cd "$PYG_FRONTIER"
 
 subbanner "pytorch_geometric (official)"
 if [[ ! -d pytorch_geometric/.git ]]; then
-  git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
+  git clone --recursive https://github.com/pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+git checkout 2.6.1
 rm -rf build
+pip_retry "flit_core>=3.2,<4"
 pip_retry . --verbose
 assert_numpy_1264
 popd >/dev/null
@@ -255,7 +257,7 @@ popd >/dev/null
 # --- pytorch_cluster (official pinned) ---
 subbanner "pytorch_cluster (official @ 1.6.3-11-g4126a52)"
 if [[ ! -d pytorch_cluster/.git ]]; then
-  git clone --recursive git@github.com:rusty1s/pytorch_cluster.git
+  git clone --recursive https://github.com/rusty1s/pytorch_cluster.git
 fi
 pushd pytorch_cluster >/dev/null
 git fetch --all
@@ -269,7 +271,7 @@ popd >/dev/null
 # --- pytorch_spline_conv (official pinned) ---
 subbanner "pytorch_spline_conv (official @ 1.2.2-9-ga6d1020)"
 if [[ ! -d pytorch_spline_conv/.git ]]; then
-  git clone --recursive git@github.com:rusty1s/pytorch_spline_conv.git
+  git clone --recursive https://github.com/rusty1s/pytorch_spline_conv.git
 fi
 pushd pytorch_spline_conv >/dev/null
 git fetch --all
@@ -337,7 +339,7 @@ cmake -DCMAKE_INSTALL_PREFIX=$VENV_PATH \
     -B adios2-build -S ADIOS2
 
 cmake --build adios2-build -j32
-cmake --install adios2_build 2>/dev/null || cmake --install adios2-build
+cmake --install adios2-build 2>/dev/null || cmake --install adios2-build
 
 # ============================================================
 # DDStore
@@ -348,7 +350,7 @@ export DDSTORE_FRONTIER
 mkdir -p "$DDSTORE_FRONTIER"
 cd "$DDSTORE_FRONTIER"
 
-git clone git@github.com:ORNL/DDStore.git || true
+git clone https://github.com/ORNL/DDStore.git || true
 pushd DDStore >/dev/null
 CC=cc CXX=CC pip_retry . --no-build-isolation --verbose
 popd >/dev/null

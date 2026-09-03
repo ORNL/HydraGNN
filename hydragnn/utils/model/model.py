@@ -59,6 +59,8 @@ def loss_function_selection(loss_function_string: str):
         return lambda x, y: torch.sqrt(torch.nn.functional.mse_loss(x, y))
     elif loss_function_string == "GaussianNLLLoss":
         return torch.nn.GaussianNLLLoss()
+    elif loss_function_string == "binary_cross_entropy":
+        return torch.nn.functional.binary_cross_entropy_with_logits
     else:
         ImportError
 
@@ -283,6 +285,15 @@ def load_existing_model(
                     channel_dim=channel_dim,
                     device=target_model.device,
                 )
+        if hasattr(target_model, "_ensure_edge_projector"):
+            edge_prefix = "edge_lin_dict."
+            for key, value in state_dict.items():
+                if edge_prefix not in key or not key.endswith(".weight"):
+                    continue
+                edge_type = key.split(edge_prefix, 1)[1].rsplit(".weight", 1)[0]
+                edge_attr_dim = value.shape[1]
+                device = getattr(target_model, "device", get_device_name())
+                target_model._ensure_edge_projector(edge_type, edge_attr_dim, device)
 
         ## Load with FSDP
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))

@@ -8,3 +8,23 @@ logs/
 serialized_dataset/
 exporter.log
 installation_DOE_supercomputers/HydraGNN-Installation-Frontier*/
+*.doc
+*.docx
+
+# Local Frontier installation environment
+/HydraGNN-Installation-Frontier/
+
+# Frontier/Slurm job output
+/job-opf-*.out
+
+# Local experiment logs
+/run_logs/
+
+# OPF crash dump
+/examples/opf/core
+
+# Generated OPF model checkpoints are external experiment artifacts.
+/examples/opf/pretrained_models/**/*.pk
+
+# Generated OPF physics-experiment plots and summary tables.
+/examples/opf/physics-experiments/figures_*/

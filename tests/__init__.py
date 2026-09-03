@@ -12,6 +12,7 @@ from .deterministic_graph_data import (
     deterministic_graph_data,
     ensure_deterministic_graph_data,
     prepared_pickle_has_attributes,
+    synchronize_dataset_paths,
 )
 from .test_config import test_config
 from .test_graphs import unittest_train_model
