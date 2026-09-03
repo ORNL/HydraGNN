@@ -78,6 +78,24 @@ pip install --no-build-isolation -v -r requirements-deepspeed.txt
 pip install --no-build-isolation -v -r requirements-optional.txt
 ```
 
+#### Building pyg-lib from source
+
+HydraGNN CI builds `pyg-lib` from source because its binary wheels are hosted
+separately from PyPI. The official
+[`pyg-lib` installation documentation](https://github.com/pyg-team/pyg-lib#installation)
+explicitly supports this installation method. Install PyTorch first and ensure
+a C++ compiler is available, then run:
+
+```bash
+pip install ninja wheel
+pip install --no-build-isolation \
+  "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
+```
+
+The pinned commit corresponds to `pyg-lib` 0.8.0 and keeps installations
+reproducible. Do not omit `--no-build-isolation`: the build must use the
+already-installed PyTorch package.
+
 ### Installation Methods
 
 #### Developer Installation (Recommended)

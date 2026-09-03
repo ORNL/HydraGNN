@@ -69,6 +69,20 @@ pip install -r requirements-pyg.txt
 pip install -r requirements-optional.txt
 ```
 
+`pyg-lib` is built from source in CI because its binary wheels are hosted
+separately from PyPI. The official
+[`pyg-lib` installation documentation](https://github.com/pyg-team/pyg-lib#installation)
+explicitly supports this method. Install PyTorch first, then run:
+
+```bash
+pip install ninja wheel
+pip install --no-build-isolation \
+  "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
+```
+
+HydraGNN pins the source revision corresponding to `pyg-lib` 0.8.0 for
+reproducibility. The build requires a working C++ compiler.
+
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```bash
