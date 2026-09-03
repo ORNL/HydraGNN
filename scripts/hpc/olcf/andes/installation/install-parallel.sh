@@ -123,7 +123,7 @@ python --version
 # ============================================================
 # pip helpers + NumPy pin
 # ============================================================
-banner "pip Helpers and NumPy Pin (1.26.4)"
+banner "pip Helpers and NumPy Pin (2.4.6)"
 PIP_FLAGS=(--upgrade-strategy only-if-needed)
 
 pip_retry() {
@@ -141,7 +141,7 @@ pip_retry() {
 assert_numpy_1264() {
   python - <<'PY'
 import numpy as np
-expected="1.26.4"
+expected="2.4.6"
 assert np.__version__==expected, f"NumPy is {np.__version__}, expected {expected}"
 PY
 }
@@ -149,8 +149,8 @@ PY
 subbanner "Upgrade pip/setuptools/wheel"
 pip_retry --disable-pip-version-check -U pip setuptools wheel
 
-subbanner "Install and pin numpy==1.26.4"
-pip_retry "numpy==1.26.4"
+subbanner "Install and pin numpy==2.4.6"
+pip_retry "numpy==2.4.6"
 assert_numpy_1264
 
 # ============================================================
@@ -162,7 +162,7 @@ pip_retry ninja
 pip_retry astunparse 
 pip_retry expecttest 
 pip_retry hypothesis 
-pip_retry numpy==1.26.4 
+pip_retry numpy==2.4.6
 pip_retry psutil==7.1.0 
 pip_retry pyyaml 
 pip_retry requests 
@@ -174,7 +174,7 @@ pip_retry networkx
 pip_retry jinja2 
 pip_retry tqdm==4.67.1
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1 
+pip_retry scipy==1.17.1
 pip_retry pyparsing 
 pip_retry build
 pip_retry Cython
@@ -468,4 +468,3 @@ echo "  ml miniforge3/23.11.0-0"
 echo "  ml libfabric/1.14.0"
 echo ""
 echo "  source activate ${VENV_PATH}"
-
