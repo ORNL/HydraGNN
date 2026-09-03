@@ -20,15 +20,15 @@ environment-variable overrides near the top of the file.
 
 | System | Script | Accelerator dependency selection |
 | --- | --- | --- |
-| Aurora | `alcf/aurora/installation/install.sh` | PyTorch/XPU stack supplied by the ALCF `frameworks` module |
-| Perlmutter | `nersc/perlmutter/installation/install.sh` | CUDA 13.0 (`cu130`), PyTorch 2.14.0, torchvision 0.29.0 |
-| Andes | `olcf/andes/installation/install.sh` | CPU PyTorch wheel |
-| Andes (parallel) | `olcf/andes/installation/install-parallel.sh` | CPU PyTorch wheel with parallel source builds |
-| Frontier ROCm 6.4 | `olcf/frontier/installation/install-rocm64.sh` | PyTorch wheels from the ROCm 6.4 index |
-| Frontier ROCm 6.4 (parallel) | `olcf/frontier/installation/install-parallel-rocm64.sh` | PyTorch wheels from the ROCm 6.4 index with parallel source builds |
-| Frontier ROCm 7.1 | `olcf/frontier/installation/install-rocm71.sh` | PyTorch wheels from the ROCm 7.1 index |
-| Frontier ROCm 7.2 | `olcf/frontier/installation/install-rocm72.sh` | PyTorch 2.14.0 and torchvision 0.29.0 from the ROCm 7.2 index |
-| Frontier ROCm 7.13 | `olcf/frontier/installation/install-rocm713.sh` | Platform-tested ROCm 7.13 PyTorch wheel set |
+| Aurora | `scripts/hpc/alcf/aurora/installation/install.sh` | PyTorch/XPU stack supplied by the ALCF `frameworks` module |
+| Perlmutter | `scripts/hpc/nersc/perlmutter/installation/install.sh` | CUDA 13.0 (`cu130`), PyTorch 2.14.0, torchvision 0.29.0 |
+| Andes | `scripts/hpc/olcf/andes/installation/install.sh` | CPU PyTorch wheel |
+| Andes (parallel) | `scripts/hpc/olcf/andes/installation/install-parallel.sh` | CPU PyTorch wheel with parallel source builds |
+| Frontier ROCm 6.4 | `scripts/hpc/olcf/frontier/installation/install-rocm64.sh` | PyTorch wheels from the ROCm 6.4 index |
+| Frontier ROCm 6.4 (parallel) | `scripts/hpc/olcf/frontier/installation/install-parallel-rocm64.sh` | PyTorch wheels from the ROCm 6.4 index with parallel source builds |
+| Frontier ROCm 7.1 | `scripts/hpc/olcf/frontier/installation/install-rocm71.sh` | PyTorch wheels from the ROCm 7.1 index |
+| Frontier ROCm 7.2 | `scripts/hpc/olcf/frontier/installation/install-rocm72.sh` | PyTorch 2.14.0 and torchvision 0.29.0 from the ROCm 7.2 index |
+| Frontier ROCm 7.13 | `scripts/hpc/olcf/frontier/installation/install-rocm713.sh` | Platform-tested ROCm 7.13 PyTorch wheel set |
 
 For example:
 
