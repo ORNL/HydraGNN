@@ -16,8 +16,10 @@
 # Optional env vars:
 #   VENV_PATH=/path/to/env
 #   PYTHON_VERSION=3.11
-#   EXPECTED_CUDA_MM=12.9
-#   TORCH_CUDA_TAG=cu129
+#   EXPECTED_CUDA_MM=13.0
+#   TORCH_CUDA_TAG=cu130
+#   TORCH_VERSION=2.14.0
+#   TORCHVISION_VERSION=0.29.0
 #   BUILD_PYG_LIB=0   # default 0 (skip pyg-lib). set 1 to try building from source.
 #   TORCH_CUDA_ARCH_LIST=8.0
 #   MAX_JOBS=16
@@ -38,7 +40,7 @@ banner "Starting HydraGNN environment setup on Perlmutter ($(date))"
 # Module initialization
 # ============================================================
 banner "Configure Perlmutter Modules"
-EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
+EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-13.0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/module-loads.sh"
@@ -192,19 +194,36 @@ pip_retry vesin==0.4.2
 # ============================================================
 banner "Install CUDA PyTorch (Before PyG)"
 
-# Match cudatoolkit/12.9 => cu129 wheels
-TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu129}"
+# Match cudatoolkit/13.0 => cu130 wheels. Pin the package versions so the
+# platform installer remains consistent with requirements-torch.txt.
+TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu130}"
+TORCH_VERSION="${TORCH_VERSION:-2.14.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.29.0}"
 PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
 
 subbanner "Install PyTorch from ${PYTORCH_INDEX_URL}"
-pip_retry --index-url "${PYTORCH_INDEX_URL}" torch torchvision
+pip_retry --index-url "${PYTORCH_INDEX_URL}" \
+          --extra-index-url "https://pypi.org/simple" \
+          "torch==${TORCH_VERSION}" \
+          "torchvision==${TORCHVISION_VERSION}"
 assert_numpy_pinned
 
-python - <<'PY'
+python - "${TORCH_VERSION%%+*}" "${EXPECTED_CUDA_MM}" <<'PY'
+import sys
 import torch
+
+expected_torch, expected_cuda = sys.argv[1:]
+actual_torch = torch.__version__.split("+", 1)[0]
+actual_cuda = torch.version.cuda
 print("torch.__version__ =", torch.__version__)
-print("torch.version.cuda =", torch.version.cuda)
+print("torch.version.cuda =", actual_cuda)
 print("cuda available =", torch.cuda.is_available())
+assert actual_torch == expected_torch, (
+    f"PyTorch is {actual_torch}, expected {expected_torch}"
+)
+assert actual_cuda is not None and actual_cuda.startswith(expected_cuda), (
+    f"PyTorch CUDA runtime is {actual_cuda}, expected {expected_cuda}.x"
+)
 if torch.cuda.is_available():
     print("gpu name =", torch.cuda.get_device_name(0))
 PY
@@ -390,6 +409,8 @@ Modules baseline:
   conda/Miniforge3-24.11.3-0 (or fallback)
 
 PyTorch:
+  torch:             ${TORCH_VERSION%%+*}+${TORCH_CUDA_TAG}
+  torchvision:       ${TORCHVISION_VERSION%%+*}+${TORCH_CUDA_TAG}
   CUDA wheel tag:    ${TORCH_CUDA_TAG}
   Index URL:         ${PYTORCH_INDEX_URL}
 
