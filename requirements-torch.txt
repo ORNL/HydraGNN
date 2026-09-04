@@ -1,5 +1,5 @@
-torch==2.14.0
-torchvision==0.29.0
+torch==2.13.0
+torchvision==0.28.0
 e3nn==0.5.1
 torch-ema==0.3
 torchmetrics==1.4.0

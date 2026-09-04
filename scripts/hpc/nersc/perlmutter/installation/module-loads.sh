@@ -10,12 +10,15 @@
 MODULES_SH_PATH="${MODULES_SH_PATH:-/etc/profile.d/modules.sh}"
 LMOD_INIT_BASH_PATH="${LMOD_INIT_BASH_PATH:-/usr/share/lmod/lmod/init/bash}"
 MODULES_INIT_BASH_PATH="${MODULES_INIT_BASH_PATH:-/usr/share/Modules/init/bash}"
-PERLMUTTER_LMOD_RESTORE_PATH="${PERLMUTTER_LMOD_RESTORE_PATH:-/opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.sh}"
+PERLMUTTER_LMOD_RESTORE_PATH="${PERLMUTTER_LMOD_RESTORE_PATH:-/opt/cray/pe/cpe/26.03/restore_lmod_system_defaults.sh}"
 
 PERLMUTTER_NERSC_DEFAULT_MODULE="${PERLMUTTER_NERSC_DEFAULT_MODULE:-nersc-default/1.0}"
-PERLMUTTER_CPE_MODULE="${PERLMUTTER_CPE_MODULE:-cpe/24.07}"
-PERLMUTTER_PRGENV_MODULE="${PERLMUTTER_PRGENV_MODULE:-PrgEnv-gnu/8.5.0}"
-PERLMUTTER_MPICH_MODULE="${PERLMUTTER_MPICH_MODULE:-cray-mpich/8.1.30}"
+PERLMUTTER_CPE_MODULE="${PERLMUTTER_CPE_MODULE:-cpe/26.03}"
+PERLMUTTER_PRGENV_MODULE="${PERLMUTTER_PRGENV_MODULE:-PrgEnv-gnu/8.7.0}"
+# cray-mpich/8.1.30's GTL library (libmpi_gtl_cuda.so) links against libcudart.so.12,
+# which is incompatible with cudatoolkit/13.0 (needed for torch 2.14/cu130) and breaks
+# the mpi4py build. cray-mpich/9.1.0's GTL library links against libcudart.so.13.
+PERLMUTTER_MPICH_MODULE="${PERLMUTTER_MPICH_MODULE:-cray-mpich/9.1.0}"
 PERLMUTTER_ACCEL_MODULE="${PERLMUTTER_ACCEL_MODULE:-craype-accel-nvidia80}"
 PERLMUTTER_GCC_MODULE="${PERLMUTTER_GCC_MODULE:-gcc-native/13.2}"
 PERLMUTTER_CMAKE_PRIMARY_MODULE="${PERLMUTTER_CMAKE_PRIMARY_MODULE:-cmake/3.30.2}"

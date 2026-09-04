@@ -28,30 +28,31 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 
 ## Dependencies
 
-To install required packages with only basic capability (`torch`,
-`torch_geometric`, and related packages)
-and to serialize+store the processed data for later sessions (`pickle5`):
+To install the packages required for the core HydraGNN capability, including
+PyTorch and PyTorch Geometric:
 
 > **Python versions:** HydraGNN is tested and supported on **Python 3.11
 > through 3.14**. Facility installation scripts default to Python 3.11 unless
 > documented otherwise for that system.
 
+The generic `install_dependencies.sh` baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
+torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
+or 2.14 so facility installers can retain their tested accelerator wheels. The
+requirements files are the authoritative source for the complete version set.
+
 **Recommended approach - standard installation:**
 ```bash
-# Install all core dependencies (base + PyTorch + PyTorch Geometric)
-pip install -r requirements.txt
-
-# Or use the installation script
-./install_dependencies.sh all
+# Install core, PyTorch, PyTorch Geometric, and model-specific dependencies
+./install_dependencies.sh
 ```
 
-**Alternative approach for reproducible installation:**
+**Alternative manual approach:**
 ```bash
-# Use the provided installation script
-./install_dependencies.sh
-
-# Or install manually with consistent settings:
-pip install --no-build-isolation -v -r requirements.txt
+# Install the modular requirements in dependency order
+pip install --no-build-isolation -v -r requirements-base.txt
+pip install --no-build-isolation -v -r requirements-torch.txt
+pip install --no-build-isolation -v -r requirements-pyg.txt
+pip install -v -r requirements-specific-models.txt
 ```
 
 **Modular installation (choose what you need):**
@@ -62,7 +63,7 @@ pip install -r requirements-base.txt
 # Add PyTorch
 pip install -r requirements-torch.txt
 
-# Add PyTorch Geometric  
+# Add PyTorch Geometric
 pip install -r requirements-pyg.txt
 
 # Add optional features (HPO, FAIRChem, etc.)
@@ -88,8 +89,14 @@ testing (`pytest`) the code:
 ```bash
 pip install -r requirements-dev.txt
 # Or with the script:
-./install_dependencies.sh all dev
+./install_dependencies.sh dev
+
+# Install development and optional dependencies together:
+./install_dependencies.sh all
 ```
+
+The script accepts `dev` and `optional` separately or together; `all` enables
+both groups. Unknown group names are rejected.
 
 Detailed dependency installation instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Install)
@@ -102,7 +109,7 @@ data or numerical quality thresholds should first read
 
 ## Installation
 
-After checking out HydgraGNN, we recommend to install HydraGNN in a
+After checking out HydraGNN, we recommend installing HydraGNN in
 developer mode so that you can use the files in your current location
 and update them if needed:
 ```bash

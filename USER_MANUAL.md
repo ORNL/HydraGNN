@@ -46,6 +46,11 @@ HydraGNN uses a modular requirements system for flexible and reproducible instal
 > through 3.14**. Facility installation scripts default to Python 3.11 unless
 > documented otherwise for that system.
 
+The generic `install_dependencies.sh` baseline uses NumPy 2.4.6, PyTorch 2.13.0,
+torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
+or 2.14 so facility installers can retain their tested accelerator wheels.
+Refer to the modular requirements files for the authoritative version set.
+
 #### Recommended: Automated Installation
 ```bash
 ./install_dependencies.sh
@@ -54,15 +59,24 @@ This script installs the following requirements in order:
 - `requirements-base.txt`: Core Python dependencies for HydraGNN
 - `requirements-torch.txt`: PyTorch and related dependencies
 - `requirements-pyg.txt`: PyTorch Geometric and extensions
+- `requirements-specific-models.txt`: Dependencies used by supported model backbones
 
 You can also install development or optional dependencies:
 ```bash
 # For development tools (testing, linting, etc.)
 ./install_dependencies.sh dev
 
-# For all optional features (including development and extra packages)
-./install_dependencies.sh all optional
+# For optional dependencies only
+./install_dependencies.sh optional
+
+# For development and optional dependencies
+./install_dependencies.sh all
+
+# Equivalent explicit form
+./install_dependencies.sh dev optional
 ```
+
+Unknown dependency-group names are rejected.
 
 #### Manual Installation (Advanced)
 If you prefer, you can install requirements manually:
@@ -134,9 +148,19 @@ Tested installation scripts are organized by facility and system under
 
 - **Frontier** (AMD, ROCm 6.4, 7.1, 7.2, and 7.13)
 - **Aurora** (Intel XPU)
-- **Perlmutter** (NVIDIA)
-- **Andes** (NVIDIA)
-```
+- **Perlmutter** (NVIDIA A100; CUDA 13.0 and PyTorch 2.14 by default)
+- **Andes** (CPU)
+
+Use the facility installer instead of `requirements-torch.txt` when preparing
+an accelerator-specific environment. The facility scripts select wheels or
+framework modules compatible with that system. In particular, the Frontier
+ROCm 7.2 installer selects PyTorch 2.14 and torchvision 0.29 from the ROCm 7.2
+index, while Perlmutter selects their CUDA 13.0 (`cu130`) wheels. Do not run the
+generic PyTorch requirements afterward, because that can replace a functioning
+facility-specific wheel. HydraGNN does not require torchaudio.
+
+See [`scripts/hpc/README.md`](scripts/hpc/README.md) for the available scripts,
+defaults, and usage commands.
 
 ---
 
