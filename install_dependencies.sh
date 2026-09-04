@@ -45,11 +45,6 @@ python -m pip install --no-build-isolation -v -r requirements-base.txt
 
 # Install PyTorch dependencies
 echo "Installing PyTorch dependencies..."
-GENERIC_TORCH_VERSION="${GENERIC_TORCH_VERSION:-2.13.0}"
-GENERIC_TORCHVISION_VERSION="${GENERIC_TORCHVISION_VERSION:-0.28.0}"
-python -m pip install --no-build-isolation -v \
-    "torch==${GENERIC_TORCH_VERSION}" \
-    "torchvision==${GENERIC_TORCHVISION_VERSION}"
 python -m pip install --no-build-isolation -v -r requirements-torch.txt
 
 # Install PyTorch Geometric dependencies
