@@ -9,9 +9,6 @@ on:
   schedule:
     - cron:  '0 3 * * 1'
 
-env:
-  TORCH_BASELINE_VERSION: "2.13.0"
-
 jobs:
   build:
     name: ${{ matrix.suite }} (${{ matrix.python }})
@@ -74,7 +71,10 @@ jobs:
           # pyg-lib is not published on PyPI. Build the 0.8.0 release from its
           # pinned commit so CI does not depend on the data.pyg.org wheel host.
           python -m pip install --no-build-isolation -v "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
-          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links "https://data.pyg.org/whl/torch-${TORCH_BASELINE_VERSION}+cpu.html"
+          # Derive the find-links wheel URL from the torch actually installed
+          # above so it can never drift from requirements-torch.txt.
+          TORCH_VERSION="$(python -c 'import torch; print(torch.__version__.split("+")[0])')"
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links "https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html"
           python -m pip install --upgrade --no-build-isolation -v -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"
       - name: Show installed packages
         run: |
