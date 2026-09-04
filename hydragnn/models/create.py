@@ -127,22 +127,38 @@ def create_model_config(
             "equivariant_attn_periodic_replication", 1
         ),
         # AllScAIP-specific
-        allscaip_num_heads=config["Architecture"]["allscaip_num_heads"],
-        allscaip_freq_list=config["Architecture"]["allscaip_freq_list"],
-        allscaip_atten_name=config["Architecture"]["allscaip_atten_name"],
-        allscaip_use_node_path=config["Architecture"]["allscaip_use_node_path"],
-        allscaip_use_sincx_mask=config["Architecture"]["allscaip_use_sincx_mask"],
-        allscaip_use_freq_mask=config["Architecture"]["allscaip_use_freq_mask"],
-        allscaip_max_num_elements=config["Architecture"]["allscaip_max_num_elements"],
-        allscaip_knn_soft=config["Architecture"]["allscaip_knn_soft"],
-        allscaip_distance_function=config["Architecture"]["allscaip_distance_function"],
-        allscaip_normalization=config["Architecture"]["allscaip_normalization"],
-        allscaip_mlp_dropout=config["Architecture"]["allscaip_mlp_dropout"],
-        allscaip_atten_dropout=config["Architecture"]["allscaip_atten_dropout"],
-        allscaip_use_residual_scaling=config["Architecture"][
-            "allscaip_use_residual_scaling"
-        ],
-        allscaip_regress_stress=config["Architecture"]["allscaip_regress_stress"],
+        allscaip_num_heads=config["Architecture"].get("allscaip_num_heads", 8),
+        allscaip_freq_list=config["Architecture"].get("allscaip_freq_list", None),
+        allscaip_atten_name=config["Architecture"].get("allscaip_atten_name", "math"),
+        allscaip_use_node_path=config["Architecture"].get(
+            "allscaip_use_node_path", True
+        ),
+        allscaip_use_sincx_mask=config["Architecture"].get(
+            "allscaip_use_sincx_mask", True
+        ),
+        allscaip_use_freq_mask=config["Architecture"].get(
+            "allscaip_use_freq_mask", True
+        ),
+        allscaip_max_num_elements=config["Architecture"].get(
+            "allscaip_max_num_elements", 119
+        ),
+        allscaip_knn_soft=config["Architecture"].get("allscaip_knn_soft", True),
+        allscaip_distance_function=config["Architecture"].get(
+            "allscaip_distance_function", "gaussian"
+        ),
+        allscaip_normalization=config["Architecture"].get(
+            "allscaip_normalization", "rmsnorm"
+        ),
+        allscaip_mlp_dropout=config["Architecture"].get("allscaip_mlp_dropout", 0.0),
+        allscaip_atten_dropout=config["Architecture"].get(
+            "allscaip_atten_dropout", 0.0
+        ),
+        allscaip_use_residual_scaling=config["Architecture"].get(
+            "allscaip_use_residual_scaling", True
+        ),
+        allscaip_regress_stress=config["Architecture"].get(
+            "allscaip_regress_stress", False
+        ),
         allscaip_use_chunked_graph=config["Architecture"].get(
             "allscaip_use_chunked_graph", False
         ),
@@ -152,26 +168,28 @@ def create_model_config(
         allscaip_knn_use_low_mem=config["Architecture"].get(
             "allscaip_knn_use_low_mem", True
         ),
-        allscaip_dataset_list=config["Architecture"]["allscaip_dataset_list"],
+        allscaip_dataset_list=config["Architecture"].get("allscaip_dataset_list", []),
         # UMA-specific
-        uma_mmax=config["Architecture"]["uma_mmax"],
-        uma_grid_resolution=config["Architecture"]["uma_grid_resolution"],
-        uma_edge_channels=config["Architecture"]["uma_edge_channels"],
-        uma_hidden_channels=config["Architecture"]["uma_hidden_channels"],
-        uma_norm_type=config["Architecture"]["uma_norm_type"],
-        uma_ff_type=config["Architecture"]["uma_ff_type"],
-        uma_use_chg_spin=config["Architecture"]["uma_use_chg_spin"],
-        uma_max_num_elements=config["Architecture"]["uma_max_num_elements"],
-        uma_variant=config["Architecture"]["uma_variant"],
-        uma_num_experts=config["Architecture"]["uma_num_experts"],
-        uma_moe_dropout=config["Architecture"]["uma_moe_dropout"],
-        uma_use_composition_embedding=config["Architecture"][
-            "uma_use_composition_embedding"
-        ],
-        uma_equivariant_vector_head=config["Architecture"][
-            "uma_equivariant_vector_head"
-        ],
-        uma_vector_head_index=config["Architecture"]["uma_vector_head_index"],
+        uma_mmax=config["Architecture"].get("uma_mmax", 2),
+        uma_grid_resolution=config["Architecture"].get("uma_grid_resolution", None),
+        uma_edge_channels=config["Architecture"].get("uma_edge_channels", 128),
+        uma_hidden_channels=config["Architecture"].get("uma_hidden_channels", None),
+        uma_norm_type=config["Architecture"].get("uma_norm_type", "rms_norm_sh"),
+        uma_ff_type=config["Architecture"].get("uma_ff_type", "grid"),
+        uma_use_chg_spin=config["Architecture"].get("uma_use_chg_spin", False),
+        uma_max_num_elements=config["Architecture"].get("uma_max_num_elements", 100),
+        uma_variant=config["Architecture"].get("uma_variant", "S"),
+        uma_num_experts=config["Architecture"].get("uma_num_experts", None),
+        uma_moe_dropout=config["Architecture"].get("uma_moe_dropout", 0.0),
+        uma_use_composition_embedding=config["Architecture"].get(
+            "uma_use_composition_embedding", False
+        ),
+        uma_equivariant_vector_head=config["Architecture"].get(
+            "uma_equivariant_vector_head", False
+        ),
+        uma_vector_head_index=config["Architecture"].get(
+            "uma_vector_head_index", None
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
