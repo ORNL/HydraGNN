@@ -11,7 +11,6 @@ on:
 
 env:
   TORCH_BASELINE_VERSION: "2.13.0"
-  TORCHVISION_BASELINE_VERSION: "0.28.0"
 
 jobs:
   build:
@@ -59,11 +58,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel meson-python ninja cython
           python -m pip install numpy==2.4.6
-          # Install HydraGNN's pinned PyTorch before fairchem-core (pulled in
-          # by requirements-dev.txt) so dependency resolution cannot select a
-          # different torch build for the native parity tests.
+          # Install HydraGNN's pinned PyTorch (from requirements-torch.txt)
+          # before fairchem-core (pulled in by requirements-dev.txt) so
+          # dependency resolution cannot select a different torch build for
+          # the native parity tests.
           python -m pip install --upgrade --no-build-isolation -v \
-            "torch==${TORCH_BASELINE_VERSION}" "torchvision==${TORCHVISION_BASELINE_VERSION}" \
             -r requirements-torch.txt \
             --index-url https://download.pytorch.org/whl/cpu \
             --extra-index-url https://pypi.org/simple
