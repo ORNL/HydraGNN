@@ -9,6 +9,10 @@ on:
   schedule:
     - cron:  '0 3 * * 1'
 
+env:
+  TORCH_BASELINE_VERSION: "2.13.0"
+  TORCHVISION_BASELINE_VERSION: "0.28.0"
+
 jobs:
   build:
     name: ${{ matrix.suite }} (${{ matrix.python }})
@@ -59,7 +63,7 @@ jobs:
           # by requirements-dev.txt) so dependency resolution cannot select a
           # different torch build for the native parity tests.
           python -m pip install --upgrade --no-build-isolation -v \
-            "torch==2.13.0" "torchvision==0.28.0" \
+            "torch==${TORCH_BASELINE_VERSION}" "torchvision==${TORCHVISION_BASELINE_VERSION}" \
             -r requirements-torch.txt \
             --index-url https://download.pytorch.org/whl/cpu \
             --extra-index-url https://pypi.org/simple
@@ -71,7 +75,7 @@ jobs:
           # pyg-lib is not published on PyPI. Build the 0.8.0 release from its
           # pinned commit so CI does not depend on the data.pyg.org wheel host.
           python -m pip install --no-build-isolation -v "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
-          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.13.0+cpu.html
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links "https://data.pyg.org/whl/torch-${TORCH_BASELINE_VERSION}+cpu.html"
           python -m pip install --upgrade --no-build-isolation -v -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"
       - name: Show installed packages
         run: |
