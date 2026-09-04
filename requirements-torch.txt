@@ -1,5 +1,6 @@
-torch>=2.13.0,<2.15
-torchvision>=0.28.0,<0.30
+# torch/torchvision are installed explicitly by install_dependencies.sh and
+# facility installers; pinning them here too would create a second, driftable
+# source of truth for the same packages.
 e3nn==0.5.1
 torch-ema==0.3
 torchmetrics==1.4.0
