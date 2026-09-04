@@ -16,6 +16,7 @@ from typing import List, Union
 
 import torch_scatter
 
+from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
 from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
@@ -45,6 +46,7 @@ def create_model_config(
     verbosity: int = 0,
     use_gpu: bool = True,
 ):
+    model_defaults = MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
     model = create_model(
         mpnn_type=config["Architecture"]["mpnn_type"],
         input_dim=config["Architecture"]["input_dim"],
@@ -127,51 +129,106 @@ def create_model_config(
             "equivariant_attn_periodic_replication", 1
         ),
         # AllScAIP-specific
-        allscaip_num_heads=config["Architecture"]["allscaip_num_heads"],
-        allscaip_freq_list=config["Architecture"]["allscaip_freq_list"],
-        allscaip_atten_name=config["Architecture"]["allscaip_atten_name"],
-        allscaip_use_node_path=config["Architecture"]["allscaip_use_node_path"],
-        allscaip_use_sincx_mask=config["Architecture"]["allscaip_use_sincx_mask"],
-        allscaip_use_freq_mask=config["Architecture"]["allscaip_use_freq_mask"],
-        allscaip_max_num_elements=config["Architecture"]["allscaip_max_num_elements"],
-        allscaip_knn_soft=config["Architecture"]["allscaip_knn_soft"],
-        allscaip_distance_function=config["Architecture"]["allscaip_distance_function"],
-        allscaip_normalization=config["Architecture"]["allscaip_normalization"],
-        allscaip_mlp_dropout=config["Architecture"]["allscaip_mlp_dropout"],
-        allscaip_atten_dropout=config["Architecture"]["allscaip_atten_dropout"],
-        allscaip_use_residual_scaling=config["Architecture"][
-            "allscaip_use_residual_scaling"
-        ],
-        allscaip_regress_stress=config["Architecture"]["allscaip_regress_stress"],
+        allscaip_num_heads=config["Architecture"].get(
+            "allscaip_num_heads", model_defaults["allscaip_num_heads"]
+        ),
+        allscaip_freq_list=config["Architecture"].get(
+            "allscaip_freq_list", model_defaults["allscaip_freq_list"]
+        ),
+        allscaip_atten_name=config["Architecture"].get(
+            "allscaip_atten_name", model_defaults["allscaip_atten_name"]
+        ),
+        allscaip_use_node_path=config["Architecture"].get(
+            "allscaip_use_node_path", model_defaults["allscaip_use_node_path"]
+        ),
+        allscaip_use_sincx_mask=config["Architecture"].get(
+            "allscaip_use_sincx_mask", model_defaults["allscaip_use_sincx_mask"]
+        ),
+        allscaip_use_freq_mask=config["Architecture"].get(
+            "allscaip_use_freq_mask", model_defaults["allscaip_use_freq_mask"]
+        ),
+        allscaip_max_num_elements=config["Architecture"].get(
+            "allscaip_max_num_elements",
+            model_defaults["allscaip_max_num_elements"],
+        ),
+        allscaip_knn_soft=config["Architecture"].get(
+            "allscaip_knn_soft", model_defaults["allscaip_knn_soft"]
+        ),
+        allscaip_distance_function=config["Architecture"].get(
+            "allscaip_distance_function",
+            model_defaults["allscaip_distance_function"],
+        ),
+        allscaip_normalization=config["Architecture"].get(
+            "allscaip_normalization", model_defaults["allscaip_normalization"]
+        ),
+        allscaip_mlp_dropout=config["Architecture"].get(
+            "allscaip_mlp_dropout", model_defaults["allscaip_mlp_dropout"]
+        ),
+        allscaip_atten_dropout=config["Architecture"].get(
+            "allscaip_atten_dropout", model_defaults["allscaip_atten_dropout"]
+        ),
+        allscaip_use_residual_scaling=config["Architecture"].get(
+            "allscaip_use_residual_scaling",
+            model_defaults["allscaip_use_residual_scaling"],
+        ),
+        allscaip_regress_stress=config["Architecture"].get(
+            "allscaip_regress_stress", model_defaults["allscaip_regress_stress"]
+        ),
         allscaip_use_chunked_graph=config["Architecture"].get(
-            "allscaip_use_chunked_graph", False
+            "allscaip_use_chunked_graph", model_defaults["allscaip_use_chunked_graph"]
         ),
         allscaip_graph_chunk_size=config["Architecture"].get(
-            "allscaip_graph_chunk_size", 512
+            "allscaip_graph_chunk_size", model_defaults["allscaip_graph_chunk_size"]
         ),
         allscaip_knn_use_low_mem=config["Architecture"].get(
-            "allscaip_knn_use_low_mem", True
+            "allscaip_knn_use_low_mem", model_defaults["allscaip_knn_use_low_mem"]
         ),
-        allscaip_dataset_list=config["Architecture"]["allscaip_dataset_list"],
+        allscaip_dataset_list=config["Architecture"].get(
+            "allscaip_dataset_list", model_defaults["allscaip_dataset_list"].copy()
+        ),
         # UMA-specific
-        uma_mmax=config["Architecture"]["uma_mmax"],
-        uma_grid_resolution=config["Architecture"]["uma_grid_resolution"],
-        uma_edge_channels=config["Architecture"]["uma_edge_channels"],
-        uma_hidden_channels=config["Architecture"]["uma_hidden_channels"],
-        uma_norm_type=config["Architecture"]["uma_norm_type"],
-        uma_ff_type=config["Architecture"]["uma_ff_type"],
-        uma_use_chg_spin=config["Architecture"]["uma_use_chg_spin"],
-        uma_max_num_elements=config["Architecture"]["uma_max_num_elements"],
-        uma_variant=config["Architecture"]["uma_variant"],
-        uma_num_experts=config["Architecture"]["uma_num_experts"],
-        uma_moe_dropout=config["Architecture"]["uma_moe_dropout"],
-        uma_use_composition_embedding=config["Architecture"][
-            "uma_use_composition_embedding"
-        ],
-        uma_equivariant_vector_head=config["Architecture"][
-            "uma_equivariant_vector_head"
-        ],
-        uma_vector_head_index=config["Architecture"]["uma_vector_head_index"],
+        uma_mmax=config["Architecture"].get("uma_mmax", model_defaults["uma_mmax"]),
+        uma_grid_resolution=config["Architecture"].get(
+            "uma_grid_resolution", model_defaults["uma_grid_resolution"]
+        ),
+        uma_edge_channels=config["Architecture"].get(
+            "uma_edge_channels", model_defaults["uma_edge_channels"]
+        ),
+        uma_hidden_channels=config["Architecture"].get(
+            "uma_hidden_channels", model_defaults["uma_hidden_channels"]
+        ),
+        uma_norm_type=config["Architecture"].get(
+            "uma_norm_type", model_defaults["uma_norm_type"]
+        ),
+        uma_ff_type=config["Architecture"].get(
+            "uma_ff_type", model_defaults["uma_ff_type"]
+        ),
+        uma_use_chg_spin=config["Architecture"].get(
+            "uma_use_chg_spin", model_defaults["uma_use_chg_spin"]
+        ),
+        uma_max_num_elements=config["Architecture"].get(
+            "uma_max_num_elements", model_defaults["uma_max_num_elements"]
+        ),
+        uma_variant=config["Architecture"].get(
+            "uma_variant", model_defaults["uma_variant"]
+        ),
+        uma_num_experts=config["Architecture"].get(
+            "uma_num_experts", model_defaults["uma_num_experts"]
+        ),
+        uma_moe_dropout=config["Architecture"].get(
+            "uma_moe_dropout", model_defaults["uma_moe_dropout"]
+        ),
+        uma_use_composition_embedding=config["Architecture"].get(
+            "uma_use_composition_embedding",
+            model_defaults["uma_use_composition_embedding"],
+        ),
+        uma_equivariant_vector_head=config["Architecture"].get(
+            "uma_equivariant_vector_head",
+            model_defaults["uma_equivariant_vector_head"],
+        ),
+        uma_vector_head_index=config["Architecture"].get(
+            "uma_vector_head_index", model_defaults["uma_vector_head_index"]
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
