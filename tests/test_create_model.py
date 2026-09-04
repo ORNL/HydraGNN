@@ -11,6 +11,7 @@
 
 from unittest.mock import Mock, patch
 
+from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
 from hydragnn.models.create import create_model_config
 
 
@@ -72,38 +73,5 @@ def test_create_model_config_accepts_legacy_model_specific_keys():
 
     assert result is model.to.return_value
     kwargs = create_model.call_args.kwargs
-    expected_defaults = {
-        "allscaip_num_heads": 8,
-        "allscaip_freq_list": None,
-        "allscaip_atten_name": "math",
-        "allscaip_use_node_path": True,
-        "allscaip_use_sincx_mask": True,
-        "allscaip_use_freq_mask": True,
-        "allscaip_max_num_elements": 119,
-        "allscaip_knn_soft": True,
-        "allscaip_distance_function": "gaussian",
-        "allscaip_normalization": "rmsnorm",
-        "allscaip_mlp_dropout": 0.0,
-        "allscaip_atten_dropout": 0.0,
-        "allscaip_use_residual_scaling": True,
-        "allscaip_regress_stress": False,
-        "allscaip_use_chunked_graph": False,
-        "allscaip_graph_chunk_size": 512,
-        "allscaip_knn_use_low_mem": True,
-        "allscaip_dataset_list": [],
-        "uma_mmax": 2,
-        "uma_grid_resolution": None,
-        "uma_edge_channels": 128,
-        "uma_hidden_channels": None,
-        "uma_norm_type": "rms_norm_sh",
-        "uma_ff_type": "grid",
-        "uma_use_chg_spin": False,
-        "uma_max_num_elements": 100,
-        "uma_variant": "S",
-        "uma_num_experts": None,
-        "uma_moe_dropout": 0.0,
-        "uma_use_composition_embedding": False,
-        "uma_equivariant_vector_head": False,
-        "uma_vector_head_index": None,
-    }
+    expected_defaults = MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
     assert {key: kwargs[key] for key in expected_defaults} == expected_defaults
