@@ -88,6 +88,78 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     return data
 
 
+def create_weighted_interatomic_model(**weights):
+    from hydragnn.models.create import create_model
+    from hydragnn.utils.model.model import update_multibranch_heads
+
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp",
+        }
+    }
+    return create_model(
+        mpnn_type="EGNN",
+        input_dim=1,
+        hidden_dim=16,
+        output_dim=[1],
+        pe_dim=6,
+        global_attn_engine="",
+        global_attn_type="",
+        global_attn_heads=1,
+        output_type=["node"],
+        output_heads=update_multibranch_heads(output_heads),
+        activation_function="relu",
+        loss_function_type="mse",
+        task_weights=[1.0],
+        num_conv_layers=1,
+        num_nodes=3,
+        enable_interatomic_potential=True,
+        use_gpu=False,
+        **weights,
+    )
+
+
+@pytest.mark.mpi_skip()
+def test_force_only_loss_does_not_require_energy():
+    model = create_weighted_interatomic_model(force_weight=1.0)
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    del data.energy
+    loss, tasks = model.energy_force_loss(model(data), data)
+    assert loss.requires_grad
+    assert len(tasks) == 3
+
+
+@pytest.mark.mpi_skip()
+def test_energy_and_force_loss_still_works():
+    model = create_weighted_interatomic_model(energy_weight=1.0, force_weight=1.0)
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    loss, tasks = model.energy_force_loss(model(data), data)
+    assert loss.requires_grad
+    assert len(tasks) == 3
+
+
+@pytest.mark.mpi_skip()
+@pytest.mark.parametrize(
+    "weights,missing,message",
+    [
+        ({"energy_weight": 1.0}, "energy", "data.energy is required"),
+        ({"force_weight": 1.0}, "forces", "data.forces is required"),
+        ({"hessian_weight": 1.0}, "hessian", "data.hessian is required"),
+    ],
+)
+def test_enabled_interatomic_loss_requires_its_label(weights, missing, message):
+    model = create_weighted_interatomic_model(**weights)
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    if missing in data:
+        del data[missing]
+    with pytest.raises(ValueError, match=message):
+        model.energy_force_loss(model(data), data)
+
+
 @pytest.mark.mpi_skip()
 def test_model_creation_with_enhancement():
     """Test creating a model with interatomic potential enhancement."""

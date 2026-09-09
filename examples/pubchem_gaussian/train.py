@@ -11,6 +11,8 @@
 import argparse
 import json
 import logging
+import os
+import re
 import shutil
 import subprocess
 import tarfile
@@ -45,7 +47,8 @@ EXAMPLE_DIR = Path(__file__).resolve().parent
 RAW_ARCHIVE_DIR = EXAMPLE_DIR / "dataset" / "raw" / "data"
 EXTRACTED_DIR = EXAMPLE_DIR / "dataset" / "raw" / "extracted"
 PICKLE_DIR = EXAMPLE_DIR / "dataset" / "pubchem_gaussian.pickle"
-CACHE_VERSION = "onsite-hessian-eigenvalues-v1"
+CACHE_VERSION = "autograd-force-hessian-v1"
+ANGSTROM_TO_BOHR = 1.8897261254578281
 
 
 def parse_structure(path):
@@ -55,6 +58,88 @@ def parse_structure(path):
         [[float(value) for value in row[1:4]] for row in rows], dtype=torch.float32
     )
     return atomic_numbers, positions
+
+
+def parse_optimization_forces(
+    path, atomic_numbers, optimized_positions_angstrom, coordinate_tolerance=5.0e-4
+):
+    """Return forces for the trajectory geometry matching ``Structure.txt``.
+
+    VIBRANT trajectory atom rows contain atomic number, Cartesian coordinates,
+    and three Gaussian force components.  The matching geometry is selected by
+    coordinates rather than assuming the last textual block is complete.
+    """
+    lines = path.read_text().splitlines()
+    rows = []
+    energies = []
+    energy_pattern = re.compile(
+        r"(?:SCF\s+Done:.*?=|\bEnergy\b\s*[=:])\s*"
+        r"([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[DEde][-+]?\d+)?)",
+        re.IGNORECASE,
+    )
+    for line_number, line in enumerate(lines):
+        match = energy_pattern.search(line)
+        if match:
+            energies.append(
+                (line_number, float(match.group(1).replace("D", "E").replace("d", "e")))
+            )
+        fields = line.replace("D", "E").split()
+        if len(fields) < 7:
+            rows.append(None)
+            continue
+        try:
+            values = [float(field) for field in fields]
+        except ValueError:
+            rows.append(None)
+            continue
+        atomic_number = int(values[0])
+        if values[0] != atomic_number or atomic_number <= 0:
+            rows.append(None)
+            continue
+        rows.append((atomic_number, values[1:4], values[-3:]))
+
+    expected_numbers = atomic_numbers.reshape(-1).to(torch.int64).tolist()
+    candidates = []
+    for start in range(len(rows) - len(expected_numbers) + 1):
+        block = rows[start : start + len(expected_numbers)]
+        if any(row is None for row in block):
+            continue
+        if [row[0] for row in block] != expected_numbers:
+            continue
+        coordinates = torch.tensor([row[1] for row in block], dtype=torch.float32)
+        mismatch = torch.max(torch.abs(coordinates - optimized_positions_angstrom))
+        candidates.append((float(mismatch), start, block))
+
+    if not candidates:
+        raise ValueError(
+            f"No complete {len(expected_numbers)}-atom force block in {path}"
+        )
+    mismatch, block_start, matching_block = min(candidates, key=lambda item: item[0])
+    if mismatch > coordinate_tolerance:
+        raise ValueError(
+            f"Closest Opt_Trj geometry differs from Structure.txt by {mismatch:.3g} Angstrom"
+        )
+    if not energies:
+        # Some XYZ-style trajectories store the energy alone on the comment
+        # line instead of prefixing it with ``Energy =``.
+        for line_number in range(block_start - 1, -1, -1):
+            fields = lines[line_number].replace("D", "E").split()
+            if len(fields) != 1:
+                continue
+            try:
+                energies.append((line_number, float(fields[0])))
+                break
+            except ValueError:
+                continue
+    if not energies:
+        raise ValueError(f"No energy record found for matching geometry in {path}")
+    preceding = [item for item in energies if item[0] <= block_start]
+    if preceding:
+        energy = max(preceding, key=lambda item: item[0])[1]
+    else:
+        energy = min(energies, key=lambda item: abs(item[0] - block_start))[1]
+    forces = torch.tensor([row[2] for row in matching_block], dtype=torch.float32)
+    return torch.tensor([[energy]], dtype=torch.float32), forces
 
 
 def parse_hessian(path, num_atoms):
@@ -86,15 +171,7 @@ def parse_hessian(path, num_atoms):
         )
 
     hessian = hessian + torch.tril(hessian, diagonal=-1).T
-    onsite_hessian_eigenvalues = torch.stack(
-        [
-            torch.linalg.eigvalsh(
-                hessian[3 * atom : 3 * atom + 3, 3 * atom : 3 * atom + 3]
-            )
-            for atom in range(num_atoms)
-        ]
-    )
-    return hessian, onsite_hessian_eigenvalues
+    return hessian
 
 
 def extract_records(archive_dir, output_dir, limit):
@@ -104,7 +181,10 @@ def extract_records(archive_dir, output_dir, limit):
     if remaining == 0:
         return
 
-    archives = sorted(archive_dir.glob("*.tar.zst"), key=lambda path: int(path.stem.split(".")[0]))
+    archives = sorted(
+        archive_dir.glob("*.tar.zst"),
+        key=lambda path: int(path.stem.split(".")[0]),
+    )
     if not archives:
         raise FileNotFoundError(f"No .tar.zst archives found in {archive_dir}")
 
@@ -155,32 +235,38 @@ class PubChemGaussianDataset(AbstractBaseDataset):
 
         for molecule_dir in molecule_dirs:
             structure_path = molecule_dir / "Structure.txt"
+            trajectory_path = molecule_dir / "Opt_Trj.txt"
             hessian_path = molecule_dir / "Hessian.txt"
-            if not structure_path.exists() or not hessian_path.exists():
+            if not all(
+                path.exists() for path in (structure_path, trajectory_path, hessian_path)
+            ):
+                logging.warning(
+                    "Skipping CID %s: required files are missing", molecule_dir.name
+                )
                 continue
             try:
-                atomic_numbers, positions = parse_structure(structure_path)
-                full_hessian, onsite_hessian_eigenvalues = parse_hessian(
-                    hessian_path, atomic_numbers.shape[0]
+                atomic_numbers, positions_angstrom = parse_structure(structure_path)
+                energy, forces = parse_optimization_forces(
+                    trajectory_path, atomic_numbers, positions_angstrom
                 )
-                lower_triangle = torch.tril_indices(
-                    full_hessian.shape[0], full_hessian.shape[1]
-                )
+                full_hessian = parse_hessian(hessian_path, atomic_numbers.shape[0])
+                positions = positions_angstrom * ANGSTROM_TO_BOHR
+                if forces.shape != positions.shape:
+                    raise ValueError(
+                        f"Force shape {tuple(forces.shape)} does not match "
+                        f"position shape {tuple(positions.shape)}"
+                    )
                 data = Data(
                     dataset_name="pubchem_gaussian",
                     molecule_id=molecule_dir.name,
                     natoms=torch.tensor([atomic_numbers.shape[0]], dtype=torch.int32),
                     atomic_numbers=atomic_numbers,
                     pos=positions,
+                    forces=forces,
+                    hessian=full_hessian,
+                    energy=energy,
                     cell=torch.eye(3, dtype=torch.float32),
                     pbc=torch.zeros(3, dtype=torch.int32),
-                    onsite_hessian_eigenvalues=onsite_hessian_eigenvalues,
-                    hessian_lower_triangle=full_hessian[
-                        lower_triangle[0], lower_triangle[1]
-                    ],
-                    hessian_dimension=torch.tensor(
-                        [full_hessian.shape[0]], dtype=torch.int32
-                    ),
                 )
                 data = radius_graph(data)
                 data = distance(data)
@@ -233,8 +319,8 @@ def load_datasets(var_config):
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Preprocess VIBRANT PubChem records and train an on-site Hessian "
-            "eigenvalue model."
+            "Preprocess VIBRANT PubChem records and train an autograd "
+            "force/Hessian model."
         )
     )
     parser.add_argument("--inputfile", default="pubchem_gaussian.json")
@@ -248,6 +334,12 @@ def main():
         config = json.load(config_file)
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+    if config["NeuralNetwork"]["Training"]["batch_size"] != 1:
+        raise ValueError("PubChem Hessian training currently requires --batch-size 1")
+    if bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))):
+        raise ValueError("PubChem Hessian training does not currently support FSDP")
+    if int(os.getenv("HYDRAGNN_GRAPH_PARALLEL_GROUP_SIZE", "1")) > 1:
+        raise ValueError("PubChem Hessian training does not support graph parallelism")
 
     world_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
@@ -302,6 +394,7 @@ def main():
         args.log,
         verbosity,
         create_plots=False,
+        compute_grad_energy=True,
     )
     hydragnn.utils.model.save_model(model, optimizer, args.log)
     if writer is not None:

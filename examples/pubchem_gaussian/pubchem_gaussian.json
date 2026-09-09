@@ -5,13 +5,19 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "SchNet",
+            "enable_interatomic_potential": true,
+            "energy_weight": 1.0,
+            "energy_peratom_weight": 0.0,
+            "force_weight": 1.0,
+            "hessian_weight": 1.0,
+            "graph_pooling": "add",
             "edge_features": [
                 "bond_length"
             ],
             "max_neighbours": 64,
             "num_gaussians": 32,
             "num_filters": 64,
-            "radius": 6.0,
+            "radius": 11.338356752746968,
             "hidden_dim": 128,
             "num_conv_layers": 4,
             "output_heads": {
@@ -31,7 +37,7 @@
         "Training": {
             "Checkpoint": true,
             "num_epoch": 20,
-            "batch_size": 16,
+            "batch_size": 1,
             "continue": 0,
             "loss_function_type": "mse",
             "Optimizer": {
@@ -55,9 +61,9 @@
         ],
         "outputs": [
             {
-                "name": "onsite_hessian_eigenvalues",
-                "level": "node",
-                "dim": 3
+                "name": "energy",
+                "level": "graph",
+                "dim": 1
             }
         ]
     }

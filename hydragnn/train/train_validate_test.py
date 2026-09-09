@@ -228,18 +228,23 @@ def train_validate_test(
 
     device = get_device()
     if compute_grad_energy:
-        num_tasks = 3  # [energy, energy per atom, forces]
-        task_dims = [1, 1, 1]
+        hessian_enabled = model.module.hessian_weight > 0
+        num_tasks = 4 if hessian_enabled else 3
+        task_dims = [1] * num_tasks
         task_weights = [
             model.module.energy_weight,
             model.module.energy_peratom_weight,
             model.module.force_weight,
         ]
+        if hessian_enabled:
+            task_weights.append(model.module.hessian_weight)
         output_names = [
             configured_output_names[0],
             "energy_peratom",
             "forces",
         ]
+        if hessian_enabled:
+            output_names.append("hessian")
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
@@ -930,7 +935,10 @@ def test(
         import torch_scatter
 
     if num_tasks is None:
-        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+        if compute_grad_energy:
+            num_tasks = 4 if model.module.hessian_weight > 0 else 3
+        else:
+            num_tasks = model.module.num_heads
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
