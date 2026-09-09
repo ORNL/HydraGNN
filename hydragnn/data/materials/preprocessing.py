@@ -23,10 +23,10 @@ StressSign = Literal["tension_positive", "compression_positive"]
 
 
 @dataclass(frozen=True)
-class StressSignDiagnostic:
-    """Result of comparing reported stress with finite-difference stress."""
+class StressEnergyStrainCheck:
+    """Evidence from comparing reported stress with reference energy derivatives."""
 
-    inferred_source_sign: Literal[
+    preferred_sign_convention: Literal[
         "tension_positive", "compression_positive", "ambiguous"
     ]
     finite_difference_stress: torch.Tensor
@@ -84,26 +84,36 @@ def normalize_stress(
     return value * (sign * unit_scale[source_unit])
 
 
-def diagnose_stress_sign(
+def check_stress_against_energy_strain(
     positions: torch.Tensor,
     cell: torch.Tensor,
     reported_stress: torch.Tensor,
-    energy_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor | float],
     *,
+    reference_energy_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor | float],
     strain_step: float = 1.0e-4,
     ambiguity_rtol: float = 0.05,
     ambiguity_atol: float = 1.0e-8,
-) -> StressSignDiagnostic:
-    """Infer a source stress sign using central energy finite differences.
+) -> StressEnergyStrainCheck:
+    """Check stress consistency with independent reference energy derivatives.
 
-    ``energy_fn`` receives strained Cartesian positions and cell vectors and
-    must return one scalar total energy in eV. Positions and cells are strained
-    together, preserving fractional coordinates. The reported stress must be a
-    symmetric ``3 x 3`` tensor in eV/Å³; its sign convention may be unknown.
+    ``reference_energy_fn`` receives strained Cartesian positions and cell
+    vectors and must return one scalar total energy in eV. It should use the
+    reference method that generated the labels, labeled strained energies, or
+    another independent and sufficiently accurate calculator. Passing the
+    learned model being checked does not independently establish the dataset's
+    sign convention; it measures only that model's energy--stress consistency.
 
-    The result is ``ambiguous`` when the RMSE values for the reported tensor
-    and its negation differ by no more than the configured tolerance. This is
-    expected for a nearly stress-free configuration.
+    Positions and cells are strained together, preserving fractional
+    coordinates. The reported stress must be a symmetric ``3 x 3`` tensor in
+    eV/Å³; its sign convention may be unknown.
+
+    ``preferred_sign_convention`` reports which sign agrees better with the
+    supplied reference energy derivatives; it is evidence from this structure,
+    not proof of dataset-wide metadata. The result is ``ambiguous`` when the
+    RMSE values for the reported tensor and its negation differ by no more than
+    the configured tolerance. This is expected for a nearly stress-free
+    configuration. Check multiple stressed structures and strain steps before
+    changing a dataset conversion.
     """
     positions = torch.as_tensor(positions)
     cell = torch.as_tensor(cell, dtype=positions.dtype, device=positions.device)
@@ -136,10 +146,10 @@ def diagnose_stress_sign(
 
     def evaluate(strain):
         transform = identity + strain
-        value = energy_fn(positions @ transform, cell @ transform)
+        value = reference_energy_fn(positions @ transform, cell @ transform)
         value = torch.as_tensor(value, dtype=cell.dtype, device=cell.device)
         if value.numel() != 1 or not torch.isfinite(value).all():
-            raise ValueError("energy_fn must return one finite scalar energy")
+            raise ValueError("reference_energy_fn must return one finite scalar energy")
         return value.reshape(())
 
     for row in range(3):
@@ -169,8 +179,8 @@ def diagnose_stress_sign(
     else:
         inferred_sign = "compression_positive"
 
-    return StressSignDiagnostic(
-        inferred_source_sign=inferred_sign,
+    return StressEnergyStrainCheck(
+        preferred_sign_convention=inferred_sign,
         finite_difference_stress=numerical_stress.detach(),
         reported_stress=reported_stress.detach(),
         tension_positive_rmse=float(tension_rmse),
