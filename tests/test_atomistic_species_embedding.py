@@ -97,7 +97,13 @@ ATOMISTIC_EXAMPLE_DIRECTORIES = (
 )
 
 
-def _model(atomistic, mpnn_type="EGNN", species_encoding=False, continuous_input_dim=0):
+def _model(
+    atomistic,
+    mpnn_type="EGNN",
+    species_encoding=False,
+    continuous_input_dim=0,
+    species_feature_index=None,
+):
     heads = update_multibranch_heads(
         {
             "node": {
@@ -141,6 +147,7 @@ def _model(atomistic, mpnn_type="EGNN", species_encoding=False, continuous_input
         num_after_skip=1,
         enable_interatomic_potential=atomistic,
         enable_atomistic_species_encoding=species_encoding,
+        atomistic_species_feature_index=species_feature_index,
         energy_weight=0.1,
         force_weight=1.0,
         use_gpu=False,
@@ -218,6 +225,30 @@ def test_atomistic_species_embedding_fuses_only_continuous_data_x():
 
     assert torch.equal(features, expected)
     assert model.atomistic_continuous_projection.in_features == 2
+
+
+def test_disabled_species_encoding_uses_atomic_number_scalar_from_data_x():
+    model = _model(atomistic=False)
+    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+
+    features = model._input_node_features(data)
+
+    assert torch.equal(features, data.x)
+
+
+def test_enabled_species_encoding_removes_scalar_fallback_from_data_x():
+    model = _model(
+        atomistic=False,
+        species_encoding=True,
+        continuous_input_dim=1,
+        species_feature_index=0,
+    )
+    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+
+    features = model._input_node_features(data)
+
+    assert model.atomistic_continuous_projection is None
+    assert torch.equal(features, model.species_embedding(data.atomic_numbers))
 
 
 def test_qm9_property_example_provides_canonical_atomic_numbers():

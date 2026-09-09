@@ -111,6 +111,17 @@ def update_config(config, train_loader, val_loader, test_loader):
     config["NeuralNetwork"]["Architecture"]["input_dim"] = schema_dimensions(
         named_schema, "node", "inputs"
     )
+    node_offset = 0
+    species_feature_index = None
+    for spec in named_schema.inputs:
+        if spec.level != "node" or spec.role == "position":
+            continue
+        if spec.role == "species":
+            species_feature_index = node_offset
+        node_offset += spec.dim
+    config["NeuralNetwork"]["Architecture"][
+        "atomistic_species_feature_index"
+    ] = species_feature_index
     named_graph_dim = schema_dimensions(named_schema, "graph", "inputs")
     if named_graph_dim:
         config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True

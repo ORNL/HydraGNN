@@ -192,6 +192,7 @@ class Base(Module):
         self.enable_atomistic_species_encoding = False
         self.species_embedding = None
         self.atomistic_continuous_projection = None
+        self.atomistic_species_feature_index = None
 
         def _pool_graph_features(x_tensor, batch_tensor):
             if batch_tensor is None:
@@ -539,7 +540,10 @@ class Base(Module):
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
     def configure_atomistic_species_encoding(
-        self, enabled: bool, continuous_input_dim: int = 0
+        self,
+        enabled: bool,
+        continuous_input_dim: int = 0,
+        species_feature_index: int | None = None,
     ) -> None:
         """Configure categorical species handling for atomistic models.
 
@@ -550,6 +554,7 @@ class Base(Module):
         self.enable_atomistic_species_encoding = bool(
             enabled and not self.uses_native_species_encoder
         )
+        self.atomistic_species_feature_index = species_feature_index
         if self.enable_atomistic_species_encoding:
             self.species_embedding = Embedding(119, self.hidden_dim, padding_idx=0)
             if continuous_input_dim > 0:
@@ -610,15 +615,30 @@ class Base(Module):
         if self.species_embedding is None:
             raise RuntimeError("atomistic species embedding was not initialized")
         features = self.species_embedding(atomic_numbers)
+        continuous_features = data.x
+        if self.atomistic_species_feature_index is not None:
+            index = self.atomistic_species_feature_index
+            if index < 0 or index >= data.x.shape[1]:
+                raise ValueError(
+                    "configured atomistic species feature index is outside data.x"
+                )
+            continuous_features = torch.cat(
+                (data.x[:, :index], data.x[:, index + 1 :]), dim=1
+            )
         if self.atomistic_continuous_projection is not None:
-            if data.x.shape[1] != self.atomistic_continuous_projection.in_features:
+            if (
+                continuous_features.shape[1]
+                != self.atomistic_continuous_projection.in_features
+            ):
                 raise ValueError(
                     "data.x must contain only the configured continuous atom "
                     "features when categorical species encoding is enabled; "
                     f"expected {self.atomistic_continuous_projection.in_features} "
-                    f"features but received {data.x.shape[1]}"
+                    f"features but received {continuous_features.shape[1]}"
                 )
-            features = features + self.atomistic_continuous_projection(data.x.float())
+            features = features + self.atomistic_continuous_projection(
+                continuous_features.float()
+            )
         return features
 
     def _embedding(self, data):

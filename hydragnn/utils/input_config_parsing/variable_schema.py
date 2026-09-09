@@ -214,6 +214,11 @@ def prepare_data_from_schema(data, schema: VariableSchema):
         value = validate_variable(data, spec)
         if spec.role == "feature":
             by_level[spec.level].append(value)
+        elif spec.role == "species":
+            # Preserve the scalar fallback representation in ``data.x``. A
+            # model with categorical species encoding enabled removes this
+            # column before applying its learned embedding.
+            by_level[spec.level].append(value.reshape(-1, 1).float())
 
     if by_level["node"]:
         data.x = torch.cat(by_level["node"], dim=-1)
@@ -257,5 +262,7 @@ def schema_dimensions(schema: VariableSchema, level: VariableLevel, group: str) 
     """Return the concatenated feature dimension for a level and group."""
     specs = getattr(schema, group)
     return sum(
-        spec.dim for spec in specs if spec.level == level and spec.role == "feature"
+        spec.dim
+        for spec in specs
+        if spec.level == level and spec.role in ("feature", "species")
     )

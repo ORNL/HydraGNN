@@ -87,7 +87,7 @@ def test_positions_do_not_change_invariant_node_features():
     assert not torch.equal(first.pos, second.pos)
 
 
-def test_species_variable_is_validated_but_not_compiled_as_continuous_input():
+def test_species_variable_compiles_as_scalar_fallback_input():
     variables = {
         "inputs": [
             {
@@ -108,8 +108,8 @@ def test_species_variable_is_validated_but_not_compiled_as_continuous_input():
 
     prepare_data_from_schema(data, schema)
 
-    assert data.x.shape == (3, 0)
-    assert schema_dimensions(schema, "node", "inputs") == 0
+    torch.testing.assert_close(data.x, torch.tensor([[1.0], [6.0], [8.0]]))
+    assert schema_dimensions(schema, "node", "inputs") == 1
 
 
 @pytest.mark.parametrize(

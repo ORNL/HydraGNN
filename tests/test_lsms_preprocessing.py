@@ -76,7 +76,7 @@ def test_lsms_preprocessing_compiles_schema_and_edges(tmp_path):
 
     data = prepare_lsms_dataset(tmp_path, _config())[0]
 
-    assert data.x.shape == (2, 0)
+    torch.testing.assert_close(data.x, torch.tensor([[26.0], [78.0]]))
     assert data.edge_index.shape == (2, 2)
     assert data.y.shape == (5, 1)
     torch.testing.assert_close(data.y_loc, torch.tensor([[0, 1, 3, 5]]))
@@ -98,5 +98,5 @@ def test_lsms_preprocessing_writes_reusable_splits(tmp_path):
     for label, expected_size in (("trainset", 2), ("valset", 1), ("testset", 1)):
         loaded = SerializedDataset(output, "lsms-test", label)
         assert len(loaded) == expected_size
-        assert loaded[0].x.shape == (2, 0)
+        assert loaded[0].x.shape == (2, 1)
         assert loaded[0].y_loc.shape == (1, 4)
