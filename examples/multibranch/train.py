@@ -137,11 +137,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
+    var_config = config["Variables"]
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -497,7 +493,7 @@ if __name__ == "__main__":
             optimizer, mode="min", factor=0.5, patience=5, min_lr=0.00001
         )
         model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-            model, optimizer, verbosity
+            model, optimizer, verbosity, config=config
         )
 
     # Print details of neural network architecture
@@ -523,7 +519,7 @@ if __name__ == "__main__":
             test_loader,
             writer,
             scheduler,
-            config["NeuralNetwork"],
+            config,
             log_name,
             verbosity,
             create_plots=False,

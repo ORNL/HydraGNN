@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env_rocm72.sh
+# HydraGNN installation for Frontier with ROCm 7.2
 # Complete automated setup for HydraGNN environment and dependencies on Frontier.
 # Updated to ROCm 7.2 (module rocm/7.2.0) and PyTorch wheels from https://download.pytorch.org/whl/rocm7.2
 #
@@ -116,7 +116,7 @@ python --version
 # ============================================================
 # pip helpers + NumPy pin
 # ============================================================
-banner "pip Helpers and NumPy Pin (1.26.4)"
+banner "pip Helpers and NumPy Pin (2.4.6)"
 PIP_FLAGS=(--upgrade-strategy only-if-needed)
 
 pip_retry() {
@@ -131,10 +131,10 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
-expected="1.26.4"
+expected="2.4.6"
 assert np.__version__==expected, f"NumPy is {np.__version__}, expected {expected}"
 PY
 }
@@ -142,9 +142,9 @@ PY
 subbanner "Upgrade pip/setuptools/wheel"
 pip_retry --disable-pip-version-check -U pip setuptools wheel
 
-subbanner "Install and pin numpy==1.26.4"
-pip_retry "numpy==1.26.4"
-assert_numpy_1264
+subbanner "Install and pin numpy==2.4.6"
+pip_retry "numpy==2.4.6"
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python dependencies
@@ -155,7 +155,7 @@ pip_retry ninja
 pip_retry astunparse
 pip_retry expecttest
 pip_retry hypothesis
-pip_retry numpy==1.26.4
+pip_retry numpy==2.4.6
 pip_retry psutil==7.1.0
 pip_retry pyyaml
 pip_retry requests
@@ -165,24 +165,24 @@ pip_retry sympy==1.14.0
 pip_retry filelock
 pip_retry networkx
 pip_retry jinja2
-pip_retry tqdm==4.67.1
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1
+pip_retry scipy==1.17.1
 pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 #pip_retry sqlite
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -217,18 +217,42 @@ if [[ "$ROCM_MM" != "$EXPECTED_ROCM_MM" ]]; then
   exit 1
 fi
 
-# ---- PyTorch ROCm 7.2 index URL ----
-PYTORCH_ROCM_INDEX_URL="https://download.pytorch.org/whl/rocm7.2"
+# ---- Official PyTorch ROCm 7.2 wheels ----
+# Keep this matrix aligned with the official PyTorch ROCm 7.2 installation
+# command. Pinning both packages prevents pip from resolving a CPU wheel or
+# selecting mutually incompatible torch/vision releases.
+PYTORCH_ROCM_INDEX_URL="${PYTORCH_ROCM_INDEX_URL:-https://download.pytorch.org/whl/rocm7.2}"
+TORCH_VERSION="${TORCH_VERSION:-2.14.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.29.0}"
 subbanner "Install ROCm PyTorch from ${PYTORCH_ROCM_INDEX_URL}"
-pip_retry --index-url "${PYTORCH_ROCM_INDEX_URL}" torch torchvision
-assert_numpy_1264
+echo "  torch==${TORCH_VERSION}"
+echo "  torchvision==${TORCHVISION_VERSION}"
+pip_retry --force-reinstall \
+          --index-url "${PYTORCH_ROCM_INDEX_URL}" \
+          --extra-index-url "https://pypi.org/simple" \
+          "torch==${TORCH_VERSION}" \
+          "torchvision==${TORCHVISION_VERSION}"
+assert_numpy_pinned
 
-python - <<'PY'
+python - "${TORCH_VERSION%%+*}" "${EXPECTED_ROCM_MM}" <<'PY'
+import sys
 import torch
+
+expected_torch, expected_rocm = sys.argv[1:]
 print("torch.__version__ =", torch.__version__)
 print("torch.version.hip =", torch.version.hip)
 print("torch.cuda.is_available() =", torch.cuda.is_available())  # ROCm uses torch.cuda API
 print("torch.cuda.device_count() =", torch.cuda.device_count())
+
+assert torch.__version__.split("+")[0] == expected_torch, (
+    f"PyTorch is {torch.__version__}, expected {expected_torch}+rocm{expected_rocm}"
+)
+assert f"rocm{expected_rocm}" in torch.__version__, (
+    f"PyTorch wheel {torch.__version__} is not built for ROCm {expected_rocm}"
+)
+assert torch.version.hip and torch.version.hip.startswith(expected_rocm), (
+    f"PyTorch reports HIP {torch.version.hip!r}, expected ROCm {expected_rocm}"
+)
 if torch.cuda.device_count() > 0:
     print("GPU[0] =", torch.cuda.get_device_name(0))
 PY
@@ -252,9 +276,14 @@ if [[ ! -d pytorch_geometric/.git ]]; then
   git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+if ! git rev-parse -q --verify "refs/tags/2.8.0" >/dev/null; then
+  git fetch --tags --force
+fi
+git checkout 2.8.0
+git submodule update --init --recursive
 rm -rf build
 pip_retry . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_scatter (ROCm fork pinned) ---
@@ -272,7 +301,7 @@ git submodule update --init --recursive
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 echo "pytorch_scatter pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
@@ -290,7 +319,7 @@ git checkout 2340737
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 echo "pytorch_sparse pinned to commit: $(git rev-parse --short HEAD)"
 popd >/dev/null
 
@@ -305,7 +334,7 @@ git checkout 1.6.3-11-g4126a52
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_spline_conv (official pinned) ---
@@ -319,12 +348,12 @@ git checkout 1.2.2-9-ga6d1020
 rm -rf build
 CC=gcc CXX=g++ python setup.py build
 CC=gcc CXX=g++ python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 subbanner "Install e3nn"
-pip_retry e3nn --verbose
-assert_numpy_1264
+pip_retry e3nn==0.5.1 --verbose
+assert_numpy_pinned
 
 # NOTE: unload ROCm for mpi4py build
 module unload craype-accel-amd-gfx90a
@@ -407,7 +436,7 @@ cd "$DEEPHYPER_FRONTIER"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL
@@ -488,7 +517,7 @@ else
     subbanner "vLLM ROCm requirements file not found; installing minimal build tooling"
     pip_retry cmake ninja packaging pybind11 setuptools_scm setuptools wheel amdsmi
   fi
-  assert_numpy_1264
+  assert_numpy_pinned
 
   subbanner "Building vLLM for gfx90a (ROCm 7.2)"
   cd "$VLLM_SRC_DIR"
@@ -509,7 +538,7 @@ import vllm
 print("vllm.__version__ =", vllm.__version__)
 PY
 
-  assert_numpy_1264
+  assert_numpy_pinned
 
   # Apply flashinfer ROCm patch (no libcudart; use libamdhip64 fallback).
   # vLLM's own cuda_wrapper.py already handles this, but flashinfer/comm/cuda_ipc.py
@@ -577,6 +606,8 @@ Base install:        $INSTALL_ROOT
 Virtual environment: $VENV_PATH
 ROCm version:        ${ROCM_MM}
 PyTorch index:       ${PYTORCH_ROCM_INDEX_URL}
+  - torch:           ${TORCH_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
+  - torchvision:     ${TORCHVISION_VERSION%%+*}+rocm${EXPECTED_ROCM_MM}
 PyTorch-Geometric:   $PYG_FRONTIER
   - pytorch_scatter fork: https://github.com/Looong01/pytorch_scatter-rocm.git @ 9799c51 (temporary)
   - pytorch_sparse fork:  https://github.com/Looong01/pytorch_sparse-rocm.git @ 2340737 (temporary)

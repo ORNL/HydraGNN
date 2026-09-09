@@ -17,6 +17,8 @@ import shutil
 import hydragnn, tests
 from tests._training_workflow import train_and_checkpoint
 
+pytestmark = pytest.mark.mpi
+
 
 # Loss function unit test called by pytest wrappers.
 # Note the intent of this test is to make sure all interfaces work - it does not assert anything
@@ -54,7 +56,12 @@ def unittest_loss_and_activation_functions(
                 + dataset_name
                 + ".pkl"
             )
-        if os.path.exists(pkl_file):
+        required_names = {
+            spec["name"]
+            for group in ("inputs", "outputs")
+            for spec in config["Variables"][group]
+        }
+        if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
 
     if rank == 0:
@@ -89,10 +96,7 @@ def unittest_loss_and_activation_functions(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
-                    tests.deterministic_graph_data(
-                        data_path, number_configurations=num_samples
-                    )
+                tests.ensure_deterministic_graph_data(data_path, num_samples)
 
     config["NeuralNetwork"]["Training"]["loss_function_type"] = loss_function_type
     config["NeuralNetwork"]["Training"]["num_epoch"] = 2

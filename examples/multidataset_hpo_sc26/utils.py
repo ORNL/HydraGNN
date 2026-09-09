@@ -161,12 +161,7 @@ def configure_variable_names(config):
     graph_feature_dims = [1]
     node_feature_names = ["atomic_number", "cartesian_coordinates", "forces"]
     node_feature_dims = [1, 3, 3]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dims
-    var_config["node_feature_names"] = node_feature_names
-    var_config["node_feature_dims"] = node_feature_dims
-    var_config["input_node_features"] = [0]
+    var_config = config["Variables"]
 
 
 def resolve_selected_precision(

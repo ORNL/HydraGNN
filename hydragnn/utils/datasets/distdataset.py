@@ -23,8 +23,6 @@ except ImportError:
 
 from hydragnn.utils.print.print_utils import log0
 from hydragnn.utils.distributed import nsplit
-from hydragnn.preprocess import update_predicted_values, update_atom_features
-
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 from tqdm import tqdm
 from io import BytesIO
@@ -299,14 +297,6 @@ class DistDataset(AbstractBaseDataset):
         log0("DDStore total (GB):", nbytes / 1024 / 1024 / 1024)
 
         ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
-        self.var_config = var_config
-
-        if self.var_config is not None:
-            self.input_node_features = self.var_config["input_node_features"]
-            self.variables_type = self.var_config["type"]
-            self.output_index = self.var_config["output_index"]
-            self.graph_feature_dim = self.var_config["graph_feature_dims"]
-            self.node_feature_dim = self.var_config["node_feature_dims"]
 
     def len(self):
         return self.total_ns
@@ -321,17 +311,6 @@ class DistDataset(AbstractBaseDataset):
         raise ValueError(
             "DDStore dataset has no node-indexed x or pos metadata for batching"
         )
-
-    def update_data_object(self, data_object):
-        if self.var_config is not None:
-            update_predicted_values(
-                self.variables_type,
-                self.output_index,
-                self.graph_feature_dim,
-                self.node_feature_dim,
-                data_object,
-            )
-            update_atom_features(self.input_node_features, data_object)
 
     @tr.profile("get")
     def get(self, idx):
@@ -384,5 +363,4 @@ class DistDataset(AbstractBaseDataset):
             v = torch.tensor(val)
             exec("data_object.%s = v" % (k))
 
-        self.update_data_object(data_object)
         return data_object

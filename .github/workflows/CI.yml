@@ -11,11 +11,27 @@ on:
 
 jobs:
   build:
-
+    name: ${{ matrix.suite }} (${{ matrix.python }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: ["3.11", "3.12", "3.13", "3.14"]
+        include:
+          - suite: serial
+            python: "3.11"
+          - suite: serial
+            python: "3.12"
+          - suite: serial
+            python: "3.13"
+          - suite: serial
+            python: "3.14"
+          - suite: mpi
+            python: "3.11"
+          - suite: mpi
+            python: "3.12"
+          - suite: mpi
+            python: "3.13"
+          - suite: mpi
+            python: "3.14"
 
     steps:
       - name: Setup Python
@@ -38,17 +54,27 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel meson-python ninja cython
-          python -m pip install numpy==2.2.6
-          # Install HydraGNN's pinned PyTorch before fairchem-core (pulled in
-          # by requirements-dev.txt) so dependency resolution cannot select a
-          # different torch build for the native parity tests.
-          python -m pip install --upgrade --no-build-isolation -v -r requirements-torch.txt --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+          python -m pip install numpy==2.4.6
+          # Install HydraGNN's pinned PyTorch (from requirements-torch.txt)
+          # before fairchem-core (pulled in by requirements-dev.txt) so
+          # dependency resolution cannot select a different torch build for
+          # the native parity tests.
+          python -m pip install --upgrade --no-build-isolation -v \
+            -r requirements-torch.txt \
+            --index-url https://download.pytorch.org/whl/cpu \
+            --extra-index-url https://pypi.org/simple
           python -m pip install --upgrade --no-build-isolation -v -r requirements-base.txt -r requirements-dev.txt
           # Model-specific backbone deps (e.g. FAIRChem UMA). Installed WITH
           # build isolation so omegaconf's sdist-only antlr4-python3-runtime
           # dependency can build its own backend -- see the file header.
           python -m pip install -v --upgrade -r requirements-specific-models.txt
-          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links https://data.pyg.org/whl/torch-2.13.0+cpu.html
+          # pyg-lib is not published on PyPI. Build the 0.8.0 release from its
+          # pinned commit so CI does not depend on the data.pyg.org wheel host.
+          python -m pip install --no-build-isolation -v "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
+          # Derive the find-links wheel URL from the torch actually installed
+          # above so it can never drift from requirements-torch.txt.
+          TORCH_VERSION="$(python -c 'import torch; print(torch.__version__.split("+")[0])')"
+          python -m pip install --upgrade --no-build-isolation -v -r requirements-pyg.txt --find-links "https://data.pyg.org/whl/torch-${TORCH_VERSION}+cpu.html"
           python -m pip install --upgrade --no-build-isolation -v -r requirements-deepspeed.txt || echo "DeepSpeed installation failed, continuing without it"
       - name: Show installed packages
         run: |
@@ -58,7 +84,8 @@ jobs:
         run: |
           black .
           git diff --exit-code
-      - name: Run pytest
+      - name: Run serial pytest
+        if: matrix.suite == 'serial'
         run: |
           # FIXME: install
           export PYTHONPATH=$PYTHONPATH:~/HydraGNN
@@ -69,11 +96,15 @@ jobs:
           python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m fairchem tests/test_fairchem_native_parity.py
           # Check if DeepSpeed is available
           if python -c "import deepspeed" 2>/dev/null; then
-            echo "DeepSpeed available - running all tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not fairchem"
-            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not fairchem"
+            echo "DeepSpeed available - running serial tests"
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not fairchem"
           else
             echo "DeepSpeed not available - skipping GPU/DeepSpeed tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not gpu and not deepspeed and not fairchem"
-            mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning  -W ignore::UserWarning --tb=native --with-mpi -m "not gpu and not deepspeed and not fairchem"
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not gpu and not deepspeed and not fairchem"
           fi
+      - name: Run MPI pytest
+        if: matrix.suite == 'mpi'
+        run: |
+          # FIXME: install
+          export PYTHONPATH=$PYTHONPATH:~/HydraGNN
+          mpirun -n 2 --oversubscribe python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native --with-mpi -m "mpi and not gpu and not deepspeed and not fairchem"

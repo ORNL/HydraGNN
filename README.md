@@ -28,30 +28,31 @@ Scalable PyTorch Implementation of Multi-Headed Graph Neural Networks
 
 ## Dependencies
 
-To install required packages with only basic capability (`torch`,
-`torch_geometric`, and related packages)
-and to serialize+store the processed data for later sessions (`pickle5`):
+To install the packages required for the core HydraGNN capability, including
+PyTorch and PyTorch Geometric:
 
 > **Python versions:** HydraGNN is tested and supported on **Python 3.11
 > through 3.14**. Facility installation scripts default to Python 3.11 unless
 > documented otherwise for that system.
 
+The generic `install_dependencies.sh` baseline currently uses NumPy 2.4.6, PyTorch 2.13.0,
+torchvision 0.28.0, and PyTorch Geometric 2.8.0. HydraGNN accepts PyTorch 2.13
+or 2.14 so facility installers can retain their tested accelerator wheels. The
+requirements files are the authoritative source for the complete version set.
+
 **Recommended approach - standard installation:**
 ```bash
-# Install all core dependencies (base + PyTorch + PyTorch Geometric)
-pip install -r requirements.txt
-
-# Or use the installation script
-./install_dependencies.sh all
+# Install core, PyTorch, PyTorch Geometric, and model-specific dependencies
+./install_dependencies.sh
 ```
 
-**Alternative approach for reproducible installation:**
+**Alternative manual approach:**
 ```bash
-# Use the provided installation script
-./install_dependencies.sh
-
-# Or install manually with consistent settings:
-pip install --no-build-isolation -v -r requirements.txt
+# Install the modular requirements in dependency order
+pip install --no-build-isolation -v -r requirements-base.txt
+pip install --no-build-isolation -v -r requirements-torch.txt
+pip install --no-build-isolation -v -r requirements-pyg.txt
+pip install -v -r requirements-specific-models.txt
 ```
 
 **Modular installation (choose what you need):**
@@ -62,28 +63,53 @@ pip install -r requirements-base.txt
 # Add PyTorch
 pip install -r requirements-torch.txt
 
-# Add PyTorch Geometric  
+# Add PyTorch Geometric
 pip install -r requirements-pyg.txt
 
 # Add optional features (HPO, FAIRChem, etc.)
 pip install -r requirements-optional.txt
 ```
 
+`pyg-lib` is built from source in CI because its binary wheels are hosted
+separately from PyPI. The official
+[`pyg-lib` installation documentation](https://github.com/pyg-team/pyg-lib#installation)
+explicitly supports this method. Install PyTorch first, then run:
+
+```bash
+pip install ninja wheel
+pip install --no-build-isolation \
+  "pyg_lib @ git+https://github.com/pyg-team/pyg-lib.git@26a2d1a06a4714da9bb804c19049afb4796971d7"
+```
+
+HydraGNN pins the source revision corresponding to `pyg-lib` 0.8.0 for
+reproducibility. The build requires a working C++ compiler.
+
 If you plan to modify the code, include packages for formatting (`black`) and
 testing (`pytest`) the code:
 ```bash
 pip install -r requirements-dev.txt
 # Or with the script:
-./install_dependencies.sh all dev
+./install_dependencies.sh dev
+
+# Install development and optional dependencies together:
+./install_dependencies.sh all
 ```
+
+The script accepts `dev` and `optional` separately or together; `all` enables
+both groups. Unknown group names are rejected.
 
 Detailed dependency installation instructions are available on the
 [Wiki](https://github.com/ORNL/HydraGNN/wiki/Install)
 
+The synthetic datasets used by model-quality CI tests have an explicit,
+versioned generation and normalization contract. Contributors changing test
+data or numerical quality thresholds should first read
+[Unit-test data fixtures](docs/unit_test_data.md).
+
 
 ## Installation
 
-After checking out HydgraGNN, we recommend to install HydraGNN in a
+After checking out HydraGNN, we recommend installing HydraGNN in
 developer mode so that you can use the files in your current location
 and update them if needed:
 ```bash
@@ -235,15 +261,134 @@ and propagated alongside the globally attended invariant representation.
 - [Materials preprocessing](docs/materials_preprocessing.md)
 - [HPC facility assets](scripts/hpc/README.md)
 
-  - `["Variables of Interest"]`
-    - `["input_node_features"]`  
-      Indices from nodal data used as inputs (int)
-    - `["output_index"]`  
-      Indices from data used as targets (int)
-    - `["type"]`  
-      Either `node` or `graph` (string)
-    - `["output_dim"]`  
-      Dimensions of prediction tasks (list)
+  - top-level `["Variables"]`
+    - `["inputs"]` and `["outputs"]` contain named tensor specifications.
+      Every specification has an attribute `name`, a `level` (`node`, `edge`,
+      or `graph`), and a positive feature dimension `dim`. Inputs may also
+      declare a semantic `role`; ordinary inputs use the default `feature`
+      role, while Cartesian coordinates use `position`.
+
+```json
+"Variables": {
+  "inputs": [
+    {"name": "atomic_numbers", "level": "node", "dim": 1},
+    {"name": "pos", "level": "node", "dim": 3, "role": "position"},
+    {"name": "bond_attributes", "level": "edge", "dim": 4},
+    {"name": "charge_and_spin", "level": "graph", "dim": 2}
+  ],
+  "outputs": [
+    {"name": "energy", "level": "graph", "dim": 1},
+    {"name": "forces", "level": "node", "dim": 3}
+  ]
+}
+```
+
+Each PyG sample must expose tensors with exactly those names. Node variables
+must have shape `(N, dim)`, edge variables `(E, dim)`, and graph variables
+`(1, dim)`. PyG therefore batches graph variables into `(B, dim)` without any
+special collation rule. When multiple attributes of the same level are listed,
+HydraGNN concatenates them along tensor dimension 1 in their JSON order. Thus,
+node attributes with dimensions 2 and 3 produce an `(N, 5)` tensor, while graph
+ attributes with dimensions 1 and 4 produce a `(1, 5)` tensor per sample.
+
+Attribute names are not aliases: the example uses PyG's conventional `pos`
+attribute, so the corresponding sample must provide `data.pos`. A different
+name is valid only when the JSON specification and PyG attribute match exactly.
+The `position` role is restricted to `pos` with node level and dimension 3.
+HydraGNN validates this geometric input but keeps it separate from `data.x`, so
+Cartesian coordinates do not become invariant scalar feature channels.
+
+#### Why positions are not concatenated into `data.x`
+
+`pos` is an input to a geometry-aware model, but it is not an ordinary scalar
+node feature. Translating a structure changes every Cartesian coordinate, and
+rotating it mixes the three coordinate components. If the coordinates were
+concatenated directly into `data.x`, an otherwise invariant or equivariant
+architecture could treat those frame-dependent values as scalar channels and
+lose its intended translation or rotation behavior.
+
+Declare Cartesian coordinates explicitly as:
+
+```json
+{"name": "pos", "level": "node", "dim": 3, "role": "position"}
+```
+
+For every sample, the matching `data.pos` must be a tensor of shape `(N, 3)`.
+HydraGNN validates it and leaves it in `data.pos`; geometry-aware local MPNNs,
+equivariant transformers, neighbor construction, and force calculations can
+then consume the coordinates through their dedicated geometric paths. The
+coordinates are excluded from both the constructed `data.x` and
+`Architecture.input_dim`. Autograd information on `data.pos` is preserved, so
+energy-gradient force models can still differentiate with respect to positions.
+
+For example, with `atomic_numbers` and `pos` declared above, preparation gives
+the model the following logically separate inputs:
+
+```text
+data.atomic_numbers ──> data.x       # ordinary node-feature channels
+data.pos            ──> data.pos     # geometric coordinates, unchanged
+```
+
+When several node inputs have the default `feature` role, only those inputs are
+concatenated into `data.x`, in JSON order. Never manually append `data.pos` to
+`data.x`. This rule applies to any geometry-aware application, not only machine
+learning interatomic potentials.
+
+The contract is deliberately strict: `role: "position"` is accepted only for
+an input named `pos` with `level: "node"` and `dim: 3`; outputs cannot have this
+role. Conversely, declaring `pos` without `role: "position"` is rejected. A
+schema must still declare at least one ordinary node input from which HydraGNN
+can construct `data.x`.
+
+Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
+`data.graph_attr`, `data.y`, or `data.y_loc` tensors in dataset importers.
+HydraGNN validates the named source attributes and builds those tensors when a
+sample is prepared from the schema:
+
+- node inputs with role `feature` become `data.x`;
+- edge inputs become `data.edge_attr`;
+- graph inputs become `data.graph_attr`;
+- outputs become the level-specific `data.node_output`, `data.edge_output`, and
+  `data.graph_output` tensors; and
+- all outputs are flattened in JSON order into `data.y`. `data.y_loc` stores
+  the boundaries needed to recover each configured output from `data.y`.
+
+The named source attributes remain on the PyG object after preparation. See the
+Variables section of the [Comprehensive User Manual](USER_MANUAL.md#variables)
+for the complete construction rules and a worked example.
+
+Schema preparation happens before a training-ready dataset is serialized. When
+that prepared dataset is later loaded from a HydraGNN pickle container, an
+ADIOS dataset, or a directory of PyG `.pt` samples, the stored graph is
+authoritative: HydraGNN uses its existing `x`, `edge_index`, `edge_attr`,
+`graph_attr`, `y`, `y_loc`, descriptors, and positional encodings without
+modifying them. Loading does not rebuild neighborhoods, renormalize edge
+lengths, rerun descriptor transforms, or compile named variables again. A
+change to any preprocessing choice therefore requires creation of a new
+prepared dataset.
+
+Source-variable names must not collide with HydraGNN's derived tensors. Names
+such as `x`, `edge_attr`, `graph_attr`, `y`, `y_loc`, `node_output`,
+`edge_output`, and `graph_output` are therefore rejected in both `inputs` and
+`outputs`. Use a semantic source name such as `node_features`, `edge_lengths`,
+or `energy`; HydraGNN then constructs the corresponding internal tensor.
+
+This schema is an intentional breaking replacement for
+`Variables_of_interest`. The index-based normalization helper
+`update_config_minmax` was removed with that interface because its
+`input_node_features` and `output_index` arguments have no meaning in the
+named-attribute schema. Applications that need normalization should normalize
+their named tensors explicitly and store the associated statistics with their
+dataset or application configuration.
+
+The schema is authoritative over HydraGNN's internal tensors. Because at least
+one node feature input is required, `data.x` is always rebuilt and overwrites any
+pre-existing `data.x`. Edge inputs, graph inputs, and outputs are optional:
+HydraGNN rebuilds their internal tensors when they are declared and removes
+stale `data.edge_attr`, `data.graph_attr`, `data.y`, `data.y_loc`, or
+level-specific output tensors when they are not. This prevents attributes
+provided by a third-party PyG dataset or an earlier schema preparation from
+silently reaching the model.
 
   - `["Training"]`
     - `["num_epoch"]`  
@@ -258,6 +403,12 @@ and propagated alongside the globally attended invariant representation.
       Training precision: `"fp32"`, `"bf16"`, `"fp64"` (str, default `"fp32"`)
     - `["conv_checkpointing"]`  
       Enable gradient checkpointing to reduce memory usage (bool, default `false`)
+    - `["LocalSGD"]`
+      Optional post-local-SGD configuration for ordinary DDP. Set `enabled`,
+      `warmup_steps`, and `synchronization_period` to replace per-step global
+      gradient averaging after warm-up with periodic model-parameter averaging.
+      `optimizer_state_policy` selects rank-local state (default) or strict
+      optimizer-aware synchronization; see the User Manual for constraints.
 
 
 ### Citations

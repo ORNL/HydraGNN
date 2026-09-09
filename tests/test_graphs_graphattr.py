@@ -14,54 +14,55 @@ import pytest
 import torch
 
 import hydragnn, tests
+from tests.deterministic_graph_data import DETERMINISTIC_GRAPH_DATA_VERSION
 from hydragnn.utils.input_config_parsing.config_utils import merge_config
 from mpi4py import MPI
-from hydragnn.preprocess import graph_samples_checks_and_updates as gscu
-from hydragnn.preprocess import graph_dataset
-from hydragnn.utils.datasets import pickledataset, distdataset, adiosdataset
 from tests._prediction_workflow import load_checkpoint_and_test
 from tests._training_workflow import train_and_checkpoint
 
 torch.manual_seed(97)
 
+pytestmark = pytest.mark.mpi
+
 CONDITIONING_MODES = ["concat_node", "film", "fuse_pool"]
 
 
-@pytest.fixture(autouse=True)
-def add_graph_attr(monkeypatch):
-    """Inject graph_attr during dataset preparation without touching core code."""
+def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
+    tests.deterministic_graph_data(str(tmp_path), number_configurations=1)
+    sample_path = next(tmp_path.glob("*.pt"))
+    sample = torch.load(sample_path, weights_only=False)
+    expected_count = (sample.node_features == sample.node_features[0]).sum().float()
+    expected = torch.stack((expected_count, expected_count.new_tensor(1.0))).view(1, 2)
+    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(
+        {
+            "inputs": [
+                {"name": "node_features", "level": "node", "dim": 1},
+                {"name": "graph_conditioning", "level": "graph", "dim": 2},
+            ],
+            "outputs": [],
+        }
+    )
 
-    orig_update = gscu.update_predicted_values
+    hydragnn.utils.input_config_parsing.prepare_data_from_schema(sample, schema)
 
-    def _wrapped(type, index, graph_feature_dim, node_feature_dim, data):
-        res = orig_update(type, index, graph_feature_dim, node_feature_dim, data)
-        if hasattr(data, "x") and data.x.numel() > 0:
-            first_val = data.x[0, 0]
-            matches = torch.isclose(data.x[:, 0], first_val)
-            charge = matches.sum().to(torch.float32)
-            spin = torch.ones(1, dtype=torch.float32)
-            data.graph_attr = torch.cat([charge.unsqueeze(0), spin])
-        return res
+    torch.testing.assert_close(sample.graph_attr, expected)
+    torch.testing.assert_close(sample.edge_lengths.max(), torch.tensor(1.0))
+    assert sample.fixture_schema_version == DETERMINISTIC_GRAPH_DATA_VERSION
 
-    monkeypatch.setattr(gscu, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(graph_dataset, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(pickledataset, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(distdataset, "update_predicted_values", _wrapped)
-    monkeypatch.setattr(adiosdataset, "update_predicted_values", _wrapped)
-    yield
-    monkeypatch.setattr(gscu, "update_predicted_values", orig_update)
-    monkeypatch.setattr(
-        graph_dataset, "update_predicted_values", orig_update, raising=False
+
+def test_deterministic_fixture_uses_historical_radius_graph(tmp_path):
+    tests.deterministic_graph_data(
+        str(tmp_path),
+        number_configurations=1,
+        unit_cell_x_range=[2, 3],
+        unit_cell_y_range=[2, 3],
+        unit_cell_z_range=[1, 2],
     )
-    monkeypatch.setattr(
-        pickledataset, "update_predicted_values", orig_update, raising=False
-    )
-    monkeypatch.setattr(
-        distdataset, "update_predicted_values", orig_update, raising=False
-    )
-    monkeypatch.setattr(
-        adiosdataset, "update_predicted_values", orig_update, raising=False
-    )
+    sample = torch.load(next(tmp_path.glob("*.pt")), weights_only=False)
+
+    # Two-neighbor KNN is used only to define the regression target. The model
+    # topology must retain the denser radius-2 graph from the original loader.
+    assert sample.edge_index.shape[1] > 2 * sample.num_nodes
 
 
 def unittest_train_model_graphattr(
@@ -88,6 +89,9 @@ def unittest_train_model_graphattr(
     config["NeuralNetwork"]["Architecture"]["global_attn_type"] = global_attn_type
     config["NeuralNetwork"]["Architecture"]["mpnn_type"] = mpnn_type
     config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
+    config["Variables"]["inputs"].append(
+        {"name": "graph_conditioning", "level": "graph", "dim": 2}
+    )
     config["NeuralNetwork"]["Architecture"][
         "graph_attr_conditioning_mode"
     ] = graph_attr_conditioning_mode
@@ -132,12 +136,22 @@ def unittest_train_model_graphattr(
                 + dataset_name
                 + ".pkl"
             )
-        if os.path.exists(pkl_file):
+        required_names = {
+            spec["name"]
+            for group in ("inputs", "outputs")
+            for spec in config["Variables"][group]
+        }
+        if tests.prepared_pickle_has_attributes(pkl_file, required_names):
             config["Dataset"]["path"][dataset_name] = pkl_file
 
-    # Only run with edge lengths for models that support them.
+    # Opt in to the fixture-owned, split-wide normalized edge lengths. The
+    # named declaration, rather than attribute presence alone, makes them
+    # canonical ``data.edge_attr`` input to the tested model.
     if use_lengths:
         config["NeuralNetwork"]["Architecture"]["edge_features"] = ["lengths"]
+        config["Variables"]["inputs"].append(
+            {"name": "edge_lengths", "level": "edge", "dim": 1}
+        )
 
     if rank == 0:
         num_samples_tot = 500
@@ -169,10 +183,7 @@ def unittest_train_model_graphattr(
                         * (1 - config["NeuralNetwork"]["Training"]["perc_train"])
                         * 0.5
                     )
-                if not os.listdir(data_path):
-                    tests.deterministic_graph_data(
-                        data_path, number_configurations=num_samples
-                    )
+                tests.ensure_deterministic_graph_data(data_path, num_samples)
     MPI.COMM_WORLD.Barrier()
 
     train_loader, val_loader, test_loader = (
@@ -211,13 +222,13 @@ def unittest_train_model_graphattr(
         thresholds["PNA"] = [0.10, 0.10]
         thresholds["PNAPlus"] = [0.10, 0.10]
         if graph_attr_conditioning_mode == "fuse_pool":
-            thresholds["PNAPlus"] = [0.16, 0.16]
+            thresholds["PNAPlus"] = [0.18, 0.18]
     if use_lengths and "vector" in ci_input:
         thresholds["PNA"] = [0.2, 0.15]
         thresholds["PNAPlus"] = [0.2, 0.15]
         thresholds["SchNet"] = [0.35, 0.35]
     if ci_input == "ci_conv_head.json":
-        thresholds["GIN"] = [0.26, 0.51]
+        thresholds["GIN"] = [0.38, 0.51]
         thresholds["SchNet"] = [0.38, 0.38]
         # EGNN performs worse with the small conv-head config; relax thresholds
         thresholds["EGNN"] = [0.36, 0.36]

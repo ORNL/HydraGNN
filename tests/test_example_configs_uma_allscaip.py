@@ -15,10 +15,10 @@ import json
 import pytest
 import torch
 from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader
 
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 from hydragnn.models.create import create_model_config
+from hydragnn.preprocess import create_dataloaders
 
 
 def _tiny_loader(num_graphs=4, num_nodes=6):
@@ -34,12 +34,16 @@ def _tiny_loader(num_graphs=4, num_nodes=6):
     for _ in range(num_graphs):
         pos = torch.randn(num_nodes, 3)
         atom_type = torch.randint(1, 10, (num_nodes, 1)).float()
-        d = Data(x=atom_type, pos=pos)
-        d.atomic_numbers = atom_type.view(-1).long()
+        d = Data(
+            atomic_numbers=atom_type,
+            potential=torch.zeros(num_nodes, 1),
+            pos=pos,
+        )
+        d.atomic_numbers = atom_type.long()
         d.charge = torch.zeros(1, dtype=torch.long)
         d.spin = torch.zeros(1, dtype=torch.long)
         data_list.append(d)
-    return DataLoader(data_list, batch_size=2, shuffle=False)
+    return data_list
 
 
 def _vector_head_loader(num_graphs=4, num_nodes=6):
@@ -56,14 +60,17 @@ def _vector_head_loader(num_graphs=4, num_nodes=6):
         atom_type = torch.randint(1, 10, (num_nodes, 1)).float()
         energy = torch.randn(1)
         forces = torch.randn(3 * num_nodes)
-        d = Data(x=atom_type, pos=pos)
-        d.atomic_numbers = atom_type.view(-1).long()
+        d = Data(
+            atomic_numbers=atom_type,
+            energy=energy.reshape(1, 1),
+            forces=forces.reshape(num_nodes, 3),
+            pos=pos,
+        )
+        d.atomic_numbers = atom_type.long()
         d.charge = torch.zeros(1, dtype=torch.long)
         d.spin = torch.zeros(1, dtype=torch.long)
-        d.y = torch.cat([energy, forces])
-        d.y_loc = torch.tensor([[0, 1, 1 + 3 * num_nodes]], dtype=torch.long)
         data_list.append(d)
-    return DataLoader(data_list, batch_size=2, shuffle=False)
+    return data_list
 
 
 def _load_example_config(filename):
@@ -71,14 +78,18 @@ def _load_example_config(filename):
     path = os.path.join(here, "..", "examples", "LennardJones", filename)
     with open(path, "r") as f:
         config = json.load(f)
-    # The example driver stamps the feature bookkeeping onto
-    # Variables_of_interest from the Dataset block; replicate that here.
-    voi = config["NeuralNetwork"]["Variables_of_interest"]
-    voi["graph_feature_names"] = config["Dataset"]["graph_features"]["name"]
-    voi["graph_feature_dims"] = config["Dataset"]["graph_features"]["dim"]
-    voi["node_feature_names"] = config["Dataset"]["node_features"]["name"]
-    voi["node_feature_dims"] = config["Dataset"]["node_features"]["dim"]
     return config
+
+
+def _prepared_loader(samples, config):
+    return create_dataloaders(
+        samples,
+        samples,
+        samples,
+        batch_size=2,
+        train_sampler_shuffle=False,
+        variables=config["Variables"],
+    )[0]
 
 
 @pytest.mark.parametrize(
@@ -97,7 +108,7 @@ def test_example_config_builds_model(filename, expected_mpnn, expected_str):
         config = _load_example_config(filename)
         assert config["NeuralNetwork"]["Architecture"]["mpnn_type"] == expected_mpnn
 
-        loader = _tiny_loader()
+        loader = _prepared_loader(_tiny_loader(), config)
         update_config(config, loader, loader, loader)
 
         model = create_model_config(
@@ -126,7 +137,7 @@ def test_uma_variant_config_builds_model(uma_variant):
         config = _load_example_config("LJ_UMA.json")
         config["NeuralNetwork"]["Architecture"]["uma_variant"] = uma_variant
 
-        loader = _tiny_loader()
+        loader = _prepared_loader(_tiny_loader(), config)
         update_config(config, loader, loader, loader)
 
         model = create_model_config(
@@ -160,7 +171,7 @@ def test_uma_equivariant_vector_head_config_builds_model():
         arch = config["NeuralNetwork"]["Architecture"]
         assert arch["uma_equivariant_vector_head"] is True
 
-        loader = _vector_head_loader()
+        loader = _prepared_loader(_vector_head_loader(), config)
         update_config(config, loader, loader, loader)
 
         model = create_model_config(

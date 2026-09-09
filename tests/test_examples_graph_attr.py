@@ -47,7 +47,7 @@ def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
         transform = AddLaplacianEigenvectorPE(
             k=pe_dim, attr_name="pe", is_undirected=True
         )
-        dataset = torch_geometric.datasets.QM9(
+        dataset = qm9_module.build_qm9_from_raw(
             root=os.path.join(tmp_path, "qm9"),
             pre_transform=lambda data: qm9_module.qm9_pre_transform(data, transform),
             pre_filter=qm9_module.qm9_pre_filter,
@@ -78,5 +78,14 @@ def test_examples_graph_attr(tmp_path, example, graph_attr_mode):
 
     sample = dataset[0]
     expected = torch.tensor([0.0, 1.0], dtype=torch.float32)
-    assert hasattr(sample, "graph_attr")
-    assert torch.allclose(sample.graph_attr, expected)
+    sample.conditioning = expected.reshape(1, 2)
+    config["Variables"]["inputs"].append(
+        {"name": "conditioning", "level": "graph", "dim": 2}
+    )
+    schema = hydragnn.utils.input_config_parsing.parse_variable_schema(
+        config["Variables"]
+    )
+    prepared = hydragnn.utils.input_config_parsing.prepare_data_from_schema(
+        sample, schema
+    )
+    assert torch.allclose(prepared.graph_attr, expected.reshape(1, 2))

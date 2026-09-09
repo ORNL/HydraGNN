@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env_perlmutter.sh
+# HydraGNN installation for Perlmutter
 # Complete automated setup for HydraGNN environment and dependencies on NERSC Perlmutter (CUDA/A100).
 #
 # CORRECTIONS INCLUDED:
@@ -10,14 +10,16 @@
 #     -> load gcc-native/13.2 and force CC/CXX to gcc/g++
 #
 # Usage:
-#   chmod +x setup_env_perlmutter.sh
-#   ./setup_env_perlmutter.sh
+#   chmod +x scripts/hpc/nersc/perlmutter/installation/install.sh
+#   scripts/hpc/nersc/perlmutter/installation/install.sh
 #
 # Optional env vars:
 #   VENV_PATH=/path/to/env
 #   PYTHON_VERSION=3.11
-#   EXPECTED_CUDA_MM=12.9
-#   TORCH_CUDA_TAG=cu129
+#   EXPECTED_CUDA_MM=13.0
+#   TORCH_CUDA_TAG=cu130
+#   TORCH_VERSION=2.14.0
+#   TORCHVISION_VERSION=0.29.0
 #   BUILD_PYG_LIB=0   # default 0 (skip pyg-lib). set 1 to try building from source.
 #   TORCH_CUDA_ARCH_LIST=8.0
 #   MAX_JOBS=16
@@ -38,7 +40,7 @@ banner "Starting HydraGNN environment setup on Perlmutter ($(date))"
 # Module initialization
 # ============================================================
 banner "Configure Perlmutter Modules"
-EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-12.9}"
+EXPECTED_CUDA_MM="${EXPECTED_CUDA_MM:-13.0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/module-loads.sh"
@@ -115,7 +117,7 @@ fi
 # ============================================================
 # pip helpers + NumPy pin
 # ============================================================
-banner "pip Helpers and NumPy Pin (1.26.4)"
+banner "pip Helpers and NumPy Pin (2.4.6)"
 
 PIP_FLAGS=(--upgrade-strategy only-if-needed)
 
@@ -131,10 +133,10 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
-expected="1.26.4"
+expected="2.4.6"
 assert np.__version__==expected, f"NumPy is {np.__version__}, expected {expected}"
 PY
 }
@@ -142,9 +144,9 @@ PY
 subbanner "Upgrade pip/setuptools/wheel"
 pip_retry --disable-pip-version-check -U pip setuptools wheel
 
-subbanner "Install and pin numpy==1.26.4"
-pip_retry "numpy==1.26.4"
-assert_numpy_1264
+subbanner "Install and pin numpy==2.4.6"
+pip_retry "numpy==2.4.6"
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python deps
@@ -156,7 +158,7 @@ pip_retry cmake
 pip_retry astunparse
 pip_retry expecttest
 pip_retry hypothesis
-pip_retry numpy==1.26.4
+pip_retry numpy==2.4.6
 pip_retry psutil==7.1.0
 pip_retry pyyaml
 pip_retry requests
@@ -166,23 +168,23 @@ pip_retry sympy==1.14.0
 pip_retry filelock
 pip_retry networkx
 pip_retry jinja2
-pip_retry tqdm==4.67.1
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1
+pip_retry scipy==1.17.1
 pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry tensorflow_datasets
 pip_retry vesin==0.4.2
@@ -192,19 +194,36 @@ pip_retry vesin==0.4.2
 # ============================================================
 banner "Install CUDA PyTorch (Before PyG)"
 
-# Match cudatoolkit/12.9 => cu129 wheels
-TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu129}"
+# Match cudatoolkit/13.0 => cu130 wheels. Pin the package versions so the
+# platform installer remains consistent with requirements-torch.txt.
+TORCH_CUDA_TAG="${TORCH_CUDA_TAG:-cu130}"
+TORCH_VERSION="${TORCH_VERSION:-2.14.0}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.29.0}"
 PYTORCH_INDEX_URL="https://download.pytorch.org/whl/${TORCH_CUDA_TAG}"
 
 subbanner "Install PyTorch from ${PYTORCH_INDEX_URL}"
-pip_retry --index-url "${PYTORCH_INDEX_URL}" torch torchvision
-assert_numpy_1264
+pip_retry --index-url "${PYTORCH_INDEX_URL}" \
+          --extra-index-url "https://pypi.org/simple" \
+          "torch==${TORCH_VERSION}" \
+          "torchvision==${TORCHVISION_VERSION}"
+assert_numpy_pinned
 
-python - <<'PY'
+python - "${TORCH_VERSION%%+*}" "${EXPECTED_CUDA_MM}" <<'PY'
+import sys
 import torch
+
+expected_torch, expected_cuda = sys.argv[1:]
+actual_torch = torch.__version__.split("+", 1)[0]
+actual_cuda = torch.version.cuda
 print("torch.__version__ =", torch.__version__)
-print("torch.version.cuda =", torch.version.cuda)
+print("torch.version.cuda =", actual_cuda)
 print("cuda available =", torch.cuda.is_available())
+assert actual_torch == expected_torch, (
+    f"PyTorch is {actual_torch}, expected {expected_torch}"
+)
+assert actual_cuda is not None and actual_cuda.startswith(expected_cuda), (
+    f"PyTorch CUDA runtime is {actual_cuda}, expected {expected_cuda}.x"
+)
 if torch.cuda.is_available():
     print("gpu name =", torch.cuda.get_device_name(0))
 PY
@@ -246,12 +265,12 @@ else
 fi
 
 subbanner "Install torch-geometric (pure python wrapper package)"
-pip_retry torch-geometric
-assert_numpy_1264
+pip_retry torch-geometric==2.8.0
+assert_numpy_pinned
 
 subbanner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
+pip_retry e3nn==0.5.1 openequivariance --verbose
+assert_numpy_pinned
 
 subbanner "PyG import sanity check"
 python - <<'PY'
@@ -349,7 +368,7 @@ cd "$DEEPHYPER_PERLMUTTER"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry -e . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL
@@ -390,6 +409,8 @@ Modules baseline:
   conda/Miniforge3-24.11.3-0 (or fallback)
 
 PyTorch:
+  torch:             ${TORCH_VERSION%%+*}+${TORCH_CUDA_TAG}
+  torchvision:       ${TORCHVISION_VERSION%%+*}+${TORCH_CUDA_TAG}
   CUDA wheel tag:    ${TORCH_CUDA_TAG}
   Index URL:         ${PYTORCH_INDEX_URL}
 

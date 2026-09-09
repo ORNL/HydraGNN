@@ -64,12 +64,7 @@ def get_log_name_config(config):
         + "-bs-"
         + str(config["NeuralNetwork"]["Training"]["batch_size"])
         + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
+        + "".join(spec["name"] + "-" for spec in config["Variables"]["inputs"])
         + "-task_weights-"
         + "".join(
             str(weigh) + "-"
@@ -155,17 +150,17 @@ if __name__ == "__main__":
         trainset = SimplePickleDataset(
             basedir=basedir,
             label="trainset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         valset = SimplePickleDataset(
             basedir=basedir,
             label="valset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         testset = SimplePickleDataset(
             basedir=basedir,
             label="testset",
-            var_config=config["NeuralNetwork"]["Variables_of_interest"],
+            var_config=config["Variables"],
         )
         pna_deg = trainset.pna_deg
     else:

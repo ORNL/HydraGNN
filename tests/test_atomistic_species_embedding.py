@@ -16,6 +16,7 @@ import json
 from pathlib import Path
 
 from hydragnn.models.Base import Base
+from hydragnn.models.AllScAIPStack import AllScAIPStack
 from hydragnn.models.CGCNNStack import CGCNNStack
 from hydragnn.models.DIMEStack import DIMEStack
 from hydragnn.models.EGCLStack import EGCLStack
@@ -29,6 +30,7 @@ from hydragnn.models.PNAPlusStack import PNAPlusStack
 from hydragnn.models.PNAStack import PNAStack
 from hydragnn.models.SAGEStack import SAGEStack
 from hydragnn.models.SCFStack import SCFStack
+from hydragnn.models.UMAStack import UMAStack
 from hydragnn.models.create import create_model
 from hydragnn.utils.model.model import update_multibranch_heads
 
@@ -46,7 +48,7 @@ GENERIC_STACKS = (
     CGCNNStack,
     MFCStack,
 )
-NATIVE_STACKS = (MACEStack,)
+NATIVE_STACKS = (MACEStack, AllScAIPStack, UMAStack)
 GENERIC_MPNN_TYPES = (
     "PAINN",
     "PNAEq",
@@ -262,10 +264,18 @@ def test_atomistic_example_configs_use_only_canonical_species_field():
                 continue
             checked.append(config_path)
             assert architecture.get("enable_atomistic_species_encoding") is True
-            continuous_features = neural_network["Variables_of_interest"][
-                "input_node_features"
+            species = [
+                variable
+                for variable in config["Variables"]["inputs"]
+                if variable.get("role") == "species"
             ]
-            assert 0 not in continuous_features
+            configured_atomic_numbers = [
+                variable
+                for variable in config["Variables"]["inputs"]
+                if variable["name"] == "atomic_numbers"
+            ]
+            assert configured_atomic_numbers == species
+            assert len(species) <= 1
     assert checked
 
 

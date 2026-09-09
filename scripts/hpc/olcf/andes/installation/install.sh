@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# setup_env_andes.sh
+# HydraGNN serial installation for Andes
 # Complete automated setup for HydraGNN environment and dependencies on Andes (CPU-only).
 
 set -Eeuo pipefail
@@ -92,7 +92,7 @@ python --version
 # ============================================================
 # pip helpers + NumPy pin
 # ============================================================
-banner "pip Helpers and NumPy Pin (1.26.4)"
+banner "pip Helpers and NumPy Pin (2.4.6)"
 PIP_FLAGS=(--upgrade-strategy only-if-needed)
 
 pip_retry() {
@@ -107,10 +107,10 @@ pip_retry() {
   return 1
 }
 
-assert_numpy_1264() {
+assert_numpy_pinned() {
   python - <<'PY'
 import numpy as np
-expected="1.26.4"
+expected="2.4.6"
 assert np.__version__==expected, f"NumPy is {np.__version__}, expected {expected}"
 PY
 }
@@ -118,9 +118,9 @@ PY
 subbanner "Upgrade pip/setuptools/wheel"
 pip_retry --disable-pip-version-check -U pip setuptools wheel
 
-subbanner "Install and pin numpy==1.26.4"
-pip_retry "numpy==1.26.4"
-assert_numpy_1264
+subbanner "Install and pin numpy==2.4.6"
+pip_retry "numpy==2.4.6"
+assert_numpy_pinned
 
 # ============================================================
 # Core scientific Python dependencies
@@ -128,37 +128,37 @@ assert_numpy_1264
 banner "Install Core Python Packages"
 
 pip_retry ninja
-pip_retry astunparse 
-pip_retry expecttest 
-pip_retry hypothesis 
-pip_retry numpy==1.26.4 
-pip_retry psutil==7.1.0 
-pip_retry pyyaml 
-pip_retry requests 
-pip_retry setuptools 
-pip_retry typing-extensions 
-pip_retry sympy==1.14.0 
-pip_retry filelock 
-pip_retry networkx 
-pip_retry jinja2 
-pip_retry tqdm==4.67.1
+pip_retry astunparse
+pip_retry expecttest
+pip_retry hypothesis
+pip_retry numpy==2.4.6
+pip_retry psutil==7.1.0
+pip_retry pyyaml
+pip_retry requests
+pip_retry setuptools
+pip_retry typing-extensions
+pip_retry sympy==1.14.0
+pip_retry filelock
+pip_retry networkx
+pip_retry jinja2
+pip_retry tqdm==4.70.0
 pip_retry types-dataclasses
-pip_retry scipy==1.14.1 
-pip_retry pyparsing 
+pip_retry scipy==1.17.1
+pip_retry pyparsing
 pip_retry build
 pip_retry Cython
 pip_retry tensorboard==2.20.0
-pip_retry scikit-learn==1.5.1
-pip_retry pytest
+pip_retry scikit-learn==1.7.2
+pip_retry pytest==8.4.2
 pip_retry ase==3.26.0
-pip_retry rdkit
+pip_retry rdkit==2026.3.5
 pip_retry jarvis-tools
 pip_retry pymatgen
 #pip_retry sqlite
 pip_retry igraph
-pip_retry mendeleev==0.16.0
+pip_retry mendeleev==1.2.0
 pip_retry lmdb
-pip_retry h5py==3.14.0 
+pip_retry h5py==3.16.0
 pip_retry tensorflow
 pip_retry vesin==0.4.2
 
@@ -168,7 +168,7 @@ pip_retry vesin==0.4.2
 banner "Install CPU-only PyTorch"
 PYTORCH_CPU_INDEX_URL="https://download.pytorch.org/whl/cpu"
 pip_retry --index-url "${PYTORCH_CPU_INDEX_URL}" torch torchvision
-assert_numpy_1264
+assert_numpy_pinned
 
 python - <<'PY'
 import torch
@@ -191,9 +191,14 @@ if [[ ! -d pytorch_geometric/.git ]]; then
   git clone --recursive git@github.com:pyg-team/pytorch_geometric.git
 fi
 pushd pytorch_geometric >/dev/null
+if ! git rev-parse -q --verify "refs/tags/2.8.0" >/dev/null; then
+  git fetch --tags --force
+fi
+git checkout 2.8.0
+git submodule update --init --recursive
 rm -rf build
 pip_retry . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_scatter (official repo & stable ref for CPU) ---
@@ -208,7 +213,7 @@ git submodule update --init --recursive
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_sparse (official pinned) ---
@@ -222,7 +227,7 @@ git checkout 0.6.18-8-gcdbf561
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_cluster (official pinned) ---
@@ -236,7 +241,7 @@ git checkout 1.6.3-11-g4126a52
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 # --- pytorch_spline_conv (official pinned) ---
@@ -250,12 +255,12 @@ git checkout 1.2.2-9-ga6d1020
 rm -rf build
 CC=mpicc CXX=mpicxx python setup.py build
 CC=mpicc CXX=mpicxx python setup.py install
-assert_numpy_1264
+assert_numpy_pinned
 popd >/dev/null
 
 subbanner "Install e3nn and openequivariance"
-pip_retry e3nn openequivariance --verbose
-assert_numpy_1264
+pip_retry e3nn==0.5.1 openequivariance --verbose
+assert_numpy_pinned
 
 # ============================================================
 # mpi4py
@@ -333,7 +338,7 @@ cd "$DEEPHYPER_ANDES"
 git clone https://github.com/deephyper/deephyper.git || true
 cd deephyper
 pip_retry -e . --verbose
-assert_numpy_1264
+assert_numpy_pinned
 
 # ============================================================
 # GPTL
@@ -392,4 +397,3 @@ echo "  ml miniforge3/23.11.0-0"
 echo "  ml libfabric/1.14.0"
 echo ""
 echo "  source activate ${VENV_PATH}"
-

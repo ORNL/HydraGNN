@@ -264,6 +264,8 @@ class AllScAIPStack(Base):
     force-training contract, and the (non-)equivariance discussion.
     """
 
+    uses_native_species_encoder = True
+
     def __init__(
         self,
         input_args,

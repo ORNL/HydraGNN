@@ -249,6 +249,8 @@ class UMAStack(Base):
     See module docstring for hyperparameter mapping and design notes.
     """
 
+    uses_native_species_encoder = True
+
     def __init__(
         self,
         input_args,

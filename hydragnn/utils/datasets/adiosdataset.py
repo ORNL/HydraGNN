@@ -43,7 +43,6 @@ import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.distributed import nsplit
-from hydragnn.preprocess import update_predicted_values, update_atom_features
 
 
 def adios2_open(*args, **kwargs):
@@ -780,14 +779,6 @@ class AdiosDataset(AbstractBaseDataset):
             self.f.__next__()
 
         ## FIXME: Using the same routine in SimplePickleDataset. We need to make as a common function
-        self.var_config = var_config
-
-        if self.var_config is not None:
-            self.input_node_features = self.var_config["input_node_features"]
-            self.variables_type = self.var_config["type"]
-            self.output_index = self.var_config["output_index"]
-            self.graph_feature_dim = self.var_config["graph_feature_dims"]
-            self.node_feature_dim = self.var_config["node_feature_dims"]
 
     def _read_smiles_strings(self, label, f):
         """
@@ -854,17 +845,6 @@ class AdiosDataset(AbstractBaseDataset):
             val = None
         val = self.comm.bcast(val, root=0)
         return val
-
-    def update_data_object(self, data_object):
-        if self.var_config is not None:
-            update_predicted_values(
-                self.variables_type,
-                self.output_index,
-                self.graph_feature_dim,
-                self.node_feature_dim,
-                data_object,
-            )
-            update_atom_features(self.input_node_features, data_object)
 
     def setkeys(self, keys):
         for k in keys:
@@ -1024,7 +1004,6 @@ class AdiosDataset(AbstractBaseDataset):
             if self.enable_cache:
                 self.cache[idx] = data_object
 
-        self.update_data_object(data_object)
         return data_object
 
     def _get_from_cache_or_file(self, cache_search_key, f, vname):

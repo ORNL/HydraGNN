@@ -145,14 +145,14 @@ PY
 echo "VENV_SITEPKG = $VENV_SITEPKG"
 
 # ============================================================
-# pip helpers + numpy pin (force venv numpy=1.26.4)
+# pip helpers + NumPy pin (force venv NumPy 2.4.6)
 # ============================================================
 banner "pip bootstrap"
 python -m pip install -U pip setuptools wheel
 
 CONSTRAINTS_FILE="${INSTALL_ROOT}/pip-constraints.txt"
 cat > "$CONSTRAINTS_FILE" <<'EOF'
-numpy==1.26.4
+numpy==2.4.6
 EOF
 export PIP_CONSTRAINT="$CONSTRAINTS_FILE"
 echo "PIP_CONSTRAINT = $PIP_CONSTRAINT"
@@ -243,8 +243,8 @@ pip_retry() {
   return 1
 }
 
-banner "Pin NumPy to 1.26.4 inside venv (shadow system-site numpy)"
-pip_retry "numpy==1.26.4"
+banner "Pin NumPy to 2.4.6 inside venv (shadow system-site NumPy)"
+pip_retry "numpy==2.4.6"
 python - <<'PY'
 import numpy as np
 print("numpy.__version__ =", np.__version__)
@@ -395,8 +395,7 @@ PY
 # PyTorch Geometric (base) + ALWAYS rebuild auxiliary deps (CPU-only)
 # ============================================================
 banner "Install PyTorch Geometric base (torch_geometric)"
-pip_retry torch_geometric
-
+pip_retry torch_geometric==2.8.0
 # ---- ALCF optional-deps prerequisites (TORCH_LIB + TORCH_VERSION) ----
 TORCH_LIB="$(python -c "import torch; print(torch.__file__)" | sed 's/__init__.py/lib/')"
 TORCH_VERSION="$(python -c "import torch; print(torch.__version__)" | sed 's/^\([0-9.]*\).*/\1/')"
@@ -485,27 +484,27 @@ PY
 # Additional python deps (NO torch install here!)
 # ============================================================
 banner "Install HydraGNN dependencies (do NOT install torch here)"
-pip_retry scipy pyyaml requests tqdm filelock psutil
+pip_retry "scipy==1.17.1" pyyaml requests "tqdm==4.70.0" filelock "psutil==7.1.0"
 pip_retry networkx jinja2
-pip_retry tensorboard scikit-learn pytest
-pip_retry ase h5py lmdb
+pip_retry "tensorboard==2.20.0" "scikit-learn==1.7.2" "pytest==8.4.2"
+pip_retry "ase==3.26.0" "h5py==3.16.0" lmdb
 
 # Keep numpy pinned and avoid it being bumped by scientific packages
-pip_retry "numpy==1.26.4"
+pip_retry "numpy==2.4.6"
 
-# Avoid numpy>=2 bump pressure from mendeleev in this environment
-pip_retry "mendeleev<1.1.0" || true
+# Keep mendeleev and NumPy aligned with HydraGNN requirements.
+pip_retry "mendeleev==1.2.0"
 
-pip_retry rdkit jarvis-tools pymatgen || true
+pip_retry "rdkit==2026.3.5" jarvis-tools pymatgen || true
 pip_retry igraph || true
 
-pip_retry e3nn openequivariance
-pip_retry vesin
+pip_retry e3nn==0.5.1 openequivariance
+pip_retry "vesin==0.4.2"
 pip_retry Cython
 pip_retry setuptools wheel
 
-banner "Re-check NumPy pin (must be 1.26.4 in venv)"
-pip_retry "numpy==1.26.4"
+banner "Re-check NumPy pin (must be 2.4.6 in venv)"
+pip_retry "numpy==2.4.6"
 python - <<'PY'
 import numpy as np
 print("numpy.__version__ =", np.__version__)
@@ -572,7 +571,7 @@ cat <<EOF
 Base install:        $INSTALL_ROOT
 Venv (system-site):  $VENV_PATH
 Venv site-packages:  $VENV_SITEPKG
-Constraints:         $CONSTRAINTS_FILE (numpy==1.26.4)
+Constraints:         $CONSTRAINTS_FILE (numpy==2.4.6)
 
 ADIOS2:
   - source:   $ADIOS2_SRC @ $ADIOS2_VERSION

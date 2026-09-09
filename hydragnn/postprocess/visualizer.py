@@ -17,6 +17,7 @@ from itertools import chain
 import time, pickle
 import numpy as np
 from math import sqrt, floor, ceil
+from hydragnn.utils.input_config_parsing import sanitize_filename_component
 
 plt.rcParams.update({"font.size": 18})
 
@@ -267,9 +268,10 @@ class Visualizer:
             )
 
         if save_plot:
+            filename = sanitize_filename_component(varname)
             fig.savefig(
                 f"./logs/{self.model_with_config_name}/"
-                + varname
+                + filename
                 + "_scatter_condm_err.png"
             )
             plt.close()
@@ -369,16 +371,19 @@ class Visualizer:
                 left=0.05, bottom=0.05, right=0.98, top=0.95, wspace=0.1, hspace=0.25
             )
         if save_plot:
+            filename = sanitize_filename_component(varname)
             if iepoch:
                 fig.savefig(
                     f"./logs/{self.model_with_config_name}/"
-                    + varname
+                    + filename
                     + "_"
                     + str(iepoch).zfill(4)
                     + ".png"
                 )
             else:
-                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/" + filename + ".png"
+                )
             plt.close()
         return
 
@@ -446,10 +451,11 @@ class Visualizer:
                 left=0.075, bottom=0.1, right=0.98, top=0.9, wspace=0.2, hspace=0.35
             )
             if save_plot:
+                filename = sanitize_filename_component(varname)
                 if iepoch:
                     fig.savefig(
                         f"./logs/{self.model_with_config_name}/"
-                        + varname
+                        + filename
                         + "_error_hist1d_"
                         + str(iepoch).zfill(4)
                         + ".png"
@@ -457,7 +463,7 @@ class Visualizer:
                 else:
                     fig.savefig(
                         f"./logs/{self.model_with_config_name}/"
-                        + varname
+                        + filename
                         + "_error_hist1d.png"
                     )
                 plt.close()
@@ -501,16 +507,19 @@ class Visualizer:
         )
 
         if save_plot:
+            filename = sanitize_filename_component(varname)
             if iepoch:
                 fig.savefig(
                     f"./logs/{self.model_with_config_name}/"
-                    + varname
+                    + filename
                     + "_"
                     + str(iepoch).zfill(4)
                     + ".png"
                 )
             else:
-                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/" + filename + ".png"
+                )
             plt.close()
 
     # FIXME: this function is currently unused and is explicitly written for 3d vectors.
@@ -597,16 +606,19 @@ class Visualizer:
         )
 
         if save_plot:
+            filename = sanitize_filename_component(varname)
             if iepoch:
                 fig.savefig(
                     f"./logs/{self.model_with_config_name}/"
-                    + varname
+                    + filename
                     + "_"
                     + str(iepoch).zfill(4)
                     + ".png"
                 )
             else:
-                fig.savefig(f"./logs/{self.model_with_config_name}/" + varname + ".png")
+                fig.savefig(
+                    f"./logs/{self.model_with_config_name}/" + filename + ".png"
+                )
             plt.close()
 
     def add_identity(self, axes, *line_args, **line_kwargs):

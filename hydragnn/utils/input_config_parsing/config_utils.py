@@ -8,7 +8,6 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-import pickle
 import os
 from hydragnn.preprocess.graph_samples_checks_and_updates import (
     check_if_graph_size_variable,
@@ -20,7 +19,34 @@ from hydragnn.utils.model import update_multibranch_heads
 from copy import deepcopy
 import warnings
 import json
+import hashlib
+import re
 import torch
+
+from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from .variable_schema import get_variable_schema, schema_dimensions
+
+_UNSAFE_LOG_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def sanitize_filename_component(value, max_length=48):
+    """Return a bounded, filesystem-safe representation of one path component.
+
+    The returned value never contains path separators or leading/trailing dots,
+    so configuration-derived labels can safely be used as filenames without
+    changing the original label shown to users in plots and logs.
+    """
+    original = str(value)
+    sanitized = _UNSAFE_LOG_COMPONENT.sub("-", original).strip("._-")
+    if not sanitized:
+        sanitized = "variable"
+
+    if sanitized != original or len(sanitized) > max_length:
+        digest = hashlib.sha256(original.encode("utf-8")).hexdigest()[:8]
+        prefix = sanitized[: max_length - len(digest) - 1].rstrip("._-")
+        sanitized = f"{prefix or 'variable'}-{digest}"
+
+    return sanitized
 
 
 def update_config(config, train_loader, val_loader, test_loader):
@@ -34,8 +60,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     else:
         graph_size_variable = bool(int(graph_size_variable))
 
-    if "Dataset" in config:
-        check_output_dim_consistent(train_loader.dataset[0], config)
+    named_schema = get_variable_schema(config)
 
     # Set default values for GPS variables
     if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
@@ -70,19 +95,33 @@ def update_config(config, train_loader, val_loader, test_loader):
         if mode == "node_budget" and "max_nodes" not in batching:
             raise ValueError("node_budget batching requires max_nodes")
 
+    validate_local_sgd_config(config["NeuralNetwork"]["Training"])
+
     # update output_heads with latest config rules
     config["NeuralNetwork"]["Architecture"]["output_heads"] = update_multibranch_heads(
         config["NeuralNetwork"]["Architecture"]["output_heads"]
     )
 
-    config["NeuralNetwork"] = update_config_NN_outputs(
-        config["NeuralNetwork"], train_loader.dataset[0], graph_size_variable
+    outputs = named_schema.outputs
+    if any(spec.level == "edge" for spec in outputs):
+        raise ValueError(
+            "Named edge outputs are valid data attributes, but HydraGNN does "
+            "not yet provide an edge prediction head"
+        )
+    config["NeuralNetwork"]["Architecture"]["input_dim"] = schema_dimensions(
+        named_schema, "node", "inputs"
     )
-
-    config = normalize_output_config(config)
-
-    config["NeuralNetwork"]["Architecture"]["input_dim"] = len(
-        config["NeuralNetwork"]["Variables_of_interest"]["input_node_features"]
+    named_graph_dim = schema_dimensions(named_schema, "graph", "inputs")
+    if named_graph_dim:
+        config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True
+    config["NeuralNetwork"]["Architecture"]["output_dim"] = [
+        spec.dim for spec in outputs
+    ]
+    config["NeuralNetwork"]["Architecture"]["output_type"] = [
+        spec.level for spec in outputs
+    ]
+    config["NeuralNetwork"]["Architecture"]["num_nodes"] = int(
+        train_loader.dataset[0].num_nodes
     )
     PNA_models = ["PNA", "PNAPlus", "PNAEq"]
     if config["NeuralNetwork"]["Architecture"]["mpnn_type"] in PNA_models:
@@ -151,76 +190,23 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
     if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
-    # AllScAIP-specific defaults (used by AllScAIPStack via create_model).
-    # Backbone depth is taken from the standard ``num_conv_layers`` key.
-    if "allscaip_num_heads" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_num_heads"] = 8
-    if "allscaip_freq_list" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_freq_list"] = None
-    if "allscaip_atten_name" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_atten_name"] = "math"
-    if "allscaip_use_node_path" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_use_node_path"] = True
-    if "allscaip_use_sincx_mask" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_use_sincx_mask"] = True
-    if "allscaip_use_freq_mask" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_use_freq_mask"] = True
-    if "allscaip_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_max_num_elements"] = 119
-    if "allscaip_knn_soft" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_knn_soft"] = True
-    if "allscaip_distance_function" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"][
-            "allscaip_distance_function"
-        ] = "gaussian"
-    if "allscaip_normalization" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_normalization"] = "rmsnorm"
-    if "allscaip_mlp_dropout" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_mlp_dropout"] = 0.0
-    if "allscaip_atten_dropout" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_atten_dropout"] = 0.0
-    if "allscaip_use_residual_scaling" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_use_residual_scaling"] = True
-    if "allscaip_regress_stress" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_regress_stress"] = False
-    if "allscaip_dataset_list" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["allscaip_dataset_list"] = []
-
-    # UMA-specific defaults (used by UMAStack via create_model).
-    if "uma_mmax" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_mmax"] = 2
-    if "uma_grid_resolution" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_grid_resolution"] = None
-    if "uma_edge_channels" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_edge_channels"] = 128
-    if "uma_hidden_channels" not in config["NeuralNetwork"]["Architecture"]:
-        # Default to None so UMAStack falls back to hidden_dim (sphere_channels).
-        config["NeuralNetwork"]["Architecture"]["uma_hidden_channels"] = None
-    if "uma_norm_type" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_norm_type"] = "rms_norm_sh"
-    if "uma_ff_type" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_ff_type"] = "grid"
-    if "uma_use_chg_spin" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_use_chg_spin"] = False
-    if "uma_max_num_elements" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_max_num_elements"] = 100
-    if "uma_variant" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_variant"] = "S"
-    if "uma_num_experts" not in config["NeuralNetwork"]["Architecture"]:
-        # None -> UMAStack picks the per-variant default (M=8, L=32; S=0).
-        config["NeuralNetwork"]["Architecture"]["uma_num_experts"] = None
-    if "uma_moe_dropout" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_moe_dropout"] = 0.0
-    if "uma_use_composition_embedding" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_use_composition_embedding"] = False
-    if "uma_equivariant_vector_head" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_equivariant_vector_head"] = False
-    if "uma_vector_head_index" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["uma_vector_head_index"] = None
+    # Model-specific defaults are shared with create_model_config so callers
+    # that bypass this normalization path receive the same values.
+    for key, value in MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS.items():
+        architecture.setdefault(key, deepcopy(value))
 
     config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
         config["NeuralNetwork"]["Architecture"]
     )
+    if named_schema is not None:
+        named_edge_dim = schema_dimensions(named_schema, "edge", "inputs")
+        if named_edge_dim:
+            if config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"]:
+                raise ValueError(
+                    "Named edge inputs cannot be used with interatomic-potential "
+                    "mode because that mode constructs specialized edge features"
+                )
+            config["NeuralNetwork"]["Architecture"]["edge_dim"] = named_edge_dim
 
     config["NeuralNetwork"]["Architecture"] = update_config_equivariance(
         config["NeuralNetwork"]["Architecture"]
@@ -334,6 +320,51 @@ def validate_equivariant_transformer_config(config):
         )
 
 
+def validate_local_sgd_config(training):
+    """Validate and fill defaults for optional post-local-SGD training."""
+    local_sgd = training.setdefault("LocalSGD", {"enabled": False})
+    if not isinstance(local_sgd, dict):
+        raise TypeError("Training.LocalSGD must be a JSON object")
+    local_sgd.setdefault("enabled", False)
+    if not isinstance(local_sgd["enabled"], bool):
+        raise TypeError("Training.LocalSGD.enabled must be a boolean")
+    if not local_sgd["enabled"]:
+        return
+
+    local_sgd.setdefault("warmup_steps", 0)
+    local_sgd.setdefault("synchronization_period", 1)
+    local_sgd.setdefault("optimizer_state_policy", "local")
+    local_sgd.setdefault("optimizer_state_bucket_bytes", 25 * 1024 * 1024)
+    if (
+        isinstance(local_sgd["warmup_steps"], bool)
+        or not isinstance(local_sgd["warmup_steps"], int)
+        or local_sgd["warmup_steps"] < 0
+    ):
+        raise ValueError("Training.LocalSGD.warmup_steps must be an integer >= 0")
+    if (
+        isinstance(local_sgd["synchronization_period"], bool)
+        or not isinstance(local_sgd["synchronization_period"], int)
+        or local_sgd["synchronization_period"] < 1
+    ):
+        raise ValueError(
+            "Training.LocalSGD.synchronization_period must be an integer >= 1"
+        )
+    if local_sgd["optimizer_state_policy"] not in {"local", "synchronize"}:
+        raise ValueError(
+            "Training.LocalSGD.optimizer_state_policy must be 'local' or "
+            "'synchronize'"
+        )
+    bucket_bytes = local_sgd["optimizer_state_bucket_bytes"]
+    if (
+        isinstance(bucket_bytes, bool)
+        or not isinstance(bucket_bytes, int)
+        or bucket_bytes < 1
+    ):
+        raise ValueError(
+            "Training.LocalSGD.optimizer_state_bucket_bytes must be an integer >= 1"
+        )
+
+
 def update_config_equivariance(config):
     equivariance_toggled_models = ["EGNN"]
     if "equivariance" in config:
@@ -377,120 +408,11 @@ def update_config_edge_dim(config):
     return config
 
 
-def check_output_dim_consistent(data, config):
-    output_type = config["NeuralNetwork"]["Variables_of_interest"]["type"]
-    output_index = config["NeuralNetwork"]["Variables_of_interest"]["output_index"]
-    if hasattr(data, "y_loc"):
-        for ihead in range(len(output_type)):
-            if output_type[ihead] == "graph":
-                assert (
-                    data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-                    == config["Dataset"]["graph_features"]["dim"][output_index[ihead]]
-                )
-            elif output_type[ihead] == "node":
-                assert (
-                    data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-                ) // data.num_nodes == config["Dataset"]["node_features"]["dim"][
-                    output_index[ihead]
-                ]
-
-
-def update_config_NN_outputs(config, data, graph_size_variable):
-    """ "Extract architecture output dimensions and set node-level prediction architecture"""
-
-    output_type = config["Variables_of_interest"]["type"]
-    if config["Architecture"].get("enable_interatomic_potential", False):
-        dims_list = config["Variables_of_interest"]["output_dim"]
-    elif hasattr(data, "y_loc"):
-        dims_list = []
-        for ihead in range(len(output_type)):
-            if output_type[ihead] == "graph":
-                dim_item = data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-            elif output_type[ihead] == "node":
-                # FIXME: check the first branch only, assuming all branches have the same type
-                if (
-                    graph_size_variable
-                    and config["Architecture"]["output_heads"]["node"][0][
-                        "architecture"
-                    ]["type"]
-                    == "mlp_per_node"
-                ):
-                    raise ValueError(
-                        '"mlp_per_node" is not allowed for variable graph size, Please set config["NeuralNetwork"]["Architecture"]["output_heads"]["node"]["type"] to be "mlp" or "conv" in input file.'
-                    )
-                dim_item = (
-                    data.y_loc[0, ihead + 1].item() - data.y_loc[0, ihead].item()
-                ) // data.num_nodes
-            else:
-                raise ValueError("Unknown output type", output_type[ihead])
-            dims_list.append(dim_item)
-    else:
-        for ihead in range(len(output_type)):
-            if output_type[ihead] != "graph":
-                raise ValueError(
-                    "y_loc is needed for outputs that are not at graph levels",
-                    output_type[ihead],
-                )
-        dims_list = config["Variables_of_interest"]["output_dim"]
-
-    config["Architecture"]["output_dim"] = dims_list
-    config["Architecture"]["output_type"] = output_type
-    config["Architecture"]["num_nodes"] = data.num_nodes
-    return config
-
-
-def normalize_output_config(config):
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    if "denormalize_output" in var_config and var_config["denormalize_output"]:
-        if (
-            var_config.get("minmax_node_feature") is not None
-            and var_config.get("minmax_graph_feature") is not None
-        ):
-            dataset_path = None
-        ###loading min/max values from input data file. Only one path is needed
-        elif list(config["Dataset"]["path"].values())[0].endswith(".pkl"):
-            dataset_path = list(config["Dataset"]["path"].values())[0]
-        else:
-            if "total" in config["Dataset"]["path"].keys():
-                dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}.pkl"
-            else:
-                dataset_path = f"{os.environ['SERIALIZED_DATA_PATH']}/serialized_dataset/{config['Dataset']['name']}_train.pkl"
-        var_config = update_config_minmax(dataset_path, var_config)
-    else:
-        var_config["denormalize_output"] = False
-
-    config["NeuralNetwork"]["Variables_of_interest"] = var_config
-    return config
-
-
-def update_config_minmax(dataset_path, config):
-    """load minimum and maximum values from dataset_path, if need denormalize,"""
-    ## Check first if "minmax_graph_feature" and "minmax_graph_feature"
-    if "minmax_node_feature" not in config and "minmax_graph_feature" not in config:
-        with open(dataset_path, "rb") as f:
-            node_minmax = pickle.load(f)
-            graph_minmax = pickle.load(f)
-    else:
-        node_minmax = config["minmax_node_feature"]
-        graph_minmax = config["minmax_graph_feature"]
-    config["x_minmax"] = []
-    config["y_minmax"] = []
-    feature_indices = [i for i in config["input_node_features"]]
-    for item in feature_indices:
-        config["x_minmax"].append(node_minmax[:, item].tolist())
-    output_type = config["type"]
-    output_index = config["output_index"]
-    for item in range(len(output_type)):
-        if output_type[item] == "graph":
-            config["y_minmax"].append(graph_minmax[:, output_index[item]].tolist())
-        elif output_type[item] == "node":
-            config["y_minmax"].append(node_minmax[:, output_index[item]].tolist())
-        else:
-            raise ValueError("Unknown output type", output_type[item])
-    return config
-
-
 def get_log_name_config(config):
+    input_names = "-".join(
+        sanitize_filename_component(spec.name)
+        for spec in get_variable_schema(config).inputs
+    )
     return (
         config["NeuralNetwork"]["Architecture"]["mpnn_type"]
         + "-r-"
@@ -514,12 +436,7 @@ def get_log_name_config(config):
             )
         ]
         + "-node_ft-"
-        + "".join(
-            str(x)
-            for x in config["NeuralNetwork"]["Variables_of_interest"][
-                "input_node_features"
-            ]
-        )
+        + input_names
         + "-task_weights-"
         + "".join(
             str(weigh) + "-"

@@ -32,10 +32,12 @@ from hydragnn.utils.datasets.pickledataset import (
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.utils.model import print_model
 from hydragnn.utils.descriptors_and_embeddings.smiles_utils import (
-    get_node_attribute_name,
     generate_graphdata_from_smilestr,
 )
-from hydragnn.utils.input_config_parsing.config_utils import parse_deepspeed_config
+from hydragnn.utils.input_config_parsing.config_utils import (
+    parse_deepspeed_config,
+    sanitize_filename_component,
+)
 from hydragnn.utils.distributed import get_deepspeed_init_args
 from hydragnn.utils.distributed import nsplit
 
@@ -299,8 +301,6 @@ if __name__ == "__main__":
     parser.set_defaults(format="adios")
     args = parser.parse_args()
 
-    graph_feature_names = ["GAP"]
-    graph_feature_dim = [1]
     dirpwd = os.path.dirname(os.path.abspath(__file__))
     datadir = os.path.join(dirpwd, "dataset/")
     ##################################################################################################################
@@ -311,18 +311,7 @@ if __name__ == "__main__":
     with open(input_filename, "r") as f:
         config = json.load(f)
     verbosity = config["Verbosity"]["level"]
-    var_config = config["NeuralNetwork"]["Variables_of_interest"]
-    var_config["output_names"] = [
-        graph_feature_names[item]
-        for ihead, item in enumerate(var_config["output_index"])
-    ]
-    var_config["graph_feature_names"] = graph_feature_names
-    var_config["graph_feature_dims"] = graph_feature_dim
-    (
-        var_config["input_node_feature_names"],
-        var_config["input_node_feature_dims"],
-    ) = get_node_attribute_name(ogb_node_types)
-    var_config["node_feature_dims"] = var_config["input_node_feature_dims"]
+    var_config = config["Variables"]
     ##################################################################################################################
     # Always initialize for multi-rank training.
     comm_size, rank = hydragnn.utils.distributed.setup_ddp(
@@ -487,7 +476,7 @@ if __name__ == "__main__":
         )
 
         model, optimizer = hydragnn.utils.distributed.distributed_model_wrapper(
-            model, optimizer, verbosity
+            model, optimizer, verbosity, config=config
         )
 
         # Print details of neural network architecture
@@ -535,7 +524,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         verbosity,
         create_plots=False,
@@ -559,9 +548,7 @@ if __name__ == "__main__":
             ihead = 0
             head_true = np.asarray(true_values[ihead].cpu()).squeeze()
             head_pred = np.asarray(predicted_values[ihead].cpu()).squeeze()
-            ifeat = var_config["output_index"][ihead]
-            outtype = var_config["type"][ihead]
-            varname = graph_feature_names[ifeat]
+            varname = var_config["outputs"][ihead]["name"]
 
             ax = axs[isub]
             error_mae = np.mean(np.abs(head_pred - head_true))
@@ -586,7 +573,8 @@ if __name__ == "__main__":
                 "MAE: {:.2f}".format(error_mae),
             )
         if rank == 0:
-            fig.savefig("./logs/" + log_name + "/" + varname + "_all.png")
+            filename = sanitize_filename_component(varname) + "_all.png"
+            fig.savefig(os.path.join("logs", log_name, filename))
         plt.close()
 
     if args.shmem:
