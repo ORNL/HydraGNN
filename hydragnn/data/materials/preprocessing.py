@@ -120,9 +120,7 @@ def diagnose_stress_sign(
         raise ValueError("positions and cell must contain only finite values")
     if not torch.isfinite(reported_stress).all():
         raise ValueError("reported_stress contains non-finite values")
-    if not torch.allclose(
-        reported_stress, reported_stress.T, rtol=1.0e-5, atol=1.0e-7
-    ):
+    if not torch.allclose(reported_stress, reported_stress.T, rtol=1.0e-5, atol=1.0e-7):
         raise ValueError("reported_stress must be symmetric")
     if strain_step <= 0:
         raise ValueError("strain_step must be positive")
