@@ -64,6 +64,9 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     # Create mock energy and forces for training
     energy = torch.randn(num_graphs, 1)  # Energy per molecule
     forces = torch.randn(num_atoms * num_graphs, 3)  # Forces per atom
+    cell = torch.eye(3).repeat(num_graphs, 1, 1) * 10.0
+    stress = torch.randn(num_graphs, 3, 3)
+    stress = 0.5 * (stress + stress.transpose(-1, -2))
 
     # Create positional encodings (random for testing)
     pe = torch.randn(num_atoms * num_graphs, 6)  # 6D positional encoding
@@ -79,6 +82,8 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
         batch=batch,
         energy=energy,
         forces=forces,
+        cell=cell,
+        stress=stress,
         pe=pe,
         edge_shifts=torch.zeros(
             edge_index.size(1), 3
@@ -277,6 +282,54 @@ def test_enabled_interatomic_loss_requires_its_label(term, missing, message):
         del data[missing]
     with pytest.raises(ValueError, match=message):
         model.energy_force_loss(model(data), data)
+
+
+FORCES_TERM = {
+    "variable": "forces",
+    "weight": 1.0,
+    "prediction": {
+        "operator": "negative_gradient",
+        "of": "energy",
+        "with_respect_to": "positions",
+    },
+}
+STRESS_TERM = {
+    "variable": "stress",
+    "weight": 2.0,
+    "prediction": {
+        "operator": "gradient_per_volume",
+        "of": "energy",
+        "with_respect_to": "strain",
+    },
+}
+
+
+@pytest.mark.mpi_skip()
+def test_energy_force_stress_loss():
+    """Stress contributes to MLIP loss through an energy/strain derivative."""
+    model = create_interatomic_model(
+        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+        FORCES_TERM,
+        STRESS_TERM,
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=2)
+    prediction = model(data)
+    loss, task_losses = model.energy_force_loss(prediction, data)
+
+    assert len(task_losses) == 3
+    assert all(torch.isfinite(value) for value in task_losses)
+    assert torch.isfinite(loss)
+    loss.backward()
+
+
+@pytest.mark.mpi_skip()
+def test_stress_loss_requires_cell():
+    """A clear error is raised instead of silently omitting stress."""
+    model = create_interatomic_model(STRESS_TERM)
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    del data.cell
+    with pytest.raises(ValueError, match="requires data.cell"):
+        model(data)
 
 
 @pytest.mark.mpi_skip()

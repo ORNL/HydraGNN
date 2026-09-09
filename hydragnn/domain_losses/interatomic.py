@@ -5,15 +5,17 @@ import torch_scatter
 class InteratomicPotentialDomainLoss(torch.nn.Module):
     """Declarative energy/force training objective for interatomic potentials."""
 
-    _SUPPORTED_TERMS = {"energy", "energy_per_atom", "forces", "hessian"}
+    _SUPPORTED_TERMS = {"energy", "energy_per_atom", "forces", "hessian", "stress"}
     requires_find_unused_parameters = True
 
     @staticmethod
-    def _validate_energy_derivative(name, prediction, operator):
+    def _validate_energy_derivative(
+        name, prediction, operator, with_respect_to="positions"
+    ):
         expected = {
             "operator": operator,
             "of": "energy",
-            "with_respect_to": "positions",
+            "with_respect_to": with_respect_to,
         }
         for field, value in expected.items():
             if prediction.get(field) != value:
@@ -51,6 +53,11 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         if "hessian" in self.active_terms:
             prediction = self.terms["hessian"].get("prediction", {})
             self._validate_energy_derivative("hessian", prediction, "hessian")
+        if "stress" in self.active_terms:
+            prediction = self.terms["stress"].get("prediction", {})
+            self._validate_energy_derivative(
+                "stress", prediction, "gradient_per_volume", "strain"
+            )
         expected = {
             "energy": ("energy", "per_structure"),
             "energy_per_atom": ("energy_per_atom", "per_atom"),
@@ -93,7 +100,63 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
             return getattr(self.model, name)
 
     def forward(self, data):
-        return self.model(data)
+        self._stress_displacement = None
+        self._stress_cell = None
+        if "stress" not in self.active_terms:
+            return self.model(data)
+
+        # Imported lazily: hydragnn.models imports hydragnn.domain_losses.
+        from hydragnn.models.allscaip_stack import AllScAIPStack
+
+        # AllScAIP owns its differentiable graph construction and applies
+        # strain internally. Other backbones receive the same symmetric
+        # infinitesimal strain here.
+        if isinstance(self.model, AllScAIPStack):
+            prediction = self.model(data)
+            self._stress_displacement = getattr(
+                self.model, "_hydragnn_stress_displacement", None
+            )
+            self._stress_cell = getattr(self.model, "_hydragnn_stress_cell", None)
+            return prediction
+
+        if getattr(data, "cell", None) is None:
+            raise ValueError(
+                "The enabled stress term requires data.cell for every graph."
+            )
+        num_graphs = int(data.batch.max().item()) + 1
+        cell = data.cell
+        if cell.dim() == 2 and cell.shape == (3, 3):
+            cell = cell.unsqueeze(0).expand(num_graphs, 3, 3).contiguous()
+        elif cell.dim() == 2 and cell.shape == (3 * num_graphs, 3):
+            cell = cell.view(num_graphs, 3, 3)
+        elif cell.dim() == 3 and cell.shape[1:] == (3, 3):
+            if cell.shape[0] == 1 and num_graphs > 1:
+                cell = cell.expand(num_graphs, 3, 3).contiguous()
+            elif cell.shape[0] != num_graphs:
+                raise ValueError(
+                    f"Expected one cell or {num_graphs} cells for stress "
+                    f"loss, got {cell.shape[0]}."
+                )
+        else:
+            raise ValueError(
+                f"Unexpected cell shape {tuple(cell.shape)} for stress loss."
+            )
+        displacement = torch.zeros_like(cell, requires_grad=True)
+        strain = 0.5 * (displacement + displacement.transpose(-1, -2))
+        original_pos = data.pos
+        original_cell = data.cell
+        data.pos = original_pos + torch.bmm(
+            original_pos.unsqueeze(1), strain[data.batch]
+        ).squeeze(1)
+        data.cell = cell + torch.bmm(cell, strain)
+        try:
+            prediction = self.model(data)
+        finally:
+            data.pos = original_pos
+            data.cell = original_cell
+        self._stress_displacement = displacement
+        self._stress_cell = cell
+        return prediction
 
     def _loss(self, name, prediction, target):
         # Imported lazily: hydragnn.models imports hydragnn.domain_losses.
@@ -210,6 +273,34 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                     hessian_prediction[finite],
                     hessian_target[finite],
                 )
+        if "stress" in self.active_terms:
+            if getattr(data, "stress", None) is None:
+                raise ValueError("The enabled stress term requires data.stress.")
+            displacement = getattr(self, "_stress_displacement", None)
+            cell = getattr(self, "_stress_cell", None)
+            if displacement is None or cell is None:
+                raise RuntimeError(
+                    "The selected MLIP backbone did not expose a differentiable "
+                    "cell displacement for stress prediction."
+                )
+            virial = torch.autograd.grad(
+                energy_pred,
+                displacement,
+                grad_outputs=torch.ones_like(energy_pred),
+                retain_graph=energy_pred.requires_grad,
+                create_graph=create_graph,
+            )[0]
+            volume = torch.det(cell).abs().view(-1, 1, 1)
+            min_volume = torch.finfo(volume.dtype).eps
+            if not torch.isfinite(volume).all() or torch.any(volume <= min_volume):
+                raise ValueError(
+                    "stress loss requires finite, non-singular simulation cells."
+                )
+            stress_prediction = virial / volume
+            stress_target = data.stress.to(stress_prediction).reshape_as(
+                stress_prediction
+            )
+            values["stress"] = (stress_prediction, stress_target)
         return values
 
     def energy_force_loss(self, pred, data, create_graph=True):

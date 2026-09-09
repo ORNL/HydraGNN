@@ -28,6 +28,18 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.precision import resolve_precision
 
 
+def _stress_term_enabled(domain_loss_config):
+    if not domain_loss_config or not domain_loss_config.get("enabled", False):
+        return False
+    if domain_loss_config.get("provider") != "interatomic_potential":
+        return False
+    terms = domain_loss_config.get("supervised", {}).get("terms", [])
+    return any(
+        term.get("variable") == "stress" and float(term.get("weight", 0.0)) > 0
+        for term in terms
+    )
+
+
 def create_model_config(
     config: dict,
     verbosity: int = 0,
@@ -220,6 +232,11 @@ def create_model(
         raise TypeError(
             f"create_model() got unexpected keyword arguments: {sorted(flat_settings)}"
         )
+    if (
+        _stress_term_enabled(domain_loss_config)
+        and not params["allscaip"].regress_stress
+    ):
+        params["allscaip"] = replace(params["allscaip"], regress_stress=True)
     params = SimpleNamespace(**params)
 
     timer = Timer("create_model")

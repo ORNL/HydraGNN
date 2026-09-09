@@ -39,6 +39,24 @@ atomic positions. Hessians are computed by differentiating those forces and
 currently require a batch size of one. At least one term must be enabled with a
 positive weight.
 
+Periodic systems can also supervise stress with:
+
+```json
+{
+    "variable": "stress", "weight": 1.0,
+    "prediction": {
+        "operator": "gradient_per_volume",
+        "of": "energy",
+        "with_respect_to": "strain"
+    }
+}
+```
+
+The stress is the derivative of the predicted energy with respect to a
+symmetric infinitesimal cell strain divided by the cell volume. Stress
+training requires full `3 x 3` reference tensors in `data.stress` and
+non-singular cells in `data.cell`; stresses use eV/Å³ with tension positive.
+
 Derivative targets are supplied as dataset attributes, not direct output
 heads. See the [PubChem Gaussian workflow](../examples/pubchem_gaussian/README.md)
 for a complete energy/force/Hessian example and target layout. That workflow
