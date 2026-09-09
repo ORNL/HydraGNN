@@ -11,17 +11,15 @@
             "force_weight": 1.0,
             "hessian_weight": 1.0,
             "graph_pooling": "add",
-            "edge_features": [
-                "bond_length"
-            ],
+            "edge_features": [],
             "max_neighbours": 64,
             "num_gaussians": 32,
             "num_filters": 64,
-            "radius": 11.338356752746968,
+            "radius": 11.3383567527,
             "hidden_dim": 128,
             "num_conv_layers": 4,
             "output_heads": {
-                "node": {
+                "graph": {
                     "num_headlayers": 2,
                     "dim_headlayers": [
                         128,

@@ -1122,8 +1122,11 @@ def create_model(
                         + energy_peratom_loss * energy_peratom_loss_weight
                     )
 
-                # Forces
-                need_hessian = hessian_loss_weight > 0
+                # NaN Hessians mark structures for which no reference Hessian exists.
+                hessian_mask = None
+                if hessian_loss_weight > 0:
+                    hessian_mask = torch.isfinite(data.hessian)
+                need_hessian = hessian_mask is not None and bool(hessian_mask.any())
                 forces_pred, hessian_pred = compute_forces_and_hessian(
                     graph_energy_pred,
                     data.pos,
@@ -1148,9 +1151,15 @@ def create_model(
 
                 if need_hessian:
                     hessian_true = data.hessian.reshape(hessian_pred.shape).float()
-                    hessian_loss = self.loss_function(hessian_pred, hessian_true)
-                    tasks_loss.append(hessian_loss)
+                    hessian_mask = hessian_mask.reshape(hessian_pred.shape)
+                    hessian_loss = self.loss_function(
+                        hessian_pred[hessian_mask], hessian_true[hessian_mask]
+                    )
                     tot_loss = tot_loss + hessian_loss * hessian_loss_weight
+                else:
+                    hessian_loss = zero
+                if hessian_loss_weight > 0:
+                    tasks_loss.append(hessian_loss)
 
                 return tot_loss, tasks_loss
 

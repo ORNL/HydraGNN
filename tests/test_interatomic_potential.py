@@ -16,7 +16,7 @@ This test validates the enhanced forward method functionality for molecular simu
 
 import torch
 import torch_scatter
-from torch_geometric.data import Data
+from torch_geometric.data import Batch, Data
 import pytest
 
 
@@ -140,6 +140,23 @@ def test_energy_and_force_loss_still_works():
     loss, tasks = model.energy_force_loss(model(data), data)
     assert loss.requires_grad
     assert len(tasks) == 3
+
+
+@pytest.mark.mpi_skip()
+def test_unavailable_hessian_is_skipped():
+    model = create_weighted_interatomic_model(
+        energy_weight=1.0, force_weight=1.0, hessian_weight=1.0
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    data.hessian = torch.full((9, 9), torch.nan)
+    data = Batch.from_data_list([data])
+
+    loss, tasks = model.energy_force_loss(model(data), data)
+
+    assert loss.requires_grad
+    assert torch.isfinite(loss)
+    assert len(tasks) == 4
+    assert tasks[-1].item() == 0.0
 
 
 @pytest.mark.mpi_skip()
