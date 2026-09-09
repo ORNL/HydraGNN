@@ -1136,11 +1136,18 @@ def create_model(
                 assert (
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                force_loss = (
-                    self.loss_function(forces_pred, data.forces.float())
-                    if hasattr(data, "forces")
-                    else zero
-                )
+                if hasattr(data, "forces"):
+                    forces_true = data.forces.float()
+                    force_mask = torch.isfinite(forces_true)
+                    force_loss = (
+                        self.loss_function(
+                            forces_pred[force_mask], forces_true[force_mask]
+                        )
+                        if bool(force_mask.any())
+                        else zero
+                    )
+                else:
+                    force_loss = zero
                 tasks_loss.append(force_loss)
 
                 if force_loss_weight > 0:

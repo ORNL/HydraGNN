@@ -143,6 +143,27 @@ def test_energy_and_force_loss_still_works():
 
 
 @pytest.mark.mpi_skip()
+@pytest.mark.parametrize("all_unavailable", [False, True])
+def test_nan_force_labels_are_skipped(all_unavailable):
+    model = create_weighted_interatomic_model(
+        energy_weight=1.0, force_weight=1.0
+    )
+    data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
+    if all_unavailable:
+        data.forces.fill_(torch.nan)
+    else:
+        data.forces[0] = torch.nan
+
+    loss, tasks = model.energy_force_loss(model(data), data)
+
+    assert loss.requires_grad
+    assert torch.isfinite(loss)
+    assert torch.isfinite(tasks[2])
+    if all_unavailable:
+        assert tasks[2].item() == 0.0
+
+
+@pytest.mark.mpi_skip()
 def test_unavailable_hessian_is_skipped():
     model = create_weighted_interatomic_model(
         energy_weight=1.0, force_weight=1.0, hessian_weight=1.0
