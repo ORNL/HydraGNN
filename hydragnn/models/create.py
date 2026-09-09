@@ -1005,7 +1005,7 @@ def create_model(
                     cell = data.cell
                     if cell.dim() == 2 and cell.shape == (3, 3):
                         cell = cell.unsqueeze(0).expand(num_graphs, 3, 3).contiguous()
-                    elif cell.dim() == 2 and cell.shape[0] == 3 * num_graphs:
+                    elif cell.dim() == 2 and cell.shape == (3 * num_graphs, 3):
                         cell = cell.view(num_graphs, 3, 3)
                     elif cell.dim() == 3 and cell.shape[1:] == (3, 3):
                         if cell.shape[0] == 1 and num_graphs > 1:

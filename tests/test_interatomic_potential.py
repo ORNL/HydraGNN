@@ -186,6 +186,11 @@ def test_stress_loss_requires_cell():
     with pytest.raises(ValueError, match="Expected one cell or 2 cells"):
         model(data)
 
+    data = create_mock_molecular_data(num_atoms=5, num_graphs=2)
+    data.cell = torch.zeros(6, 2)
+    with pytest.raises(ValueError, match="Unexpected cell shape"):
+        model(data)
+
 
 @pytest.mark.mpi_skip()
 def test_model_creation_with_enhancement():
