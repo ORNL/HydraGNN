@@ -10,15 +10,15 @@
 ##############################################################################
 
 from .preprocessing import (
-    StressSignDiagnostic,
-    diagnose_stress_sign,
+    StressEnergyStrainCheck,
+    check_stress_against_energy_strain,
     normalize_stress,
     validate_materials_sample,
 )
 
 __all__ = [
-    "StressSignDiagnostic",
-    "diagnose_stress_sign",
+    "StressEnergyStrainCheck",
+    "check_stress_against_energy_strain",
     "normalize_stress",
     "validate_materials_sample",
 ]

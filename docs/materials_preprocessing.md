@@ -15,23 +15,25 @@ MPTrj and OMat24 are the first consumers. MPTrj converts VASP stress from kbar
 with compression positive. OMat24 receives ASE stress already expressed in
 eV/Å³ with tension positive.
 
-## Diagnosing an unknown sign convention
+## Checking stress against reference energy–strain derivatives
 
-Use `diagnose_stress_sign` when an energy evaluator is available for strained
-versions of a source structure:
+Use `check_stress_against_energy_strain` when the original reference method or
+labeled strained energies are available for a source structure:
 
 ```python
-from hydragnn.utils.materials import diagnose_stress_sign
+from hydragnn.utils.materials import check_stress_against_energy_strain
 
-diagnostic = diagnose_stress_sign(
+check = check_stress_against_energy_strain(
     data.pos,
     data.cell,
     source_stress,  # symmetric 3 x 3, eV/Å³
-    lambda positions, cell: calculator.energy(positions, cell),
+    reference_energy_fn=lambda positions, cell: reference_calculator.energy(
+        positions, cell
+    ),
 )
-print(diagnostic.inferred_source_sign)
-print(diagnostic.tension_positive_rmse)
-print(diagnostic.compression_positive_rmse)
+print(check.preferred_sign_convention)
+print(check.tension_positive_rmse)
+print(check.compression_positive_rmse)
 ```
 
 The utility applies positive and negative perturbations for all six independent
@@ -39,4 +41,15 @@ symmetric strain components, estimates `dE/dstrain / volume` with central
 finite differences, and compares that tensor with both the reported stress and
 its negation. It returns `ambiguous` for configurations where the two errors are
 too similar, as commonly happens near zero stress. It does not modify the
-reported tensor; pass the inferred convention explicitly to `normalize_stress`.
+reported tensor.
+
+The energy callback is deliberately named `reference_energy_fn`: use the same
+first-principles method that produced the labels, actual labeled strained
+energies, or another independent and sufficiently accurate calculator. Using
+the learned model under evaluation cannot independently establish the label
+convention; it checks only that model's energy–stress consistency, and energy
+errors can reverse the numerical derivative. The preferred convention is
+evidence for one structure rather than proof of dataset-wide metadata. Check
+multiple structures with appreciable stress and multiple strain steps before
+changing a dataset conversion, then pass the verified convention explicitly to
+`normalize_stress`.

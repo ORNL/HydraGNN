@@ -14,7 +14,7 @@ import torch
 from torch_geometric.data import Data
 
 from hydragnn.utils.materials import (
-    diagnose_stress_sign,
+    check_stress_against_energy_strain,
     normalize_stress,
     validate_materials_sample,
 )
@@ -68,7 +68,7 @@ def test_normalize_stress_preserves_ase_convention():
     ("reported_sign", "expected"),
     [(1.0, "tension_positive"), (-1.0, "compression_positive")],
 )
-def test_diagnose_stress_sign(reported_sign, expected):
+def test_check_stress_against_energy_strain(reported_sign, expected):
     dtype = torch.float64
     positions = torch.tensor([[0.1, 0.2, 0.3], [0.7, 0.6, 0.5]], dtype=dtype)
     cell = torch.diag(torch.tensor([2.0, 3.0, 4.0], dtype=dtype))
@@ -78,37 +78,37 @@ def test_diagnose_stress_sign(reported_sign, expected):
     )
     volume = torch.det(cell)
 
-    def energy_fn(_positions, strained_cell):
+    def reference_energy_fn(_positions, strained_cell):
         deformation = torch.linalg.solve(cell, strained_cell)
         strain = deformation - torch.eye(3, dtype=dtype)
         return volume * torch.sum(reference * strain)
 
-    result = diagnose_stress_sign(
+    result = check_stress_against_energy_strain(
         positions,
         cell,
         reported_sign * reference,
-        energy_fn,
+        reference_energy_fn=reference_energy_fn,
         strain_step=1.0e-5,
     )
 
-    assert result.inferred_source_sign == expected
+    assert result.preferred_sign_convention == expected
     torch.testing.assert_close(
         result.finite_difference_stress, reference, rtol=1.0e-9, atol=1.0e-9
     )
 
 
-def test_diagnose_stress_sign_reports_ambiguous_zero_stress():
+def test_energy_strain_check_reports_ambiguous_zero_stress():
     positions = torch.zeros(1, 3, dtype=torch.float64)
     cell = torch.eye(3, dtype=torch.float64)
 
-    result = diagnose_stress_sign(
+    result = check_stress_against_energy_strain(
         positions,
         cell,
         torch.zeros(3, 3, dtype=torch.float64),
-        lambda _positions, _cell: 2.0,
+        reference_energy_fn=lambda _positions, _cell: 2.0,
     )
 
-    assert result.inferred_source_sign == "ambiguous"
+    assert result.preferred_sign_convention == "ambiguous"
 
 
 @pytest.mark.parametrize(
