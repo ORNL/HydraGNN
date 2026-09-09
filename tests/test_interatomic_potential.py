@@ -131,6 +131,7 @@ def test_energy_force_stress_loss():
         use_gpu=False,
     )
     data = create_mock_molecular_data(num_atoms=5, num_graphs=2)
+    data.cell = data.cell[:1]  # One shared cell is expanded across the batch.
     prediction = model(data)
     loss, task_losses = model.energy_force_loss(prediction, data)
 
@@ -178,6 +179,11 @@ def test_stress_loss_requires_cell():
     data = create_mock_molecular_data(num_atoms=5, num_graphs=1)
     del data.cell
     with pytest.raises(ValueError, match="requires data.cell"):
+        model(data)
+
+    data = create_mock_molecular_data(num_atoms=5, num_graphs=2)
+    data.cell = torch.eye(3).repeat(3, 1, 1)
+    with pytest.raises(ValueError, match="Expected one cell or 2 cells"):
         model(data)
 
 

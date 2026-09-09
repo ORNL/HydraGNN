@@ -996,9 +996,7 @@ def create_model(
                 # AllScAIP owns its differentiable graph construction and
                 # applies strain internally. Other MLIP backbones receive the
                 # same symmetric infinitesimal strain here.
-                if self.stress_weight > 0 and not isinstance(
-                    self.model, AllScAIPStack
-                ):
+                if self.stress_weight > 0 and not isinstance(self.model, AllScAIPStack):
                     if getattr(data, "cell", None) is None:
                         raise ValueError(
                             "stress_weight > 0 requires data.cell for every graph."
@@ -1009,7 +1007,15 @@ def create_model(
                         cell = cell.unsqueeze(0).expand(num_graphs, 3, 3).contiguous()
                     elif cell.dim() == 2 and cell.shape[0] == 3 * num_graphs:
                         cell = cell.view(num_graphs, 3, 3)
-                    elif cell.dim() != 3:
+                    elif cell.dim() == 3 and cell.shape[1:] == (3, 3):
+                        if cell.shape[0] == 1 and num_graphs > 1:
+                            cell = cell.expand(num_graphs, 3, 3).contiguous()
+                        elif cell.shape[0] != num_graphs:
+                            raise ValueError(
+                                f"Expected one cell or {num_graphs} cells for stress "
+                                f"loss, got {cell.shape[0]}."
+                            )
+                    else:
                         raise ValueError(
                             f"Unexpected cell shape {tuple(cell.shape)} for stress loss."
                         )
@@ -1173,8 +1179,13 @@ def create_model(
                         create_graph=create_graph,
                     )[0]
                     volume = torch.det(cell).abs().view(-1, 1, 1)
-                    if torch.any(volume <= 0):
-                        raise ValueError("stress loss requires non-singular simulation cells.")
+                    min_volume = torch.finfo(volume.dtype).eps
+                    if not torch.isfinite(volume).all() or torch.any(
+                        volume <= min_volume
+                    ):
+                        raise ValueError(
+                            "stress loss requires finite, non-singular simulation cells."
+                        )
                     stress_pred = virial / volume
                     stress_true = stress_true.float().reshape_as(stress_pred)
                     stress_loss = self.loss_function(stress_pred.float(), stress_true)

@@ -969,6 +969,7 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
     "Architecture": {
         "enable_interatomic_potential": true,
         "energy_weight": 1.0,
+        "energy_peratom_weight": 1.0,
         "force_weight": 10.0,
         "stress_weight": 1.0
     },

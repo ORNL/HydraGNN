@@ -561,8 +561,8 @@ class AllScAIPStack(Base):
         results = self.allscaip_backbone(adapter)
         # Preserve the autograd strain handle and undeformed cell for the
         # outer MLIP wrapper's optional stress loss.
-        data._hydragnn_stress_displacement = results["displacement"]
-        data._hydragnn_stress_cell = results["orig_cell"]
+        data._hydragnn_stress_displacement = results.get("displacement")
+        data._hydragnn_stress_cell = results.get("orig_cell")
         # ``node_reps`` is shape [N, hidden_dim] (no padding -- AllScAIP
         # always runs unpadded under HydraGNN).
         inv_node_feat = self.allscaip_output_norm(results["node_reps"])

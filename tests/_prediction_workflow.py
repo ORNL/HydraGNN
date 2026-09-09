@@ -66,8 +66,7 @@ def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
     num_tasks = (
         4
         if enable_interatomic_potential and model.module.stress_weight > 0
-        else 3 if enable_interatomic_potential
-        else model.module.num_heads
+        else 3 if enable_interatomic_potential else model.module.num_heads
     )
 
     (

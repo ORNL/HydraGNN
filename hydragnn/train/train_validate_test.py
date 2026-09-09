@@ -932,9 +932,9 @@ def test(
 
     if num_tasks is None:
         num_tasks = (
-            4 if compute_grad_energy and model.module.stress_weight > 0
-            else 3 if compute_grad_energy
-            else model.module.num_heads
+            4
+            if compute_grad_energy and model.module.stress_weight > 0
+            else 3 if compute_grad_energy else model.module.num_heads
         )
 
     total_error = torch.tensor(0.0, device=get_device())
@@ -1112,7 +1112,16 @@ def test(
                                 grad_outputs=torch.ones_like(graph_energy_pred),
                                 create_graph=False,
                             )[0]
-                            stress_pred = virial / torch.det(cell).abs().view(-1, 1, 1)
+                            volume = torch.det(cell).abs().view(-1, 1, 1)
+                            min_volume = torch.finfo(volume.dtype).eps
+                            if not torch.isfinite(volume).all() or torch.any(
+                                volume <= min_volume
+                            ):
+                                raise ValueError(
+                                    "stress evaluation requires finite, non-singular "
+                                    "simulation cells."
+                                )
+                            stress_pred = virial / volume
                             stress_true = data.stress.float().reshape_as(stress_pred)
                             true_values[3].append(stress_true.reshape(-1, 1))
                             predicted_values[3].append(stress_pred.reshape(-1, 1))
