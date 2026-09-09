@@ -11,7 +11,8 @@
 
 """Dataset-independent preprocessing helpers for atomistic materials data."""
 
-from typing import Literal
+from dataclasses import dataclass
+from typing import Callable, Literal
 
 import torch
 
@@ -19,6 +20,19 @@ GPA_PER_EV_PER_ANGSTROM_CUBED = 160.21766208
 
 StressUnit = Literal["ev_per_angstrom_cubed", "gpa", "kbar"]
 StressSign = Literal["tension_positive", "compression_positive"]
+
+
+@dataclass(frozen=True)
+class StressSignDiagnostic:
+    """Result of comparing reported stress with finite-difference stress."""
+
+    inferred_source_sign: Literal[
+        "tension_positive", "compression_positive", "ambiguous"
+    ]
+    finite_difference_stress: torch.Tensor
+    reported_stress: torch.Tensor
+    tension_positive_rmse: float
+    compression_positive_rmse: float
 
 
 def _voigt_to_full(stress: torch.Tensor) -> torch.Tensor:
@@ -68,6 +82,102 @@ def normalize_stress(
 
     sign = -1.0 if source_sign == "compression_positive" else 1.0
     return value * (sign * unit_scale[source_unit])
+
+
+def diagnose_stress_sign(
+    positions: torch.Tensor,
+    cell: torch.Tensor,
+    reported_stress: torch.Tensor,
+    energy_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor | float],
+    *,
+    strain_step: float = 1.0e-4,
+    ambiguity_rtol: float = 0.05,
+    ambiguity_atol: float = 1.0e-8,
+) -> StressSignDiagnostic:
+    """Infer a source stress sign using central energy finite differences.
+
+    ``energy_fn`` receives strained Cartesian positions and cell vectors and
+    must return one scalar total energy in eV. Positions and cells are strained
+    together, preserving fractional coordinates. The reported stress must be a
+    symmetric ``3 x 3`` tensor in eV/Å³; its sign convention may be unknown.
+
+    The result is ``ambiguous`` when the RMSE values for the reported tensor
+    and its negation differ by no more than the configured tolerance. This is
+    expected for a nearly stress-free configuration.
+    """
+    positions = torch.as_tensor(positions)
+    cell = torch.as_tensor(cell, dtype=positions.dtype, device=positions.device)
+    reported_stress = torch.as_tensor(
+        reported_stress, dtype=positions.dtype, device=positions.device
+    )
+    if positions.ndim != 2 or positions.shape[1] != 3:
+        raise ValueError("positions must have shape [N, 3]")
+    if cell.shape != (3, 3):
+        raise ValueError("cell must have shape [3, 3]")
+    if reported_stress.shape != (3, 3):
+        raise ValueError("reported_stress must have shape [3, 3]")
+    if not torch.isfinite(positions).all() or not torch.isfinite(cell).all():
+        raise ValueError("positions and cell must contain only finite values")
+    if not torch.isfinite(reported_stress).all():
+        raise ValueError("reported_stress contains non-finite values")
+    if not torch.allclose(
+        reported_stress, reported_stress.T, rtol=1.0e-5, atol=1.0e-7
+    ):
+        raise ValueError("reported_stress must be symmetric")
+    if strain_step <= 0:
+        raise ValueError("strain_step must be positive")
+    if ambiguity_rtol < 0 or ambiguity_atol < 0:
+        raise ValueError("ambiguity tolerances must be non-negative")
+
+    volume = torch.det(cell).abs()
+    if not torch.isfinite(volume) or volume <= 0:
+        raise ValueError("stress diagnosis requires a non-singular cell")
+
+    identity = torch.eye(3, dtype=cell.dtype, device=cell.device)
+    numerical_stress = torch.zeros_like(cell)
+
+    def evaluate(strain):
+        transform = identity + strain
+        value = energy_fn(positions @ transform, cell @ transform)
+        value = torch.as_tensor(value, dtype=cell.dtype, device=cell.device)
+        if value.numel() != 1 or not torch.isfinite(value).all():
+            raise ValueError("energy_fn must return one finite scalar energy")
+        return value.reshape(())
+
+    for row in range(3):
+        for col in range(row, 3):
+            basis = torch.zeros_like(cell)
+            basis[row, col] = 1.0
+            basis[col, row] = 1.0
+            energy_plus = evaluate(strain_step * basis)
+            energy_minus = evaluate(-strain_step * basis)
+            derivative = (energy_plus - energy_minus) / (2.0 * strain_step)
+            # An off-diagonal probe changes both symmetric tensor entries.
+            component = derivative / (volume * (2.0 if row != col else 1.0))
+            numerical_stress[row, col] = component
+            numerical_stress[col, row] = component
+
+    tension_rmse = torch.sqrt(torch.mean((reported_stress - numerical_stress) ** 2))
+    compression_rmse = torch.sqrt(
+        torch.mean((-reported_stress - numerical_stress) ** 2)
+    )
+    error_scale = max(
+        float(tension_rmse), float(compression_rmse), float(ambiguity_atol)
+    )
+    if abs(float(tension_rmse - compression_rmse)) <= ambiguity_rtol * error_scale:
+        inferred_sign = "ambiguous"
+    elif tension_rmse < compression_rmse:
+        inferred_sign = "tension_positive"
+    else:
+        inferred_sign = "compression_positive"
+
+    return StressSignDiagnostic(
+        inferred_source_sign=inferred_sign,
+        finite_difference_stress=numerical_stress.detach(),
+        reported_stress=reported_stress.detach(),
+        tension_positive_rmse=float(tension_rmse),
+        compression_positive_rmse=float(compression_rmse),
+    )
 
 
 def validate_materials_sample(data, *, require_stress: bool = False):

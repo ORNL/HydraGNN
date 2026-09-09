@@ -63,7 +63,12 @@ def load_checkpoint_and_test(config, test_loader, use_deepspeed=False):
     enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
         "enable_interatomic_potential", False
     )
-    num_tasks = 3 if enable_interatomic_potential else model.module.num_heads
+    num_tasks = (
+        4
+        if enable_interatomic_potential and model.module.stress_weight > 0
+        else 3 if enable_interatomic_potential
+        else model.module.num_heads
+    )
 
     (
         error,

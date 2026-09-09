@@ -13,7 +13,11 @@ import pytest
 import torch
 from torch_geometric.data import Data
 
-from hydragnn.utils.materials import normalize_stress, validate_materials_sample
+from hydragnn.utils.materials import (
+    diagnose_stress_sign,
+    normalize_stress,
+    validate_materials_sample,
+)
 from hydragnn.utils.materials.preprocessing import (
     GPA_PER_EV_PER_ANGSTROM_CUBED,
 )
@@ -58,6 +62,53 @@ def test_normalize_stress_preserves_ase_convention():
         source_sign="tension_positive",
     )
     torch.testing.assert_close(output, stress)
+
+
+@pytest.mark.parametrize(
+    ("reported_sign", "expected"),
+    [(1.0, "tension_positive"), (-1.0, "compression_positive")],
+)
+def test_diagnose_stress_sign(reported_sign, expected):
+    dtype = torch.float64
+    positions = torch.tensor([[0.1, 0.2, 0.3], [0.7, 0.6, 0.5]], dtype=dtype)
+    cell = torch.diag(torch.tensor([2.0, 3.0, 4.0], dtype=dtype))
+    reference = torch.tensor(
+        [[1.2, 0.3, -0.2], [0.3, -0.7, 0.4], [-0.2, 0.4, 0.9]],
+        dtype=dtype,
+    )
+    volume = torch.det(cell)
+
+    def energy_fn(_positions, strained_cell):
+        deformation = torch.linalg.solve(cell, strained_cell)
+        strain = deformation - torch.eye(3, dtype=dtype)
+        return volume * torch.sum(reference * strain)
+
+    result = diagnose_stress_sign(
+        positions,
+        cell,
+        reported_sign * reference,
+        energy_fn,
+        strain_step=1.0e-5,
+    )
+
+    assert result.inferred_source_sign == expected
+    torch.testing.assert_close(
+        result.finite_difference_stress, reference, rtol=1.0e-9, atol=1.0e-9
+    )
+
+
+def test_diagnose_stress_sign_reports_ambiguous_zero_stress():
+    positions = torch.zeros(1, 3, dtype=torch.float64)
+    cell = torch.eye(3, dtype=torch.float64)
+
+    result = diagnose_stress_sign(
+        positions,
+        cell,
+        torch.zeros(3, 3, dtype=torch.float64),
+        lambda _positions, _cell: 2.0,
+    )
+
+    assert result.inferred_source_sign == "ambiguous"
 
 
 @pytest.mark.parametrize(

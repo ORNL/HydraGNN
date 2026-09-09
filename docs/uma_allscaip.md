@@ -19,6 +19,15 @@ Set `enable_interatomic_potential` to `true` when training an energy-conserving
 potential. HydraGNN then obtains conservative forces by differentiating the
 predicted invariant energy with respect to `data.pos`.
 
+Set `stress_weight` to a positive value to add a stress term to the MLIP loss.
+HydraGNN differentiates energy with respect to a symmetric cell strain and
+divides the resulting virial by the undeformed cell volume. Stress training
+requires `data.cell` and `data.stress`; reference stresses must be full `3 x 3`
+tensors in eV/Å³ with tension positive. The complete objective is
+`energy_weight * L_energy + energy_peratom_weight * L_energy_per_atom +
+force_weight * L_forces + stress_weight * L_stress`. A zero `stress_weight`
+(the default) preserves the energy/force-only behavior.
+
 ## UMA
 
 Select UMA with `"mpnn_type": "UMA"` and set `"equivariance": true`. UMA

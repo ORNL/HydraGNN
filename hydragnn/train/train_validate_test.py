@@ -228,18 +228,19 @@ def train_validate_test(
 
     device = get_device()
     if compute_grad_energy:
-        num_tasks = 3  # [energy, energy per atom, forces]
-        task_dims = [1, 1, 1]
+        include_stress = model.module.stress_weight > 0
+        num_tasks = 4 if include_stress else 3
+        task_dims = [1, 1, 1] + ([9] if include_stress else [])
         task_weights = [
             model.module.energy_weight,
             model.module.energy_peratom_weight,
             model.module.force_weight,
-        ]
+        ] + ([model.module.stress_weight] if include_stress else [])
         output_names = [
             configured_output_names[0],
             "energy_peratom",
             "forces",
-        ]
+        ] + (["stress"] if include_stress else [])
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
@@ -930,7 +931,11 @@ def test(
         import torch_scatter
 
     if num_tasks is None:
-        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+        num_tasks = (
+            4 if compute_grad_energy and model.module.stress_weight > 0
+            else 3 if compute_grad_energy
+            else model.module.num_heads
+        )
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
@@ -1098,6 +1103,19 @@ def test(
                             graph_energy_peratom_pred.reshape(-1, 1)
                         )
                         predicted_values[2].append(forces_pred.reshape(-1, 1))
+                        if model.module.stress_weight > 0:
+                            displacement = model.module._stress_displacement
+                            cell = model.module._stress_cell
+                            virial = torch.autograd.grad(
+                                graph_energy_pred,
+                                displacement,
+                                grad_outputs=torch.ones_like(graph_energy_pred),
+                                create_graph=False,
+                            )[0]
+                            stress_pred = virial / torch.det(cell).abs().view(-1, 1, 1)
+                            stress_true = data.stress.float().reshape_as(stress_pred)
+                            true_values[3].append(stress_true.reshape(-1, 1))
+                            predicted_values[3].append(stress_pred.reshape(-1, 1))
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y

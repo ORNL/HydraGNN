@@ -967,7 +967,10 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
 ```json
 {
     "Architecture": {
-        "enable_interatomic_potential": true
+        "enable_interatomic_potential": true,
+        "energy_weight": 1.0,
+        "force_weight": 10.0,
+        "stress_weight": 1.0
     },
     "Training": {
         "compute_grad_energy": true
@@ -975,7 +978,13 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
 }
 ```
 
-With `enable_interatomic_potential`, the training loss includes energy, per-atom energy, and force components. Set `compute_grad_energy` to `true` to derive forces via automatic differentiation of the energy prediction.
+With `enable_interatomic_potential`, the training loss includes energy,
+per-atom energy, and force components. Set `compute_grad_energy` to `true` to
+derive forces via automatic differentiation of the energy prediction. A
+positive `stress_weight` additionally penalizes the stress obtained by
+differentiating energy with respect to symmetric cell strain. Stress training
+requires full `3 x 3` reference tensors in `data.stress` and non-singular cells
+in `data.cell`; stresses use eV/Å³ with tension positive.
 
 Categorical handling is configured on each scalar node input. For example,
 atomic numbers can use a learned embedding:

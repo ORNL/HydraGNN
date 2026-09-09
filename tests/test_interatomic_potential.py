@@ -64,6 +64,9 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     # Create mock energy and forces for training
     energy = torch.randn(num_graphs, 1)  # Energy per molecule
     forces = torch.randn(num_atoms * num_graphs, 3)  # Forces per atom
+    cell = torch.eye(3).repeat(num_graphs, 1, 1) * 10.0
+    stress = torch.randn(num_graphs, 3, 3)
+    stress = 0.5 * (stress + stress.transpose(-1, -2))
 
     # Create positional encodings (random for testing)
     pe = torch.randn(num_atoms * num_graphs, 6)  # 6D positional encoding
@@ -79,6 +82,8 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
         batch=batch,
         energy=energy,
         forces=forces,
+        cell=cell,
+        stress=stress,
         pe=pe,
         edge_shifts=torch.zeros(
             edge_index.size(1), 3
@@ -86,6 +91,94 @@ def create_mock_molecular_data(num_atoms=10, num_graphs=2):
     )
 
     return data
+
+
+@pytest.mark.mpi_skip()
+def test_energy_force_stress_loss():
+    """Stress contributes to MLIP loss through an energy/strain derivative."""
+    from hydragnn.models.create import create_model
+    from hydragnn.utils.model.model import update_multibranch_heads
+
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp",
+        }
+    }
+    model = create_model(
+        mpnn_type="EGNN",
+        input_dim=1,
+        hidden_dim=32,
+        output_dim=[1],
+        pe_dim=6,
+        global_attn_engine="",
+        global_attn_type="",
+        global_attn_heads=1,
+        output_type=["node"],
+        output_heads=update_multibranch_heads(output_heads),
+        activation_function="relu",
+        loss_function_type="mse",
+        task_weights=[1.0],
+        num_conv_layers=2,
+        num_nodes=10,
+        enable_interatomic_potential=True,
+        energy_weight=1.0,
+        force_weight=1.0,
+        stress_weight=2.0,
+        use_gpu=False,
+    )
+    data = create_mock_molecular_data(num_atoms=5, num_graphs=2)
+    prediction = model(data)
+    loss, task_losses = model.energy_force_loss(prediction, data)
+
+    assert len(task_losses) == 4
+    assert all(torch.isfinite(value) for value in task_losses)
+    assert torch.isfinite(loss)
+    loss.backward()
+
+
+@pytest.mark.mpi_skip()
+def test_stress_loss_requires_cell():
+    """A clear error is raised instead of silently omitting stress."""
+    from hydragnn.models.create import create_model
+    from hydragnn.utils.model.model import update_multibranch_heads
+
+    output_heads = {
+        "node": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 8,
+            "num_headlayers": 1,
+            "dim_headlayers": [1],
+            "type": "mlp",
+        }
+    }
+    model = create_model(
+        mpnn_type="EGNN",
+        input_dim=1,
+        hidden_dim=16,
+        output_dim=[1],
+        pe_dim=6,
+        global_attn_engine="",
+        global_attn_type="",
+        global_attn_heads=1,
+        output_type=["node"],
+        output_heads=update_multibranch_heads(output_heads),
+        activation_function="relu",
+        loss_function_type="mse",
+        task_weights=[1.0],
+        num_conv_layers=1,
+        num_nodes=5,
+        enable_interatomic_potential=True,
+        stress_weight=1.0,
+        use_gpu=False,
+    )
+    data = create_mock_molecular_data(num_atoms=5, num_graphs=1)
+    del data.cell
+    with pytest.raises(ValueError, match="requires data.cell"):
+        model(data)
 
 
 @pytest.mark.mpi_skip()
