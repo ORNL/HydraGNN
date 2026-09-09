@@ -1040,9 +1040,11 @@ def create_model(
                 prediction = self.model(data)
                 if self.stress_weight > 0:
                     self._stress_displacement = getattr(
-                        data, "_hydragnn_stress_displacement", None
+                        self.model, "_hydragnn_stress_displacement", None
                     )
-                    self._stress_cell = getattr(data, "_hydragnn_stress_cell", None)
+                    self._stress_cell = getattr(
+                        self.model, "_hydragnn_stress_cell", None
+                    )
                 return prediction
 
             def energy_force_loss(self, pred, data, create_graph=True):
