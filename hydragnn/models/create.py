@@ -1118,8 +1118,7 @@ def create_model(
 
                 if energy_peratom_loss_weight > 0:
                     tot_loss = (
-                        tot_loss
-                        + energy_peratom_loss * energy_peratom_loss_weight
+                        tot_loss + energy_peratom_loss * energy_peratom_loss_weight
                     )
 
                 # NaN Hessians mark structures for which no reference Hessian exists.

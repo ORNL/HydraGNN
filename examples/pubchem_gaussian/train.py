@@ -40,7 +40,6 @@ from hydragnn.utils.datasets.pickledataset import (
 )
 from hydragnn.utils.print.print_utils import log
 
-
 torch.set_default_dtype(torch.float32)
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
@@ -129,7 +128,9 @@ def _parse_gaussian_table(lines, start, value_columns, header_dividers):
         index += 1
 
     if not values:
-        raise ValueError(f"No rows found in Gaussian table starting at line {start + 1}")
+        raise ValueError(
+            f"No rows found in Gaussian table starting at line {start + 1}"
+        )
     return atomic_numbers, torch.tensor(values, dtype=torch.float32)
 
 
@@ -146,6 +147,7 @@ def parse_gaussian_log(path):
             latest_atomic_numbers, latest_positions = _parse_gaussian_table(
                 lines, index, 3, header_dividers=2
             )
+            latest_energy = None
             continue
 
         energy_match = SCF_ENERGY_PATTERN.search(line)
@@ -156,7 +158,9 @@ def parse_gaussian_log(path):
         if "Forces (Hartrees/Bohr)" not in line:
             continue
         if latest_atomic_numbers is None or latest_positions is None:
-            raise ValueError(f"Force table in {path} has no preceding input orientation")
+            raise ValueError(
+                f"Force table in {path} has no preceding input orientation"
+            )
         if latest_energy is None:
             raise ValueError(f"Force table in {path} has no preceding SCF energy")
 
@@ -164,7 +168,9 @@ def parse_gaussian_log(path):
             lines, index, 3, header_dividers=1
         )
         if force_atomic_numbers != latest_atomic_numbers:
-            raise ValueError(f"Atomic numbers differ between geometry and forces in {path}")
+            raise ValueError(
+                f"Atomic numbers differ between geometry and forces in {path}"
+            )
         records.append(
             {
                 "atomic_numbers": torch.tensor(
@@ -188,7 +194,9 @@ def extract_records(archive_dir, output_dir, limit):
     if remaining == 0:
         return
 
-    archives = sorted(archive_dir.glob("*.tar.zst"), key=lambda path: int(path.stem.split(".")[0]))
+    archives = sorted(
+        archive_dir.glob("*.tar.zst"), key=lambda path: int(path.stem.split(".")[0])
+    )
     if not archives:
         raise FileNotFoundError(f"No .tar.zst archives found in {archive_dir}")
 
@@ -202,7 +210,9 @@ def extract_records(archive_dir, output_dir, limit):
             universal_newlines=True,
         ).stdout.splitlines()
         members = [name for name in listing if name.endswith(".tar")]
-        members = [name for name in members if Path(name).stem not in existing][:remaining]
+        members = [name for name in members if Path(name).stem not in existing][
+            :remaining
+        ]
         if not members:
             continue
 
@@ -219,7 +229,9 @@ def extract_records(archive_dir, output_dir, limit):
                 remaining -= 1
 
     if remaining:
-        raise RuntimeError(f"Only extracted {limit - remaining} of {limit} requested records")
+        raise RuntimeError(
+            f"Only extracted {limit - remaining} of {limit} requested records"
+        )
 
 
 class PubChemGaussianDataset(AbstractBaseDataset):
@@ -242,7 +254,9 @@ class PubChemGaussianDataset(AbstractBaseDataset):
             structure_path = molecule_dir / "Structure.txt"
             hessian_path = molecule_dir / "Hessian.txt"
             log_path = molecule_dir / f"{molecule_dir.name}.log"
-            if not all(path.exists() for path in (structure_path, hessian_path, log_path)):
+            if not all(
+                path.exists() for path in (structure_path, hessian_path, log_path)
+            ):
                 continue
             try:
                 optimized_atomic_numbers, optimized_positions = parse_structure(
@@ -252,8 +266,7 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                     hessian_path, optimized_atomic_numbers.shape[0]
                 )
                 records = parse_gaussian_log(log_path)
-                molecule_data = []
-
+                matching_records = []
                 for step, record in enumerate(records):
                     if not torch.equal(
                         record["atomic_numbers"], optimized_atomic_numbers
@@ -267,41 +280,35 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                         rtol=0.0,
                         atol=OPTIMIZED_POSITION_TOLERANCE,
                     )
-                    hessian = (
-                        full_hessian.clone()
-                        if is_optimized
-                        else torch.full_like(full_hessian, torch.nan)
-                    )
-                    data = Data(
-                        dataset_name="pubchem_gaussian",
-                        molecule_id=molecule_dir.name,
-                        optimization_step=torch.tensor([step], dtype=torch.int32),
-                        natoms=torch.tensor(
-                            [record["atomic_numbers"].shape[0]], dtype=torch.int32
-                        ),
-                        atomic_numbers=record["atomic_numbers"],
-                        # Using Bohr here makes -dE/dpos and d2E/dpos2 directly
-                        # comparable to Gaussian forces and Hessians below.
-                        pos=record["pos"] * ANGSTROM_TO_BOHR,
-                        energy=record["energy"],
-                        forces=record["forces"],
-                        hessian=hessian,
-                        hessian_available=torch.tensor([is_optimized]),
-                        cell=torch.eye(3, dtype=torch.float32),
-                        pbc=torch.zeros(3, dtype=torch.int32),
-                    )
-                    data = radius_graph(data)
-                    data = distance(data)
-                    data.edge_shifts = torch.zeros(
-                        (data.num_edges, 3), dtype=torch.float32
-                    )
-                    molecule_data.append(data)
+                    if is_optimized:
+                        matching_records.append((step, record))
 
-                if not any(data.hessian_available.item() for data in molecule_data):
+                if not matching_records:
                     raise ValueError(
                         f"No log geometry in {log_path} matches {structure_path}"
                     )
-                self.dataset.extend(molecule_data)
+                step, record = matching_records[-1]
+                data = Data(
+                    dataset_name="pubchem_gaussian",
+                    molecule_id=molecule_dir.name,
+                    optimization_step=torch.tensor([step], dtype=torch.int32),
+                    natoms=torch.tensor(
+                        [record["atomic_numbers"].shape[0]], dtype=torch.int32
+                    ),
+                    atomic_numbers=record["atomic_numbers"],
+                    # Using Bohr here makes -dE/dpos and d2E/dpos2 directly
+                    # comparable to Gaussian forces and Hessians below.
+                    pos=record["pos"] * ANGSTROM_TO_BOHR,
+                    energy=record["energy"],
+                    forces=record["forces"],
+                    hessian=full_hessian,
+                    cell=torch.eye(3, dtype=torch.float32),
+                    pbc=torch.zeros(3, dtype=torch.int32),
+                )
+                data = radius_graph(data)
+                data = distance(data)
+                data.edge_shifts = torch.zeros((data.num_edges, 3), dtype=torch.float32)
+                self.dataset.append(data)
             except (OSError, ValueError) as error:
                 logging.warning("Skipping CID %s: %s", molecule_dir.name, error)
 
@@ -327,7 +334,9 @@ def preprocess(config, num_molecules, comm, rank, world_size):
         shutil.rmtree(PICKLE_DIR)
     comm.Barrier()
     attributes = {"pna_deg": degree, "cache_version": CACHE_VERSION}
-    SimplePickleWriter(trainset, PICKLE_DIR, "trainset", use_subdir=True, attrs=attributes)
+    SimplePickleWriter(
+        trainset, PICKLE_DIR, "trainset", use_subdir=True, attrs=attributes
+    )
     SimplePickleWriter(valset, PICKLE_DIR, "valset", use_subdir=True)
     SimplePickleWriter(testset, PICKLE_DIR, "testset", use_subdir=True)
     log(
