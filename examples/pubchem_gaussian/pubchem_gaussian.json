@@ -1,0 +1,64 @@
+{
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "SchNet",
+            "edge_features": [
+                "bond_length"
+            ],
+            "max_neighbours": 64,
+            "num_gaussians": 32,
+            "num_filters": 64,
+            "radius": 6.0,
+            "hidden_dim": 128,
+            "num_conv_layers": 4,
+            "output_heads": {
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        128,
+                        128
+                    ],
+                    "type": "mlp"
+                }
+            },
+            "task_weights": [
+                1.0
+            ]
+        },
+        "Training": {
+            "Checkpoint": true,
+            "num_epoch": 20,
+            "batch_size": 16,
+            "continue": 0,
+            "loss_function_type": "mse",
+            "Optimizer": {
+                "learning_rate": 0.001
+            }
+        }
+    },
+    "Variables": {
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "pos",
+                "role": "position",
+                "level": "node",
+                "dim": 3
+            }
+        ],
+        "outputs": [
+            {
+                "name": "onsite_hessian_eigenvalues",
+                "level": "node",
+                "dim": 3
+            }
+        ]
+    }
+}
