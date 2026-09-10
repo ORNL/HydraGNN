@@ -211,7 +211,7 @@ def test_qm9_property_example_provides_canonical_atomic_numbers():
     assert transformed.atomic_numbers.ndim == 1
 
 
-def test_atomistic_examples_configure_atomic_numbers_as_an_embedding():
+def test_atomistic_examples_use_canonical_atomic_number_input():
     examples = Path(__file__).resolve().parents[1] / "examples"
     checked = []
     for directory in ATOMISTIC_EXAMPLE_DIRECTORIES:
@@ -229,11 +229,27 @@ def test_atomistic_examples_configure_atomic_numbers_as_an_embedding():
                 if variable["name"] == "atomic_numbers"
             ]
             assert len(atomic_numbers) == 1
-            encoding = atomic_numbers[0]["encoding"]
-            assert encoding["type"] == "embedding"
-            assert encoding["min_value"] == 1
-            assert encoding["num_categories"] == 118
+            encoding = atomic_numbers[0].get("encoding")
+            if encoding is not None:
+                assert encoding["type"] == "embedding"
+                assert encoding["min_value"] == 1
+                assert encoding["num_categories"] == 118
     assert checked
+
+
+def test_multibranch_examples_preserve_continuous_atomic_number_input():
+    examples = Path(__file__).resolve().parents[1] / "examples" / "multibranch"
+    for config_path in examples.glob("*.json"):
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        architecture = config.get("NeuralNetwork", {}).get("Architecture", {})
+        if "mpnn_type" not in architecture:
+            continue
+        atomic_numbers = next(
+            variable
+            for variable in config["Variables"]["inputs"]
+            if variable["name"] == "atomic_numbers"
+        )
+        assert "encoding" not in atomic_numbers
 
 
 @pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)
