@@ -26,13 +26,16 @@ except ImportError:
 
 import hydragnn
 
-MD17_MLIP_CACHE_VERSION = "named-schema-v2:mlip-energy-forces:subset-25pct"
-MD17_LEGACY_CACHE_DIRECTORIES = ("named-schema-v1",)
+MD17_MLIP_CACHE_VERSION = "named-schema-v3:canonical-atomic-numbers"
+MD17_LEGACY_CACHE_DIRECTORIES = (
+    "named-schema-v1",
+    "named-schema-v2:mlip-energy-forces:subset-25pct",
+)
 
 
 # Update each sample prior to loading.
 def md17_pre_transform(data, compute_edges, transform):
-    data.atomic_numbers = data.z.float().view(-1, 1)
+    data.atomic_numbers = data.z.long().view(-1)
     data.energy = data.energy.reshape(1, 1)
     data = compute_edges(data)
     data = transform(data)

@@ -102,7 +102,7 @@ class AtomsToGraphs:
         """
 
         # set the atomic numbers, positions, and cell
-        atomic_numbers = torch.Tensor(atoms.get_atomic_numbers()).unsqueeze(1)
+        atomic_numbers = torch.tensor(atoms.get_atomic_numbers(), dtype=torch.long)
         positions = torch.Tensor(atoms.get_positions())
         natoms = torch.IntTensor([positions.shape[0]])
         # initialized to torch.zeros(natoms) if tags missing.

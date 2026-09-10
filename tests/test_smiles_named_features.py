@@ -38,9 +38,16 @@ def test_csce_smiles_features_are_compiled_from_named_attributes():
     assert data.atom_descriptors.shape == (data.num_nodes, 6)
     torch.testing.assert_close(
         data.x,
-        torch.cat([data.atom_type, data.atom_descriptors], dim=1),
+        torch.cat(
+            [
+                data.atomic_numbers.reshape(-1, 1).float(),
+                data.atom_type,
+                data.atom_descriptors,
+            ],
+            dim=1,
+        ),
     )
-    assert data.x.shape == (data.num_nodes, 12)
+    assert data.x.shape == (data.num_nodes, 13)
     torch.testing.assert_close(data.GAP, target)
     torch.testing.assert_close(data.y, target)
     assert data.y_loc.tolist() == [[0, 1]]

@@ -99,7 +99,8 @@ class PNAPlusStack(Base):
         )
 
     def _embedding(self, data):
-        node_features, _, _ = super()._embedding(data)
+        super()._embedding(data)
+        node_features = self._input_node_features(data)
 
         assert (
             data.pos is not None

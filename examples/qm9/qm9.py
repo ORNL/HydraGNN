@@ -33,10 +33,11 @@ num_samples = 1000
 # charge and spin are constant across QM9 dataset
 charge = 0.0
 spin = 1.0
-QM9_CACHE_VERSION = "named-schema-v3-robust-raw"
+QM9_CACHE_VERSION = "named-schema-v4-canonical-atomic-numbers"
 QM9_LEGACY_CACHE_DIRECTORIES = (
     "named-schema-v1",
     "named-schema-v2-raw-subset",
+    "named-schema-v3-robust-raw",
 )
 
 
@@ -44,7 +45,7 @@ QM9_LEGACY_CACHE_DIRECTORIES = (
 def qm9_pre_transform(data, transform):
     # LPE
     data = transform(data)
-    data.atomic_numbers = data.z.float().view(-1, 1)
+    data.atomic_numbers = data.z.long().view(-1)
     # Only predict free energy (index 10 of 19 properties) for this run.
     data.free_energy = data.y[:, 10:11] / data.num_nodes
     # gps requires relative edge features, introduced rel_lapPe as edge encodings

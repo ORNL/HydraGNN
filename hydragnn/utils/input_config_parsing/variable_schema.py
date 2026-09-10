@@ -269,7 +269,7 @@ def prepare_data_from_schema(data, schema: VariableSchema):
         value = validate_variable(data, spec)
         if spec.role == "feature":
             if spec.encoding is not None:
-                value = value.reshape(-1, 1)
+                value = value.reshape(-1, 1).float()
             by_level[spec.level].append(value)
 
     if by_level["node"]:

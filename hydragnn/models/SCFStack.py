@@ -164,7 +164,8 @@ class SCFStack(Base):
             )
 
     def _embedding(self, data):
-        node_features, _, _ = super()._embedding(data)
+        super()._embedding(data)
+        node_features = self._input_node_features(data)
         equivariant_geometry = None
         if self.global_attn_engine == "EquivariantTransformer":
             # Capture periodic metadata before the legacy coordinate-update
