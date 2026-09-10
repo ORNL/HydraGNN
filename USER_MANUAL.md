@@ -295,7 +295,7 @@ from torch_geometric.data import Data
 
 # Users parse their source format and construct named PyG attributes.
 sample = Data(
-    atomic_numbers=atomic_numbers,  # (N, 1)
+    atomic_numbers=atomic_numbers,  # (N,) or (N, 1) for an encoded scalar
     pos=positions,                  # (N, 3)
     energy=energy,                  # (1, 1)
     forces=forces,                  # (N, 3)
@@ -447,6 +447,7 @@ Every configured name must be an attribute of the PyG sample with exactly the
 declared shape:
 
 - a node attribute has shape `(N, dim)`, where `N` is the sample's node count;
+  an encoded scalar with `dim: 1` may alternatively have shape `(N,)`;
 - an edge attribute has shape `(E, dim)`, where `E` is the number of columns in
   `edge_index`; and
 - a graph attribute has shape `(1, dim)` for an individual sample.
@@ -469,7 +470,7 @@ representation according to these rules:
 
 | JSON variables | Internal tensor | Construction |
 |---|---|---|
-| node inputs with role `feature` | `data.x` | concatenate columns in JSON order |
+| node inputs with role `feature` | `data.x` | concatenate raw columns in JSON order; apply each configured node encoding before message passing |
 | node input with role `position` | `data.pos` | validate as `(N, 3)`; do not concatenate |
 | edge inputs | `data.edge_attr` | concatenate columns in JSON order |
 | graph inputs | `data.graph_attr` | concatenate columns in JSON order |
@@ -483,16 +484,28 @@ As a more explicit input example:
 
 ```json
 "inputs": [
-  {"name": "atomic_numbers", "level": "node", "dim": 1},
+  {
+    "name": "atomic_numbers",
+    "level": "node",
+    "dim": 1,
+    "encoding": {
+      "type": "embedding",
+      "num_categories": 118,
+      "embedding_dim": 64,
+      "min_value": 1
+    }
+  },
   {"name": "pos", "level": "node", "dim": 3, "role": "position"}
 ]
 ```
 
 causes HydraGNN to validate `data.pos` as `(N, 3)` while constructing an
-`(N, 1)` internal node-feature tensor equivalent to:
+`(N, 1)` raw node-feature tensor. Before message passing, that scalar column is
+replaced by an `(N, 64)` learned representation:
 
 ```python
-data.x = data.atomic_numbers
+data.x = data.atomic_numbers.reshape(-1, 1)  # raw compiled representation
+# model input: species_embedding(data.x[:, 0])  # shape (N, 64)
 ```
 
 The `position` role is a geometric input contract, not a feature channel.
@@ -535,11 +548,12 @@ During schema preparation, HydraGNN performs these operations separately:
    attention, and energy-gradient force calculations. The original tensor and
    its autograd relationship are preserved.
 
-For example, if `atomic_numbers` has dimension 1, `chemical_state` has
-dimension 4, and `pos` is the position input, the result is `data.x` with shape
-`(N, 5)` and a separate `data.pos` with shape `(N, 3)`—not `data.x` with shape
-`(N, 8)`. Dataset importers should assign the three named source attributes and
-must not perform either concatenation themselves.
+For example, if `atomic_numbers` uses an embedding of width 64,
+`chemical_state` is a continuous input of dimension 4, and `pos` is the
+position input, the raw prepared `data.x` has shape `(N, 5)`, the model-facing
+node representation has shape `(N, 68)`, and `data.pos` remains `(N, 3)`.
+Dataset importers should assign the three named source attributes and must not
+perform concatenation or encoding themselves.
 
 This is a general geometry contract, not an MLIP-only convention. Any
 HydraGNN model that relies on translation invariance or rotational
@@ -619,10 +633,11 @@ Schema compilation is a preprocessing operation, not a load-time migration.
 Before serialization, each training-ready graph must already contain the
 internal tensors required by its configuration: `x`, `edge_index`, any
 declared `edge_attr` or `graph_attr`, and `y`/`y_loc` for configured outputs.
-Their column dimensions must agree with the architecture derived from the
-schema; in particular, `x.shape[1]` must equal `Architecture.input_dim`, and an
-edge feature tensor must have one row per edge and
-`Architecture.edge_dim` columns.
+Their column dimensions must agree with the raw schema. Without encoded node
+inputs, `x.shape[1]` equals `Architecture.input_dim`. With an embedding or
+one-hot input, `x` retains one raw scalar column for that variable while
+`Architecture.input_dim` counts its post-encoding width. An edge feature
+tensor must have one row per edge and `Architecture.edge_dim` columns.
 
 When HydraGNN later opens a prepared pickle, `.pt`, ADIOS, or DDStore artifact,
 it treats those stored tensors as authoritative and does not recover missing
@@ -983,14 +998,26 @@ atomic numbers can use a learned embedding:
 }
 ```
 
-The same mechanism works for any scalar node variable. Set `type` to
-`one_hot` for an explicit one-hot representation, or omit `encoding` to pass
-the raw scalar through as a continuous feature. `min_value` defines the first
-valid category and defaults to zero. Encoded and continuous variables are
-concatenated in schema order before message passing. MACE, UMA, and AllScAIP
-continue to use their native chemical species encoders, so their atomic-number
-inputs should not declare a HydraGNN encoding.
-```
+The same mechanism works for any scalar node variable:
+
+| Setting | Meaning | Model-facing width |
+|---|---|---|
+| no `encoding` | preserve continuous numeric values | declared `dim` |
+| `type: "embedding"` | trainable categorical lookup | `embedding_dim` |
+| `type: "one_hot"` | fixed categorical indicator | `num_categories` |
+
+Both categorical types require a positive `num_categories`. An embedding also
+requires a positive `embedding_dim`. `min_value` defines the first valid
+category and defaults to zero, so accepted values span `min_value` through
+`min_value + num_categories - 1`. Categorical inputs must contain exact integer
+values and must be scalar node inputs (`level: "node"`, `dim: 1`). Encodings
+are not accepted on positions, edge or graph inputs, or outputs.
+
+Encoded and continuous variables are concatenated in schema order before
+message passing. Consequently, `Architecture.input_dim` is derived from the
+post-encoding widths rather than the raw `data.x` width. MACE, UMA, and
+AllScAIP continue to use their native chemical species encoders, so their
+atomic-number inputs should not declare a HydraGNN encoding.
 
 ### Training Execution
 
@@ -1478,7 +1505,17 @@ Features:
     },
     "Variables": {
         "inputs": [
-            {"name": "atomic_numbers", "level": "node", "dim": 1},
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1,
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 64,
+                    "min_value": 1
+                }
+            },
             {"name": "pos", "level": "node", "dim": 3, "role": "position"}
         ],
         "outputs": [

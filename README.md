@@ -267,12 +267,23 @@ and propagated alongside the globally attended invariant representation.
       Every specification has an attribute `name`, a `level` (`node`, `edge`,
       or `graph`), and a positive feature dimension `dim`. Inputs may also
       declare a semantic `role`; ordinary inputs use the default `feature`
-      role, while Cartesian coordinates use `position`.
+      role, while Cartesian coordinates use `position`. Scalar node features
+      may also declare an `encoding` of type `embedding` or `one_hot`.
 
 ```json
 "Variables": {
   "inputs": [
-    {"name": "atomic_numbers", "level": "node", "dim": 1},
+    {
+      "name": "atomic_numbers",
+      "level": "node",
+      "dim": 1,
+      "encoding": {
+        "type": "embedding",
+        "num_categories": 118,
+        "embedding_dim": 64,
+        "min_value": 1
+      }
+    },
     {"name": "pos", "level": "node", "dim": 3, "role": "position"},
     {"name": "bond_attributes", "level": "edge", "dim": 4},
     {"name": "charge_and_spin", "level": "graph", "dim": 2}
@@ -285,12 +296,16 @@ and propagated alongside the globally attended invariant representation.
 ```
 
 Each PyG sample must expose tensors with exactly those names. Node variables
-must have shape `(N, dim)`, edge variables `(E, dim)`, and graph variables
-`(1, dim)`. PyG therefore batches graph variables into `(B, dim)` without any
-special collation rule. When multiple attributes of the same level are listed,
-HydraGNN concatenates them along tensor dimension 1 in their JSON order. Thus,
-node attributes with dimensions 2 and 3 produce an `(N, 5)` tensor, while graph
- attributes with dimensions 1 and 4 produce a `(1, 5)` tensor per sample.
+must have shape `(N, dim)`; an encoded scalar (`dim: 1`) may also use shape
+`(N,)`. Edge variables use `(E, dim)`, and graph variables use `(1, dim)`. PyG
+therefore batches graph variables into `(B, dim)` without any special
+collation rule. When multiple attributes of the same level are listed,
+HydraGNN concatenates their raw values into `data.x` in JSON order. Immediately
+before message passing, each encoded scalar is replaced by its learned
+embedding or one-hot representation. Unencoded inputs remain continuous. Thus,
+the model-facing width is the sum of continuous dimensions, embedding
+dimensions, and one-hot category counts. Edge and graph inputs are currently
+continuous and are concatenated without an encoding step.
 
 Attribute names are not aliases: the example uses PyG's conventional `pos`
 attribute, so the corresponding sample must provide `data.pos`. A different
@@ -326,14 +341,14 @@ For example, with `atomic_numbers` and `pos` declared above, preparation gives
 the model the following logically separate inputs:
 
 ```text
-data.atomic_numbers ──> data.x       # ordinary node-feature channels
-data.pos            ──> data.pos     # geometric coordinates, unchanged
+data.atomic_numbers ──> data.x ──> configured categorical encoder
+data.pos            ────────────> dedicated geometric path
 ```
 
-When several node inputs have the default `feature` role, only those inputs are
-concatenated into `data.x`, in JSON order. Never manually append `data.pos` to
-`data.x`. This rule applies to any geometry-aware application, not only machine
-learning interatomic potentials.
+When several node inputs have the default `feature` role, they are compiled in
+JSON order and their configured encodings are applied independently. Never
+manually append `data.pos` to `data.x`. This rule applies to any geometry-aware
+application, not only machine-learning interatomic potentials.
 
 The contract is deliberately strict: `role: "position"` is accepted only for
 an input named `pos` with `level: "node"` and `dim: 3`; outputs cannot have this
@@ -346,7 +361,8 @@ Users must not construct HydraGNN's internal `data.x`, `data.edge_attr`,
 HydraGNN validates the named source attributes and builds those tensors when a
 sample is prepared from the schema:
 
-- node inputs with role `feature` become `data.x`;
+- node inputs with role `feature` become raw columns in `data.x`, and any
+  configured categorical encoders transform their columns at model entry;
 - edge inputs become `data.edge_attr`;
 - graph inputs become `data.graph_attr`;
 - outputs become the level-specific `data.node_output`, `data.edge_output`, and
