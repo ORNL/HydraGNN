@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "PNA",
-            "enable_atomistic_species_encoding": true,
             "max_neighbours": 20,
             "hidden_dim": 200,
             "num_conv_layers": 6,
@@ -37,6 +36,17 @@
     },
     "Variables": {
         "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1,
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 200,
+                    "min_value": 1
+                }
+            },
             {
                 "name": "atom_type",
                 "level": "node",

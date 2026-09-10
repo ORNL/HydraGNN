@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "MACE",
-            "enable_atomistic_species_encoding": true,
             "enable_interatomic_potential": true,
             "equivariance": true,
             "radius": 5,

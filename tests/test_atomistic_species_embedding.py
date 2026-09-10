@@ -1,54 +1,13 @@
-##############################################################################
-# Copyright (c) 2026, Oak Ridge National Laboratory                          #
-# All rights reserved.                                                       #
-#                                                                            #
-# This file is part of HydraGNN and is distributed under a BSD 3-clause      #
-# license. For the licensing terms see the LICENSE file in the top-level     #
-# directory.                                                                 #
-#                                                                            #
-# SPDX-License-Identifier: BSD-3-Clause                                      #
-##############################################################################
+import json
+from pathlib import Path
 
 import pytest
 import torch
 from torch_geometric.data import Data
-import json
-from pathlib import Path
 
-from hydragnn.models.Base import Base
-from hydragnn.models.AllScAIPStack import AllScAIPStack
-from hydragnn.models.CGCNNStack import CGCNNStack
-from hydragnn.models.DIMEStack import DIMEStack
-from hydragnn.models.EGCLStack import EGCLStack
-from hydragnn.models.GATStack import GATStack
-from hydragnn.models.GINStack import GINStack
-from hydragnn.models.MACEStack import MACEStack
-from hydragnn.models.MFCStack import MFCStack
-from hydragnn.models.PAINNStack import PAINNStack
-from hydragnn.models.PNAEqStack import PNAEqStack
-from hydragnn.models.PNAPlusStack import PNAPlusStack
-from hydragnn.models.PNAStack import PNAStack
-from hydragnn.models.SAGEStack import SAGEStack
-from hydragnn.models.SCFStack import SCFStack
-from hydragnn.models.UMAStack import UMAStack
 from hydragnn.models.create import create_model
 from hydragnn.utils.model.model import update_multibranch_heads
 
-GENERIC_STACKS = (
-    PAINNStack,
-    PNAEqStack,
-    DIMEStack,
-    SCFStack,
-    EGCLStack,
-    PNAPlusStack,
-    PNAStack,
-    GATStack,
-    GINStack,
-    SAGEStack,
-    CGCNNStack,
-    MFCStack,
-)
-NATIVE_STACKS = (MACEStack, AllScAIPStack, UMAStack)
 GENERIC_MPNN_TYPES = (
     "PAINN",
     "PNAEq",
@@ -97,13 +56,19 @@ ATOMISTIC_EXAMPLE_DIRECTORIES = (
 )
 
 
-def _model(
-    atomistic,
-    mpnn_type="EGNN",
-    species_encoding=False,
-    continuous_input_dim=0,
-    species_feature_index=None,
-):
+def _embedding_encoding(name="atomic_numbers", start=0, embedding_dim=8):
+    return {
+        "name": name,
+        "start": start,
+        "dim": 1,
+        "type": "embedding",
+        "num_categories": 118,
+        "embedding_dim": embedding_dim,
+        "min_value": 1,
+    }
+
+
+def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1):
     heads = update_multibranch_heads(
         {
             "node": {
@@ -117,7 +82,7 @@ def _model(
     )
     return create_model(
         mpnn_type=mpnn_type,
-        input_dim=(continuous_input_dim if atomistic or species_encoding else 1),
+        input_dim=input_dim,
         hidden_dim=8,
         output_dim=[1],
         pe_dim=0,
@@ -146,15 +111,14 @@ def _model(
         num_before_skip=1,
         num_after_skip=1,
         enable_interatomic_potential=atomistic,
-        enable_atomistic_species_encoding=species_encoding,
-        atomistic_species_feature_index=species_feature_index,
+        input_node_encodings=encodings,
         energy_weight=0.1,
         force_weight=1.0,
         use_gpu=False,
     )
 
 
-def _data(atomic_numbers=None):
+def _data(values=None):
     pos = torch.tensor(
         [[0.0, 0.0, 0.0], [1.1, 0.0, 0.0], [0.0, 1.3, 0.0]],
         requires_grad=True,
@@ -162,10 +126,8 @@ def _data(atomic_numbers=None):
     edge_index = torch.tensor(
         [[0, 1, 0, 2, 1, 2], [1, 0, 2, 0, 2, 1]], dtype=torch.long
     )
-    values = torch.tensor([[7.0], [1.0], [8.0]])
     return Data(
-        x=values,
-        atomic_numbers=atomic_numbers,
+        x=values if values is not None else torch.tensor([[7.0], [1.0], [8.0]]),
         pos=pos,
         edge_index=edge_index,
         edge_attr=torch.ones(edge_index.shape[1], 1),
@@ -176,79 +138,58 @@ def _data(atomic_numbers=None):
     )
 
 
-def test_stack_species_capabilities_are_explicit():
-    assert all(not stack.uses_native_species_encoder for stack in GENERIC_STACKS)
-    assert all(stack.uses_native_species_encoder for stack in NATIVE_STACKS)
-
-
 @pytest.mark.parametrize("mpnn_type", GENERIC_MPNN_TYPES)
-def test_non_atomistic_generic_input_is_unchanged(mpnn_type):
-    model = _model(atomistic=False, mpnn_type=mpnn_type)
+def test_unencoded_generic_input_is_unchanged(mpnn_type):
+    model = _model(mpnn_type=mpnn_type)
     data = _data()
     features, _, _ = model._embedding(data)
-
-    assert model.species_embedding is None
+    assert not model.input_feature_encoders
     assert torch.equal(features, data.x)
 
 
 @pytest.mark.parametrize("mpnn_type", GENERIC_MPNN_TYPES)
-def test_atomistic_generic_input_is_a_hidden_width_species_embedding(mpnn_type):
-    model = _model(atomistic=True, mpnn_type=mpnn_type)
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
-    features, _, _ = model.model._embedding(data)
-
-    assert isinstance(model.model.species_embedding, torch.nn.Embedding)
-    assert model.model.species_embedding.num_embeddings == 119
-    assert features.shape == (3, 8)
-    assert torch.equal(features, model.model.species_embedding(data.atomic_numbers))
-
-
-def test_atomistic_property_model_can_enable_species_without_mlip_wrapper():
-    model = _model(atomistic=False, species_encoding=True)
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+def test_embedding_encoded_input_has_configured_width(mpnn_type):
+    model = _model(mpnn_type=mpnn_type, encodings=[_embedding_encoding()], input_dim=8)
+    data = _data()
     features, _, _ = model._embedding(data)
-
-    assert not hasattr(model, "model")
-    assert model.atomistic_mode_enabled
-    assert features.shape == (data.num_nodes, model.hidden_dim)
-    assert torch.equal(features, model.species_embedding(data.atomic_numbers))
-
-
-def test_atomistic_species_embedding_fuses_only_continuous_data_x():
-    model = _model(atomistic=False, species_encoding=True, continuous_input_dim=2)
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
-    data.x = torch.tensor([[0.1, 1.0], [0.2, 2.0], [0.3, 3.0]])
-
-    features = model._input_node_features(data)
-    expected = model.species_embedding(data.atomic_numbers)
-    expected = expected + model.atomistic_continuous_projection(data.x)
-
-    assert torch.equal(features, expected)
-    assert model.atomistic_continuous_projection.in_features == 2
+    embedding = model.input_feature_encoders["0"]
+    assert embedding.num_embeddings == 118
+    assert features.shape == (3, 8)
+    assert torch.equal(features, embedding(data.x[:, 0].long() - 1))
 
 
-def test_disabled_species_encoding_uses_atomic_number_scalar_from_data_x():
-    model = _model(atomistic=False)
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
-
-    features = model._input_node_features(data)
-
-    assert torch.equal(features, data.x)
-
-
-def test_enabled_species_encoding_removes_scalar_fallback_from_data_x():
+def test_encoding_is_generic_and_preserves_continuous_features():
+    values = torch.tensor([[0.1, 7.0, 1.0], [0.2, 1.0, 2.0], [0.3, 8.0, 3.0]])
     model = _model(
-        atomistic=False,
-        species_encoding=True,
-        continuous_input_dim=1,
-        species_feature_index=0,
+        encodings=[_embedding_encoding(name="site_type", start=1, embedding_dim=4)],
+        input_dim=6,
     )
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+    features = model._input_node_features(_data(values))
+    expected = torch.cat(
+        (
+            values[:, :1],
+            model.input_feature_encoders["0"](values[:, 1].long() - 1),
+            values[:, 2:],
+        ),
+        dim=1,
+    )
+    assert torch.equal(features, expected)
 
-    features = model._input_node_features(data)
 
-    assert model.atomistic_continuous_projection is None
-    assert torch.equal(features, model.species_embedding(data.atomic_numbers))
+def test_one_hot_encoding_is_supported_for_arbitrary_node_feature():
+    encoding = {
+        "name": "site_type",
+        "start": 0,
+        "dim": 1,
+        "type": "one_hot",
+        "num_categories": 4,
+        "embedding_dim": None,
+        "min_value": 0,
+    }
+    model = _model(encodings=[encoding], input_dim=4)
+    data = _data(torch.tensor([[0.0], [2.0], [3.0]]))
+    expected = torch.nn.functional.one_hot(data.x[:, 0].long(), num_classes=4).float()
+    assert torch.equal(model._input_node_features(data), expected)
 
 
 def test_qm9_property_example_provides_canonical_atomic_numbers():
@@ -270,55 +211,43 @@ def test_qm9_property_example_provides_canonical_atomic_numbers():
     assert transformed.atomic_numbers.ndim == 1
 
 
-def test_qm9_property_configs_enable_atomistic_species_encoding():
-    repository = Path(__file__).resolve().parents[1]
-    for relative_path in ("examples/qm9/qm9.json", "examples/qm9_hpo/qm9.json"):
-        with open(repository / relative_path, encoding="utf-8") as stream:
-            config = json.load(stream)
-        assert config["NeuralNetwork"]["Architecture"][
-            "enable_atomistic_species_encoding"
-        ]
-
-
-def test_atomistic_example_configs_use_only_canonical_species_field():
+def test_atomistic_examples_configure_atomic_numbers_as_an_embedding():
     examples = Path(__file__).resolve().parents[1] / "examples"
     checked = []
     for directory in ATOMISTIC_EXAMPLE_DIRECTORIES:
         for config_path in (examples / directory).glob("*.json"):
-            with open(config_path, encoding="utf-8") as stream:
-                config = json.load(stream)
-            neural_network = config.get("NeuralNetwork", {})
-            architecture = neural_network.get("Architecture", {})
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            architecture = config.get("NeuralNetwork", {}).get("Architecture", {})
             if "mpnn_type" not in architecture:
                 continue
             if architecture["mpnn_type"] in NATIVE_SPECIES_MPNN_TYPES:
                 continue
             checked.append(config_path)
-            assert architecture.get("enable_atomistic_species_encoding") is True
-            species = [
-                variable
-                for variable in config["Variables"]["inputs"]
-                if variable.get("role") == "species"
-            ]
-            configured_atomic_numbers = [
+            atomic_numbers = [
                 variable
                 for variable in config["Variables"]["inputs"]
                 if variable["name"] == "atomic_numbers"
             ]
-            assert configured_atomic_numbers == species
-            assert len(species) <= 1
+            assert len(atomic_numbers) == 1
+            encoding = atomic_numbers[0]["encoding"]
+            assert encoding["type"] == "embedding"
+            assert encoding["min_value"] == 1
+            assert encoding["num_categories"] == 118
     assert checked
 
 
 @pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)
-def test_custom_embedding_paths_do_not_restore_raw_atomic_numbers(mpnn_type):
-    model = _model(atomistic=True, mpnn_type=mpnn_type).model
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+def test_custom_embedding_paths_use_configured_input_encoder(mpnn_type):
+    model = _model(
+        mpnn_type=mpnn_type,
+        atomistic=True,
+        encodings=[_embedding_encoding()],
+        input_dim=8,
+    ).model
+    data = _data()
     features, _, _ = model._embedding(data)
-
-    assert features.shape == (data.num_nodes, model.hidden_dim)
-    assert torch.equal(features, model.species_embedding(data.atomic_numbers))
-    assert not torch.equal(features[:, :1], data.x)
+    expected = model.input_feature_encoders["0"](data.x[:, 0].long() - 1)
+    assert torch.equal(features, expected)
 
 
 @pytest.mark.parametrize("mpnn_type", CUSTOM_EMBEDDING_MPNN_TYPES)
@@ -334,84 +263,36 @@ def test_custom_embedding_paths_receive_gradients(mpnn_type, monkeypatch):
             mask = (row != col) & (batch[row] == batch[col])
             return torch.stack((row[mask], col[mask]))
 
-        # The unit-test environment does not provide the optional pyg-lib
-        # radius-graph kernel. Replacing only graph construction keeps this
-        # test focused on feature propagation through SchNet.
         monkeypatch.setattr(schnet_module, "radius_graph", complete_radius_graph)
-
-    model = _model(atomistic=True, mpnn_type=mpnn_type)
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
-
+    model = _model(
+        mpnn_type=mpnn_type,
+        atomistic=True,
+        encodings=[_embedding_encoding()],
+        input_dim=8,
+    )
+    data = _data()
     predictions = model(data)
     sum(prediction.sum() for prediction in predictions).backward()
-
-    gradient = model.model.species_embedding.weight.grad
+    gradient = model.model.input_feature_encoders["0"].weight.grad
     assert gradient is not None
     assert torch.isfinite(gradient).all()
-    assert gradient[data.atomic_numbers].abs().sum() > 0
+    assert gradient[(data.x[:, 0] - 1).long()].abs().sum() > 0
 
 
-def test_native_capability_prevents_double_embedding():
-    for stack_type in NATIVE_STACKS:
-        stack = stack_type.__new__(stack_type)
-        torch.nn.Module.__init__(stack)
-        stack.hidden_dim = 8
-        stack.species_embedding = None
-        Base.configure_atomistic_species_encoding(stack, True)
-        assert stack.enable_atomistic_species_encoding is False
-        assert stack.species_embedding is None
-
-
-def test_atomic_number_boundaries_are_supported():
-    model = _model(atomistic=True).model
-    data = _data(torch.tensor([1, 118, 1], dtype=torch.long))
-    features = model._input_node_features(data)
-    assert features.shape == (3, model.hidden_dim)
-
-
-@pytest.mark.parametrize(
-    "atomic_numbers,error",
-    [
-        (torch.tensor([0, 1, 2]), ValueError),
-        (torch.tensor([1, 2, 119]), ValueError),
-        (torch.tensor([1.0, 2.0, 3.0]), TypeError),
-    ],
-)
-def test_invalid_atomic_numbers_are_rejected(atomic_numbers, error):
-    model = _model(atomistic=True).model
-    with pytest.raises(error):
-        model._input_node_features(_data(atomic_numbers))
-
-
-def test_enabled_species_encoding_requires_atomic_numbers():
-    model = _model(atomistic=True).model
-    data = _data()
-    del data.atomic_numbers
-    with pytest.raises(ValueError, match="requires data.atomic_numbers"):
-        model._input_node_features(data)
-
-
-def test_atomic_number_count_must_match_nodes():
-    model = _model(atomistic=True).model
-    with pytest.raises(ValueError, match="one value per node"):
-        model._input_node_features(_data(torch.tensor([1, 8])))
-
-
-def test_distinct_species_have_distinct_learned_representations():
-    model = _model(atomistic=True).model
-    data = _data(torch.tensor([1, 2, 3]))
-    features = model._input_node_features(data)
-    assert torch.unique(features, dim=0).shape[0] == 3
+@pytest.mark.parametrize("value", [0.0, 119.0, 1.5])
+def test_invalid_encoded_categories_are_rejected(value):
+    model = _model(encodings=[_embedding_encoding()], input_dim=8)
+    with pytest.raises((TypeError, ValueError)):
+        model._input_node_features(_data(torch.tensor([[value], [1.0], [8.0]])))
 
 
 def test_atomistic_forward_backward_force_path():
-    model = _model(atomistic=True)
-    data = _data(torch.tensor([7, 1, 8], dtype=torch.long))
+    model = _model(atomistic=True, encodings=[_embedding_encoding()], input_dim=8)
+    data = _data()
     predictions = model(data)
     energy = predictions[0].sum()
     forces = -torch.autograd.grad(energy, data.pos, create_graph=True)[0]
-
     assert forces.shape == data.pos.shape
     assert torch.isfinite(forces).all()
     forces.square().sum().backward()
-    assert model.model.species_embedding.weight.grad is not None
+    assert model.model.input_feature_encoders["0"].weight.grad is not None

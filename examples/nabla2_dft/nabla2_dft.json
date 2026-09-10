@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
-            "enable_atomistic_species_encoding": true,
             "edge_features": [
                 "bond_length"
             ],
@@ -63,7 +62,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
-                "role": "species",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 200,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             }

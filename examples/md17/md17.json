@@ -10,7 +10,6 @@
             "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
             "mpnn_type": "SchNet",
-            "enable_atomistic_species_encoding": true,
             "radius": 7,
             "max_neighbours": 5,
             "periodic_boundary_conditions": false,
@@ -67,7 +66,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
-                "role": "species",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 64,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             }

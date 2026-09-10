@@ -14,7 +14,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "PNA",
-            "enable_atomistic_species_encoding": true,
             "radius": 3,
             "max_neighbours": 100000,
             "edge_features": [
@@ -69,7 +68,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
-                "role": "species",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 50,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             }

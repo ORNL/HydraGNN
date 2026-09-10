@@ -10,7 +10,6 @@
         "Architecture": {
             "periodic_boundary_conditions": true,
             "mpnn_type": "DimeNet",
-            "enable_atomistic_species_encoding": true,
             "radius": 5.0,
             "max_neighbours": 5,
             "int_emb_size": 32,
@@ -67,7 +66,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
-                "role": "species",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 32,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             },

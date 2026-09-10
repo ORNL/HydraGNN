@@ -5,7 +5,6 @@
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "EGNN",
-            "enable_atomistic_species_encoding": true,
             "equivariance": true,
             "radius": 5,
             "max_neighbours": 20,
@@ -205,7 +204,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
-                "role": "species",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 866,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             },

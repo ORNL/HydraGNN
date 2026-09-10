@@ -16,9 +16,10 @@ from typing import Literal
 import torch
 
 VariableLevel = Literal["node", "edge", "graph"]
-VariableRole = Literal["feature", "position", "species"]
+VariableRole = Literal["feature", "position"]
 _LEVELS = frozenset(("node", "edge", "graph"))
-_ROLES = frozenset(("feature", "position", "species"))
+_ROLES = frozenset(("feature", "position"))
+_ENCODING_TYPES = frozenset(("embedding", "one_hot"))
 _DERIVED_TENSOR_NAMES = frozenset(
     (
         "x",
@@ -36,6 +37,16 @@ _DERIVED_TENSOR_NAMES = frozenset(
 
 
 @dataclass(frozen=True)
+class InputEncoding:
+    """Optional transformation applied to one named input variable."""
+
+    type: Literal["embedding", "one_hot"]
+    num_categories: int
+    embedding_dim: int | None = None
+    min_value: int = 0
+
+
+@dataclass(frozen=True)
 class VariableSpec:
     """The public contract for one tensor attribute on a graph sample."""
 
@@ -43,6 +54,7 @@ class VariableSpec:
     level: VariableLevel
     dim: int
     role: VariableRole = "feature"
+    encoding: InputEncoding | None = None
 
 
 @dataclass(frozen=True)
@@ -63,7 +75,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         path = f"Variables.{group}[{index}]"
         if not isinstance(raw, dict):
             raise TypeError(f"{path} must be a JSON object")
-        extra = set(raw) - {"name", "level", "dim", "role"}
+        extra = set(raw) - {"name", "level", "dim", "role", "encoding"}
         missing = {"name", "level", "dim"} - set(raw)
         if missing:
             raise ValueError(f"{path} is missing: {', '.join(sorted(missing))}")
@@ -74,6 +86,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         level = raw["level"]
         dim = raw["dim"]
         role = raw.get("role", "feature")
+        raw_encoding = raw.get("encoding")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
@@ -90,17 +103,63 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
                     f"{path} with role 'position' must have name 'pos', "
                     "level 'node', and dim 3"
                 )
-        if role == "species":
-            if group != "inputs":
-                raise ValueError(f"{path}.role 'species' is valid only for inputs")
-            if name != "atomic_numbers" or level != "node" or dim != 1:
+        encoding = None
+        if raw_encoding is not None:
+            if group != "inputs" or level != "node" or role != "feature" or dim != 1:
                 raise ValueError(
-                    f"{path} with role 'species' must have name 'atomic_numbers', "
-                    "level 'node', and dim 1"
+                    f"{path}.encoding is supported only for scalar node input features"
                 )
+            if not isinstance(raw_encoding, dict):
+                raise TypeError(f"{path}.encoding must be a JSON object")
+            encoding_extra = set(raw_encoding) - {
+                "type",
+                "num_categories",
+                "embedding_dim",
+                "min_value",
+            }
+            if encoding_extra:
+                raise ValueError(
+                    f"{path}.encoding has unknown keys: "
+                    + ", ".join(sorted(encoding_extra))
+                )
+            encoding_type = raw_encoding.get("type")
+            num_categories = raw_encoding.get("num_categories")
+            embedding_dim = raw_encoding.get("embedding_dim")
+            min_value = raw_encoding.get("min_value", 0)
+            if encoding_type not in _ENCODING_TYPES:
+                raise ValueError(
+                    f"{path}.encoding.type must be one of {sorted(_ENCODING_TYPES)}"
+                )
+            if (
+                isinstance(num_categories, bool)
+                or not isinstance(num_categories, int)
+                or num_categories <= 0
+            ):
+                raise ValueError(f"{path}.encoding.num_categories must be positive")
+            if encoding_type == "embedding":
+                if (
+                    isinstance(embedding_dim, bool)
+                    or not isinstance(embedding_dim, int)
+                    or embedding_dim <= 0
+                ):
+                    raise ValueError(f"{path}.encoding.embedding_dim must be positive")
+            elif embedding_dim is not None:
+                raise ValueError(
+                    f"{path}.encoding.embedding_dim is valid only for embedding"
+                )
+            if isinstance(min_value, bool) or not isinstance(min_value, int):
+                raise ValueError(f"{path}.encoding.min_value must be an integer")
+            encoding = InputEncoding(
+                type=encoding_type,
+                num_categories=num_categories,
+                embedding_dim=embedding_dim,
+                min_value=min_value,
+            )
         if group == "inputs" and name == "pos" and role != "position":
             raise ValueError(f"{path} named 'pos' must declare role 'position'")
-        parsed.append(VariableSpec(name=name, level=level, dim=dim, role=role))
+        parsed.append(
+            VariableSpec(name=name, level=level, dim=dim, role=role, encoding=encoding)
+        )
     return tuple(parsed)
 
 
@@ -127,12 +186,9 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
     if len(positions) > 1:
         raise ValueError("Variables.inputs may contain only one position variable")
     if not any(
-        spec.level == "node" and spec.role in ("feature", "species")
-        for spec in schema.inputs
+        spec.level == "node" and spec.role == "feature" for spec in schema.inputs
     ):
-        raise ValueError(
-            "Variables.inputs must contain at least one node feature or species variable"
-        )
+        raise ValueError("Variables.inputs must contain at least one node feature")
     reserved = sorted(
         {
             spec.name
@@ -184,12 +240,11 @@ def validate_variable(data, spec: VariableSpec) -> torch.Tensor:
     value = getattr(data, spec.name)
     if not isinstance(value, torch.Tensor):
         raise TypeError(f"Data.{spec.name} must be a torch.Tensor")
-    expected = (
-        (_expected_rows(data, spec.level),)
-        if spec.role == "species"
-        else (_expected_rows(data, spec.level), spec.dim)
-    )
-    if value.ndim != 2 or tuple(value.shape) != expected:
+    expected = (_expected_rows(data, spec.level), spec.dim)
+    valid_shape = value.ndim == 2 and tuple(value.shape) == expected
+    if spec.encoding is not None:
+        valid_shape = valid_shape or tuple(value.shape) == (expected[0],)
+    if not valid_shape:
         raise ValueError(
             f"Data.{spec.name} must have shape {expected} for a {spec.level} "
             f"variable; got {tuple(value.shape)}"
@@ -213,12 +268,9 @@ def prepare_data_from_schema(data, schema: VariableSchema):
     for spec in schema.inputs:
         value = validate_variable(data, spec)
         if spec.role == "feature":
+            if spec.encoding is not None:
+                value = value.reshape(-1, 1)
             by_level[spec.level].append(value)
-        elif spec.role == "species":
-            # Preserve the scalar fallback representation in ``data.x``. A
-            # model with categorical species encoding enabled removes this
-            # column before applying its learned embedding.
-            by_level[spec.level].append(value.reshape(-1, 1).float())
 
     if by_level["node"]:
         data.x = torch.cat(by_level["node"], dim=-1)
@@ -262,7 +314,23 @@ def schema_dimensions(schema: VariableSchema, level: VariableLevel, group: str) 
     """Return the concatenated feature dimension for a level and group."""
     specs = getattr(schema, group)
     return sum(
-        spec.dim
-        for spec in specs
-        if spec.level == level and spec.role in ("feature", "species")
+        spec.dim for spec in specs if spec.level == level and spec.role == "feature"
     )
+
+
+def encoded_schema_dimensions(
+    schema: VariableSchema, level: VariableLevel, group: str
+) -> int:
+    """Return feature width after applying configured categorical encoders."""
+    specs = getattr(schema, group)
+    total = 0
+    for spec in specs:
+        if spec.level != level or spec.role != "feature":
+            continue
+        if spec.encoding is None:
+            total += spec.dim
+        elif spec.encoding.type == "embedding":
+            total += spec.encoding.embedding_dim
+        else:
+            total += spec.encoding.num_categories
+    return total

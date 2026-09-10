@@ -72,8 +72,6 @@ import math
 
 @compile_mode("script")
 class MACEStack(Base):
-    uses_native_species_encoder = True
-
     def __init__(
         self,
         input_args,

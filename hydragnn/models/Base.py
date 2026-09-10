@@ -35,8 +35,6 @@ import inspect
 
 
 class Base(Module):
-    uses_native_species_encoder = False
-
     def __init__(
         self,
         input_args: str,
@@ -185,14 +183,9 @@ class Base(Module):
         self.graph_pooling = pool_mode
         self.graph_pool_fn, self.graph_pool_reduction = pool_map[pool_mode]
 
-        # Atomistic species encoding is configured by create_model after the
-        # stack has been constructed. Generic graph behavior remains disabled
-        # by default, and native atomistic stacks opt out via the class flag.
+        self.input_feature_encoders = ModuleDict()
+        self.input_feature_encoding_config = []
         self.atomistic_mode_enabled = False
-        self.enable_atomistic_species_encoding = False
-        self.species_embedding = None
-        self.atomistic_continuous_projection = None
-        self.atomistic_species_feature_index = None
 
         def _pool_graph_features(x_tensor, batch_tensor):
             if batch_tensor is None:
@@ -539,107 +532,64 @@ class Base(Module):
             )
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
-    def configure_atomistic_species_encoding(
-        self,
-        enabled: bool,
-        continuous_input_dim: int = 0,
-        species_feature_index: int | None = None,
-    ) -> None:
-        """Configure categorical species handling for atomistic models.
-
-        Stacks with a native encoder retain it; all other stacks use the common
-        HydraGNN species embedding. Generic graph behavior remains unchanged.
-        """
-        self.atomistic_mode_enabled = bool(enabled)
-        self.enable_atomistic_species_encoding = bool(
-            enabled and not self.uses_native_species_encoder
-        )
-        self.atomistic_species_feature_index = species_feature_index
-        if self.enable_atomistic_species_encoding:
-            self.species_embedding = Embedding(119, self.hidden_dim, padding_idx=0)
-            if continuous_input_dim > 0:
-                self.atomistic_continuous_projection = Linear(
-                    continuous_input_dim, self.hidden_dim, bias=False
+    def configure_input_feature_encoders(self, encodings: list[dict] | None) -> None:
+        """Build schema-configured encoders for arbitrary scalar node inputs."""
+        self.input_feature_encoding_config = list(encodings or [])
+        for index, encoding in enumerate(self.input_feature_encoding_config):
+            if encoding["type"] == "embedding":
+                self.input_feature_encoders[str(index)] = Embedding(
+                    encoding["num_categories"], encoding["embedding_dim"]
                 )
 
     @staticmethod
     def _atomic_numbers(data) -> torch.Tensor:
-        """Read and validate the canonical categorical atomic-number field."""
+        """Return canonical atomic numbers for native atomistic encoders."""
         if not hasattr(data, "atomic_numbers") or data.atomic_numbers is None:
-            raise ValueError(
-                "categorical atomistic species encoding requires "
-                "data.atomic_numbers; data.x is not interpreted as species"
-            )
+            raise ValueError("native atomistic encoding requires data.atomic_numbers")
         values = data.atomic_numbers
         if not torch.is_tensor(values):
             raise TypeError("data.atomic_numbers must be a torch.Tensor")
-        integer_dtypes = {
-            torch.uint8,
-            torch.int8,
-            torch.int16,
-            torch.int32,
-            torch.int64,
-        }
-        if values.dtype not in integer_dtypes:
-            raise TypeError("data.atomic_numbers must have an integer dtype")
-        atomic_numbers = values.long().view(-1)
-
-        if hasattr(data, "pos") and data.pos is not None:
-            num_nodes = data.pos.shape[0]
-        elif hasattr(data, "x") and data.x is not None:
-            num_nodes = data.x.shape[0]
-        else:
-            num_nodes = atomic_numbers.numel()
-        if atomic_numbers.numel() != num_nodes:
-            raise ValueError(
-                "data.atomic_numbers must contain exactly one value per node; "
-                f"received {atomic_numbers.numel()} values for {num_nodes} nodes"
-            )
-
-        if atomic_numbers.numel() and not torch.all(
-            (atomic_numbers >= 1) & (atomic_numbers <= 118)
-        ):
-            minimum = int(atomic_numbers.min())
-            maximum = int(atomic_numbers.max())
-            raise ValueError(
-                "atomic numbers must satisfy 1 <= Z <= 118; "
-                f"observed min/max {minimum}/{maximum}"
-            )
-        return atomic_numbers
+        return values.long().view(-1)
 
     def _input_node_features(self, data) -> torch.Tensor:
-        """Return generic features or atomistic categorical species embeddings."""
-        if not self.enable_atomistic_species_encoding:
+        """Apply configured categorical encoders to raw named node features."""
+        if not self.input_feature_encoding_config:
             return data.x
-        atomic_numbers = self._atomic_numbers(data)
-        if self.species_embedding is None:
-            raise RuntimeError("atomistic species embedding was not initialized")
-        features = self.species_embedding(atomic_numbers)
-        continuous_features = data.x
-        if self.atomistic_species_feature_index is not None:
-            index = self.atomistic_species_feature_index
-            if index < 0 or index >= data.x.shape[1]:
-                raise ValueError(
-                    "configured atomistic species feature index is outside data.x"
+        pieces = []
+        cursor = 0
+        for index, encoding in enumerate(self.input_feature_encoding_config):
+            start = encoding["start"]
+            if start > cursor:
+                pieces.append(data.x[:, cursor:start])
+            raw = data.x[:, start]
+            rounded = raw.round()
+            if not torch.equal(raw, rounded):
+                raise TypeError(
+                    f"encoded node feature '{encoding['name']}' must contain integers"
                 )
-            continuous_features = torch.cat(
-                (data.x[:, :index], data.x[:, index + 1 :]), dim=1
-            )
-        if self.atomistic_continuous_projection is not None:
-            if (
-                continuous_features.shape[1]
-                != self.atomistic_continuous_projection.in_features
+            values = rounded.long()
+            minimum = encoding["min_value"]
+            maximum = minimum + encoding["num_categories"] - 1
+            if values.numel() and not torch.all(
+                (values >= minimum) & (values <= maximum)
             ):
                 raise ValueError(
-                    "data.x must contain only the configured continuous atom "
-                    "features when categorical species encoding is enabled; "
-                    f"expected {self.atomistic_continuous_projection.in_features} "
-                    f"features but received {continuous_features.shape[1]}"
+                    f"encoded node feature '{encoding['name']}' must satisfy "
+                    f"{minimum} <= value <= {maximum}"
                 )
-            features = features + self.atomistic_continuous_projection(
-                continuous_features.float()
-            )
-        return features
+            category_indices = values - minimum
+            if encoding["type"] == "embedding":
+                pieces.append(self.input_feature_encoders[str(index)](category_indices))
+            else:
+                pieces.append(
+                    F.one_hot(
+                        category_indices, num_classes=encoding["num_categories"]
+                    ).float()
+                )
+            cursor = start + encoding["dim"]
+        if cursor < data.x.shape[1]:
+            pieces.append(data.x[:, cursor:])
+        return torch.cat(pieces, dim=1)
 
     def _embedding(self, data):
         if not hasattr(data, "edge_shifts"):

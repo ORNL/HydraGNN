@@ -24,7 +24,11 @@ import re
 import torch
 
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
-from .variable_schema import get_variable_schema, schema_dimensions
+from .variable_schema import (
+    encoded_schema_dimensions,
+    get_variable_schema,
+    schema_dimensions,
+)
 
 _UNSAFE_LOG_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -108,20 +112,30 @@ def update_config(config, train_loader, val_loader, test_loader):
             "Named edge outputs are valid data attributes, but HydraGNN does "
             "not yet provide an edge prediction head"
         )
-    config["NeuralNetwork"]["Architecture"]["input_dim"] = schema_dimensions(
+    config["NeuralNetwork"]["Architecture"]["input_dim"] = encoded_schema_dimensions(
         named_schema, "node", "inputs"
     )
     node_offset = 0
-    species_feature_index = None
+    input_node_encodings = []
     for spec in named_schema.inputs:
         if spec.level != "node" or spec.role == "position":
             continue
-        if spec.role == "species":
-            species_feature_index = node_offset
+        if spec.encoding is not None:
+            input_node_encodings.append(
+                {
+                    "name": spec.name,
+                    "start": node_offset,
+                    "dim": spec.dim,
+                    "type": spec.encoding.type,
+                    "num_categories": spec.encoding.num_categories,
+                    "embedding_dim": spec.encoding.embedding_dim,
+                    "min_value": spec.encoding.min_value,
+                }
+            )
         node_offset += spec.dim
     config["NeuralNetwork"]["Architecture"][
-        "atomistic_species_feature_index"
-    ] = species_feature_index
+        "input_node_encodings"
+    ] = input_node_encodings
     named_graph_dim = schema_dimensions(named_schema, "graph", "inputs")
     if named_graph_dim:
         config["NeuralNetwork"]["Architecture"]["use_graph_attr_conditioning"] = True

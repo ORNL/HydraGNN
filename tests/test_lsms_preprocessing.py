@@ -44,7 +44,12 @@ def _config(stratified=False):
                     "name": "atomic_numbers",
                     "level": "node",
                     "dim": 1,
-                    "role": "species",
+                    "encoding": {
+                        "type": "embedding",
+                        "num_categories": 118,
+                        "embedding_dim": 8,
+                        "min_value": 1,
+                    },
                 }
             ],
             "outputs": [
