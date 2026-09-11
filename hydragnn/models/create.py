@@ -97,6 +97,7 @@ def create_model_config(
         energy_weight=config["Architecture"].get("energy_weight", 0.0),
         energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
         force_weight=config["Architecture"].get("force_weight", 0.0),
+        stress_weight=config["Architecture"].get("stress_weight", 0.0),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
@@ -288,6 +289,7 @@ def create_model(
     energy_weight: float = 0.0,
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
+    stress_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
@@ -343,6 +345,17 @@ def create_model(
     torch.manual_seed(0)
 
     device = get_device(use_gpu, verbosity_level=verbosity)
+
+    if stress_weight < 0:
+        raise ValueError("stress_weight must be non-negative.")
+    if stress_weight > 0 and not enable_interatomic_potential:
+        raise ValueError(
+            "stress_weight is only valid when enable_interatomic_potential is true."
+        )
+    # The AllScAIP backbone must retain its strain tensor so the outer MLIP
+    # wrapper can differentiate energy with respect to it.
+    if stress_weight > 0 and mpnn_type == "AllScAIP":
+        allscaip_regress_stress = True
 
     # Note: model-specific inputs must come first.
     if mpnn_type == "GIN":
@@ -950,6 +963,7 @@ def create_model(
                 self.energy_weight = energy_weight
                 self.energy_peratom_weight = energy_peratom_weight
                 self.force_weight = force_weight
+                self.stress_weight = stress_weight
 
             def __getattr__(self, name):
                 # First try to get from the wrapper itself
@@ -976,8 +990,62 @@ def create_model(
 
             # ---------- forward ----------
             def forward(self, data):
+                self._stress_displacement = None
+                self._stress_cell = None
 
-                return self.model(data)
+                # AllScAIP owns its differentiable graph construction and
+                # applies strain internally. Other MLIP backbones receive the
+                # same symmetric infinitesimal strain here.
+                if self.stress_weight > 0 and not isinstance(self.model, AllScAIPStack):
+                    if getattr(data, "cell", None) is None:
+                        raise ValueError(
+                            "stress_weight > 0 requires data.cell for every graph."
+                        )
+                    num_graphs = int(data.batch.max().item()) + 1
+                    cell = data.cell
+                    if cell.dim() == 2 and cell.shape == (3, 3):
+                        cell = cell.unsqueeze(0).expand(num_graphs, 3, 3).contiguous()
+                    elif cell.dim() == 2 and cell.shape == (3 * num_graphs, 3):
+                        cell = cell.view(num_graphs, 3, 3)
+                    elif cell.dim() == 3 and cell.shape[1:] == (3, 3):
+                        if cell.shape[0] == 1 and num_graphs > 1:
+                            cell = cell.expand(num_graphs, 3, 3).contiguous()
+                        elif cell.shape[0] != num_graphs:
+                            raise ValueError(
+                                f"Expected one cell or {num_graphs} cells for stress "
+                                f"loss, got {cell.shape[0]}."
+                            )
+                    else:
+                        raise ValueError(
+                            f"Unexpected cell shape {tuple(cell.shape)} for stress loss."
+                        )
+                    displacement = torch.zeros_like(cell, requires_grad=True)
+                    strain = 0.5 * (displacement + displacement.transpose(-1, -2))
+                    original_pos = data.pos
+                    original_cell = data.cell
+                    data.pos = original_pos + torch.bmm(
+                        original_pos.unsqueeze(1), strain[data.batch]
+                    ).squeeze(1)
+                    strained_cell = cell + torch.bmm(cell, strain)
+                    data.cell = strained_cell
+                    try:
+                        prediction = self.model(data)
+                    finally:
+                        data.pos = original_pos
+                        data.cell = original_cell
+                    self._stress_displacement = displacement
+                    self._stress_cell = cell
+                    return prediction
+
+                prediction = self.model(data)
+                if self.stress_weight > 0:
+                    self._stress_displacement = getattr(
+                        self.model, "_hydragnn_stress_displacement", None
+                    )
+                    self._stress_cell = getattr(
+                        self.model, "_hydragnn_stress_cell", None
+                    )
+                return prediction
 
             def energy_force_loss(self, pred, data, create_graph=True):
                 """
@@ -986,6 +1054,7 @@ def create_model(
                 This method is specific to interatomic potentials and computes:
                 1. Energy loss between predicted and true total energies
                 2. Force loss between predicted and true forces (via autograd on positions)
+                3. Optional stress loss from the energy derivative with respect to strain
 
                 Forces are computed as negative gradients of total energy with respect to positions.
                 """
@@ -1033,15 +1102,17 @@ def create_model(
                 energy_loss_weight = self.energy_weight
                 energy_peratom_loss_weight = self.energy_peratom_weight
                 force_loss_weight = self.force_weight
+                stress_loss_weight = self.stress_weight
 
                 # Interatomic potential training requires at least one active loss term
                 if (
                     energy_loss_weight <= 0
                     and energy_peratom_loss_weight <= 0
                     and force_loss_weight <= 0
+                    and stress_loss_weight <= 0
                 ):
                     raise ValueError(
-                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
+                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, force_weight, or stress_weight to a positive value."
                     )
 
                 tot_loss = 0
@@ -1090,6 +1161,38 @@ def create_model(
                     )  # Have force-weight be the complement to energy-weight
                     ## FixMe: current loss functions require the number of heads to be the number of things being predicted
                     ##        so, we need to do loss calculation manually without calling the other functions.
+
+                if stress_loss_weight > 0:
+                    stress_true = getattr(data, "stress", None)
+                    if stress_true is None:
+                        raise ValueError("stress_weight > 0 requires data.stress.")
+                    displacement = self._stress_displacement
+                    cell = self._stress_cell
+                    if displacement is None or cell is None:
+                        raise RuntimeError(
+                            "The selected MLIP backbone did not expose a differentiable "
+                            "cell displacement for stress prediction."
+                        )
+                    virial = torch.autograd.grad(
+                        graph_energy_pred,
+                        displacement,
+                        grad_outputs=torch.ones_like(graph_energy_pred),
+                        retain_graph=graph_energy_pred.requires_grad,
+                        create_graph=create_graph,
+                    )[0]
+                    volume = torch.det(cell).abs().view(-1, 1, 1)
+                    min_volume = torch.finfo(volume.dtype).eps
+                    if not torch.isfinite(volume).all() or torch.any(
+                        volume <= min_volume
+                    ):
+                        raise ValueError(
+                            "stress loss requires finite, non-singular simulation cells."
+                        )
+                    stress_pred = virial / volume
+                    stress_true = stress_true.float().reshape_as(stress_pred)
+                    stress_loss = self.loss_function(stress_pred.float(), stress_true)
+                    tasks_loss.append(stress_loss)
+                    tot_loss += stress_loss * stress_loss_weight
 
                 return tot_loss, tasks_loss
 

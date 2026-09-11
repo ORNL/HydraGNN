@@ -9,6 +9,16 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
-from .preprocessing import normalize_stress, validate_materials_sample
+from .preprocessing import (
+    StressEnergyStrainCheck,
+    check_stress_against_energy_strain,
+    normalize_stress,
+    validate_materials_sample,
+)
 
-__all__ = ["normalize_stress", "validate_materials_sample"]
+__all__ = [
+    "StressEnergyStrainCheck",
+    "check_stress_against_energy_strain",
+    "normalize_stress",
+    "validate_materials_sample",
+]
