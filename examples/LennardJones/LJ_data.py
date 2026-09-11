@@ -159,7 +159,7 @@ class LJDataset(AbstractBaseDataset):
             1.0 / energy_pre_scaling_factor * torch.ones(num_nodes, 1)
         )
         forces = torch_data[:, [5, 6, 7]]
-        atomic_numbers = torch_data[:, [0]].to(torch.float32)
+        atomic_numbers = torch_data[:, 0].long()
         potential = torch_data[:, [4]].to(torch.float32)
         forces_pre_scaling_factor = 1.0
         forces_pre_scaled = forces * forces_pre_scaling_factor
@@ -344,6 +344,7 @@ def create_configuration(
         torch.tensor([supercell_size_x, supercell_size_y, supercell_size_z])
     )
     data.pbc = torch.tensor([True, True, True], dtype=torch.bool)
+    data.atomic_numbers = atom_types.long().view(-1)
     data.x = torch.cat([atom_types, positions], dim=1)
 
     create_graph_connectivity_pbc = get_radius_graph_pbc(

@@ -10,7 +10,7 @@
 ##############################################################################
 
 import torch
-from torch.nn import ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
+from torch.nn import Embedding, ModuleList, Sequential, ReLU, Linear, Module, ModuleDict
 import torch.nn.functional as F
 from torch_geometric.nn import (
     BatchNorm,
@@ -182,6 +182,10 @@ class Base(Module):
             raise ValueError("Unsupported graph_pooling: " + graph_pooling)
         self.graph_pooling = pool_mode
         self.graph_pool_fn, self.graph_pool_reduction = pool_map[pool_mode]
+
+        self.input_feature_encoders = ModuleDict()
+        self.input_feature_encoding_config = []
+        self.atomistic_mode_enabled = False
 
         def _pool_graph_features(x_tensor, batch_tensor):
             if batch_tensor is None:
@@ -528,6 +532,65 @@ class Base(Module):
             )
             self.feature_layers.append(BatchNorm(self.hidden_dim))
 
+    def configure_input_feature_encoders(self, encodings: list[dict] | None) -> None:
+        """Build schema-configured encoders for arbitrary scalar node inputs."""
+        self.input_feature_encoding_config = list(encodings or [])
+        for index, encoding in enumerate(self.input_feature_encoding_config):
+            if encoding["type"] == "embedding":
+                self.input_feature_encoders[str(index)] = Embedding(
+                    encoding["num_categories"], encoding["embedding_dim"]
+                )
+
+    @staticmethod
+    def _atomic_numbers(data) -> torch.Tensor:
+        """Return canonical atomic numbers for native atomistic encoders."""
+        if not hasattr(data, "atomic_numbers") or data.atomic_numbers is None:
+            raise ValueError("native atomistic encoding requires data.atomic_numbers")
+        values = data.atomic_numbers
+        if not torch.is_tensor(values):
+            raise TypeError("data.atomic_numbers must be a torch.Tensor")
+        return values.long().view(-1)
+
+    def _input_node_features(self, data) -> torch.Tensor:
+        """Apply configured categorical encoders to raw named node features."""
+        if not self.input_feature_encoding_config:
+            return data.x
+        pieces = []
+        cursor = 0
+        for index, encoding in enumerate(self.input_feature_encoding_config):
+            start = encoding["start"]
+            if start > cursor:
+                pieces.append(data.x[:, cursor:start])
+            raw = data.x[:, start]
+            rounded = raw.round()
+            if not torch.equal(raw, rounded):
+                raise TypeError(
+                    f"encoded node feature '{encoding['name']}' must contain integers"
+                )
+            values = rounded.long()
+            minimum = encoding["min_value"]
+            maximum = minimum + encoding["num_categories"] - 1
+            if values.numel() and not torch.all(
+                (values >= minimum) & (values <= maximum)
+            ):
+                raise ValueError(
+                    f"encoded node feature '{encoding['name']}' must satisfy "
+                    f"{minimum} <= value <= {maximum}"
+                )
+            category_indices = values - minimum
+            if encoding["type"] == "embedding":
+                pieces.append(self.input_feature_encoders[str(index)](category_indices))
+            else:
+                pieces.append(
+                    F.one_hot(
+                        category_indices, num_classes=encoding["num_categories"]
+                    ).float()
+                )
+            cursor = start + encoding["dim"]
+        if cursor < data.x.shape[1]:
+            pieces.append(data.x[:, cursor:])
+        return torch.cat(pieces, dim=1)
+
     def _embedding(self, data):
         if not hasattr(data, "edge_shifts"):
             data.edge_shifts = torch.zeros(
@@ -540,18 +603,19 @@ class Base(Module):
             ), "Data must have edge attributes if use_edge_attributes is set."
             conv_args.update({"edge_attr": data.edge_attr})
 
+        node_features = self._input_node_features(data)
         if self.use_global_attn:
             if self.global_attn_engine == "EquivariantTransformer":
                 if not self.input_dim:
                     raise ValueError(
                         "EquivariantTransformer requires invariant node features"
                     )
-                return self.node_emb(data.x.float()), data.pos, conv_args
+                return self.node_emb(node_features.float()), data.pos, conv_args
             # encode node positional embeddings
             x = self.pos_emb(data.pe)
             # if node features are available, generate mebeddings, concatenate with positional embeddings and map to hidden dim
             if self.input_dim:
-                x = torch.cat((self.node_emb(data.x.float()), x), 1)
+                x = torch.cat((self.node_emb(node_features.float()), x), 1)
                 x = self.node_lin(x)
             # repeat for edge features and relative edge encodings
             if self.is_edge_model:
@@ -562,7 +626,7 @@ class Base(Module):
                 conv_args.update({"edge_attr": e})
             return x, data.pos, conv_args
         else:
-            return data.x, data.pos, conv_args
+            return node_features, data.pos, conv_args
 
     def _equivariant_attention_geometry(self, data):
         """Collect global-attention geometry under the configured PBC policy."""

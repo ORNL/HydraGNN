@@ -17,7 +17,19 @@ from examples.eam import eam_preprocess
 def _config(outputs):
     return {
         "Variables": {
-            "inputs": [{"name": "node_features", "level": "node", "dim": 1}],
+            "inputs": [
+                {
+                    "name": "atomic_numbers",
+                    "level": "node",
+                    "dim": 1,
+                    "encoding": {
+                        "type": "embedding",
+                        "num_categories": 118,
+                        "embedding_dim": 8,
+                        "min_value": 1,
+                    },
+                }
+            ],
             "outputs": outputs,
         }
     }
@@ -59,7 +71,7 @@ def test_eam_cfg_parser_exposes_named_attributes(monkeypatch, tmp_path):
         ),
     )
 
-    assert sample.node_features.shape == (2, 1)
+    torch.testing.assert_close(sample.atomic_numbers, torch.tensor([28, 41]))
     assert sample.atomic_energy.shape == (2, 1)
     assert sample.atomic_forces.shape == (2, 3)
     torch.testing.assert_close(sample.bulk_modulus, torch.tensor([[42.5]]))

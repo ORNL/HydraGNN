@@ -40,7 +40,7 @@ def parse_lsms_file(filepath):
     if any(len(row) < 7 for row in atom_rows):
         raise ValueError(f"LSMS atom rows require at least seven columns: {path}")
 
-    atomic_numbers = torch.tensor(
+    proton_counts = torch.tensor(
         [[float(row[0])] for row in atom_rows], dtype=torch.float32
     )
     electronic_charge = torch.tensor(
@@ -56,11 +56,11 @@ def parse_lsms_file(filepath):
     total_energy = float(lines[0][0])
 
     return Data(
-        num_of_protons=atomic_numbers,
+        atomic_numbers=proton_counts.long().view(-1),
         free_energy_per_atom=torch.tensor(
             [[total_energy / len(atom_rows)]], dtype=torch.float32
         ),
-        charge_density=electronic_charge - atomic_numbers,
+        charge_density=electronic_charge - proton_counts,
         magnetic_moment=magnetic_moment,
         pos=pos,
     )

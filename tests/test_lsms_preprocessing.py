@@ -39,7 +39,19 @@ def _config(stratified=False):
             "Training": {"perc_train": 0.5},
         },
         "Variables": {
-            "inputs": [{"name": "num_of_protons", "level": "node", "dim": 1}],
+            "inputs": [
+                {
+                    "name": "atomic_numbers",
+                    "level": "node",
+                    "dim": 1,
+                    "encoding": {
+                        "type": "embedding",
+                        "num_categories": 118,
+                        "embedding_dim": 8,
+                        "min_value": 1,
+                    },
+                }
+            ],
             "outputs": [
                 {"name": "free_energy_per_atom", "level": "graph", "dim": 1},
                 {"name": "charge_density", "level": "node", "dim": 1},
@@ -55,7 +67,7 @@ def test_lsms_parser_creates_named_attributes(tmp_path):
 
     data = parse_lsms_file(record)
 
-    torch.testing.assert_close(data.num_of_protons, torch.tensor([[26.0], [78.0]]))
+    torch.testing.assert_close(data.atomic_numbers, torch.tensor([26, 78]))
     torch.testing.assert_close(data.free_energy_per_atom, torch.tensor([[-4.0]]))
     torch.testing.assert_close(data.charge_density, torch.tensor([[1.5], [1.0]]))
     torch.testing.assert_close(data.magnetic_moment, torch.tensor([[1.2], [-0.2]]))
@@ -69,7 +81,7 @@ def test_lsms_preprocessing_compiles_schema_and_edges(tmp_path):
 
     data = prepare_lsms_dataset(tmp_path, _config())[0]
 
-    assert data.x.shape == (2, 1)
+    torch.testing.assert_close(data.x, torch.tensor([[26.0], [78.0]]))
     assert data.edge_index.shape == (2, 2)
     assert data.y.shape == (5, 1)
     torch.testing.assert_close(data.y_loc, torch.tensor([[0, 1, 3, 5]]))

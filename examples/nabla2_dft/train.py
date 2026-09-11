@@ -194,7 +194,7 @@ class Nabla2RelaxDataset(AbstractBaseDataset):
             pos=pos,
             cell=cell,
             pbc=pbc,
-            atomic_numbers=atomic_numbers,
+            atomic_numbers=atomic_numbers.long().view(-1),
             chemical_composition=chemical_composition,
             energy=energy,
             energy_per_atom=energy_per_atom,

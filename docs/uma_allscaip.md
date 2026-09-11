@@ -7,12 +7,13 @@ layers combined with the `GPS` engine.
 
 ## Input data contract
 
-Both backbones require `data.pos` with shape `[num_nodes, 3]`. Prefer an integer
-`data.atomic_numbers` tensor with one value per node. For compatibility, the
-current integration falls back to `data.x[:, 0]` when `atomic_numbers` is not
-present. Periodic samples may provide `data.cell` and `data.pbc`; non-periodic
-samples default to a zero cell with periodicity disabled. Optional `charge` and
-`spin` values are graph-level scalars.
+Both backbones require `data.pos` with shape `[num_nodes, 3]` and an integer
+`data.atomic_numbers` tensor with one value per node. Declare `atomic_numbers`
+as an ordinary scalar node input without HydraGNN's `encoding` subsection:
+these backbones apply their own native chemical-species encoders. Periodic
+samples may provide `data.cell` and `data.pbc`; non-periodic samples default to
+a zero cell with periodicity disabled. Optional `charge` and `spin` values are
+graph-level scalars.
 
 Set `enable_interatomic_potential` to `true` when training an energy-conserving
 potential. HydraGNN then obtains conservative forces by differentiating the

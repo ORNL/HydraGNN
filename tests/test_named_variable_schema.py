@@ -19,6 +19,7 @@ from hydragnn.preprocess.load_data import (
 )
 import hydragnn.preprocess.load_data as load_data_module
 from hydragnn.utils.input_config_parsing.variable_schema import (
+    encoded_schema_dimensions,
     get_variable_schema,
     parse_variable_schema,
     prepare_data_from_schema,
@@ -85,6 +86,81 @@ def test_positions_do_not_change_invariant_node_features():
 
     torch.testing.assert_close(first.x, second.x)
     assert not torch.equal(first.pos, second.pos)
+
+
+def test_encoded_variable_compiles_raw_scalar_input():
+    variables = {
+        "inputs": [
+            {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1,
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 8,
+                    "min_value": 1,
+                },
+            }
+        ],
+        "outputs": [],
+    }
+    schema = parse_variable_schema(variables)
+    data = Data(
+        atomic_numbers=torch.tensor([1, 6, 8]),
+        edge_index=torch.empty((2, 0), dtype=torch.long),
+        num_nodes=3,
+    )
+
+    prepare_data_from_schema(data, schema)
+
+    torch.testing.assert_close(data.x, torch.tensor([[1.0], [6.0], [8.0]]))
+    assert schema_dimensions(schema, "node", "inputs") == 1
+    assert encoded_schema_dimensions(schema, "node", "inputs") == 8
+
+
+def test_one_hot_encoding_contributes_category_count_to_model_width():
+    schema = parse_variable_schema(
+        {
+            "inputs": [
+                {"name": "continuous", "level": "node", "dim": 2},
+                {
+                    "name": "site_type",
+                    "level": "node",
+                    "dim": 1,
+                    "encoding": {"type": "one_hot", "num_categories": 4},
+                },
+            ],
+            "outputs": [],
+        }
+    )
+
+    assert schema_dimensions(schema, "node", "inputs") == 3
+    assert encoded_schema_dimensions(schema, "node", "inputs") == 6
+
+
+@pytest.mark.parametrize(
+    "variable",
+    [
+        {
+            "name": "kind",
+            "level": "graph",
+            "dim": 1,
+            "encoding": {"type": "one_hot", "num_categories": 3},
+        },
+        {
+            "name": "kind",
+            "level": "node",
+            "dim": 2,
+            "encoding": {"type": "one_hot", "num_categories": 3},
+        },
+    ],
+)
+def test_encoding_requires_scalar_node_input(variable):
+    with pytest.raises(
+        ValueError, match="supported only for scalar node input features"
+    ):
+        parse_variable_schema({"inputs": [variable], "outputs": []})
 
 
 def test_graph_inputs_batch_to_one_row_per_graph():

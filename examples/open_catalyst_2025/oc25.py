@@ -223,7 +223,7 @@ def _create_pytorch_data_object(
             pbc=pbc,
             edge_index=None,
             edge_attr=None,
-            atomic_numbers=atomic_numbers,
+            atomic_numbers=atomic_numbers.long().view(-1),
             chemical_composition=chemical_composition,
             smiles_string=None,
             energy=energy,

@@ -125,6 +125,7 @@ def generate_graphdata_from_rdkit_molecule(
         ).to(torch.float)
 
     data = Data(
+        atomic_numbers=z.long().view(-1),
         atom_type=atom_type,
         atom_descriptors=atom_descriptors,
         edge_index=edge_index,

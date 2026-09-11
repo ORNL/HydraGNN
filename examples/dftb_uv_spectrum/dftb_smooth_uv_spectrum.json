@@ -36,6 +36,17 @@
     "Variables": {
         "inputs": [
             {
+                "name": "atomic_numbers",
+                "level": "node",
+                "dim": 1,
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 200,
+                    "min_value": 1
+                }
+            },
+            {
                 "name": "atom_type",
                 "level": "node",
                 "dim": 6

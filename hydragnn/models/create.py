@@ -93,6 +93,7 @@ def create_model_config(
         enable_interatomic_potential=config["Architecture"].get(
             "enable_interatomic_potential", False
         ),
+        input_node_encodings=config["Architecture"].get("input_node_encodings"),
         energy_weight=config["Architecture"].get("energy_weight", 0.0),
         energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
         force_weight=config["Architecture"].get("force_weight", 0.0),
@@ -283,6 +284,7 @@ def create_model(
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
     enable_interatomic_potential: bool = False,
+    input_node_encodings: list[dict] | None = None,
     energy_weight: float = 0.0,
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
@@ -933,6 +935,9 @@ def create_model(
 
     else:
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
+
+    model.configure_input_feature_encoders(input_node_encodings)
+    model.atomistic_mode_enabled = bool(enable_interatomic_potential)
 
     # Apply interatomic potential enhancement if requested
     if enable_interatomic_potential:

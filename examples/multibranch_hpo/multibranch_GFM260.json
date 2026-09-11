@@ -305,6 +305,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 866,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             },

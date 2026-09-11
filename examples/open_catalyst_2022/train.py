@@ -143,7 +143,7 @@ def ase_to_torch_geom(
             pos=positions,
             cell=cell,
             pbc=pbc,
-            atomic_numbers=atomic_numbers,
+            atomic_numbers=atomic_numbers.long().view(-1),
             chemical_composition=chemical_composition,
             tags=tags,
             energy=energy_tensor,

@@ -18,8 +18,10 @@ from .config_utils import (
     sanitize_filename_component,
 )
 from .variable_schema import (
+    InputEncoding,
     VariableSchema,
     VariableSpec,
+    encoded_schema_dimensions,
     get_variable_schema,
     parse_variable_schema,
     prepare_data_from_schema,

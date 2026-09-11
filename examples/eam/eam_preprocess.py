@@ -42,7 +42,7 @@ def parse_eam_cfg(filepath, config):
 
     size = len(atoms)
     values = dict(
-        node_features=torch.as_tensor(arrays["numbers"]).float().reshape(size, 1),
+        atomic_numbers=torch.as_tensor(arrays["numbers"]).long().reshape(size),
         pos=torch.as_tensor(atoms.positions).float(),
         cell=torch.as_tensor(atoms.cell.array).float(),
         pbc=torch.tensor([True, True, True]),
