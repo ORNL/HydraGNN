@@ -20,6 +20,8 @@
             "num_conv_layers": 4,
             "output_heads": {
                 "graph": {
+                    "num_sharedlayers": 1,
+                    "dim_sharedlayers": 128,
                     "num_headlayers": 2,
                     "dim_headlayers": [
                         128,
@@ -47,6 +49,12 @@
         "inputs": [
             {
                 "name": "atomic_numbers",
+                "encoding": {
+                    "type": "embedding",
+                    "num_categories": 118,
+                    "embedding_dim": 128,
+                    "min_value": 1
+                },
                 "level": "node",
                 "dim": 1
             },

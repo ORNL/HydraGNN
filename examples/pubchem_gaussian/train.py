@@ -27,8 +27,9 @@ mpi4py.rc.threads = False
 from mpi4py import MPI
 import torch
 import torch.distributed as dist
+from torch_cluster import radius_graph
 from torch_geometric.data import Data
-from torch_geometric.transforms import Distance, RadiusGraph
+from torch_geometric.transforms import Distance
 
 import hydragnn
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
@@ -45,11 +46,13 @@ torch.set_default_dtype(torch.float32)
 EXAMPLE_DIR = Path(__file__).resolve().parent
 RAW_ARCHIVE_DIR = EXAMPLE_DIR / "dataset" / "raw" / "data"
 EXTRACTED_DIR = EXAMPLE_DIR / "dataset" / "raw" / "extracted"
+ATOMIC_REFERENCE_ARCHIVE = EXAMPLE_DIR / "dataset" / "raw" / "atomization.tar.gz"
 PICKLE_DIR = EXAMPLE_DIR / "dataset" / "pubchem_gaussian.pickle"
-CACHE_VERSION = "autograd-trajectory-hessian-v2"
+CACHE_VERSION = "autograd-formation-energy-hessian-v4"
 SCF_ENERGY_PATTERN = re.compile(
     r"SCF Done:\s+E\([^)]+\)\s*=\s*([-+]?\d+(?:\.\d*)?(?:[DEde][-+]?\d+)?)"
 )
+ATOMIC_NUMBERS = {"H": 1, "C": 6, "N": 7, "O": 8, "P": 15, "S": 16}
 # Coordinate matching is performed in the source unit (Angstrom) before conversion.
 OPTIMIZED_POSITION_TOLERANCE = 1.0e-5
 # CODATA conversion: 1 Angstrom = 1.8897261254578281 Bohr.
@@ -64,6 +67,46 @@ def parse_structure(path):
         [[float(value) for value in row[1:4]] for row in rows], dtype=torch.float32
     )
     return atomic_numbers, positions
+
+
+def parse_atomic_reference_energies(path):
+    """Read final isolated-atom SCF energies from the atomization archive."""
+    reference_energies = {}
+    with tarfile.open(path, "r:gz") as archive:
+        for member in archive.getmembers():
+            match = re.fullmatch(r"atomization/([A-Z][a-z]?)/elem\.log", member.name)
+            if match is None:
+                continue
+            symbol = match.group(1)
+            if symbol not in ATOMIC_NUMBERS:
+                continue
+            extracted = archive.extractfile(member)
+            if extracted is None:
+                continue
+            text = extracted.read().decode(errors="replace")
+            energies = SCF_ENERGY_PATTERN.findall(text)
+            if not energies:
+                raise ValueError(f"No SCF energy found in {member.name}")
+            reference_energies[ATOMIC_NUMBERS[symbol]] = float(
+                energies[-1].replace("D", "E")
+            )
+
+    if not reference_energies:
+        raise ValueError(f"No isolated-atom reference energies found in {path}")
+    return reference_energies
+
+
+def compute_formation_energy(total_energy, atomic_numbers, reference_energies):
+    """Return E_molecule - sum(n_element * E_isolated_atom), in Hartree."""
+    atomic_reference_energy = 0.0
+    for atomic_number in atomic_numbers.reshape(-1).to(torch.int64).tolist():
+        if atomic_number not in reference_energies:
+            raise ValueError(
+                f"No isolated-atom reference energy for atomic number {atomic_number}"
+            )
+        atomic_reference_energy += reference_energies[atomic_number]
+    reference = torch.full_like(total_energy, atomic_reference_energy)
+    return total_energy - reference, reference
 
 
 def parse_hessian(path, num_atoms):
@@ -235,15 +278,20 @@ def extract_records(archive_dir, output_dir, limit):
 
 
 class PubChemGaussianDataset(AbstractBaseDataset):
-    def __init__(self, root, config, rank=0, world_size=1):
+    def __init__(
+        self,
+        root,
+        config,
+        rank=0,
+        world_size=1,
+        atomic_reference_energies=None,
+    ):
         super().__init__()
         architecture = config["NeuralNetwork"]["Architecture"]
-        # data.pos is stored in Bohr, so the configured radius must also be in Bohr.
-        radius_graph = RadiusGraph(
-            architecture["radius"],
-            loop=False,
-            max_num_neighbors=architecture["max_neighbours"],
-        )
+        if atomic_reference_energies is None:
+            atomic_reference_energies = parse_atomic_reference_energies(
+                ATOMIC_REFERENCE_ARCHIVE
+            )
         distance = Distance(norm=False, cat=False)
         molecule_dirs = sorted(
             (path for path in root.iterdir() if path.is_dir()),
@@ -288,8 +336,12 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                         f"No log geometry in {log_path} matches {structure_path}"
                     )
                 step, record = matching_records[-1]
+                formation_energy, atomic_reference_energy = compute_formation_energy(
+                    record["energy"],
+                    record["atomic_numbers"],
+                    atomic_reference_energies,
+                )
                 data = Data(
-                    dataset_name="pubchem_gaussian",
                     molecule_id=molecule_dir.name,
                     optimization_step=torch.tensor([step], dtype=torch.int32),
                     natoms=torch.tensor(
@@ -299,13 +351,25 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                     # Using Bohr here makes -dE/dpos and d2E/dpos2 directly
                     # comparable to Gaussian forces and Hessians below.
                     pos=record["pos"] * ANGSTROM_TO_BOHR,
-                    energy=record["energy"],
+                    total_energy=record["energy"],
+                    atomic_reference_energy=atomic_reference_energy,
+                    formation_energy=formation_energy,
+                    atomization_energy=-formation_energy,
+                    # The potential loss expects data.energy. Subtracting the
+                    # composition-only reference leaves force/Hessian derivatives unchanged.
+                    energy=formation_energy,
                     forces=record["forces"],
                     hessian=full_hessian,
                     cell=torch.eye(3, dtype=torch.float32),
                     pbc=torch.zeros(3, dtype=torch.int32),
                 )
-                data = radius_graph(data)
+                # data.pos is stored in Bohr, so the configured radius is in Bohr.
+                data.edge_index = radius_graph(
+                    data.pos,
+                    r=architecture["radius"],
+                    loop=False,
+                    max_num_neighbors=architecture["max_neighbours"],
+                )
                 data = distance(data)
                 data.edge_shifts = torch.zeros((data.num_edges, 3), dtype=torch.float32)
                 self.dataset.append(data)
@@ -404,7 +468,7 @@ def main():
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-    config["pna_deg"] = trainset.pna_deg
+    config["pna_deg"] = trainset.pna_deg.tolist()
     hydragnn.utils.input_config_parsing.save_config(config, args.log)
 
     verbosity = config["Verbosity"]["level"]

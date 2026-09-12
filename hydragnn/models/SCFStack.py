@@ -15,6 +15,7 @@ import pdb
 import torch
 from torch import nn
 from torch import Tensor
+from torch_cluster import radius_graph
 from torch.nn import Identity, Linear, ReLU, Sequential
 from torch_geometric.nn import Sequential as PyGSeq
 from torch_geometric.nn import MessagePassing
@@ -24,19 +25,28 @@ from torch_geometric.nn.models.schnet import (
 )
 from torch_geometric.typing import OptTensor
 
-if torch.cuda.is_available():
-    from torch_geometric.nn.models.schnet import (
-        RadiusInteractionGraph as RadiusInteractionGraph,
-    )
-else:
-    from hydragnn.preprocess.graph_samples_checks_and_updates import (
-        RadiusInteractionGraphCPU as RadiusInteractionGraph,
-    )
-
 from .Base import Base
 
 from hydragnn.utils.model import unsorted_segment_mean
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
+
+
+class RadiusInteractionGraph(nn.Module):
+    def __init__(self, cutoff: float, max_num_neighbors: int):
+        super().__init__()
+        self.cutoff = cutoff
+        self.max_num_neighbors = max_num_neighbors
+
+    def forward(self, pos: Tensor, batch: Tensor):
+        edge_index = radius_graph(
+            pos,
+            r=self.cutoff,
+            batch=batch,
+            max_num_neighbors=self.max_num_neighbors,
+        )
+        row, col = edge_index
+        edge_weight = (pos[row] - pos[col]).norm(dim=-1)
+        return edge_index, edge_weight
 
 
 class SCFStack(Base):

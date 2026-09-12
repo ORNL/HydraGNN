@@ -5,7 +5,9 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 import importlib.util
+import io
 from pathlib import Path
+import tarfile
 
 import pytest
 import torch
@@ -45,6 +47,24 @@ def test_force_and_hessian_autograd_identities_and_backpropagation():
 
 
 @pytest.mark.mpi_skip()
+def test_atomic_reference_archive_uses_final_scf_energy(tmp_path):
+    example = _load_example_module()
+    archive_path = tmp_path / "atomization.tar.gz"
+    contents = (
+        b" SCF Done: E(UB3LYP) = -0.400000D+00 A.U. after 4 cycles\n"
+        b" SCF Done: E(UB3LYP) = -0.502257D+00 A.U. after 6 cycles\n"
+    )
+    with tarfile.open(archive_path, "w:gz") as archive:
+        member = tarfile.TarInfo("atomization/H/elem.log")
+        member.size = len(contents)
+        archive.addfile(member, io.BytesIO(contents))
+
+    references = example.parse_atomic_reference_energies(archive_path)
+
+    assert references == {1: pytest.approx(-0.502257)}
+
+
+@pytest.mark.mpi_skip()
 def test_pubchem_trajectory_selects_optimized_energy_force_and_hessian(
     tmp_path, monkeypatch
 ):
@@ -68,15 +88,25 @@ def test_pubchem_trajectory_selects_optimized_energy_force_and_hessian(
         " 1 1 -0.10 -0.20 -0.30\n -----\n"
     )
     identity_transform = lambda *args, **kwargs: lambda data: data
-    monkeypatch.setattr(example, "RadiusGraph", identity_transform)
+    monkeypatch.setattr(
+        example,
+        "radius_graph",
+        lambda positions, **kwargs: torch.empty((2, 0), dtype=torch.int64),
+    )
     monkeypatch.setattr(example, "Distance", identity_transform)
 
     config = {"NeuralNetwork": {"Architecture": {"radius": 5.0, "max_neighbours": 8}}}
-    dataset = example.PubChemGaussianDataset(tmp_path, config)
+    dataset = example.PubChemGaussianDataset(
+        tmp_path, config, atomic_reference_energies={1: -0.5}
+    )
 
     assert len(dataset) == 1
     assert dataset[0].energy.shape == (1, 1)
-    assert dataset[0].energy.item() == pytest.approx(-1.125)
+    assert dataset[0].total_energy.item() == pytest.approx(-1.125)
+    assert dataset[0].atomic_reference_energy.item() == pytest.approx(-0.5)
+    assert dataset[0].formation_energy.item() == pytest.approx(-0.625)
+    assert dataset[0].atomization_energy.item() == pytest.approx(0.625)
+    assert torch.equal(dataset[0].energy, dataset[0].formation_energy)
     assert dataset[0].forces.shape == (1, 3)
     assert torch.isfinite(dataset[0].hessian).all()
     assert torch.allclose(dataset[0].hessian, dataset[0].hessian.T)
