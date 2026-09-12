@@ -47,6 +47,30 @@ size is one because dense Hessians vary with molecular size.
 Each epoch's text log reports the energy, energy-per-atom, force, and (when
 enabled) Hessian train, validation, and test losses using the same named format.
 
+## Hyperparameter optimization
+
+`pubchem_gaussian_hpo.py` follows the SC26 DeepHyper queued-worker pattern and
+searches over the message-passing implementation, optional GPS global attention,
+energy/force/Hessian weights, message-passing depth and width, attention type,
+conditional multi-head count, and graph-transformer feed-forward depth and
+width. GPS is used for the optional graph transformer because it supports both
+`multihead` and `performer`; the equivariant local MPNN channels remain separate
+from its global attention over invariant channels. `global_attn_heads` is used
+only for `multihead`; Performer and transformer-disabled trials set it to one.
+
+The HPO objective is the negative unweighted mean of the named energy, force,
+and Hessian validation losses from the latest completed epoch. Keeping the
+objective unweighted prevents trials with smaller loss weights from winning
+solely because their aggregate loss has been rescaled.
+
+First create the shared processed dataset, then submit the launcher after
+adapting its allocation and environment setup to the target system:
+
+```bash
+srun -N1 -n1 python examples/pubchem_gaussian/train.py --preonly
+sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
+```
+
 Atomic numbers are categorical node inputs encoded by a learned 128-dimensional
 embedding. The 118 categories cover atomic numbers 1 through 118; `min_value: 1`
 maps hydrogen to embedding index zero without reserving a category for atomic

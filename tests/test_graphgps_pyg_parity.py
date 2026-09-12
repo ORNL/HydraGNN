@@ -100,6 +100,26 @@ def test_graphgps_global_branch_matches_pyg(attn_type, batch):
     assert actual_equiv is equiv
 
 
+def test_graphgps_configurable_feedforward_depth_and_width():
+    layer = HydraGPSConv(
+        8,
+        conv=None,
+        heads=2,
+        attn_type="multihead",
+        num_hidden_layers=3,
+        hidden_dim=24,
+    )
+    linear_layers = [
+        module for module in layer.mlp if isinstance(module, torch.nn.Linear)
+    ]
+
+    assert len(linear_layers) == 4
+    assert linear_layers[0].in_features == 8
+    assert all(module.out_features == 24 for module in linear_layers[:-1])
+    assert linear_layers[-1].in_features == 24
+    assert linear_layers[-1].out_features == 8
+
+
 @pytest.mark.parametrize("attn_type", ["multihead", "performer"])
 def test_graphgps_local_and_global_branches_match_pyg(attn_type):
     torch.manual_seed(29)

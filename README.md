@@ -210,6 +210,12 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Dimension of positional encodings (int)
     - `["global_attn_heads"]`
       Examples: `1`, `2`, `3`, `4` ... (int)
+    - `["global_attn_num_hidden_layers"]`
+      Number of hidden layers in the GPS feed-forward network (positive int,
+      default `1`).
+    - `["global_attn_hidden_dim"]`
+      Width of each GPS feed-forward hidden layer (positive int). The default
+      is twice `hidden_dim`.
     - `["hidden_dim"]`  
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
     - `["enable_interatomic_potential"]`  

@@ -131,6 +131,10 @@ def create_model_config(
             "graph_attr_conditioning_mode", "concat_node"
         ),
         graph_pooling=config["Architecture"].get("graph_pooling", "mean"),
+        global_attn_num_hidden_layers=config["Architecture"].get(
+            "global_attn_num_hidden_layers", 1
+        ),
+        global_attn_hidden_dim=config["Architecture"].get("global_attn_hidden_dim"),
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
             "equivariant_attn_num_radial", 16
@@ -319,6 +323,8 @@ def create_model(
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
+    global_attn_num_hidden_layers: int = 1,
+    global_attn_hidden_dim: int | None = None,
     equivariant_attn_lmax: int = 1,
     equivariant_attn_num_radial: int = 16,
     equivariant_attn_feedforward_multiplier: int = 2,
@@ -397,6 +403,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "PNA":
@@ -426,6 +434,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "PNAPlus":
@@ -463,6 +473,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "GAT":
@@ -495,6 +507,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "MFC":
@@ -523,6 +537,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "CGCNN":
@@ -550,6 +566,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "SAGE":
@@ -575,6 +593,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "SchNet":
@@ -609,6 +629,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -672,6 +694,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -715,6 +739,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     elif mpnn_type == "PAINN":
@@ -744,6 +770,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -789,6 +817,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -846,6 +876,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -911,6 +943,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
     elif mpnn_type == "UMA":
         assert radius is not None, "UMA requires radius input."
@@ -959,6 +993,8 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            global_attn_num_hidden_layers=global_attn_num_hidden_layers,
+            global_attn_hidden_dim=global_attn_hidden_dim,
         )
 
     else:

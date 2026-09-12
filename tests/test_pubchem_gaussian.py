@@ -6,6 +6,7 @@
 ##############################################################################
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tarfile
 
@@ -14,6 +15,11 @@ import torch
 
 from hydragnn.models.create import compute_forces_and_hessian
 
+from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
+    configure_trial,
+    validation_objective,
+)
+
 
 def _load_example_module():
     path = Path(__file__).parents[1] / "examples" / "pubchem_gaussian" / "train.py"
@@ -21,6 +27,79 @@ def _load_example_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def _hpo_parameters(**updates):
+    parameters = {
+        "mpnn_type": "SchNet",
+        "use_equivariant_graph_transformer": "on",
+        "energy_weight": 0.1,
+        "force_weight": 1.0,
+        "hessian_weight": 10.0,
+        "num_conv_layers": 3,
+        "hidden_dim": 128,
+        "global_attn_type": "multihead",
+        "global_attn_heads": 4,
+        "global_attn_num_hidden_layers": 3,
+        "global_attn_hidden_dim": 64,
+    }
+    parameters.update(updates)
+    return parameters
+
+
+def test_pubchem_hpo_configures_architecture_and_conditional_attention():
+    config_path = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "pubchem_gaussian"
+        / "pubchem_gaussian.json"
+    )
+    config = configure_trial(
+        json.loads(config_path.read_text()),
+        _hpo_parameters(),
+    )
+    architecture = config["NeuralNetwork"]["Architecture"]
+
+    assert architecture["mpnn_type"] == "SchNet"
+    assert architecture["num_conv_layers"] == 3
+    assert architecture["hidden_dim"] == 128
+    assert architecture["global_attn_engine"] == "GPS"
+    assert architecture["global_attn_type"] == "multihead"
+    assert architecture["global_attn_heads"] == 4
+    assert architecture["energy_weight"] == pytest.approx(0.1)
+    assert architecture["force_weight"] == pytest.approx(1.0)
+    assert architecture["hessian_weight"] == pytest.approx(10.0)
+    assert architecture["global_attn_num_hidden_layers"] == 3
+    assert architecture["global_attn_hidden_dim"] == 64
+
+    performer = configure_trial(
+        config,
+        _hpo_parameters(global_attn_type="performer", global_attn_heads=8),
+    )
+    assert performer["NeuralNetwork"]["Architecture"]["global_attn_heads"] == 1
+
+    disabled = configure_trial(
+        config,
+        _hpo_parameters(use_equivariant_graph_transformer="off"),
+    )
+    disabled_architecture = disabled["NeuralNetwork"]["Architecture"]
+    assert disabled_architecture["global_attn_engine"] == ""
+    assert disabled_architecture["global_attn_type"] == ""
+    assert disabled_architecture["global_attn_heads"] == 1
+
+
+def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
+    log_path = tmp_path / "trial.log"
+    log_path.write_text(
+        "Energy Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "Forces Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "Hessian Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "Energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
+        "Forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
+        "Hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
+    )
+
+    assert validation_objective(log_path) == pytest.approx(-5.0)
 
 
 @pytest.mark.mpi_skip()
