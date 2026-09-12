@@ -145,9 +145,7 @@ def test_energy_and_force_loss_still_works():
 @pytest.mark.mpi_skip()
 @pytest.mark.parametrize("all_unavailable", [False, True])
 def test_nan_force_labels_are_skipped(all_unavailable):
-    model = create_weighted_interatomic_model(
-        energy_weight=1.0, force_weight=1.0
-    )
+    model = create_weighted_interatomic_model(energy_weight=1.0, force_weight=1.0)
     data = create_mock_molecular_data(num_atoms=3, num_graphs=1)
     if all_unavailable:
         data.forces.fill_(torch.nan)
