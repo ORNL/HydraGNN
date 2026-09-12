@@ -263,7 +263,7 @@ def train_validate_test(
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
         output_names = configured_output_names
-        task_names = [name.replace("_", " ").title() for name in output_names]
+        task_names = output_names
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
