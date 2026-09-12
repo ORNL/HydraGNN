@@ -340,6 +340,11 @@ def train_validate_test(
             print_distributed(
                 verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
             )
+            if compute_grad_energy and hessian_enabled:
+                print_distributed(
+                    verbosity,
+                    f"Hessian Loss for {dataset_name}: {taskserr[-1].item():.8f}",
+                )
         return
 
     timer = Timer("train_validate_test")
@@ -440,6 +445,13 @@ def train_validate_test(
         print_distributed(
             verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
         )
+        if compute_grad_energy and hessian_enabled:
+            print_distributed(
+                verbosity,
+                f"Hessian Train Loss: {train_taskserr[-1].item():.8f}, "
+                f"Hessian Val Loss: {val_taskserr[-1].item():.8f}, "
+                f"Hessian Test Loss: {test_taskserr[-1].item():.8f}",
+            )
 
         total_loss_train[epoch] = train_loss
         total_loss_val[epoch] = val_loss
