@@ -62,10 +62,9 @@ class Base(Module):
         graph_pooling: str = "mean",
         use_graph_attr_conditioning: bool = False,
         graph_attr_conditioning_mode: str = "concat_node",
-        global_attn_num_hidden_layers: int = 1,
-        global_attn_hidden_dim: int | None = None,
         equivariant_attn_lmax: int = 1,
         equivariant_attn_num_radial: int = 16,
+        equivariant_attn_num_hidden_layers: int = 1,
         equivariant_attn_feedforward_multiplier: int = 2,
         equivariant_attn_allow_scalar_only: bool = False,
         equivariant_attn_require_tensor_coupling: bool = True,
@@ -86,10 +85,9 @@ class Base(Module):
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.global_attn_dropout = dropout
-        self.global_attn_num_hidden_layers = global_attn_num_hidden_layers
-        self.global_attn_hidden_dim = global_attn_hidden_dim
         self.equivariant_attn_lmax = equivariant_attn_lmax
         self.equivariant_attn_num_radial = equivariant_attn_num_radial
+        self.equivariant_attn_num_hidden_layers = equivariant_attn_num_hidden_layers
         self.equivariant_attn_feedforward_multiplier = (
             equivariant_attn_feedforward_multiplier
         )
@@ -286,8 +284,6 @@ class Base(Module):
                     heads=self.global_attn_heads,
                     dropout=self.global_attn_dropout,
                     attn_type=self.global_attn_type,
-                    num_hidden_layers=self.global_attn_num_hidden_layers,
-                    hidden_dim=self.global_attn_hidden_dim,
                 )
             if self.global_attn_engine == "EquivariantTransformer":
                 if not hasattr(self, "equivariant_attn_adapter_type"):
@@ -302,6 +298,7 @@ class Base(Module):
                     heads=self.global_attn_heads,
                     lmax=self.equivariant_attn_lmax,
                     num_radial=self.equivariant_attn_num_radial,
+                    num_hidden_layers=self.equivariant_attn_num_hidden_layers,
                     feedforward_multiplier=(
                         self.equivariant_attn_feedforward_multiplier
                     ),

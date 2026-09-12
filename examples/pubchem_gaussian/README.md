@@ -50,17 +50,17 @@ enabled) Hessian train, validation, and test losses using the same named format.
 ## Hyperparameter optimization
 
 `pubchem_gaussian_hpo.py` follows the SC26 DeepHyper queued-worker pattern and
-searches over the message-passing implementation, optional GPS global attention,
-energy/force/Hessian weights, message-passing depth and width, attention type,
-conditional multi-head count, and graph-transformer feed-forward depth and
-width. GPS is used for the optional graph transformer because it supports both
-`multihead` and `performer`; the equivariant local MPNN channels remain separate
-from its global attention over invariant channels. `global_attn_heads` is used
-only for `multihead`; Performer and transformer-disabled trials set it to one.
+searches over the message-passing implementation, the optional equivariant
+all-to-all graph Transformer, energy/force/Hessian weights, message-passing
+depth and width, conditional attention-head count, and equivariant feed-forward
+depth and irrep multiplicity. The engine is `EquivariantTransformer`, which
+uses exact equivariant multi-head softmax attention. It does not use GPS or
+Performer because HydraGNN has no equivariant Performer implementation.
 The default MPNN set is `EGNN`, `SchNet`, `DimeNet`, `MACE`, `PAINN`, `PNAEq`,
 `AllScAIP`, and `UMA`. AllScAIP and UMA are monolithic transformer backbones,
-so they do not receive an additional GPS wrapper; the GPS-specific sampled
-parameters are conditionally ignored for those two model types.
+and EGNN has no compatible irrep adapter, so those three types do not receive
+an additional `EquivariantTransformer`; its sampled parameters are
+conditionally ignored for those model types.
 
 The HPO objective is the negative unweighted mean of the named energy, force,
 and Hessian validation losses from the latest completed epoch. Keeping the

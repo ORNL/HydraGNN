@@ -52,8 +52,6 @@ class HydraGPSConv(torch.nn.Module):
         norm_kwargs: Optional[Dict[str, Any]] = None,
         attn_type: str = "multihead",
         attn_kwargs: Optional[Dict[str, Any]] = None,
-        num_hidden_layers: int = 1,
-        hidden_dim: Optional[int] = None,
     ):
         super().__init__()
 
@@ -81,24 +79,13 @@ class HydraGPSConv(torch.nn.Module):
             # TODO: Support BigBird
             raise ValueError(f"{attn_type} is not supported")
 
-        if num_hidden_layers <= 0:
-            raise ValueError("num_hidden_layers must be positive")
-        hidden_dim = hidden_dim or channels * 2
-        if hidden_dim <= 0:
-            raise ValueError("hidden_dim must be positive")
-        mlp_layers = []
-        input_dim = channels
-        for _ in range(num_hidden_layers):
-            mlp_layers.extend(
-                [
-                    Linear(input_dim, hidden_dim),
-                    activation_resolver(act, **(act_kwargs or {})),
-                    Dropout(dropout),
-                ]
-            )
-            input_dim = hidden_dim
-        mlp_layers.extend([Linear(input_dim, channels), Dropout(dropout)])
-        self.mlp = Sequential(*mlp_layers)
+        self.mlp = Sequential(
+            Linear(channels, channels * 2),
+            activation_resolver(act, **(act_kwargs or {})),
+            Dropout(dropout),
+            Linear(channels * 2, channels),
+            Dropout(dropout),
+        )
 
         norm_kwargs = norm_kwargs or {}
         self.norm1 = normalization_resolver(norm, channels, **norm_kwargs)

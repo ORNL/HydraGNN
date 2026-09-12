@@ -38,10 +38,9 @@ def _hpo_parameters(**updates):
         "hessian_weight": 10.0,
         "num_conv_layers": 3,
         "hidden_dim": 128,
-        "global_attn_type": "multihead",
         "global_attn_heads": 4,
-        "global_attn_num_hidden_layers": 3,
-        "global_attn_hidden_dim": 64,
+        "equivariant_attn_num_hidden_layers": 3,
+        "equivariant_attn_feedforward_multiplier": 4,
     }
     parameters.update(updates)
     return parameters
@@ -63,20 +62,16 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert architecture["mpnn_type"] == "SchNet"
     assert architecture["num_conv_layers"] == 3
     assert architecture["hidden_dim"] == 128
-    assert architecture["global_attn_engine"] == "GPS"
-    assert architecture["global_attn_type"] == "multihead"
+    assert architecture["global_attn_engine"] == "EquivariantTransformer"
+    assert architecture["global_attn_type"] == ""
     assert architecture["global_attn_heads"] == 4
     assert architecture["energy_weight"] == pytest.approx(0.1)
     assert architecture["force_weight"] == pytest.approx(1.0)
     assert architecture["hessian_weight"] == pytest.approx(10.0)
-    assert architecture["global_attn_num_hidden_layers"] == 3
-    assert architecture["global_attn_hidden_dim"] == 64
-
-    performer = configure_trial(
-        config,
-        _hpo_parameters(global_attn_type="performer", global_attn_heads=8),
-    )
-    assert performer["NeuralNetwork"]["Architecture"]["global_attn_heads"] == 1
+    assert architecture["equivariant_attn_num_hidden_layers"] == 3
+    assert architecture["equivariant_attn_feedforward_multiplier"] == 4
+    assert architecture["equivariant_attn_allow_scalar_only"] is True
+    assert architecture["equivariant_attn_require_tensor_coupling"] is False
 
     disabled = configure_trial(
         config,

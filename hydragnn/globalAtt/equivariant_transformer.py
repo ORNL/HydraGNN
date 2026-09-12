@@ -61,6 +61,7 @@ class EquivariantTransformerLayer(torch.nn.Module):
         heads: int = 1,
         lmax: int = 1,
         num_radial: int = 16,
+        num_hidden_layers: int = 1,
         feedforward_multiplier: int = 2,
         require_tensor_coupling: bool = True,
         chunk_size: int | None = None,
@@ -74,6 +75,12 @@ class EquivariantTransformerLayer(torch.nn.Module):
                 "non-scalar input irrep; use require_tensor_coupling=False "
                 "only for the acknowledged SchNet/DimeNet scalar-only mode"
             )
+        if (
+            not isinstance(num_hidden_layers, int)
+            or isinstance(num_hidden_layers, bool)
+            or num_hidden_layers <= 0
+        ):
+            raise ValueError("num_hidden_layers must be a positive integer")
         if (
             not isinstance(feedforward_multiplier, int)
             or isinstance(feedforward_multiplier, bool)
@@ -102,17 +109,26 @@ class EquivariantTransformerLayer(torch.nn.Module):
             num_radial=num_radial,
         )
         self.feedforward_norm = EquivariantRMSNorm(self.irreps)
-        self.feedforward = torch.nn.Sequential(
-            o3.Linear(self.irreps, hidden_irreps, biases=False),
-            nn.NormActivation(
-                hidden_irreps,
-                scalar_nonlinearity=torch.nn.functional.silu,
-                normalize=True,
-                epsilon=1.0e-8,
-                bias=False,
-            ),
-            o3.Linear(hidden_irreps, self.irreps, biases=False),
+        feedforward_layers = []
+        input_irreps = self.irreps
+        for _ in range(num_hidden_layers):
+            feedforward_layers.extend(
+                [
+                    o3.Linear(input_irreps, hidden_irreps, biases=False),
+                    nn.NormActivation(
+                        hidden_irreps,
+                        scalar_nonlinearity=torch.nn.functional.silu,
+                        normalize=True,
+                        epsilon=1.0e-8,
+                        bias=False,
+                    ),
+                ]
+            )
+            input_irreps = hidden_irreps
+        feedforward_layers.append(
+            o3.Linear(hidden_irreps, self.irreps, biases=False)
         )
+        self.feedforward = torch.nn.Sequential(*feedforward_layers)
 
     def forward(
         self,

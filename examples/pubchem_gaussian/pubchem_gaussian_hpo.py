@@ -37,33 +37,28 @@ def configure_trial(base_config, parameters):
     architecture["mpnn_type"] = parameters["mpnn_type"]
     architecture["num_conv_layers"] = int(parameters["num_conv_layers"])
     architecture["hidden_dim"] = int(parameters["hidden_dim"])
-    architecture["global_attn_num_hidden_layers"] = int(
-        parameters["global_attn_num_hidden_layers"]
+    architecture["equivariant_attn_num_hidden_layers"] = int(
+        parameters["equivariant_attn_num_hidden_layers"]
     )
-    architecture["global_attn_hidden_dim"] = int(
-        parameters["global_attn_hidden_dim"]
+    architecture["equivariant_attn_feedforward_multiplier"] = int(
+        parameters["equivariant_attn_feedforward_multiplier"]
     )
     architecture["energy_weight"] = float(parameters["energy_weight"])
     architecture["force_weight"] = float(parameters["force_weight"])
     architecture["hessian_weight"] = float(parameters["hessian_weight"])
 
-    native_transformer_models = {"AllScAIP", "UMA"}
-    uses_native_transformer = architecture["mpnn_type"] in native_transformer_models
+    supported_transformer_models = {"SchNet", "DimeNet", "MACE", "PAINN", "PNAEq"}
     use_transformer = (
         parameters["use_equivariant_graph_transformer"] == "on"
-        and not uses_native_transformer
+        and architecture["mpnn_type"] in supported_transformer_models
     )
     if use_transformer:
-        attention_type = parameters["global_attn_type"]
-        architecture["global_attn_engine"] = "GPS"
-        architecture["global_attn_type"] = attention_type
-        # The head-count choice is conditional: Performer trials deliberately
-        # use one head and ignore the sampled multi-head-only parameter.
-        architecture["global_attn_heads"] = (
-            int(parameters["global_attn_heads"])
-            if attention_type == "multihead"
-            else 1
-        )
+        architecture["global_attn_engine"] = "EquivariantTransformer"
+        architecture["global_attn_type"] = ""
+        architecture["global_attn_heads"] = int(parameters["global_attn_heads"])
+        scalar_only = architecture["mpnn_type"] in {"SchNet", "DimeNet"}
+        architecture["equivariant_attn_allow_scalar_only"] = scalar_only
+        architecture["equivariant_attn_require_tensor_coupling"] = not scalar_only
     else:
         architecture["global_attn_engine"] = ""
         architecture["global_attn_type"] = ""
@@ -73,14 +68,6 @@ def configure_trial(base_config, parameters):
         architecture["equivariance"] = False
     elif architecture["mpnn_type"] == "UMA":
         architecture["equivariance"] = True
-
-    hidden_dim = architecture["hidden_dim"]
-    attention_heads = architecture["global_attn_heads"]
-    if use_transformer and hidden_dim % attention_heads != 0:
-        raise ValueError(
-            f"hidden_dim={hidden_dim} must be divisible by "
-            f"global_attn_heads={attention_heads}"
-        )
 
     return config
 
@@ -177,10 +164,11 @@ def build_problem(mpnn_types):
     problem.add_hyperparameter([0.1, 1.0, 10.0], "hessian_weight")
     problem.add_hyperparameter((2, 6), "num_conv_layers")
     problem.add_hyperparameter([64, 128, 256, 512], "hidden_dim")
-    problem.add_hyperparameter(["multihead", "performer"], "global_attn_type")
     problem.add_hyperparameter([1, 2, 4, 8], "global_attn_heads")
-    problem.add_hyperparameter((1, 4), "global_attn_num_hidden_layers")
-    problem.add_hyperparameter([64, 128, 256, 512], "global_attn_hidden_dim")
+    problem.add_hyperparameter((1, 4), "equivariant_attn_num_hidden_layers")
+    problem.add_hyperparameter(
+        [1, 2, 4], "equivariant_attn_feedforward_multiplier"
+    )
     return problem
 
 

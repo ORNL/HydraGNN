@@ -678,8 +678,6 @@ while migrating, downloading, or rebuilding a cache.
         "global_attn_engine": "GPS",
         "global_attn_type": "multihead",
         "global_attn_heads": 8,
-        "global_attn_num_hidden_layers": 2,
-        "global_attn_hidden_dim": 256,
         "pe_dim": 16,  // Positional encoding dimension
         "hidden_dim": 128  // Must be divisible by global_attn_heads
     }
@@ -1354,8 +1352,6 @@ racing to construct the same processed dataset.
         "global_attn_engine": "GPS",
         "global_attn_type": "multihead",
         "global_attn_heads": 8,
-        "global_attn_num_hidden_layers": 2,
-        "global_attn_hidden_dim": 256,
         "pe_dim": 16,
         "hidden_dim": 128  // Must be divisible by global_attn_heads
     }
