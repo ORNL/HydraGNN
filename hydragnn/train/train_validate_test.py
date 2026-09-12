@@ -53,13 +53,10 @@ PRECISION_MAP = {
     "fp64": {"param_dtype": torch.float64, "autocast_dtype": None},
 }
 
-INTERATOMIC_LOSS_LABELS = ("Energy", "Energy Per Atom", "Forces", "Hessian")
 
-
-def _print_interatomic_task_losses(verbosity, losses_by_split):
-    """Print each interatomic loss term with a consistent named format."""
-    num_tasks = len(next(iter(losses_by_split.values())))
-    for task_index, task_name in enumerate(INTERATOMIC_LOSS_LABELS[:num_tasks]):
+def _print_named_task_losses(verbosity, task_names, losses_by_split):
+    """Print each task loss with its name and a consistent split format."""
+    for task_index, task_name in enumerate(task_names):
         fields = [
             f"{split_name} Loss: {losses[task_index].item():.8f}"
             for split_name, losses in losses_by_split.items()
@@ -258,11 +255,15 @@ def train_validate_test(
         ]
         if hessian_enabled:
             output_names.append("hessian")
+        task_names = ["Energy", "Energy Per Atom", "Forces"]
+        if hessian_enabled:
+            task_names.append("Hessian")
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
         output_names = configured_output_names
+        task_names = [name.replace("_", " ").title() for name in output_names]
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -350,14 +351,11 @@ def train_validate_test(
                 verbosity,
                 f"Loss for {dataset_name}: {loss:.8f}",
             )
-            print_distributed(
-                verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
+            _print_named_task_losses(
+                verbosity,
+                task_names,
+                {dataset_name: taskserr},
             )
-            if compute_grad_energy:
-                _print_interatomic_task_losses(
-                    verbosity,
-                    {dataset_name: taskserr},
-                )
         return
 
     timer = Timer("train_validate_test")
@@ -438,35 +436,24 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(num_tasks):
+            for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
-                    "train error of task" + str(ivar), train_taskserr[ivar], epoch
+                    "train error of " + task_name, train_taskserr[ivar], epoch
                 )
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
             f"Test Loss: {test_loss:.8f}",
         )
-        print_distributed(
+        _print_named_task_losses(
             verbosity,
-            "Tasks Train Loss:",
-            [taskerr.item() for taskerr in train_taskserr],
+            task_names,
+            {
+                "Train": train_taskserr,
+                "Val": val_taskserr,
+                "Test": test_taskserr,
+            },
         )
-        print_distributed(
-            verbosity, "Tasks Val Loss:", [taskerr.item() for taskerr in val_taskserr]
-        )
-        print_distributed(
-            verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
-        )
-        if compute_grad_energy:
-            _print_interatomic_task_losses(
-                verbosity,
-                {
-                    "Train": train_taskserr,
-                    "Val": val_taskserr,
-                    "Test": test_taskserr,
-                },
-            )
 
         total_loss_train[epoch] = train_loss
         total_loss_val[epoch] = val_loss
