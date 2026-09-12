@@ -87,6 +87,12 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert disabled_architecture["global_attn_type"] == ""
     assert disabled_architecture["global_attn_heads"] == 1
 
+    for model_type, equivariance in (("AllScAIP", False), ("UMA", True)):
+        native = configure_trial(config, _hpo_parameters(mpnn_type=model_type))
+        native_architecture = native["NeuralNetwork"]["Architecture"]
+        assert native_architecture["global_attn_engine"] == ""
+        assert native_architecture["equivariance"] is equivariance
+
 
 def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     log_path = tmp_path / "trial.log"

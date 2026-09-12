@@ -47,7 +47,12 @@ def configure_trial(base_config, parameters):
     architecture["force_weight"] = float(parameters["force_weight"])
     architecture["hessian_weight"] = float(parameters["hessian_weight"])
 
-    use_transformer = parameters["use_equivariant_graph_transformer"] == "on"
+    native_transformer_models = {"AllScAIP", "UMA"}
+    uses_native_transformer = architecture["mpnn_type"] in native_transformer_models
+    use_transformer = (
+        parameters["use_equivariant_graph_transformer"] == "on"
+        and not uses_native_transformer
+    )
     if use_transformer:
         attention_type = parameters["global_attn_type"]
         architecture["global_attn_engine"] = "GPS"
@@ -63,6 +68,11 @@ def configure_trial(base_config, parameters):
         architecture["global_attn_engine"] = ""
         architecture["global_attn_type"] = ""
         architecture["global_attn_heads"] = 1
+
+    if architecture["mpnn_type"] == "AllScAIP":
+        architecture["equivariance"] = False
+    elif architecture["mpnn_type"] == "UMA":
+        architecture["equivariance"] = True
 
     hidden_dim = architecture["hidden_dim"]
     attention_heads = architecture["global_attn_heads"]
@@ -179,7 +189,7 @@ def main():
     parser.add_argument("--max-evals", type=int, default=100)
     parser.add_argument(
         "--mpnn-types",
-        default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq",
+        default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq,AllScAIP,UMA",
         help="Comma-separated message-passing implementations",
     )
     args = parser.parse_args()

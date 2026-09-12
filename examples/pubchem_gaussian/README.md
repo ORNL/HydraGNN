@@ -57,6 +57,10 @@ width. GPS is used for the optional graph transformer because it supports both
 `multihead` and `performer`; the equivariant local MPNN channels remain separate
 from its global attention over invariant channels. `global_attn_heads` is used
 only for `multihead`; Performer and transformer-disabled trials set it to one.
+The default MPNN set is `EGNN`, `SchNet`, `DimeNet`, `MACE`, `PAINN`, `PNAEq`,
+`AllScAIP`, and `UMA`. AllScAIP and UMA are monolithic transformer backbones,
+so they do not receive an additional GPS wrapper; the GPS-specific sampled
+parameters are conditionally ignored for those two model types.
 
 The HPO objective is the negative unweighted mean of the named energy, force,
 and Hessian validation losses from the latest completed epoch. Keeping the
