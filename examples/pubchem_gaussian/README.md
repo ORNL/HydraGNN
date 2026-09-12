@@ -44,9 +44,9 @@ The configuration trains a scalar additive formation-energy model. HydraGNN
 differentiates that energy once for force loss and again for Hessian loss. Batch
 size is one because dense Hessians vary with molecular size.
 
-When Hessian loss is enabled, each epoch's text log reports the Hessian train,
-validation, and test losses explicitly in addition to the existing aggregate
-and per-task loss output.
+Each epoch's text log reports the energy, energy-per-atom, force, and (when
+enabled) Hessian train, validation, and test losses using the same named format,
+in addition to the existing aggregate and per-task loss output.
 
 Atomic numbers are categorical node inputs encoded by a learned 128-dimensional
 embedding. The 118 categories cover atomic numbers 1 through 118; `min_value: 1`
