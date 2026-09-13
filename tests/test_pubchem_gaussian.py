@@ -19,6 +19,10 @@ from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
     configure_trial,
     validation_objective,
 )
+from examples.pubchem_gaussian.pubchem_gaussian_multistage_hpo import (
+    normalized_score,
+    sample_candidates,
+)
 
 
 def _load_example_module():
@@ -112,6 +116,34 @@ def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     )
 
     assert validation_objective(log_path) == pytest.approx(-5.0)
+
+
+def test_pubchem_multistage_candidates_are_balanced_and_reproducible():
+    first = sample_candidates(16, seed=7)
+    second = sample_candidates(16, seed=7)
+
+    assert first == second
+    model_counts = {}
+    for candidate in first:
+        model_type = candidate["parameters"]["mpnn_type"]
+        model_counts[model_type] = model_counts.get(model_type, 0) + 1
+    assert set(model_counts.values()) == {2}
+
+
+def test_pubchem_multistage_score_uses_fixed_metric_scales():
+    losses = {"Energy": 2.0, "Forces": 10.0, "Hessian": 40.0}
+    scales = {"Energy": 1.0, "Forces": 5.0, "Hessian": 20.0}
+
+    assert normalized_score(losses, scales) == pytest.approx(2.0)
+
+
+def test_pubchem_deterministic_subset_is_nested():
+    example = _load_example_module()
+    dataset = list(range(100))
+    small = example.deterministic_subset(dataset, 10, seed=11)
+    large = example.deterministic_subset(dataset, 30, seed=11)
+
+    assert small.indices == large.indices[:10]
 
 
 @pytest.mark.mpi_skip()

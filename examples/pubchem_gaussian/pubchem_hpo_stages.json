@@ -1,0 +1,34 @@
+[
+    {
+        "name": "screen",
+        "train_samples": 50000,
+        "val_samples": 10000,
+        "test_samples": 10000,
+        "epochs": 3,
+        "keep": 128
+    },
+    {
+        "name": "refine",
+        "train_samples": 300000,
+        "val_samples": 50000,
+        "test_samples": 50000,
+        "epochs": 8,
+        "keep": 32
+    },
+    {
+        "name": "confirm",
+        "train_samples": 1000000,
+        "val_samples": 50000,
+        "test_samples": 50000,
+        "epochs": 15,
+        "keep": 8
+    },
+    {
+        "name": "full",
+        "train_samples": 3000000,
+        "val_samples": 50000,
+        "test_samples": 50000,
+        "epochs": 25,
+        "keep": 3
+    }
+]

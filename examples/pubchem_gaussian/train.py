@@ -30,6 +30,7 @@ import torch.distributed as dist
 from torch_cluster import radius_graph
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance
+from torch.utils.data import Subset
 
 import hydragnn
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
@@ -419,6 +420,17 @@ def load_datasets(var_config):
     return datasets
 
 
+def deterministic_subset(dataset, num_samples, seed):
+    """Select a reproducible subset without copying graph records."""
+    if num_samples is None or num_samples >= len(dataset):
+        return dataset
+    if num_samples <= 0:
+        raise ValueError("subset size must be positive")
+    generator = torch.Generator().manual_seed(seed)
+    indices = torch.randperm(len(dataset), generator=generator)[:num_samples]
+    return Subset(dataset, indices.tolist())
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -430,6 +442,11 @@ def main():
     parser.add_argument("--preonly", action="store_true")
     parser.add_argument("--num-molecules", type=int, default=100)
     parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--num-epoch", type=int)
+    parser.add_argument("--num-train-samples", type=int)
+    parser.add_argument("--num-val-samples", type=int)
+    parser.add_argument("--num-test-samples", type=int)
+    parser.add_argument("--subset-seed", type=int, default=0)
     parser.add_argument("--log", default="pubchem_gaussian")
     args = parser.parse_args()
 
@@ -437,6 +454,8 @@ def main():
         config = json.load(config_file)
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
+    if args.num_epoch is not None:
+        config["NeuralNetwork"]["Training"]["num_epoch"] = args.num_epoch
     if config["NeuralNetwork"]["Training"]["batch_size"] != 1:
         raise ValueError("PubChem Hessian training currently requires --batch-size 1")
     if bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0"))):
@@ -458,6 +477,14 @@ def main():
         return
 
     trainset, valset, testset = load_datasets(config["Variables"])
+    pna_deg = trainset.pna_deg
+    trainset = deterministic_subset(
+        trainset, args.num_train_samples, args.subset_seed
+    )
+    valset = deterministic_subset(valset, args.num_val_samples, args.subset_seed + 1)
+    testset = deterministic_subset(
+        testset, args.num_test_samples, args.subset_seed + 2
+    )
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,
@@ -468,7 +495,7 @@ def main():
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
     )
-    config["pna_deg"] = trainset.pna_deg.tolist()
+    config["pna_deg"] = pna_deg.tolist()
     hydragnn.utils.input_config_parsing.save_config(config, args.log)
 
     verbosity = config["Verbosity"]["level"]

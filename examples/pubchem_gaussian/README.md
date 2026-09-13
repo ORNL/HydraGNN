@@ -78,6 +78,37 @@ srun -N1 -n1 python examples/pubchem_gaussian/train.py --preonly
 sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
 ```
 
+For the three-million-sample search, use the resumable successive-halving
+driver and its checked-in stage schedule:
+
+```bash
+sbatch examples/pubchem_gaussian/job-multistage-hpo-frontier.sh
+```
+
+By default the job first preprocesses up to 3,000,000 molecules across one task
+per allocated node. Set `PREPROCESS_DATASET=0` when resuming with an already
+complete shared cache so that preprocessing is not repeated.
+
+`pubchem_hpo_stages.json` screens 512 balanced candidates on 50,000 training
+samples, then promotes 128, 32, and 8 candidates through 300,000, 1,000,000,
+and 3,000,000 requested samples. The final stage retains three configurations.
+All stages reuse one processed dataset and deterministic nested subsets; graph
+records are not copied per trial. Validation and test subsets remain fixed at
+the sizes in the schedule.
+
+The screen-stage median of each raw validation metric defines fixed energy,
+force, and Hessian scales. Candidates are ranked by the mean of these three
+dimensionless losses, preventing either physical units or sampled training
+weights from directly rescaling the selection objective. Each trial writes its
+configuration, log, and result separately. Existing result files are reused on
+restart, and every stage writes a CSV ranking; `finalists.json` contains the
+last promoted configurations.
+
+The launcher defaults to four concurrent single-GPU trials per node. Set
+`TRIALS_PER_NODE` lower if the screen stage shows that MACE or UMA requires more
+GPU or host memory. When running outside Slurm, pass `--concurrency 1` unless
+GPU assignment is managed externally.
+
 Atomic numbers are categorical node inputs encoded by a learned 128-dimensional
 embedding. The 118 categories cover atomic numbers 1 through 118; `min_value: 1`
 maps hydrogen to embedding index zero without reserving a category for atomic

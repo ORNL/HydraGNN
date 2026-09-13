@@ -78,8 +78,8 @@ def configure_trial(base_config, parameters):
     return config
 
 
-def validation_objective(log_path):
-    """Return the negative mean of the latest energy, force, and Hessian losses."""
+def validation_losses(log_path):
+    """Return the latest complete set of named validation losses."""
     current = {}
     latest = None
     for line in Path(log_path).read_text(errors="replace").splitlines():
@@ -92,9 +92,17 @@ def validation_objective(log_path):
             "Forces",
             "Hessian",
         }:
-            latest = sum(current.values()) / len(current)
+            latest = current
             current = {}
-    return -latest if latest is not None and math.isfinite(latest) else -math.inf
+    return latest
+
+
+def validation_objective(log_path):
+    """Return the negative mean of the latest energy, force, and Hessian losses."""
+    losses = validation_losses(log_path)
+    if losses is None or not all(math.isfinite(value) for value in losses.values()):
+        return -math.inf
+    return -sum(losses.values()) / len(losses)
 
 
 def _trial_command(config_path, log_name, nodes):
