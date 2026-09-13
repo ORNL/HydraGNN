@@ -61,6 +61,9 @@ The default MPNN set is `EGNN`, `SchNet`, `DimeNet`, `MACE`, `PAINN`, `PNAEq`,
 and EGNN has no compatible irrep adapter, so those three types do not receive
 an additional `EquivariantTransformer`; its sampled parameters are
 conditionally ignored for those model types.
+MACE and UMA trials fix the tensor order at $\ell_{\max}=2$. MACE sets
+`max_ell`, `node_max_ell`, and the optional transformer's
+`equivariant_attn_lmax` to two; UMA sets `max_ell=2` and `uma_mmax=2`.
 
 The HPO objective is the negative unweighted mean of the named energy, force,
 and Hessian validation losses from the latest completed epoch. Keeping the

@@ -68,6 +68,12 @@ def configure_trial(base_config, parameters):
         architecture["equivariance"] = False
     elif architecture["mpnn_type"] == "UMA":
         architecture["equivariance"] = True
+        architecture["max_ell"] = 2
+        architecture["uma_mmax"] = 2
+    elif architecture["mpnn_type"] == "MACE":
+        architecture["max_ell"] = 2
+        architecture["node_max_ell"] = 2
+        architecture["equivariant_attn_lmax"] = 2
 
     return config
 

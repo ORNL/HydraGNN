@@ -88,6 +88,17 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
         assert native_architecture["global_attn_engine"] == ""
         assert native_architecture["equivariance"] is equivariance
 
+    uma = configure_trial(config, _hpo_parameters(mpnn_type="UMA"))
+    uma_architecture = uma["NeuralNetwork"]["Architecture"]
+    assert uma_architecture["max_ell"] == 2
+    assert uma_architecture["uma_mmax"] == 2
+
+    mace = configure_trial(config, _hpo_parameters(mpnn_type="MACE"))
+    mace_architecture = mace["NeuralNetwork"]["Architecture"]
+    assert mace_architecture["max_ell"] == 2
+    assert mace_architecture["node_max_ell"] == 2
+    assert mace_architecture["equivariant_attn_lmax"] == 2
+
 
 def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     log_path = tmp_path / "trial.log"
