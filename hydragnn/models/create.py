@@ -41,6 +41,32 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.train_validate_test import resolve_precision
 
 
+def compute_forces_and_hessian(
+    energy, positions, *, compute_hessian=False, create_graph=False
+):
+    """Differentiate scalar graph energy into forces and a Cartesian Hessian."""
+    forces = -torch.autograd.grad(
+        energy,
+        positions,
+        grad_outputs=torch.ones_like(energy),
+        retain_graph=True,
+        create_graph=create_graph or compute_hessian,
+    )[0]
+    if not compute_hessian:
+        return forces, None
+
+    rows = []
+    for component in forces.reshape(-1):
+        force_gradient = torch.autograd.grad(
+            component,
+            positions,
+            retain_graph=True,
+            create_graph=create_graph,
+        )[0]
+        rows.append(-force_gradient.reshape(-1))
+    return forces, torch.stack(rows)
+
+
 def create_model_config(
     config: dict,
     verbosity: int = 0,
@@ -97,6 +123,7 @@ def create_model_config(
         energy_weight=config["Architecture"].get("energy_weight", 0.0),
         energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
         force_weight=config["Architecture"].get("force_weight", 0.0),
+        hessian_weight=config["Architecture"].get("hessian_weight", 0.0),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
@@ -107,6 +134,9 @@ def create_model_config(
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
             "equivariant_attn_num_radial", 16
+        ),
+        equivariant_attn_num_hidden_layers=config["Architecture"].get(
+            "equivariant_attn_num_hidden_layers", 1
         ),
         equivariant_attn_feedforward_multiplier=config["Architecture"].get(
             "equivariant_attn_feedforward_multiplier", 2
@@ -288,11 +318,13 @@ def create_model(
     energy_weight: float = 0.0,
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
+    hessian_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
     equivariant_attn_lmax: int = 1,
     equivariant_attn_num_radial: int = 16,
+    equivariant_attn_num_hidden_layers: int = 1,
     equivariant_attn_feedforward_multiplier: int = 2,
     equivariant_attn_allow_scalar_only: bool = False,
     equivariant_attn_require_tensor_coupling: bool = True,
@@ -581,6 +613,9 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=(
+                equivariant_attn_num_hidden_layers
+            ),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -644,6 +679,9 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=(
+                equivariant_attn_num_hidden_layers
+            ),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -716,6 +754,9 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=(
+                equivariant_attn_num_hidden_layers
+            ),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -761,6 +802,9 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=(
+                equivariant_attn_num_hidden_layers
+            ),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -818,6 +862,9 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            equivariant_attn_num_hidden_layers=(
+                equivariant_attn_num_hidden_layers
+            ),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -950,6 +997,7 @@ def create_model(
                 self.energy_weight = energy_weight
                 self.energy_peratom_weight = energy_peratom_weight
                 self.force_weight = force_weight
+                self.hessian_weight = hessian_weight
 
             def __getattr__(self, name):
                 # First try to get from the wrapper itself
@@ -989,15 +1037,14 @@ def create_model(
 
                 Forces are computed as negative gradients of total energy with respect to positions.
                 """
-                # Asserts
-                assert (
-                    data.pos is not None
-                    and data.energy is not None
-                    and data.forces is not None
-                ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
-                assert (
-                    data.pos.requires_grad
-                ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
+                if data.pos is None:
+                    raise ValueError(
+                        "data.pos is required for interatomic-potential loss"
+                    )
+                if not data.pos.requires_grad:
+                    raise ValueError(
+                        "data.pos must require gradients for force/Hessian prediction"
+                    )
 
                 assert (
                     self.num_heads == 1
@@ -1027,69 +1074,117 @@ def create_model(
                         "Force predictions are only supported for node or graph energy heads."
                     )
 
-                graph_energy_true = data.energy.squeeze().float()
-                tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
-
                 energy_loss_weight = self.energy_weight
                 energy_peratom_loss_weight = self.energy_peratom_weight
                 force_loss_weight = self.force_weight
+                hessian_loss_weight = self.hessian_weight
 
                 # Interatomic potential training requires at least one active loss term
                 if (
                     energy_loss_weight <= 0
                     and energy_peratom_loss_weight <= 0
                     and force_loss_weight <= 0
+                    and hessian_loss_weight <= 0
                 ):
                     raise ValueError(
-                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
+                        "All interatomic potential loss weights are zero; set at "
+                        "least one of energy_weight, energy_peratom_weight, "
+                        "force_weight, or hessian_weight to a positive value."
                     )
 
-                tot_loss = 0
-                if energy_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(graph_energy_pred, graph_energy_true)
-                        * energy_loss_weight
+                if (
+                    energy_loss_weight > 0 or energy_peratom_loss_weight > 0
+                ) and not hasattr(data, "energy"):
+                    raise ValueError(
+                        "data.energy is required when energy_weight or energy_peratom_weight is positive"
                     )
+                if force_loss_weight > 0 and not hasattr(data, "forces"):
+                    raise ValueError(
+                        "data.forces is required when force_weight is positive"
+                    )
+                if hessian_loss_weight > 0 and not hasattr(data, "hessian"):
+                    raise ValueError(
+                        "data.hessian is required when hessian_weight is positive"
+                    )
+                if hessian_loss_weight > 0 and data.num_graphs != 1:
+                    raise ValueError("Hessian loss currently requires batch size 1")
+
+                zero = graph_energy_pred.sum() * 0.0
+                tot_loss = zero
+                if hasattr(data, "energy"):
+                    graph_energy_true = data.energy.squeeze().float()
+                    energy_loss = self.loss_function(
+                        graph_energy_pred, graph_energy_true
+                    )
+                else:
+                    graph_energy_true = None
+                    energy_loss = zero
+                tasks_loss = [energy_loss]
+                if energy_loss_weight > 0:
+                    tot_loss = tot_loss + energy_loss * energy_loss_weight
 
                 # Energy per atom
                 natoms = torch.bincount(data.batch)
                 graph_energy_peratom_pred = graph_energy_pred / natoms
-                graph_energy_peratom_true = graph_energy_true / natoms
-                tasks_loss.append(
-                    self.loss_function(
+                if graph_energy_true is not None:
+                    graph_energy_peratom_true = graph_energy_true / natoms
+                    energy_peratom_loss = self.loss_function(
                         graph_energy_peratom_pred, graph_energy_peratom_true
                     )
-                )
+                else:
+                    energy_peratom_loss = zero
+                tasks_loss.append(energy_peratom_loss)
 
                 if energy_peratom_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(
-                            graph_energy_peratom_pred, graph_energy_peratom_true
-                        )
-                        * energy_peratom_loss_weight
+                    tot_loss = (
+                        tot_loss + energy_peratom_loss * energy_peratom_loss_weight
                     )
 
-                # Forces
-                forces_true = data.forces.float()
-                forces_pred = torch.autograd.grad(
+                # NaN Hessians mark structures for which no reference Hessian exists.
+                hessian_mask = None
+                if hessian_loss_weight > 0:
+                    hessian_mask = torch.isfinite(data.hessian)
+                need_hessian = hessian_mask is not None and bool(hessian_mask.any())
+                forces_pred, hessian_pred = compute_forces_and_hessian(
                     graph_energy_pred,
                     data.pos,
-                    grad_outputs=torch.ones_like(graph_energy_pred),
-                    retain_graph=graph_energy_pred.requires_grad,
+                    compute_hessian=need_hessian,
                     create_graph=create_graph,
-                )[0].float()
+                )
+                forces_pred = forces_pred.float()
                 assert (
                     forces_pred is not None
                 ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                forces_pred = -forces_pred
-                tasks_loss.append(self.loss_function(forces_pred, forces_true))
+                if hasattr(data, "forces"):
+                    forces_true = data.forces.float()
+                    force_mask = torch.isfinite(forces_true)
+                    force_loss = (
+                        self.loss_function(
+                            forces_pred[force_mask], forces_true[force_mask]
+                        )
+                        if bool(force_mask.any())
+                        else zero
+                    )
+                else:
+                    force_loss = zero
+                tasks_loss.append(force_loss)
 
                 if force_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(forces_pred, forces_true) * force_loss_weight
-                    )  # Have force-weight be the complement to energy-weight
+                    tot_loss = tot_loss + force_loss * force_loss_weight
                     ## FixMe: current loss functions require the number of heads to be the number of things being predicted
                     ##        so, we need to do loss calculation manually without calling the other functions.
+
+                if need_hessian:
+                    hessian_true = data.hessian.reshape(hessian_pred.shape).float()
+                    hessian_mask = hessian_mask.reshape(hessian_pred.shape)
+                    hessian_loss = self.loss_function(
+                        hessian_pred[hessian_mask], hessian_true[hessian_mask]
+                    )
+                    tot_loss = tot_loss + hessian_loss * hessian_loss_weight
+                else:
+                    hessian_loss = zero
+                if hessian_loss_weight > 0:
+                    tasks_loss.append(hessian_loss)
 
                 return tot_loss, tasks_loss
 

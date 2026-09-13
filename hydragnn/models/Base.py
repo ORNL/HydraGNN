@@ -64,6 +64,7 @@ class Base(Module):
         graph_attr_conditioning_mode: str = "concat_node",
         equivariant_attn_lmax: int = 1,
         equivariant_attn_num_radial: int = 16,
+        equivariant_attn_num_hidden_layers: int = 1,
         equivariant_attn_feedforward_multiplier: int = 2,
         equivariant_attn_allow_scalar_only: bool = False,
         equivariant_attn_require_tensor_coupling: bool = True,
@@ -86,6 +87,7 @@ class Base(Module):
         self.global_attn_dropout = dropout
         self.equivariant_attn_lmax = equivariant_attn_lmax
         self.equivariant_attn_num_radial = equivariant_attn_num_radial
+        self.equivariant_attn_num_hidden_layers = equivariant_attn_num_hidden_layers
         self.equivariant_attn_feedforward_multiplier = (
             equivariant_attn_feedforward_multiplier
         )
@@ -296,6 +298,7 @@ class Base(Module):
                     heads=self.global_attn_heads,
                     lmax=self.equivariant_attn_lmax,
                     num_radial=self.equivariant_attn_num_radial,
+                    num_hidden_layers=self.equivariant_attn_num_hidden_layers,
                     feedforward_multiplier=(
                         self.equivariant_attn_feedforward_multiplier
                     ),

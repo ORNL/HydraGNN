@@ -49,6 +49,7 @@ def _layer(coupling_mode):
         heads=1,
         lmax=1,
         num_radial=4,
+        num_hidden_layers=1,
         feedforward_multiplier=2,
         allow_scalar_only=False,
         require_tensor_coupling=True,

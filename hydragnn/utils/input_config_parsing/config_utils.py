@@ -82,6 +82,9 @@ def update_config(config, train_loader, val_loader, test_loader):
     architecture = config["NeuralNetwork"]["Architecture"]
     architecture.setdefault("equivariant_attn_lmax", 1)
     architecture.setdefault("equivariant_attn_num_radial", 16)
+    architecture.setdefault("equivariant_attn_num_hidden_layers", 1)
+    if architecture["equivariant_attn_num_hidden_layers"] <= 0:
+        raise ValueError("equivariant_attn_num_hidden_layers must be positive")
     architecture.setdefault("equivariant_attn_feedforward_multiplier", 2)
     architecture.setdefault("equivariant_attn_allow_scalar_only", False)
     architecture.setdefault("equivariant_attn_require_tensor_coupling", True)

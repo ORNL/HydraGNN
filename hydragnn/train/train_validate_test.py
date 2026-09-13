@@ -54,6 +54,16 @@ PRECISION_MAP = {
 }
 
 
+def _print_named_task_losses(verbosity, task_names, losses_by_split):
+    """Print each task loss with its name and a consistent split format."""
+    for task_index, task_name in enumerate(task_names):
+        fields = [
+            f"{split_name} Loss: {losses[task_index].item():.8f}"
+            for split_name, losses in losses_by_split.items()
+        ]
+        print_distributed(verbosity, f"{task_name} " + ", ".join(fields))
+
+
 def resolve_precision(precision: str):
     """Normalize precision string and return parameter/autocast dtypes."""
 
@@ -228,23 +238,32 @@ def train_validate_test(
 
     device = get_device()
     if compute_grad_energy:
-        num_tasks = 3  # [energy, energy per atom, forces]
-        task_dims = [1, 1, 1]
+        hessian_enabled = model.module.hessian_weight > 0
+        num_tasks = 4 if hessian_enabled else 3
+        task_dims = [1] * num_tasks
         task_weights = [
             model.module.energy_weight,
             model.module.energy_peratom_weight,
             model.module.force_weight,
         ]
+        if hessian_enabled:
+            task_weights.append(model.module.hessian_weight)
         output_names = [
             configured_output_names[0],
             "energy_peratom",
             "forces",
         ]
+        if hessian_enabled:
+            output_names.append("hessian")
+        task_names = ["Energy", "Energy Per Atom", "Forces"]
+        if hessian_enabled:
+            task_names.append("Hessian")
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims
         task_weights = model.module.loss_weights
         output_names = configured_output_names
+        task_names = output_names
 
     # total loss tracking for train/vali/test
     total_loss_train = torch.zeros(num_epoch, device=device)
@@ -332,8 +351,10 @@ def train_validate_test(
                 verbosity,
                 f"Loss for {dataset_name}: {loss:.8f}",
             )
-            print_distributed(
-                verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
+            _print_named_task_losses(
+                verbosity,
+                task_names,
+                {dataset_name: taskserr},
             )
         return
 
@@ -415,25 +436,23 @@ def train_validate_test(
             writer.add_scalar("train error", train_loss, epoch)
             writer.add_scalar("validate error", val_loss, epoch)
             writer.add_scalar("test error", test_loss, epoch)
-            for ivar in range(num_tasks):
+            for ivar, task_name in enumerate(task_names):
                 writer.add_scalar(
-                    "train error of task" + str(ivar), train_taskserr[ivar], epoch
+                    "train error of " + task_name, train_taskserr[ivar], epoch
                 )
         print_distributed(
             verbosity,
             f"Epoch: {epoch:02d}, Train Loss: {train_loss:.8f}, Val Loss: {val_loss:.8f}, "
             f"Test Loss: {test_loss:.8f}",
         )
-        print_distributed(
+        _print_named_task_losses(
             verbosity,
-            "Tasks Train Loss:",
-            [taskerr.item() for taskerr in train_taskserr],
-        )
-        print_distributed(
-            verbosity, "Tasks Val Loss:", [taskerr.item() for taskerr in val_taskserr]
-        )
-        print_distributed(
-            verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
+            task_names,
+            {
+                "Train": train_taskserr,
+                "Val": val_taskserr,
+                "Test": test_taskserr,
+            },
         )
 
         total_loss_train[epoch] = train_loss
@@ -930,7 +949,10 @@ def test(
         import torch_scatter
 
     if num_tasks is None:
-        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+        if compute_grad_energy:
+            num_tasks = 4 if model.module.hessian_weight > 0 else 3
+        else:
+            num_tasks = model.module.num_heads
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())

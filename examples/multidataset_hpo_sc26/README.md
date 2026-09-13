@@ -1,5 +1,10 @@
 # SC26 Single-Model Training + Inference Jobs
 
+Per-output losses in HydraGNN logs use the exact output names declared under
+`Variables.outputs` in the model JSON. The DeepHyper objective parser consumes
+the named `Energy Per Atom` and `Forces` validation-loss fields emitted by the
+interatomic-potential workflow; it does not depend on positional task arrays.
+
 This folder contains Slurm scripts for both Frontier and Perlmutter:
 
 - Frontier:
