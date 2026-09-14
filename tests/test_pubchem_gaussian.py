@@ -288,6 +288,73 @@ def test_pubchem_mpi_degree_histogram_does_not_require_torch_distributed():
     assert histogram.tolist() == [0, 2, 1]
 
 
+def test_pubchem_dataset_limit_applies_before_rank_partition(tmp_path):
+    example = _load_example_module()
+    for molecule_id in (5, 1, 4, 2, 3):
+        (tmp_path / str(molecule_id)).mkdir()
+    (tmp_path / "temporary").mkdir()
+
+    selected = example.select_molecule_dirs(tmp_path, rank=1, world_size=2, limit=3)
+
+    assert [path.name for path in selected] == ["2"]
+
+
+@pytest.mark.parametrize(
+    ("header", "columns", "rows", "expected"),
+    [
+        (
+            "Mulliken charges:",
+            "1",
+            "1 C -0.125000\n2 H 0.125000",
+            [-0.125, 0.125],
+        ),
+        (
+            "Mulliken charges and spin densities:",
+            "1 2",
+            "1 C -0.250000 0.750000\n2 H 0.250000 -0.750000",
+            [-0.25, 0.25],
+        ),
+    ],
+)
+def test_pubchem_parses_closed_and_open_shell_mulliken_charges(
+    header, columns, rows, expected
+):
+    example = _load_example_module()
+    text = f"{header}\n {columns}\n{rows}\n Sum of Mulliken charges = 0.0\n"
+
+    charges = example._parse_mulliken_charges(text, num_atoms=2)
+
+    assert charges == pytest.approx(expected)
+
+
+def test_pubchem_parses_concatenated_fixed_width_polarizability():
+    example = _load_example_module()
+    text = " Exact polarizability: 593.655 219.358 239.797-134.162 -68.483 247.212\n"
+
+    values = example._last_labeled_floats("Exact polarizability:", text, 6)
+
+    assert values == pytest.approx(
+        [593.655, 219.358, 239.797, -134.162, -68.483, 247.212]
+    )
+
+
+def test_pubchem_parsers_accept_preloaded_log_text(tmp_path):
+    example = _load_example_module()
+    missing_path = tmp_path / "not-read.log"
+    text = (
+        " Input orientation:\n"
+        " -----\n header\n -----\n"
+        " 1 1 0 0.000000 0.000000 0.000000\n -----\n"
+        " SCF Done: E(RHF) = -1.125000D+00\n"
+        " Forces (Hartrees/Bohr)\n -----\n"
+        " 1 1 -0.10 -0.20 -0.30\n -----\n"
+    )
+
+    records = example.parse_gaussian_log(missing_path, text=text)
+
+    assert records[0]["energy"].item() == pytest.approx(-1.125)
+
+
 @pytest.mark.mpi_skip()
 def test_force_and_hessian_autograd_identities_and_backpropagation():
     positions = torch.tensor([[0.2, -0.3, 0.5], [0.7, 0.1, -0.4]], requires_grad=True)

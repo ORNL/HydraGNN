@@ -84,6 +84,17 @@ def _last_floats(pattern, text, count=None):
     return values
 
 
+def _last_labeled_floats(label, text, count):
+    matches = re.findall(rf"^\s*{re.escape(label)}\s*(.*?)\s*$", text, re.MULTILINE)
+    if not matches:
+        raise ValueError(f"Gaussian property not found: {label}")
+    number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[DEde][-+]?\d+)?"
+    values = [float(value.replace("D", "E")) for value in re.findall(number, matches[-1])]
+    if len(values) != count:
+        raise ValueError(f"Expected {count} values for {label}, found {len(values)}")
+    return values
+
+
 def _tensor_eigenvalues(xx, yy, zz, xy, xz, yz):
     tensor = torch.tensor(
         [[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]], dtype=torch.float32
@@ -91,34 +102,41 @@ def _tensor_eigenvalues(xx, yy, zz, xy, xz, yz):
     return torch.linalg.eigvalsh(tensor).unsqueeze(0)
 
 
-def parse_gaussian_properties(path, num_atoms):
+def _parse_mulliken_charges(text, num_atoms):
+    sections = list(
+        re.finditer(
+            r"Mulliken charges(?: and spin densities)?:\s*\n"
+            r"\s*1(?:\s+2)?\s*\n(?P<table>.*?)(?=\s*Sum of Mulliken charges)",
+            text,
+            flags=re.DOTALL,
+        )
+    )
+    if not sections:
+        raise ValueError("Final Mulliken charges not found")
+    charges = []
+    for line in sections[-1].group("table").splitlines():
+        fields = line.split()
+        if len(fields) >= 3 and fields[0].isdigit():
+            charges.append(float(fields[2].replace("D", "E")))
+    if len(charges) != num_atoms:
+        raise ValueError(f"Expected {num_atoms} Mulliken charges, found {len(charges)}")
+    return charges
+
+
+def parse_gaussian_properties(path, num_atoms, text=None):
     """Parse final, hardware-independent labels from a Gaussian log.
 
     Vector/tensor observables use rotation-invariant magnitudes or sorted
     eigenvalues because the current HydraGNN graph heads are scalar heads.
     """
-    text = path.read_text(errors="replace")
+    if text is None:
+        text = path.read_text(errors="replace")
     number = r"([-+]?\d+(?:\.\d*)?(?:[DEde][-+]?\d+)?)"
     charge, multiplicity = _last_floats(
         rf"Charge\s*=\s*{number}\s+Multiplicity\s*=\s*{number}", text, 2
     )
 
-    mulliken_sections = list(
-        re.finditer(
-            r"Mulliken charges:\s*\n\s*1\s*\n(?P<table>.*?)(?=\s*Sum of Mulliken charges)",
-            text,
-            flags=re.DOTALL,
-        )
-    )
-    if not mulliken_sections:
-        raise ValueError("Final Mulliken charges not found")
-    charges = []
-    for line in mulliken_sections[-1].group("table").splitlines():
-        fields = line.split()
-        if len(fields) >= 3 and fields[0].isdigit():
-            charges.append(float(fields[-1].replace("D", "E")))
-    if len(charges) != num_atoms:
-        raise ValueError(f"Expected {num_atoms} Mulliken charges, found {len(charges)}")
+    charges = _parse_mulliken_charges(text, num_atoms)
 
     dipole = _last_floats(
         rf"X=\s*{number}\s+Y=\s*{number}\s+Z=\s*{number}\s+Tot=\s*{number}",
@@ -130,11 +148,7 @@ def parse_gaussian_properties(path, num_atoms):
         text,
         6,
     )
-    polarizability = _last_floats(
-        rf"Exact polarizability:\s*{number}\s+{number}\s+{number}\s+{number}\s+{number}\s+{number}",
-        text,
-        6,
-    )
+    polarizability = _last_labeled_floats("Exact polarizability:", text, 6)
     pxx, pyx, pyy, pzx, pzy, pzz = polarizability
 
     homo = None
@@ -301,9 +315,11 @@ def _parse_gaussian_table(lines, start, value_columns, header_dividers):
     return atomic_numbers, torch.tensor(values, dtype=torch.float32)
 
 
-def parse_gaussian_log(path):
+def parse_gaussian_log(path, text=None):
     """Return aligned coordinates (Angstrom), energies (Hartree), and forces (Hartree/Bohr)."""
-    lines = path.read_text(errors="replace").splitlines()
+    if text is None:
+        text = path.read_text(errors="replace")
+    lines = text.splitlines()
     latest_atomic_numbers = None
     latest_positions = None
     latest_energy = None
@@ -475,6 +491,16 @@ def gather_degree_mpi(dataset, comm):
     return comm.allreduce(local_degree.numpy(), op=MPI.SUM)
 
 
+def select_molecule_dirs(root, rank=0, world_size=1, limit=None):
+    molecule_dirs = sorted(
+        (path for path in root.iterdir() if path.is_dir() and path.name.isdigit()),
+        key=lambda path: int(path.name),
+    )
+    if limit is not None:
+        molecule_dirs = molecule_dirs[:limit]
+    return molecule_dirs[rank::world_size]
+
+
 class PubChemGaussianDataset(AbstractBaseDataset):
     def __init__(
         self,
@@ -483,6 +509,7 @@ class PubChemGaussianDataset(AbstractBaseDataset):
         rank=0,
         world_size=1,
         atomic_reference_energies=None,
+        limit=None,
     ):
         super().__init__()
         architecture = config["NeuralNetwork"]["Architecture"]
@@ -495,10 +522,7 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                 ATOMIC_REFERENCE_ARCHIVE
             )
         distance = Distance(norm=False, cat=False)
-        molecule_dirs = sorted(
-            (path for path in root.iterdir() if path.is_dir()),
-            key=lambda path: int(path.name),
-        )[rank::world_size]
+        molecule_dirs = select_molecule_dirs(root, rank, world_size, limit)
 
         for molecule_dir in molecule_dirs:
             structure_path = molecule_dir / "Structure.txt"
@@ -515,10 +539,11 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                 full_hessian = parse_hessian(
                     hessian_path, optimized_atomic_numbers.shape[0]
                 )
-                records = parse_gaussian_log(log_path)
+                log_text = log_path.read_text(errors="replace")
+                records = parse_gaussian_log(log_path, text=log_text)
                 properties = (
                     parse_gaussian_properties(
-                        log_path, optimized_atomic_numbers.shape[0]
+                        log_path, optimized_atomic_numbers.shape[0], text=log_text
                     )
                     if parse_multitask_properties
                     else {}
@@ -593,15 +618,25 @@ class PubChemGaussianDataset(AbstractBaseDataset):
         return self.dataset[index]
 
 
-def preprocess(config, num_molecules, comm, rank, world_size, dataset_format):
+def preprocess(
+    config,
+    num_molecules,
+    comm,
+    rank,
+    world_size,
+    dataset_format,
+    extracted_dir=EXTRACTED_DIR,
+    adios_path=ADIOS_PATH,
+    pickle_dir=PICKLE_DIR,
+):
     extract_records(
-        RAW_ARCHIVE_DIR, EXTRACTED_DIR, num_molecules, comm, rank, world_size
+        RAW_ARCHIVE_DIR, extracted_dir, num_molecules, comm, rank, world_size
     )
     comm.Barrier()
     completed = None
     if rank == 0:
         completed = sum(
-            path.is_dir() and path.name.isdigit() for path in EXTRACTED_DIR.iterdir()
+            path.is_dir() and path.name.isdigit() for path in extracted_dir.iterdir()
         )
     completed = comm.bcast(completed, root=0)
     if completed < num_molecules:
@@ -609,35 +644,37 @@ def preprocess(config, num_molecules, comm, rank, world_size, dataset_format):
             f"Only extracted {completed} of {num_molecules} requested records"
         )
 
-    dataset = PubChemGaussianDataset(EXTRACTED_DIR, config, rank, world_size)
+    dataset = PubChemGaussianDataset(
+        extracted_dir, config, rank, world_size, limit=num_molecules
+    )
     trainset, valset, testset = split_dataset(
         dataset=dataset, perc_train=0.8, stratify_splitting=False
     )
     degree = gather_degree_mpi(trainset, comm)
 
     if dataset_format == "adios":
-        if rank == 0 and ADIOS_PATH.exists():
-            shutil.rmtree(ADIOS_PATH)
+        if rank == 0 and adios_path.exists():
+            shutil.rmtree(adios_path)
         comm.Barrier()
-        writer = AdiosWriter(str(ADIOS_PATH), comm)
+        writer = AdiosWriter(str(adios_path), comm)
         writer.add("trainset", trainset)
         writer.add("valset", valset)
         writer.add("testset", testset)
         writer.add_global("pna_deg", degree)
         writer.add_global("cache_version", CACHE_VERSION)
         writer.save()
-        output_path = ADIOS_PATH
+        output_path = adios_path
     else:
-        if rank == 0 and PICKLE_DIR.exists():
-            shutil.rmtree(PICKLE_DIR)
+        if rank == 0 and pickle_dir.exists():
+            shutil.rmtree(pickle_dir)
         comm.Barrier()
         attributes = {"pna_deg": degree, "cache_version": CACHE_VERSION}
         SimplePickleWriter(
-            trainset, PICKLE_DIR, "trainset", use_subdir=True, attrs=attributes
+            trainset, pickle_dir, "trainset", use_subdir=True, attrs=attributes
         )
-        SimplePickleWriter(valset, PICKLE_DIR, "valset", use_subdir=True)
-        SimplePickleWriter(testset, PICKLE_DIR, "testset", use_subdir=True)
-        output_path = PICKLE_DIR
+        SimplePickleWriter(valset, pickle_dir, "valset", use_subdir=True)
+        SimplePickleWriter(testset, pickle_dir, "testset", use_subdir=True)
+        output_path = pickle_dir
     log(
         f"Preprocessed {sum(comm.allgather(len(dataset)))} molecules into {output_path}",
         rank=0,
@@ -689,6 +726,8 @@ def main():
     parser.add_argument("--inputfile", default="pubchem_gaussian.json")
     parser.add_argument("--preonly", action="store_true")
     parser.add_argument("--num-molecules", type=int, default=100)
+    parser.add_argument("--extracted-dir", type=Path, default=EXTRACTED_DIR)
+    parser.add_argument("--output-path", type=Path)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--num-epoch", type=int)
     parser.add_argument("--num-train-samples", type=int)
@@ -732,8 +771,18 @@ def main():
     hydragnn.utils.print.setup_log(args.log)
 
     if args.preonly:
+        adios_path = args.output_path if args.output_path else ADIOS_PATH
+        pickle_dir = args.output_path if args.output_path else PICKLE_DIR
         preprocess(
-            config, args.num_molecules, comm, rank, world_size, args.dataset_format
+            config,
+            args.num_molecules,
+            comm,
+            rank,
+            world_size,
+            args.dataset_format,
+            extracted_dir=args.extracted_dir,
+            adios_path=adios_path,
+            pickle_dir=pickle_dir,
         )
         return
 
