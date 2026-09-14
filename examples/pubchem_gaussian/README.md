@@ -104,10 +104,12 @@ configuration, log, and result separately. Existing result files are reused on
 restart, and every stage writes a CSV ranking; `finalists.json` contains the
 last promoted configurations.
 
-The launcher defaults to four concurrent single-GPU trials per node. Set
-`TRIALS_PER_NODE` lower if the screen stage shows that MACE or UMA requires more
-GPU or host memory. When running outside Slurm, pass `--concurrency 1` unless
-GPU assignment is managed externally.
+The launcher defaults to 16 allocated nodes, four nodes per trial, and eight DDP
+ranks (one per GPU) on every node. It therefore trains four configurations
+concurrently, each with 32 DDP ranks. Change `NNODES_PER_TRIAL` to control the
+distributed-training scale; the total allocation must be divisible by it.
+`TASKS_PER_NODE` controls participating GPUs per node. When running outside
+Slurm, use one process unless distributed process launch is managed externally.
 
 Atomic numbers are categorical node inputs encoded by a learned 128-dimensional
 embedding. The 118 categories cover atomic numbers 1 through 118; `min_value: 1`

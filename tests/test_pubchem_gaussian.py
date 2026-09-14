@@ -20,6 +20,7 @@ from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
     validation_objective,
 )
 from examples.pubchem_gaussian.pubchem_gaussian_multistage_hpo import (
+    _command,
     normalized_score,
     sample_candidates,
 )
@@ -135,6 +136,35 @@ def test_pubchem_multistage_score_uses_fixed_metric_scales():
     scales = {"Energy": 1.0, "Forces": 5.0, "Hessian": 20.0}
 
     assert normalized_score(losses, scales) == pytest.approx(2.0)
+
+
+def test_pubchem_multistage_launches_each_slurm_trial_with_multinode_ddp(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("SLURM_JOB_ID", "12345")
+    stage = {
+        "epochs": 3,
+        "train_samples": 50_000,
+        "val_samples": 10_000,
+        "test_samples": 10_000,
+    }
+
+    command = _command(tmp_path / "config.json", "trial", stage, 42, 4, 8)
+
+    assert command[:12] == [
+        "srun",
+        "--exclusive",
+        "--exact",
+        "-N",
+        "4",
+        "-n",
+        "32",
+        "--ntasks-per-node=8",
+        "--gpus-per-node=8",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "--kill-on-bad-exit=1",
+    ]
 
 
 def test_pubchem_deterministic_subset_is_nested():

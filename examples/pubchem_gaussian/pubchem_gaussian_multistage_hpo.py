@@ -95,17 +95,30 @@ def normalized_score(losses, scales):
     return sum(values) / len(values)
 
 
-def _command(config_path, log_name, stage, subset_seed):
+def _command(
+    config_path,
+    log_name,
+    stage,
+    subset_seed,
+    nodes_per_trial,
+    tasks_per_node,
+):
     command = []
     if os.environ.get("SLURM_JOB_ID"):
         command.extend(
             [
                 "srun",
                 "--exclusive",
-                "-N1",
-                "-n1",
+                "--exact",
+                "-N",
+                str(nodes_per_trial),
+                "-n",
+                str(nodes_per_trial * tasks_per_node),
+                f"--ntasks-per-node={tasks_per_node}",
+                f"--gpus-per-node={tasks_per_node}",
                 "--gpus-per-task=1",
                 "--gpu-bind=closest",
+                "--kill-on-bad-exit=1",
             ]
         )
     command.extend(
@@ -125,8 +138,16 @@ def _command(config_path, log_name, stage, subset_seed):
     return command
 
 
-def run_candidate(candidate, base_config, stage, output_dir, subset_seed):
-    """Run one candidate in an exclusive one-GPU Slurm step."""
+def run_candidate(
+    candidate,
+    base_config,
+    stage,
+    output_dir,
+    subset_seed,
+    nodes_per_trial,
+    tasks_per_node,
+):
+    """Run one candidate as an exclusive multi-node DDP Slurm step."""
     trial_dir = output_dir / stage["name"] / candidate["id"]
     trial_dir.mkdir(parents=True, exist_ok=True)
     config_path = (trial_dir / "config.json").resolve()
@@ -142,6 +163,8 @@ def run_candidate(candidate, base_config, stage, output_dir, subset_seed):
         f"{stage['name']}_{candidate['id']}",
         stage,
         subset_seed,
+        nodes_per_trial,
+        tasks_per_node,
     )
     return_code = -1
     try:
@@ -197,10 +220,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--initial-candidates", type=int, default=512)
     parser.add_argument("--concurrency", type=int, default=16)
+    parser.add_argument("--nodes-per-trial", type=int, default=1)
+    parser.add_argument("--tasks-per-node", type=int, default=1)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", default="pubchem-multistage-hpo")
     parser.add_argument("--schedule", help="Optional JSON stage schedule")
     args = parser.parse_args()
+    if args.nodes_per_trial <= 0 or args.tasks_per_node <= 0:
+        parser.error("--nodes-per-trial and --tasks-per-node must be positive")
 
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -224,15 +251,15 @@ def main():
                     stage,
                     output_dir,
                     args.seed,
+                    args.nodes_per_trial,
+                    args.tasks_per_node,
                 )
                 for candidate in candidates
             ]
             results = [future.result() for future in as_completed(futures)]
 
         if scales is None:
-            finite_losses = [
-                result["losses"] for result in results if result["losses"]
-            ]
+            finite_losses = [result["losses"] for result in results if result["losses"]]
             if not finite_losses:
                 raise RuntimeError("No screen-stage trial completed with finite losses")
             scales = {

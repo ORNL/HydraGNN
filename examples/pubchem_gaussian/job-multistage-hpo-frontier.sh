@@ -5,7 +5,7 @@
 #SBATCH -e pubchem-multistage-hpo-%j.out
 #SBATCH -t 12:00:00
 #SBATCH -p batch
-#SBATCH -N 4
+#SBATCH -N 16
 
 set -euo pipefail
 : "${HYDRAGNN_ROOT:?Set HYDRAGNN_ROOT to the HydraGNN checkout}"
@@ -24,14 +24,22 @@ if [[ "${PREPROCESS_DATASET}" == "1" ]]; then
         --preonly --num-molecules 3000000
 fi
 
-# Four concurrent one-GPU trials per Frontier node. Reduce this if UMA or MACE
-# establishes a lower memory limit during the screen stage.
-TRIALS_PER_NODE="${TRIALS_PER_NODE:-4}"
-CONCURRENCY=$((SLURM_JOB_NUM_NODES * TRIALS_PER_NODE))
+# Each candidate is trained with DDP across four nodes and all eight GPUs per
+# node. Four independent candidates run concurrently in the default 16-node
+# allocation. Override NNODES_PER_TRIAL for larger or smaller DDP jobs.
+NNODES_PER_TRIAL="${NNODES_PER_TRIAL:-4}"
+TASKS_PER_NODE="${TASKS_PER_NODE:-8}"
+if ((SLURM_JOB_NUM_NODES % NNODES_PER_TRIAL != 0)); then
+    echo "SLURM_JOB_NUM_NODES must be divisible by NNODES_PER_TRIAL" >&2
+    exit 2
+fi
+CONCURRENCY=$((SLURM_JOB_NUM_NODES / NNODES_PER_TRIAL))
 
 python -u \
     "${HYDRAGNN_ROOT}/examples/pubchem_gaussian/pubchem_gaussian_multistage_hpo.py" \
     --initial-candidates 512 \
     --concurrency "${CONCURRENCY}" \
+    --nodes-per-trial "${NNODES_PER_TRIAL}" \
+    --tasks-per-node "${TASKS_PER_NODE}" \
     --schedule "${HYDRAGNN_ROOT}/examples/pubchem_gaussian/pubchem_hpo_stages.json" \
     --output-dir "pubchem-multistage-hpo-${SLURM_JOB_ID}"
