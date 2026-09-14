@@ -239,7 +239,8 @@ def train_validate_test(
     device = get_device()
     if compute_grad_energy:
         hessian_enabled = model.module.hessian_weight > 0
-        num_tasks = 4 if hessian_enabled else 3
+        auxiliary_names = configured_output_names[1:]
+        num_tasks = (4 if hessian_enabled else 3) + len(auxiliary_names)
         task_dims = [1] * num_tasks
         task_weights = [
             model.module.energy_weight,
@@ -248,6 +249,7 @@ def train_validate_test(
         ]
         if hessian_enabled:
             task_weights.append(model.module.hessian_weight)
+        task_weights.extend(model.module.loss_weights[1:])
         output_names = [
             configured_output_names[0],
             "energy_peratom",
@@ -255,9 +257,11 @@ def train_validate_test(
         ]
         if hessian_enabled:
             output_names.append("hessian")
+        output_names.extend(auxiliary_names)
         task_names = ["Energy", "Energy Per Atom", "Forces"]
         if hessian_enabled:
             task_names.append("Hessian")
+        task_names.extend(auxiliary_names)
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims

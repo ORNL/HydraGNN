@@ -51,7 +51,7 @@ EXTRACTED_DIR = EXAMPLE_DIR / "dataset" / "raw" / "extracted"
 ATOMIC_REFERENCE_ARCHIVE = EXAMPLE_DIR / "dataset" / "raw" / "atomization.tar.gz"
 PICKLE_DIR = EXAMPLE_DIR / "dataset" / "pubchem_gaussian.pickle"
 ADIOS_PATH = EXAMPLE_DIR / "dataset" / "pubchem_gaussian.bp"
-CACHE_VERSION = "autograd-formation-energy-hessian-v4"
+CACHE_VERSION = "gaussian-multitask-properties-v6"
 SCF_ENERGY_PATTERN = re.compile(
     r"SCF Done:\s+E\([^)]+\)\s*=\s*([-+]?\d+(?:\.\d*)?(?:[DEde][-+]?\d+)?)"
 )
@@ -60,6 +60,127 @@ ATOMIC_NUMBERS = {"H": 1, "C": 6, "N": 7, "O": 8, "P": 15, "S": 16}
 OPTIMIZED_POSITION_TOLERANCE = 1.0e-5
 # CODATA conversion: 1 Angstrom = 1.8897261254578281 Bohr.
 ANGSTROM_TO_BOHR = 1.8897261254578281
+MULTITASK_PROPERTY_NAMES = {
+    "mulliken_charges",
+    "dipole_magnitude",
+    "quadrupole_eigenvalues",
+    "polarizability_eigenvalues",
+    "frontier_orbital_energies",
+    "rotational_constants",
+    "thermochemistry",
+}
+
+
+def _last_floats(pattern, text, count=None):
+    """Return floats from the final regex match, or raise for a missing label."""
+    matches = list(
+        re.finditer(pattern, text, flags=re.MULTILINE | re.IGNORECASE | re.DOTALL)
+    )
+    if not matches:
+        raise ValueError(f"Gaussian property not found: {pattern}")
+    values = [float(value.replace("D", "E")) for value in matches[-1].groups()]
+    if count is not None and len(values) != count:
+        raise ValueError(f"Expected {count} values for {pattern}, found {len(values)}")
+    return values
+
+
+def _tensor_eigenvalues(xx, yy, zz, xy, xz, yz):
+    tensor = torch.tensor(
+        [[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]], dtype=torch.float32
+    )
+    return torch.linalg.eigvalsh(tensor).unsqueeze(0)
+
+
+def parse_gaussian_properties(path, num_atoms):
+    """Parse final, hardware-independent labels from a Gaussian log.
+
+    Vector/tensor observables use rotation-invariant magnitudes or sorted
+    eigenvalues because the current HydraGNN graph heads are scalar heads.
+    """
+    text = path.read_text(errors="replace")
+    number = r"([-+]?\d+(?:\.\d*)?(?:[DEde][-+]?\d+)?)"
+    charge, multiplicity = _last_floats(
+        rf"Charge\s*=\s*{number}\s+Multiplicity\s*=\s*{number}", text, 2
+    )
+
+    mulliken_sections = list(
+        re.finditer(
+            r"Mulliken charges:\s*\n\s*1\s*\n(?P<table>.*?)(?=\s*Sum of Mulliken charges)",
+            text,
+            flags=re.DOTALL,
+        )
+    )
+    if not mulliken_sections:
+        raise ValueError("Final Mulliken charges not found")
+    charges = []
+    for line in mulliken_sections[-1].group("table").splitlines():
+        fields = line.split()
+        if len(fields) >= 3 and fields[0].isdigit():
+            charges.append(float(fields[-1].replace("D", "E")))
+    if len(charges) != num_atoms:
+        raise ValueError(f"Expected {num_atoms} Mulliken charges, found {len(charges)}")
+
+    dipole = _last_floats(
+        rf"X=\s*{number}\s+Y=\s*{number}\s+Z=\s*{number}\s+Tot=\s*{number}",
+        text,
+        4,
+    )
+    quadrupole = _last_floats(
+        rf"Traceless Quadrupole moment.*?\n\s*XX=\s*{number}\s+YY=\s*{number}\s+ZZ=\s*{number}\s*\n\s*XY=\s*{number}\s+XZ=\s*{number}\s+YZ=\s*{number}",
+        text,
+        6,
+    )
+    polarizability = _last_floats(
+        rf"Exact polarizability:\s*{number}\s+{number}\s+{number}\s+{number}\s+{number}\s+{number}",
+        text,
+        6,
+    )
+    pxx, pyx, pyy, pzx, pzy, pzz = polarizability
+
+    homo = None
+    lumo = None
+    for line in text.splitlines():
+        occupied_match = re.search(r"Alpha\s+occ\. eigenvalues --\s*(.*)", line)
+        virtual_match = re.search(r"Alpha\s+virt\. eigenvalues --\s*(.*)", line)
+        if occupied_match:
+            homo = float(occupied_match.group(1).split()[-1].replace("D", "E"))
+            lumo = None
+        elif virtual_match and lumo is None:
+            lumo = float(virtual_match.group(1).split()[0].replace("D", "E"))
+    if homo is None or lumo is None:
+        raise ValueError("Final alpha occupied/virtual orbital energies not found")
+    rotational_constants = _last_floats(
+        rf"Rotational constants \(GHZ\):\s*{number}\s+{number}\s+{number}",
+        text,
+        3,
+    )
+    thermochemistry = _last_floats(
+        rf"Zero-point correction=\s*{number}.*?"
+        rf"Thermal correction to Energy=\s*{number}.*?"
+        rf"Thermal correction to Enthalpy=\s*{number}.*?"
+        rf"Thermal correction to Gibbs Free Energy=\s*{number}.*?"
+        rf"Sum of electronic and zero-point Energies=\s*{number}.*?"
+        rf"Sum of electronic and thermal Energies=\s*{number}.*?"
+        rf"Sum of electronic and thermal Enthalpies=\s*{number}.*?"
+        rf"Sum of electronic and thermal Free Energies=\s*{number}",
+        text,
+        8,
+    )
+    return {
+        "total_charge": torch.tensor([[charge]], dtype=torch.float32),
+        "spin_multiplicity": torch.tensor([[multiplicity]], dtype=torch.float32),
+        "mulliken_charges": torch.tensor(charges, dtype=torch.float32).unsqueeze(1),
+        "dipole_magnitude": torch.tensor([[dipole[3]]], dtype=torch.float32),
+        "quadrupole_eigenvalues": _tensor_eigenvalues(*quadrupole),
+        "polarizability_eigenvalues": _tensor_eigenvalues(pxx, pyy, pzz, pyx, pzx, pzy),
+        "frontier_orbital_energies": torch.tensor(
+            [[homo, lumo, lumo - homo]], dtype=torch.float32
+        ),
+        "rotational_constants": torch.tensor(
+            [sorted(rotational_constants, reverse=True)], dtype=torch.float32
+        ),
+        "thermochemistry": torch.tensor([thermochemistry], dtype=torch.float32),
+    }
 
 
 def parse_structure(path):
@@ -237,9 +358,7 @@ def _allocate_archive_limits(available_counts, limit):
     archive_limits = {}
     remaining = limit
     for archive_index in sorted(available_counts):
-        archive_limits[archive_index] = min(
-            available_counts[archive_index], remaining
-        )
+        archive_limits[archive_index] = min(available_counts[archive_index], remaining)
         remaining -= archive_limits[archive_index]
     return archive_limits, remaining
 
@@ -292,9 +411,7 @@ def extract_records(archive_dir, output_dir, limit, comm, rank, world_size):
         {index: len(members) for index, members in local_members.items()}
     ):
         available_counts.update(rank_counts)
-    archive_limits, unavailable = _allocate_archive_limits(
-        available_counts, remaining
-    )
+    archive_limits, unavailable = _allocate_archive_limits(available_counts, remaining)
     if unavailable:
         raise RuntimeError(
             f"Only found {limit - unavailable} of {limit} requested records"
@@ -354,9 +471,7 @@ def gather_degree_mpi(dataset, comm):
         node_degree = degree(
             data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long
         )
-        local_degree += torch.bincount(
-            node_degree, minlength=local_degree.numel()
-        )
+        local_degree += torch.bincount(node_degree, minlength=local_degree.numel())
     return comm.allreduce(local_degree.numpy(), op=MPI.SUM)
 
 
@@ -371,6 +486,10 @@ class PubChemGaussianDataset(AbstractBaseDataset):
     ):
         super().__init__()
         architecture = config["NeuralNetwork"]["Architecture"]
+        configured_outputs = {
+            output["name"] for output in config.get("Variables", {}).get("outputs", [])
+        }
+        parse_multitask_properties = bool(configured_outputs & MULTITASK_PROPERTY_NAMES)
         if atomic_reference_energies is None:
             atomic_reference_energies = parse_atomic_reference_energies(
                 ATOMIC_REFERENCE_ARCHIVE
@@ -397,6 +516,13 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                     hessian_path, optimized_atomic_numbers.shape[0]
                 )
                 records = parse_gaussian_log(log_path)
+                properties = (
+                    parse_gaussian_properties(
+                        log_path, optimized_atomic_numbers.shape[0]
+                    )
+                    if parse_multitask_properties
+                    else {}
+                )
                 matching_records = []
                 for step, record in enumerate(records):
                     if not torch.equal(
@@ -443,6 +569,7 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                     energy=formation_energy,
                     forces=record["forces"],
                     hessian=full_hessian,
+                    **properties,
                     cell=torch.eye(3, dtype=torch.float32),
                     pbc=torch.zeros(3, dtype=torch.int32),
                 )

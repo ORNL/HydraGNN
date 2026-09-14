@@ -56,6 +56,17 @@ DEFAULT_STAGES = (
     {"name": "full", "train_samples": 3_000_000, "epochs": 25, "keep": 3},
 )
 WEIGHT_CHOICES = (0.01, 0.1, 1.0, 10.0, 100.0)
+PRIMARY_METRICS = ("Energy", "Forces", "Hessian")
+DERIVED_PRIMARY_METRICS = ("Energy Per Atom",)
+AUXILIARY_METRICS = (
+    "mulliken_charges",
+    "dipole_magnitude",
+    "quadrupole_eigenvalues",
+    "polarizability_eigenvalues",
+    "frontier_orbital_energies",
+    "rotational_constants",
+    "thermochemistry",
+)
 
 
 def sample_candidates(count, seed, model_types=DEFAULT_MODELS):
@@ -89,10 +100,65 @@ def normalized_score(losses, scales):
     """Average dimensionless metrics using scales fixed from the screen stage."""
     if losses is None:
         return math.inf
-    values = [losses[name] / scales[name] for name in ("Energy", "Forces", "Hessian")]
+    values = [losses[name] / scales[name] for name in PRIMARY_METRICS]
     if not all(math.isfinite(value) for value in values):
         return math.inf
     return sum(values) / len(values)
+
+
+def auxiliary_score(losses, scales):
+    """Return a dimensionless auxiliary score, or infinity if labels are missing."""
+    if losses is None:
+        return math.inf
+    names = [name for name in AUXILIARY_METRICS if name in scales]
+    if not names or any(name not in losses for name in names):
+        return math.inf
+    values = [losses[name] / scales[name] for name in names]
+    if not values or not all(math.isfinite(value) for value in values):
+        return math.inf
+    return sum(values) / len(values)
+
+
+def rank_with_auxiliary_tiebreakers(results, scales, relative_tolerance=0.02):
+    """Rank auxiliaries only inside the primary-best model's error envelope.
+
+    A model is comparable only when every primary loss is no more than
+    ``relative_tolerance`` above the candidate with the best aggregate primary
+    score. This makes energy, force, and Hessian errors hard selection gates;
+    auxiliary losses cannot compensate for a primary regression.
+    """
+    if relative_tolerance < 0:
+        raise ValueError("relative_tolerance must be non-negative")
+    for result in results:
+        result["primary_score"] = normalized_score(result.get("losses"), scales)
+        result["auxiliary_score"] = auxiliary_score(result.get("losses"), scales)
+        result["score"] = result["primary_score"]
+        result["primary_comparable"] = False
+    successful = [
+        result for result in results if math.isfinite(result["primary_score"])
+    ]
+    if not successful:
+        return results
+    anchor = min(successful, key=lambda result: result["primary_score"])
+    anchor_losses = anchor["losses"]
+    for result in successful:
+        result["primary_comparable"] = all(
+            result["losses"][name] <= anchor_losses[name] * (1.0 + relative_tolerance)
+            for name in PRIMARY_METRICS
+        )
+    results.sort(
+        key=lambda result: (
+            0 if result["primary_comparable"] else 1,
+            (
+                result["auxiliary_score"]
+                if result["primary_comparable"]
+                else result["primary_score"]
+            ),
+            result["primary_score"],
+            result["id"],
+        )
+    )
+    return results
 
 
 def _command(
@@ -208,14 +274,19 @@ def run_candidate(
 
 def _write_results(path, results):
     parameter_names = sorted(results[0]["parameters"]) if results else []
-    fields = [
-        "id",
-        "stage",
-        "score",
-        "Energy",
-        "Forces",
-        "Hessian",
-    ] + parameter_names
+    fields = (
+        [
+            "id",
+            "stage",
+            "score",
+            "primary_score",
+            "auxiliary_score",
+            "primary_comparable",
+        ]
+        + list(PRIMARY_METRICS)
+        + list(AUXILIARY_METRICS)
+        + parameter_names
+    )
     with path.open("w", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
@@ -228,7 +299,7 @@ def _write_results(path, results):
                     "score": result["score"],
                     **{
                         name: losses.get(name)
-                        for name in ("Energy", "Forces", "Hessian")
+                        for name in PRIMARY_METRICS + AUXILIARY_METRICS
                     },
                     **result["parameters"],
                 }
@@ -255,11 +326,19 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", default="pubchem-multistage-hpo")
     parser.add_argument("--schedule", help="Optional JSON stage schedule")
+    parser.add_argument(
+        "--primary-tolerance",
+        type=float,
+        default=0.02,
+        help="Maximum relative regression in every primary metric for tie-breaking",
+    )
     args = parser.parse_args()
     if args.nodes_per_trial <= 0 or args.tasks_per_node <= 0:
         parser.error("--nodes-per-trial and --tasks-per-node must be positive")
     if args.shmem and args.ddstore:
         parser.error("--shmem and --ddstore are mutually exclusive")
+    if args.primary_tolerance < 0:
+        parser.error("--primary-tolerance must be non-negative")
 
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -298,21 +377,26 @@ def main():
             finite_losses = [result["losses"] for result in results if result["losses"]]
             if not finite_losses:
                 raise RuntimeError("No screen-stage trial completed with finite losses")
+            metric_names = PRIMARY_METRICS + AUXILIARY_METRICS
             scales = {
                 name: max(
-                    statistics.median(loss[name] for loss in finite_losses),
+                    statistics.median(
+                        loss[name] for loss in finite_losses if name in loss
+                    ),
                     1.0e-12,
                 )
-                for name in ("Energy", "Forces", "Hessian")
+                for name in metric_names
+                if any(name in loss for loss in finite_losses)
             }
             (output_dir / "objective_scales.json").write_text(
                 json.dumps(scales, indent=4) + "\n"
             )
-        for result in results:
-            result["score"] = normalized_score(result["losses"], scales)
-        results.sort(key=lambda result: result["score"])
+        tolerance = float(stage.get("primary_tolerance", args.primary_tolerance))
+        rank_with_auxiliary_tiebreakers(results, scales, tolerance)
         _write_results(output_dir / f"{stage['name']}-results.csv", results)
-        successful = [result for result in results if math.isfinite(result["score"])]
+        successful = [
+            result for result in results if math.isfinite(result["primary_score"])
+        ]
         if not successful:
             raise RuntimeError(f"No successful candidates in stage {stage['name']}")
         keep = min(int(stage["keep"]), len(successful))

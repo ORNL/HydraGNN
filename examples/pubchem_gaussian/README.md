@@ -40,12 +40,27 @@ Gaussian and a contiguous PyTorch tensor both use atom-major Cartesian order,
 directly to `(3N, 3N)`. Matrix element `[3*a + alpha, 3*b + beta]` then equals
 $\partial^2 E/(\partial R_{a\alpha}\partial R_{b\beta})$.
 
-The configuration trains a scalar additive formation-energy model. HydraGNN
-differentiates that energy once for force loss and again for Hessian loss. Batch
-size is one because dense Hessians vary with molecular size.
+The configuration trains a multitask model whose first head is the scalar,
+additive formation energy. HydraGNN differentiates that energy once for force
+loss and again for Hessian loss. Total molecular charge and spin multiplicity
+are graph-level conditioning inputs, rather than prediction targets.
 
-Each epoch's text log reports the energy, energy-per-atom, force, and (when
-enabled) Hessian train, validation, and test losses using the same named format.
+The auxiliary labels are per-atom Mulliken charges, dipole magnitude, sorted
+eigenvalues of the traceless quadrupole and polarizability tensors, HOMO/LUMO
+energies and their gap, rotational constants, and thermochemistry. Magnitudes
+and tensor eigenvalues are used instead of Cartesian components so invariant
+scalar heads do not learn an orientation-dependent target. Frequencies and
+normal modes should instead be derived from the predicted Hessian; IR and Raman
+intensities require dipole and polarizability derivatives, respectively, and
+INS intensities require the normal modes plus neutron-scattering weights. None
+of these spectra is trained as an independent unconstrained head. Labels are
+read only from the final frequency calculation; records missing any configured
+label are skipped with a warning. Batch size is one because dense Hessians vary
+with molecular size.
+
+Each epoch's text log reports energy, energy-per-atom, force, Hessian, and all
+configured auxiliary train, validation, and test losses using the same named
+format.
 
 ## Hyperparameter optimization
 
@@ -103,13 +118,18 @@ All stages reuse one processed dataset and deterministic nested subsets; graph
 records are not copied per trial. Validation and test subsets remain fixed at
 the sizes in the schedule.
 
-The screen-stage median of each raw validation metric defines fixed energy,
-force, and Hessian scales. Candidates are ranked by the mean of these three
-dimensionless losses, preventing either physical units or sampled training
-weights from directly rescaling the selection objective. Each trial writes its
-configuration, log, and result separately. Existing result files are reused on
-restart, and every stage writes a CSV ranking; `finalists.json` contains the
-last promoted configurations.
+The screen-stage median of each raw validation metric defines fixed scales.
+The mean normalized energy, force, and Hessian loss identifies the primary
+anchor model. A candidate enters the comparable cohort only when each of its
+three primary losses is within the stage's `primary_tolerance` of that anchor;
+the default schedule uses 2% initially and 1% in the last two stages. Auxiliary
+losses rank models only within this cohort and can never compensate for a model
+outside all three primary error gates. Remaining promotion slots are filled by
+primary score. The CLI `--primary-tolerance` supplies the default for schedules
+that do not set it. Each trial writes its configuration, log, and result
+separately. Existing result files are reused on restart, and every stage writes
+a CSV ranking with primary score, auxiliary score, and comparability status;
+`finalists.json` contains the last promoted configurations.
 
 The launcher defaults to 16 allocated nodes, four nodes per trial, and eight DDP
 ranks (one per GPU) on every node. It therefore trains four configurations

@@ -613,9 +613,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(
-                equivariant_attn_num_hidden_layers
-            ),
+            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -679,9 +677,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(
-                equivariant_attn_num_hidden_layers
-            ),
+            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -754,9 +750,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(
-                equivariant_attn_num_hidden_layers
-            ),
+            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -802,9 +796,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(
-                equivariant_attn_num_hidden_layers
-            ),
+            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -862,9 +854,7 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(
-                equivariant_attn_num_hidden_layers
-            ),
+            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -1046,9 +1036,8 @@ def create_model(
                         "data.pos must require gradients for force/Hessian prediction"
                     )
 
-                assert (
-                    self.num_heads == 1
-                ), "Force predictions require exactly one head."
+                if self.num_heads < 1:
+                    raise ValueError("Force prediction requires an energy head")
 
                 # Support both node and graph heads; enforce sum pooling for graph heads
                 if self.head_type[0] == "node":
@@ -1185,6 +1174,48 @@ def create_model(
                     hessian_loss = zero
                 if hessian_loss_weight > 0:
                     tasks_loss.append(hessian_loss)
+
+                # Remaining heads are ordinary multitask targets. The first
+                # configured head is reserved for the differentiable energy.
+                if self.num_heads > 1:
+                    if not isinstance(pred, (list, tuple)):
+                        raise ValueError(
+                            "Multitask interatomic potentials require list-like model outputs"
+                        )
+                    if not hasattr(data, "y_loc"):
+                        raise ValueError(
+                            "Multitask interatomic potentials require batched y_loc metadata"
+                        )
+                    sample_sizes = data.y_loc[:, -1]
+                    sample_starts = torch.cumsum(sample_sizes, dim=0) - sample_sizes
+                    for head_index in range(1, self.num_heads):
+                        indices = []
+                        for sample_index in range(data.y_loc.shape[0]):
+                            start = (
+                                sample_starts[sample_index]
+                                + data.y_loc[sample_index, head_index]
+                            )
+                            end = (
+                                sample_starts[sample_index]
+                                + data.y_loc[sample_index, head_index + 1]
+                            )
+                            indices.append(
+                                torch.arange(start, end, device=data.y.device)
+                            )
+                        target = data.y[torch.cat(indices)].reshape(
+                            pred[head_index].shape
+                        )
+                        prediction = pred[head_index]
+                        mask = torch.isfinite(target)
+                        auxiliary_loss = (
+                            self.loss_function(prediction[mask], target[mask])
+                            if bool(mask.any())
+                            else zero
+                        )
+                        tasks_loss.append(auxiliary_loss)
+                        tot_loss = (
+                            tot_loss + auxiliary_loss * self.loss_weights[head_index]
+                        )
 
                 return tot_loss, tasks_loss
 

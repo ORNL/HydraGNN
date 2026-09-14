@@ -31,7 +31,7 @@
                 }
             },
             "task_weights": [
-                1.0
+                1.0, 1.0, 0.1, 0.01, 0.0001, 1.0, 0.1, 0.0001
             ]
         },
         "Training": {
@@ -63,6 +63,16 @@
                 "role": "position",
                 "level": "node",
                 "dim": 3
+            },
+            {
+                "name": "total_charge",
+                "level": "graph",
+                "dim": 1
+            },
+            {
+                "name": "spin_multiplicity",
+                "level": "graph",
+                "dim": 1
             }
         ],
         "outputs": [
@@ -70,6 +80,41 @@
                 "name": "energy",
                 "level": "graph",
                 "dim": 1
+            },
+            {
+                "name": "mulliken_charges",
+                "level": "node",
+                "dim": 1
+            },
+            {
+                "name": "dipole_magnitude",
+                "level": "graph",
+                "dim": 1
+            },
+            {
+                "name": "quadrupole_eigenvalues",
+                "level": "graph",
+                "dim": 3
+            },
+            {
+                "name": "polarizability_eigenvalues",
+                "level": "graph",
+                "dim": 3
+            },
+            {
+                "name": "frontier_orbital_energies",
+                "level": "graph",
+                "dim": 3
+            },
+            {
+                "name": "rotational_constants",
+                "level": "graph",
+                "dim": 3
+            },
+            {
+                "name": "thermochemistry",
+                "level": "graph",
+                "dim": 8
             }
         ]
     }

@@ -17,11 +17,13 @@ from hydragnn.models.create import compute_forces_and_hessian
 
 from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
     configure_trial,
+    validation_losses,
     validation_objective,
 )
 from examples.pubchem_gaussian.pubchem_gaussian_multistage_hpo import (
     _command,
     normalized_score,
+    rank_with_auxiliary_tiebreakers,
     sample_candidates,
 )
 
@@ -119,6 +121,27 @@ def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     assert validation_objective(log_path) == pytest.approx(-5.0)
 
 
+def test_pubchem_hpo_collects_auxiliary_losses_from_latest_epoch(tmp_path):
+    log_path = tmp_path / "trial.log"
+    log_path.write_text(
+        "Energy Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "Forces Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "Hessian Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "dipole_magnitude Train Loss: 9, Val Loss: 9, Test Loss: 9\n"
+        "Energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
+        "Forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
+        "Hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
+        "dipole_magnitude Train Loss: 1, Val Loss: 0.5, Test Loss: 2\n"
+    )
+
+    assert validation_losses(log_path) == {
+        "Energy": 2.0,
+        "Forces": 5.0,
+        "Hessian": 8.0,
+        "dipole_magnitude": 0.5,
+    }
+
+
 def test_pubchem_multistage_candidates_are_balanced_and_reproducible():
     first = sample_candidates(16, seed=7)
     second = sample_candidates(16, seed=7)
@@ -136,6 +159,40 @@ def test_pubchem_multistage_score_uses_fixed_metric_scales():
     scales = {"Energy": 1.0, "Forces": 5.0, "Hessian": 20.0}
 
     assert normalized_score(losses, scales) == pytest.approx(2.0)
+
+
+def test_pubchem_multistage_uses_auxiliaries_only_inside_primary_tolerance():
+    def result(identifier, primary, auxiliary):
+        return {
+            "id": identifier,
+            "losses": {
+                "Energy": primary[0],
+                "Forces": primary[1],
+                "Hessian": primary[2],
+                "dipole_magnitude": auxiliary,
+            },
+        }
+
+    results = [
+        result("primary-anchor", (1.0, 1.0, 1.0), 10.0),
+        result("comparable-better-aux", (1.01, 1.01, 1.01), 1.0),
+        result("outside-great-aux", (1.03, 1.0, 1.0), 0.0),
+    ]
+    scales = {
+        "Energy": 1.0,
+        "Forces": 1.0,
+        "Hessian": 1.0,
+        "dipole_magnitude": 1.0,
+    }
+
+    ranked = rank_with_auxiliary_tiebreakers(results, scales, 0.02)
+
+    assert [entry["id"] for entry in ranked] == [
+        "comparable-better-aux",
+        "primary-anchor",
+        "outside-great-aux",
+    ]
+    assert [entry["primary_comparable"] for entry in ranked] == [True, True, False]
 
 
 def test_pubchem_multistage_launches_each_slurm_trial_with_multinode_ddp(

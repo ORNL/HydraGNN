@@ -20,11 +20,10 @@ import re
 import subprocess
 import sys
 
-
 EXAMPLE_DIR = Path(__file__).resolve().parent
 BASE_CONFIG_PATH = EXAMPLE_DIR / "pubchem_gaussian.json"
 LOSS_PATTERN = re.compile(
-    r"^(?:\d+:\s*)?(Energy|Forces|Hessian) Train Loss: "
+    r"^(?:\d+:\s*)?(.+?) Train Loss: "
     r"[-+\d.eE]+, Val Loss: ([-+\d.eE]+), Test Loss: [-+\d.eE]+$"
 )
 
@@ -86,14 +85,13 @@ def validation_losses(log_path):
         match = LOSS_PATTERN.match(line.strip())
         if match is None:
             continue
-        current[match.group(1)] = float(match.group(2))
-        if match.group(1) == "Hessian" and set(current) == {
-            "Energy",
-            "Forces",
-            "Hessian",
-        }:
-            latest = current
+        if match.group(1) == "Energy" and "Energy" in current:
+            if {"Energy", "Forces", "Hessian"} <= set(current):
+                latest = current
             current = {}
+        current[match.group(1)] = float(match.group(2))
+    if {"Energy", "Forces", "Hessian"} <= set(current):
+        latest = current
     return latest
 
 
@@ -180,9 +178,7 @@ def build_problem(mpnn_types):
     problem.add_hyperparameter([64, 128, 256, 512], "hidden_dim")
     problem.add_hyperparameter([1, 2, 4, 8], "global_attn_heads")
     problem.add_hyperparameter((1, 4), "equivariant_attn_num_hidden_layers")
-    problem.add_hyperparameter(
-        [1, 2, 4], "equivariant_attn_feedforward_multiplier"
-    )
+    problem.add_hyperparameter([1, 2, 4], "equivariant_attn_feedforward_multiplier")
     return problem
 
 
