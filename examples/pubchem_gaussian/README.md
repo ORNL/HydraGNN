@@ -85,11 +85,14 @@ driver and its checked-in stage schedule:
 sbatch examples/pubchem_gaussian/job-multistage-hpo-frontier.sh
 ```
 
-By default the job first preprocesses up to 3,000,000 molecules across one task
-per allocated node. Set `PREPROCESS_DATASET=0` when resuming with an already
-complete shared cache so that preprocessing is not repeated. The Frontier
-launcher defaults to the ADIOS2 backend. Set `DATASET_FORMAT=pickle` to use the
-pickle backend instead. ADIOS2 reads can additionally use DDStore with
+By default the job first preprocesses up to 3,000,000 molecules across 56 CPU
+MPI ranks per allocated Frontier node, one per physical CPU core. Outer
+archives are divided among ranks, and completed molecule directories are
+installed atomically so extraction can resume after a wall-time interruption.
+Set `PREPROCESS_TASKS_PER_NODE` to override the CPU rank count, or set
+`PREPROCESS_DATASET=0` when resuming with an already complete shared cache. The
+Frontier launcher defaults to the ADIOS2 backend. Set `DATASET_FORMAT=pickle`
+to use the pickle backend instead. ADIOS2 reads can additionally use DDStore with
 `USE_DDSTORE=1` and an optional `DDSTORE_WIDTH`, or node-local shared memory
 with `USE_SHMEM=1`; DDStore and shared memory are mutually exclusive.
 

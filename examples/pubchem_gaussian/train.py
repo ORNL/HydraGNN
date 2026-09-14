@@ -30,10 +30,10 @@ import torch.distributed as dist
 from torch_cluster import radius_graph
 from torch_geometric.data import Data
 from torch_geometric.transforms import Distance
+from torch_geometric.utils import degree
 from torch.utils.data import Subset
 
 import hydragnn
-from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
@@ -233,9 +233,35 @@ def parse_gaussian_log(path):
     return records
 
 
-def extract_records(archive_dir, output_dir, limit):
+def _allocate_archive_limits(available_counts, limit):
+    archive_limits = {}
+    remaining = limit
+    for archive_index in sorted(available_counts):
+        archive_limits[archive_index] = min(
+            available_counts[archive_index], remaining
+        )
+        remaining -= archive_limits[archive_index]
+    return archive_limits, remaining
+
+
+def extract_records(archive_dir, output_dir, limit, comm, rank, world_size):
     output_dir.mkdir(parents=True, exist_ok=True)
-    existing = {path.name for path in output_dir.iterdir() if path.is_dir()}
+    stale_directories = None
+    if rank == 0:
+        stale_directories = sorted(output_dir.parent.glob(".extract-rank-*"))
+    stale_directories = comm.bcast(stale_directories, root=0)
+    for stale_directory in stale_directories[rank::world_size]:
+        shutil.rmtree(stale_directory)
+    comm.Barrier()
+
+    existing = None
+    if rank == 0:
+        existing = {
+            path.name
+            for path in output_dir.iterdir()
+            if path.is_dir() and path.name.isdigit()
+        }
+    existing = comm.bcast(existing, root=0)
     remaining = max(0, limit - len(existing))
     if remaining == 0:
         return
@@ -246,38 +272,92 @@ def extract_records(archive_dir, output_dir, limit):
     if not archives:
         raise FileNotFoundError(f"No .tar.zst archives found in {archive_dir}")
 
-    for archive in archives:
-        if remaining == 0:
-            break
+    local_archives = list(enumerate(archives))[rank::world_size]
+    local_members = {}
+    for archive_index, archive in local_archives:
         listing = subprocess.run(
             ["tar", "--zstd", "-tf", str(archive)],
             check=True,
             stdout=subprocess.PIPE,
             universal_newlines=True,
         ).stdout.splitlines()
-        members = [name for name in listing if name.endswith(".tar")]
-        members = [name for name in members if Path(name).stem not in existing][
-            :remaining
+        local_members[archive_index] = [
+            name
+            for name in listing
+            if name.endswith(".tar") and Path(name).stem not in existing
         ]
+
+    available_counts = {}
+    for rank_counts in comm.allgather(
+        {index: len(members) for index, members in local_members.items()}
+    ):
+        available_counts.update(rank_counts)
+    archive_limits, unavailable = _allocate_archive_limits(
+        available_counts, remaining
+    )
+    if unavailable:
+        raise RuntimeError(
+            f"Only found {limit - unavailable} of {limit} requested records"
+        )
+
+    local_target = sum(archive_limits[index] for index, _ in local_archives)
+    log(
+        f"Extracting {local_target} records from {len(local_archives)} archives",
+        rank=None,
+    )
+    extracted = 0
+    for archive_index, archive in local_archives:
+        members = local_members[archive_index][: archive_limits[archive_index]]
         if not members:
             continue
 
-        with tempfile.TemporaryDirectory(dir=output_dir) as temporary_dir:
+        with tempfile.TemporaryDirectory(
+            dir=output_dir.parent, prefix=f".extract-rank-{rank}-"
+        ) as temporary_dir:
             subprocess.run(
                 ["tar", "--zstd", "-xf", str(archive), "-C", temporary_dir, *members],
                 check=True,
             )
             for member in members:
                 nested_archive = Path(temporary_dir) / member
+                target = output_dir / nested_archive.stem
+                if target.exists():
+                    continue
+                unpack_dir = Path(temporary_dir) / f"unpack-{nested_archive.stem}"
+                unpack_dir.mkdir()
                 with tarfile.open(nested_archive) as nested:
-                    nested.extractall(output_dir)
-                existing.add(nested_archive.stem)
-                remaining -= 1
-
-    if remaining:
-        raise RuntimeError(
-            f"Only extracted {limit - remaining} of {limit} requested records"
+                    nested.extractall(unpack_dir)
+                source = unpack_dir / nested_archive.stem
+                if not source.is_dir():
+                    raise RuntimeError(
+                        f"{nested_archive} did not contain {nested_archive.stem}/"
+                    )
+                source.rename(target)
+                extracted += 1
+        log(
+            f"Extracted {extracted} of {local_target} records on rank {rank}",
+            rank=None,
         )
+
+
+def gather_degree_mpi(dataset, comm):
+    local_max_degree = 0
+    for data in dataset:
+        node_degree = degree(
+            data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long
+        )
+        if node_degree.numel():
+            local_max_degree = max(local_max_degree, int(node_degree.max()))
+    max_degree = comm.allreduce(local_max_degree, op=MPI.MAX)
+    local_degree = torch.zeros(max_degree + 1, dtype=torch.long)
+    for data in dataset:
+        node_degree = degree(
+            data.edge_index[1], num_nodes=data.num_nodes, dtype=torch.long
+        )
+        local_degree += torch.bincount(
+            node_degree, minlength=local_degree.numel()
+        )
+    return comm.allreduce(local_degree.numpy(), op=MPI.SUM)
 
 
 class PubChemGaussianDataset(AbstractBaseDataset):
@@ -387,15 +467,26 @@ class PubChemGaussianDataset(AbstractBaseDataset):
 
 
 def preprocess(config, num_molecules, comm, rank, world_size, dataset_format):
-    if rank == 0:
-        extract_records(RAW_ARCHIVE_DIR, EXTRACTED_DIR, num_molecules)
+    extract_records(
+        RAW_ARCHIVE_DIR, EXTRACTED_DIR, num_molecules, comm, rank, world_size
+    )
     comm.Barrier()
+    completed = None
+    if rank == 0:
+        completed = sum(
+            path.is_dir() and path.name.isdigit() for path in EXTRACTED_DIR.iterdir()
+        )
+    completed = comm.bcast(completed, root=0)
+    if completed < num_molecules:
+        raise RuntimeError(
+            f"Only extracted {completed} of {num_molecules} requested records"
+        )
 
     dataset = PubChemGaussianDataset(EXTRACTED_DIR, config, rank, world_size)
     trainset, valset, testset = split_dataset(
         dataset=dataset, perc_train=0.8, stratify_splitting=False
     )
-    degree = gather_deg(trainset)
+    degree = gather_degree_mpi(trainset, comm)
 
     if dataset_format == "adios":
         if rank == 0 and ADIOS_PATH.exists():
@@ -504,8 +595,9 @@ def main():
     if int(os.getenv("HYDRAGNN_GRAPH_PARALLEL_GROUP_SIZE", "1")) > 1:
         raise ValueError("PubChem Hessian training does not support graph parallelism")
 
-    world_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
+    world_size = comm.Get_size()
+    rank = comm.Get_rank()
     logging.basicConfig(
         level=logging.INFO,
         format="%%(levelname)s (rank %d): %%(message)s" % rank,
@@ -516,8 +608,11 @@ def main():
         preprocess(
             config, args.num_molecules, comm, rank, world_size, args.dataset_format
         )
-        dist.destroy_process_group()
         return
+
+    ddp_world_size, ddp_rank = hydragnn.utils.distributed.setup_ddp()
+    if (ddp_world_size, ddp_rank) != (world_size, rank):
+        raise RuntimeError("MPI and torch.distributed rank assignments differ")
 
     trainset, valset, testset = load_datasets(
         config["Variables"],

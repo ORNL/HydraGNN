@@ -201,6 +201,36 @@ def test_pubchem_deterministic_subset_is_nested():
     assert small.indices == large.indices[:10]
 
 
+def test_pubchem_archive_limits_preserve_global_order():
+    example = _load_example_module()
+
+    limits, unavailable = example._allocate_archive_limits({2: 4, 0: 3, 1: 2}, 6)
+
+    assert limits == {0: 3, 1: 2, 2: 1}
+    assert unavailable == 0
+
+
+def test_pubchem_archive_limits_report_shortfall():
+    example = _load_example_module()
+
+    limits, unavailable = example._allocate_archive_limits({0: 2, 1: 1}, 5)
+
+    assert limits == {0: 2, 1: 1}
+    assert unavailable == 2
+
+
+def test_pubchem_mpi_degree_histogram_does_not_require_torch_distributed():
+    example = _load_example_module()
+    graph = example.Data(
+        edge_index=torch.tensor([[0, 1, 0, 2], [1, 0, 2, 0]]),
+        num_nodes=3,
+    )
+
+    histogram = example.gather_degree_mpi([graph], example.MPI.COMM_SELF)
+
+    assert histogram.tolist() == [0, 2, 1]
+
+
 @pytest.mark.mpi_skip()
 def test_force_and_hessian_autograd_identities_and_backpropagation():
     positions = torch.tensor([[0.2, -0.3, 0.5], [0.7, 0.1, -0.4]], requires_grad=True)

@@ -39,8 +39,12 @@ if [[ "${USE_SHMEM}" == "1" ]]; then
     DATASET_OPTIONS+=(--shmem)
 fi
 if [[ "${PREPROCESS_DATASET}" == "1" ]]; then
-    srun -N "${SLURM_JOB_NUM_NODES}" -n "${SLURM_JOB_NUM_NODES}" \
-        --ntasks-per-node=1 \
+    PREPROCESS_TASKS_PER_NODE="${PREPROCESS_TASKS_PER_NODE:-56}"
+    export OMP_NUM_THREADS=1
+    srun -N "${SLURM_JOB_NUM_NODES}" \
+        -n "$((SLURM_JOB_NUM_NODES * PREPROCESS_TASKS_PER_NODE))" \
+        --ntasks-per-node="${PREPROCESS_TASKS_PER_NODE}" --cpus-per-task=1 \
+        --cpu-bind=cores \
         python -u "${HYDRAGNN_ROOT}/examples/pubchem_gaussian/train.py" \
         --preonly --num-molecules 3000000 "--${DATASET_FORMAT}"
 fi
