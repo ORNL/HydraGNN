@@ -17,11 +17,32 @@ export HYDRAGNN_VALTEST=1
 
 # Set PREPROCESS_DATASET=0 when resuming from an already complete 3M cache.
 PREPROCESS_DATASET="${PREPROCESS_DATASET:-1}"
+DATASET_FORMAT="${DATASET_FORMAT:-adios}"
+if [[ "${DATASET_FORMAT}" != "adios" && "${DATASET_FORMAT}" != "pickle" ]]; then
+    echo "DATASET_FORMAT must be adios or pickle" >&2
+    exit 2
+fi
+USE_DDSTORE="${USE_DDSTORE:-0}"
+USE_SHMEM="${USE_SHMEM:-0}"
+if [[ "${USE_DDSTORE}" == "1" && "${USE_SHMEM}" == "1" ]]; then
+    echo "USE_DDSTORE and USE_SHMEM cannot both be enabled" >&2
+    exit 2
+fi
+DATASET_OPTIONS=("--${DATASET_FORMAT}")
+if [[ "${USE_DDSTORE}" == "1" ]]; then
+    DATASET_OPTIONS+=(--ddstore)
+    if [[ -n "${DDSTORE_WIDTH:-}" ]]; then
+        DATASET_OPTIONS+=("--ddstore-width=${DDSTORE_WIDTH}")
+    fi
+fi
+if [[ "${USE_SHMEM}" == "1" ]]; then
+    DATASET_OPTIONS+=(--shmem)
+fi
 if [[ "${PREPROCESS_DATASET}" == "1" ]]; then
     srun -N "${SLURM_JOB_NUM_NODES}" -n "${SLURM_JOB_NUM_NODES}" \
         --ntasks-per-node=1 \
         python -u "${HYDRAGNN_ROOT}/examples/pubchem_gaussian/train.py" \
-        --preonly --num-molecules 3000000
+        --preonly --num-molecules 3000000 "--${DATASET_FORMAT}"
 fi
 
 # Each candidate is trained with DDP across four nodes and all eight GPUs per
@@ -41,5 +62,6 @@ python -u \
     --concurrency "${CONCURRENCY}" \
     --nodes-per-trial "${NNODES_PER_TRIAL}" \
     --tasks-per-node "${TASKS_PER_NODE}" \
+    "${DATASET_OPTIONS[@]}" \
     --schedule "${HYDRAGNN_ROOT}/examples/pubchem_gaussian/pubchem_hpo_stages.json" \
     --output-dir "pubchem-multistage-hpo-${SLURM_JOB_ID}"

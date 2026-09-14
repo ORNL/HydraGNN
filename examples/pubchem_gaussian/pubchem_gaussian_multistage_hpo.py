@@ -102,6 +102,10 @@ def _command(
     subset_seed,
     nodes_per_trial,
     tasks_per_node,
+    dataset_format="adios",
+    ddstore=False,
+    ddstore_width=None,
+    shmem=False,
 ):
     command = []
     if os.environ.get("SLURM_JOB_ID"):
@@ -133,8 +137,15 @@ def _command(
             f"--num-val-samples={stage['val_samples']}",
             f"--num-test-samples={stage['test_samples']}",
             f"--subset-seed={subset_seed}",
+            f"--{dataset_format}",
         ]
     )
+    if ddstore:
+        command.append("--ddstore")
+    if ddstore_width is not None:
+        command.append(f"--ddstore-width={ddstore_width}")
+    if shmem:
+        command.append("--shmem")
     return command
 
 
@@ -146,6 +157,10 @@ def run_candidate(
     subset_seed,
     nodes_per_trial,
     tasks_per_node,
+    dataset_format,
+    ddstore,
+    ddstore_width,
+    shmem,
 ):
     """Run one candidate as an exclusive multi-node DDP Slurm step."""
     trial_dir = output_dir / stage["name"] / candidate["id"]
@@ -165,6 +180,10 @@ def run_candidate(
         subset_seed,
         nodes_per_trial,
         tasks_per_node,
+        dataset_format,
+        ddstore,
+        ddstore_width,
+        shmem,
     )
     return_code = -1
     try:
@@ -222,12 +241,25 @@ def main():
     parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--nodes-per-trial", type=int, default=1)
     parser.add_argument("--tasks-per-node", type=int, default=1)
+    parser.add_argument("--ddstore", action="store_true")
+    parser.add_argument("--ddstore-width", type=int)
+    parser.add_argument("--shmem", action="store_true")
+    format_group = parser.add_mutually_exclusive_group()
+    format_group.add_argument(
+        "--adios", action="store_const", dest="dataset_format", const="adios"
+    )
+    format_group.add_argument(
+        "--pickle", action="store_const", dest="dataset_format", const="pickle"
+    )
+    parser.set_defaults(dataset_format="adios")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output-dir", default="pubchem-multistage-hpo")
     parser.add_argument("--schedule", help="Optional JSON stage schedule")
     args = parser.parse_args()
     if args.nodes_per_trial <= 0 or args.tasks_per_node <= 0:
         parser.error("--nodes-per-trial and --tasks-per-node must be positive")
+    if args.shmem and args.ddstore:
+        parser.error("--shmem and --ddstore are mutually exclusive")
 
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -253,6 +285,10 @@ def main():
                     args.seed,
                     args.nodes_per_trial,
                     args.tasks_per_node,
+                    args.dataset_format,
+                    args.ddstore,
+                    args.ddstore_width,
+                    args.shmem,
                 )
                 for candidate in candidates
             ]

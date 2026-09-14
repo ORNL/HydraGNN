@@ -165,6 +165,31 @@ def test_pubchem_multistage_launches_each_slurm_trial_with_multinode_ddp(
         "--gpu-bind=closest",
         "--kill-on-bad-exit=1",
     ]
+    assert command[-1] == "--adios"
+
+
+def test_pubchem_multistage_propagates_adios_cache_options(monkeypatch, tmp_path):
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    stage = {
+        "epochs": 3,
+        "train_samples": 50_000,
+        "val_samples": 10_000,
+        "test_samples": 10_000,
+    }
+
+    command = _command(
+        tmp_path / "config.json",
+        "trial",
+        stage,
+        42,
+        1,
+        1,
+        dataset_format="adios",
+        ddstore=True,
+        ddstore_width=32,
+    )
+
+    assert command[-3:] == ["--adios", "--ddstore", "--ddstore-width=32"]
 
 
 def test_pubchem_deterministic_subset_is_nested():

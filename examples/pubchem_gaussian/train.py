@@ -36,6 +36,7 @@ import hydragnn
 from hydragnn.preprocess.graph_samples_checks_and_updates import gather_deg
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
+from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
 from hydragnn.utils.datasets.pickledataset import (
     SimplePickleDataset,
     SimplePickleWriter,
@@ -49,6 +50,7 @@ RAW_ARCHIVE_DIR = EXAMPLE_DIR / "dataset" / "raw" / "data"
 EXTRACTED_DIR = EXAMPLE_DIR / "dataset" / "raw" / "extracted"
 ATOMIC_REFERENCE_ARCHIVE = EXAMPLE_DIR / "dataset" / "raw" / "atomization.tar.gz"
 PICKLE_DIR = EXAMPLE_DIR / "dataset" / "pubchem_gaussian.pickle"
+ADIOS_PATH = EXAMPLE_DIR / "dataset" / "pubchem_gaussian.bp"
 CACHE_VERSION = "autograd-formation-energy-hessian-v4"
 SCF_ENERGY_PATTERN = re.compile(
     r"SCF Done:\s+E\([^)]+\)\s*=\s*([-+]?\d+(?:\.\d*)?(?:[DEde][-+]?\d+)?)"
@@ -384,7 +386,7 @@ class PubChemGaussianDataset(AbstractBaseDataset):
         return self.dataset[index]
 
 
-def preprocess(config, num_molecules, comm, rank, world_size):
+def preprocess(config, num_molecules, comm, rank, world_size, dataset_format):
     if rank == 0:
         extract_records(RAW_ARCHIVE_DIR, EXTRACTED_DIR, num_molecules)
     comm.Barrier()
@@ -395,22 +397,50 @@ def preprocess(config, num_molecules, comm, rank, world_size):
     )
     degree = gather_deg(trainset)
 
-    if rank == 0 and PICKLE_DIR.exists():
-        shutil.rmtree(PICKLE_DIR)
-    comm.Barrier()
-    attributes = {"pna_deg": degree, "cache_version": CACHE_VERSION}
-    SimplePickleWriter(
-        trainset, PICKLE_DIR, "trainset", use_subdir=True, attrs=attributes
-    )
-    SimplePickleWriter(valset, PICKLE_DIR, "valset", use_subdir=True)
-    SimplePickleWriter(testset, PICKLE_DIR, "testset", use_subdir=True)
+    if dataset_format == "adios":
+        if rank == 0 and ADIOS_PATH.exists():
+            shutil.rmtree(ADIOS_PATH)
+        comm.Barrier()
+        writer = AdiosWriter(str(ADIOS_PATH), comm)
+        writer.add("trainset", trainset)
+        writer.add("valset", valset)
+        writer.add("testset", testset)
+        writer.add_global("pna_deg", degree)
+        writer.add_global("cache_version", CACHE_VERSION)
+        writer.save()
+        output_path = ADIOS_PATH
+    else:
+        if rank == 0 and PICKLE_DIR.exists():
+            shutil.rmtree(PICKLE_DIR)
+        comm.Barrier()
+        attributes = {"pna_deg": degree, "cache_version": CACHE_VERSION}
+        SimplePickleWriter(
+            trainset, PICKLE_DIR, "trainset", use_subdir=True, attrs=attributes
+        )
+        SimplePickleWriter(valset, PICKLE_DIR, "valset", use_subdir=True)
+        SimplePickleWriter(testset, PICKLE_DIR, "testset", use_subdir=True)
+        output_path = PICKLE_DIR
     log(
-        f"Preprocessed {sum(comm.allgather(len(dataset)))} molecules into {PICKLE_DIR}",
+        f"Preprocessed {sum(comm.allgather(len(dataset)))} molecules into {output_path}",
         rank=0,
     )
 
 
-def load_datasets(var_config):
+def load_datasets(var_config, dataset_format, comm, ddstore, ddstore_width, shmem):
+    if dataset_format == "adios":
+        if shmem and ddstore:
+            raise ValueError("Cannot use both --shmem and --ddstore")
+        options = {
+            "preload": False,
+            "shmem": shmem,
+            "ddstore": ddstore,
+            "ddstore_width": ddstore_width,
+        }
+        return tuple(
+            AdiosDataset(str(ADIOS_PATH), label, comm, **options, var_config=var_config)
+            for label in ("trainset", "valset", "testset")
+        )
+
     datasets = tuple(
         SimplePickleDataset(PICKLE_DIR, label, var_config=var_config)
         for label in ("trainset", "valset", "testset")
@@ -448,6 +478,17 @@ def main():
     parser.add_argument("--num-test-samples", type=int)
     parser.add_argument("--subset-seed", type=int, default=0)
     parser.add_argument("--log", default="pubchem_gaussian")
+    parser.add_argument("--ddstore", action="store_true", help="use DDStore")
+    parser.add_argument("--ddstore-width", type=int)
+    parser.add_argument("--shmem", action="store_true", help="use shared memory")
+    format_group = parser.add_mutually_exclusive_group()
+    format_group.add_argument(
+        "--adios", action="store_const", dest="dataset_format", const="adios"
+    )
+    format_group.add_argument(
+        "--pickle", action="store_const", dest="dataset_format", const="pickle"
+    )
+    parser.set_defaults(dataset_format="adios")
     args = parser.parse_args()
 
     with open(EXAMPLE_DIR / args.inputfile) as config_file:
@@ -472,19 +513,24 @@ def main():
     hydragnn.utils.print.setup_log(args.log)
 
     if args.preonly:
-        preprocess(config, args.num_molecules, comm, rank, world_size)
+        preprocess(
+            config, args.num_molecules, comm, rank, world_size, args.dataset_format
+        )
         dist.destroy_process_group()
         return
 
-    trainset, valset, testset = load_datasets(config["Variables"])
+    trainset, valset, testset = load_datasets(
+        config["Variables"],
+        args.dataset_format,
+        comm,
+        args.ddstore,
+        args.ddstore_width,
+        args.shmem,
+    )
     pna_deg = trainset.pna_deg
-    trainset = deterministic_subset(
-        trainset, args.num_train_samples, args.subset_seed
-    )
+    trainset = deterministic_subset(trainset, args.num_train_samples, args.subset_seed)
     valset = deterministic_subset(valset, args.num_val_samples, args.subset_seed + 1)
-    testset = deterministic_subset(
-        testset, args.num_test_samples, args.subset_seed + 2
-    )
+    testset = deterministic_subset(testset, args.num_test_samples, args.subset_seed + 2)
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,

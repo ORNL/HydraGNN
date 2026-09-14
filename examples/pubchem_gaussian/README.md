@@ -87,7 +87,11 @@ sbatch examples/pubchem_gaussian/job-multistage-hpo-frontier.sh
 
 By default the job first preprocesses up to 3,000,000 molecules across one task
 per allocated node. Set `PREPROCESS_DATASET=0` when resuming with an already
-complete shared cache so that preprocessing is not repeated.
+complete shared cache so that preprocessing is not repeated. The Frontier
+launcher defaults to the ADIOS2 backend. Set `DATASET_FORMAT=pickle` to use the
+pickle backend instead. ADIOS2 reads can additionally use DDStore with
+`USE_DDSTORE=1` and an optional `DDSTORE_WIDTH`, or node-local shared memory
+with `USE_SHMEM=1`; DDStore and shared memory are mutually exclusive.
 
 `pubchem_hpo_stages.json` screens 512 balanced candidates on 50,000 training
 samples, then promotes 128, 32, and 8 candidates through 300,000, 1,000,000,
@@ -116,7 +120,7 @@ embedding. The 118 categories cover atomic numbers 1 through 118; `min_value: 1`
 maps hydrogen to embedding index zero without reserving a category for atomic
 number zero.
 
-Preprocess 100 molecules into pickle datasets:
+Preprocess 100 molecules into the default ADIOS2 dataset:
 
 ```bash
 python train.py --preonly --num-molecules 100
@@ -128,6 +132,12 @@ Train using the preprocessed data:
 python train.py
 ```
 
+Use `--pickle` on both commands to select the pickle backend. The mutually
+exclusive `--adios` and `--pickle` flags follow the convention used by the
+other HydraGNN dataset examples; ADIOS2 is the default. Training also accepts
+`--ddstore`, `--ddstore-width`, and `--shmem` for the standard ADIOS2 caching
+options.
+
 Both commands support distributed execution through the same launcher and
 environment used by the other HydraGNN examples. The raw archives, extracted
-records, and generated pickle files are intentionally ignored by Git.
+records, and generated ADIOS2 or pickle files are intentionally ignored by Git.
