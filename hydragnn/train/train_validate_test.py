@@ -954,7 +954,9 @@ def test(
 
     if num_tasks is None:
         if compute_grad_energy:
-            num_tasks = 4 if model.module.hessian_weight > 0 else 3
+            num_tasks = (4 if model.module.hessian_weight > 0 else 3) + max(
+                model.module.num_heads - 1, 0
+            )
         else:
             num_tasks = model.module.num_heads
 
@@ -1102,18 +1104,31 @@ def test(
                         graph_energy_peratom_pred = graph_energy_pred / ncount
                         graph_energy_peratom_true = graph_energy_true / ncount
 
+                        hessian_enabled = model.module.hessian_weight > 0
                         forces_true = data.forces.float()
-                        forces_pred = torch.autograd.grad(
+                        forces_pred = -torch.autograd.grad(
                             graph_energy_pred,
                             data.pos,
                             grad_outputs=torch.ones_like(graph_energy_pred),
-                            retain_graph=graph_energy_pred.requires_grad,
-                            create_graph=False,
-                        )[0].float()
+                            retain_graph=hessian_enabled,
+                            create_graph=hessian_enabled,
+                        )[0]
+                        hessian_pred = None
+                        if hessian_enabled:
+                            hessian_rows = []
+                            for component in forces_pred.reshape(-1):
+                                force_gradient = torch.autograd.grad(
+                                    component,
+                                    data.pos,
+                                    retain_graph=True,
+                                    create_graph=False,
+                                )[0]
+                                hessian_rows.append(-force_gradient.reshape(-1))
+                            hessian_pred = torch.stack(hessian_rows)
+                        forces_pred = forces_pred.float()
                         assert (
                             forces_pred is not None
                         ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                        forces_pred = -forces_pred
                         forces_true = forces_true.flatten()
                         forces_pred = forces_pred.flatten()
                         true_values[0].append(graph_energy_true.reshape(-1, 1))
@@ -1124,6 +1139,54 @@ def test(
                             graph_energy_peratom_pred.reshape(-1, 1)
                         )
                         predicted_values[2].append(forces_pred.reshape(-1, 1))
+                        task_offset = 3
+                        if hessian_enabled:
+                            hessian_true = data.hessian.reshape(
+                                hessian_pred.shape
+                            ).float()
+                            hessian_mask = torch.isfinite(hessian_true)
+                            true_values[3].append(
+                                hessian_true[hessian_mask].reshape(-1, 1)
+                            )
+                            predicted_values[3].append(
+                                hessian_pred[hessian_mask].reshape(-1, 1)
+                            )
+                            task_offset = 4
+
+                        if model.module.num_heads > 1:
+                            if not isinstance(pred, (list, tuple)):
+                                raise ValueError(
+                                    "Multitask interatomic potentials require list-like model outputs"
+                                )
+                            sample_sizes = data.y_loc[:, -1]
+                            sample_starts = (
+                                torch.cumsum(sample_sizes, dim=0) - sample_sizes
+                            )
+                            for head_index in range(1, model.module.num_heads):
+                                indices = []
+                                for sample_index in range(data.y_loc.shape[0]):
+                                    start = (
+                                        sample_starts[sample_index]
+                                        + data.y_loc[sample_index, head_index]
+                                    )
+                                    end = (
+                                        sample_starts[sample_index]
+                                        + data.y_loc[sample_index, head_index + 1]
+                                    )
+                                    indices.append(
+                                        torch.arange(start, end, device=data.y.device)
+                                    )
+                                target = data.y[torch.cat(indices)].reshape(
+                                    pred[head_index].shape
+                                )
+                                mask = torch.isfinite(target)
+                                task_index = task_offset + head_index - 1
+                                true_values[task_index].append(
+                                    target[mask].reshape(-1, 1)
+                                )
+                                predicted_values[task_index].append(
+                                    pred[head_index][mask].reshape(-1, 1)
+                                )
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y

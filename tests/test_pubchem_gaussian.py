@@ -379,6 +379,23 @@ def test_force_and_hessian_autograd_identities_and_backpropagation():
 
 
 @pytest.mark.mpi_skip()
+def test_force_only_graph_is_retained_for_force_loss_backpropagation():
+    positions = torch.tensor([[0.2, -0.3, 0.5]], requires_grad=True)
+    stiffness = torch.nn.Parameter(torch.tensor(1.5))
+    energy = stiffness * positions.pow(4).sum()
+
+    forces, hessian = compute_forces_and_hessian(
+        energy, positions, compute_hessian=False, create_graph=True
+    )
+    force_loss = forces.square().sum()
+    force_loss.backward()
+
+    assert hessian is None
+    assert stiffness.grad is not None
+    assert stiffness.grad.abs() > 0
+
+
+@pytest.mark.mpi_skip()
 def test_atomic_reference_archive_uses_final_scf_energy(tmp_path):
     example = _load_example_module()
     archive_path = tmp_path / "atomization.tar.gz"

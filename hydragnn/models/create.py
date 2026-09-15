@@ -49,7 +49,9 @@ def compute_forces_and_hessian(
         energy,
         positions,
         grad_outputs=torch.ones_like(energy),
-        retain_graph=True,
+        # Force-loss backpropagation also needs the differentiated graph when
+        # create_graph=True; evaluation can release it when no Hessian follows.
+        retain_graph=create_graph or compute_hessian,
         create_graph=create_graph or compute_hessian,
     )[0]
     if not compute_hessian:
