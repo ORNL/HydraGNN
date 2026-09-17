@@ -125,9 +125,7 @@ class EquivariantTransformerLayer(torch.nn.Module):
                 ]
             )
             input_irreps = hidden_irreps
-        feedforward_layers.append(
-            o3.Linear(hidden_irreps, self.irreps, biases=False)
-        )
+        feedforward_layers.append(o3.Linear(hidden_irreps, self.irreps, biases=False))
         self.feedforward = torch.nn.Sequential(*feedforward_layers)
 
     def forward(

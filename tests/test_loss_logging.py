@@ -34,8 +34,7 @@ def test_named_task_loss_logging_preserves_output_names(monkeypatch):
     )
 
     assert messages == [
-        "energy Train Loss: 1.00000000, Val Loss: 3.00000000, "
-        "Test Loss: 5.00000000",
+        "energy Train Loss: 1.00000000, Val Loss: 3.00000000, " "Test Loss: 5.00000000",
         "band_gap Train Loss: 2.00000000, Val Loss: 4.00000000, "
         "Test Loss: 6.00000000",
     ]

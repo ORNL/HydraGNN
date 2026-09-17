@@ -89,7 +89,9 @@ def _last_labeled_floats(label, text, count):
     if not matches:
         raise ValueError(f"Gaussian property not found: {label}")
     number = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[DEde][-+]?\d+)?"
-    values = [float(value.replace("D", "E")) for value in re.findall(number, matches[-1])]
+    values = [
+        float(value.replace("D", "E")) for value in re.findall(number, matches[-1])
+    ]
     if len(values) != count:
         raise ValueError(f"Expected {count} values for {label}, found {len(values)}")
     return values
