@@ -286,6 +286,23 @@ def load_existing_model(
                     device=target_model.device,
                 )
 
+        # Ensure per-edge-type projectors (e.g. HeteroHEATStack.edge_lin_dict)
+        # exist before strict load: they are created lazily on first forward
+        # pass, so a freshly constructed model won't have these keys yet.
+        if hasattr(target_model, "_ensure_edge_projector"):
+            edge_lin_marker = ".edge_lin_dict."
+            for key, tensor in state_dict.items():
+                if edge_lin_marker not in key or not key.endswith(".weight"):
+                    continue
+                edge_type_key = key.split(edge_lin_marker, 1)[1][: -len(".weight")]
+                existing = getattr(target_model, "edge_lin_dict", None)
+                if existing is not None and edge_type_key in existing:
+                    continue
+                edge_attr_dim = tensor.shape[1]
+                target_model._ensure_edge_projector(
+                    edge_type_key, edge_attr_dim, target_model.device
+                )
+
         ## Load with FSDP
         use_fsdp = bool(int(os.getenv("HYDRAGNN_USE_FSDP", "0")))
         fsdp_version = int(os.getenv("HYDRAGNN_FSDP_VERSION", "1"))
