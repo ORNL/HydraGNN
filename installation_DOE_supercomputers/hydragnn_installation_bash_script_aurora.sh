@@ -489,6 +489,7 @@ pip_retry scipy pyyaml requests tqdm filelock psutil
 pip_retry networkx jinja2
 pip_retry tensorboard scikit-learn pytest
 pip_retry ase h5py lmdb pandas==2.3.3 pyarrow
+pip_retry pandapower==3.5.4
 
 # Keep numpy pinned and avoid it being bumped by scientific packages
 pip_retry "numpy==1.26.4"

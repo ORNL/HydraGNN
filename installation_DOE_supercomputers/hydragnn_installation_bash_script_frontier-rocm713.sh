@@ -236,6 +236,7 @@ pip_retry lmdb
 pip_retry h5py==3.14.0
 pip_retry pandas==2.3.3
 pip_retry pyarrow
+pip_retry pandapower==3.5.4
 # tensorflow and tensorflow_datasets are intentionally NOT installed for ROCm builds.
 # Both TF and ROCm PyTorch link their own LLVM; loading both in the same process
 # triggers: "LLVM ERROR: inconsistency in registered CommandLine options" (hard abort).
