@@ -622,6 +622,15 @@ if __name__ == "__main__":
         help="Override DomainLoss.ramp_epochs: epochs to linearly ramp from 0 to full weight (default 0).",
     )
     parser.add_argument(
+        "--eval_domain_penalties_only",
+        action="store_true",
+        help=(
+            "After loading the model/checkpoint, run a single validation pass with all "
+            "domain-loss penalty terms forced on (enabled=True, non-zero weights, no "
+            "warmup/ramp), log the resulting LossBreakdown line, and exit without training."
+        ),
+    )
+    parser.add_argument(
         "--nvme",
         action="store_true",
         help="Stage selected OPF case(s) onto node-local NVMe/scratch if available",
@@ -1382,6 +1391,34 @@ if __name__ == "__main__":
         model, config["NeuralNetwork"]["Training"], optimizer=optimizer
     )
     _diag("Exited load_existing_model_config")
+
+    if args.eval_domain_penalties_only:
+        _diag("Entering eval_domain_penalties_only")
+        target_model = model.module if hasattr(model, "module") else model
+        if not isinstance(target_model, OPFEnhancedModelWrapper):
+            raise RuntimeError(
+                "--eval_domain_penalties_only requires a DomainLoss section in the "
+                "config so the model is wrapped with OPFEnhancedModelWrapper."
+            )
+        domain_loss = target_model.domain_loss
+        # Force every penalty term to be computed and logged, irrespective of how
+        # this checkpoint was actually trained (e.g. a supervised-only baseline).
+        domain_loss.enabled = True
+        domain_loss.warmup_epochs = 0
+        domain_loss.ramp_epochs = 0
+        for attr in ("voltage_bound_weight", "angle_diff_weight", "line_flow_weight"):
+            if getattr(domain_loss, attr) <= 0.0:
+                setattr(domain_loss, attr, 1.0)
+        os.environ["HYDRAGNN_EPOCH"] = "0"
+        num_tasks = model.module.num_heads
+        hydragnn.train.validate(
+            val_loader, model, config["Verbosity"]["level"], num_tasks=num_tasks
+        )
+        target_model._flush_epoch_log(target_model._last_seen_epoch, force=True)
+        _diag("Exited eval_domain_penalties_only")
+        if dist.is_initialized():
+            dist.destroy_process_group()
+        raise SystemExit(0)
 
     _diag("Entering train_validate_test")
     hydragnn.train.train_validate_test(

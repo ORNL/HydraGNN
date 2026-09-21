@@ -3,6 +3,7 @@
 import copy
 import logging
 import os
+import statistics
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -19,11 +20,15 @@ class OPFDomainLoss:
     Feasibility penalties (all zero on any strictly feasible OPF solution):
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
       - angle_diff_weight              : Penalty for predicted Va angle-difference outside line [theta_min, theta_max].
-      - line_flow_weight               : Penalty for DC-approximate branch flow (DeltaVa / x_ij) exceeding rate_a.
-      - line_flow_slack               : Tolerance subtracted from rate_a before penalising, absorbing the
-                                        small linearisation error of the DC approximation on AC-feasible
-                                        solutions.  Default 1e-4 (one decade above the ~1.3e-5 residual
-                                        observed on pglib_opf_case10000_goc ground-truth data).
+      - line_flow_weight               : Penalty for full AC apparent-power branch flow (|S_ij|, |S_ji|,
+                                        reconstructed from complex bus voltages via the standard pi-model
+                                        branch equations) exceeding rate_a, matching the manuscript's
+                                        thermal-limit equation exactly (no DC linearisation).
+      - line_flow_slack               : Small numerical tolerance subtracted from rate_a before penalising,
+                                        absorbing floating-point/near-binding-constraint noise on
+                                        AC-feasible ground-truth solutions (the full AC formula itself
+                                        introduces no linearisation bias, unlike the DC approximation it
+                                        replaces). Default 1e-4.
 
     Each raw penalty is normalized by a per-term exponential moving average (EMA)
     before the weight is applied.  This keeps every term near unit scale and makes
@@ -39,10 +44,14 @@ class OPFDomainLoss:
     Example: warmup_epochs=3, ramp_epochs=3 with num_epoch=10 means:
       epochs 0-2: no domain loss, epochs 3-5: linear ramp, epochs 6-9: full weight.
 
-    Feature-index conventions (derived from the gridopt/PyG OPFDataset schema):
+    Feature-index conventions (empirically verified against ground-truth pglib_opf_case14_ieee.m
+    branch data — exact numeric cross-check of r, x, b, rate_a/100 against this project's own
+    HDF5-converted edge_attr tensors; a previously-consulted internal docx had this schema wrong):
       bus targets  : [Va (0), Vm (1)]
-      ac_line attrs: [theta_min(0), theta_max(1), r_from(2), r_to(3), b_sh(4), x(5), rate_a(6), ...]
-      transformer  : [theta_min(0), theta_max(1), r(2), x(3), rate_a(4), ...]
+      ac_line attrs: [angmin(0), angmax(1), b_fr(2), b_to(3), r(4), x(5), rate_a(6), rate_b(7), rate_c(8)]
+      transformer  : [angmin(0), angmax(1), r(2), x(3), rate_a(4), rate_b(5), rate_c(6), tm(7), ...(8-10, unused/reserved)]
+      (b_fr == b_to == total shunt susceptance / 2; rate_a/b/c are identical in this dataset;
+       tm is the off-nominal turns ratio; transformers carry no shunt-susceptance term.)
     """
 
     def __init__(self, config: dict | None = None, node_target_type: str = "bus"):
@@ -60,17 +69,23 @@ class OPFDomainLoss:
         self.va_output_index = int(cfg.get("va_output_index", 0))
         self.angle_diff_weight = float(cfg.get("angle_diff_weight", 0.0))
         self.line_flow_weight = float(cfg.get("line_flow_weight", 0.0))
-        # line_flow_slack: a small tolerance subtracted from rate_a before the DC thermal-limit
-        # penalty is evaluated.  It exists because the DC power-flow formula
-        #   P_ij = (Va_i - Va_j) / x_ij
-        # is a linearisation of the full AC power-flow equations.  Even when the OPF solver
-        # produces a strictly AC-feasible solution, the DC approximation introduces a residual
-        # of ~1e-5 p.u. (empirically measured on pglib_opf_case10000_goc ground-truth data:
-        # mean ~1.3e-5, max ~1.7e-5).  Without a slack the penalty is non-zero on ground truth,
-        # which means the gradient incorrectly penalises physically correct predictions.
-        # The default 1e-4 is one decade above the observed noise floor — large enough to zero
-        # out the DC-approximation artefact but small enough to still penalise real violations.
+        # line_flow_slack: a small numerical tolerance subtracted from rate_a before the
+        # AC apparent-power thermal-limit penalty is evaluated. The full AC formula
+        # (unlike the DC approximation it replaces) introduces no intrinsic linearisation
+        # bias, but a small slack still absorbs floating-point noise and near-binding
+        # constraints on ground-truth solutions. Default 1e-4.
         self.line_flow_slack = float(cfg.get("line_flow_slack", 1e-4))
+        # line_flow_min_x: branches whose series-impedance magnitude |z| = sqrt(r^2+x^2)
+        # falls below this floor are excluded from the thermal-limit penalty entirely
+        # (rather than clamped). Some PGLib-OPF cases (e.g. case6470_rte, case4661_sdet,
+        # case13659_pegase) contain near-zero or even negative reactance on certain
+        # transformer/ac_line branches (likely ideal or phase-shifting transformers);
+        # dividing by such a tiny admittance denominator blows up the reconstructed
+        # apparent power to unphysical magnitudes even on ground-truth Va/Vm, dominating
+        # the mean-of-squares statistic. Default 1e-3 p.u. sits below the smallest
+        # impedance magnitude observed on well-behaved branches (~0.04 p.u. for ac_line,
+        # ~0.21 p.u. for transformer on pglib_opf_case14_ieee).
+        self.line_flow_min_x = float(cfg.get("line_flow_min_x", 1e-3))
         # EMA state for per-term scale normalization.
         self._ema_momentum = float(cfg.get("ema_momentum", 0.1))
         self._penalty_ema: dict[str, float] = {}
@@ -212,38 +227,77 @@ class OPFDomainLoss:
                 total_penalty = total_penalty + curriculum * self.angle_diff_weight * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
                 metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
 
-        # ── DC thermal limit penalty ─────────────────────────────────────────
-        # Penalise approximate DC branch flows that exceed the thermal limit.
-        #   P_ij = (Va_i - Va_j) / x_ij   (DC power flow approximation)
-        #   ac_line:     x = edge_attr[:,5], rate_a = edge_attr[:,6]
-        #   transformer: x = edge_attr[:,3], rate_a = edge_attr[:,4]
-        if self.line_flow_weight > 0.0 and bus_pred.shape[-1] > self.va_output_index:
+        # ── Full AC apparent-power thermal limit penalty ────────────────────
+        # Reconstruct branch apparent power flow at both ends (S_ij, S_ji) from the
+        # predicted complex bus voltages V = Vm * exp(j*Va), using the standard
+        # pi-equivalent branch model (series admittance y = 1/(r+jx), shunt charging
+        # susceptance b_fr/b_to, off-nominal turns ratio tm for transformers):
+        #   Yff = (y + j*b_fr) / tm^2   Yft = -y / tm
+        #   Ytf = -y / tm               Ytt =  y + j*b_to
+        #   I_ij = Yff*Vi + Yft*Vj      I_ji = Ytf*Vi + Ytf*Vj  (from/to branch currents)
+        #   S_ij = Vi * conj(I_ij)      S_ji = Vj * conj(I_ji)
+        # penalising max(|S_ij|, |S_ji|) exceeding rate_a. This matches the manuscript's
+        # thermal-limit equation exactly (no DC/small-angle linearisation).
+        #   ac_line:     b_fr=edge_attr[:,2], b_to=edge_attr[:,3], r=edge_attr[:,4],
+        #                x=edge_attr[:,5], rate_a=edge_attr[:,6], tm=1 (no tap)
+        #   transformer: r=edge_attr[:,2], x=edge_attr[:,3], rate_a=edge_attr[:,4],
+        #                tm=edge_attr[:,7], b_fr=b_to=0 (no shunt term in this schema)
+        if self.line_flow_weight > 0.0 and bus_pred.shape[-1] > max(self.va_output_index, self.voltage_output_index):
             Va = bus_pred[:, self.va_output_index].reshape(-1)
-            for rel, x_idx, ra_idx, rel_tag in [
-                (("bus", "ac_line", "bus"),    5, 6, "ac"),
-                (("bus", "transformer", "bus"), 3, 4, "tr"),
+            Vm = bus_pred[:, self.voltage_output_index].reshape(-1)
+            for rel, r_idx, x_idx, ra_idx, b_fr_idx, b_to_idx, tm_idx, rel_tag in [
+                (("bus", "ac_line", "bus"),    4, 5, 6, 2, 3, None, "ac"),
+                (("bus", "transformer", "bus"), 2, 3, 4, None, None, 7, "tr"),
             ]:
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
-                if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(x_idx, ra_idx):
+                needed_idx = [i for i in (r_idx, x_idx, ra_idx, b_fr_idx, b_to_idx, tm_idx) if i is not None]
+                if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(needed_idx):
                     continue
-                # clamp x_ij away from zero to avoid division-by-zero in the DC formula;
-                # 1e-6 p.u. is several orders of magnitude below any physical reactance.
-                x_ij   = ea[:, x_idx].to(Va.device).clamp(min=1e-6)
+                r_raw = ea[:, r_idx].to(Va.device)
+                x_raw = ea[:, x_idx].to(Va.device)
+                # Exclude near-singular-admittance branches entirely rather than clamping:
+                # y = 1/(r+jx) is undefined for |z| ~ 0, and clamping to a tiny floor
+                # produces unphysical penalty spikes (see line_flow_min_x comment in __init__).
+                z_mag = torch.sqrt(r_raw.pow(2) + x_raw.pow(2))
+                keep = z_mag >= self.line_flow_min_x
+                n_excluded = int((~keep).sum().item())
+                metrics[f"opf_{rel_tag}_line_flow_n_excluded"] = n_excluded
+                if not torch.any(keep):
+                    metrics[f"opf_{rel_tag}_line_flow"] = bus_pred.new_zeros(())
+                    continue
+                r_ij = r_raw[keep]
+                x_ij = x_raw[keep]
                 # clamp rate_a to be non-negative; negative thermal limits are nonsensical
                 # and could arise from edge cases in dataset normalisation.
-                rate_a = ea[:, ra_idx].to(Va.device).clamp(min=0.0)
+                rate_a = ea[:, ra_idx].to(Va.device).clamp(min=0.0)[keep]
+                b_fr = ea[:, b_fr_idx].to(Va.device)[keep] if b_fr_idx is not None else torch.zeros_like(r_ij)
+                b_to = ea[:, b_to_idx].to(Va.device)[keep] if b_to_idx is not None else torch.zeros_like(r_ij)
+                tm = ea[:, tm_idx].to(Va.device)[keep] if tm_idx is not None else torch.ones_like(r_ij)
                 src, dst = ei
-                # DC power-flow approximation: P_ij ≈ (Va_i - Va_j) / x_ij  [per unit].
-                # This linearises the full AC formula sin(Va_i - Va_j) / x_ij and is only
-                # exact in the flat-voltage, small-angle limit.
-                P_ij = (Va[src] - Va[dst]) / x_ij
-                # line_flow_slack is subtracted from rate_a to absorb the residual introduced
-                # by the DC linearisation on AC-feasible solutions (see __init__ for details).
-                # Without it, ground-truth predictions would incur a spurious non-zero penalty.
-                flow_p = torch.mean(F.relu(P_ij.abs() - rate_a - self.line_flow_slack).pow(2))
+                src, dst = src[keep], dst[keep]
+
+                y = 1.0 / torch.complex(r_ij, x_ij)
+                Yff = (y + 1j * b_fr) / tm.pow(2)
+                Yft = -y / tm
+                Ytf = -y / tm
+                Ytt = y + 1j * b_to
+
+                Vi = torch.polar(Vm[src], Va[src])
+                Vj = torch.polar(Vm[dst], Va[dst])
+                I_ij = Yff * Vi + Yft * Vj
+                I_ji = Ytf * Vi + Ytt * Vj
+                S_ij = Vi * torch.conj(I_ij)
+                S_ji = Vj * torch.conj(I_ji)
+
+                # line_flow_slack absorbs floating-point/near-binding-constraint noise;
+                # the full AC formula itself introduces no linearisation bias.
+                flow_p = torch.mean(
+                    F.relu(S_ij.abs() - rate_a - self.line_flow_slack).pow(2)
+                    + F.relu(S_ji.abs() - rate_a - self.line_flow_slack).pow(2)
+                )
                 total_penalty = total_penalty + curriculum * self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
                 metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
 
@@ -278,7 +332,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self._epoch_accum_task: list[float] = []
         self._last_seen_epoch: int = -1
 
-    def _flush_epoch_log(self, epoch: int) -> None:
+    def _flush_epoch_log(self, epoch: int, force: bool = False) -> None:
         """Log the mean task-loss and domain-loss breakdown for *epoch* on rank 0.
 
         Called automatically at the first batch of a new epoch so the previous
@@ -309,13 +363,28 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
                                     individual feasibility penalty.  Zero on any strictly
                                     feasible OPF solution; non-zero indicates the current
                                     prediction violates that constraint.
+
+        *force* bypasses the "only rank 0" gate below (used by the one-shot
+        --eval_domain_penalties_only path): under some launch configurations the
+        MPI/SLURM rank that prints diagnostics (HYDRAGNN_DIAG_RANK) does not
+        coincide with torch.distributed's rank 0, which otherwise silently
+        suppresses this log line with no error. Passing force=True guarantees a
+        LossBreakdown line is printed by whichever process has accumulated data,
+        at the cost of possible duplicate lines across ranks in that one-shot mode
+        (harmless -- there is no ongoing training loop relying on a single line).
         """
         # Only log from rank 0 to avoid duplicate lines in the shared run.log.
-        if dist.is_initialized() and dist.get_rank() != 0:
+        if not force and dist.is_initialized() and dist.get_rank() != 0:
             self._epoch_accum.clear()
             self._epoch_accum_task.clear()
             return
         if not self._epoch_accum_task:
+            rank = dist.get_rank() if dist.is_initialized() else 0
+            print(
+                f"0: LossBreakdown epoch={epoch:02d} WARNING: rank={rank} has an "
+                "empty accumulator (0 batches seen) -- no breakdown to report.",
+                flush=True,
+            )
             return  # nothing accumulated yet (e.g. first call before any batch)
 
         n = len(self._epoch_accum_task)
@@ -330,7 +399,14 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             "opf_tr_angle_diff":     "raw_tr_angle_diff",
             "opf_ac_line_flow":      "raw_ac_line_flow",
             "opf_tr_line_flow":      "raw_tr_line_flow",
+            "opf_ac_line_flow_n_excluded": "ac_line_flow_n_excluded",
+            "opf_tr_line_flow_n_excluded": "tr_line_flow_n_excluded",
         }
+        # Line-flow terms are reported with a median alongside the mean: a handful
+        # of near-zero-reactance branches (excluded from the penalty itself via
+        # line_flow_min_x, but occasionally still present in edge cases) or genuinely
+        # overloaded outlier branches can otherwise dominate the mean-of-squares.
+        _median_keys = {"opf_ac_line_flow": "raw_ac_line_flow_median", "opf_tr_line_flow": "raw_tr_line_flow_median"}
 
         parts = [f"epoch={epoch:02d}", f"data_driven_mse={task_mean:.8f}"]
         for key in sorted(self._epoch_accum):
@@ -338,6 +414,8 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             mean_val = sum(vals) / len(vals)
             label = _key_labels.get(key, key.removeprefix("opf_"))
             parts.append(f"{label}={mean_val:.8f}")
+            if key in _median_keys:
+                parts.append(f"{_median_keys[key]}={statistics.median(vals):.8f}")
 
         # Use print rather than logging.info so the line is always visible in
         # run.log regardless of the logging level configured by HydraGNN.
