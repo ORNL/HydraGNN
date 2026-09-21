@@ -8,6 +8,7 @@ lmdb # needed to use FAIRChem functionalities released by the Meta Research AI g
 orjson # needed to use FAIRChem functionalities released by the Meta Research AI group
 pandas==2.3.3 # needed for HPO examples and FAIRChem functionalities
 pyarrow # needed for OPFLearn parquet preprocessing pipeline
+pandapower==3.5.4 # needed for OPFLearn power-flow/optimal-power-flow preprocessing
 PyYAML # needed for FAIRChem configuration files
 wandb # needed for FAIRChem logging functionalities
 
