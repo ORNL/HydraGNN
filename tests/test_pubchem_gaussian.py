@@ -299,6 +299,31 @@ def test_pubchem_dataset_limit_applies_before_rank_partition(tmp_path):
     assert [path.name for path in selected] == ["2"]
 
 
+def test_pubchem_loads_external_adios_path(tmp_path, monkeypatch):
+    example = _load_example_module()
+    calls = []
+
+    def fake_dataset(path, label, comm, **options):
+        calls.append((path, label, options["var_config"]))
+        return label
+
+    monkeypatch.setattr(example, "AdiosDataset", fake_dataset)
+    external_path = tmp_path / "external.bp"
+
+    datasets = example.load_datasets(
+        {"inputs": [], "outputs": []},
+        "adios",
+        example.MPI.COMM_SELF,
+        False,
+        None,
+        False,
+        external_path,
+    )
+
+    assert datasets == ("trainset", "valset", "testset")
+    assert {path for path, _, _ in calls} == {str(external_path)}
+
+
 @pytest.mark.parametrize(
     ("header", "columns", "rows", "expected"),
     [

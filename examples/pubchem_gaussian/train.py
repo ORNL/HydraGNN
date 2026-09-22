@@ -683,7 +683,15 @@ def preprocess(
     )
 
 
-def load_datasets(var_config, dataset_format, comm, ddstore, ddstore_width, shmem):
+def load_datasets(
+    var_config,
+    dataset_format,
+    comm,
+    ddstore,
+    ddstore_width,
+    shmem,
+    dataset_path=None,
+):
     if dataset_format == "adios":
         if shmem and ddstore:
             raise ValueError("Cannot use both --shmem and --ddstore")
@@ -693,13 +701,15 @@ def load_datasets(var_config, dataset_format, comm, ddstore, ddstore_width, shme
             "ddstore": ddstore,
             "ddstore_width": ddstore_width,
         }
+        path = dataset_path if dataset_path is not None else ADIOS_PATH
         return tuple(
-            AdiosDataset(str(ADIOS_PATH), label, comm, **options, var_config=var_config)
+            AdiosDataset(str(path), label, comm, **options, var_config=var_config)
             for label in ("trainset", "valset", "testset")
         )
 
+    path = dataset_path if dataset_path is not None else PICKLE_DIR
     datasets = tuple(
-        SimplePickleDataset(PICKLE_DIR, label, var_config=var_config)
+        SimplePickleDataset(path, label, var_config=var_config)
         for label in ("trainset", "valset", "testset")
     )
     if datasets[0].attrs.get("cache_version") != CACHE_VERSION:
@@ -730,6 +740,7 @@ def main():
     parser.add_argument("--num-molecules", type=int, default=100)
     parser.add_argument("--extracted-dir", type=Path, default=EXTRACTED_DIR)
     parser.add_argument("--output-path", type=Path)
+    parser.add_argument("--dataset-path", type=Path)
     parser.add_argument("--batch-size", type=int)
     parser.add_argument("--num-epoch", type=int)
     parser.add_argument("--num-train-samples", type=int)
@@ -799,6 +810,7 @@ def main():
         args.ddstore,
         args.ddstore_width,
         args.shmem,
+        args.dataset_path,
     )
     pna_deg = trainset.pna_deg
     trainset = deterministic_subset(trainset, args.num_train_samples, args.subset_seed)
