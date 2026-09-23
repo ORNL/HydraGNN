@@ -1,11 +1,19 @@
 from dataclasses import dataclass
 
-from download_and_uncompress_data import (
-    _discover_cases,
-    _ensure_opf_downloaded,
-    _parse_num_groups,
-    _resolve_num_groups,
-)
+try:
+    from .download_and_uncompress_data import (
+        _discover_cases,
+        _ensure_opf_downloaded,
+        _parse_num_groups,
+        _resolve_num_groups,
+    )
+except ImportError:  # Direct-script execution from this directory.
+    from download_and_uncompress_data import (
+        _discover_cases,
+        _ensure_opf_downloaded,
+        _parse_num_groups,
+        _resolve_num_groups,
+    )
 
 
 @dataclass(frozen=True)

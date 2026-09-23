@@ -981,6 +981,7 @@ def create_model(
 
     elif mpnn_type == "HeteroGIN":
         model = HeteroGINStack(
+            edge_dim,
             input_dim,
             hidden_dim,
             output_dim,
@@ -1011,6 +1012,7 @@ def create_model(
 
     elif mpnn_type == "HeteroSAGE":
         model = HeteroSAGEStack(
+            edge_dim,
             input_dim,
             hidden_dim,
             output_dim,
@@ -1142,6 +1144,7 @@ def create_model(
     elif mpnn_type == "HeteroHGT":
         model = HeteroHGTStack(
             hetero_attention_heads,
+            edge_dim,
             input_dim,
             hidden_dim,
             output_dim,
@@ -1174,6 +1177,7 @@ def create_model(
             hetero_attention_heads,
             hetero_edge_type_emb_dim,
             hetero_edge_attr_emb_dim,
+            edge_dim,
             input_dim,
             hidden_dim,
             output_dim,

@@ -10,6 +10,8 @@ def _make_toy_base_for_embedding(hidden_dim=8, pe_dim=3, x_dim=5):
     model = Base.__new__(Base)
     model.use_edge_attr = False
     model.use_global_attn = True
+    model.global_attn_engine = "GPS"
+    model.input_feature_encoding_config = []
     model.input_dim = x_dim
     model.is_edge_model = False
 

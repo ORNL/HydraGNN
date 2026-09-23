@@ -1,6 +1,9 @@
 from dataclasses import dataclass
 
-from download_and_uncompress_data import discover_cases, ensure_pglearn_downloaded
+try:
+    from .download_and_uncompress_data import discover_cases, ensure_pglearn_downloaded
+except ImportError:  # Direct-script execution from this directory.
+    from download_and_uncompress_data import discover_cases, ensure_pglearn_downloaded
 
 
 @dataclass(frozen=True)

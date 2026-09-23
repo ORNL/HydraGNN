@@ -86,18 +86,24 @@ class HeteroHEATStack(HeteroBase):
         attention_heads: int,
         edge_type_emb_dim: int,
         edge_attr_emb_dim: int,
+        edge_dim,
         *args,
         **kwargs,
     ):
         self.attention_heads = attention_heads
         self.edge_type_emb_dim = edge_type_emb_dim
         self.edge_attr_emb_dim = edge_attr_emb_dim
+        self.edge_dim = edge_dim
         self.node_types = None
         self.edge_types = None
         self._heat_edge_dim = None
         self.is_edge_model = True
         super().__init__(*args, **kwargs)
         self.edge_lin_dict = ModuleDict()
+        if isinstance(self.edge_dim, dict):
+            for edge_type, dim in self.edge_dim.items():
+                if dim:
+                    self.edge_lin_dict[str(edge_type)] = Linear(dim, self.hidden_dim)
 
     def _init_conv(self):
         self.graph_convs = ModuleList()

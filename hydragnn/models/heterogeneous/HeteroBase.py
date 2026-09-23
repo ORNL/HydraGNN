@@ -295,6 +295,23 @@ class HeteroBase(Module):
             return None if resolved == 0 else resolved
         return edge_dim
 
+    def _validate_featureless_edges(self):
+        """Reject edge attributes for architectures that cannot consume them."""
+        if self.attn_only:
+            return
+        edge_dim = getattr(self, "edge_dim", None)
+        if isinstance(edge_dim, dict):
+            featureful = [edge_type for edge_type, dim in edge_dim.items() if dim]
+        elif edge_dim:
+            featureful = ["all edge types"]
+        else:
+            featureful = []
+        if featureful:
+            raise ValueError(
+                f"{type(self).__name__} does not support edge attributes; "
+                f"nonzero dimensions were declared for {featureful}."
+            )
+
     def _apply_global_attn(self, mpnn):
         if not self.use_global_attn:
             return mpnn

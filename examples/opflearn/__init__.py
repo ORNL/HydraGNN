@@ -9,7 +9,10 @@ _PIPELINE_DIR = os.path.join(
 if _PIPELINE_DIR not in sys.path:
     sys.path.insert(0, _PIPELINE_DIR)
 
-from download_and_uncompress_data import ensure_opflearn_prepared
+try:
+    from .download_and_uncompress_data import ensure_opflearn_prepared
+except ImportError:  # Direct-script execution from this directory.
+    from download_and_uncompress_data import ensure_opflearn_prepared
 from utils.pyg_serialization import serialize_parquet_to_hdf5
 
 

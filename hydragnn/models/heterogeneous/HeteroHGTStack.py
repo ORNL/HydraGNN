@@ -16,10 +16,12 @@ from .HeteroBase import HeteroBase
 
 
 class HeteroHGTStack(HeteroBase):
-    def __init__(self, num_heads: int, *args, **kwargs):
+    def __init__(self, num_heads: int, edge_dim, *args, **kwargs):
         self.num_heads = num_heads
+        self.edge_dim = edge_dim
         self.is_edge_model = False
         super().__init__(*args, **kwargs)
+        self._validate_featureless_edges()
 
     def _init_conv(self):
         self.graph_convs = ModuleList()
@@ -67,7 +69,7 @@ class HeteroHGTStack(HeteroBase):
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
             if self.use_global_attn:
-                x_dict = conv(
+                x_dict, _ = conv(
                     x_dict,
                     data.edge_index_dict,
                     batch_dict,

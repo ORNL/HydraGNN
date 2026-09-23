@@ -29,12 +29,12 @@ def _path_graph_data():
     return Data(edge_index=edge_index, num_nodes=3)
 
 
-def pytest_create_positional_encoder_defaults_to_laplacian():
+def test_create_positional_encoder_defaults_to_laplacian():
     encoder = create_positional_encoder({"pe_dim": 2})
     assert isinstance(encoder, AddLaplacianEigenvectorPE)
 
 
-def pytest_communicability_encoder_produces_expected_shapes_and_symmetry():
+def test_communicability_encoder_produces_expected_shapes_and_symmetry():
     data = _path_graph_data()
     transform = AddCommunicabilityPE(k=3, method="katz")
     data = transform(data)
@@ -47,7 +47,7 @@ def pytest_communicability_encoder_produces_expected_shapes_and_symmetry():
     assert torch.allclose(data.pe[0], data.pe[2], atol=1.0e-5)
 
 
-def pytest_factory_supports_communicability_encoder():
+def test_factory_supports_communicability_encoder():
     cfg = {
         "pe_dim": 4,
         "pe_encoder": "communicability",

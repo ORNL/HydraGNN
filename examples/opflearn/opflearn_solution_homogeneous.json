@@ -7,6 +7,16 @@
     "Verbosity": {
         "level": 2
     },
+    "Variables": {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {"name": "load_setpoints", "level": "node", "dim": 1},
+            {"name": "feasible", "level": "graph", "dim": 1}
+        ],
+        "outputs": [
+            {"name": "opf_solution", "level": "node", "dim": 1}
+        ]
+    },
     "NeuralNetwork": {
         "Architecture": {
             "mpnn_type": "GIN",
