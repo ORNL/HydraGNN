@@ -104,6 +104,11 @@ class HeteroHEATStack(HeteroBase):
             for edge_type, dim in self.edge_dim.items():
                 if dim:
                     self.edge_lin_dict[str(edge_type)] = Linear(dim, self.hidden_dim)
+        elif self.edge_dim and self._metadata is not None:
+            for edge_type in self._metadata[1]:
+                self.edge_lin_dict[str(edge_type)] = Linear(
+                    self.edge_dim, self.hidden_dim
+                )
 
     def _init_conv(self):
         self.graph_convs = ModuleList()
@@ -159,7 +164,9 @@ class HeteroHEATStack(HeteroBase):
         x_dict = data.x_dict
         self._ensure_node_embedders(x_dict)
         x_dict = {
-            node_type: self.node_embedders[node_type](x.float())
+            node_type: self.node_embedders[node_type](
+                x.to(dtype=self.node_embedders[node_type].weight.dtype)
+            )
             for node_type, x in x_dict.items()
         }
 
@@ -185,7 +192,7 @@ class HeteroHEATStack(HeteroBase):
 
         for conv, node_norms in zip(self.graph_convs, self.feature_layers):
             if self.use_global_attn:
-                x_dict = conv(
+                x_dict, _ = conv(
                     x_dict,
                     data.edge_index_dict,
                     batch_dict,

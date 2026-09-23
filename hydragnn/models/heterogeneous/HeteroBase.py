@@ -56,6 +56,7 @@ class HeteroBase(Module):
         num_nodes: int = None,
         graph_pooling: str = "mean",
         use_graph_attr_conditioning: bool = False,
+        graph_attr_dim: int = 0,
         graph_attr_conditioning_mode: str = "concat_node",
         hetero_pooling_mode: str = "sum",
         node_target_type: str = None,
@@ -109,6 +110,7 @@ class HeteroBase(Module):
         )
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
+        self.graph_attr_dim = int(graph_attr_dim)
         self.graph_attr_conditioning_mode = graph_attr_conditioning_mode.lower()
         if self.graph_attr_conditioning_mode not in (
             "film",
@@ -166,26 +168,54 @@ class HeteroBase(Module):
             raise ValueError("hetero_pooling_mode must be 'sum' or 'mean'.")
         self.hetero_pooling_mode = hetero_pooling_mode
 
-        def _pool_graph_features(x_tensor, batch_tensor):
+        def _pool_graph_features(x_tensor, batch_tensor, size=None):
             if batch_tensor is None:
                 if self.graph_pool_reduction == "mean":
                     return x_tensor.mean(dim=0, keepdim=True)
                 if self.graph_pool_reduction == "max":
                     return x_tensor.max(dim=0, keepdim=True).values
                 return x_tensor.sum(dim=0, keepdim=True)
-            return self.graph_pool_fn(x_tensor, batch_tensor.to(x_tensor.device))
+            return self.graph_pool_fn(
+                x_tensor, batch_tensor.to(x_tensor.device), size=size
+            )
 
         self._pool_graph_features = _pool_graph_features
 
         self.freeze_conv = freeze_conv
         self.initial_bias = initial_bias
 
-        # Graph conditioning modules (lazy)
+        # Graph conditioning modules must exist before optimizer construction.
         self.graph_conditioner = None
         self.graph_concat_projector = None
         self.graph_concat_projector_in_dim = None
         self.graph_pool_projector = None
         self.graph_pool_projector_in_dim = None
+        if self.use_graph_attr_conditioning:
+            if self.graph_attr_dim <= 0:
+                raise ValueError(
+                    "graph_attr_dim must be positive when graph conditioning is enabled."
+                )
+            if self.graph_attr_conditioning_mode == "film":
+                hidden = max(self.hidden_dim, self.graph_attr_dim)
+                self.graph_conditioner = Sequential(
+                    Linear(self.graph_attr_dim, hidden),
+                    self.activation_function,
+                    Linear(hidden, 2 * self.hidden_dim),
+                )
+            elif self.graph_attr_conditioning_mode == "concat_node":
+                self.graph_concat_projector = Linear(
+                    self.hidden_dim + self.graph_attr_dim, self.hidden_dim
+                )
+                self.graph_concat_projector_in_dim = (
+                    self.hidden_dim + self.graph_attr_dim
+                )
+            else:
+                self.graph_pool_projector = Sequential(
+                    Linear(self.hidden_dim + self.graph_attr_dim, self.hidden_dim),
+                    self.activation_function,
+                    Linear(self.hidden_dim, self.hidden_dim),
+                )
+                self.graph_pool_projector_in_dim = self.hidden_dim + self.graph_attr_dim
 
         self._multihead()
         if self.initial_bias is not None:
@@ -243,6 +273,7 @@ class HeteroBase(Module):
             self._pending_node_conv_init = False
 
     def _build_hetero_conv(self, input_dim: int, output_dim: int):
+        self._validate_shared_edge_dims()
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
@@ -260,6 +291,7 @@ class HeteroBase(Module):
         return HeteroConv(conv_dict, aggr="sum")
 
     def _build_hetero_conv_node_head(self, input_dim: int, output_dim: int):
+        self._validate_shared_edge_dims()
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
@@ -294,6 +326,19 @@ class HeteroBase(Module):
             resolved = edge_dim[edge_type]
             return None if resolved == 0 else resolved
         return edge_dim
+
+    def _validate_shared_edge_dims(self):
+        if not self.share_relation_weights or not getattr(self, "is_edge_model", False):
+            return
+        edge_dims = {
+            self._resolve_edge_dim_for_type(edge_type)
+            for edge_type in self._metadata[1]
+        }
+        if len(edge_dims) > 1:
+            raise ValueError(
+                "share_relation_weights requires identical edge feature widths; "
+                f"found {sorted(str(dim) for dim in edge_dims)}."
+            )
 
     def _apply_global_attn(self, mpnn):
         if not self.use_global_attn:
@@ -556,11 +601,11 @@ class HeteroBase(Module):
         self._ensure_node_embedders(inv_node_feat_dict)
         embedded_dict = {}
         for node_type, x in inv_node_feat_dict.items():
-            x = x.float()
             embedder = self.node_embedders[node_type]
             if embedder.weight.device != x.device:
                 embedder = embedder.to(x.device)
                 self.node_embedders[node_type] = embedder
+            x = x.to(dtype=embedder.weight.dtype)
             embedded_dict[node_type] = embedder(x)
 
         batch_dict = self._get_batch_dict(data, embedded_dict)
@@ -578,9 +623,16 @@ class HeteroBase(Module):
         return None
 
     def _pool_hetero_graph_features(self, x_dict, batch_dict):
+        num_graphs = max(
+            int(batch.max().item()) + 1
+            for batch in batch_dict.values()
+            if batch.numel() > 0
+        )
         pooled = []
         for node_type, x in x_dict.items():
-            pooled.append(self._pool_graph_features(x, batch_dict[node_type]))
+            pooled.append(
+                self._pool_graph_features(x, batch_dict[node_type], size=num_graphs)
+            )
         if len(pooled) == 1:
             return pooled[0]
         if self.hetero_pooling_mode == "sum":
@@ -606,12 +658,9 @@ class HeteroBase(Module):
             )
 
     def _ensure_graph_conditioner(self, graph_attr_dim: int, device):
-        if self.graph_conditioner is None:
-            hidden = max(self.hidden_dim, graph_attr_dim)
-            self.graph_conditioner = Sequential(
-                Linear(graph_attr_dim, hidden),
-                self.activation_function,
-                Linear(hidden, 2 * self.hidden_dim),
+        if self.graph_conditioner is None or graph_attr_dim != self.graph_attr_dim:
+            raise ValueError(
+                f"graph_attr width {graph_attr_dim} does not match configured graph_attr_dim={self.graph_attr_dim}."
             )
         if self.graph_conditioner[0].weight.device != device:
             self.graph_conditioner = self.graph_conditioner.to(device)
@@ -623,8 +672,9 @@ class HeteroBase(Module):
         if (self.graph_concat_projector is None) or (
             self.graph_concat_projector_in_dim != in_dim
         ):
-            self.graph_concat_projector = Linear(in_dim, channel_dim)
-            self.graph_concat_projector_in_dim = in_dim
+            raise ValueError(
+                f"Graph concat projector expects input width {self.graph_concat_projector_in_dim}, got {in_dim}."
+            )
         if self.graph_concat_projector.weight.device != device:
             self.graph_concat_projector = self.graph_concat_projector.to(device)
 
@@ -635,12 +685,9 @@ class HeteroBase(Module):
         if (self.graph_pool_projector is None) or (
             self.graph_pool_projector_in_dim != in_dim
         ):
-            self.graph_pool_projector = Sequential(
-                Linear(in_dim, channel_dim),
-                self.activation_function,
-                Linear(channel_dim, channel_dim),
+            raise ValueError(
+                f"Graph pool projector expects input width {self.graph_pool_projector_in_dim}, got {in_dim}."
             )
-            self.graph_pool_projector_in_dim = in_dim
         if self.graph_pool_projector[0].weight.device != device:
             self.graph_pool_projector = self.graph_pool_projector.to(device)
 
@@ -654,31 +701,35 @@ class HeteroBase(Module):
             )
 
         graph_attr = data.graph_attr
-        graph_attr = graph_attr.to(inv_node_feat.device).float()
+        graph_attr = graph_attr.to(
+            device=inv_node_feat.device, dtype=inv_node_feat.dtype
+        )
 
         if batch is None:
             batch = torch.zeros(
                 inv_node_feat.size(0), device=inv_node_feat.device, dtype=torch.long
             )
 
-        num_graphs = int(batch.max().item() + 1)
+        batch_num_graphs = int(batch.max().item() + 1)
 
         if graph_attr.dim() == 1:
-            if graph_attr.numel() % num_graphs == 0:
-                feat_dim = graph_attr.numel() // num_graphs
+            if self.graph_attr_dim and graph_attr.numel() % self.graph_attr_dim == 0:
+                feat_dim = self.graph_attr_dim
+                num_graphs = graph_attr.numel() // feat_dim
                 graph_attr = graph_attr.view(num_graphs, feat_dim)
             else:
                 raise ValueError(
-                    f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by num_graphs={num_graphs}."
+                    f"One-dimensional graph_attr with numel={graph_attr.numel()} is not divisible by graph_attr_dim={self.graph_attr_dim}."
                 )
         elif graph_attr.dim() == 2:
-            if graph_attr.size(0) != num_graphs:
-                raise ValueError(
-                    f"graph_attr first dim {graph_attr.size(0)} does not match num_graphs={num_graphs}."
-                )
+            num_graphs = graph_attr.size(0)
         else:
             raise ValueError(
                 f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
+            )
+        if batch_num_graphs > num_graphs:
+            raise ValueError(
+                f"Node batch references {batch_num_graphs} graphs, but graph_attr contains {num_graphs}."
             )
 
         if self.graph_attr_conditioning_mode == "film":
@@ -751,7 +802,7 @@ class HeteroBase(Module):
                 f"Unsupported graph_attr ndim={graph_attr.dim()}; expected 1/2."
             )
 
-        graph_attr = graph_attr.to(x_graph.device).float()
+        graph_attr = graph_attr.to(device=x_graph.device, dtype=x_graph.dtype)
 
         self._ensure_graph_pool_projector(
             graph_attr_dim=graph_attr.size(-1),

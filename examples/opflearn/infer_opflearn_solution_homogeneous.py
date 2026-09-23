@@ -100,6 +100,13 @@ def main():
     voi["node_feature_dims"] = [x_dim]
     voi["output_dim"] = [y_dim]
 
+    for variable in config["Variables"]["inputs"]:
+        if variable["name"] == "load_setpoints":
+            variable["dim"] = x_dim
+    for variable in config["Variables"]["outputs"]:
+        if variable["name"] == "opf_solution":
+            variable["dim"] = y_dim
+
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
         valset,

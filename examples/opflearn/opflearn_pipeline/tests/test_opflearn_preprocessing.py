@@ -6,7 +6,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from examples.opflearn.opflearn_pipeline.utils.download import extract_archive
+from examples.opflearn.opflearn_pipeline.utils.download import (
+    _validate_path_component,
+    extract_archive,
+)
 from examples.opflearn.opflearn_pipeline.utils.parsing import parse_complex_voltage
 from examples.opflearn.opflearn_pipeline.utils.preprocessing import (
     correct_v_bus_columns,
@@ -62,6 +65,14 @@ def test_extract_archive_rejects_path_traversal(tmp_path: Path) -> None:
         extract_archive(archive_path, extract_dir, logging.getLogger("test_opflearn"))
 
     assert not escaped_path.exists()
+
+
+@pytest.mark.parametrize(
+    "case_name", ["../escape", "nested/case", "..\\escape", "/absolute"]
+)
+def test_opflearn_case_name_rejects_path_components(case_name: str) -> None:
+    with pytest.raises(ValueError, match="single non-empty path component"):
+        _validate_path_component(case_name, "case name")
 
 
 def test_magnitude_preservation() -> None:

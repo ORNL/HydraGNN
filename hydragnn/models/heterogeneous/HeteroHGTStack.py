@@ -54,7 +54,9 @@ class HeteroHGTStack(HeteroBase):
         x_dict = data.x_dict
         self._ensure_node_embedders(x_dict)
         x_dict = {
-            node_type: self.node_embedders[node_type](x.float())
+            node_type: self.node_embedders[node_type](
+                x.to(dtype=self.node_embedders[node_type].weight.dtype)
+            )
             for node_type, x in x_dict.items()
         }
 

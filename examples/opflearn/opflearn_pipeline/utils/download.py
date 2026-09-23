@@ -18,6 +18,13 @@ DEFAULT_CASES = [
 ]
 
 
+def _validate_path_component(value: str, field_name: str) -> str:
+    value = value.strip()
+    if not value or value in {".", ".."} or any(sep in value for sep in ("/", "\\")):
+        raise ValueError(f"{field_name} must be a single non-empty path component.")
+    return value
+
+
 def create_session() -> requests.Session:
     """Create a requests session with retry policy for transient failures."""
     retry = Retry(
@@ -149,9 +156,9 @@ def download_cases(
     downloaded: list[Path] = []
     try:
         for case in cases:
-            case_name = case.strip()
-            if not case_name:
+            if not case.strip():
                 continue
+            case_name = _validate_path_component(case, "case name")
             url = CASE_URL_TEMPLATE.format(case=case_name)
             output = raw_dir / f"pglib_opf_{case_name}.csv"
             downloaded.append(

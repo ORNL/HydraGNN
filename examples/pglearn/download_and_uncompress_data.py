@@ -11,6 +11,13 @@ HF_DATASET_API = "https://huggingface.co/api/datasets/{repo}/tree/main?recursive
 HF_DATASET_FILE = "https://huggingface.co/datasets/{repo}/resolve/main/{path}"
 
 
+def _validate_path_component(value: str, field_name: str) -> str:
+    value = value.strip()
+    if not value or value in {".", ".."} or any(sep in value for sep in ("/", "\\")):
+        raise ValueError(f"{field_name} must be a single non-empty path component.")
+    return value
+
+
 def _hf_tree(repo: str):
     url = HF_DATASET_API.format(repo=urllib.parse.quote(repo, safe="/"))
     with urllib.request.urlopen(url, timeout=60) as response:
@@ -60,6 +67,8 @@ def ensure_pglearn_downloaded(
     splits=("train", "test"),
     uncompress_h5=True,
 ):
+    case_name = _validate_path_component(case_name, "case_name")
+    formulation = _validate_path_component(formulation, "formulation")
     if rank == 0:
         os.makedirs(root, exist_ok=True)
 

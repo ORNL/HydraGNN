@@ -19,6 +19,7 @@ from hydragnn.models.create import create_model
 from hydragnn.utils.model.model import update_multibranch_heads
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.distributed import setup_ddp, get_distributed_model
+from examples.pglearn.download_and_uncompress_data import _validate_path_component
 
 
 def _build_simple_hetero_graph(input_dim: int = 4, edge_dim: int = None):
@@ -41,6 +42,130 @@ def _build_simple_hetero_graph(input_dim: int = 4, edge_dim: int = None):
         data[("b", "to", "a")].edge_attr = torch.randn(edge_index_ba.size(1), edge_dim)
 
     return data
+
+
+def _graph_head_model_args(mpnn_type, edge_dim, **overrides):
+    output_heads = {
+        "graph": {
+            "num_sharedlayers": 1,
+            "dim_sharedlayers": 16,
+            "num_headlayers": 1,
+            "dim_headlayers": [8],
+        }
+    }
+    args = {
+        "mpnn_type": mpnn_type,
+        "input_dim": 4,
+        "hidden_dim": 16,
+        "output_dim": [2],
+        "pe_dim": 0,
+        "global_attn_engine": "",
+        "global_attn_type": "",
+        "global_attn_heads": 1,
+        "output_type": ["graph"],
+        "output_heads": update_multibranch_heads(output_heads),
+        "activation_function": "relu",
+        "loss_function_type": "mse",
+        "task_weights": [1.0],
+        "num_conv_layers": 2,
+        "equivariance": False,
+        "use_graph_attr_conditioning": False,
+        "graph_pooling": "mean",
+        "hetero_pooling_mode": "sum",
+        "edge_dim": edge_dim,
+        "metadata": (["a", "b"], [("a", "to", "b"), ("b", "to", "a")]),
+        "node_input_dims": {"a": 4, "b": 4},
+    }
+    args.update(overrides)
+    return args
+
+
+@pytest.mark.parametrize(
+    "value", ["../escape", "nested/case", "..\\escape", "/absolute"]
+)
+def test_pglearn_identifiers_reject_path_components(value):
+    with pytest.raises(ValueError, match="single non-empty path component"):
+        _validate_path_component(value, "case_name")
+
+
+@pytest.mark.parametrize("mpnn_type", ["HeteroGAT", "HeteroRGAT", "HeteroPNA"])
+def test_shared_relation_weights_reject_different_edge_widths(mpnn_type):
+    edge_dim = {("a", "to", "b"): 3, ("b", "to", "a"): 5}
+    args = _graph_head_model_args(
+        mpnn_type,
+        edge_dim,
+        share_relation_weights=True,
+    )
+    if mpnn_type == "HeteroPNA":
+        args["pna_deg"] = [1, 2, 1]
+
+    with pytest.raises(ValueError, match="identical edge feature widths"):
+        create_model(**args)
+
+
+def test_heterogeneous_pooling_pads_missing_node_types():
+    model = create_model(**_graph_head_model_args("HeteroSAGE", None))
+    x_dict = {"a": torch.ones(2, 16), "b": torch.ones(1, 16)}
+    batch_dict = {
+        "a": torch.tensor([0, 1]),
+        "b": torch.tensor([0]),
+    }
+
+    pooled = model._pool_hetero_graph_features(x_dict, batch_dict)
+
+    assert pooled.shape == (2, 16)
+    torch.testing.assert_close(pooled[1], torch.ones(16))
+
+
+@pytest.mark.parametrize(
+    ("mode", "module_name"),
+    [
+        ("film", "graph_conditioner"),
+        ("concat_node", "graph_concat_projector"),
+        ("fuse_pool", "graph_pool_projector"),
+    ],
+)
+def test_graph_conditioning_parameters_exist_before_optimizer_and_preserve_dtype(
+    mode, module_name
+):
+    args = _graph_head_model_args(
+        "HeteroSAGE",
+        None,
+        use_graph_attr_conditioning=True,
+        graph_attr_dim=2,
+        graph_attr_conditioning_mode=mode,
+    )
+    model = create_model(**args).double()
+    optimizer = torch.optim.AdamW(model.parameters())
+    optimizer_param_ids = {
+        id(param) for group in optimizer.param_groups for param in group["params"]
+    }
+    conditioning_params = list(getattr(model, module_name).parameters())
+    assert conditioning_params
+    assert all(id(param) in optimizer_param_ids for param in conditioning_params)
+
+    data = _build_simple_hetero_graph()
+    data.graph_attr = torch.tensor([1.0, 2.0], dtype=torch.float32)
+    model.eval()
+    output = model(data)[0]
+
+    assert output.dtype == torch.float64
+
+
+def test_hetero_heat_with_gps_unpacks_local_output():
+    data = _build_simple_hetero_graph(edge_dim=3)
+    args = _graph_head_model_args(
+        "HeteroHEAT",
+        3,
+        global_attn_engine="GPS",
+        global_attn_type="multihead",
+    )
+    model = create_model(**args)
+    model.eval()
+
+    output = model(data)[0]
+
+    assert output.shape == (1, 2)
 
 
 def _build_random_hetero_graph(

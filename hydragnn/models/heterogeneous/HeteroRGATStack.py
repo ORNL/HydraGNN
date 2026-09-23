@@ -57,6 +57,7 @@ class HeteroRGATStack(HeteroBase):
         super().__init__(*args, **kwargs)
 
     def _build_hetero_rgat_conv(self, input_dim: int, output_dim: int, concat: bool):
+        self._validate_shared_edge_dims()
         conv_dict = {}
         shared_conv = None
         for edge_type in self._metadata[1]:
