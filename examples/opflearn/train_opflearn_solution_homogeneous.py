@@ -44,13 +44,19 @@ def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="opflearn_solution_homogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="opflearn_solution_homogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument("--modelname", type=str, default="OPFLearn_Solution")
     parser.add_argument("--case_name", type=str, default="case14_ieee")
     parser.add_argument("--formulation", type=str, default="ACOPF")
     parser.add_argument("--preonly", action="store_true")
-    parser.add_argument("--overwrite", action="store_true", help="Re-download/re-serialize even if data exists.")
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Re-download/re-serialize even if data exists.",
+    )
     parser.add_argument("--max_samples", type=int, default=None)
     parser.add_argument("--train_frac", type=float, default=0.8)
     parser.add_argument("--val_frac", type=float, default=0.1)

@@ -566,7 +566,10 @@ def validate_edge_type_contract(edge_types, data):
                 )
             continue
         expected_shape = (int(edge_index.shape[1]), expected_dim)
-        if not isinstance(edge_attr, torch.Tensor) or tuple(edge_attr.shape) != expected_shape:
+        if (
+            not isinstance(edge_attr, torch.Tensor)
+            or tuple(edge_attr.shape) != expected_shape
+        ):
             actual_shape = None if edge_attr is None else tuple(edge_attr.shape)
             raise ValueError(
                 f"Edge type {edge_type} has edge_attr shape {actual_shape}; "

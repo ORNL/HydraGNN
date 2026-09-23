@@ -1,4 +1,3 @@
-
 import logging
 from pathlib import Path
 
@@ -68,7 +67,11 @@ def classify_columns(columns: list[str]) -> dict[str, list[str]]:
             input_cols.append(column)
         if suffix in PRIMAL_SUFFIXES:
             primal_cols.append(column)
-        if suffix in DUAL_SUFFIXES or suffix.endswith("_max") or suffix.endswith("_min"):
+        if (
+            suffix in DUAL_SUFFIXES
+            or suffix.endswith("_max")
+            or suffix.endswith("_min")
+        ):
             dual_cols.append(column)
 
     return {
@@ -126,7 +129,9 @@ def correct_v_bus_columns(frame: pd.DataFrame) -> pd.DataFrame:
                 ) from exc
 
         raw_values = np.asarray(parsed_values, dtype=np.complex128)
-        corrected_voltage, corrected_angle_rad, corrected_angle_deg = correct_bus_voltage_array(raw_values)
+        corrected_voltage, corrected_angle_rad, corrected_angle_deg = (
+            correct_bus_voltage_array(raw_values)
+        )
         vm_bus = np.abs(raw_values)
 
         validate_voltage_transformation(
@@ -182,18 +187,24 @@ def process_csv_to_parquet(
         ):
             corrected = correct_v_bus_columns(chunk)
             if any(is_complex_dtype(dtype) for dtype in corrected.dtypes):
-                raise ValueError("Complex-typed columns are not allowed in Parquet output.")
+                raise ValueError(
+                    "Complex-typed columns are not allowed in Parquet output."
+                )
 
             table = pa.Table.from_pandas(corrected, preserve_index=False)
             if writer is None:
                 output_schema = table.schema
-                writer = pq.ParquetWriter(output_parquet, output_schema, compression="snappy")
+                writer = pq.ParquetWriter(
+                    output_parquet, output_schema, compression="snappy"
+                )
                 n_cols_total = table.num_columns
                 logger.info("Initialized Parquet schema with %d columns.", n_cols_total)
             else:
                 assert output_schema is not None
                 if table.schema != output_schema:
-                    table = table.select(output_schema.names).cast(output_schema, safe=False)
+                    table = table.select(output_schema.names).cast(
+                        output_schema, safe=False
+                    )
 
             writer.write_table(table)
             n_rows_total += len(corrected)

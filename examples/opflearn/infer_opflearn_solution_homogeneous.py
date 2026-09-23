@@ -55,7 +55,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="opflearn_solution_homogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="opflearn_solution_homogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument("--modelname", type=str, default="OPFLearn_Solution")
     parser.add_argument("--batch_size", type=int, default=None)

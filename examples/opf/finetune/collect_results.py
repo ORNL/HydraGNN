@@ -22,10 +22,10 @@ import json
 import os
 import sys
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _load_results_json(path: str) -> dict:
     with open(path) as fh:
@@ -41,11 +41,13 @@ def _load_training_curve(csv_path: str) -> list[dict]:
         reader = csv.DictReader(fh)
         for row in reader:
             try:
-                rows.append({
-                    "step":  int(row["step"]) if row["step"] else None,
-                    "tag":   row["tag"],
-                    "value": float(row["value"]) if row["value"] else None,
-                })
+                rows.append(
+                    {
+                        "step": int(row["step"]) if row["step"] else None,
+                        "tag": row["tag"],
+                        "value": float(row["value"]) if row["value"] else None,
+                    }
+                )
             except (KeyError, ValueError):
                 continue
     return rows
@@ -54,6 +56,7 @@ def _load_training_curve(csv_path: str) -> list[dict]:
 def _pivot_training_curve(rows: list[dict]) -> dict[str, list]:
     """Convert flat rows to tag → list of (epoch, value) pairs."""
     from collections import defaultdict
+
     result = defaultdict(list)
     for r in rows:
         if r["step"] is not None and r["value"] is not None:
@@ -64,6 +67,7 @@ def _pivot_training_curve(rows: list[dict]) -> dict[str, list]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Core collection logic
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def collect(logs_root: str, out_dir: str) -> None:
     """Scan logs_root for FT1/FT3 results and write summary files."""
@@ -78,64 +82,68 @@ def collect(logs_root: str, out_dir: str) -> None:
         found.extend(sorted(glob.glob(pat)))
 
     if not found:
-        print(f"[collect] No results.json files found under {logs_root}/FT1_* or FT3_*.")
-        print("  Have all experiments finished?  Check that save_run_results() completed.")
+        print(
+            f"[collect] No results.json files found under {logs_root}/FT1_* or FT3_*."
+        )
+        print(
+            "  Have all experiments finished?  Check that save_run_results() completed."
+        )
         sys.exit(0)
 
     print(f"[collect] Found {len(found)} results file(s).")
 
-    records = []   # flat dicts for CSV
+    records = []  # flat dicts for CSV
     detailed = []  # full JSON payloads (with training curves) for JSON
 
     for results_path in found:
-        log_dir  = os.path.dirname(results_path)
+        log_dir = os.path.dirname(results_path)
         log_name = os.path.basename(log_dir)
 
         payload = _load_results_json(results_path)
-        meta    = payload.get("meta", {})
+        meta = payload.get("meta", {})
         metrics = payload.get("test_metrics", {})
 
         # Load training curve
         curve_path = os.path.join(log_dir, "training_curve.csv")
         curve_rows = _load_training_curve(curve_path)
-        curve      = _pivot_training_curve(curve_rows)
+        curve = _pivot_training_curve(curve_rows)
 
         # ── Determine friendly run label ──────────────────────────────────
-        strategy  = meta.get("ft_strategy", "unknown")
-        arch      = meta.get("arch", "unknown")
-        regime    = meta.get("regime", "full")
+        strategy = meta.get("ft_strategy", "unknown")
+        arch = meta.get("arch", "unknown")
+        regime = meta.get("regime", "full")
         pretrained = meta.get("pretrained", True)
-        label     = f"{arch}_{regime}" + ("" if pretrained else "_baseline")
+        label = f"{arch}_{regime}" + ("" if pretrained else "_baseline")
 
         # ── Flat record (one row per run) ─────────────────────────────────
         flat = {
-            "log_name":  log_name,
-            "strategy":  strategy,
-            "arch":      arch,
-            "regime":    regime,
+            "log_name": log_name,
+            "strategy": strategy,
+            "arch": arch,
+            "regime": regime,
             "pretrained": pretrained,
-            "label":     label,
+            "label": label,
             # FT1 classification metrics
-            "bce":        metrics.get("bce"),
-            "accuracy":   metrics.get("accuracy"),
-            "precision":  metrics.get("precision"),
-            "recall":     metrics.get("recall"),
-            "f1":         metrics.get("f1"),
-            "auc_roc":    metrics.get("auc_roc"),
-            "n_samples":  metrics.get("n_samples"),
+            "bce": metrics.get("bce"),
+            "accuracy": metrics.get("accuracy"),
+            "precision": metrics.get("precision"),
+            "recall": metrics.get("recall"),
+            "f1": metrics.get("f1"),
+            "auc_roc": metrics.get("auc_roc"),
+            "n_samples": metrics.get("n_samples"),
             # FT3 regression metrics
             "overall_mse": metrics.get("overall_mse"),
-            "Va_mse":      metrics.get("Va_mse"),
-            "Va_mae":      metrics.get("Va_mae"),
-            "Va_r2":       metrics.get("Va_r2"),
-            "Vm_mse":      metrics.get("Vm_mse"),
-            "Vm_mae":      metrics.get("Vm_mae"),
-            "Vm_r2":       metrics.get("Vm_r2"),
-            "n_nodes":     metrics.get("n_nodes"),
+            "Va_mse": metrics.get("Va_mse"),
+            "Va_mae": metrics.get("Va_mae"),
+            "Va_r2": metrics.get("Va_r2"),
+            "Vm_mse": metrics.get("Vm_mse"),
+            "Vm_mae": metrics.get("Vm_mae"),
+            "Vm_r2": metrics.get("Vm_r2"),
+            "n_nodes": metrics.get("n_nodes"),
             # Training hyperparameters
-            "num_epoch":    meta.get("num_epoch"),
+            "num_epoch": meta.get("num_epoch"),
             "learning_rate": meta.get("learning_rate"),
-            "config_file":  meta.get("config_file"),
+            "config_file": meta.get("config_file"),
             # Training curve extremes
             "best_val_error": _best_val(curve),
             "final_train_error": _final_train(curve),
@@ -144,20 +152,23 @@ def collect(logs_root: str, out_dir: str) -> None:
         records.append(flat)
 
         # ── Detailed entry (full metrics + curve for plotting) ─────────────
-        detailed.append({
-            "log_name":    log_name,
-            "meta":        meta,
-            "test_metrics": {
-                # Omit large arrays from the JSON summary; keep just scalars.
-                k: v for k, v in metrics.items()
-                if k not in ("probs", "labels", "preds_sample", "targets_sample")
-            },
-            "probs":          metrics.get("probs", []),
-            "labels":         metrics.get("labels", []),
-            "preds_sample":   metrics.get("preds_sample", []),
-            "targets_sample": metrics.get("targets_sample", []),
-            "training_curve": curve,
-        })
+        detailed.append(
+            {
+                "log_name": log_name,
+                "meta": meta,
+                "test_metrics": {
+                    # Omit large arrays from the JSON summary; keep just scalars.
+                    k: v
+                    for k, v in metrics.items()
+                    if k not in ("probs", "labels", "preds_sample", "targets_sample")
+                },
+                "probs": metrics.get("probs", []),
+                "labels": metrics.get("labels", []),
+                "preds_sample": metrics.get("preds_sample", []),
+                "targets_sample": metrics.get("targets_sample", []),
+                "training_curve": curve,
+            }
+        )
 
     # ── Write outputs ──────────────────────────────────────────────────────
     os.makedirs(out_dir, exist_ok=True)
@@ -186,6 +197,7 @@ def collect(logs_root: str, out_dir: str) -> None:
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _best_val(curve: dict) -> float | None:
     vals = curve.get("validate error", [])
     return min(v for _, v in vals) if vals else None
@@ -203,6 +215,7 @@ def _n_epochs(curve: dict) -> int | None:
 
 def _json_default(obj):
     import numpy as np
+
     if isinstance(obj, (np.floating, np.integer)):
         return obj.item()
     if isinstance(obj, np.ndarray):
@@ -214,6 +227,7 @@ def _print_table(records: list[dict]) -> None:
     """Print a compact ASCII summary table."""
     # Group by strategy
     from itertools import groupby
+
     for strategy, grp in groupby(
         sorted(records, key=lambda r: (r["strategy"], r["arch"], r["regime"])),
         key=lambda r: r["strategy"],
@@ -226,7 +240,9 @@ def _print_table(records: list[dict]) -> None:
         if is_ft1:
             hdr = f"  {'Label':<30} {'BCE':>7} {'Acc':>7} {'F1':>7} {'AUC':>7}"
         else:
-            hdr = f"  {'Label':<30} {'Va_MSE':>9} {'Vm_MSE':>9} {'Va_R2':>7} {'Vm_R2':>7}"
+            hdr = (
+                f"  {'Label':<30} {'Va_MSE':>9} {'Vm_MSE':>9} {'Va_R2':>7} {'Vm_R2':>7}"
+            )
         print(hdr)
         for r in rows:
             lbl = r["label"]
@@ -257,6 +273,7 @@ def _fmt(v) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # CLI
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser(

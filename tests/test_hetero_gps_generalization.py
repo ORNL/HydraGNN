@@ -11,9 +11,7 @@ class DummyEquivariantLocalConv(torch.nn.Module):
         edge_index_dict,
         edge_attr_dict=None,
     ):
-        inv_out = {
-            node_type: x + 1.0 for node_type, x in inv_node_feat_dict.items()
-        }
+        inv_out = {node_type: x + 1.0 for node_type, x in inv_node_feat_dict.items()}
         equiv_out = {
             node_type: v + 2.0 for node_type, v in equiv_node_feat_dict.items()
         }

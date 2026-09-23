@@ -15,7 +15,10 @@ from torch_geometric.data import Data
 
 import hydragnn
 from __init__ import data_ops
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset, SimplePickleWriter
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleDataset,
+    SimplePickleWriter,
+)
 from hydragnn.utils.input_config_parsing.config_utils import update_config
 from hydragnn.utils.model import print_model
 from hydragnn.utils.profiling_and_tracing import print_timers
@@ -40,7 +43,9 @@ PF_VG_KEY_CANDIDATES = ["vg", "vg_setpoint", "vm_setpoint", "vset", "gen_vm"]
 def _normalize_task(task_name):
     task = str(task_name).strip().lower()
     if task not in (TASK_PF, TASK_OPF):
-        raise ValueError(f"Unsupported task '{task_name}'. Use '{TASK_PF}' or '{TASK_OPF}'.")
+        raise ValueError(
+            f"Unsupported task '{task_name}'. Use '{TASK_PF}' or '{TASK_OPF}'."
+        )
     return task
 
 
@@ -339,10 +344,16 @@ def _prepare_local_datasets(
         )
 
     schema_keys = None
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(train_primal_path, "r") as tr_out:
-        schema_keys = _validate_and_resolve_schema(task, tr_in, tr_out, len(static["pgmax"]))
+    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
+        train_primal_path, "r"
+    ) as tr_out:
+        schema_keys = _validate_and_resolve_schema(
+            task, tr_in, tr_out, len(static["pgmax"])
+        )
 
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(train_primal_path, "r") as tr_out:
+    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
+        train_primal_path, "r"
+    ) as tr_out:
         n_train_total = int(tr_in["pd"].shape[0])
         val_count = max(1, int(0.1 * n_train_total))
         train_count = n_train_total - val_count
@@ -370,15 +381,27 @@ def _prepare_local_datasets(
     local_val = []
     local_test = []
 
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(train_primal_path, "r") as tr_out:
-        for idx in iterate_tqdm(local_train_idx, 2, desc="Preprocess train", leave=False):
-            local_train.append(_build_sample(static, tr_in, tr_out, idx, task, schema_keys))
+    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
+        train_primal_path, "r"
+    ) as tr_out:
+        for idx in iterate_tqdm(
+            local_train_idx, 2, desc="Preprocess train", leave=False
+        ):
+            local_train.append(
+                _build_sample(static, tr_in, tr_out, idx, task, schema_keys)
+            )
         for idx in iterate_tqdm(local_val_idx, 2, desc="Preprocess val", leave=False):
-            local_val.append(_build_sample(static, tr_in, tr_out, idx, task, schema_keys))
+            local_val.append(
+                _build_sample(static, tr_in, tr_out, idx, task, schema_keys)
+            )
 
-    with h5py.File(test_input_path, "r") as te_in, h5py.File(test_primal_path, "r") as te_out:
+    with h5py.File(test_input_path, "r") as te_in, h5py.File(
+        test_primal_path, "r"
+    ) as te_out:
         for idx in iterate_tqdm(local_test_idx, 2, desc="Preprocess test", leave=False):
-            local_test.append(_build_sample(static, te_in, te_out, idx, task, schema_keys))
+            local_test.append(
+                _build_sample(static, te_in, te_out, idx, task, schema_keys)
+            )
 
     return local_train, local_val, local_test
 
@@ -435,7 +458,11 @@ def _load_serialized_splits(args, datadir, comm):
 
     if args.format == "hdf5":
         base = os.path.join(datadir, f"{args.modelname}.h5")
-        return HDF5Dataset(base, "trainset"), HDF5Dataset(base, "valset"), HDF5Dataset(base, "testset")
+        return (
+            HDF5Dataset(base, "trainset"),
+            HDF5Dataset(base, "valset"),
+            HDF5Dataset(base, "testset"),
+        )
 
     base = os.path.join(datadir, f"{args.modelname}.pickle")
     return (
@@ -449,7 +476,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="pglearn_solution_homogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="pglearn_solution_homogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument("--modelname", type=str, default="PGLearn_Solution")
     parser.add_argument("--repo", type=str, default="PGLearn/PGLearn-Small")
@@ -477,7 +506,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    task = _infer_task_from_formulation(args.formulation) if args.task == "auto" else _normalize_task(args.task)
+    task = (
+        _infer_task_from_formulation(args.formulation)
+        if args.task == "auto"
+        else _normalize_task(args.task)
+    )
     _validate_task_and_formulation(task, args.formulation)
 
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
@@ -521,7 +554,9 @@ def main():
     elif args.format == "hdf5":
         serialized_exists = os.path.isdir(os.path.join(datadir, f"{args.modelname}.h5"))
     else:
-        serialized_exists = os.path.isdir(os.path.join(datadir, f"{args.modelname}.pickle"))
+        serialized_exists = os.path.isdir(
+            os.path.join(datadir, f"{args.modelname}.pickle")
+        )
 
     if args.preonly or not serialized_exists:
         trainset, valset, testset = _prepare_local_datasets(

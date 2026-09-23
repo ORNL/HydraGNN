@@ -16,7 +16,9 @@ from go_challenge1.parser_utils import parse_scenario_bundle
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--scenario-dir", required=True)
     parser.add_argument("--solution-dir", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -68,7 +70,11 @@ def main():
             solution = rec.get("solution", {})
             try:
                 data = scenario_solution_to_heterodata(
-                    scenario, solution, task_name=task, sample_uid=files.uid, grid_id=files.network_name
+                    scenario,
+                    solution,
+                    task_name=task,
+                    sample_uid=files.uid,
+                    grid_id=files.network_name,
                 )
             except Exception as exc:  # noqa: BLE001
                 print(f"[skip] {files.uid}: graph conversion failed: {exc}")
@@ -95,9 +101,17 @@ def main():
         if metadata_rows:
             task_rows = [r for r in metadata_rows if r["task_name"] == task]
             if task_rows:
-                pd.DataFrame(task_rows).to_parquet(out_dir / task / "metadata.parquet", index=False)
-            with open(out_dir / task / "normalization.json", "w", encoding="utf-8") as fh:
-                json.dump({"note": "Compute normalization on training split only."}, fh, indent=2)
+                pd.DataFrame(task_rows).to_parquet(
+                    out_dir / task / "metadata.parquet", index=False
+                )
+            with open(
+                out_dir / task / "normalization.json", "w", encoding="utf-8"
+            ) as fh:
+                json.dump(
+                    {"note": "Compute normalization on training split only."},
+                    fh,
+                    indent=2,
+                )
 
     if metadata_rows:
         with open(out_dir / "metadata.json", "w", encoding="utf-8") as fh:

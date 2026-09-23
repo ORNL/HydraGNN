@@ -105,9 +105,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
             raise ValueError(f"{path}.role must be one of {sorted(_ROLES)}")
         if node_type is not None:
             if level != "node":
-                raise ValueError(
-                    f"{path}.node_type is valid only when level is 'node'"
-                )
+                raise ValueError(f"{path}.node_type is valid only when level is 'node'")
             if not isinstance(node_type, str) or not node_type.strip():
                 raise ValueError(f"{path}.node_type must be a non-empty string")
         if role == "position":
@@ -194,9 +192,7 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
         raise ValueError("Variables has unknown keys: " + ", ".join(sorted(extra)))
     graph_type = raw_variables.get("graph_type")
     if graph_type not in _GRAPH_TYPES:
-        raise ValueError(
-            f"Variables.graph_type must be one of {sorted(_GRAPH_TYPES)}"
-        )
+        raise ValueError(f"Variables.graph_type must be one of {sorted(_GRAPH_TYPES)}")
     raw_node_types = raw_variables.get("node_types")
     if graph_type == "homogeneous":
         if raw_node_types is not None:
@@ -210,12 +206,9 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
                 "Heterogeneous Variables.node_types must be a non-empty array"
             )
         if any(
-            not isinstance(value, str) or not value.strip()
-            for value in raw_node_types
+            not isinstance(value, str) or not value.strip() for value in raw_node_types
         ):
-            raise ValueError(
-                "Variables.node_types entries must be non-empty strings"
-            )
+            raise ValueError("Variables.node_types entries must be non-empty strings")
         if len(set(raw_node_types)) != len(raw_node_types):
             raise ValueError("Variables.node_types entries must be unique")
         node_types = tuple(raw_node_types)

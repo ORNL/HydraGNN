@@ -60,7 +60,11 @@ def _load_splits(args, datadir, comm):
 
     if args.format == "hdf5":
         base = os.path.join(datadir, f"{args.modelname}.h5")
-        return HDF5Dataset(base, "trainset"), HDF5Dataset(base, "valset"), HDF5Dataset(base, "testset")
+        return (
+            HDF5Dataset(base, "trainset"),
+            HDF5Dataset(base, "valset"),
+            HDF5Dataset(base, "testset"),
+        )
 
     base = os.path.join(datadir, f"{args.modelname}.pickle")
     return (
@@ -74,7 +78,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="pglearn_solution_homogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="pglearn_solution_homogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument("--modelname", type=str, default="PGLearn_Solution")
     parser.add_argument("--batch_size", type=int, default=None)

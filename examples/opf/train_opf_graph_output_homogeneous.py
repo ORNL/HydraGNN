@@ -594,19 +594,19 @@ if __name__ == "__main__":
         trainset = SimplePickleDataset(
             basedir=basedir, label="trainset", var_config=None
         )
-        valset = SimplePickleDataset(
-            basedir=basedir, label="valset", var_config=None
-        )
-        testset = SimplePickleDataset(
-            basedir=basedir, label="testset", var_config=None
-        )
+        valset = SimplePickleDataset(basedir=basedir, label="valset", var_config=None)
+        testset = SimplePickleDataset(basedir=basedir, label="testset", var_config=None)
 
     info(
         "trainset,valset,testset size: %d %d %d"
         % (len(trainset), len(valset), len(testset))
     )
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

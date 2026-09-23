@@ -21,7 +21,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-
 FT1_RE = re.compile(
     r"^FT1_feasibility_(?P<arch>[A-Za-z0-9]+)_(?P<regime>full|partial|head_only)"
     r"(?P<scratch>_scratch)?_n(?P<n>\d+)$"
@@ -65,9 +64,7 @@ def parse_run_log(run_log: Path, split: str) -> Dict[int, float]:
 
 def collect(logs_dir: Path, split: str) -> Dict[str, Dict[str, List[Dict[int, float]]]]:
     """Collect per-run epoch curves organized as arch -> method -> list(curves)."""
-    curves = defaultdict(
-        lambda: defaultdict(list)
-    )
+    curves = defaultdict(lambda: defaultdict(list))
 
     for d in sorted(logs_dir.iterdir()):
         if not d.is_dir():
@@ -90,7 +87,9 @@ def collect(logs_dir: Path, split: str) -> Dict[str, Dict[str, List[Dict[int, fl
     return curves
 
 
-def summarize_curves(curves: List[Dict[int, float]]) -> Tuple[List[int], List[float], List[float]]:
+def summarize_curves(
+    curves: List[Dict[int, float]],
+) -> Tuple[List[int], List[float], List[float]]:
     """Return epochs, mean_loss, std_loss from a list of epoch->loss curves."""
     by_epoch = defaultdict(list)
     for c in curves:
@@ -104,7 +103,7 @@ def summarize_curves(curves: List[Dict[int, float]]) -> Tuple[List[int], List[fl
         vals = by_epoch[e]
         mu = mean(vals)
         var = sum((x - mu) ** 2 for x in vals) / len(vals)
-        stds.append(var ** 0.5)
+        stds.append(var**0.5)
     return epochs, means, stds
 
 

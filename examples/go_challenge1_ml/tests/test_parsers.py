@@ -50,9 +50,7 @@ def test_parse_inl_minimal(tmp_path: Path):
 def test_parse_con_minimal(tmp_path: Path):
     con = tmp_path / "case.con"
     con.write_text(
-        "CONTINGENCY C1\n"
-        "OPEN BRANCH FROM BUS 1 TO BUS 2 CKT '1'\n"
-        "END\n",
+        "CONTINGENCY C1\n" "OPEN BRANCH FROM BUS 1 TO BUS 2 CKT '1'\n" "END\n",
         encoding="utf-8",
     )
     contingencies = parse_con_file(con)

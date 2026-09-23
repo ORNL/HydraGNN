@@ -430,9 +430,7 @@ def test_homogeneous_schema_omits_node_types():
 def test_homogeneous_schema_rejects_node_types():
     variables = {
         "graph_type": "homogeneous",
-        "inputs": [
-            {"name": "features", "level": "node", "dim": 2, "node_type": "bus"}
-        ],
+        "inputs": [{"name": "features", "level": "node", "dim": 2, "node_type": "bus"}],
         "outputs": [],
     }
     with pytest.raises(ValueError, match="Homogeneous graph variables must omit"):
@@ -458,12 +456,8 @@ def test_heterogeneous_schema_rejects_unknown_node_types():
     variables = {
         "graph_type": "heterogeneous",
         "node_types": ["bus", "generator"],
-        "inputs": [
-            {"name": "features", "level": "node", "dim": 2, "node_type": "bus"}
-        ],
-        "outputs": [
-            {"name": "target", "level": "node", "dim": 1, "node_type": "load"}
-        ],
+        "inputs": [{"name": "features", "level": "node", "dim": 2, "node_type": "bus"}],
+        "outputs": [{"name": "target", "level": "node", "dim": 1, "node_type": "load"}],
     }
     with pytest.raises(ValueError, match="absent from Variables.node_types"):
         parse_variable_schema(variables)

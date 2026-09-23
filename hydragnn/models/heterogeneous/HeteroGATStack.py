@@ -33,10 +33,7 @@ class _ProjectedHeteroConv(Module):
                 edge_attr_dict=edge_attr_dict,
             )
 
-        return {
-            node_type: self.proj[node_type](x)
-            for node_type, x in out_dict.items()
-        }
+        return {node_type: self.proj[node_type](x) for node_type, x in out_dict.items()}
 
     def reset_parameters(self):
         self.conv.reset_parameters()

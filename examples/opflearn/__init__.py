@@ -3,7 +3,9 @@ import sys
 from dataclasses import dataclass
 
 # Ensure the OPFLearn pipeline utilities are importable for serialization.
-_PIPELINE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "opflearn_pipeline")
+_PIPELINE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "opflearn_pipeline"
+)
 if _PIPELINE_DIR not in sys.path:
     sys.path.insert(0, _PIPELINE_DIR)
 

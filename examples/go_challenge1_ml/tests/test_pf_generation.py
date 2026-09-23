@@ -15,7 +15,17 @@ def test_pf_generation_returns_status():
         scenario_id="s1",
         network_name="n1",
         buses=[Bus(bus_id="1", bus_type=3, source=_source())],
-        generators=[Generator(generator_id="1", bus_id="1", pg=10.0, pmax=100.0, qmax=100.0, qmin=-100.0, source=_source())],
+        generators=[
+            Generator(
+                generator_id="1",
+                bus_id="1",
+                pg=10.0,
+                pmax=100.0,
+                qmax=100.0,
+                qmin=-100.0,
+                source=_source(),
+            )
+        ],
         loads=[Load(load_id="1", bus_id="1", pd=1.0, qd=0.1, source=_source())],
     )
     result = generate_pf_sample(scenario)

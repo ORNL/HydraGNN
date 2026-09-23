@@ -86,7 +86,9 @@ class AddCommunicabilityPE:
 
     def _katz_features(self, adjacency: torch.Tensor) -> torch.Tensor:
         num_nodes = adjacency.shape[0]
-        pe = torch.zeros((num_nodes, self.k), dtype=adjacency.dtype, device=adjacency.device)
+        pe = torch.zeros(
+            (num_nodes, self.k), dtype=adjacency.dtype, device=adjacency.device
+        )
         ones = torch.ones((num_nodes,), dtype=adjacency.dtype, device=adjacency.device)
         eye = torch.eye(num_nodes, dtype=adjacency.dtype, device=adjacency.device)
 
@@ -118,8 +120,12 @@ class AddCommunicabilityPE:
 
     def _adjacency_power_features(self, adjacency: torch.Tensor) -> torch.Tensor:
         num_nodes = adjacency.shape[0]
-        pe = torch.zeros((num_nodes, self.k), dtype=adjacency.dtype, device=adjacency.device)
-        signal = torch.ones((num_nodes,), dtype=adjacency.dtype, device=adjacency.device)
+        pe = torch.zeros(
+            (num_nodes, self.k), dtype=adjacency.dtype, device=adjacency.device
+        )
+        signal = torch.ones(
+            (num_nodes,), dtype=adjacency.dtype, device=adjacency.device
+        )
         for idx in range(self.k):
             signal = adjacency @ signal
             pe[:, idx] = signal
@@ -131,7 +137,9 @@ class AddCommunicabilityPE:
             setattr(
                 data,
                 self.attr_name,
-                torch.empty((num_nodes, 0), dtype=torch.float32, device=data.edge_index.device),
+                torch.empty(
+                    (num_nodes, 0), dtype=torch.float32, device=data.edge_index.device
+                ),
             )
             return data
 

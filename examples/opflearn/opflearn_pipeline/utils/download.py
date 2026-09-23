@@ -1,4 +1,3 @@
-
 import logging
 import zipfile
 from pathlib import Path
@@ -63,7 +62,11 @@ def stream_download(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     if should_skip(output_path, force=force):
-        logger.info("Skipping existing file: %s (%s)", output_path, human_bytes(output_path.stat().st_size))
+        logger.info(
+            "Skipping existing file: %s (%s)",
+            output_path,
+            human_bytes(output_path.stat().st_size),
+        )
         return output_path
 
     part_path = output_path.with_suffix(output_path.suffix + ".part")
@@ -94,11 +97,15 @@ def stream_download(
         raise RuntimeError(f"Downloaded file is empty: {url}")
 
     part_path.replace(output_path)
-    logger.info("Downloaded %s (%s)", output_path, human_bytes(output_path.stat().st_size))
+    logger.info(
+        "Downloaded %s (%s)", output_path, human_bytes(output_path.stat().st_size)
+    )
     return output_path
 
 
-def extract_archive(archive_path: Path, extract_dir: Path, logger: logging.Logger) -> list[Path]:
+def extract_archive(
+    archive_path: Path, extract_dir: Path, logger: logging.Logger
+) -> list[Path]:
     """Extract OPFLearn archive and return discovered CSV files."""
     if not archive_path.exists():
         raise FileNotFoundError(f"Archive not found: {archive_path}")
@@ -120,12 +127,16 @@ def download_archive(raw_dir: Path, force: bool, logger: logging.Logger) -> Path
     session = create_session()
     try:
         target = raw_dir / "OPFLearn_Datasets.zip"
-        return stream_download(ARCHIVE_URL, target, force=force, session=session, logger=logger)
+        return stream_download(
+            ARCHIVE_URL, target, force=force, session=session, logger=logger
+        )
     finally:
         session.close()
 
 
-def download_cases(cases: list[str], raw_dir: Path, force: bool, logger: logging.Logger) -> list[Path]:
+def download_cases(
+    cases: list[str], raw_dir: Path, force: bool, logger: logging.Logger
+) -> list[Path]:
     """Download selected OPFLearn case CSV files."""
     session = create_session()
     downloaded: list[Path] = []
@@ -136,7 +147,11 @@ def download_cases(cases: list[str], raw_dir: Path, force: bool, logger: logging
                 continue
             url = CASE_URL_TEMPLATE.format(case=case_name)
             output = raw_dir / f"pglib_opf_{case_name}.csv"
-            downloaded.append(stream_download(url, output, force=force, session=session, logger=logger))
+            downloaded.append(
+                stream_download(
+                    url, output, force=force, session=session, logger=logger
+                )
+            )
     finally:
         session.close()
     return downloaded

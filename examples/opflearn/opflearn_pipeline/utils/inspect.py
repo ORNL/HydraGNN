@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import numpy as np
@@ -11,9 +10,21 @@ from .preprocessing import classify_columns, detect_component_counts
 def _summary(series: pd.Series) -> dict[str, float]:
     values = pd.to_numeric(series, errors="coerce")
     return {
-        "min": float(np.nanmin(values.to_numpy())) if values.notna().any() else float("nan"),
-        "max": float(np.nanmax(values.to_numpy())) if values.notna().any() else float("nan"),
-        "mean": float(np.nanmean(values.to_numpy())) if values.notna().any() else float("nan"),
+        "min": (
+            float(np.nanmin(values.to_numpy()))
+            if values.notna().any()
+            else float("nan")
+        ),
+        "max": (
+            float(np.nanmax(values.to_numpy()))
+            if values.notna().any()
+            else float("nan")
+        ),
+        "mean": (
+            float(np.nanmean(values.to_numpy()))
+            if values.notna().any()
+            else float("nan")
+        ),
     }
 
 
@@ -37,7 +48,9 @@ def _raw_angle_range_from_vbus_raw(frame: pd.DataFrame) -> dict[str, float]:
 
     all_angles: list[np.ndarray] = []
     for col in raw_cols:
-        complex_vals = frame[col].map(parse_complex_voltage).to_numpy(dtype=np.complex128)
+        complex_vals = (
+            frame[col].map(parse_complex_voltage).to_numpy(dtype=np.complex128)
+        )
         all_angles.append(np.angle(complex_vals))
 
     merged = np.concatenate(all_angles)
@@ -63,7 +76,10 @@ def inspect_dataset_table(frame: pd.DataFrame, file_name: str) -> dict[str, obje
     branch_cols = [
         c
         for c in columns
-        if c.endswith(":p_to") or c.endswith(":p_fr") or c.endswith(":q_to") or c.endswith(":q_fr")
+        if c.endswith(":p_to")
+        or c.endswith(":p_fr")
+        or c.endswith(":q_to")
+        or c.endswith(":q_fr")
     ]
 
     missing_counts = frame.isna().sum().to_dict()

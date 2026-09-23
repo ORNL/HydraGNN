@@ -7,7 +7,6 @@ import shutil
 import urllib.parse
 import urllib.request
 
-
 HF_DATASET_API = "https://huggingface.co/api/datasets/{repo}/tree/main?recursive=1"
 HF_DATASET_FILE = "https://huggingface.co/datasets/{repo}/resolve/main/{path}"
 
@@ -36,7 +35,9 @@ def discover_cases(root: str, repo: str):
 def _download_file(url: str, out_path: str):
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     tmp_path = f"{out_path}.part"
-    with urllib.request.urlopen(url, timeout=120) as response, open(tmp_path, "wb") as fh:
+    with urllib.request.urlopen(url, timeout=120) as response, open(
+        tmp_path, "wb"
+    ) as fh:
         shutil.copyfileobj(response, fh)
     os.replace(tmp_path, out_path)
 

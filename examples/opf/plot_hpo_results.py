@@ -245,7 +245,9 @@ def print_summary(by_type, n_failed, failed_types):
             )
     all_trials.sort(key=lambda x: x["best_loss"])
 
-    print(f"{'Rank':>4} {'Trial':>5} {'Model Type':>14} {'Hidden':>6} {'Layers':>6} {'LR':>10} {'Best Val Loss':>13}")
+    print(
+        f"{'Rank':>4} {'Trial':>5} {'Model Type':>14} {'Hidden':>6} {'Layers':>6} {'LR':>10} {'Best Val Loss':>13}"
+    )
     print("-" * 68)
     for i, t in enumerate(all_trials):
         print(
@@ -290,7 +292,9 @@ def update_docx(by_type, plot_path, docx_path, n_failed, failed_types):
         if "15.4" in p.text and "HPO Results" in p.text:
             print(f"WARNING: Section '15.4 HPO Results' already exists in {docx_path}.")
             print("         Skipping docx update to avoid duplication.")
-            print("         Delete the existing section first if you want to regenerate it.")
+            print(
+                "         Delete the existing section first if you want to regenerate it."
+            )
             return
 
     total = sum(len(v) for v in by_type.values())
@@ -357,8 +361,12 @@ def update_docx(by_type, plot_path, docx_path, n_failed, failed_types):
     table = doc.add_table(rows=n_show + 1, cols=6)
     table.style = "Light Shading Accent 1"
     headers = [
-        "Rank", "Model Type", "Hidden Dim",
-        "Conv Layers", "Learning Rate", "Best Val Loss",
+        "Rank",
+        "Model Type",
+        "Hidden Dim",
+        "Conv Layers",
+        "Learning Rate",
+        "Best Val Loss",
     ]
     for j, h in enumerate(headers):
         cell = table.rows[0].cells[j]
@@ -430,9 +438,14 @@ def update_docx(by_type, plot_path, docx_path, n_failed, failed_types):
 
     # Build dynamic caption from actual best/worst types
     hex_to_name = {
-        "#d62728": "red", "#1f77b4": "blue", "#2ca02c": "green",
-        "#ff7f0e": "orange", "#9467bd": "purple", "#8c564b": "brown",
-        "#e377c2": "pink", "#333333": "gray",
+        "#d62728": "red",
+        "#1f77b4": "blue",
+        "#2ca02c": "green",
+        "#ff7f0e": "orange",
+        "#9467bd": "purple",
+        "#8c564b": "brown",
+        "#e377c2": "pink",
+        "#333333": "gray",
     }
     best_two = type_order[:2]
     worst_two = type_order[-2:] if len(type_order) >= 4 else type_order[-1:]
@@ -476,7 +489,7 @@ def update_docx(by_type, plot_path, docx_path, n_failed, failed_types):
         )
 
     # Common hyperparameter patterns in top 5
-    top5 = all_success[:min(5, len(all_success))]
+    top5 = all_success[: min(5, len(all_success))]
     layers_set = set(t["layers"] for t in top5)
     if len(layers_set) == 1:
         common_layers = top5[0]["layers"]
@@ -625,7 +638,9 @@ def main():
             sys.exit(1)
     for d in dh_dirs:
         if not os.path.isdir(d):
-            print(f"WARNING: DeepHyper dir not found: {d} (epoch curves will be missing)")
+            print(
+                f"WARNING: DeepHyper dir not found: {d} (epoch curves will be missing)"
+            )
 
     # Load and build data
     print("Loading results...")

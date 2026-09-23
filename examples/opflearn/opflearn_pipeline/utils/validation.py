@@ -1,4 +1,3 @@
-
 import logging
 
 import numpy as np
@@ -59,6 +58,10 @@ def validate_voltage_transformation(
             atol=1e-12,
         )
 
-    suspicious = int(np.sum((voltage_magnitude <= 0.0) & np.isfinite(voltage_magnitude)))
+    suspicious = int(
+        np.sum((voltage_magnitude <= 0.0) & np.isfinite(voltage_magnitude))
+    )
     if suspicious > 0:
-        log.warning("Detected %d nonpositive vm_bus values in corrected output.", suspicious)
+        log.warning(
+            "Detected %d nonpositive vm_bus values in corrected output.", suspicious
+        )

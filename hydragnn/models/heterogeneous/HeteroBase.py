@@ -288,7 +288,9 @@ class HeteroBase(Module):
         if isinstance(edge_dim, dict):
             edge_type = tuple(edge_type)
             if edge_type not in edge_dim:
-                raise ValueError(f"Undeclared edge type in model metadata: {edge_type}.")
+                raise ValueError(
+                    f"Undeclared edge type in model metadata: {edge_type}."
+                )
             resolved = edge_dim[edge_type]
             return None if resolved == 0 else resolved
         return edge_dim
@@ -463,9 +465,11 @@ class HeteroBase(Module):
                             hidden_dim_node,
                             node_NN_type,
                             self.activation_function,
-                            num_nodes=self.num_nodes
-                            if node_NN_type == "mlp_per_node"
-                            else None,
+                            num_nodes=(
+                                self.num_nodes
+                                if node_NN_type == "mlp_per_node"
+                                else None
+                            ),
                         )
                     elif node_NN_type == "conv":
                         head_NN[branchtype] = ModuleList()
@@ -783,7 +787,7 @@ class HeteroBase(Module):
                     store.edge_index = store.edge_index.to(device)
                 if hasattr(store, "edge_attr") and store.edge_attr is not None:
                     store.edge_attr = store.edge_attr.to(device)
-                    
+
         x_dict, batch_dict = self._prepare_node_features(data)
         equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
 

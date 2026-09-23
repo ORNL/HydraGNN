@@ -1,4 +1,3 @@
-
 import logging
 from pathlib import Path
 
@@ -44,7 +43,9 @@ def test_parse_malformed_string_raises() -> None:
 
 
 def test_magnitude_preservation() -> None:
-    raw = np.array([1.05 * np.exp(1j * -0.001), 0.98 * np.exp(1j * 0.02)], dtype=np.complex128)
+    raw = np.array(
+        [1.05 * np.exp(1j * -0.001), 0.98 * np.exp(1j * 0.02)], dtype=np.complex128
+    )
     corrected, _, _ = correct_bus_voltage_array(raw)
     np.testing.assert_allclose(np.abs(corrected), np.abs(raw), rtol=1e-12, atol=1e-12)
 
@@ -52,11 +53,15 @@ def test_magnitude_preservation() -> None:
 def test_exact_minus_180_over_pi_correction() -> None:
     raw_angle_rad = -0.001
     magnitude = 1.05
-    raw_voltage = np.array([magnitude * np.exp(1j * raw_angle_rad)], dtype=np.complex128)
+    raw_voltage = np.array(
+        [magnitude * np.exp(1j * raw_angle_rad)], dtype=np.complex128
+    )
     expected_angle_rad = -raw_angle_rad * 180.0 / np.pi
 
     _, corrected_angle_rad, _ = correct_bus_voltage_array(raw_voltage)
-    assert corrected_angle_rad[0] == pytest.approx(expected_angle_rad, rel=1e-12, abs=1e-12)
+    assert corrected_angle_rad[0] == pytest.approx(
+        expected_angle_rad, rel=1e-12, abs=1e-12
+    )
     assert ANGLE_CORRECTION_FACTOR == pytest.approx(-180.0 / np.pi)
 
 

@@ -17,7 +17,10 @@ from hydragnn.train.train_validate_test import test
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
 from hydragnn.utils.distributed import setup_ddp
-from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims, update_config
+from hydragnn.utils.input_config_parsing.config_utils import (
+    edge_type_dims,
+    update_config,
+)
 from hydragnn.utils.model import load_existing_model
 
 try:
@@ -49,11 +52,17 @@ def _validate_edge_attr_hetero(data, edge_dim_dict):
 
         if expected_dim == 0:
             if isinstance(edge_attr, torch.Tensor):
-                raise RuntimeError(f"Featureless edge type {edge_type} should not have edge_attr.")
+                raise RuntimeError(
+                    f"Featureless edge type {edge_type} should not have edge_attr."
+                )
             continue
         if not isinstance(edge_attr, torch.Tensor):
             raise RuntimeError(f"Edge type {edge_type} is missing edge_attr.")
-        if edge_attr.dim() != 2 or edge_attr.size(0) != num_edges or edge_attr.size(1) != expected_dim:
+        if (
+            edge_attr.dim() != 2
+            or edge_attr.size(0) != num_edges
+            or edge_attr.size(1) != expected_dim
+        ):
             raise RuntimeError(f"edge_attr mismatch for edge type {edge_type}.")
     return data
 
@@ -92,10 +101,15 @@ class NodeBatchAdapter:
                 node_store = data[self.node_target_type]
                 if hasattr(node_store, "batch"):
                     data.batch = node_store.batch
-                elif hasattr(data, "batch_dict") and self.node_target_type in data.batch_dict:
+                elif (
+                    hasattr(data, "batch_dict")
+                    and self.node_target_type in data.batch_dict
+                ):
                     data.batch = data.batch_dict[self.node_target_type]
                 else:
-                    raise RuntimeError(f"Cannot find batch vector for node type '{self.node_target_type}'.")
+                    raise RuntimeError(
+                        f"Cannot find batch vector for node type '{self.node_target_type}'."
+                    )
             data.y = data[self.node_target_type].y
             yield data
 
@@ -127,7 +141,9 @@ def _plot_parity_per_dim(true_values, predicted_values, output_name, out_dir):
         ax.set_title(f"{output_name} dim {dim}")
         ax.set_aspect("equal", adjustable="box")
         fig.tight_layout()
-        fig.savefig(os.path.join(out_dir, f"parity_{output_name}_dim{dim}.png"), dpi=300)
+        fig.savefig(
+            os.path.join(out_dir, f"parity_{output_name}_dim{dim}.png"), dpi=300
+        )
         plt.close(fig)
 
 
@@ -144,7 +160,11 @@ def _load_splits(args, datadir, comm):
 
     if args.format == "hdf5":
         base = os.path.join(datadir, f"{args.modelname}.h5")
-        return HDF5Dataset(base, "trainset"), HDF5Dataset(base, "valset"), HDF5Dataset(base, "testset")
+        return (
+            HDF5Dataset(base, "trainset"),
+            HDF5Dataset(base, "valset"),
+            HDF5Dataset(base, "testset"),
+        )
 
     base = os.path.join(datadir, f"{args.modelname}.pickle")
     return (
@@ -158,7 +178,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="pglearn_solution_heterogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="pglearn_solution_heterogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument("--modelname", type=str, default="PGLearn_Solution_Hetero")
     parser.add_argument("--node_target_type", type=str, default="bus")
@@ -194,14 +216,16 @@ def main():
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
-    edge_dim = edge_type_dims(
-        config["NeuralNetwork"]["Architecture"]["edge_types"]
-    )
+    edge_dim = edge_type_dims(config["NeuralNetwork"]["Architecture"]["edge_types"])
 
     trainset, valset, testset = _load_splits(args, datadir, comm)
-    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type, edge_dim=edge_dim)
+    trainset = NodeTargetDatasetAdapter(
+        trainset, args.node_target_type, edge_dim=edge_dim
+    )
     valset = NodeTargetDatasetAdapter(valset, args.node_target_type, edge_dim=edge_dim)
-    testset = NodeTargetDatasetAdapter(testset, args.node_target_type, edge_dim=edge_dim)
+    testset = NodeTargetDatasetAdapter(
+        testset, args.node_target_type, edge_dim=edge_dim
+    )
 
     train_loader, val_loader, test_loader = hydragnn.preprocess.create_dataloaders(
         trainset,
@@ -210,9 +234,13 @@ def main():
         config["NeuralNetwork"]["Training"]["batch_size"],
     )
 
-    train_loader = NodeBatchAdapter(train_loader, args.node_target_type, edge_dim=edge_dim)
+    train_loader = NodeBatchAdapter(
+        train_loader, args.node_target_type, edge_dim=edge_dim
+    )
     val_loader = NodeBatchAdapter(val_loader, args.node_target_type, edge_dim=edge_dim)
-    test_loader = NodeBatchAdapter(test_loader, args.node_target_type, edge_dim=edge_dim)
+    test_loader = NodeBatchAdapter(
+        test_loader, args.node_target_type, edge_dim=edge_dim
+    )
 
     config = update_config(config, train_loader, val_loader, test_loader)
 
@@ -255,12 +283,19 @@ def main():
             "mae": [],
         }
 
-        output_names = config["NeuralNetwork"]["Variables_of_interest"].get("output_names", ["bus_solution"])
+        output_names = config["NeuralNetwork"]["Variables_of_interest"].get(
+            "output_names", ["bus_solution"]
+        )
         for ihead in range(num_tasks):
             t = true_values[ihead].detach().cpu().numpy()
             p = predicted_values[ihead].detach().cpu().numpy()
             metrics["mae"].append(float(np.mean(np.abs(p - t))))
-            _plot_parity_per_dim(true_values[ihead], predicted_values[ihead], output_names[ihead] if ihead < len(output_names) else f"head{ihead}", out_dir)
+            _plot_parity_per_dim(
+                true_values[ihead],
+                predicted_values[ihead],
+                output_names[ihead] if ihead < len(output_names) else f"head{ihead}",
+                out_dir,
+            )
 
         with open(os.path.join(out_dir, "test_metrics.json"), "w") as fh:
             json.dump(metrics, fh, indent=2)

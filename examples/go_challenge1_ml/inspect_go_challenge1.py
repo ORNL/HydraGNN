@@ -12,10 +12,16 @@ from go_challenge1.parser_utils import parse_scenario_bundle
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--input-dir", required=True)
-    parser.add_argument("--scenario", default=None, help="Optional scenario name filter")
-    parser.add_argument("--json", action="store_true", help="Emit JSON instead of table")
+    parser.add_argument(
+        "--scenario", default=None, help="Optional scenario name filter"
+    )
+    parser.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of table"
+    )
     return parser.parse_args()
 
 
@@ -48,7 +54,11 @@ def main():
     args = parse_args()
     scenarios = discover_scenarios(Path(args.input_dir))
     if args.scenario:
-        scenarios = [s for s in scenarios if s.scenario_id == args.scenario or s.network_name == args.scenario]
+        scenarios = [
+            s
+            for s in scenarios
+            if s.scenario_id == args.scenario or s.network_name == args.scenario
+        ]
 
     rows = []
     for files in scenarios:

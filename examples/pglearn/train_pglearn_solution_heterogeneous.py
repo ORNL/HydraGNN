@@ -15,8 +15,14 @@ from torch_geometric.data import HeteroData
 import hydragnn
 from __init__ import data_ops
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset, HDF5Writer
-from hydragnn.utils.datasets.pickledataset import SimplePickleDataset, SimplePickleWriter
-from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims, update_config
+from hydragnn.utils.datasets.pickledataset import (
+    SimplePickleDataset,
+    SimplePickleWriter,
+)
+from hydragnn.utils.input_config_parsing.config_utils import (
+    edge_type_dims,
+    update_config,
+)
 from hydragnn.utils.model import print_model
 from hydragnn.utils.profiling_and_tracing import print_timers
 from hydragnn.utils.print import iterate_tqdm
@@ -38,7 +44,9 @@ PF_VG_KEY_CANDIDATES = ["vg", "vg_setpoint", "vm_setpoint", "vset", "gen_vm"]
 def _normalize_task(task_name):
     task = str(task_name).strip().lower()
     if task not in (TASK_PF, TASK_OPF):
-        raise ValueError(f"Unsupported task '{task_name}'. Use '{TASK_PF}' or '{TASK_OPF}'.")
+        raise ValueError(
+            f"Unsupported task '{task_name}'. Use '{TASK_PF}' or '{TASK_OPF}'."
+        )
     return task
 
 
@@ -207,7 +215,10 @@ class NodeTargetDatasetAdapter:
         _validate_edge_attr_hetero(data, self.edge_dim)
         if self.node_target_type not in data.node_types:
             raise RuntimeError(f"Node type '{self.node_target_type}' not found.")
-        if not hasattr(data[self.node_target_type], "y") or data[self.node_target_type].y is None:
+        if (
+            not hasattr(data[self.node_target_type], "y")
+            or data[self.node_target_type].y is None
+        ):
             raise RuntimeError(f"Node type '{self.node_target_type}' is missing y.")
         data.y = data[self.node_target_type].y
         return data
@@ -231,10 +242,15 @@ class NodeBatchAdapter:
                 node_store = data[self.node_target_type]
                 if hasattr(node_store, "batch"):
                     data.batch = node_store.batch
-                elif hasattr(data, "batch_dict") and self.node_target_type in data.batch_dict:
+                elif (
+                    hasattr(data, "batch_dict")
+                    and self.node_target_type in data.batch_dict
+                ):
                     data.batch = data.batch_dict[self.node_target_type]
                 else:
-                    raise RuntimeError(f"Cannot find batch vector for node type '{self.node_target_type}'.")
+                    raise RuntimeError(
+                        f"Cannot find batch vector for node type '{self.node_target_type}'."
+                    )
             data.y = data[self.node_target_type].y
             yield data
 
@@ -255,7 +271,9 @@ def _build_case_static(case_data):
 
     edge_src = np.concatenate([bus_fr, bus_to])
     edge_dst = np.concatenate([bus_to, bus_fr])
-    edge_index_bus = torch.tensor(np.stack([edge_src, edge_dst], axis=0), dtype=torch.long)
+    edge_index_bus = torch.tensor(
+        np.stack([edge_src, edge_dst], axis=0), dtype=torch.long
+    )
 
     # Static branch channels.
     branch_keys = ["gff", "gft", "gtf", "gtt", "bff", "bft", "btf", "btt", "smax"]
@@ -438,8 +456,12 @@ def _build_sample(static, input_h5, primal_h5, idx, task, schema_keys):
         axis=1,
     )
 
-    branch_status_full = np.concatenate([branch_status, branch_status], axis=0).reshape(-1, 1)
-    edge_attr_bus = np.concatenate([static["branch_static"], branch_status_full], axis=1)
+    branch_status_full = np.concatenate([branch_status, branch_status], axis=0).reshape(
+        -1, 1
+    )
+    edge_attr_bus = np.concatenate(
+        [static["branch_static"], branch_status_full], axis=1
+    )
 
     data = HeteroData()
     data["bus"].x = torch.tensor(bus_x, dtype=torch.float32)
@@ -448,7 +470,9 @@ def _build_sample(static, input_h5, primal_h5, idx, task, schema_keys):
     data["load"].x = torch.tensor(load_x, dtype=torch.float32)
 
     data[("bus", "ac_line", "bus")].edge_index = static["edge_index_bus"]
-    data[("bus", "ac_line", "bus")].edge_attr = torch.tensor(edge_attr_bus, dtype=torch.float32)
+    data[("bus", "ac_line", "bus")].edge_attr = torch.tensor(
+        edge_attr_bus, dtype=torch.float32
+    )
 
     gen_ids = np.arange(n_gen, dtype=np.int64)
     gen_bus = static["gen_to_bus"].astype(np.int64)
@@ -497,12 +521,18 @@ def _prepare_local_datasets(
     test_primal_path = os.path.join(case_dir, "test", formulation, "primal.h5")
 
     if not os.path.isfile(train_input_path) or not os.path.isfile(train_primal_path):
-        raise FileNotFoundError("Missing uncompressed train HDF5 files. Run download script first.")
+        raise FileNotFoundError(
+            "Missing uncompressed train HDF5 files. Run download script first."
+        )
     if not os.path.isfile(test_input_path) or not os.path.isfile(test_primal_path):
-        raise FileNotFoundError("Missing uncompressed test HDF5 files. Run download script first.")
+        raise FileNotFoundError(
+            "Missing uncompressed test HDF5 files. Run download script first."
+        )
 
     schema_keys = None
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(train_primal_path, "r") as tr_out:
+    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
+        train_primal_path, "r"
+    ) as tr_out:
         schema_keys = _validate_and_resolve_schema(task, tr_in, tr_out, static["n_gen"])
 
     with h5py.File(train_input_path, "r") as tr_in:
@@ -532,15 +562,27 @@ def _prepare_local_datasets(
     local_val = []
     local_test = []
 
-    with h5py.File(train_input_path, "r") as tr_in, h5py.File(train_primal_path, "r") as tr_out:
-        for idx in iterate_tqdm(local_train_idx, 2, desc="Preprocess train", leave=False):
-            local_train.append(_build_sample(static, tr_in, tr_out, idx, task, schema_keys))
+    with h5py.File(train_input_path, "r") as tr_in, h5py.File(
+        train_primal_path, "r"
+    ) as tr_out:
+        for idx in iterate_tqdm(
+            local_train_idx, 2, desc="Preprocess train", leave=False
+        ):
+            local_train.append(
+                _build_sample(static, tr_in, tr_out, idx, task, schema_keys)
+            )
         for idx in iterate_tqdm(local_val_idx, 2, desc="Preprocess val", leave=False):
-            local_val.append(_build_sample(static, tr_in, tr_out, idx, task, schema_keys))
+            local_val.append(
+                _build_sample(static, tr_in, tr_out, idx, task, schema_keys)
+            )
 
-    with h5py.File(test_input_path, "r") as te_in, h5py.File(test_primal_path, "r") as te_out:
+    with h5py.File(test_input_path, "r") as te_in, h5py.File(
+        test_primal_path, "r"
+    ) as te_out:
         for idx in iterate_tqdm(local_test_idx, 2, desc="Preprocess test", leave=False):
-            local_test.append(_build_sample(static, te_in, te_out, idx, task, schema_keys))
+            local_test.append(
+                _build_sample(static, te_in, te_out, idx, task, schema_keys)
+            )
 
     return local_train, local_val, local_test
 
@@ -597,7 +639,11 @@ def _load_serialized_splits(args, datadir, comm):
 
     if args.format == "hdf5":
         base = os.path.join(datadir, f"{args.modelname}.h5")
-        return HDF5Dataset(base, "trainset"), HDF5Dataset(base, "valset"), HDF5Dataset(base, "testset")
+        return (
+            HDF5Dataset(base, "trainset"),
+            HDF5Dataset(base, "valset"),
+            HDF5Dataset(base, "testset"),
+        )
 
     base = os.path.join(datadir, f"{args.modelname}.pickle")
     return (
@@ -611,7 +657,9 @@ def parse_args():
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument("--inputfile", type=str, default="pglearn_solution_heterogeneous.json")
+    parser.add_argument(
+        "--inputfile", type=str, default="pglearn_solution_heterogeneous.json"
+    )
     parser.add_argument("--data_root", type=str, default="dataset")
     parser.add_argument("--modelname", type=str, default="PGLearn_Solution_Hetero")
     parser.add_argument("--repo", type=str, default="PGLearn/PGLearn-Small")
@@ -640,7 +688,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    task = _infer_task_from_formulation(args.formulation) if args.task == "auto" else _normalize_task(args.task)
+    task = (
+        _infer_task_from_formulation(args.formulation)
+        if args.task == "auto"
+        else _normalize_task(args.task)
+    )
     _validate_task_and_formulation(task, args.formulation)
 
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
@@ -683,7 +735,9 @@ def main():
     elif args.format == "hdf5":
         serialized_exists = os.path.isdir(os.path.join(datadir, f"{args.modelname}.h5"))
     else:
-        serialized_exists = os.path.isdir(os.path.join(datadir, f"{args.modelname}.pickle"))
+        serialized_exists = os.path.isdir(
+            os.path.join(datadir, f"{args.modelname}.pickle")
+        )
 
     if args.preonly or not serialized_exists:
         trainset, valset, testset = _prepare_local_datasets(
@@ -705,12 +759,14 @@ def main():
 
     trainset, valset, testset = _load_serialized_splits(args, datadir, comm)
 
-    edge_dim = edge_type_dims(
-        config["NeuralNetwork"]["Architecture"]["edge_types"]
+    edge_dim = edge_type_dims(config["NeuralNetwork"]["Architecture"]["edge_types"])
+    trainset = NodeTargetDatasetAdapter(
+        trainset, args.node_target_type, edge_dim=edge_dim
     )
-    trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type, edge_dim=edge_dim)
     valset = NodeTargetDatasetAdapter(valset, args.node_target_type, edge_dim=edge_dim)
-    testset = NodeTargetDatasetAdapter(testset, args.node_target_type, edge_dim=edge_dim)
+    testset = NodeTargetDatasetAdapter(
+        testset, args.node_target_type, edge_dim=edge_dim
+    )
 
     sample0 = trainset[0]
     _check_task_token(sample0, task)
@@ -739,9 +795,13 @@ def main():
         config["NeuralNetwork"]["Training"]["batch_size"],
     )
 
-    train_loader = NodeBatchAdapter(train_loader, args.node_target_type, edge_dim=edge_dim)
+    train_loader = NodeBatchAdapter(
+        train_loader, args.node_target_type, edge_dim=edge_dim
+    )
     val_loader = NodeBatchAdapter(val_loader, args.node_target_type, edge_dim=edge_dim)
-    test_loader = NodeBatchAdapter(test_loader, args.node_target_type, edge_dim=edge_dim)
+    test_loader = NodeBatchAdapter(
+        test_loader, args.node_target_type, edge_dim=edge_dim
+    )
 
     config = update_config(config, train_loader, val_loader, test_loader)
     config = _to_jsonable(config)

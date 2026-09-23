@@ -46,7 +46,9 @@ def select_io_columns(columns: list[str]) -> tuple[list[str], list[str]]:
     return sorted(input_cols), sorted(output_cols)
 
 
-def _split_indices(n_rows: int, train_frac: float, val_frac: float, seed: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _split_indices(
+    n_rows: int, train_frac: float, val_frac: float, seed: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if n_rows < 3:
         raise ValueError("Need at least 3 rows to form train/val/test splits.")
 
@@ -95,7 +97,9 @@ def _build_split_dataset(
     local_idx = split_idx[rank::world_size]
     dataset: list[Data] = []
     for i in local_idx:
-        dataset.append(_row_to_data(x_values[i], y_values[i], feasible_flag=feasible_flag))
+        dataset.append(
+            _row_to_data(x_values[i], y_values[i], feasible_flag=feasible_flag)
+        )
     return dataset
 
 
@@ -123,7 +127,7 @@ def serialize_parquet_to_hdf5(
     frame = pd.read_parquet(input_parquet)
     n_total = int(frame.shape[0])
     if max_samples is not None and max_samples > 0:
-        frame = frame.iloc[: max_samples].copy()
+        frame = frame.iloc[:max_samples].copy()
 
     input_cols, output_cols = select_io_columns(list(frame.columns))
     x_values = frame[input_cols].to_numpy(dtype=np.float32)
@@ -134,9 +138,15 @@ def serialize_parquet_to_hdf5(
 
     feasible_flag = 0.0 if input_parquet.name.startswith("INFEASIBLE_") else 1.0
 
-    trainset = _build_split_dataset(x_values, y_values, train_idx, feasible_flag, rank, world_size)
-    valset = _build_split_dataset(x_values, y_values, val_idx, feasible_flag, rank, world_size)
-    testset = _build_split_dataset(x_values, y_values, test_idx, feasible_flag, rank, world_size)
+    trainset = _build_split_dataset(
+        x_values, y_values, train_idx, feasible_flag, rank, world_size
+    )
+    valset = _build_split_dataset(
+        x_values, y_values, val_idx, feasible_flag, rank, world_size
+    )
+    testset = _build_split_dataset(
+        x_values, y_values, test_idx, feasible_flag, rank, world_size
+    )
 
     if rank == 0 and output_hdf5_dir.exists() and overwrite:
         if output_hdf5_dir.is_dir():
@@ -195,7 +205,9 @@ def serialize_directory(
 
     parquet_files = sorted(input_dir.glob("*.parquet"))
     if not include_infeasible:
-        parquet_files = [p for p in parquet_files if not p.name.startswith("INFEASIBLE_")]
+        parquet_files = [
+            p for p in parquet_files if not p.name.startswith("INFEASIBLE_")
+        ]
 
     if not parquet_files:
         raise FileNotFoundError("No matching parquet files found to serialize.")

@@ -1,4 +1,3 @@
-
 import argparse
 import logging
 import sys
@@ -13,11 +12,30 @@ def parse_args() -> argparse.Namespace:
         description="Preprocess OPFLearn CSV files and write corrected Parquet outputs.",
     )
     parser.add_argument("--input", type=Path, default=None, help="Input CSV file path.")
-    parser.add_argument("--output", type=Path, default=None, help="Output Parquet file path for single-file mode.")
-    parser.add_argument("--input-dir", type=Path, default=None, help="Input directory containing one or more CSV files.")
-    parser.add_argument("--output-dir", type=Path, default=None, help="Output directory for processed Parquet files.")
-    parser.add_argument("--chunksize", type=int, default=1000, help="Rows per processing chunk.")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output files.")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Output Parquet file path for single-file mode.",
+    )
+    parser.add_argument(
+        "--input-dir",
+        type=Path,
+        default=None,
+        help="Input directory containing one or more CSV files.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output directory for processed Parquet files.",
+    )
+    parser.add_argument(
+        "--chunksize", type=int, default=1000, help="Rows per processing chunk."
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing output files."
+    )
     return parser.parse_args()
 
 
@@ -59,7 +77,9 @@ def main() -> int:
 
         if input_dir is not None:
             if output_dir is None:
-                raise ValueError("--output-dir is required when --input-dir is provided.")
+                raise ValueError(
+                    "--output-dir is required when --input-dir is provided."
+                )
             results = process_directory(
                 input_dir=input_dir,
                 output_dir=output_dir,

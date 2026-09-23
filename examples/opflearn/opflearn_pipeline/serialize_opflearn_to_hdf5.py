@@ -14,8 +14,15 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description="Convert processed OPFLearn parquet files into PyG objects serialized as HydraGNN HDF5 datasets.",
     )
-    parser.add_argument("--input", type=Path, default=None, help="Single input parquet file.")
-    parser.add_argument("--output", type=Path, default=None, help="Single output HDF5 dataset directory (*.h5).")
+    parser.add_argument(
+        "--input", type=Path, default=None, help="Single input parquet file."
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Single output HDF5 dataset directory (*.h5).",
+    )
     parser.add_argument(
         "--input-dir",
         type=Path,
@@ -28,13 +35,34 @@ def parse_args() -> argparse.Namespace:
         default=Path("dataset/opflearn/serialized_hdf5"),
         help="Output directory for HDF5 dataset directories.",
     )
-    parser.add_argument("--include-infeasible", action="store_true", help="Also serialize INFEASIBLE_*.parquet files.")
-    parser.add_argument("--max-samples", type=int, default=None, help="Optional cap on number of rows per input file.")
-    parser.add_argument("--include-duals", action="store_true", help="Reserved: include dual outputs in y (not yet enabled).")
-    parser.add_argument("--train-frac", type=float, default=0.8, help="Train split fraction.")
-    parser.add_argument("--val-frac", type=float, default=0.1, help="Validation split fraction.")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for split shuffling.")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite existing output datasets.")
+    parser.add_argument(
+        "--include-infeasible",
+        action="store_true",
+        help="Also serialize INFEASIBLE_*.parquet files.",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Optional cap on number of rows per input file.",
+    )
+    parser.add_argument(
+        "--include-duals",
+        action="store_true",
+        help="Reserved: include dual outputs in y (not yet enabled).",
+    )
+    parser.add_argument(
+        "--train-frac", type=float, default=0.8, help="Train split fraction."
+    )
+    parser.add_argument(
+        "--val-frac", type=float, default=0.1, help="Validation split fraction."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed for split shuffling."
+    )
+    parser.add_argument(
+        "--overwrite", action="store_true", help="Overwrite existing output datasets."
+    )
     return parser.parse_args()
 
 

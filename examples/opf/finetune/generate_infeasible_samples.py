@@ -36,10 +36,10 @@ sys.path.insert(0, _OPF_DIR)
 
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset, HDF5Writer
 
-
 # ---------------------------------------------------------------------------
 # Sample manipulation helpers
 # ---------------------------------------------------------------------------
+
 
 def strip_node_targets(data):
     """Remove node-level prediction targets and y_loc; keep all node features."""
@@ -78,6 +78,7 @@ def label_samples(samples, label: float):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     comm = MPI.COMM_WORLD
@@ -174,10 +175,14 @@ def main():
                 if (n_seen % 5000) == 0:
                     print(f"  Scanned {n_seen} samples, kept {len(reservoir)}...")
         except Exception as exc:
-            print(f"  Warning: could not load split '{split}' from {args.src_dir}: {exc}")
+            print(
+                f"  Warning: could not load split '{split}' from {args.src_dir}: {exc}"
+            )
 
     all_feasible = reservoir
-    print(f"Loaded {len(all_feasible)} feasible samples from {args.src_dir} (scanned {n_seen} total)")
+    print(
+        f"Loaded {len(all_feasible)} feasible samples from {args.src_dir} (scanned {n_seen} total)"
+    )
 
     if len(all_feasible) == 0:
         raise RuntimeError("No feasible samples found in the source dataset.")
@@ -203,11 +208,11 @@ def main():
 
     # ── Split ──────────────────────────────────────────────────────────────
     n_train = int(args.train_frac * n_total)
-    n_val   = int(args.val_frac   * n_total)
+    n_val = int(args.val_frac * n_total)
     splits = {
         "trainset": mixed[:n_train],
-        "valset":   mixed[n_train : n_train + n_val],
-        "testset":  mixed[n_train + n_val :],
+        "valset": mixed[n_train : n_train + n_val],
+        "testset": mixed[n_train + n_val :],
     }
     for name, s in splits.items():
         label_counts = {

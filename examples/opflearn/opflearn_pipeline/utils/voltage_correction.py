@@ -1,4 +1,3 @@
-
 import numpy as np
 
 ANGLE_CORRECTION_FACTOR = -180.0 / np.pi

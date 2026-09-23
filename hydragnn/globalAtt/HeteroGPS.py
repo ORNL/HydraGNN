@@ -297,9 +297,7 @@ class HeteroGPSConv(torch.nn.Module):
 
         if batch_dict is None:
             batch_dict = {
-                node_type: torch.zeros(
-                    x.size(0), device=x.device, dtype=torch.long
-                )
+                node_type: torch.zeros(x.size(0), device=x.device, dtype=torch.long)
                 for node_type, x in inv_node_feat_dict.items()
             }
 

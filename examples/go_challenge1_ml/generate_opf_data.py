@@ -14,10 +14,14 @@ from go_challenge1.validation import ValidationTolerances, validate_solution
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--solver", choices=["pandapower", "powermodels"], default="pandapower")
+    parser.add_argument(
+        "--solver", choices=["pandapower", "powermodels"], default="pandapower"
+    )
     parser.add_argument("--powermodels-timeout", type=float, default=600.0)
     parser.add_argument("--limit-scenarios", type=int, default=None)
     parser.add_argument("--power-balance-tol", type=float, default=1e-5)
@@ -48,13 +52,15 @@ def main():
             scenario = parse_scenario_bundle(files)
         except Exception as exc:  # noqa: BLE001
             print(f"[skip] failed to parse scenario bundle: {exc}")
-            summary.append({
-                "scenario_id": files.uid,
-                "task_name": "opf",
-                "success": False,
-                "label_valid": False,
-                "validation_messages": [f"parse_error:{type(exc).__name__}:{exc}"],
-            })
+            summary.append(
+                {
+                    "scenario_id": files.uid,
+                    "task_name": "opf",
+                    "success": False,
+                    "label_valid": False,
+                    "validation_messages": [f"parse_error:{type(exc).__name__}:{exc}"],
+                }
+            )
             continue
 
         try:
@@ -86,16 +92,20 @@ def main():
             summary.append({k: v for k, v in rec.items() if k != "solution"})
         except Exception as exc:  # noqa: BLE001
             print(f"[skip] {scenario.scenario_id}: OPF generation failed: {exc}")
-            summary.append({
-                "scenario_id": scenario.scenario_id,
-                "sample_uid": files.uid,
-                "grid_id": files.network_name,
-                "network_name": scenario.network_name,
-                "task_name": "opf",
-                "success": False,
-                "label_valid": False,
-                "validation_messages": [f"generation_error:{type(exc).__name__}:{exc}"],
-            })
+            summary.append(
+                {
+                    "scenario_id": scenario.scenario_id,
+                    "sample_uid": files.uid,
+                    "grid_id": files.network_name,
+                    "network_name": scenario.network_name,
+                    "task_name": "opf",
+                    "success": False,
+                    "label_valid": False,
+                    "validation_messages": [
+                        f"generation_error:{type(exc).__name__}:{exc}"
+                    ],
+                }
+            )
             continue
 
     with open(out_dir / "summary.opf.json", "w", encoding="utf-8") as fh:

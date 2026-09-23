@@ -104,7 +104,6 @@ class OPFDomainLoss:
                 int(v) for v in self.voltage_bound_feature_indices
             )
 
-
     def _curriculum_scale(self) -> float:
         """Return a [0, 1] multiplier for domain-loss weights based on current epoch.
 
@@ -190,11 +189,13 @@ class OPFDomainLoss:
                 # is zero for feasible predictions and proportional to the violation otherwise.
                 # Squaring gives a smooth (C1) penalty with growing gradient for larger violations.
                 bound_penalty = torch.mean(
-                    F.relu(lower - voltage).pow(2)
-                    + F.relu(voltage - upper).pow(2)
+                    F.relu(lower - voltage).pow(2) + F.relu(voltage - upper).pow(2)
                 )
                 total_penalty = (
-                    total_penalty + curriculum * self.voltage_bound_weight * self._normalize("voltage_bound", bound_penalty)
+                    total_penalty
+                    + curriculum
+                    * self.voltage_bound_weight
+                    * self._normalize("voltage_bound", bound_penalty)
                 )
                 metrics["opf_voltage_bound"] = bound_penalty.detach()
 
@@ -226,7 +227,12 @@ class OPFDomainLoss:
                     F.relu(delta_theta - theta_max).pow(2)
                     + F.relu(theta_min - delta_theta).pow(2)
                 )
-                total_penalty = total_penalty + curriculum * self.angle_diff_weight * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                total_penalty = (
+                    total_penalty
+                    + curriculum
+                    * self.angle_diff_weight
+                    * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                )
                 metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
 
         # ── Full AC apparent-power thermal limit penalty ────────────────────
@@ -244,19 +250,30 @@ class OPFDomainLoss:
         #                x=edge_attr[:,5], rate_a=edge_attr[:,6], tm=1 (no tap)
         #   transformer: r=edge_attr[:,2], x=edge_attr[:,3], rate_a=edge_attr[:,4],
         #                tm=edge_attr[:,7], b_fr=b_to=0 (no shunt term in this schema)
-        if self.line_flow_weight > 0.0 and bus_pred.shape[-1] > max(self.va_output_index, self.voltage_output_index):
+        if self.line_flow_weight > 0.0 and bus_pred.shape[-1] > max(
+            self.va_output_index, self.voltage_output_index
+        ):
             Va = bus_pred[:, self.va_output_index].reshape(-1)
             Vm = bus_pred[:, self.voltage_output_index].reshape(-1)
             for rel, r_idx, x_idx, ra_idx, b_fr_idx, b_to_idx, tm_idx, rel_tag in [
-                (("bus", "ac_line", "bus"),    4, 5, 6, 2, 3, None, "ac"),
+                (("bus", "ac_line", "bus"), 4, 5, 6, 2, 3, None, "ac"),
                 (("bus", "transformer", "bus"), 2, 3, 4, None, None, 7, "tr"),
             ]:
                 if rel not in data.edge_types:
                     continue
                 ea = getattr(data[rel], "edge_attr", None)
                 ei = getattr(data[rel], "edge_index", None)
-                needed_idx = [i for i in (r_idx, x_idx, ra_idx, b_fr_idx, b_to_idx, tm_idx) if i is not None]
-                if ea is None or ei is None or ea.numel() == 0 or ea.shape[1] <= max(needed_idx):
+                needed_idx = [
+                    i
+                    for i in (r_idx, x_idx, ra_idx, b_fr_idx, b_to_idx, tm_idx)
+                    if i is not None
+                ]
+                if (
+                    ea is None
+                    or ei is None
+                    or ea.numel() == 0
+                    or ea.shape[1] <= max(needed_idx)
+                ):
                     continue
                 r_raw = ea[:, r_idx].to(Va.device)
                 x_raw = ea[:, x_idx].to(Va.device)
@@ -275,9 +292,21 @@ class OPFDomainLoss:
                 # clamp rate_a to be non-negative; negative thermal limits are nonsensical
                 # and could arise from edge cases in dataset normalisation.
                 rate_a = ea[:, ra_idx].to(Va.device).clamp(min=0.0)[keep]
-                b_fr = ea[:, b_fr_idx].to(Va.device)[keep] if b_fr_idx is not None else torch.zeros_like(r_ij)
-                b_to = ea[:, b_to_idx].to(Va.device)[keep] if b_to_idx is not None else torch.zeros_like(r_ij)
-                tm = ea[:, tm_idx].to(Va.device)[keep] if tm_idx is not None else torch.ones_like(r_ij)
+                b_fr = (
+                    ea[:, b_fr_idx].to(Va.device)[keep]
+                    if b_fr_idx is not None
+                    else torch.zeros_like(r_ij)
+                )
+                b_to = (
+                    ea[:, b_to_idx].to(Va.device)[keep]
+                    if b_to_idx is not None
+                    else torch.zeros_like(r_ij)
+                )
+                tm = (
+                    ea[:, tm_idx].to(Va.device)[keep]
+                    if tm_idx is not None
+                    else torch.ones_like(r_ij)
+                )
                 src, dst = ei
                 src, dst = src[keep], dst[keep]
 
@@ -300,7 +329,12 @@ class OPFDomainLoss:
                     F.relu(S_ij.abs() - rate_a - self.line_flow_slack).pow(2)
                     + F.relu(S_ji.abs() - rate_a - self.line_flow_slack).pow(2)
                 )
-                total_penalty = total_penalty + curriculum * self.line_flow_weight * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                total_penalty = (
+                    total_penalty
+                    + curriculum
+                    * self.line_flow_weight
+                    * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                )
                 metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
 
         metrics["opf_domain_total"] = total_penalty.detach()
@@ -394,13 +428,13 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
 
         # Map internal metric keys to self-explaining log field names.
         _key_labels = {
-            "opf_domain_total":      "physics_penalty_total",
-            "opf_curriculum_scale":  "curriculum_scale",
-            "opf_voltage_bound":     "raw_voltage_bound",
-            "opf_ac_angle_diff":     "raw_ac_angle_diff",
-            "opf_tr_angle_diff":     "raw_tr_angle_diff",
-            "opf_ac_line_flow":      "raw_ac_line_flow",
-            "opf_tr_line_flow":      "raw_tr_line_flow",
+            "opf_domain_total": "physics_penalty_total",
+            "opf_curriculum_scale": "curriculum_scale",
+            "opf_voltage_bound": "raw_voltage_bound",
+            "opf_ac_angle_diff": "raw_ac_angle_diff",
+            "opf_tr_angle_diff": "raw_tr_angle_diff",
+            "opf_ac_line_flow": "raw_ac_line_flow",
+            "opf_tr_line_flow": "raw_tr_line_flow",
             "opf_ac_line_flow_n_excluded": "ac_line_flow_n_excluded",
             "opf_tr_line_flow_n_excluded": "tr_line_flow_n_excluded",
         }
@@ -408,7 +442,10 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         # of near-zero-reactance branches (excluded from the penalty itself via
         # line_flow_min_x, but occasionally still present in edge cases) or genuinely
         # overloaded outlier branches can otherwise dominate the mean-of-squares.
-        _median_keys = {"opf_ac_line_flow": "raw_ac_line_flow_median", "opf_tr_line_flow": "raw_tr_line_flow_median"}
+        _median_keys = {
+            "opf_ac_line_flow": "raw_ac_line_flow_median",
+            "opf_tr_line_flow": "raw_tr_line_flow_median",
+        }
 
         parts = [f"epoch={epoch:02d}", f"data_driven_mse={task_mean:.8f}"]
         for key in sorted(self._epoch_accum):

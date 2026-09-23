@@ -4,7 +4,9 @@ import os
 import sys
 
 # Reuse the OPFLearn pipeline utilities (download + preprocess).
-_PIPELINE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "opflearn_pipeline")
+_PIPELINE_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "opflearn_pipeline"
+)
 if _PIPELINE_DIR not in sys.path:
     sys.path.insert(0, _PIPELINE_DIR)
 
@@ -16,7 +18,11 @@ from utils.preprocessing import process_csv_to_parquet
 
 def _case_csv_name(case_name: str) -> str:
     # Pipeline case names omit the leading "pglib_opf_" that the source files carry.
-    stem = case_name[len("pglib_opf_"):] if case_name.startswith("pglib_opf_") else case_name
+    stem = (
+        case_name[len("pglib_opf_") :]
+        if case_name.startswith("pglib_opf_")
+        else case_name
+    )
     return stem
 
 
@@ -42,7 +48,9 @@ def ensure_opflearn_prepared(
         raw_dir.mkdir(parents=True, exist_ok=True)
         processed_dir.mkdir(parents=True, exist_ok=True)
 
-        csv_paths = download_cases(cases=[stem], raw_dir=raw_dir, force=overwrite, logger=logger)
+        csv_paths = download_cases(
+            cases=[stem], raw_dir=raw_dir, force=overwrite, logger=logger
+        )
         csv_path = csv_paths[0]
 
         if overwrite or not parquet_path.exists():

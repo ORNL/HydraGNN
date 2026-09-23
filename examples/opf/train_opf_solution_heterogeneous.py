@@ -34,7 +34,6 @@ import torch_geometric.datasets.opf as tg_opf
 from __init__ import data_ops
 from opf_nvme_utils import stage_case_to_nvme
 
-
 _DEFAULT_CASE_NAMES = [
     "pglib_opf_case14_ieee",
     "pglib_opf_case30_ieee",
@@ -241,9 +240,9 @@ def _raw_json_to_heterodata(filepath):
     data["generator", "generator_link", "bus"].edge_index = tg_opf.extract_edge_index(
         obj, "generator_link"
     )
-    data[
-        "bus", "generator_link", "generator"
-    ].edge_index = tg_opf.extract_edge_index_rev(obj, "generator_link")
+    data["bus", "generator_link", "generator"].edge_index = (
+        tg_opf.extract_edge_index_rev(obj, "generator_link")
+    )
     data["load", "load_link", "bus"].edge_index = tg_opf.extract_edge_index(
         obj, "load_link"
     )
@@ -681,7 +680,11 @@ if __name__ == "__main__":
     # Apply CLI overrides for domain loss.  Any CLI flag takes precedence over
     # whatever is stored in the input config.
     _domain_cli_overrides = {
-        "enabled": True if args.enable_domain_loss else (False if args.disable_domain_loss else None),
+        "enabled": (
+            True
+            if args.enable_domain_loss
+            else (False if args.disable_domain_loss else None)
+        ),
         "voltage_bound_weight": args.domain_loss_voltage_bound_weight,
         "voltage_bound_feature_indices": (
             list(args.domain_loss_voltage_bound_feature_indices)
@@ -1294,7 +1297,11 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 
@@ -1345,9 +1352,7 @@ if __name__ == "__main__":
             info(
                 f"[DomainLoss] config (enabled={dl_enabled}): "
                 + ", ".join(
-                    f"{k}={v}"
-                    for k, v in domain_loss_config.items()
-                    if k != "enabled"
+                    f"{k}={v}" for k, v in domain_loss_config.items() if k != "enabled"
                 )
             )
         if dl_enabled and rank == 0:

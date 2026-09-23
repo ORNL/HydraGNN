@@ -10,6 +10,7 @@ import re
 from collections import defaultdict
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -93,34 +94,49 @@ def main():
             all_failed_types[ft] += fc
         for mpnn, trial_id, hparams, losses in trials:
             by_type[mpnn].append((trial_id, hparams, losses))
-        print("Loaded {} successful trials from {} (dh_dir={})".format(
-            len(trials), csv_path, dh_dir))
+        print(
+            "Loaded {} successful trials from {} (dh_dir={})".format(
+                len(trials), csv_path, dh_dir
+            )
+        )
 
     total = sum(len(v) for v in by_type.values())
     print("\nTotal: {} successful, {} failed".format(total, total_failed))
 
     # Print summary
-    print("\n{:>4} {:>14} {:>6} {:>6} {:>10} {:>13}".format(
-        "Rank", "Model Type", "Hidden", "Layers", "LR", "Best Val Loss"))
+    print(
+        "\n{:>4} {:>14} {:>6} {:>6} {:>10} {:>13}".format(
+            "Rank", "Model Type", "Hidden", "Layers", "LR", "Best Val Loss"
+        )
+    )
     print("-" * 60)
     all_trials = []
     for mpnn, trials in by_type.items():
         for trial_id, hparams, losses in trials:
-            all_trials.append({
-                "mpnn": mpnn, "trial": trial_id,
-                "hidden": hparams["hidden_dim"],
-                "layers": hparams["num_conv_layers"],
-                "lr": hparams["learning_rate"],
-                "best_loss": min(losses),
-            })
+            all_trials.append(
+                {
+                    "mpnn": mpnn,
+                    "trial": trial_id,
+                    "hidden": hparams["hidden_dim"],
+                    "layers": hparams["num_conv_layers"],
+                    "lr": hparams["learning_rate"],
+                    "best_loss": min(losses),
+                }
+            )
     all_trials.sort(key=lambda x: x["best_loss"])
     for i, t in enumerate(all_trials):
-        print("{:>4} {:>14} {:>6} {:>6} {:>10.6f} {:>13.6f}".format(
-            i+1, t["mpnn"], t["hidden"], t["layers"], t["lr"], t["best_loss"]))
+        print(
+            "{:>4} {:>14} {:>6} {:>6} {:>10.6f} {:>13.6f}".format(
+                i + 1, t["mpnn"], t["hidden"], t["layers"], t["lr"], t["best_loss"]
+            )
+        )
 
     # Per-type summary
-    print("\n{:>14} {:>6} {:>10} {:>10} {:>10}".format(
-        "Model Type", "Trials", "Best", "Mean", "Worst"))
+    print(
+        "\n{:>14} {:>6} {:>10} {:>10} {:>10}".format(
+            "Model Type", "Trials", "Best", "Mean", "Worst"
+        )
+    )
     print("-" * 54)
     type_stats = {}
     for mpnn, trials in by_type.items():
@@ -133,13 +149,17 @@ def main():
         }
     for mpnn in sorted(type_stats, key=lambda t: type_stats[t]["best"]):
         s = type_stats[mpnn]
-        print("{:>14} {:>6} {:>10.6f} {:>10.6f} {:>10.6f}".format(
-            mpnn, s["count"], s["best"], s["mean"], s["worst"]))
+        print(
+            "{:>14} {:>6} {:>10.6f} {:>10.6f} {:>10.6f}".format(
+                mpnn, s["count"], s["best"], s["mean"], s["worst"]
+            )
+        )
 
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(12, 7))
     type_order = sorted(
-        by_type.keys(), key=lambda t: min(min(l) for _, _, l in by_type[t]))
+        by_type.keys(), key=lambda t: min(min(l) for _, _, l in by_type[t])
+    )
 
     legend_handles = []
     legend_labels = []
@@ -159,11 +179,16 @@ def main():
             alpha = 0.9 if idx == 0 else 0.35
             lw = 2.5 if idx == 0 else 1.0
             line = ax.semilogy(
-                epochs, losses,
-                color=color, marker=marker,
+                epochs,
+                losses,
+                color=color,
+                marker=marker,
                 markersize=6 if idx == 0 else 4,
-                linewidth=lw, alpha=alpha,
-                markeredgewidth=0.5, markeredgecolor="white")
+                linewidth=lw,
+                alpha=alpha,
+                markeredgewidth=0.5,
+                markeredgecolor="white",
+            )
             if idx == 0:
                 best_loss = min(losses)
                 legend_handles.append(line[0])
@@ -172,35 +197,49 @@ def main():
                     overall_best_loss = best_loss
                     best_epoch = losses.index(best_loss) + 1
                     overall_best_info = {
-                        "mpnn": mpnn, "trial": trial_id,
-                        "loss": best_loss, "epoch": best_epoch}
+                        "mpnn": mpnn,
+                        "trial": trial_id,
+                        "loss": best_loss,
+                        "epoch": best_epoch,
+                    }
 
     ax.set_xlabel("Epoch", fontsize=13, fontweight="bold")
     ax.set_ylabel("Validation Loss", fontsize=13, fontweight="bold")
     ax.set_title(
         "HPO Validation Loss Curves by Model Architecture\n"
         "({} trials, Jobs 4249563 + 4252004, 128 Frontier nodes)".format(total),
-        fontsize=14, fontweight="bold")
+        fontsize=14,
+        fontweight="bold",
+    )
     ax.set_xticks(range(1, max_epochs + 1))
     ax.set_xlim(0.5, max_epochs + 0.5)
     ax.grid(True, which="both", alpha=0.3, linestyle="--")
     ax.yaxis.set_minor_formatter(mticker.NullFormatter())
 
-    ax.legend(legend_handles, legend_labels,
-              loc="upper right", fontsize=10, framealpha=0.9,
-              title="Model Type (best trial val loss)", title_fontsize=10)
+    ax.legend(
+        legend_handles,
+        legend_labels,
+        loc="upper right",
+        fontsize=10,
+        framealpha=0.9,
+        title="Model Type (best trial val loss)",
+        title_fontsize=10,
+    )
 
     if overall_best_info:
         info = overall_best_info
         ax.annotate(
             "Best overall:\n{}, trial {}\nVal loss = {:.5f}".format(
-                info["mpnn"], info["trial"], info["loss"]),
+                info["mpnn"], info["trial"], info["loss"]
+            ),
             xy=(info["epoch"], info["loss"]),
             xytext=(max(1, info["epoch"] - 3), info["loss"] * 2.5),
             fontsize=9,
             arrowprops=dict(arrowstyle="->", color="gray", lw=1.2),
-            bbox=dict(boxstyle="round,pad=0.3",
-                      facecolor="lightyellow", edgecolor="gray"))
+            bbox=dict(
+                boxstyle="round,pad=0.3", facecolor="lightyellow", edgecolor="gray"
+            ),
+        )
 
     plt.tight_layout()
     plot_path = "hpo_validation_loss_curves.png"

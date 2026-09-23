@@ -14,7 +14,9 @@ from go_challenge1.validation import ValidationTolerances, validate_solution
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--opf-solution-dir", default=None)
     parser.add_argument("--output-dir", required=True)
@@ -66,13 +68,15 @@ def main():
             scenario = parse_scenario_bundle(files)
         except Exception as exc:  # noqa: BLE001
             print(f"[skip] failed to parse scenario bundle: {exc}")
-            summary.append({
-                "scenario_id": files.uid,
-                "task_name": "pf",
-                "success": False,
-                "label_valid": False,
-                "validation_messages": [f"parse_error:{type(exc).__name__}:{exc}"],
-            })
+            summary.append(
+                {
+                    "scenario_id": files.uid,
+                    "task_name": "pf",
+                    "success": False,
+                    "label_valid": False,
+                    "validation_messages": [f"parse_error:{type(exc).__name__}:{exc}"],
+                }
+            )
             continue
 
         try:
@@ -81,7 +85,9 @@ def main():
             opf_output_state = None
             if args.use_opf_controls:
                 if args.opf_solution_dir is None:
-                    raise ValueError("--opf-solution-dir is required when --use-opf-controls is enabled")
+                    raise ValueError(
+                        "--opf-solution-dir is required when --use-opf-controls is enabled"
+                    )
                 opf_path = Path(args.opf_solution_dir) / f"{files.uid}.opf.json"
                 if opf_path.exists():
                     with open(opf_path, "r", encoding="utf-8") as fh:
@@ -119,16 +125,20 @@ def main():
             summary.append({k: v for k, v in rec.items() if k != "solution"})
         except Exception as exc:  # noqa: BLE001
             print(f"[skip] {scenario.scenario_id}: PF generation failed: {exc}")
-            summary.append({
-                "scenario_id": scenario.scenario_id,
-                "sample_uid": files.uid,
-                "grid_id": files.network_name,
-                "network_name": scenario.network_name,
-                "task_name": "pf",
-                "success": False,
-                "label_valid": False,
-                "validation_messages": [f"generation_error:{type(exc).__name__}:{exc}"],
-            })
+            summary.append(
+                {
+                    "scenario_id": scenario.scenario_id,
+                    "sample_uid": files.uid,
+                    "grid_id": files.network_name,
+                    "network_name": scenario.network_name,
+                    "task_name": "pf",
+                    "success": False,
+                    "label_valid": False,
+                    "validation_messages": [
+                        f"generation_error:{type(exc).__name__}:{exc}"
+                    ],
+                }
+            )
             continue
 
     with open(out_dir / "summary.pf.json", "w", encoding="utf-8") as fh:

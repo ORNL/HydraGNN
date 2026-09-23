@@ -832,9 +832,7 @@ if __name__ == "__main__":
         args.node_target_type = resolved_node_target_type
 
     actual_x_dim = trainset[0].x.shape[1]
-    configured_x_dim = schema_dimensions(
-        get_variable_schema(config), "node", "inputs"
-    )
+    configured_x_dim = schema_dimensions(get_variable_schema(config), "node", "inputs")
     if configured_x_dim != actual_x_dim:
         raise ValueError(
             f"Variables.inputs declares {configured_x_dim} node feature dimensions, "
@@ -846,7 +844,11 @@ if __name__ == "__main__":
         % (len(trainset), len(valset), len(testset))
     )
 
-    (train_loader, val_loader, test_loader,) = hydragnn.preprocess.create_dataloaders(
+    (
+        train_loader,
+        val_loader,
+        test_loader,
+    ) = hydragnn.preprocess.create_dataloaders(
         trainset, valset, testset, config["NeuralNetwork"]["Training"]["batch_size"]
     )
 

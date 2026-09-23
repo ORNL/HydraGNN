@@ -9,6 +9,7 @@ FT1 is a graph-level binary feasibility classification task:
   - Preprocessing: run generate_infeasible_samples.py before training FT1
   - Loss: binary_cross_entropy_with_logits (BCE)
 """
+
 import json
 import os
 
@@ -17,8 +18,18 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 EDGE_TYPES = [
     {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
     {"source_type": "bus", "relation": "transformer", "target_type": "bus", "dim": 11},
-    {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
-    {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
+    {
+        "source_type": "generator",
+        "relation": "generator_link",
+        "target_type": "bus",
+        "dim": 0,
+    },
+    {
+        "source_type": "bus",
+        "relation": "generator_link",
+        "target_type": "generator",
+        "dim": 0,
+    },
     {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},
     {"source_type": "bus", "relation": "load_link", "target_type": "load", "dim": 0},
     {"source_type": "shunt", "relation": "shunt_link", "target_type": "bus", "dim": 0},
@@ -173,6 +184,7 @@ def _variables(output_name, level, dim, node_type=None):
         "outputs": [output],
     }
 
+
 # Best HPO hyperparameters from Table VII of the manuscript
 ARCHS = {
     "HeteroSAGE": {"hd": 141, "nl": 5},
@@ -293,9 +305,7 @@ def generate_all():
 
                 if tgt == "graph":
                     # FT1: graph-level binary classification
-                    arch = _base_arch_graph(
-                        arch_name, ap["hd"], ap["nl"], freeze_conv
-                    )
+                    arch = _base_arch_graph(arch_name, ap["hd"], ap["nl"], freeze_conv)
                     training = _base_training_classify(lr, fm["epochs"], regime)
                     variables = _variables("feasibility", "graph", 1)
                     # Shared dataset (arch-independent)
@@ -321,10 +331,19 @@ def generate_all():
                     # FT2 / FT3 / FT4: node-level regression
                     out_dim = 2  # bus [Va, Vm] or generator [Pg, Qg]
                     node_target_type = tgt  # "bus" or "generator"
-                    output_name = "generator_pg_qg" if tgt == "generator" else "bus_va_vm"
-                    variables = _variables(output_name, "node", out_dim, node_target_type)
+                    output_name = (
+                        "generator_pg_qg" if tgt == "generator" else "bus_va_vm"
+                    )
+                    variables = _variables(
+                        output_name, "node", out_dim, node_target_type
+                    )
                     arch = _base_arch(
-                        arch_name, ap["hd"], ap["nl"], freeze_conv, node_target_type, out_dim
+                        arch_name,
+                        ap["hd"],
+                        ap["nl"],
+                        freeze_conv,
+                        node_target_type,
+                        out_dim,
                     )
                     training = _base_training(lr, fm["epochs"], regime)
                     cfg = {
