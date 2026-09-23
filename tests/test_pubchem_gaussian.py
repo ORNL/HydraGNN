@@ -89,6 +89,9 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert disabled_architecture["global_attn_type"] == ""
     assert disabled_architecture["global_attn_heads"] == 1
 
+    painn = configure_trial(config, _hpo_parameters(mpnn_type="PAINN"))
+    assert painn["NeuralNetwork"]["Architecture"]["num_radial"] == 6
+
     for model_type, equivariance in (("AllScAIP", False), ("UMA", True)):
         native = configure_trial(config, _hpo_parameters(mpnn_type=model_type))
         native_architecture = native["NeuralNetwork"]["Architecture"]
@@ -98,13 +101,28 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     uma = configure_trial(config, _hpo_parameters(mpnn_type="UMA"))
     uma_architecture = uma["NeuralNetwork"]["Architecture"]
     assert uma_architecture["max_ell"] == 2
+    assert uma_architecture["num_radial"] == 6
     assert uma_architecture["uma_mmax"] == 2
 
     mace = configure_trial(config, _hpo_parameters(mpnn_type="MACE"))
     mace_architecture = mace["NeuralNetwork"]["Architecture"]
     assert mace_architecture["max_ell"] == 2
+    assert mace_architecture["num_radial"] == 6
     assert mace_architecture["node_max_ell"] == 2
     assert mace_architecture["equivariant_attn_lmax"] == 2
+
+    dimenet = configure_trial(config, _hpo_parameters(mpnn_type="DimeNet"))
+    dimenet_architecture = dimenet["NeuralNetwork"]["Architecture"]
+    assert dimenet_architecture["basis_emb_size"] == 8
+    assert dimenet_architecture["int_emb_size"] == 64
+    assert dimenet_architecture["out_emb_size"] == 128
+    assert dimenet_architecture["num_radial"] == 6
+    assert dimenet_architecture["num_spherical"] == 7
+
+    allscaip = configure_trial(config, _hpo_parameters(mpnn_type="AllScAIP"))
+    allscaip_architecture = allscaip["NeuralNetwork"]["Architecture"]
+    assert allscaip_architecture["allscaip_num_heads"] == 2
+    assert allscaip_architecture["allscaip_freq_list"] is None
 
 
 def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):

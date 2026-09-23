@@ -177,7 +177,9 @@ def update_config(config, train_loader, val_loader, test_loader):
             ## Use avg neighbours used in the dataset.
             avg_num_neighbors = float(train_loader.dataset.avg_num_neighbors)
         else:
-            avg_num_neighbors = float(calculate_avg_deg(train_loader.dataset))
+            avg_num_neighbors = float(
+                torch.as_tensor(calculate_avg_deg(train_loader.dataset)).item()
+            )
         config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"] = avg_num_neighbors
     else:
         config["NeuralNetwork"]["Architecture"]["avg_num_neighbors"] = None

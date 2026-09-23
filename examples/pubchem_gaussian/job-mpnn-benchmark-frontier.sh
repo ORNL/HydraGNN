@@ -17,6 +17,7 @@ ROOT="${HYDRAGNN_ROOT:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN}"
 VENV="${HYDRAGNN_VENV:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
 DATASET="${PUBCHEM_DATASET:-/lustre/orion/lrn070/world-shared/kmehta/hydragnn/datasets/pubchem_gaussian.bp}"
 OUTPUT_DIR="${ROOT}/pubchem-mpnn-benchmark-${SLURM_JOB_ID}"
+MODELS="${PUBCHEM_MODELS:-PAINN,MACE,SchNet,DimeNet,UMA,AllScAIP}"
 
 export PATH="${VENV}/bin:${PATH}"
 export PYTHONNOUSERSITE=1
@@ -36,6 +37,7 @@ cd "${ROOT}"
 python -u examples/pubchem_gaussian/pubchem_gaussian_mpnn_benchmark.py \
     --dataset-path "${DATASET}" \
     --output-dir "${OUTPUT_DIR}" \
+    --models "${MODELS}" \
     --epochs 1 \
     --train-samples 64 \
     --val-samples 16 \

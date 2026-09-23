@@ -63,15 +63,34 @@ def configure_trial(base_config, parameters):
         architecture["global_attn_type"] = ""
         architecture["global_attn_heads"] = 1
 
-    if architecture["mpnn_type"] == "AllScAIP":
+    if architecture["mpnn_type"] == "PAINN":
+        architecture["num_radial"] = 6
+    elif architecture["mpnn_type"] == "DimeNet":
+        architecture.update(
+            {
+                "basis_emb_size": 8,
+                "envelope_exponent": 5,
+                "int_emb_size": 64,
+                "out_emb_size": 128,
+                "num_after_skip": 2,
+                "num_before_skip": 1,
+                "num_radial": 6,
+                "num_spherical": 7,
+            }
+        )
+    elif architecture["mpnn_type"] == "AllScAIP":
         architecture["equivariance"] = False
+        architecture["allscaip_num_heads"] = 2
+        architecture["allscaip_freq_list"] = None
     elif architecture["mpnn_type"] == "UMA":
         architecture["equivariance"] = True
         architecture["max_ell"] = 2
+        architecture["num_radial"] = 6
         architecture["uma_mmax"] = 2
     elif architecture["mpnn_type"] == "MACE":
         architecture["max_ell"] = 2
         architecture["node_max_ell"] = 2
+        architecture["num_radial"] = 6
         architecture["equivariant_attn_lmax"] = 2
 
     return config

@@ -25,6 +25,7 @@ except ImportError:
 EXAMPLE_DIR = Path(__file__).resolve().parent
 BASE_CONFIG_PATH = EXAMPLE_DIR / "pubchem_gaussian.json"
 DEFAULT_MODELS = ("PAINN", "MACE", "SchNet", "DimeNet", "UMA", "AllScAIP")
+TRANSIENT_IO_ERRORS = ("Input/output error", "cannot read file data")
 
 
 def model_parameters(mpnn_type):
@@ -92,15 +93,26 @@ def run_model(mpnn_type, args, base_config, output_dir):
     command = trial_command(args, config_path, f"mpnn_benchmark_{mpnn_type.lower()}")
 
     start = time.monotonic()
-    with log_path.open("w") as stream:
-        return_code = subprocess.run(
-            command, stdout=stream, stderr=subprocess.STDOUT, check=False
-        ).returncode
+    return_code = -1
+    attempts = 0
+    for attempts in range(1, 3):
+        with log_path.open("a") as stream:
+            stream.write(f"\n===== attempt {attempts} =====\n")
+            stream.flush()
+            return_code = subprocess.run(
+                command, stdout=stream, stderr=subprocess.STDOUT, check=False
+            ).returncode
+        if return_code == 0 or not any(
+            message in log_path.read_text(errors="replace")
+            for message in TRANSIENT_IO_ERRORS
+        ):
+            break
     elapsed_seconds = time.monotonic() - start
     losses = validation_losses(log_path) if return_code == 0 else None
     result = {
         "model": mpnn_type,
         "return_code": return_code,
+        "attempts": attempts,
         "elapsed_seconds": elapsed_seconds,
         "losses": losses,
         "config": str(config_path),
