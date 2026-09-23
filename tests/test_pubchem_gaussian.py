@@ -303,9 +303,15 @@ def test_pubchem_loads_external_adios_path(tmp_path, monkeypatch):
     example = _load_example_module()
     calls = []
 
+    class FakeDataset:
+        keys = example.PROCESSED_FIELDS
+
+        def __init__(self, label):
+            self.label = label
+
     def fake_dataset(path, label, comm, **options):
-        calls.append((path, label, options["var_config"]))
-        return label
+        calls.append((path, label))
+        return FakeDataset(label)
 
     monkeypatch.setattr(example, "AdiosDataset", fake_dataset)
     external_path = tmp_path / "external.bp"
@@ -320,8 +326,45 @@ def test_pubchem_loads_external_adios_path(tmp_path, monkeypatch):
         external_path,
     )
 
-    assert datasets == ("trainset", "valset", "testset")
-    assert {path for path, _, _ in calls} == {str(external_path)}
+    assert tuple(dataset.label for dataset in datasets) == (
+        "trainset",
+        "valset",
+        "testset",
+    )
+    assert {path for path, _ in calls} == {str(external_path)}
+
+
+def test_pubchem_adapts_legacy_processed_dataset():
+    example = _load_example_module()
+    sample = example.Data(
+        atomic_numbers=torch.tensor([[1.0], [6.0]]),
+        pos=torch.zeros((2, 3)),
+        total_charge=torch.zeros((1, 1)),
+        spin_multiplicity=torch.ones((1, 1)),
+        energy=torch.tensor([[-1.0]]),
+        mulliken_charges=torch.zeros((2, 1)),
+        dipole_magnitude=torch.zeros((1, 1)),
+        quadrupole_eigenvalues=torch.zeros((1, 3)),
+        polarizability_eigenvalues=torch.zeros((1, 3)),
+        frontier_orbital_energies=torch.zeros((1, 3)),
+        rotational_constants=torch.zeros((1, 3)),
+        thermochemistry=torch.zeros((1, 8)),
+        edge_index=torch.empty((2, 0), dtype=torch.int64),
+    )
+    config_path = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "pubchem_gaussian"
+        / "pubchem_gaussian.json"
+    )
+    variables = json.loads(config_path.read_text())["Variables"]
+
+    dataset = example.model_ready_dataset([sample], variables)
+    prepared = dataset[0]
+
+    assert prepared.x.equal(sample.atomic_numbers)
+    assert prepared.y is not None
+    assert prepared.graph_attr.shape == (1, 2)
 
 
 @pytest.mark.parametrize(

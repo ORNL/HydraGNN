@@ -34,7 +34,7 @@ from torch_geometric.utils import degree
 from torch.utils.data import Subset
 
 import hydragnn
-from hydragnn.preprocess.load_data import split_dataset
+from hydragnn.preprocess.load_data import SchemaPreparedDataset, split_dataset
 from hydragnn.utils.datasets.abstractbasedataset import AbstractBaseDataset
 from hydragnn.utils.datasets.adiosdataset import AdiosDataset, AdiosWriter
 from hydragnn.utils.datasets.pickledataset import (
@@ -42,6 +42,10 @@ from hydragnn.utils.datasets.pickledataset import (
     SimplePickleWriter,
 )
 from hydragnn.utils.print.print_utils import log
+from hydragnn.utils.input_config_parsing import (
+    parse_variable_schema,
+    prepare_data_from_schema,
+)
 
 torch.set_default_dtype(torch.float32)
 
@@ -69,6 +73,7 @@ MULTITASK_PROPERTY_NAMES = {
     "rotational_constants",
     "thermochemistry",
 }
+PROCESSED_FIELDS = {"x", "y", "y_loc", "graph_attr"}
 
 
 def _last_floats(pattern, text, count=None):
@@ -515,6 +520,11 @@ class PubChemGaussianDataset(AbstractBaseDataset):
     ):
         super().__init__()
         architecture = config["NeuralNetwork"]["Architecture"]
+        variable_schema = (
+            parse_variable_schema(config["Variables"])
+            if "Variables" in config
+            else None
+        )
         configured_outputs = {
             output["name"] for output in config.get("Variables", {}).get("outputs", [])
         }
@@ -609,6 +619,8 @@ class PubChemGaussianDataset(AbstractBaseDataset):
                 )
                 data = distance(data)
                 data.edge_shifts = torch.zeros((data.num_edges, 3), dtype=torch.float32)
+                if variable_schema is not None:
+                    data = prepare_data_from_schema(data, variable_schema)
                 self.dataset.append(data)
             except (OSError, ValueError) as error:
                 logging.warning("Skipping CID %s: %s", molecule_dir.name, error)
@@ -702,9 +714,12 @@ def load_datasets(
             "ddstore_width": ddstore_width,
         }
         path = dataset_path if dataset_path is not None else ADIOS_PATH
-        return tuple(
-            AdiosDataset(str(path), label, comm, **options, var_config=var_config)
+        datasets = tuple(
+            AdiosDataset(str(path), label, comm, **options)
             for label in ("trainset", "valset", "testset")
+        )
+        return tuple(
+            model_ready_dataset(dataset, var_config) for dataset in datasets
         )
 
     path = dataset_path if dataset_path is not None else PICKLE_DIR
@@ -714,7 +729,19 @@ def load_datasets(
     )
     if datasets[0].attrs.get("cache_version") != CACHE_VERSION:
         raise RuntimeError("Processed data is stale; rerun with --preonly")
-    return datasets
+    return tuple(model_ready_dataset(dataset, var_config) for dataset in datasets)
+
+
+def model_ready_dataset(dataset, var_config):
+    """Use persisted model tensors, adapting caches from before they were stored."""
+    keys = set(dataset.keys) if hasattr(dataset, "keys") else set(dataset[0].keys())
+    if PROCESSED_FIELDS.issubset(keys):
+        return dataset
+    logging.warning(
+        "Processed dataset lacks internal model tensors; compiling its named fields "
+        "while reading. Regenerate the cache to persist data.x/data.y directly."
+    )
+    return SchemaPreparedDataset(dataset, parse_variable_schema(var_config))
 
 
 def deterministic_subset(dataset, num_samples, seed):
@@ -821,7 +848,6 @@ def main():
         valset,
         testset,
         config["NeuralNetwork"]["Training"]["batch_size"],
-        variables=config["Variables"],
     )
     config = hydragnn.utils.input_config_parsing.update_config(
         config, train_loader, val_loader, test_loader
