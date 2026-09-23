@@ -28,6 +28,14 @@
                         128
                     ],
                     "type": "mlp"
+                },
+                "node": {
+                    "num_headlayers": 2,
+                    "dim_headlayers": [
+                        128,
+                        128
+                    ],
+                    "type": "mlp"
                 }
             },
             "task_weights": [
