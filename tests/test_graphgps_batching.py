@@ -2,7 +2,7 @@ import types
 
 import torch
 
-from hydragnn.globalAtt.gps import GPSConv
+from hydragnn.globalAtt.gps import HydraGPSConv
 from hydragnn.models.Base import Base
 
 
@@ -42,7 +42,9 @@ def test_base_embedding_adds_graph_batch_for_global_attention():
 def test_gpsconv_attention_isolated_per_graph_in_minibatch():
     torch.manual_seed(1)
 
-    conv = GPSConv(channels=8, conv=None, heads=2, dropout=0.0, attn_type="multihead")
+    conv = HydraGPSConv(
+        channels=8, conv=None, heads=2, dropout=0.0, attn_type="multihead"
+    )
     conv.eval()
 
     # Two graphs in one mini-batch, each with two nodes.
@@ -75,7 +77,9 @@ def test_gpsconv_attention_isolated_per_graph_in_minibatch():
 def test_gpsconv_single_graph_batch_none_unchanged():
     torch.manual_seed(2)
 
-    conv = GPSConv(channels=8, conv=None, heads=2, dropout=0.0, attn_type="multihead")
+    conv = HydraGPSConv(
+        channels=8, conv=None, heads=2, dropout=0.0, attn_type="multihead"
+    )
     conv.eval()
 
     x = torch.randn(3, 8)
