@@ -17,7 +17,7 @@ from hydragnn.train.train_validate_test import test
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 from hydragnn.utils.datasets.pickledataset import SimplePickleDataset
 from hydragnn.utils.distributed import setup_ddp
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims, update_config
 from hydragnn.utils.model import load_existing_model
 
 try:
@@ -29,17 +29,25 @@ except ImportError:
 def _validate_edge_attr_hetero(data, edge_dim_dict):
     if not hasattr(data, "edge_types"):
         return data
+    actual_edge_types = {tuple(edge_type) for edge_type in data.edge_types}
+    configured_edge_types = set(edge_dim_dict)
+    if actual_edge_types != configured_edge_types:
+        raise RuntimeError(
+            "Configured edge_types do not match data: "
+            f"missing={sorted(actual_edge_types - configured_edge_types)}, "
+            f"unexpected={sorted(configured_edge_types - actual_edge_types)}."
+        )
     for edge_type in data.edge_types:
+        edge_type = tuple(edge_type)
         edge_store = data[edge_type]
         edge_index = getattr(edge_store, "edge_index", None)
         if not isinstance(edge_index, torch.Tensor):
             continue
         num_edges = int(edge_index.size(1))
-        rel = str(edge_type[1])
-        expected_dim = edge_dim_dict.get(rel)
+        expected_dim = edge_dim_dict[edge_type]
         edge_attr = getattr(edge_store, "edge_attr", None)
 
-        if expected_dim is None:
+        if expected_dim == 0:
             if isinstance(edge_attr, torch.Tensor):
                 raise RuntimeError(f"Featureless edge type {edge_type} should not have edge_attr.")
             continue
@@ -186,7 +194,9 @@ def main():
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
 
-    edge_dim = config["NeuralNetwork"]["Architecture"].get("edge_dim", {"ac_line": 10})
+    edge_dim = edge_type_dims(
+        config["NeuralNetwork"]["Architecture"]["edge_types"]
+    )
 
     trainset, valset, testset = _load_splits(args, datadir, comm)
     trainset = NodeTargetDatasetAdapter(trainset, args.node_target_type, edge_dim=edge_dim)

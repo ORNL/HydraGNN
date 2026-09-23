@@ -20,7 +20,7 @@ from opf_solution_utils import (
     compute_pna_deg_for_hetero_dataset,
     info,
     resolve_edge_feature_schema,
-    validate_voi_node_features,
+    validate_opf_variable_schema,
 )
 
 
@@ -97,7 +97,10 @@ from hydragnn.utils.datasets.pickledataset import (
 )
 from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.model import print_model
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.utils.input_config_parsing.config_utils import (
+    edge_type_dims,
+    update_config,
+)
 
 try:
     from hydragnn.utils.datasets.adiosdataset import AdiosWriter, AdiosDataset
@@ -293,20 +296,10 @@ if __name__ == "__main__":
         config = json.load(f)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
-    raw_edge_dim = arch_config.get("edge_dim")
-    if isinstance(raw_edge_dim, dict):
-        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
-        edge_feature_schema = None
-    elif raw_edge_dim is not None:
-        edge_dim = int(raw_edge_dim)
-        names = arch_config.get("edge_feature_names")
-        if names:
-            edge_feature_schema = resolve_edge_feature_schema(names, edge_dim)
-        else:
-            edge_feature_schema = None
-    else:
-        raise RuntimeError("edge_dim must be specified in config.")
-    arch_config["edge_dim"] = edge_dim
+    if arch_config.get("edge_types") is None:
+        raise RuntimeError("Architecture.edge_types must be specified.")
+    edge_dim = edge_type_dims(arch_config["edge_types"])
+    edge_feature_schema = None
 
     if args.batch_size is not None:
         config["NeuralNetwork"]["Training"]["batch_size"] = args.batch_size
@@ -618,16 +611,7 @@ if __name__ == "__main__":
             args.topological_perturbations,
         )
 
-        # Validate var_config from config — no auto-fill from data
-        var_config = config["NeuralNetwork"]["Variables_of_interest"]
-        validate_voi_node_features(config)
-        if (
-            not isinstance(var_config.get("graph_feature_dims"), list)
-            or len(var_config["graph_feature_dims"]) == 0
-        ):
-            raise RuntimeError(
-                "'graph_feature_dims' must be an explicit non-empty list in the config."
-            )
+        validate_opf_variable_schema(config)
 
     if args.format == "adios":
         if AdiosDataset is None:
@@ -722,7 +706,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

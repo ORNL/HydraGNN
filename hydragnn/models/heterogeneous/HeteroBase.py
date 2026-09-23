@@ -208,6 +208,17 @@ class HeteroBase(Module):
                     self.device
                 )
 
+    def configure_input_feature_encoders(self, encodings: list[dict] | None) -> None:
+        """Schema-configured scalar input encoders are not supported for hetero
+        models: per-node-type inputs are already keyed by name via
+        ``node_input_dims`` rather than packed into one positional ``x`` tensor.
+        """
+        if encodings:
+            raise NotImplementedError(
+                "Variables.inputs 'encoding' is not supported for heterogeneous "
+                "models; remove per-input encodings from the config."
+            )
+
     def _ensure_node_embedders(self, x_dict):
         for node_type, x in x_dict.items():
             if node_type not in self.node_embedders:
@@ -268,15 +279,18 @@ class HeteroBase(Module):
     def _resolve_edge_dim_for_type(self, edge_type):
         """Return the edge_dim for a specific edge type.
 
-        When ``self.edge_dim`` is a dict mapping relation names to widths,
-        look up the relation (middle element of the triple).  Returns ``None``
-        for featureless edge types.  When ``self.edge_dim`` is an int (or
-        absent), return it unchanged for all edge types.
+        When ``self.edge_dim`` is a dict, look up the complete edge-type triple.
+        A declared width of zero denotes a featureless edge and returns ``None``.
+        When ``self.edge_dim`` is an int (or absent), return it unchanged for
+        all edge types.
         """
         edge_dim = getattr(self, "edge_dim", None)
         if isinstance(edge_dim, dict):
-            _, rel, _ = edge_type
-            return edge_dim.get(rel)
+            edge_type = tuple(edge_type)
+            if edge_type not in edge_dim:
+                raise ValueError(f"Undeclared edge type in model metadata: {edge_type}.")
+            resolved = edge_dim[edge_type]
+            return None if resolved == 0 else resolved
         return edge_dim
 
     def _apply_global_attn(self, mpnn):

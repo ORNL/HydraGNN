@@ -263,15 +263,45 @@ and propagated alongside the globally attended invariant representation.
 - [HPC facility assets](scripts/hpc/README.md)
 
   - top-level `["Variables"]`
-    - `["inputs"]` and `["outputs"]` contain named tensor specifications.
+    - Required `["graph_type"]` is `"homogeneous"` or `"heterogeneous"`.
+      Heterogeneous schemas also require `["node_types"]`, listing every node
+      type in the dataset. `["inputs"]` and `["outputs"]` contain named tensor specifications.
       Every specification has an attribute `name`, a `level` (`node`, `edge`,
       or `graph`), and a positive feature dimension `dim`. Inputs may also
       declare a semantic `role`; ordinary inputs use the default `feature`
       role, while Cartesian coordinates use `position`. Scalar node features
       may also declare an `encoding` of type `embedding` or `one_hot`.
+      Every node-level specification in a heterogeneous schema must declare
+      `node_type`; homogeneous schemas reject `node_type`.
+  - heterogeneous `NeuralNetwork.Architecture["edge_types"]`
+    - Must list every dataset edge type by `source_type`, `relation`, and
+      `target_type`. `dim` declares that relation's edge-feature width; use
+      `dim: 0` for featureless relations. The list must contain each runtime
+      edge triple exactly once, and both endpoints must appear in
+      `Variables.node_types`. Relation-name-only `edge_dim` dictionaries are
+      rejected.
+  - homogeneous `NeuralNetwork.Architecture["edge_dim"]`
+    - Must be one nonnegative integer shared by every edge. Homogeneous
+      configurations must not define `edge_types`. When heterogeneous source
+      data is converted to a homogeneous graph, preprocessing must pad every
+      relation to this common width and zero-fill featureless relations first.
+
+```json
+"edge_types": [
+  {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
+  {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0}
+]
+```
+
+At runtime, a positive `dim` requires an `edge_attr` tensor shaped
+`(num_relation_edges, dim)`. A zero dimension requires that relation to have no
+`edge_attr`. Heterogeneous message-passing layers are constructed separately
+for each complete edge triple, so different relations may use different input
+widths without padding.
 
 ```json
 "Variables": {
+  "graph_type": "homogeneous",
   "inputs": [
     {
       "name": "atomic_numbers",

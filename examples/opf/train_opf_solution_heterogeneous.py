@@ -113,7 +113,10 @@ from hydragnn.utils.datasets.pickledataset import (
 from hydragnn.utils.distributed import nsplit
 from hydragnn.utils.model import print_model
 from hydragnn.utils.print import iterate_tqdm
-from hydragnn.utils.input_config_parsing.config_utils import update_config
+from hydragnn.utils.input_config_parsing.config_utils import (
+    edge_type_dims,
+    update_config,
+)
 
 from opf_solution_utils import (
     EdgeAttrDatasetAdapter,
@@ -125,7 +128,7 @@ from opf_solution_utils import (
     assemble_edge_attr,
     build_solution_target as _build_solution_target,
     compute_pna_deg_for_hetero_dataset,
-    validate_voi_node_features,
+    validate_opf_variable_schema,
     ensure_node_y_loc as _ensure_node_y_loc,
     info,
     resolve_edge_feature_schema,
@@ -701,28 +704,16 @@ if __name__ == "__main__":
                 domain_loss_config[key] = val
         training_config["DomainLoss"] = domain_loss_config
 
-    raw_edge_dim = arch_config.get("edge_dim")
-    if isinstance(raw_edge_dim, dict):
-        # Heterogeneous route: per-edge-type widths from pre-assembled tensors.
-        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
-        edge_feature_schema = None
-    elif raw_edge_dim is not None:
-        # Homogeneous route: uniform width, optional named-column schema.
-        edge_dim = int(raw_edge_dim)
-        names = arch_config.get("edge_feature_names")
-        if names:
-            edge_feature_schema = resolve_edge_feature_schema(names, edge_dim)
-        else:
-            edge_feature_schema = None
-    else:
-        raise RuntimeError("edge_dim must be specified in config.")
-    arch_config["edge_dim"] = edge_dim
+    if arch_config.get("edge_types") is None:
+        raise RuntimeError("Architecture.edge_types must be specified.")
+    edge_dim = edge_type_dims(arch_config["edge_types"])
+    edge_feature_schema = None
 
     if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
         args.node_target_type = config["NeuralNetwork"]["Architecture"][
             "node_target_type"
         ]
-    validate_voi_node_features(config, args.node_target_type)
+    validate_opf_variable_schema(config, args.node_target_type)
 
     comm_size, rank = hydragnn.utils.distributed.setup_ddp()
     comm = MPI.COMM_WORLD
@@ -1282,7 +1273,7 @@ if __name__ == "__main__":
     config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})[
         "node_target_type"
     ] = args.node_target_type
-    validate_voi_node_features(config, args.node_target_type)
+    validate_opf_variable_schema(config, args.node_target_type)
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
 
@@ -1429,7 +1420,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

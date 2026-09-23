@@ -27,7 +27,9 @@ from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
 from .variable_schema import (
     encoded_schema_dimensions,
     get_variable_schema,
+    node_type_feature_dims,
     schema_dimensions,
+    validate_node_type_contract,
 )
 
 _UNSAFE_LOG_COMPONENT = re.compile(r"[^A-Za-z0-9._-]+")
@@ -70,8 +72,12 @@ def update_config(config, train_loader, val_loader, test_loader):
     arch_cfg = config["NeuralNetwork"].setdefault("Architecture", {})
     data_sample = train_loader.dataset[0]
     if hasattr(data_sample, "node_types"):
+        dataset_node_types = tuple(
+            str(node_type) for node_type in data_sample.node_types
+        )
+        validate_node_type_contract(named_schema, dataset_node_types)
         node_input_dims = {}
-        for node_type in data_sample.node_types:
+        for node_type in dataset_node_types:
             node_store = data_sample[node_type]
             if hasattr(node_store, "x") and node_store.x is not None:
                 node_input_dims[str(node_type)] = int(node_store.x.shape[1])
@@ -81,6 +87,18 @@ def update_config(config, train_loader, val_loader, test_loader):
                     "Overriding node_input_dims with dataset-derived sizes for hetero model."
                 )
             arch_cfg["node_input_dims"] = node_input_dims
+
+        # Cross-check configured per-type input widths against the dataset.
+        configured_node_type_dims = node_type_feature_dims(named_schema, "inputs")
+        for node_type, configured_dim in configured_node_type_dims.items():
+            actual_dim = node_input_dims.get(node_type)
+            if actual_dim is not None and actual_dim != configured_dim:
+                raise ValueError(
+                    f"Variables.inputs declares {configured_dim} dims for node_type "
+                    f"'{node_type}', but the dataset provides {actual_dim}."
+                )
+    else:
+        validate_node_type_contract(named_schema, None)
 
     # Set default values for GPS variables
     if "global_attn_engine" not in config["NeuralNetwork"]["Architecture"]:
@@ -255,9 +273,38 @@ def update_config(config, train_loader, val_loader, test_loader):
     for key, value in MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS.items():
         architecture.setdefault(key, deepcopy(value))
 
-    config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(
-        config["NeuralNetwork"]["Architecture"]
-    )
+    if named_schema is not None:
+        edge_types = architecture.get("edge_types")
+        if named_schema.graph_type == "heterogeneous":
+            if edge_types is None:
+                raise ValueError(
+                    "Heterogeneous Variables.graph_type requires "
+                    "NeuralNetwork.Architecture.edge_types."
+                )
+            if architecture.get("edge_dim") is not None:
+                raise ValueError(
+                    "Heterogeneous configs must use Architecture.edge_types, "
+                    "not edge_dim."
+                )
+            declared_node_types = set(named_schema.node_types)
+            for edge_type in normalize_edge_types(edge_types):
+                endpoints = {
+                    edge_type["source_type"],
+                    edge_type["target_type"],
+                }
+                unknown = endpoints - declared_node_types
+                if unknown:
+                    raise ValueError(
+                        f"Edge type references undeclared node types: {sorted(unknown)}."
+                    )
+        elif edge_types is not None:
+            raise ValueError(
+                "Homogeneous Variables.graph_type cannot define Architecture.edge_types."
+            )
+
+    config["NeuralNetwork"]["Architecture"] = update_config_edge_dim(architecture)
+    if named_schema is not None and named_schema.graph_type == "heterogeneous":
+        validate_edge_type_contract(architecture["edge_types"], data_sample)
     if named_schema is not None:
         named_edge_dim = schema_dimensions(named_schema, "edge", "inputs")
         if named_edge_dim:
@@ -447,13 +494,96 @@ def update_config_equivariance(config):
     return config
 
 
+def normalize_edge_types(edge_types):
+    if not isinstance(edge_types, list) or not edge_types:
+        raise ValueError("edge_types must be a non-empty list.")
+
+    normalized = []
+    seen = set()
+    required = {"source_type", "relation", "target_type", "dim"}
+    for index, spec in enumerate(edge_types):
+        if not isinstance(spec, dict) or set(spec) != required:
+            raise ValueError(
+                f"edge_types[{index}] must contain exactly {sorted(required)}."
+            )
+        source_type = str(spec["source_type"]).strip()
+        relation = str(spec["relation"]).strip()
+        target_type = str(spec["target_type"]).strip()
+        if not source_type or not relation or not target_type:
+            raise ValueError(f"edge_types[{index}] contains an empty type name.")
+        try:
+            dim = int(spec["dim"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"edge_types[{index}].dim must be an integer.") from exc
+        if dim < 0:
+            raise ValueError(f"edge_types[{index}].dim must be >= 0.")
+        edge_type = (source_type, relation, target_type)
+        if edge_type in seen:
+            raise ValueError(f"Duplicate edge type declaration: {edge_type}.")
+        seen.add(edge_type)
+        normalized.append(
+            {
+                "source_type": source_type,
+                "relation": relation,
+                "target_type": target_type,
+                "dim": dim,
+            }
+        )
+    return normalized
+
+
+def edge_type_dims(edge_types):
+    return {
+        (spec["source_type"], spec["relation"], spec["target_type"]): spec["dim"]
+        for spec in normalize_edge_types(edge_types)
+    }
+
+
+def validate_edge_type_contract(edge_types, data):
+    configured = edge_type_dims(edge_types)
+    if not hasattr(data, "edge_types"):
+        raise ValueError("Configured edge_types require a heterogeneous dataset.")
+
+    actual = {tuple(edge_type) for edge_type in data.edge_types}
+    declared = set(configured)
+    if actual != declared:
+        raise ValueError(
+            "Configured edge_types do not match dataset edge types: "
+            f"missing={sorted(actual - declared)}, "
+            f"unexpected={sorted(declared - actual)}."
+        )
+
+    for edge_type, expected_dim in configured.items():
+        store = data[edge_type]
+        edge_index = getattr(store, "edge_index", None)
+        if not isinstance(edge_index, torch.Tensor):
+            raise ValueError(f"Edge type {edge_type} is missing edge_index.")
+        edge_attr = getattr(store, "edge_attr", None)
+        if expected_dim == 0:
+            if isinstance(edge_attr, torch.Tensor):
+                raise ValueError(
+                    f"Featureless edge type {edge_type} must not have edge_attr."
+                )
+            continue
+        expected_shape = (int(edge_index.shape[1]), expected_dim)
+        if not isinstance(edge_attr, torch.Tensor) or tuple(edge_attr.shape) != expected_shape:
+            actual_shape = None if edge_attr is None else tuple(edge_attr.shape)
+            raise ValueError(
+                f"Edge type {edge_type} has edge_attr shape {actual_shape}; "
+                f"expected {expected_shape}."
+            )
+    return configured
+
+
 def update_config_edge_dim(config):
     def _normalize_edge_dim(value):
         if value is None:
             return None
         if isinstance(value, dict):
-            # Per-edge-type widths (heterogeneous route).
-            return {str(k): int(v) for k, v in value.items()}
+            raise ValueError(
+                "edge_dim dictionaries are unsupported; declare complete "
+                "Architecture.edge_types entries instead."
+            )
         try:
             edge_dim = int(value)
         except (TypeError, ValueError) as exc:
@@ -465,6 +595,13 @@ def update_config_edge_dim(config):
         return edge_dim
 
     explicit_edge_dim = _normalize_edge_dim(config.get("edge_dim"))
+    explicit_edge_types = config.get("edge_types")
+    if explicit_edge_dim is not None and explicit_edge_types is not None:
+        raise ValueError("Architecture cannot define both edge_dim and edge_types.")
+    if explicit_edge_types is not None:
+        config["edge_types"] = normalize_edge_types(explicit_edge_types)
+        config["edge_dim"] = None
+        return config
     if explicit_edge_dim is not None:
         # Explicit edge_dim provided — validate against feature names if any.
         if isinstance(explicit_edge_dim, int):

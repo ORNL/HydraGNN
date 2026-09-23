@@ -46,7 +46,11 @@ from hydragnn.utils.model.model import load_existing_model
 from hydragnn.utils.model import print_model
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.input_config_parsing.config_utils import update_config
-from hydragnn.utils.input_config_parsing import save_config
+from hydragnn.utils.input_config_parsing import (
+    edge_type_dims,
+    get_variable_schema,
+    save_config,
+)
 
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 
@@ -59,7 +63,7 @@ from opf_solution_utils import (
     NodeTargetDatasetAdapter,
     OPFDomainLoss,
     compute_pna_deg_for_hetero_dataset,
-    validate_voi_node_features,
+    validate_opf_variable_schema,
     info,
     resolve_node_target_type as _resolve_node_target_type,
 )
@@ -86,7 +90,9 @@ def _to_jsonable(obj):
 
 def _resolve_edge_dim(config):
     arch = config.get("NeuralNetwork", {}).get("Architecture", {})
-    return arch.get("edge_dim", {"ac_line": 9, "transformer": 11})
+    if arch.get("edge_types") is None:
+        raise RuntimeError("Architecture.edge_types must be specified.")
+    return edge_type_dims(arch["edge_types"])
 
 
 def apply_freeze_regime(model, regime: str):
@@ -408,7 +414,7 @@ if __name__ == "__main__":
     )
     args.node_target_type = resolved_node_target_type
     config["NeuralNetwork"]["Architecture"]["node_target_type"] = args.node_target_type
-    validate_voi_node_features(config, args.node_target_type)
+    validate_opf_variable_schema(config, args.node_target_type)
 
     trainset = EdgeAttrDatasetAdapter(trainset, edge_dim=edge_dim)
     valset   = EdgeAttrDatasetAdapter(valset,   edge_dim=edge_dim)
@@ -546,7 +552,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,
@@ -564,16 +570,15 @@ if __name__ == "__main__":
 
     # ── Post-training regression evaluation ───────────────────────────────
     device = get_device()
-    _cfg_voi = config["NeuralNetwork"]["Variables_of_interest"]
-    _output_names = _cfg_voi.get("output_names", None)
-    if _output_names and len(_output_names) == 1:
-        _out_dim = arch_config.get("output_dim", [2])[0]
+    output_specs = get_variable_schema(config).outputs
+    if len(output_specs) == 1:
+        _out_dim = output_specs[0].dim
         if args.node_target_type == "bus":
             _out_names = ["Va", "Vm"][:_out_dim]
         else:
             _out_names = ["Pg", "Qg"][:_out_dim]
     else:
-        _out_names = _output_names or ["dim_0", "dim_1"]
+        _out_names = [spec.name for spec in output_specs]
 
     info(f"[FT] Post-training regression eval on test set (dims: {_out_names})...")
     test_metrics = evaluate_ft3(model, test_loader, device, comm,

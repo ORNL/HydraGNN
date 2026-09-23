@@ -17,6 +17,7 @@ from typing import Dict, List, Union
 import torch_scatter
 
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims
 from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
@@ -78,7 +79,11 @@ def create_model_config(
         initial_bias=config["Architecture"]["initial_bias"],
         num_nodes=config["Architecture"]["num_nodes"],
         max_neighbours=config["Architecture"]["max_neighbours"],
-        edge_dim=config["Architecture"]["edge_dim"],
+        edge_dim=(
+            edge_type_dims(config["Architecture"]["edge_types"])
+            if config["Architecture"].get("edge_types") is not None
+            else config["Architecture"]["edge_dim"]
+        ),
         pna_deg=config["Architecture"]["pna_deg"],
         num_before_skip=config["Architecture"]["num_before_skip"],
         num_after_skip=config["Architecture"]["num_after_skip"],

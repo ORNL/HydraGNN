@@ -11,22 +11,30 @@
 
 import pytest
 import torch
-from torch_geometric.data import Batch, Data
+from torch_geometric.data import Batch, Data, HeteroData
 
 from hydragnn.preprocess.load_data import (
     build_dataset_on_rank_zero,
     create_dataloaders,
 )
 import hydragnn.preprocess.load_data as load_data_module
+from hydragnn.utils.input_config_parsing import (
+    edge_type_dims,
+    validate_edge_type_contract,
+)
+from hydragnn.utils.input_config_parsing.config_utils import update_config_edge_dim
 from hydragnn.utils.input_config_parsing.variable_schema import (
     encoded_schema_dimensions,
     get_variable_schema,
+    node_type_feature_dims,
     parse_variable_schema,
     prepare_data_from_schema,
     schema_dimensions,
+    validate_node_type_contract,
 )
 
 VARIABLES = {
+    "graph_type": "homogeneous",
     "inputs": [
         {"name": "species", "level": "node", "dim": 2},
         {"name": "pos", "level": "node", "dim": 3, "role": "position"},
@@ -40,6 +48,62 @@ VARIABLES = {
         {"name": "node_target", "level": "node", "dim": 1},
     ],
 }
+
+EDGE_TYPES = [
+    {"source_type": "bus", "relation": "line", "target_type": "bus", "dim": 9},
+    {"source_type": "load", "relation": "link", "target_type": "bus", "dim": 0},
+]
+
+
+def test_explicit_edge_types_use_complete_edge_triples():
+    assert edge_type_dims(EDGE_TYPES) == {
+        ("bus", "line", "bus"): 9,
+        ("load", "link", "bus"): 0,
+    }
+
+
+def test_explicit_edge_types_reject_duplicate_triples():
+    with pytest.raises(ValueError, match="Duplicate edge type"):
+        edge_type_dims([EDGE_TYPES[0], EDGE_TYPES[0]])
+
+
+def test_explicit_edge_types_require_all_fields():
+    with pytest.raises(ValueError, match="must contain exactly"):
+        edge_type_dims([{"relation": "line", "dim": 9}])
+
+
+def test_relation_only_edge_dim_dictionary_is_rejected():
+    with pytest.raises(ValueError, match="edge_dim dictionaries are unsupported"):
+        update_config_edge_dim({"edge_dim": {"line": 9}})
+
+
+def _heterogeneous_edge_sample():
+    data = HeteroData()
+    data["bus"].x = torch.ones(2, 1)
+    data["load"].x = torch.ones(1, 1)
+    data["bus", "line", "bus"].edge_index = torch.tensor([[0], [1]])
+    data["bus", "line", "bus"].edge_attr = torch.ones(1, 9)
+    data["load", "link", "bus"].edge_index = torch.tensor([[0], [1]])
+    return data
+
+
+def test_edge_type_contract_matches_complete_runtime_edge_set():
+    assert validate_edge_type_contract(EDGE_TYPES, _heterogeneous_edge_sample()) == {
+        ("bus", "line", "bus"): 9,
+        ("load", "link", "bus"): 0,
+    }
+
+
+def test_edge_type_contract_rejects_incomplete_declaration():
+    with pytest.raises(ValueError, match="do not match dataset edge types"):
+        validate_edge_type_contract(EDGE_TYPES[:1], _heterogeneous_edge_sample())
+
+
+def test_edge_type_contract_rejects_attributes_on_featureless_relation():
+    data = _heterogeneous_edge_sample()
+    data["load", "link", "bus"].edge_attr = torch.ones(1, 1)
+    with pytest.raises(ValueError, match="must not have edge_attr"):
+        validate_edge_type_contract(EDGE_TYPES, data)
 
 
 def _sample(num_nodes=3):
@@ -90,6 +154,7 @@ def test_positions_do_not_change_invariant_node_features():
 
 def test_encoded_variable_compiles_raw_scalar_input():
     variables = {
+        "graph_type": "homogeneous",
         "inputs": [
             {
                 "name": "atomic_numbers",
@@ -122,6 +187,7 @@ def test_encoded_variable_compiles_raw_scalar_input():
 def test_one_hot_encoding_contributes_category_count_to_model_width():
     schema = parse_variable_schema(
         {
+            "graph_type": "homogeneous",
             "inputs": [
                 {"name": "continuous", "level": "node", "dim": 2},
                 {
@@ -160,7 +226,13 @@ def test_encoding_requires_scalar_node_input(variable):
     with pytest.raises(
         ValueError, match="supported only for scalar node input features"
     ):
-        parse_variable_schema({"inputs": [variable], "outputs": []})
+        parse_variable_schema(
+            {
+                "graph_type": "homogeneous",
+                "inputs": [variable],
+                "outputs": [],
+            }
+        )
 
 
 def test_graph_inputs_batch_to_one_row_per_graph():
@@ -287,6 +359,7 @@ def test_named_variable_schema_rejects_duplicate_names():
 )
 def test_pos_cannot_be_declared_as_an_ordinary_feature(position):
     variables = {
+        "graph_type": "homogeneous",
         "inputs": [
             {"name": "species", "level": "node", "dim": 2},
             position,
@@ -307,6 +380,7 @@ def test_pos_cannot_be_declared_as_an_ordinary_feature(position):
 )
 def test_position_role_requires_pyg_pos_shape_contract(position):
     variables = {
+        "graph_type": "homogeneous",
         "inputs": [
             {"name": "species", "level": "node", "dim": 2},
             position,
@@ -324,9 +398,97 @@ def test_named_variable_configuration_is_required():
         get_variable_schema({"NeuralNetwork": {}})
 
 
+def test_graph_type_is_required():
+    with pytest.raises(ValueError, match="Variables.graph_type"):
+        parse_variable_schema(
+            {
+                "inputs": [{"name": "features", "level": "node", "dim": 2}],
+                "outputs": [],
+            }
+        )
+
+
+def test_heterogeneous_schema_requires_node_type_registry():
+    with pytest.raises(ValueError, match="node_types must be a non-empty array"):
+        parse_variable_schema(
+            {
+                "graph_type": "heterogeneous",
+                "inputs": [],
+                "outputs": [],
+            }
+        )
+
+
+def test_homogeneous_schema_omits_node_types():
+    schema = parse_variable_schema(VARIABLES)
+    validate_node_type_contract(schema, None)
+
+    with pytest.raises(ValueError, match="dataset is heterogeneous"):
+        validate_node_type_contract(schema, ("bus",))
+
+
+def test_homogeneous_schema_rejects_node_types():
+    variables = {
+        "graph_type": "homogeneous",
+        "inputs": [
+            {"name": "features", "level": "node", "dim": 2, "node_type": "bus"}
+        ],
+        "outputs": [],
+    }
+    with pytest.raises(ValueError, match="Homogeneous graph variables must omit"):
+        parse_variable_schema(variables)
+
+
+def test_heterogeneous_schema_requires_node_types():
+    with pytest.raises(ValueError, match="must declare node_type"):
+        parse_variable_schema(
+            {
+                **VARIABLES,
+                "graph_type": "heterogeneous",
+                "node_types": ["bus", "generator"],
+            }
+        )
+
+    schema = parse_variable_schema(VARIABLES)
+    with pytest.raises(ValueError, match="must declare node_type"):
+        node_type_feature_dims(schema)
+
+
+def test_heterogeneous_schema_rejects_unknown_node_types():
+    variables = {
+        "graph_type": "heterogeneous",
+        "node_types": ["bus", "generator"],
+        "inputs": [
+            {"name": "features", "level": "node", "dim": 2, "node_type": "bus"}
+        ],
+        "outputs": [
+            {"name": "target", "level": "node", "dim": 1, "node_type": "load"}
+        ],
+    }
+    with pytest.raises(ValueError, match="absent from Variables.node_types"):
+        parse_variable_schema(variables)
+
+
+def test_heterogeneous_registry_must_match_dataset_node_types():
+    schema = parse_variable_schema(
+        {
+            "graph_type": "heterogeneous",
+            "node_types": ["bus", "generator"],
+            "inputs": [
+                {"name": "voltage", "level": "node", "dim": 1, "node_type": "bus"}
+            ],
+            "outputs": [],
+        }
+    )
+
+    with pytest.raises(ValueError, match="do not match dataset node types"):
+        validate_node_type_contract(schema, ("bus", "load"))
+
+
 @pytest.mark.parametrize("group", ["inputs", "outputs"])
 def test_internal_derived_names_are_rejected(group):
     variables = {
+        "graph_type": "homogeneous",
         "inputs": [{"name": "features", "level": "node", "dim": 2}],
         "outputs": [{"name": "target", "level": "node", "dim": 1}],
     }
@@ -340,6 +502,7 @@ def test_schema_recompilation_removes_stale_derived_attributes():
     prepare_data_from_schema(data, parse_variable_schema(VARIABLES))
 
     node_only = {
+        "graph_type": "homogeneous",
         "inputs": [{"name": "species", "level": "node", "dim": 2}],
         "outputs": [{"name": "energy", "level": "graph", "dim": 1}],
     }
@@ -352,6 +515,7 @@ def test_schema_recompilation_removes_stale_derived_attributes():
     assert data.graph_output.shape == (1, 1)
 
     no_outputs = {
+        "graph_type": "homogeneous",
         "inputs": [{"name": "species", "level": "node", "dim": 2}],
         "outputs": [],
     }

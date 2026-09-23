@@ -43,7 +43,7 @@ import hydragnn.utils.model as model_utils
 from hydragnn.utils.model import print_model
 from hydragnn.utils.distributed import get_device
 from hydragnn.utils.input_config_parsing.config_utils import update_config
-from hydragnn.utils.input_config_parsing import save_config
+from hydragnn.utils.input_config_parsing import edge_type_dims, save_config
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 
 from ft_utils import EpochCSVWriter, evaluate_ft1, save_run_results
@@ -76,7 +76,9 @@ def _to_jsonable(obj):
 
 def _resolve_edge_dim(config):
     arch = config.get("NeuralNetwork", {}).get("Architecture", {})
-    return arch.get("edge_dim", {"ac_line": 9, "transformer": 11})
+    if arch.get("edge_types") is None:
+        raise RuntimeError("Architecture.edge_types must be specified.")
+    return edge_type_dims(arch["edge_types"])
 
 
 def apply_freeze_regime(model, regime: str):
@@ -326,8 +328,7 @@ if __name__ == "__main__":
     )
 
     # ── Update config from data ────────────────────────────────────────────
-    # update_config handles graph-level outputs without y_loc: it reads
-    # output_dim directly from config["Variables_of_interest"]["output_dim"].
+    # update_config derives graph-level output dimensions from Variables.outputs.
     config = update_config(config, train_loader, val_loader, test_loader)
     arch_config = config["NeuralNetwork"]["Architecture"]
 
@@ -404,7 +405,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

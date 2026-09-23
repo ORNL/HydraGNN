@@ -9,6 +9,8 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from torch_geometric.utils import degree
 
+from hydragnn.utils.input_config_parsing import get_variable_schema
+
 
 def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
@@ -583,32 +585,31 @@ def resolve_edge_feature_schema(
     return tuple(schema)
 
 
-def validate_voi_node_features(config: dict, node_target_type: str | None = None):
-    """Validate that node feature config is fully specified.  Crash on anything missing."""
-    nn_config = config.get("NeuralNetwork")
-    if nn_config is None:
-        raise RuntimeError("Config is missing 'NeuralNetwork' section.")
-    var_config = nn_config.get("Variables_of_interest")
-    if var_config is None:
-        raise RuntimeError("Config is missing 'NeuralNetwork.Variables_of_interest'.")
+def validate_opf_variable_schema(config: dict, node_target_type: str | None = None):
+    """Validate the canonical variable schema required by OPF workflows."""
+    schema = get_variable_schema(config)
+    if node_target_type is None:
+        return config
 
-    input_node_features = var_config.get("input_node_features")
-    if not isinstance(input_node_features, list) or len(input_node_features) == 0:
+    node_inputs = [
+        spec
+        for spec in schema.inputs
+        if spec.level == "node" and spec.node_type == node_target_type
+    ]
+    if not node_inputs:
         raise RuntimeError(
-            "'input_node_features' must be an explicit non-empty list in the config."
+            f"Variables.inputs has no entries for node_type '{node_target_type}'."
         )
 
-    node_feature_dims = var_config.get("node_feature_dims")
-    if not isinstance(node_feature_dims, list) or len(node_feature_dims) == 0:
+    node_outputs = [
+        spec
+        for spec in schema.outputs
+        if spec.level == "node" and spec.node_type == node_target_type
+    ]
+    if not node_outputs:
         raise RuntimeError(
-            "'node_feature_dims' must be an explicit non-empty list in the config."
+            f"Variables.outputs has no entries for node_type '{node_target_type}'."
         )
-
-    if "node_feature_names" not in var_config:
-        raise RuntimeError(
-            "'node_feature_names' must be explicitly provided in the config."
-        )
-
     return config
 
 
@@ -674,15 +675,23 @@ def compute_pna_deg_for_hetero_dataset(dataset, verbosity: int = 2):
 def _assemble_edge_attr_hetero(data, edge_dim_dict):
     """Heterogeneous route: keep per-edge-type native widths.
 
-    Edge types whose relation name appears in *edge_dim_dict* must carry a
-    pre-assembled ``edge_attr`` tensor with the declared width.  Edge types
-    absent from the dict are treated as featureless — any stale ``edge_attr``
-    is removed so that ``data.edge_attr_dict`` only contains featured types.
+    Every edge-type triple must appear in *edge_dim_dict*. Positive dimensions
+    require a pre-assembled ``edge_attr`` tensor with the declared width;
+    dimension zero declares a featureless edge and removes stale attributes.
 
     Returns ``(data, edge_dim_dict)`` unchanged.
     """
+    actual_edge_types = {tuple(edge_type) for edge_type in data.edge_types}
+    configured_edge_types = set(edge_dim_dict)
+    if actual_edge_types != configured_edge_types:
+        raise RuntimeError(
+            "Configured edge_types do not match data: "
+            f"missing={sorted(actual_edge_types - configured_edge_types)}, "
+            f"unexpected={sorted(configured_edge_types - actual_edge_types)}."
+        )
+
     for edge_type in data.edge_types:
-        _, rel, _ = edge_type
+        edge_type = tuple(edge_type)
         edge_store = data[edge_type]
         edge_index = getattr(edge_store, "edge_index", None)
         if not isinstance(edge_index, torch.Tensor):
@@ -690,10 +699,10 @@ def _assemble_edge_attr_hetero(data, edge_dim_dict):
         if edge_index.dim() != 2 or edge_index.size(0) != 2:
             continue
 
-        expected_dim = edge_dim_dict.get(rel)
+        expected_dim = edge_dim_dict[edge_type]
         existing = getattr(edge_store, "edge_attr", None)
 
-        if expected_dim is None:
+        if expected_dim == 0:
             # Featureless — remove any edge_attr so it stays out of
             # data.edge_attr_dict during training.
             if existing is not None:
@@ -705,12 +714,12 @@ def _assemble_edge_attr_hetero(data, edge_dim_dict):
 
         if not isinstance(existing, torch.Tensor) or existing.dim() != 2:
             raise RuntimeError(
-                f"Edge type {edge_type} (rel={rel}) expects edge_attr with "
+                f"Edge type {edge_type} expects edge_attr with "
                 f"{expected_dim} columns but found no valid 2-D tensor."
             )
         if existing.size(1) != expected_dim:
             raise RuntimeError(
-                f"Edge type {edge_type} (rel={rel}) has edge_attr width "
+                f"Edge type {edge_type} has edge_attr width "
                 f"{existing.size(1)}, expected {expected_dim} from edge_dim config."
             )
 
@@ -725,10 +734,8 @@ def assemble_edge_attr(data, edge_dim, feature_schema=None):
     * **int** — *homogeneous* route.  Every edge type is zero-padded (or
       assembled from named columns via *feature_schema*) to a uniform width
       equal to *edge_dim*.
-    * **dict** — *heterogeneous* route.  Keys are relation names (the middle
-      element of an edge-type triple); values are the expected widths of
-      pre-assembled ``edge_attr`` tensors.  Edge types absent from the dict
-      are treated as featureless.
+        * **dict** — *heterogeneous* route. Keys are complete edge-type triples and
+            values are expected widths. Zero declares a featureless edge.
 
     Returns ``(data, edge_dim)``.
     """
@@ -826,8 +833,17 @@ def assemble_edge_attr(data, edge_dim, feature_schema=None):
 
 def _validate_edge_attr_hetero(data, edge_dim_dict):
     """Check per-edge-type widths for the heterogeneous route."""
+    actual_edge_types = {tuple(edge_type) for edge_type in data.edge_types}
+    configured_edge_types = set(edge_dim_dict)
+    if actual_edge_types != configured_edge_types:
+        raise RuntimeError(
+            "Configured edge_types do not match data: "
+            f"missing={sorted(actual_edge_types - configured_edge_types)}, "
+            f"unexpected={sorted(configured_edge_types - actual_edge_types)}."
+        )
+
     for edge_type in data.edge_types:
-        _, rel, _ = edge_type
+        edge_type = tuple(edge_type)
         edge_store = data[edge_type]
         edge_index = getattr(edge_store, "edge_index", None)
         if not isinstance(edge_index, torch.Tensor):
@@ -836,21 +852,21 @@ def _validate_edge_attr_hetero(data, edge_dim_dict):
             continue
         num_edges = int(edge_index.size(1))
 
-        expected_dim = edge_dim_dict.get(rel)
+        expected_dim = edge_dim_dict[edge_type]
         edge_attr = getattr(edge_store, "edge_attr", None)
 
-        if expected_dim is None:
+        if expected_dim == 0:
             # Featureless — must NOT have edge_attr.
             if isinstance(edge_attr, torch.Tensor):
                 raise RuntimeError(
-                    f"Featureless edge type {edge_type} (rel={rel}) should not "
+                    f"Featureless edge type {edge_type} should not "
                     f"have edge_attr, but found tensor with shape {list(edge_attr.shape)}."
                 )
             continue
 
         if not isinstance(edge_attr, torch.Tensor):
             raise RuntimeError(
-                f"Edge type {edge_type} (rel={rel}) is missing edge_attr; "
+                f"Edge type {edge_type} is missing edge_attr; "
                 f"expected width {expected_dim}."
             )
         if edge_attr.dim() != 2:
@@ -865,7 +881,7 @@ def _validate_edge_attr_hetero(data, edge_dim_dict):
             )
         if edge_attr.size(1) != expected_dim:
             raise RuntimeError(
-                f"edge_attr dim mismatch for edge type {edge_type} (rel={rel}): "
+                f"edge_attr dim mismatch for edge type {edge_type}: "
                 f"got {edge_attr.size(1)}, expected {expected_dim}."
             )
 
@@ -879,8 +895,8 @@ def validate_edge_attr(data, edge_dim):
 
     * **int** — every edge type must have ``edge_attr`` with that many columns
       (featureless types that have no ``edge_attr`` are silently skipped).
-    * **dict** — per-relation-name widths; featureless types (absent from the
-      dict) must NOT carry ``edge_attr``.
+        * **dict** — per-edge-triple widths; types declared with zero must not carry
+            ``edge_attr``.
     """
     if not hasattr(data, "edge_types"):
         return data

@@ -36,6 +36,7 @@ from opf_solution_utils import (
     resolve_edge_feature_schema,
     resolve_node_target_type as _resolve_node_target_type,
 )
+from hydragnn.utils.input_config_parsing import get_variable_schema, schema_dimensions
 
 
 def _to_jsonable(obj):
@@ -280,9 +281,17 @@ def _log_phase_time(comm, rank, label: str, elapsed_local: float):
 
 
 class HomogeneousDatasetAdapter:
-    def __init__(self, base, node_target_type: str):
+    def __init__(
+        self,
+        base,
+        node_target_type: str,
+        edge_dim: int,
+        edge_feature_schema=None,
+    ):
         self.base = base
         self.node_target_type = node_target_type
+        self.edge_dim = edge_dim
+        self.edge_feature_schema = edge_feature_schema
 
     def __len__(self):
         return len(self.base)
@@ -290,6 +299,11 @@ class HomogeneousDatasetAdapter:
     def __getitem__(self, idx):
         data = self.base[idx]
         if hasattr(data, "node_types"):
+            data, _ = assemble_edge_attr(
+                data,
+                edge_dim=self.edge_dim,
+                feature_schema=self.edge_feature_schema,
+            )
             data = data.to_homogeneous(
                 node_attrs=["x", "y"],
                 edge_attrs=["edge_attr"],
@@ -426,10 +440,7 @@ if __name__ == "__main__":
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
     raw_edge_dim = arch_config.get("edge_dim")
-    if isinstance(raw_edge_dim, dict):
-        edge_dim = {str(k): int(v) for k, v in raw_edge_dim.items()}
-        edge_feature_schema = None
-    elif raw_edge_dim is not None:
+    if raw_edge_dim is not None and not isinstance(raw_edge_dim, dict):
         edge_dim = int(raw_edge_dim)
         names = arch_config.get("edge_feature_names")
         if names:
@@ -437,7 +448,7 @@ if __name__ == "__main__":
         else:
             edge_feature_schema = None
     else:
-        raise RuntimeError("edge_dim must be specified in config.")
+        raise RuntimeError("Homogeneous Architecture.edge_dim must be an integer.")
     arch_config["edge_dim"] = edge_dim
 
     if "node_target_type" in config.get("NeuralNetwork", {}).get("Architecture", {}):
@@ -781,22 +792,34 @@ if __name__ == "__main__":
         train_base = AdiosDataset(fname, "trainset", comm, var_config=None)
         val_base = AdiosDataset(fname, "valset", comm, var_config=None)
         test_base = AdiosDataset(fname, "testset", comm, var_config=None)
-        trainset = HomogeneousDatasetAdapter(train_base, args.node_target_type)
-        valset = HomogeneousDatasetAdapter(val_base, args.node_target_type)
-        testset = HomogeneousDatasetAdapter(test_base, args.node_target_type)
+        trainset = HomogeneousDatasetAdapter(
+            train_base, args.node_target_type, edge_dim, edge_feature_schema
+        )
+        valset = HomogeneousDatasetAdapter(
+            val_base, args.node_target_type, edge_dim, edge_feature_schema
+        )
+        testset = HomogeneousDatasetAdapter(
+            test_base, args.node_target_type, edge_dim, edge_feature_schema
+        )
     else:
         basedir = os.path.join(datadir, f"{args.modelname}.pickle")
         trainset = HomogeneousDatasetAdapter(
             SimplePickleDataset(basedir=basedir, label="trainset", var_config=None),
             args.node_target_type,
+            edge_dim,
+            edge_feature_schema,
         )
         valset = HomogeneousDatasetAdapter(
             SimplePickleDataset(basedir=basedir, label="valset", var_config=None),
             args.node_target_type,
+            edge_dim,
+            edge_feature_schema,
         )
         testset = HomogeneousDatasetAdapter(
             SimplePickleDataset(basedir=basedir, label="testset", var_config=None),
             args.node_target_type,
+            edge_dim,
+            edge_feature_schema,
         )
 
     resolved_node_target_type = _resolve_node_target_type(
@@ -808,18 +831,15 @@ if __name__ == "__main__":
         )
         args.node_target_type = resolved_node_target_type
 
-    # Sync input_node_features with the actual homogeneous data feature dim.
-    # After to_homogeneous(), x is zero-padded to the max feature dim across
-    # all node types, which is typically larger than the config's original
-    # input_node_features list.
     actual_x_dim = trainset[0].x.shape[1]
-    voi = config["NeuralNetwork"]["Variables_of_interest"]
-    if len(voi["input_node_features"]) != actual_x_dim:
-        info(
-            f"Updating input_node_features: config has {len(voi['input_node_features'])} "
-            f"features but homogeneous data has {actual_x_dim} (zero-padded)."
+    configured_x_dim = schema_dimensions(
+        get_variable_schema(config), "node", "inputs"
+    )
+    if configured_x_dim != actual_x_dim:
+        raise ValueError(
+            f"Variables.inputs declares {configured_x_dim} node feature dimensions, "
+            f"but homogeneous OPF data provides {actual_x_dim}."
         )
-        voi["input_node_features"] = list(range(actual_x_dim))
 
     info(
         "trainset,valset,testset size: %d %d %d"
@@ -873,7 +893,7 @@ if __name__ == "__main__":
         test_loader,
         writer,
         scheduler,
-        config["NeuralNetwork"],
+        config,
         log_name,
         config["Verbosity"]["level"],
         create_plots=False,

@@ -15,9 +15,13 @@
             "num_conv_layers": 4,
             "pe_dim": 0,
             "max_neighbours": 64,
-            "edge_dim": {
-                "ac_line": 10
-            },
+            "edge_types": [
+                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 10},
+                {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
+                {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "load_link", "target_type": "load", "dim": 0}
+            ],
             "node_input_dims": {
                 "bus": 10,
                 "generator": 5,

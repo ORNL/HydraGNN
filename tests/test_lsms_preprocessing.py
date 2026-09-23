@@ -39,6 +39,7 @@ def _config(stratified=False):
             "Training": {"perc_train": 0.5},
         },
         "Variables": {
+            "graph_type": "homogeneous",
             "inputs": [
                 {
                     "name": "atomic_numbers",

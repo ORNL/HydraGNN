@@ -233,6 +233,7 @@ dataset = AdiosDataset(filename, "trainset", comm)
         }
     },
     "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [
             {"name": "num_of_protons", "level": "node", "dim": 1}
         ],
@@ -429,9 +430,67 @@ HydraGNN. A dataset importer only stores named source tensors on each PyG
 `graph_attr`, or `y`; HydraGNN constructs those internal tensors from the
 schema.
 
+`graph_type` is required and must be either `homogeneous` or `heterogeneous`.
+A heterogeneous schema must also list every dataset node type in `node_types`,
+and every node-level input or output must identify one of them with
+`node_type`. A homogeneous schema must not contain either `node_types` or
+per-variable `node_type` fields. HydraGNN verifies the declaration against the
+loaded PyG `Data` or `HeteroData` sample.
+
+A heterogeneous architecture must also declare every edge type using its full
+source, relation, and target triple. `dim` is the width of that relation's
+`edge_attr`; use `dim: 0` to declare a featureless relation. The declaration
+must match the dataset's edge types exactly. Each entry must contain exactly
+`source_type`, `relation`, `target_type`, and `dim`; triples must be unique,
+their endpoints must be present in `Variables.node_types`, and dimensions must
+be nonnegative integers. Relation-name-only `edge_dim` dictionaries are
+rejected rather than migrated.
+
+```json
+"edge_types": [
+    {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
+    {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0}
+]
+```
+
+For every positive dimension, the corresponding `HeteroData` edge store must
+contain `edge_attr` with shape `(E_relation, dim)`. A zero dimension requires
+that store to have no `edge_attr`. Missing declarations, extra declarations,
+duplicate triples, incorrect widths, and attributes on featureless relations
+are errors. Model construction uses the complete edge triple to configure each
+relation-specific convolution; edge attributes from different relations are
+not concatenated or padded.
+
+A homogeneous architecture instead declares one scalar `edge_dim`, shared by
+all edges, and must not declare `edge_types`. Its `data.edge_attr` has shape
+`(E, edge_dim)`. If heterogeneous source data is converted to homogeneous form,
+every relation must first be padded to that width and featureless relations are
+represented by zero rows of the same width. The resulting integer `edge_type`
+labels may preserve relation identity as metadata, but they do not permit
+different feature widths.
+
+For a heterogeneous graph, the structure is explicit:
+
 ```json
 {
     "Variables": {
+        "graph_type": "heterogeneous",
+        "node_types": ["bus", "generator"],
+        "inputs": [
+            {"name": "bus_features", "level": "node", "dim": 4, "node_type": "bus"},
+            {"name": "generator_features", "level": "node", "dim": 11, "node_type": "generator"}
+        ],
+        "outputs": [
+            {"name": "bus_voltage", "level": "node", "dim": 2, "node_type": "bus"}
+        ]
+    }
+}
+```
+
+```json
+{
+    "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [
             {"name": "node_features", "level": "node", "dim": 3}
         ],
@@ -592,6 +651,8 @@ The migration is intentionally direct rather than compatibility-based:
 |---|---|
 | `NeuralNetwork.Variables_of_interest` | top-level `Variables.inputs` and `Variables.outputs` |
 | feature and target column indices | exact named PyG attributes |
+| heterogeneous relation-name `edge_dim` dictionary | complete `Architecture.edge_types` list |
+| omitted featureless heterogeneous relations | explicit `edge_types` entries with `dim: 0` |
 | manual construction of `data.x` and target tensors | `prepare_data_from_schema` or `SchemaPreparedDataset` |
 | HydraGNN-owned CFG/LSMS parsing | application-owned parsing into PyG `Data` objects |
 | `update_config_minmax` | application-owned normalization of named attributes |
@@ -636,8 +697,12 @@ declared `edge_attr` or `graph_attr`, and `y`/`y_loc` for configured outputs.
 Their column dimensions must agree with the raw schema. Without encoded node
 inputs, `x.shape[1]` equals `Architecture.input_dim`. With an embedding or
 one-hot input, `x` retains one raw scalar column for that variable while
-`Architecture.input_dim` counts its post-encoding width. An edge feature
-tensor must have one row per edge and `Architecture.edge_dim` columns.
+`Architecture.input_dim` counts its post-encoding width. For a homogeneous
+graph, `data.edge_attr` must have one row per edge and
+`Architecture.edge_dim` columns. For a heterogeneous graph, each edge store
+declared with positive `dim` must have one row per relation edge and the width
+specified by its matching `Architecture.edge_types` entry; stores declared
+with `dim: 0` must not contain `edge_attr`.
 
 When HydraGNN later opens a prepared pickle, `.pt`, ADIOS, or DDStore artifact,
 it treats those stored tensors as authoritative and does not recover missing
@@ -1007,6 +1072,7 @@ atomic numbers can use a learned embedding:
 ```json
 {
     "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [{
             "name": "atomic_numbers",
             "level": "node",
@@ -1017,7 +1083,8 @@ atomic numbers can use a learned embedding:
                 "embedding_dim": 64,
                 "min_value": 1
             }
-        }]
+        }],
+        "outputs": []
     }
 }
 ```
@@ -1528,6 +1595,7 @@ Features:
         "compute_grad_energy": true
     },
     "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [
             {
                 "name": "atomic_numbers",

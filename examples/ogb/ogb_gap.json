@@ -34,6 +34,7 @@
         }
     },
     "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [
             {
                 "name": "atom_type",

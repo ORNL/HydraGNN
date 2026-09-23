@@ -57,6 +57,7 @@ def test_csce_smiles_features_are_compiled_from_named_attributes():
 
 def test_smiles_edge_outputs_use_one_row_per_edge():
     variables = {
+        "graph_type": "homogeneous",
         "inputs": [
             {"name": "atom_type", "level": "node", "dim": 6},
             {"name": "atom_descriptors", "level": "node", "dim": 6},
@@ -78,6 +79,7 @@ def test_smiles_edge_outputs_use_one_row_per_edge():
 
 def test_smiles_generation_accepts_a_preparsed_schema():
     variables = {
+        "graph_type": "homogeneous",
         "inputs": [
             {"name": "atom_type", "level": "node", "dim": 6},
             {"name": "atom_descriptors", "level": "node", "dim": 6},

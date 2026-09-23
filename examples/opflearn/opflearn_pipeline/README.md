@@ -234,6 +234,11 @@ def wrapped_angle_difference(prediction, target):
 > are avoided and the example uses **GIN**, which operates correctly on
 > edge-free graphs.
 >
+> Its JSON therefore declares `Variables.graph_type: "homogeneous"` and does
+> not contain `Architecture.edge_types`. That field is reserved for
+> heterogeneous graphs; homogeneous graphs use one scalar `edge_dim` when an
+> edge-feature width is required.
+>
 > If a future OPFLearn release (or a join against `pglib-opf` case files)
 > provides explicit topology, a heterogeneous variant mirroring the `pglearn`
 > example could then be added.

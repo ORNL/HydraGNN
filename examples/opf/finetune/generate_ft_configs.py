@@ -14,6 +14,17 @@ import os
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
+EDGE_TYPES = [
+    {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
+    {"source_type": "bus", "relation": "transformer", "target_type": "bus", "dim": 11},
+    {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
+    {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
+    {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},
+    {"source_type": "bus", "relation": "load_link", "target_type": "load", "dim": 0},
+    {"source_type": "shunt", "relation": "shunt_link", "target_type": "bus", "dim": 0},
+    {"source_type": "bus", "relation": "shunt_link", "target_type": "shunt", "dim": 0},
+]
+
 
 def _base_training(lr, num_epoch, regime):
     return {
@@ -49,7 +60,7 @@ def _base_arch(mpnn_type, hd, nl, freeze_conv, node_target_type, out_dim):
         "pe_dim": 0,
         "max_neighbours": 100,
         "hetero_attention_heads": 4,
-        "edge_dim": {"ac_line": 9, "transformer": 11},
+        "edge_types": EDGE_TYPES,
         "node_input_dims": {"bus": 4, "generator": 11, "load": 2, "shunt": 2},
         "output_heads": {
             "node": [
@@ -92,7 +103,7 @@ def _base_arch_graph(mpnn_type, hd, nl, freeze_conv):
         "pe_dim": 0,
         "max_neighbours": 100,
         "hetero_attention_heads": 4,
-        "edge_dim": {"ac_line": 9, "transformer": 11},
+        "edge_types": EDGE_TYPES,
         "node_input_dims": {"bus": 4, "generator": 11, "load": 2, "shunt": 2},
         "output_heads": {
             "graph": [
@@ -127,31 +138,40 @@ def _base_arch_graph(mpnn_type, hd, nl, freeze_conv):
     }
 
 
-VOI_BUS = {
-    "input_node_features": [0, 1, 2, 3],
-    "graph_feature_names": ["context"],
-    "graph_feature_dims": [1],
-    "node_feature_names": ["node_features"],
-    "node_feature_dims": [4],
-    "output_names": ["bus_solution"],
-    "output_index": [0],
-    "output_dim": [2],
-    "type": ["node"],
-    "denormalize_output": False,
-}
+HETERO_INPUTS = [
+    {"name": "context", "level": "graph", "dim": 1},
+    {"name": "bus_base_kv", "level": "node", "dim": 1, "node_type": "bus"},
+    {"name": "bus_type", "level": "node", "dim": 1, "node_type": "bus"},
+    {"name": "bus_vmin", "level": "node", "dim": 1, "node_type": "bus"},
+    {"name": "bus_vmax", "level": "node", "dim": 1, "node_type": "bus"},
+    {"name": "gen_mbase", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_pg_mid", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_pmin", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_pmax", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_qg_mid", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_qmin", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_qmax", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_vg_status", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_cost_c2", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_cost_c1", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "gen_cost_c0", "level": "node", "dim": 1, "node_type": "generator"},
+    {"name": "load_pd", "level": "node", "dim": 1, "node_type": "load"},
+    {"name": "load_qd", "level": "node", "dim": 1, "node_type": "load"},
+    {"name": "shunt_bs", "level": "node", "dim": 1, "node_type": "shunt"},
+    {"name": "shunt_gs", "level": "node", "dim": 1, "node_type": "shunt"},
+]
 
-VOI_GEN = dict(VOI_BUS)
-VOI_GEN["output_names"] = ["generator_solution"]
-VOI_GEN["output_dim"] = [2]  # generator solution = [Pg, Qg] (active/reactive dispatch)
 
-VOI_FEASIBILITY = {
-    "input_node_features": [0, 1, 2, 3],
-    "output_names": ["feasibility"],
-    "output_index": [0],
-    "output_dim": [1],
-    "type": ["graph"],
-    "denormalize_output": False,
-}
+def _variables(output_name, level, dim, node_type=None):
+    output = {"name": output_name, "level": level, "dim": dim}
+    if node_type is not None:
+        output["node_type"] = node_type
+    return {
+        "graph_type": "heterogeneous",
+        "node_types": ["bus", "generator", "load", "shunt"],
+        "inputs": HETERO_INPUTS,
+        "outputs": [output],
+    }
 
 # Best HPO hyperparameters from Table VII of the manuscript
 ARCHS = {
@@ -170,6 +190,19 @@ REGIME_LR = {
 }
 
 STRATEGIES = {
+    "FT1_topology": {
+        "desc": (
+            "Topology-specific fine-tuning: pretrain on 10-case corpus, "
+            "fine-tune on held-out topology pglib_opf_case118_ieee."
+        ),
+        "case": "pglib_opf_case118_ieee",
+        "groups": "20",
+        "max_samples": None,
+        "topo_perturb": False,
+        "epochs": 50,
+        "target": "bus",
+        "data_modelname": "FT1_topology_data",
+    },
     "FT1_feasibility_classification": {
         "desc": (
             "Feasibility classification: binary graph-level prediction of "
@@ -264,7 +297,7 @@ def generate_all():
                         arch_name, ap["hd"], ap["nl"], freeze_conv
                     )
                     training = _base_training_classify(lr, fm["epochs"], regime)
-                    voi = VOI_FEASIBILITY
+                    variables = _variables("feasibility", "graph", 1)
                     # Shared dataset (arch-independent)
                     data_modelname = "FT1_feasibility_data"
                     cfg = {
@@ -275,9 +308,9 @@ def generate_all():
                         "Verbosity": {"level": 2},
                         "NeuralNetwork": {
                             "Architecture": arch,
-                            "Variables_of_interest": voi,
                             "Training": training,
                         },
+                        "Variables": variables,
                         "Visualization": {
                             "plot_init_solution": False,
                             "plot_hist_solution": False,
@@ -288,7 +321,8 @@ def generate_all():
                     # FT2 / FT3 / FT4: node-level regression
                     out_dim = 2  # bus [Va, Vm] or generator [Pg, Qg]
                     node_target_type = tgt  # "bus" or "generator"
-                    voi = VOI_GEN if tgt == "generator" else VOI_BUS
+                    output_name = "generator_pg_qg" if tgt == "generator" else "bus_va_vm"
+                    variables = _variables(output_name, "node", out_dim, node_target_type)
                     arch = _base_arch(
                         arch_name, ap["hd"], ap["nl"], freeze_conv, node_target_type, out_dim
                     )
@@ -300,13 +334,15 @@ def generate_all():
                         "_ft_num_groups": fm["groups"],
                         "_ft_max_samples": fm["max_samples"],
                         "_ft_topological_perturbations": fm["topo_perturb"],
-                        "ft_data_modelname": f"{ft_dir}_{arch_name}_data",
+                        "ft_data_modelname": fm.get(
+                            "data_modelname", f"{ft_dir}_{arch_name}_data"
+                        ),
                         "Verbosity": {"level": 2},
                         "NeuralNetwork": {
                             "Architecture": arch,
-                            "Variables_of_interest": voi,
                             "Training": training,
                         },
+                        "Variables": variables,
                         "Visualization": {
                             "plot_init_solution": False,
                             "plot_hist_solution": False,

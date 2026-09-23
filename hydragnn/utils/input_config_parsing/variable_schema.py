@@ -17,8 +17,10 @@ import torch
 
 VariableLevel = Literal["node", "edge", "graph"]
 VariableRole = Literal["feature", "position"]
+GraphType = Literal["homogeneous", "heterogeneous"]
 _LEVELS = frozenset(("node", "edge", "graph"))
 _ROLES = frozenset(("feature", "position"))
+_GRAPH_TYPES = frozenset(("homogeneous", "heterogeneous"))
 _ENCODING_TYPES = frozenset(("embedding", "one_hot"))
 _DERIVED_TENSOR_NAMES = frozenset(
     (
@@ -55,12 +57,17 @@ class VariableSpec:
     dim: int
     role: VariableRole = "feature"
     encoding: InputEncoding | None = None
+    # Disambiguates which heterogeneous node type this variable belongs to;
+    # unused (and must be omitted) for homogeneous graphs.
+    node_type: str | None = None
 
 
 @dataclass(frozen=True)
 class VariableSchema:
     """Named model inputs and prediction targets."""
 
+    graph_type: GraphType
+    node_types: tuple[str, ...]
     inputs: tuple[VariableSpec, ...]
     outputs: tuple[VariableSpec, ...]
 
@@ -75,7 +82,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         path = f"Variables.{group}[{index}]"
         if not isinstance(raw, dict):
             raise TypeError(f"{path} must be a JSON object")
-        extra = set(raw) - {"name", "level", "dim", "role", "encoding"}
+        extra = set(raw) - {"name", "level", "dim", "role", "encoding", "node_type"}
         missing = {"name", "level", "dim"} - set(raw)
         if missing:
             raise ValueError(f"{path} is missing: {', '.join(sorted(missing))}")
@@ -87,6 +94,7 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         dim = raw["dim"]
         role = raw.get("role", "feature")
         raw_encoding = raw.get("encoding")
+        node_type = raw.get("node_type")
         if not isinstance(name, str) or not name.strip():
             raise ValueError(f"{path}.name must be a non-empty string")
         if level not in _LEVELS:
@@ -95,6 +103,13 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
             raise ValueError(f"{path}.dim must be a positive integer")
         if role not in _ROLES:
             raise ValueError(f"{path}.role must be one of {sorted(_ROLES)}")
+        if node_type is not None:
+            if level != "node":
+                raise ValueError(
+                    f"{path}.node_type is valid only when level is 'node'"
+                )
+            if not isinstance(node_type, str) or not node_type.strip():
+                raise ValueError(f"{path}.node_type must be a non-empty string")
         if role == "position":
             if group != "inputs":
                 raise ValueError(f"{path}.role 'position' is valid only for inputs")
@@ -158,7 +173,14 @@ def _parse_group(raw_variables, group: str) -> tuple[VariableSpec, ...]:
         if group == "inputs" and name == "pos" and role != "position":
             raise ValueError(f"{path} named 'pos' must declare role 'position'")
         parsed.append(
-            VariableSpec(name=name, level=level, dim=dim, role=role, encoding=encoding)
+            VariableSpec(
+                name=name,
+                level=level,
+                dim=dim,
+                role=role,
+                encoding=encoding,
+                node_type=node_type,
+            )
         )
     return tuple(parsed)
 
@@ -167,10 +189,39 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
     """Parse and validate the top-level ``Variables`` JSON section."""
     if not isinstance(raw_variables, dict):
         raise TypeError("Variables must be a JSON object")
-    extra = set(raw_variables) - {"inputs", "outputs"}
+    extra = set(raw_variables) - {"graph_type", "node_types", "inputs", "outputs"}
     if extra:
         raise ValueError("Variables has unknown keys: " + ", ".join(sorted(extra)))
+    graph_type = raw_variables.get("graph_type")
+    if graph_type not in _GRAPH_TYPES:
+        raise ValueError(
+            f"Variables.graph_type must be one of {sorted(_GRAPH_TYPES)}"
+        )
+    raw_node_types = raw_variables.get("node_types")
+    if graph_type == "homogeneous":
+        if raw_node_types is not None:
+            raise ValueError(
+                "Variables.node_types is valid only for heterogeneous graphs"
+            )
+        node_types = ()
+    else:
+        if not isinstance(raw_node_types, list) or not raw_node_types:
+            raise ValueError(
+                "Heterogeneous Variables.node_types must be a non-empty array"
+            )
+        if any(
+            not isinstance(value, str) or not value.strip()
+            for value in raw_node_types
+        ):
+            raise ValueError(
+                "Variables.node_types entries must be non-empty strings"
+            )
+        if len(set(raw_node_types)) != len(raw_node_types):
+            raise ValueError("Variables.node_types entries must be unique")
+        node_types = tuple(raw_node_types)
     schema = VariableSchema(
+        graph_type=graph_type,
+        node_types=node_types,
         inputs=_parse_group(raw_variables, "inputs"),
         outputs=_parse_group(raw_variables, "outputs"),
     )
@@ -185,6 +236,44 @@ def parse_variable_schema(raw_variables: dict) -> VariableSchema:
     positions = [spec for spec in schema.inputs if spec.role == "position"]
     if len(positions) > 1:
         raise ValueError("Variables.inputs may contain only one position variable")
+    node_specs = [
+        (group, spec)
+        for group, specs in (("inputs", schema.inputs), ("outputs", schema.outputs))
+        for spec in specs
+        if spec.level == "node"
+    ]
+    if graph_type == "homogeneous":
+        qualified = [
+            f"Variables.{group}.{spec.name}"
+            for group, spec in node_specs
+            if spec.node_type is not None
+        ]
+        if qualified:
+            raise ValueError(
+                "Homogeneous graph variables must omit node_type: "
+                + ", ".join(qualified)
+            )
+    else:
+        unqualified = [
+            f"Variables.{group}.{spec.name}"
+            for group, spec in node_specs
+            if spec.node_type is None
+        ]
+        if unqualified:
+            raise ValueError(
+                "Heterogeneous graph node variables must declare node_type: "
+                + ", ".join(unqualified)
+            )
+        unknown = [
+            f"Variables.{group}.{spec.name}={spec.node_type}"
+            for group, spec in node_specs
+            if spec.node_type not in node_types
+        ]
+        if unknown:
+            raise ValueError(
+                "Variable node_type values are absent from Variables.node_types: "
+                + ", ".join(unknown)
+            )
     if not any(
         spec.level == "node" and spec.role == "feature" for spec in schema.inputs
     ):
@@ -334,3 +423,41 @@ def encoded_schema_dimensions(
         else:
             total += spec.encoding.num_categories
     return total
+
+
+def node_type_feature_dims(schema: VariableSchema, group: str = "inputs") -> dict:
+    """Sum feature dimensions for node-type-qualified variables."""
+    specs = getattr(schema, group)
+    dims: dict = {}
+    for spec in specs:
+        if spec.level != "node" or spec.role != "feature":
+            continue
+        if spec.node_type is None:
+            raise ValueError(
+                f"Variables.{group}.{spec.name} must declare node_type before "
+                "computing heterogeneous feature dimensions"
+            )
+        dims[spec.node_type] = dims.get(spec.node_type, 0) + spec.dim
+    return dims
+
+
+def validate_node_type_contract(
+    schema: VariableSchema, node_types: tuple[str, ...] | None
+) -> None:
+    """Validate the declared graph structure against a loaded dataset."""
+    if node_types is None:
+        if schema.graph_type != "homogeneous":
+            raise ValueError(
+                "Variables.graph_type is 'heterogeneous', but the dataset is homogeneous"
+            )
+        return
+
+    if schema.graph_type != "heterogeneous":
+        raise ValueError(
+            "Variables.graph_type is 'homogeneous', but the dataset is heterogeneous"
+        )
+    if set(schema.node_types) != set(node_types):
+        raise ValueError(
+            f"Variables.node_types {sorted(schema.node_types)} do not match dataset "
+            f"node types {sorted(node_types)}"
+        )
