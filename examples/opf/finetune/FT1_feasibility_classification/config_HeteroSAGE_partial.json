@@ -19,13 +19,13 @@
                     "source_type": "bus",
                     "relation": "ac_line",
                     "target_type": "bus",
-                    "dim": 0
+                    "dim": 9
                 },
                 {
                     "source_type": "bus",
                     "relation": "transformer",
                     "target_type": "bus",
-                    "dim": 0
+                    "dim": 11
                 },
                 {
                     "source_type": "generator",

@@ -9,6 +9,9 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 
+import json
+from pathlib import Path
+
 import pytest
 import torch
 from torch_geometric.data import Batch, Data, HeteroData
@@ -54,12 +57,48 @@ EDGE_TYPES = [
     {"source_type": "load", "relation": "link", "target_type": "bus", "dim": 0},
 ]
 
+OPF_EDGE_DIMS = {
+    ("bus", "ac_line", "bus"): 9,
+    ("bus", "transformer", "bus"): 11,
+    ("generator", "generator_link", "bus"): 0,
+    ("bus", "generator_link", "generator"): 0,
+    ("load", "load_link", "bus"): 0,
+    ("bus", "load_link", "load"): 0,
+    ("shunt", "shunt_link", "bus"): 0,
+    ("bus", "shunt_link", "shunt"): 0,
+}
+
 
 def test_explicit_edge_types_use_complete_edge_triples():
     assert edge_type_dims(EDGE_TYPES) == {
         ("bus", "line", "bus"): 9,
         ("load", "link", "bus"): 0,
     }
+
+
+def test_opf_configs_share_model_independent_edge_dimensions():
+    repository_root = Path(__file__).resolve().parents[1]
+    opf_root = repository_root / "examples" / "opf"
+    config_paths = [
+        *opf_root.glob("*.json"),
+        *opf_root.glob("finetune/**/config_*.json"),
+        *opf_root.glob("pretrained_models/*/config.json"),
+    ]
+
+    checked_paths = []
+    for config_path in config_paths:
+        config = json.loads(config_path.read_text())
+        if config.get("Variables", {}).get("graph_type") != "heterogeneous":
+            continue
+        edge_types = (
+            config.get("NeuralNetwork", {}).get("Architecture", {}).get("edge_types")
+        )
+        if edge_types is None:
+            continue
+        assert edge_type_dims(edge_types) == OPF_EDGE_DIMS, config_path
+        checked_paths.append(config_path)
+
+    assert checked_paths
 
 
 def test_explicit_edge_types_reject_duplicate_triples():

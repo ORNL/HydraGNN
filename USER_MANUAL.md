@@ -446,6 +446,11 @@ their endpoints must be present in `Variables.node_types`, and dimensions must
 be nonnegative integers. Relation-name-only `edge_dim` dictionaries are
 rejected rather than migrated.
 
+This declaration is a dataset contract, not a model capability declaration.
+For a given dataset, relation dimensions must remain the same when `mpnn_type`
+changes. Edge-aware architectures consume `edge_attr`; edge-unaware
+architectures use the same relation topology but ignore those attributes.
+
 ```json
 "edge_types": [
     {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
@@ -457,9 +462,10 @@ For every positive dimension, the corresponding `HeteroData` edge store must
 contain `edge_attr` with shape `(E_relation, dim)`. A zero dimension requires
 that store to have no `edge_attr`. Missing declarations, extra declarations,
 duplicate triples, incorrect widths, and attributes on featureless relations
-are errors. Model construction uses the complete edge triple to configure each
-relation-specific convolution; edge attributes from different relations are
-not concatenated or padded.
+are errors. For edge-aware models, construction uses the complete edge triple
+to configure each relation-specific convolution; edge attributes from different
+relations are not concatenated or padded. Edge-unaware models do not receive
+`edge_attr_dict`.
 
 A homogeneous architecture instead declares one scalar `edge_dim`, shared by
 all edges, and must not declare `edge_types`. Its `data.edge_attr` has shape

@@ -20,7 +20,6 @@ class HeteroGINStack(HeteroBase):
         self.edge_dim = edge_dim
         self.is_edge_model = False
         super().__init__(*args, **kwargs)
-        self._validate_featureless_edges()
 
     def get_conv(self, input_dim, output_dim, edge_dim=None):
         gin = GINConv(

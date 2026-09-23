@@ -279,7 +279,10 @@ and propagated alongside the globally attended invariant representation.
       `dim: 0` for featureless relations. The list must contain each runtime
       edge triple exactly once, and both endpoints must appear in
       `Variables.node_types`. Relation-name-only `edge_dim` dictionaries are
-      rejected.
+      rejected. These dimensions describe the dataset and therefore do not
+      change with `mpnn_type`. Edge-aware models consume the declared
+      attributes; edge-unaware models use the same graph topology and leave
+      the attributes unused.
   - homogeneous `NeuralNetwork.Architecture["edge_dim"]`
     - Must be one nonnegative integer shared by every edge. Homogeneous
       configurations must not define `edge_types`. When heterogeneous source
@@ -295,9 +298,10 @@ and propagated alongside the globally attended invariant representation.
 
 At runtime, a positive `dim` requires an `edge_attr` tensor shaped
 `(num_relation_edges, dim)`. A zero dimension requires that relation to have no
-`edge_attr`. Heterogeneous message-passing layers are constructed separately
-for each complete edge triple, so different relations may use different input
-widths without padding.
+`edge_attr`. Edge-aware heterogeneous message-passing layers are constructed
+separately for each complete edge triple, so different relations may use
+different input widths without padding. Edge-unaware layers still use every
+declared relation's `edge_index`, but do not consume its `edge_attr`.
 
 ```json
 "Variables": {

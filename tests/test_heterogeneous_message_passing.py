@@ -173,11 +173,11 @@ class _HeteroBatchAdapter:
 @pytest.mark.parametrize(
     "mpnn_type,edge_dim,pna_deg",
     [
-        ("HeteroGIN", None, None),
-        ("HeteroSAGE", None, None),
+        ("HeteroGIN", 3, None),
+        ("HeteroSAGE", 3, None),
         ("HeteroGAT", 3, None),
         ("HeteroRGAT", 3, None),
-        ("HeteroHGT", None, None),
+        ("HeteroHGT", 3, None),
         ("HeteroHEAT", 3, None),
         ("HeteroPNA", 3, [1, 2, 3, 2]),
     ],

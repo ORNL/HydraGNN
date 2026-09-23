@@ -21,7 +21,6 @@ class HeteroHGTStack(HeteroBase):
         self.edge_dim = edge_dim
         self.is_edge_model = False
         super().__init__(*args, **kwargs)
-        self._validate_featureless_edges()
 
     def _init_conv(self):
         self.graph_convs = ModuleList()

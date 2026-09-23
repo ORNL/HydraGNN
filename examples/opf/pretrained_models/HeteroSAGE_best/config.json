@@ -11,8 +11,8 @@
             "max_neighbours": 100,
             "hetero_attention_heads": 4,
             "edge_types": [
-                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 0},
-                {"source_type": "bus", "relation": "transformer", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
+                {"source_type": "bus", "relation": "transformer", "target_type": "bus", "dim": 11},
                 {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
                 {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
                 {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},
