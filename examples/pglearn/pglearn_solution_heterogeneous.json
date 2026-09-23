@@ -23,13 +23,14 @@
     },
     "NeuralNetwork": {
         "Architecture": {
-            "mpnn_type": "HeteroSAGE",
+            "mpnn_type": "HeteroRGAT",
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
             "max_neighbours": 64,
+            "hetero_attention_heads": 4,
             "edge_types": [
-                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 0},
+                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 10},
                 {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
                 {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
                 {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},

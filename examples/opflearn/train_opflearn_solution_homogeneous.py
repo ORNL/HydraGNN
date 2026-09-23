@@ -140,6 +140,13 @@ def main():
     voi["node_feature_dims"] = [x_dim]
     voi["output_dim"] = [y_dim]
 
+    for variable in config["Variables"]["inputs"]:
+        if variable["name"] == "load_setpoints":
+            variable["dim"] = x_dim
+    for variable in config["Variables"]["outputs"]:
+        if variable["name"] == "opf_solution":
+            variable["dim"] = y_dim
+
     log_name = args.modelname
     hydragnn.utils.print.setup_log(log_name)
     writer = hydragnn.utils.model.get_summary_writer(log_name)

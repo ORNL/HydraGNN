@@ -182,7 +182,7 @@ class _HeteroBatchAdapter:
         ("HeteroPNA", 3, [1, 2, 3, 2]),
     ],
 )
-def pytest_hetero_graph_head_forward(mpnn_type, edge_dim, pna_deg):
+def test_hetero_graph_head_forward(mpnn_type, edge_dim, pna_deg):
     data = _build_simple_hetero_graph(edge_dim=edge_dim)
 
     output_heads = {

@@ -1,4 +1,5 @@
 import torch
+from torch_geometric.nn import GATConv, HeteroConv
 
 from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
 
@@ -89,6 +90,51 @@ def test_hetero_gps_backward_compatible_with_invariant_local_conv():
     inv_out, equiv_out = conv(x_dict, {}, batch_dict)
 
     assert set(inv_out.keys()) == set(x_dict.keys())
+    assert equiv_out is None
+
+
+def test_hetero_gps_forwards_edge_attributes_to_pyg_hetero_conv():
+    torch.manual_seed(2)
+
+    edge_type = ("a", "r", "a")
+    metadata = (["a"], [edge_type])
+    local_conv = HeteroConv(
+        {
+            edge_type: GATConv(
+                in_channels=4,
+                out_channels=4,
+                heads=1,
+                edge_dim=3,
+                add_self_loops=False,
+            )
+        },
+        aggr="sum",
+    )
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=local_conv,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+    )
+    conv.eval()
+
+    x_dict = {"a": torch.randn(3, 4)}
+    edge_index_dict = {
+        edge_type: torch.tensor([[0, 1, 2], [1, 2, 0]], dtype=torch.long)
+    }
+    edge_attr_dict = {edge_type: torch.randn(3, 3)}
+    batch_dict = {"a": torch.zeros(3, dtype=torch.long)}
+
+    inv_out, equiv_out = conv(
+        x_dict=x_dict,
+        edge_index_dict=edge_index_dict,
+        batch_dict=batch_dict,
+        edge_attr_dict=edge_attr_dict,
+    )
+
+    assert inv_out["a"].shape == x_dict["a"].shape
     assert equiv_out is None
 
 

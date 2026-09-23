@@ -113,6 +113,13 @@ def extract_archive(
     extract_dir.mkdir(parents=True, exist_ok=True)
     logger.info("Extracting %s -> %s", archive_path, extract_dir)
     with zipfile.ZipFile(archive_path, "r") as zf:
+        extract_root = extract_dir.resolve()
+        for member in zf.infolist():
+            member_path = (extract_dir / member.filename).resolve()
+            if member_path != extract_root and extract_root not in member_path.parents:
+                raise ValueError(
+                    f"Archive member escapes extraction directory: {member.filename}"
+                )
         zf.extractall(extract_dir)
 
     csv_files = sorted(extract_dir.rglob("*.csv"))

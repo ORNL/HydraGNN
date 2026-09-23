@@ -1,13 +1,21 @@
 import logging
+import zipfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from utils.parsing import parse_complex_voltage
-from utils.preprocessing import correct_v_bus_columns, process_csv_to_parquet
-from utils.voltage_correction import ANGLE_CORRECTION_FACTOR, correct_bus_voltage_array
+from examples.opflearn.opflearn_pipeline.utils.download import extract_archive
+from examples.opflearn.opflearn_pipeline.utils.parsing import parse_complex_voltage
+from examples.opflearn.opflearn_pipeline.utils.preprocessing import (
+    correct_v_bus_columns,
+    process_csv_to_parquet,
+)
+from examples.opflearn.opflearn_pipeline.utils.voltage_correction import (
+    ANGLE_CORRECTION_FACTOR,
+    correct_bus_voltage_array,
+)
 
 
 def test_parse_complex_with_spaces() -> None:
@@ -40,6 +48,20 @@ def test_parse_missing_values() -> None:
 def test_parse_malformed_string_raises() -> None:
     with pytest.raises(ValueError):
         parse_complex_voltage("this_is_not_complex")
+
+
+def test_extract_archive_rejects_path_traversal(tmp_path: Path) -> None:
+    archive_path = tmp_path / "malicious.zip"
+    extract_dir = tmp_path / "extracted"
+    escaped_path = tmp_path / "escaped.csv"
+
+    with zipfile.ZipFile(archive_path, "w") as archive:
+        archive.writestr("../escaped.csv", "unsafe")
+
+    with pytest.raises(ValueError, match="escapes extraction directory"):
+        extract_archive(archive_path, extract_dir, logging.getLogger("test_opflearn"))
+
+    assert not escaped_path.exists()
 
 
 def test_magnitude_preservation() -> None:

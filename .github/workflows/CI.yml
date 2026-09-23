@@ -97,10 +97,10 @@ jobs:
           # Check if DeepSpeed is available
           if python -c "import deepspeed" 2>/dev/null; then
             echo "DeepSpeed available - running serial tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not fairchem" tests
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not fairchem" tests examples/opflearn/opflearn_pipeline/tests
           else
             echo "DeepSpeed not available - skipping GPU/DeepSpeed tests"
-            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not gpu and not deepspeed and not fairchem" tests
+            python -m pytest -rfEP -W error -W ignore::DeprecationWarning -W ignore::UserWarning --tb=native -m "not mpi and not gpu and not deepspeed and not fairchem" tests examples/opflearn/opflearn_pipeline/tests
           fi
       - name: Run MPI pytest
         if: matrix.suite == 'mpi'

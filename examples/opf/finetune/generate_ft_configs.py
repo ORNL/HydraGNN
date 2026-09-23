@@ -37,6 +37,12 @@ EDGE_TYPES = [
 ]
 
 
+def _edge_types_for(mpnn_type):
+    if mpnn_type in {"HeteroGIN", "HeteroHGT", "HeteroSAGE"}:
+        return [{**edge_type, "dim": 0} for edge_type in EDGE_TYPES]
+    return [edge_type.copy() for edge_type in EDGE_TYPES]
+
+
 def _base_training(lr, num_epoch, regime):
     return {
         "num_epoch": num_epoch,
@@ -71,7 +77,7 @@ def _base_arch(mpnn_type, hd, nl, freeze_conv, node_target_type, out_dim):
         "pe_dim": 0,
         "max_neighbours": 100,
         "hetero_attention_heads": 4,
-        "edge_types": EDGE_TYPES,
+        "edge_types": _edge_types_for(mpnn_type),
         "node_input_dims": {"bus": 4, "generator": 11, "load": 2, "shunt": 2},
         "output_heads": {
             "node": [
@@ -114,7 +120,7 @@ def _base_arch_graph(mpnn_type, hd, nl, freeze_conv):
         "pe_dim": 0,
         "max_neighbours": 100,
         "hetero_attention_heads": 4,
-        "edge_types": EDGE_TYPES,
+        "edge_types": _edge_types_for(mpnn_type),
         "node_input_dims": {"bus": 4, "generator": 11, "load": 2, "shunt": 2},
         "output_heads": {
             "graph": [
