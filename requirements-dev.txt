@@ -2,6 +2,8 @@ black==26.5.1
 pre-commit
 pytest==8.4.2
 pytest-mpi
+# Required by the OPFLearn preprocessing tests collected by CI.
+pyarrow
 mendeleev==1.2.0
 # Required by the raw-QM9 preprocessing exercised in the CI example tests.
 rdkit==2026.3.5
