@@ -3,7 +3,7 @@
 #SBATCH -J pubchem-mpnn-benchmark
 #SBATCH -o pubchem-mpnn-benchmark-%j.out
 #SBATCH -e pubchem-mpnn-benchmark-%j.out
-#SBATCH -t 01:00:00
+#SBATCH -t 02:00:00
 #SBATCH -p batch
 #SBATCH -N 1
 
@@ -41,4 +41,4 @@ python -u examples/pubchem_gaussian/pubchem_gaussian_mpnn_benchmark.py \
     --val-samples 16 \
     --test-samples 16 \
     --subset-seed 0 \
-    --concurrency 6
+    --concurrency 1
