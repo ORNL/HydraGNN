@@ -19,6 +19,9 @@ VENV="${HYDRAGNN_VENV:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Instal
 DATASET="${PUBCHEM_DATASET:-/lustre/orion/lrn070/world-shared/kmehta/hydragnn/datasets/pubchem_gaussian.bp}"
 OUTPUT_DIR="${ROOT}/pubchem-mpnn-benchmark-${SLURM_JOB_ID}"
 MODELS="${PUBCHEM_MODELS:-PAINN,MACE,SchNet,DimeNet,UMA,AllScAIP}"
+TRAIN_SAMPLES="${PUBCHEM_TRAIN_SAMPLES:-64}"
+VAL_SAMPLES="${PUBCHEM_VAL_SAMPLES:-16}"
+TEST_SAMPLES="${PUBCHEM_TEST_SAMPLES:-16}"
 
 export PATH="${VENV}/bin:${PATH}"
 export PYTHONNOUSERSITE=1
@@ -40,8 +43,8 @@ python -u examples/pubchem_gaussian/pubchem_gaussian_mpnn_benchmark.py \
     --output-dir "${OUTPUT_DIR}" \
     --models "${MODELS}" \
     --epochs 1 \
-    --train-samples 64 \
-    --val-samples 16 \
-    --test-samples 16 \
+    --train-samples "${TRAIN_SAMPLES}" \
+    --val-samples "${VAL_SAMPLES}" \
+    --test-samples "${TEST_SAMPLES}" \
     --subset-seed 0 \
     --concurrency 1
