@@ -8,6 +8,7 @@ from hydragnn.models.Base import Base
 
 def _make_toy_base_for_embedding(hidden_dim=8, pe_dim=3, x_dim=5):
     model = Base.__new__(Base)
+    torch.nn.Module.__init__(model)
     model.use_edge_attr = False
     model.use_global_attn = True
     model.global_attn_engine = "GPS"

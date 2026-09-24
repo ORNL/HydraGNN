@@ -15,6 +15,8 @@ import pytest
 import pdb
 import subprocess
 
+from tests.md17_fixture import create_md17_raw_fixture
+
 
 @pytest.mark.parametrize(
     "global_attn_engine",
@@ -39,10 +41,18 @@ import subprocess
 )
 @pytest.mark.parametrize("example", ["qm9", "md17"])
 @pytest.mark.mpi_skip()
-def test_examples_energy(example, mpnn_type, global_attn_engine, global_attn_type):
+def test_examples_energy(
+    tmp_path, example, mpnn_type, global_attn_engine, global_attn_type
+):
     path = os.path.join(os.path.dirname(__file__), "..", "examples", example)
     file_path = os.path.join(path, example + ".py")
     # Add the --mpnn_type argument for the subprocess call
+    env = os.environ.copy()
+    if example == "md17":
+        cache_root = tmp_path / "md17"
+        create_md17_raw_fixture(cache_root)
+        env["HYDRAGNN_MD17_ROOT"] = str(cache_root)
+
     return_code = subprocess.call(
         [
             sys.executable,
@@ -53,7 +63,8 @@ def test_examples_energy(example, mpnn_type, global_attn_engine, global_attn_typ
             global_attn_engine,
             "--global_attn_type",
             global_attn_type,
-        ]
+        ],
+        env=env,
     )
 
     # Check the file ran without error.
