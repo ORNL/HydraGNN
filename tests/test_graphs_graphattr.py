@@ -35,6 +35,7 @@ def test_named_graph_conditioning_preserves_original_two_components(tmp_path):
     expected = torch.stack((expected_count, expected_count.new_tensor(1.0))).view(1, 2)
     schema = hydragnn.utils.input_config_parsing.parse_variable_schema(
         {
+            "graph_type": "homogeneous",
             "inputs": [
                 {"name": "node_features", "level": "node", "dim": 1},
                 {"name": "graph_conditioning", "level": "graph", "dim": 2},

@@ -9,6 +9,9 @@
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
 from .config_utils import (
+    edge_type_dims,
+    normalize_edge_types,
+    validate_edge_type_contract,
     update_config,
     update_config_edge_dim,
     update_config_equivariance,
@@ -23,8 +26,10 @@ from .variable_schema import (
     VariableSpec,
     encoded_schema_dimensions,
     get_variable_schema,
+    node_type_feature_dims,
     parse_variable_schema,
     prepare_data_from_schema,
     schema_dimensions,
+    validate_node_type_contract,
     validate_variable,
 )

@@ -117,7 +117,7 @@ def main(mpnn_type=None, global_attn_engine=None, global_attn_type=None):
     # Fix for MD17 datasets
     torch_geometric.datasets.MD17.file_names["uracil"] = "md17_uracil.npz"
 
-    cache_root = os.path.join("dataset", "md17")
+    cache_root = os.environ.get("HYDRAGNN_MD17_ROOT", os.path.join("dataset", "md17"))
 
     def build_dataset():
         hydragnn.utils.datasets.prepare_pyg_cache(

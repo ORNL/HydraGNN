@@ -61,6 +61,7 @@
         }
     },
     "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [
             {
                 "name": "atomic_numbers",

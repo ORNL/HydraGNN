@@ -32,6 +32,11 @@ outputs. For example, `edge_lengths` is present on every fixture, but it becomes
 
 Likewise, HydraGNN constructs `data.x`, `data.edge_attr`, `data.graph_attr`,
 `data.y`, and `data.y_loc` from the declared named attributes before batching.
+These fixtures are homogeneous, so their architecture uses one scalar
+`edge_dim` for every edge and does not declare `edge_types`. Heterogeneous
+datasets instead require a complete `Architecture.edge_types` list of source,
+relation, target, and dimension entries; `dim: 0` explicitly marks a
+featureless relation.
 
 ## Split-local normalization
 

@@ -40,7 +40,7 @@ function setup_bb()
     fi
 }
 
-HYDRAGNN_ROOT=/lustre/orion/world-shared/lrn070/jyc/frontier/HydraGNN
+HYDRAGNN_ROOT=/lustre/orion/lrn078/proj-shared/HydraGNN
 
 # Load conda environment
 module reset

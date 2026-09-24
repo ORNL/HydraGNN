@@ -71,6 +71,7 @@ class Base(Module):
         equivariant_attn_coupling_mode: str = "parallel",
         equivariant_attn_periodic: bool = False,
         equivariant_attn_periodic_replication: int | list[int] = 1,
+        attn_only: bool = False,
     ):
         super().__init__()
         self.device = get_device()
@@ -78,6 +79,7 @@ class Base(Module):
         self.conv_args = conv_args
         self.global_attn_engine = global_attn_engine
         self.global_attn_type = global_attn_type
+        self.attn_only = bool(attn_only)
         self.input_dim = input_dim
         self.pe_dim = pe_dim
         self.global_attn_heads = global_attn_heads
@@ -278,7 +280,7 @@ class Base(Module):
             if self.global_attn_engine == "GPS":
                 return HydraGPSConv(
                     channels=self.hidden_dim,
-                    conv=mpnn,
+                    conv=None if self.attn_only else mpnn,
                     heads=self.global_attn_heads,
                     dropout=self.global_attn_dropout,
                     attn_type=self.global_attn_type,
@@ -597,6 +599,8 @@ class Base(Module):
                 (data.edge_index.size(1), 3), device=data.edge_index.device
             )
         conv_args = {"edge_index": data.edge_index.to(torch.long)}
+        if self.use_global_attn:
+            conv_args["graph_batch"] = getattr(data, "batch", None)
         if self.use_edge_attr:
             assert (
                 data.edge_attr is not None

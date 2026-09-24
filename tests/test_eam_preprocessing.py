@@ -17,6 +17,7 @@ from examples.eam import eam_preprocess
 def _config(outputs):
     return {
         "Variables": {
+            "graph_type": "homogeneous",
             "inputs": [
                 {
                     "name": "atomic_numbers",

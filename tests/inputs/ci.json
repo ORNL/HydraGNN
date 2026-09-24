@@ -83,6 +83,7 @@
         "create_plots": true
     },
     "Variables": {
+        "graph_type": "homogeneous",
         "inputs": [
             {
                 "name": "node_features",

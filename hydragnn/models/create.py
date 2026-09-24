@@ -12,11 +12,12 @@
 import os
 import torch
 from torch_geometric.data import Data
-from typing import List, Union
+from typing import Dict, List, Union
 
 import torch_scatter
 
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims
 from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
 from hydragnn.models.PNAStack import PNAStack
@@ -33,6 +34,15 @@ from hydragnn.models.PAINNStack import PAINNStack
 from hydragnn.models.MACEStack import MACEStack
 from hydragnn.models.AllScAIPStack import AllScAIPStack
 from hydragnn.models.UMAStack import UMAStack
+from hydragnn.models.heterogeneous import (
+    HeteroGINStack,
+    HeteroSAGEStack,
+    HeteroGATStack,
+    HeteroPNAStack,
+    HeteroHGTStack,
+    HeteroHEATStack,
+    HeteroRGATStack,
+)
 
 # InteratomicPotential functionality is now implemented via wrapper composition
 
@@ -45,6 +55,8 @@ def create_model_config(
     config: dict,
     verbosity: int = 0,
     use_gpu: bool = True,
+    metadata=None,
+    node_input_dims=None,
 ):
     model_defaults = MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
     model = create_model(
@@ -56,6 +68,7 @@ def create_model_config(
         global_attn_engine=config["Architecture"]["global_attn_engine"],
         global_attn_type=config["Architecture"]["global_attn_type"],
         global_attn_heads=config["Architecture"]["global_attn_heads"],
+        attn_only=config["Architecture"].get("attn_only", False),
         output_type=config["Architecture"]["output_type"],
         output_heads=config["Architecture"]["output_heads"],
         activation_function=config["Architecture"]["activation_function"],
@@ -66,7 +79,11 @@ def create_model_config(
         initial_bias=config["Architecture"]["initial_bias"],
         num_nodes=config["Architecture"]["num_nodes"],
         max_neighbours=config["Architecture"]["max_neighbours"],
-        edge_dim=config["Architecture"]["edge_dim"],
+        edge_dim=(
+            edge_type_dims(config["Architecture"]["edge_types"])
+            if config["Architecture"].get("edge_types") is not None
+            else config["Architecture"]["edge_dim"]
+        ),
         pna_deg=config["Architecture"]["pna_deg"],
         num_before_skip=config["Architecture"]["num_before_skip"],
         num_after_skip=config["Architecture"]["num_after_skip"],
@@ -100,6 +117,7 @@ def create_model_config(
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
+        graph_attr_dim=config["Architecture"].get("graph_attr_dim", 0),
         graph_attr_conditioning_mode=config["Architecture"].get(
             "graph_attr_conditioning_mode", "concat_node"
         ),
@@ -230,6 +248,23 @@ def create_model_config(
         uma_vector_head_index=config["Architecture"].get(
             "uma_vector_head_index", model_defaults["uma_vector_head_index"]
         ),
+        hetero_pooling_mode=config["Architecture"].get("hetero_pooling_mode", "sum"),
+        node_target_type=config["Architecture"].get("node_target_type", None),
+        share_relation_weights=config["Architecture"].get(
+            "share_relation_weights", False
+        ),
+        metadata=metadata,
+        node_input_dims=node_input_dims,
+        hetero_attention_heads=config["Architecture"].get("hetero_attention_heads", 4),
+        hetero_attention_negative_slope=config["Architecture"].get(
+            "hetero_attention_negative_slope", 0.2
+        ),
+        hetero_edge_type_emb_dim=config["Architecture"].get(
+            "hetero_edge_type_emb_dim", 16
+        ),
+        hetero_edge_attr_emb_dim=config["Architecture"].get(
+            "hetero_edge_attr_emb_dim", 16
+        ),
         verbosity=verbosity,
         use_gpu=use_gpu,
     )
@@ -262,7 +297,7 @@ def create_model(
     initial_bias: float = None,
     num_nodes: int = None,
     max_neighbours: int = None,
-    edge_dim: int = None,
+    edge_dim: Union[int, Dict[str, int], None] = None,
     pna_deg: torch.tensor = None,
     num_before_skip: int = None,
     num_after_skip: int = None,
@@ -289,6 +324,7 @@ def create_model(
     energy_peratom_weight: float = 0.0,
     force_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
+    graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
     graph_pooling: str = "mean",
     equivariant_attn_lmax: int = 1,
@@ -334,9 +370,19 @@ def create_model(
     uma_use_composition_embedding: bool = False,
     uma_equivariant_vector_head: bool = False,
     uma_vector_head_index: int = None,
+    hetero_pooling_mode: str = "sum",
+    node_target_type: str = None,
+    share_relation_weights: bool = False,
+    metadata=None,
+    node_input_dims=None,
+    hetero_attention_heads: int = 4,
+    hetero_attention_negative_slope: float = 0.2,
+    hetero_edge_type_emb_dim: int = 16,
+    hetero_edge_attr_emb_dim: int = 16,
     verbosity: int = 0,
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
+    attn_only: bool = False,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -834,6 +880,7 @@ def create_model(
                 equivariant_attn_periodic_replication
             ),
         )
+
     elif mpnn_type == "AllScAIP":
         assert radius is not None, "AllScAIP requires radius input."
         assert max_neighbours is not None, "AllScAIP requires max_neighbours input."
@@ -884,6 +931,7 @@ def create_model(
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
         )
+
     elif mpnn_type == "UMA":
         assert radius is not None, "UMA requires radius input."
         assert max_neighbours is not None, "UMA requires max_neighbours input."
@@ -931,6 +979,240 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+        )
+
+    elif mpnn_type == "HeteroGIN":
+        model = HeteroGINStack(
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
+        )
+
+    elif mpnn_type == "HeteroSAGE":
+        model = HeteroSAGEStack(
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
+        )
+
+    elif mpnn_type == "HeteroGAT":
+        heads = 6
+        negative_slope = 0.05
+        model = HeteroGATStack(
+            heads,
+            negative_slope,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
+        )
+
+    elif mpnn_type == "HeteroPNA":
+        assert pna_deg is not None, "HeteroPNA requires degree input."
+        model = HeteroPNAStack(
+            pna_deg,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
+        )
+
+    elif mpnn_type == "HeteroRGAT":
+        model = HeteroRGATStack(
+            hetero_attention_heads,
+            hetero_attention_negative_slope,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
+        )
+    elif mpnn_type == "HeteroHGT":
+        model = HeteroHGTStack(
+            hetero_attention_heads,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
+        )
+    elif mpnn_type == "HeteroHEAT":
+        model = HeteroHEATStack(
+            hetero_attention_heads,
+            hetero_edge_type_emb_dim,
+            hetero_edge_attr_emb_dim,
+            edge_dim,
+            input_dim,
+            hidden_dim,
+            output_dim,
+            pe_dim,
+            global_attn_engine,
+            global_attn_type,
+            global_attn_heads,
+            output_type,
+            output_heads,
+            activation_function,
+            loss_function_type,
+            equivariance,
+            loss_weights=task_weights,
+            freeze_conv=freeze_conv,
+            initial_bias=initial_bias,
+            num_conv_layers=num_conv_layers,
+            num_nodes=num_nodes,
+            graph_pooling=graph_pooling,
+            use_graph_attr_conditioning=use_graph_attr_conditioning,
+            graph_attr_dim=graph_attr_dim,
+            graph_attr_conditioning_mode=graph_attr_conditioning_mode,
+            hetero_pooling_mode=hetero_pooling_mode,
+            node_target_type=node_target_type,
+            share_relation_weights=share_relation_weights,
+            metadata=metadata,
+            node_input_dims=node_input_dims,
+            attn_only=attn_only,
         )
 
     else:

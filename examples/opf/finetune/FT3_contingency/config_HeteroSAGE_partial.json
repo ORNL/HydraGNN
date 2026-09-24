@@ -1,0 +1,288 @@
+{
+    "_ft_strategy": "FT3_contingency",
+    "_ft_description": "Contingency fine-tuning: adapt to N-1 topological perturbations (topological_perturbations=True) for pglib_opf_case118_ieee.",
+    "_ft_case_name": "pglib_opf_case118_ieee",
+    "_ft_num_groups": "20",
+    "_ft_max_samples": null,
+    "_ft_topological_perturbations": true,
+    "ft_data_modelname": "FT3_contingency_HeteroSAGE_data",
+    "Verbosity": {
+        "level": 2
+    },
+    "NeuralNetwork": {
+        "Architecture": {
+            "mpnn_type": "HeteroSAGE",
+            "hidden_dim": 141,
+            "num_conv_layers": 5,
+            "pe_dim": 0,
+            "max_neighbours": 100,
+            "hetero_attention_heads": 4,
+            "edge_types": [
+                {
+                    "source_type": "bus",
+                    "relation": "ac_line",
+                    "target_type": "bus",
+                    "dim": 9
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "transformer",
+                    "target_type": "bus",
+                    "dim": 11
+                },
+                {
+                    "source_type": "generator",
+                    "relation": "generator_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "generator_link",
+                    "target_type": "generator",
+                    "dim": 0
+                },
+                {
+                    "source_type": "load",
+                    "relation": "load_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "load_link",
+                    "target_type": "load",
+                    "dim": 0
+                },
+                {
+                    "source_type": "shunt",
+                    "relation": "shunt_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "shunt_link",
+                    "target_type": "shunt",
+                    "dim": 0
+                }
+            ],
+            "node_input_dims": {
+                "bus": 4,
+                "generator": 11,
+                "load": 2,
+                "shunt": 2
+            },
+            "output_heads": {
+                "node": [
+                    {
+                        "type": "branch-0",
+                        "architecture": {
+                            "num_headlayers": 2,
+                            "dim_headlayers": [
+                                32,
+                                16
+                            ],
+                            "type": "mlp"
+                        }
+                    }
+                ]
+            },
+            "task_weights": [
+                1.0
+            ],
+            "hetero_pooling_mode": "sum",
+            "node_target_type": "bus",
+            "global_attn_engine": null,
+            "global_attn_type": null,
+            "global_attn_heads": 0,
+            "output_dim": [
+                2
+            ],
+            "output_type": [
+                "node"
+            ],
+            "num_nodes": 31,
+            "input_dim": 4,
+            "pna_deg": null,
+            "activation_function": "relu",
+            "hetero_attention_negative_slope": 0.2,
+            "hetero_edge_type_emb_dim": 16,
+            "hetero_edge_attr_emb_dim": 16,
+            "SyncBatchNorm": false,
+            "freeze_conv_layers": false
+        },
+        "Training": {
+            "num_epoch": 50,
+            "batch_size": 32,
+            "patience": 15,
+            "early_stopping": true,
+            "Checkpoint": true,
+            "checkpoint_warmup": 2,
+            "continue": 0,
+            "startfrom": "existing_model",
+            "DomainLoss": {
+                "enabled": false,
+                "smoothness_weight": 0.001,
+                "transformer_smoothness_weight": 0.001,
+                "voltage_bound_weight": 0.01,
+                "voltage_bound_feature_indices": [
+                    2,
+                    3
+                ],
+                "voltage_output_index": -1
+            },
+            "Optimizer": {
+                "type": "AdamW",
+                "learning_rate": 0.0005
+            },
+            "conv_checkpointing": false,
+            "loss_function_type": "mse",
+            "precision": "fp32",
+            "_ft_regime": "partial"
+        }
+    },
+    "Variables": {
+        "graph_type": "heterogeneous",
+        "node_types": [
+            "bus",
+            "generator",
+            "load",
+            "shunt"
+        ],
+        "inputs": [
+            {
+                "name": "context",
+                "level": "graph",
+                "dim": 1
+            },
+            {
+                "name": "bus_base_kv",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_type",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_vmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_vmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "gen_mbase",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pg_mid",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qg_mid",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_vg_status",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c2",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c1",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c0",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "load_pd",
+                "level": "node",
+                "dim": 1,
+                "node_type": "load"
+            },
+            {
+                "name": "load_qd",
+                "level": "node",
+                "dim": 1,
+                "node_type": "load"
+            },
+            {
+                "name": "shunt_bs",
+                "level": "node",
+                "dim": 1,
+                "node_type": "shunt"
+            },
+            {
+                "name": "shunt_gs",
+                "level": "node",
+                "dim": 1,
+                "node_type": "shunt"
+            }
+        ],
+        "outputs": [
+            {
+                "name": "bus_va_vm",
+                "level": "node",
+                "dim": 2,
+                "node_type": "bus"
+            }
+        ]
+    },
+    "Visualization": {
+        "plot_init_solution": false,
+        "plot_hist_solution": false,
+        "create_plots": false
+    }
+}
