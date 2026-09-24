@@ -819,9 +819,7 @@ class HeteroBase(Module):
         fused = torch.cat([x_graph, graph_attr], dim=-1)
         return self.graph_pool_projector(fused)
 
-    def forward(self, data):
-        self._maybe_init_metadata(data)
-
+    def _move_data_to_model_device(self, data):
         device = next(self.parameters()).device
         if hasattr(data, "to"):
             data = data.to(device)
@@ -838,6 +836,12 @@ class HeteroBase(Module):
                     store.edge_index = store.edge_index.to(device)
                 if hasattr(store, "edge_attr") and store.edge_attr is not None:
                     store.edge_attr = store.edge_attr.to(device)
+
+        return data
+
+    def forward(self, data):
+        self._maybe_init_metadata(data)
+        data = self._move_data_to_model_device(data)
 
         x_dict, batch_dict = self._prepare_node_features(data)
         equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)

@@ -290,7 +290,7 @@ def load_existing_model(
         # exist before strict load: they are created lazily on first forward
         # pass, so a freshly constructed model won't have these keys yet.
         if hasattr(target_model, "_ensure_edge_projector"):
-            edge_lin_marker = ".edge_lin_dict."
+            edge_lin_marker = "edge_lin_dict."
             for key, tensor in state_dict.items():
                 if edge_lin_marker not in key or not key.endswith(".weight"):
                     continue

@@ -16,7 +16,7 @@ from torch_geometric.loader import DataLoader
 
 import hydragnn
 from hydragnn.models.create import create_model
-from hydragnn.utils.model.model import update_multibranch_heads
+from hydragnn.utils.model.model import load_existing_model, update_multibranch_heads
 from hydragnn.preprocess.load_data import split_dataset
 from hydragnn.utils.distributed import setup_ddp, get_distributed_model
 from examples.pglearn.download_and_uncompress_data import _validate_path_component
@@ -166,6 +166,45 @@ def test_hetero_heat_with_gps_unpacks_local_output():
     output = model(data)[0]
 
     assert output.shape == (1, 2)
+
+
+@pytest.mark.parametrize("mpnn_type", ["HeteroHEAT", "HeteroHGT"])
+def test_specialized_hetero_forward_uses_device_transfer(mpnn_type, monkeypatch):
+    data = _build_simple_hetero_graph(edge_dim=3)
+    model = create_model(**_graph_head_model_args(mpnn_type, 3))
+    model.eval()
+    sentinel = object()
+    transferred = []
+
+    def move_data(input_data):
+        transferred.append(input_data)
+        return data
+
+    monkeypatch.setattr(model, "_move_data_to_model_device", move_data)
+
+    output = model(sentinel)[0]
+
+    assert transferred == [sentinel]
+    assert output.shape == (1, 2)
+
+
+def test_load_unwrapped_hetero_heat_lazy_edge_projectors(tmp_path):
+    source = create_model(**_graph_head_model_args("HeteroHEAT", 3))
+    target = create_model(**_graph_head_model_args("HeteroHEAT", None))
+    model_name = "hetero_heat_lazy_projectors"
+    checkpoint_dir = tmp_path / model_name
+    checkpoint_dir.mkdir()
+    torch.save(
+        {"model_state_dict": source.state_dict()},
+        checkpoint_dir / f"{model_name}.pk",
+    )
+
+    assert not target.edge_lin_dict
+    load_existing_model(target, model_name, path=tmp_path)
+
+    assert set(target.edge_lin_dict) == set(source.edge_lin_dict)
+    for key, value in source.state_dict().items():
+        torch.testing.assert_close(target.state_dict()[key], value)
 
 
 def _build_random_hetero_graph(

@@ -50,6 +50,7 @@ class HeteroHGTStack(HeteroBase):
 
     def forward(self, data):
         self._maybe_init_metadata(data)
+        data = self._move_data_to_model_device(data)
 
         x_dict = data.x_dict
         self._ensure_node_embedders(x_dict)
