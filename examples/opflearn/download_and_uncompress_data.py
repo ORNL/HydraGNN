@@ -2,18 +2,20 @@ import argparse
 import logging
 import os
 import sys
-
-# Reuse the OPFLearn pipeline utilities (download + preprocess).
-_PIPELINE_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "opflearn_pipeline"
-)
-if _PIPELINE_DIR not in sys.path:
-    sys.path.insert(0, _PIPELINE_DIR)
-
 from pathlib import Path
 
-from utils.download import download_cases
-from utils.preprocessing import process_csv_to_parquet
+if __package__:
+    from .opflearn_pipeline.utils.download import download_cases
+    from .opflearn_pipeline.utils.preprocessing import process_csv_to_parquet
+else:
+    # Support direct execution from the examples/opflearn directory.
+    _PIPELINE_DIR = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "opflearn_pipeline"
+    )
+    if _PIPELINE_DIR not in sys.path:
+        sys.path.insert(0, _PIPELINE_DIR)
+    from utils.download import download_cases
+    from utils.preprocessing import process_csv_to_parquet
 
 
 def _case_csv_name(case_name: str) -> str:
