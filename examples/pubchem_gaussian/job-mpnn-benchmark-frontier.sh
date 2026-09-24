@@ -1,10 +1,11 @@
 #!/bin/bash
-#SBATCH -A LRN070
+#SBATCH -A LRN087
 #SBATCH -J pubchem-mpnn-benchmark
 #SBATCH -o pubchem-mpnn-benchmark-%j.out
 #SBATCH -e pubchem-mpnn-benchmark-%j.out
-#SBATCH -t 02:00:00
+#SBATCH -t 00:30:00
 #SBATCH -p batch
+#SBATCH -q debug
 #SBATCH -N 1
 
 set -euo pipefail
