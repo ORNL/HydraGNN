@@ -1,7 +1,9 @@
 import importlib.util
+import json
 import math
 from pathlib import Path
 
+import pytest
 import torch
 from torch_geometric.data import Batch, HeteroData
 
@@ -30,6 +32,9 @@ compute_effective_impedance_matrix = _MODULE.compute_effective_impedance_matrix
 compute_effective_impedance_pe = _MODULE.compute_effective_impedance_pe
 compute_effective_impedance_rpe = _MODULE.compute_effective_impedance_rpe
 OPFStructuralEncodingProvider = _MODULE.OPFStructuralEncodingProvider
+_OPF_CONFIGS = sorted(
+    (Path(__file__).parents[1] / "examples" / "opf" / "configs").glob("*.json")
+)
 
 
 def _model_structural_config(preprocessing):
@@ -74,6 +79,43 @@ def _model_structural_config(preprocessing):
             "coefficient_init": settings.get("coefficient_init", 0.0),
         }
     return result
+
+
+@pytest.mark.parametrize("config_path", _OPF_CONFIGS, ids=lambda path: path.stem)
+def test_opf_provider_produces_every_declared_structural_attribute(
+    config_path, tmp_path
+):
+    architecture = json.loads(config_path.read_text())["NeuralNetwork"][
+        "Architecture"
+    ]
+    structural = architecture.get("structural_encoding", {})
+    provider = OPFStructuralEncodingProvider(
+        architecture, cache_dir=str(tmp_path / config_path.stem)
+    )
+    data = provider(_three_bus_path(), topology_id="path")
+    target = structural.get("target_node_type")
+    if target is None:
+        return
+    store = data[target]
+
+    for spec in structural.get("node_inputs", []):
+        assert hasattr(store, spec["attribute"])
+    factorized = structural.get("factorized_pairwise")
+    if factorized:
+        for attribute in factorized["attributes"].values():
+            assert hasattr(store, attribute)
+    pairwise = structural.get("pairwise")
+    if pairwise:
+        assert hasattr(store, pairwise["path_attribute"])
+        artifact = torch.load(
+            getattr(store, pairwise["path_attribute"]),
+            map_location="cpu",
+            weights_only=True,
+        )
+        assert pairwise["artifact_key"] in artifact
+    qk = structural.get("qk_coordinates")
+    if qk:
+        assert hasattr(store, qk["attribute"])
 resolve_opf_positional_encoding_config = (
     _MODULE.resolve_opf_positional_encoding_config
 )
@@ -120,14 +162,14 @@ def _three_bus_path():
     return data
 
 
-def pytest_ybus_keeps_complex_transformer_asymmetry():
+def test_ybus_keeps_complex_transformer_asymmetry():
     ybus = build_ybus(_two_bus_transformer())
     assert ybus.dtype == torch.complex128
     assert not torch.allclose(ybus, ybus.transpose(0, 1))
     assert not torch.allclose(ybus, ybus.conj().transpose(0, 1))
 
 
-def pytest_ybus_svd_preprocessing_stores_padded_real_factors():
+def test_ybus_svd_preprocessing_stores_padded_real_factors():
     data = add_ybus_svd_rpe(_two_bus_transformer(), k=3)
     bus = data["bus"]
     for name in ("svd_u_real", "svd_u_imag", "svd_v_real", "svd_v_imag", "svd_s"):
@@ -141,7 +183,7 @@ def pytest_ybus_svd_preprocessing_stores_padded_real_factors():
     assert torch.all(bus.svd_s[:, :-1] <= 1)
 
 
-def pytest_heterogps_svd_rpe_changes_attention_output():
+def test_heterogps_svd_rpe_changes_attention_output():
     torch.manual_seed(7)
     conv = HeteroGPSConv(
         channels=4,
@@ -186,7 +228,7 @@ def pytest_heterogps_svd_rpe_changes_attention_output():
     assert not torch.allclose(out_a["bus"], out_b["bus"])
 
 
-def pytest_topological_laplacian_stores_smallest_nonzero_eigenpairs():
+def test_topological_laplacian_stores_smallest_nonzero_eigenpairs():
     data = _three_bus_path()
     laplacian = build_topological_laplacian(data)
     artifact = compute_topological_laplacian_pe(data, k=3, compute_device="cpu")
@@ -208,7 +250,7 @@ def pytest_topological_laplacian_stores_smallest_nonzero_eigenpairs():
     )
 
 
-def pytest_effective_resistance_summary_excludes_diagonal():
+def test_effective_resistance_summary_excludes_diagonal():
     stats = compute_effective_resistance_pe(
         _three_bus_path(), compute_device="cpu"
     )["effective_resistance_pe"]
@@ -233,7 +275,7 @@ def pytest_effective_resistance_summary_excludes_diagonal():
     assert torch.allclose(two_bus_stats[:, 3], torch.tensor([1.0, 1.0]))
 
 
-def pytest_effective_resistance_rpe_is_raw_pairwise_distance():
+def test_effective_resistance_rpe_is_raw_pairwise_distance():
     matrix = compute_effective_resistance_matrix(
         _three_bus_path(), compute_device="cpu"
     )
@@ -247,7 +289,7 @@ def pytest_effective_resistance_rpe_is_raw_pairwise_distance():
     assert torch.allclose(rpe[..., 0], expected, atol=1.0e-5)
 
 
-def pytest_effective_resistance_qk_coordinates_reconstruct_truncated_distance():
+def test_effective_resistance_qk_coordinates_reconstruct_truncated_distance():
     data = _three_bus_path()
     coordinates = compute_effective_resistance_qk(
         data, k=2, compute_device="cpu"
@@ -259,7 +301,7 @@ def pytest_effective_resistance_qk_coordinates_reconstruct_truncated_distance():
     assert torch.allclose(reconstructed, exact, atol=1.0e-5)
 
 
-def pytest_resistance_qk_augmentation_matches_explicit_softmax_bias():
+def test_resistance_qk_augmentation_matches_explicit_softmax_bias():
     attention = StructuralCoordinatePerformerAttention(
         channels=4,
         heads=1,
@@ -297,7 +339,7 @@ def pytest_resistance_qk_augmentation_matches_explicit_softmax_bias():
     assert coefficient.grad.abs() > 0
 
 
-def pytest_heterogps_resistance_performer_updates_global_coefficient():
+def test_heterogps_resistance_performer_updates_global_coefficient():
     torch.manual_seed(23)
     conv = HeteroGPSConv(
         channels=4,
@@ -333,7 +375,7 @@ def pytest_heterogps_resistance_performer_updates_global_coefficient():
     assert torch.isfinite(coefficient.grad)
 
 
-def pytest_effective_impedance_summary_and_rpe_use_real_imaginary_parts():
+def test_effective_impedance_summary_and_rpe_use_real_imaginary_parts():
     data = _three_bus_path()
     impedance = compute_effective_impedance_matrix(data, compute_device="cpu")
     expected_distance = torch.tensor(
@@ -367,7 +409,7 @@ def pytest_effective_impedance_summary_and_rpe_use_real_imaginary_parts():
     assert torch.allclose(rpe[..., 1], expected_distance.float(), atol=1.0e-6)
 
 
-def pytest_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
+def test_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
     torch.manual_seed(19)
     conv = HeteroGPSConv(
         channels=4,
@@ -412,7 +454,7 @@ def pytest_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
     assert torch.count_nonzero(diagonal) == 0
 
 
-def pytest_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
+def test_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
     architecture = {
         "opf_preprocessing": {
             "precompute": ["laplacian", "effective_resistance"],
@@ -425,8 +467,8 @@ def pytest_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
     preprocessor = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path)
     )
-    first = preprocessor(_three_bus_path(), case_name="path")
-    second = preprocessor(_three_bus_path(), case_name="path")
+    first = preprocessor(_three_bus_path(), topology_id="path")
+    second = preprocessor(_three_bus_path(), topology_id="path")
 
     assert len(list(tmp_path.glob("*.pt"))) == 2
     assert first["bus"].lap_eigvec.shape == (3, 2)
@@ -439,7 +481,7 @@ def pytest_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
     assert batched["bus"].lap_eigval.shape == (2, 2)
 
 
-def pytest_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
+def test_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
     architecture = {
         "opf_preprocessing": {
             "precompute": [
@@ -453,7 +495,7 @@ def pytest_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
     }
     data = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path)
-    )(_three_bus_path(), case_name="path")
+    )(_three_bus_path(), topology_id="path")
     bus = data["bus"]
     assert not hasattr(bus, "effective_resistance_rpe")
     assert not hasattr(bus, "effective_impedance_rpe")
@@ -469,7 +511,7 @@ def pytest_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
     assert artifact["pairwise_rpe"].shape == (3, 3, 2)
 
 
-def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
+def test_heterobase_loads_topology_level_rpe_cache(tmp_path):
     architecture = {
         "opf_preprocessing": {
             "precompute": ["effective_impedance_rpe"],
@@ -485,7 +527,7 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
     }
     data = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path)
-    )(_three_bus_path(), case_name="path")
+    )(_three_bus_path(), topology_id="path")
     # Keep the forward smoke test focused on bus attention; pooling an empty
     # auxiliary node store is independently unsupported by HeteroBase.
     del data["shunt", "shunt_link", "bus"]
@@ -540,7 +582,7 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
     assert outputs[0].shape == (3, 1)
 
 
-def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers():
+def test_heterobase_shares_one_resistance_coefficient_across_performer_layers():
     architecture = {
         "opf_preprocessing": {
             "precompute": ["effective_resistance_qk"],
@@ -604,7 +646,7 @@ def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers(
     assert outputs[0].shape == (3, 1)
 
 
-def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
+def test_resistance_coordinates_can_be_fused_before_qkv_projection():
     architecture = {
         "opf_preprocessing": {
             "precompute": ["effective_resistance_qk"],
@@ -665,7 +707,7 @@ def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
     assert outputs[0].shape == (3, 1)
 
 
-def pytest_laplacian_sign_flip_is_graphwise_and_train_only():
+def test_laplacian_sign_flip_is_graphwise_and_train_only():
     class _SignFlipHarness:
         training = True
 
@@ -688,7 +730,7 @@ def pytest_laplacian_sign_flip_is_graphwise_and_train_only():
     )
 
 
-def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
+def test_laplacian_and_resistance_are_fused_only_into_bus_input():
     architecture = {
         "opf_preprocessing": {
             "precompute": ["laplacian", "effective_resistance"],
@@ -737,7 +779,7 @@ def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
     assert embedded["shunt"].shape == (0, 8)
 
 
-def pytest_ten_dimensional_impedance_summary_is_fused_into_bus_input():
+def test_ten_dimensional_impedance_summary_is_fused_into_bus_input():
     architecture = {
         "opf_preprocessing": {
             "precompute": ["effective_impedance"],
