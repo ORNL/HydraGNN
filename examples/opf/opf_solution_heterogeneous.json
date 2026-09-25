@@ -11,14 +11,54 @@
             "max_neighbours": 100,
             "hetero_attention_heads": 4,
             "edge_types": [
-                {"source_type": "bus", "relation": "ac_line", "target_type": "bus", "dim": 9},
-                {"source_type": "bus", "relation": "transformer", "target_type": "bus", "dim": 11},
-                {"source_type": "generator", "relation": "generator_link", "target_type": "bus", "dim": 0},
-                {"source_type": "bus", "relation": "generator_link", "target_type": "generator", "dim": 0},
-                {"source_type": "load", "relation": "load_link", "target_type": "bus", "dim": 0},
-                {"source_type": "bus", "relation": "load_link", "target_type": "load", "dim": 0},
-                {"source_type": "shunt", "relation": "shunt_link", "target_type": "bus", "dim": 0},
-                {"source_type": "bus", "relation": "shunt_link", "target_type": "shunt", "dim": 0}
+                {
+                    "source_type": "bus",
+                    "relation": "ac_line",
+                    "target_type": "bus",
+                    "dim": 9
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "transformer",
+                    "target_type": "bus",
+                    "dim": 11
+                },
+                {
+                    "source_type": "generator",
+                    "relation": "generator_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "generator_link",
+                    "target_type": "generator",
+                    "dim": 0
+                },
+                {
+                    "source_type": "load",
+                    "relation": "load_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "load_link",
+                    "target_type": "load",
+                    "dim": 0
+                },
+                {
+                    "source_type": "shunt",
+                    "relation": "shunt_link",
+                    "target_type": "bus",
+                    "dim": 0
+                },
+                {
+                    "source_type": "bus",
+                    "relation": "shunt_link",
+                    "target_type": "shunt",
+                    "dim": 0
+                }
             ],
             "node_input_dims": {
                 "bus": 4,
@@ -29,11 +69,16 @@
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
-                    "dim_headlayers": [32, 16],
+                    "dim_headlayers": [
+                        32,
+                        16
+                    ],
                     "type": "mlp"
                 }
             },
-            "task_weights": [1.0],
+            "task_weights": [
+                1.0
+            ],
             "hetero_pooling_mode": "sum",
             "node_target_type": "bus"
         },
@@ -46,25 +91,64 @@
             "checkpoint_warmup": 1,
             "continue": 0,
             "startfrom": "existing_model",
-            "DomainLoss": {
-                "enabled": true,
-                "provider": "optimal_power_flow",
-                "voltage_bound_weight": 0.01,
-                "voltage_bound_feature_indices": [2, 3],
-                "voltage_output_index": -1,
-                "angle_diff_weight": 0.001,
-                "line_flow_weight": 0.001,
-                "rho": 1.0,
-                "rho_growth": 2.0,
-                "rho_max": 10000.0,
-                "constraint_reduction": 0.9,
-                "dual_update_interval": 1,
-                "warmup_epochs": 3,
-                "ramp_epochs": 3
-            },
             "Optimizer": {
                 "type": "AdamW",
-                "learning_rate": 1e-3
+                "learning_rate": 0.001
+            },
+            "loss": {
+                "enabled": true,
+                "provider": "optimal_power_flow",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "bus_va_vm",
+                            "weight": 1.0
+                        }
+                    ]
+                },
+                "constraints": [
+                    {
+                        "name": "voltage_limits",
+                        "operator": "bounded",
+                        "value": "bus_voltage_magnitude",
+                        "lower": "bus_vmin",
+                        "upper": "bus_vmax",
+                        "scale": 0.01
+                    },
+                    {
+                        "name": "angle_limits",
+                        "operator": "edge_difference_bounded",
+                        "value": "bus_voltage_angle",
+                        "relations": [
+                            "ac_line",
+                            "transformer"
+                        ],
+                        "lower": "angle_minimum",
+                        "upper": "angle_maximum",
+                        "scale": 0.001
+                    },
+                    {
+                        "name": "thermal_limits",
+                        "operator": "ac_thermal_limit",
+                        "relations": [
+                            "ac_line",
+                            "transformer"
+                        ],
+                        "scale": 0.001,
+                        "slack": 0.0001
+                    }
+                ],
+                "constraint_optimizer": {
+                    "type": "augmented_lagrangian",
+                    "rho": 1.0,
+                    "rho_growth": 2.0,
+                    "rho_max": 10000.0,
+                    "required_reduction": 0.9,
+                    "update_every": 1,
+                    "warmup_epochs": 3,
+                    "ramp_epochs": 3
+                }
             }
         }
     },
@@ -75,31 +159,170 @@
     },
     "Variables": {
         "graph_type": "heterogeneous",
-        "node_types": ["bus", "generator", "load", "shunt"],
+        "node_types": [
+            "bus",
+            "generator",
+            "load",
+            "shunt"
+        ],
         "inputs": [
-            {"name": "context", "level": "graph", "dim": 1},
-            {"name": "bus_base_kv", "level": "node", "dim": 1, "node_type": "bus"},
-            {"name": "bus_type", "level": "node", "dim": 1, "node_type": "bus"},
-            {"name": "bus_vmin", "level": "node", "dim": 1, "node_type": "bus"},
-            {"name": "bus_vmax", "level": "node", "dim": 1, "node_type": "bus"},
-            {"name": "gen_mbase", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_pg_mid", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_pmin", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_pmax", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_qg_mid", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_qmin", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_qmax", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_vg_status", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_cost_c2", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_cost_c1", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "gen_cost_c0", "level": "node", "dim": 1, "node_type": "generator"},
-            {"name": "load_pd", "level": "node", "dim": 1, "node_type": "load"},
-            {"name": "load_qd", "level": "node", "dim": 1, "node_type": "load"},
-            {"name": "shunt_bs", "level": "node", "dim": 1, "node_type": "shunt"},
-            {"name": "shunt_gs", "level": "node", "dim": 1, "node_type": "shunt"}
+            {
+                "name": "context",
+                "level": "graph",
+                "dim": 1
+            },
+            {
+                "name": "bus_base_kv",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_type",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_vmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "bus_vmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "bus"
+            },
+            {
+                "name": "gen_mbase",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pg_mid",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_pmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qg_mid",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qmin",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_qmax",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_vg_status",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c2",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c1",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "gen_cost_c0",
+                "level": "node",
+                "dim": 1,
+                "node_type": "generator"
+            },
+            {
+                "name": "load_pd",
+                "level": "node",
+                "dim": 1,
+                "node_type": "load"
+            },
+            {
+                "name": "load_qd",
+                "level": "node",
+                "dim": 1,
+                "node_type": "load"
+            },
+            {
+                "name": "shunt_bs",
+                "level": "node",
+                "dim": 1,
+                "node_type": "shunt"
+            },
+            {
+                "name": "shunt_gs",
+                "level": "node",
+                "dim": 1,
+                "node_type": "shunt"
+            }
         ],
         "outputs": [
-            {"name": "bus_va_vm", "level": "node", "dim": 2, "node_type": "bus"}
-        ]
+            {
+                "name": "bus_va_vm",
+                "level": "node",
+                "dim": 2,
+                "node_type": "bus",
+                "components": [
+                    "bus_voltage_angle",
+                    "bus_voltage_magnitude"
+                ]
+            }
+        ],
+        "edge_attributes": {
+            "ac_line": [
+                "angle_minimum",
+                "angle_maximum",
+                "shunt_from",
+                "shunt_to",
+                "resistance",
+                "reactance",
+                "rate_a",
+                "rate_b",
+                "rate_c"
+            ],
+            "transformer": [
+                "angle_minimum",
+                "angle_maximum",
+                "resistance",
+                "reactance",
+                "rate_a",
+                "rate_b",
+                "rate_c",
+                "tap_ratio",
+                "reserved_0",
+                "reserved_1",
+                "reserved_2"
+            ]
+        }
     }
 }

@@ -114,20 +114,23 @@ def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1):
             {
                 "enabled": True,
                 "provider": "interatomic_potential",
-                "terms": {
-                    "energy": {
-                        "enabled": True,
-                        "weight": 0.1,
-                        "target": "energy",
-                        "normalization": "structure",
-                    },
-                    "forces": {
-                        "enabled": True,
-                        "weight": 1.0,
-                        "target": "forces",
-                        "prediction": "negative_energy_gradient",
-                    },
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 0.1,
+                            "normalization": "per_structure",
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {"operator": "negative_gradient"},
+                        },
+                    ],
                 },
+                "constraints": [],
+                "constraint_optimizer": {"type": "fixed_penalty"},
             }
             if atomistic
             else None

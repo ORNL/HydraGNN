@@ -154,7 +154,7 @@ if __name__ == "__main__":
         "--force_weight",
         type=float,
         default=None,
-        help="Override Training.DomainLoss.terms.forces.weight.",
+        help="Override Training.loss.supervised force-term weight.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -254,7 +254,7 @@ if __name__ == "__main__":
     set_param_value("hidden_dim")
     set_param_value("num_conv_layers")
     if args.force_weight is not None:
-        config["NeuralNetwork"]["Training"]["DomainLoss"]["terms"]["forces"][
+        config["NeuralNetwork"]["Training"]["loss"]["terms"]["forces"][
             "weight"
         ] = args.force_weight
 

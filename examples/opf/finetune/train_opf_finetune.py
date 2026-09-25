@@ -501,11 +501,15 @@ if __name__ == "__main__":
     )
 
     # ── Optionally wrap with domain-loss ───────────────────────────────────
-    domain_loss_config = config["NeuralNetwork"]["Training"].get("DomainLoss")
+    domain_loss_config = config["NeuralNetwork"]["Training"].get("loss")
     if domain_loss_config is not None and domain_loss_config.get("enabled", False):
         model = OPFEnhancedModelWrapper(
             model,
-            OPFDomainLoss(domain_loss_config, node_target_type=args.node_target_type),
+            OPFDomainLoss(
+                domain_loss_config,
+                node_target_type=args.node_target_type,
+                variables=config["Variables"],
+            ),
         )
 
     # ── Load pretrained weights (before freezing, before optimizer) ────────

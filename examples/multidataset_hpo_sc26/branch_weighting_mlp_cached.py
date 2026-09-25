@@ -657,14 +657,14 @@ def main():
     energy_weight = (
         args.energy_weight
         if args.energy_weight is not None
-        else config["NeuralNetwork"]["Training"]["DomainLoss"]["terms"]["energy"].get(
+        else config["NeuralNetwork"]["Training"]["loss"]["terms"]["energy"].get(
             "weight", 1.0
         )
     )
     force_weight = (
         args.force_weight
         if args.force_weight is not None
-        else config["NeuralNetwork"]["Training"]["DomainLoss"]["terms"]["forces"].get(
+        else config["NeuralNetwork"]["Training"]["loss"]["terms"]["forces"].get(
             "weight", 1.0
         )
     )

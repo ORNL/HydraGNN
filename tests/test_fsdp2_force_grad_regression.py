@@ -127,26 +127,28 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 domain_loss_config={
                     "enabled": True,
                     "provider": "interatomic_potential",
-                    "terms": {
-                        "energy": {
-                            "enabled": True,
-                            "weight": 1.0,
-                            "target": "energy",
-                            "normalization": "structure",
-                        },
-                        "energy_per_atom": {
-                            "enabled": True,
-                            "weight": 1.0,
-                            "target": "energy",
-                            "normalization": "atom",
-                        },
-                        "forces": {
-                            "enabled": True,
-                            "weight": 1.0,
-                            "target": "forces",
-                            "prediction": "negative_energy_gradient",
-                        },
+                    "supervised": {
+                        "default_metric": "mse",
+                        "terms": [
+                            {
+                                "variable": "energy",
+                                "weight": 1.0,
+                                "normalization": "per_structure",
+                            },
+                            {
+                                "variable": "energy_per_atom",
+                                "weight": 1.0,
+                                "normalization": "per_atom",
+                            },
+                            {
+                                "variable": "forces",
+                                "weight": 1.0,
+                                "prediction": {"operator": "negative_gradient"},
+                            },
+                        ],
                     },
+                    "constraints": [],
+                    "constraint_optimizer": {"type": "fixed_penalty"},
                 },
                 use_gpu=True,
             )
