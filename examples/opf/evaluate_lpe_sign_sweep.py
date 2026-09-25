@@ -84,7 +84,7 @@ def apply_graphwise_sign_pattern(data, pattern: torch.Tensor):
     if eigenvectors is None:
         raise ValueError(
             "The batch is missing bus.lap_eigvec. Re-run OPF preprocessing "
-            "with laplacian in positional_encodings.precompute."
+            "with laplacian in opf_preprocessing.precompute."
         )
     if eigenvectors.dim() != 2:
         raise ValueError(
@@ -138,7 +138,7 @@ def _load_run_config(run_dir: Path) -> dict:
 
 def _laplacian_width(config: dict) -> int:
     architecture = config["NeuralNetwork"]["Architecture"]
-    pe_config = architecture.get("positional_encodings", {})
+    pe_config = architecture.get("opf_preprocessing", {})
     active = pe_config.get("use", [])
     if "laplacian" not in active:
         raise ValueError("Every sweep model must use the Laplacian encoding.")

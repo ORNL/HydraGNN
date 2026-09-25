@@ -8,23 +8,6 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
-            "positional_encodings": {
-                "precompute": [
-                    "effective_resistance_qk"
-                ],
-                "use": [
-                    "effective_resistance_qk"
-                ],
-                "cache_by_case": true,
-                "compute_device": "auto",
-                "effective_resistance_qk": {
-                    "dim": 8,
-                    "relative_tolerance": null,
-                    "coefficient_init": 0.0,
-                    "placement": "qk"
-                },
-                "target_node_type": "bus"
-            },
             "max_neighbours": 100,
             "global_attn_engine": "GPS",
             "global_attn_type": "performer",
@@ -109,7 +92,33 @@
                     "target_type": "shunt",
                     "dim": 0
                 }
-            ]
+            ],
+            "opf_preprocessing": {
+                "precompute": [
+                    "effective_resistance_qk"
+                ],
+                "use": [
+                    "effective_resistance_qk"
+                ],
+                "cache_by_case": true,
+                "compute_device": "auto",
+                "effective_resistance_qk": {
+                    "dim": 8,
+                    "relative_tolerance": null,
+                    "coefficient_init": 0.0,
+                    "placement": "qk"
+                },
+                "target_node_type": "bus"
+            },
+            "structural_encoding": {
+                "target_node_type": "bus",
+                "qk_coordinates": {
+                    "attribute": "effective_resistance_qk",
+                    "dim": 8,
+                    "placement": "qk",
+                    "coefficient_init": 0.0
+                }
+            }
         },
         "Training": {
             "num_epoch": 50,

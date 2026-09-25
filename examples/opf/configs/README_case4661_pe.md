@@ -30,9 +30,9 @@ python -u train_opf_solution_heterogeneous.py \
   --log case4661_lpe
 ```
 
-`Architecture.positional_encodings.precompute` controls which tensors are
-written into the serialized samples, while `Architecture.positional_encodings.use`
-controls which of those tensors the model actually consumes. Valid source names
+`Architecture.opf_preprocessing.precompute` controls which tensors are
+written into serialized samples. `Architecture.structural_encoding` controls
+how those prepared tensors enter the model. Valid OPF provider source names
 are `laplacian`, `effective_resistance`, `effective_impedance`,
 `effective_resistance_rpe`, `effective_impedance_rpe`, and `ybus_svd`; compatible
 input PEs can be selected independently or combined. The first three are shared

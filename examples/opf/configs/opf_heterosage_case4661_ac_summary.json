@@ -8,58 +8,6 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
-            "positional_encodings": {
-                "precompute": [
-                    "effective_resistance",
-                    "effective_impedance",
-                    "effective_resistance_rpe",
-                    "effective_impedance_rpe"
-                ],
-                "use": [
-                    "effective_impedance"
-                ],
-                "cache_by_case": true,
-                "compute_device": "auto",
-                "effective_resistance": {
-                    "statistics": [
-                        "min",
-                        "max",
-                        "std",
-                        "median",
-                        "mean"
-                    ],
-                    "std_correction": 0,
-                    "exclude_diagonal": true
-                },
-                "effective_impedance": {
-                    "statistics": [
-                        "min",
-                        "max",
-                        "std",
-                        "median",
-                        "mean"
-                    ],
-                    "components": [
-                        "real",
-                        "imag"
-                    ],
-                    "std_correction": 0,
-                    "exclude_diagonal": true,
-                    "relative_tolerance": null
-                },
-                "effective_resistance_rpe": {
-                    "feature_dim": 1,
-                    "mlp_hidden_dim": 8,
-                    "zero_diagonal_bias": true
-                },
-                "effective_impedance_rpe": {
-                    "feature_dim": 2,
-                    "mlp_hidden_dim": 8,
-                    "zero_diagonal_bias": true,
-                    "relative_tolerance": null
-                },
-                "target_node_type": "bus"
-            },
             "max_neighbours": 100,
             "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
@@ -144,7 +92,68 @@
                     "target_type": "shunt",
                     "dim": 0
                 }
-            ]
+            ],
+            "opf_preprocessing": {
+                "precompute": [
+                    "effective_resistance",
+                    "effective_impedance",
+                    "effective_resistance_rpe",
+                    "effective_impedance_rpe"
+                ],
+                "use": [
+                    "effective_impedance"
+                ],
+                "cache_by_case": true,
+                "compute_device": "auto",
+                "effective_resistance": {
+                    "statistics": [
+                        "min",
+                        "max",
+                        "std",
+                        "median",
+                        "mean"
+                    ],
+                    "std_correction": 0,
+                    "exclude_diagonal": true
+                },
+                "effective_impedance": {
+                    "statistics": [
+                        "min",
+                        "max",
+                        "std",
+                        "median",
+                        "mean"
+                    ],
+                    "components": [
+                        "real",
+                        "imag"
+                    ],
+                    "std_correction": 0,
+                    "exclude_diagonal": true,
+                    "relative_tolerance": null
+                },
+                "effective_resistance_rpe": {
+                    "feature_dim": 1,
+                    "mlp_hidden_dim": 8,
+                    "zero_diagonal_bias": true
+                },
+                "effective_impedance_rpe": {
+                    "feature_dim": 2,
+                    "mlp_hidden_dim": 8,
+                    "zero_diagonal_bias": true,
+                    "relative_tolerance": null
+                },
+                "target_node_type": "bus"
+            },
+            "structural_encoding": {
+                "target_node_type": "bus",
+                "node_inputs": [
+                    {
+                        "attribute": "effective_impedance_pe",
+                        "dim": 10
+                    }
+                ]
+            }
         },
         "Training": {
             "num_epoch": 50,

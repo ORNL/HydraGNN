@@ -79,11 +79,11 @@ def resolve_opf_positional_encoding_config(architecture_config):
     """Return a validated OPF structural-encoding configuration."""
 
     arch = architecture_config or {}
-    nested = arch.get("positional_encodings")
+    nested = arch.get("opf_preprocessing")
     if nested is None:
         nested = {}
     elif not isinstance(nested, dict):
-        raise TypeError("Architecture.positional_encodings must be a dictionary.")
+        raise TypeError("Architecture.opf_preprocessing must be a dictionary.")
     config = copy.deepcopy(nested)
 
     use = _canonical_sources(config.get("use", []))
@@ -92,7 +92,7 @@ def resolve_opf_positional_encoding_config(architecture_config):
     if missing:
         raise ValueError(
             "Every active positional encoding must also be precomputed; missing "
-            f"from positional_encodings.precompute: {sorted(missing)}"
+            f"from opf_preprocessing.precompute: {sorted(missing)}"
         )
 
     laplacian = copy.deepcopy(config.get("laplacian", {}))
@@ -101,7 +101,7 @@ def resolve_opf_positional_encoding_config(architecture_config):
     laplacian.setdefault("relative_tolerance", None)
     laplacian.setdefault("random_sign_flip", False)
     if int(laplacian["dim"]) <= 0 and "laplacian" in precompute:
-        raise ValueError("positional_encodings.laplacian.dim must be positive.")
+        raise ValueError("opf_preprocessing.laplacian.dim must be positive.")
     if str(laplacian["eigenvector_selection"]).lower() != "smallest_nonzero":
         raise ValueError(
             "Only laplacian.eigenvector_selection='smallest_nonzero' is supported."
@@ -186,7 +186,7 @@ def resolve_opf_positional_encoding_config(architecture_config):
     ybus_svd.setdefault("dim", int(arch.get("pe_dim", 8) or 8))
     ybus_svd.setdefault("relative_tolerance", arch.get("svd_rpe_tolerance"))
     if int(ybus_svd["dim"]) <= 0 and "ybus_svd" in precompute:
-        raise ValueError("positional_encodings.ybus_svd.dim must be positive.")
+        raise ValueError("opf_preprocessing.ybus_svd.dim must be positive.")
 
     active_rpe = set(use) & {
         "ybus_svd",
