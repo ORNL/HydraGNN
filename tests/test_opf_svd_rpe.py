@@ -30,6 +30,50 @@ compute_effective_impedance_matrix = _MODULE.compute_effective_impedance_matrix
 compute_effective_impedance_pe = _MODULE.compute_effective_impedance_pe
 compute_effective_impedance_rpe = _MODULE.compute_effective_impedance_rpe
 OPFStructuralEncodingProvider = _MODULE.OPFStructuralEncodingProvider
+
+
+def _model_structural_config(preprocessing):
+    active = set(preprocessing.get("use", []))
+    result = {"target_node_type": "bus"}
+    node_inputs = []
+    if "laplacian" in active:
+        settings = preprocessing["laplacian"]
+        width = int(settings["dim"])
+        node_inputs.extend(
+            [
+                {
+                    "attribute": "lap_eigvec",
+                    "dim": width,
+                    "random_sign_flip": settings.get("random_sign_flip", False),
+                },
+                {"attribute": "lap_eigval", "dim": width, "broadcast": "graph"},
+            ]
+        )
+    if "effective_resistance" in active:
+        node_inputs.append({"attribute": "effective_resistance_pe", "dim": 5})
+    if "effective_impedance" in active:
+        node_inputs.append({"attribute": "effective_impedance_pe", "dim": 10})
+    if node_inputs:
+        result["node_inputs"] = node_inputs
+    if "effective_impedance_rpe" in active:
+        settings = preprocessing["effective_impedance_rpe"]
+        result["pairwise"] = {
+            "attribute": "effective_impedance_rpe",
+            "path_attribute": "effective_impedance_rpe_path",
+            "artifact_key": "pairwise_rpe",
+            "dim": settings["feature_dim"],
+            "hidden_dim": settings["mlp_hidden_dim"],
+            "zero_diagonal": settings["zero_diagonal_bias"],
+        }
+    if "effective_resistance_qk" in active:
+        settings = preprocessing["effective_resistance_qk"]
+        result["qk_coordinates"] = {
+            "attribute": "effective_resistance_qk",
+            "dim": settings["dim"],
+            "placement": settings.get("placement", "qk"),
+            "coefficient_init": settings.get("coefficient_init", 0.0),
+        }
+    return result
 resolve_opf_positional_encoding_config = (
     _MODULE.resolve_opf_positional_encoding_config
 )
@@ -107,7 +151,7 @@ def pytest_heterogps_svd_rpe_changes_attention_output():
         dropout=0.0,
         attn_type="multihead",
         attn_node_types=["bus"],
-        pe_dim=2,
+        factorized_feature_dim=2,
     )
     conv.eval()
     x = {"bus": torch.randn(3, 4)}
@@ -370,7 +414,7 @@ def pytest_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
 
 def pytest_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": ["laplacian", "effective_resistance"],
             "use": ["laplacian"],
             "cache_by_case": True,
@@ -397,7 +441,7 @@ def pytest_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
 
 def pytest_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": [
                 "effective_resistance_rpe",
                 "effective_impedance_rpe",
@@ -427,7 +471,7 @@ def pytest_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
 
 def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": ["effective_impedance_rpe"],
             "use": ["effective_impedance_rpe"],
             "cache_by_case": True,
@@ -475,7 +519,7 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
         metadata=data.metadata(),
         node_input_dims={"bus": 4},
         attn_node_types=["bus"],
-        positional_encodings=architecture["positional_encodings"],
+        structural_encoding=_model_structural_config(architecture["opf_preprocessing"]),
     )
     embedded, batch = model._prepare_node_features(data)
     matrices = model._get_pairwise_features(
@@ -485,7 +529,7 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
         dtype=embedded["bus"].dtype,
     )
 
-    assert model.pairwise_source == "effective_impedance_rpe"
+    assert model.pairwise_config["attribute"] == "effective_impedance_rpe"
     assert model.pairwise_feature_dim == 2
     assert len(matrices) == 1
     assert matrices[0].shape == (3, 3, 2)
@@ -498,7 +542,7 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
 
 def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers():
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": ["effective_resistance_qk"],
             "use": ["effective_resistance_qk"],
             "compute_device": "cpu",
@@ -542,7 +586,7 @@ def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers(
         metadata=data.metadata(),
         node_input_dims={"bus": 4},
         attn_node_types=["bus"],
-        positional_encodings=architecture["positional_encodings"],
+        structural_encoding=_model_structural_config(architecture["opf_preprocessing"]),
     )
     model.eval()
     outputs = model(data)
@@ -562,7 +606,7 @@ def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers(
 
 def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": ["effective_resistance_qk"],
             "use": ["effective_resistance_qk"],
             "compute_device": "cpu",
@@ -606,7 +650,7 @@ def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
         metadata=data.metadata(),
         node_input_dims={"bus": 4},
         attn_node_types=["bus"],
-        positional_encodings=architecture["positional_encodings"],
+        structural_encoding=_model_structural_config(architecture["opf_preprocessing"]),
     )
     embedded, _ = model._prepare_node_features(data)
     model.eval()
@@ -624,7 +668,6 @@ def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
 def pytest_laplacian_sign_flip_is_graphwise_and_train_only():
     class _SignFlipHarness:
         training = True
-        laplacian_random_sign_flip = True
 
     harness = _SignFlipHarness()
     vectors = torch.tensor(
@@ -632,7 +675,7 @@ def pytest_laplacian_sign_flip_is_graphwise_and_train_only():
     )
     batch = torch.tensor([0, 0, 1, 1])
     torch.manual_seed(11)
-    flipped = HeteroBase._apply_laplacian_sign_flip(harness, vectors, batch)
+    flipped = HeteroBase._apply_random_sign_flip(harness, vectors, batch)
 
     assert torch.equal(flipped.abs(), vectors.abs())
     ratios = flipped / vectors
@@ -641,13 +684,13 @@ def pytest_laplacian_sign_flip_is_graphwise_and_train_only():
 
     harness.training = False
     assert torch.equal(
-        HeteroBase._apply_laplacian_sign_flip(harness, vectors, batch), vectors
+        HeteroBase._apply_random_sign_flip(harness, vectors, batch), vectors
     )
 
 
 def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": ["laplacian", "effective_resistance"],
             "use": ["laplacian", "effective_resistance"],
             "compute_device": "cpu",
@@ -683,7 +726,7 @@ def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
         node_target_type="bus",
         metadata=data.metadata(),
         node_input_dims={"bus": 4, "shunt": 2},
-        positional_encodings=architecture["positional_encodings"],
+        structural_encoding=_model_structural_config(architecture["opf_preprocessing"]),
     )
     embedded, _ = model._prepare_node_features(data)
 
@@ -696,7 +739,7 @@ def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
 
 def pytest_ten_dimensional_impedance_summary_is_fused_into_bus_input():
     architecture = {
-        "positional_encodings": {
+        "opf_preprocessing": {
             "precompute": ["effective_impedance"],
             "use": ["effective_impedance"],
             "compute_device": "cpu",
@@ -731,7 +774,7 @@ def pytest_ten_dimensional_impedance_summary_is_fused_into_bus_input():
         node_target_type="bus",
         metadata=data.metadata(),
         node_input_dims={"bus": 4, "shunt": 2},
-        positional_encodings=architecture["positional_encodings"],
+        structural_encoding=_model_structural_config(architecture["opf_preprocessing"]),
     )
     embedded, _ = model._prepare_node_features(data)
 

@@ -8,34 +8,6 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
-            "positional_encodings": {
-                "precompute": [
-                    "laplacian",
-                    "effective_resistance"
-                ],
-                "use": [
-                    "effective_resistance"
-                ],
-                "cache_by_case": true,
-                "compute_device": "auto",
-                "laplacian": {
-                    "dim": 8,
-                    "eigenvector_selection": "smallest_nonzero",
-                    "relative_tolerance": null,
-                    "random_sign_flip": false
-                },
-                "effective_resistance": {
-                    "statistics": [
-                        "min",
-                        "max",
-                        "std",
-                        "median",
-                        "mean"
-                    ],
-                    "std_correction": 0
-                },
-                "target_node_type": "bus"
-            },
             "max_neighbours": 100,
             "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
@@ -120,7 +92,44 @@
                     "target_type": "shunt",
                     "dim": 0
                 }
-            ]
+            ],
+            "opf_preprocessing": {
+                "precompute": [
+                    "laplacian",
+                    "effective_resistance"
+                ],
+                "use": [
+                    "effective_resistance"
+                ],
+                "cache_by_case": true,
+                "compute_device": "auto",
+                "laplacian": {
+                    "dim": 8,
+                    "eigenvector_selection": "smallest_nonzero",
+                    "relative_tolerance": null,
+                    "random_sign_flip": false
+                },
+                "effective_resistance": {
+                    "statistics": [
+                        "min",
+                        "max",
+                        "std",
+                        "median",
+                        "mean"
+                    ],
+                    "std_correction": 0
+                },
+                "target_node_type": "bus"
+            },
+            "structural_encoding": {
+                "target_node_type": "bus",
+                "node_inputs": [
+                    {
+                        "attribute": "effective_resistance_pe",
+                        "dim": 5
+                    }
+                ]
+            }
         },
         "Training": {
             "num_epoch": 50,

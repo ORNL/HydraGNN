@@ -66,7 +66,7 @@ class HeteroBase(Module):
         metadata=None,
         attn_only: bool = False,
         attn_node_types: list[str] | None = None,
-        positional_encodings: dict | None = None,
+        structural_encoding: dict | None = None,
     ):
         super().__init__()
 
@@ -83,13 +83,18 @@ class HeteroBase(Module):
         self._node_input_dims = node_input_dims
         self.node_target_type = node_target_type
         self.attn_node_types = attn_node_types
-        self.positional_encodings = positional_encodings or {}
-        self.structural_node_type = self.positional_encodings.get(
+        self.structural_encoding = structural_encoding or {}
+        self.structural_node_type = self.structural_encoding.get(
             "target_node_type",
             attn_node_types[0]
             if attn_node_types is not None and len(attn_node_types) == 1
-            else "bus",
+            else node_target_type,
         )
+        if self.structural_encoding and self.structural_node_type is None:
+            raise ValueError(
+                "structural_encoding requires target_node_type when it cannot "
+                "be inferred from a single attention node type."
+            )
         self.share_relation_weights = share_relation_weights
         self._metadata = metadata
         self._initialized = False
@@ -120,63 +125,49 @@ class HeteroBase(Module):
             activation_function_type
         )
 
-        active_pe_sources = self.positional_encodings.get("use", [])
-        if isinstance(active_pe_sources, str):
-            active_pe_sources = [active_pe_sources]
-        self.active_pe_sources = {
-            str(source).lower() for source in active_pe_sources
-        }
+        self.structural_node_inputs = list(
+            self.structural_encoding.get("node_inputs", [])
+        )
+        for spec in self.structural_node_inputs:
+            if not spec.get("attribute") or int(spec.get("dim", 0)) <= 0:
+                raise ValueError(
+                    "Each structural node input requires an attribute and positive dim."
+                )
 
-        laplacian_config = self.positional_encodings.get("laplacian", {})
-        self.laplacian_pe_dim = (
-            int(laplacian_config.get("dim", 8))
-            if "laplacian" in self.active_pe_sources
-            else 0
+        factorized_config = self.structural_encoding.get("factorized_pairwise")
+        pairwise_config = self.structural_encoding.get("pairwise")
+        qk_config = self.structural_encoding.get("qk_coordinates") or {}
+        active_attention_inputs = sum(
+            item is not None
+            for item in (factorized_config, pairwise_config)
+        ) + int(bool(qk_config) and qk_config.get("placement", "qk") in {"qk", "both"})
+        if active_attention_inputs > 1:
+            raise ValueError("Only one structural attention input may be active.")
+
+        self.factorized_pairwise_config = factorized_config
+        self.factorized_pairwise_dim = (
+            int(factorized_config["dim"]) if factorized_config else 0
         )
-        self.laplacian_random_sign_flip = bool(
-            laplacian_config.get("random_sign_flip", False)
+        self.pairwise_config = pairwise_config
+        self.pairwise_feature_dim = (
+            int(pairwise_config["dim"]) if pairwise_config else 0
         )
-        self.effective_resistance_pe_dim = (
-            len(
-                self.positional_encodings.get("effective_resistance", {}).get(
-                    "statistics", ["min", "max", "std", "median", "mean"]
-                )
-            )
-            if "effective_resistance" in self.active_pe_sources
-            else 0
+        self.pairwise_hidden_dim = (
+            int(pairwise_config.get("hidden_dim", 8)) if pairwise_config else 0
         )
-        self.effective_impedance_pe_dim = (
-            2
-            * len(
-                self.positional_encodings.get("effective_impedance", {}).get(
-                    "statistics", ["min", "max", "std", "median", "mean"]
-                )
-            )
-            if "effective_impedance" in self.active_pe_sources
-            else 0
+        self.pairwise_zero_diagonal = (
+            bool(pairwise_config.get("zero_diagonal", True))
+            if pairwise_config
+            else True
         )
-        self.svd_rpe_dim = (
-            int(
-                self.positional_encodings.get("ybus_svd", {}).get("dim", pe_dim)
-            )
-            if "ybus_svd" in self.active_pe_sources
-            else 0
-        )
-        resistance_qk_config = self.positional_encodings.get(
-            "effective_resistance_qk", {}
-        )
-        self.qk_coordinate_dim = (
-            int(resistance_qk_config.get("dim", 8))
-            if "effective_resistance_qk" in self.active_pe_sources
-            else 0
-        )
-        self.qk_placement = str(
-            resistance_qk_config.get("placement", "qk")
-        ).lower()
+        self._pairwise_device_cache = {}
+
+        self.qk_coordinate_dim = int(qk_config.get("dim", 0))
+        self.qk_attribute = qk_config.get("attribute")
+        self.qk_placement = str(qk_config.get("placement", "qk")).lower()
         if self.qk_placement not in {"input", "qk", "both"}:
             raise ValueError(
-                "effective_resistance_qk.placement must be 'input', 'qk', or "
-                "'both'."
+                "qk_coordinates.placement must be 'input', 'qk', or 'both'."
             )
         self.qk_input_dim = (
             self.qk_coordinate_dim
@@ -189,41 +180,10 @@ class HeteroBase(Module):
             else 0
         )
 
-        pairwise_sources = self.active_pe_sources & {
-            "effective_resistance_rpe",
-            "effective_impedance_rpe",
-        }
-        attention_rpe_count = (
-            len(pairwise_sources)
-            + int(self.svd_rpe_dim > 0)
-            + int(self.qk_attention_dim > 0)
-        )
-        if attention_rpe_count > 1:
-            raise ValueError("Only one attention RPE can be active at a time.")
-        self.pairwise_source = (
-            next(iter(pairwise_sources)) if pairwise_sources else None
-        )
-        pairwise_config = self.positional_encodings.get(
-            self.pairwise_source, {}
-        )
-        self.pairwise_feature_dim = (
-            int(pairwise_config.get("feature_dim", 1))
-            if self.pairwise_source is not None
-            else 0
-        )
-        self.pairwise_hidden_dim = (
-            int(pairwise_config.get("mlp_hidden_dim", 8))
-            if self.pairwise_source is not None
-            else 0
-        )
-        self.pairwise_zero_diagonal = bool(
-            pairwise_config.get("zero_diagonal_bias", True)
-        )
-        self._pairwise_device_cache = {}
-        if self.pairwise_source is not None:
+        if self.pairwise_config is not None:
             if not self.use_global_attn or self.global_attn_type != "multihead":
                 raise ValueError(
-                    "Direct OPF RPE requires global multihead attention."
+                    "Pairwise structural features require global multihead attention."
                 )
             if self.attn_node_types != [self.structural_node_type]:
                 raise ValueError(
@@ -235,8 +195,7 @@ class HeteroBase(Module):
         if self.qk_attention_dim > 0:
             if not self.use_global_attn or self.global_attn_type != "performer":
                 raise ValueError(
-                    "Effective-resistance Q/K augmentation requires global "
-                    "Performer attention."
+                    "Structural Q/K augmentation requires global Performer attention."
                 )
             if self.attn_node_types != [self.structural_node_type]:
                 raise ValueError(
@@ -245,16 +204,13 @@ class HeteroBase(Module):
                 )
             self.qk_coefficient = Parameter(
                 torch.tensor(
-                    float(resistance_qk_config.get("coefficient_init", 0.0)),
+                    float(qk_config.get("coefficient_init", 0.0)),
                     dtype=torch.float32,
                 )
             )
 
-        # Each Laplacian mode contributes its node value and graph eigenvalue.
         self.structural_input_dim = (
-            2 * self.laplacian_pe_dim
-            + self.effective_resistance_pe_dim
-            + self.effective_impedance_pe_dim
+            sum(int(spec["dim"]) for spec in self.structural_node_inputs)
             + self.qk_input_dim
         )
         self.structural_input_fuser = None
@@ -509,7 +465,7 @@ class HeteroBase(Module):
                 dropout=self.dropout,
                 attn_type=self.global_attn_type,
                 attn_node_types=self.attn_node_types,
-                pe_dim=self.svd_rpe_dim,
+                factorized_feature_dim=self.factorized_pairwise_dim,
                 pairwise_feature_dim=self.pairwise_feature_dim,
                 rpe_hidden_dim=self.pairwise_hidden_dim,
                 rpe_zero_diagonal=self.pairwise_zero_diagonal,
@@ -737,42 +693,42 @@ class HeteroBase(Module):
             edge_attr_dict = None
         return edge_attr_dict
 
-    def _apply_laplacian_sign_flip(self, eigenvectors, batch):
-        """Flip each graph/eigenmode once, never independently per node."""
+    def _apply_random_sign_flip(self, values, batch):
+        """Flip each graph/feature once, never independently per node."""
 
-        if not (self.training and self.laplacian_random_sign_flip):
-            return eigenvectors
+        if not self.training:
+            return values
         num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
         if num_graphs == 0:
-            return eigenvectors
+            return values
         signs = torch.randint(
             0,
             2,
-            (num_graphs, eigenvectors.size(1)),
-            device=eigenvectors.device,
+            (num_graphs, values.size(1)),
+            device=values.device,
         )
-        signs = signs.to(eigenvectors.dtype).mul_(2.0).sub_(1.0)
-        return eigenvectors * signs[batch]
+        signs = signs.to(values.dtype).mul_(2.0).sub_(1.0)
+        return values * signs[batch]
 
     @staticmethod
-    def _expand_graph_eigenvalues(eigenvalues, batch, num_nodes, width):
-        if eigenvalues.dim() == 1:
-            eigenvalues = eigenvalues.view(-1, width)
-        if eigenvalues.dim() != 2 or eigenvalues.size(1) != width:
+    def _expand_graph_features(value, batch, num_nodes, width):
+        if value.dim() == 1:
+            value = value.view(-1, width)
+        if value.dim() != 2 or value.size(1) != width:
             raise ValueError(
-                f"Expected Laplacian eigenvalues with width {width}, got "
-                f"shape {tuple(eigenvalues.shape)}."
+                f"Expected graph-level structural feature with width {width}, got "
+                f"shape {tuple(value.shape)}."
             )
-        if eigenvalues.size(0) == num_nodes:
-            return eigenvalues
+        if value.size(0) == num_nodes:
+            return value
         num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
-        if eigenvalues.size(0) == num_graphs:
-            return eigenvalues[batch]
-        if eigenvalues.size(0) == 1:
-            return eigenvalues.expand(num_nodes, -1)
+        if value.size(0) == num_graphs:
+            return value[batch]
+        if value.size(0) == 1:
+            return value.expand(num_nodes, -1)
         raise ValueError(
-            "Laplacian eigenvalue rows must be one per node or one per graph; "
-            f"got {eigenvalues.size(0)} rows for {num_nodes} nodes and "
+            "Graph-level structural feature rows must be one per node or graph; "
+            f"got {value.size(0)} rows for {num_nodes} nodes and "
             f"{num_graphs} graphs."
         )
 
@@ -781,76 +737,41 @@ class HeteroBase(Module):
         store = data[self.structural_node_type]
         num_nodes = int(batch.numel())
 
-        if self.laplacian_pe_dim > 0:
-            eigenvectors = getattr(store, "lap_eigvec", None)
-            eigenvalues = getattr(store, "lap_eigval", None)
-            if eigenvectors is None or eigenvalues is None:
+        for spec in self.structural_node_inputs:
+            attribute = spec["attribute"]
+            width = int(spec["dim"])
+            value = getattr(store, attribute, None)
+            if value is None:
                 raise ValueError(
-                    "Laplacian PE is enabled, but the batch is missing "
-                    f"{self.structural_node_type}.lap_eigvec or "
-                    f"{self.structural_node_type}.lap_eigval."
+                    f"Structural input requires missing attribute "
+                    f"{self.structural_node_type}.{attribute}."
                 )
-            eigenvectors = eigenvectors.to(device=device, dtype=dtype)
-            eigenvalues = eigenvalues.to(device=device, dtype=dtype)
-            if eigenvectors.shape != (num_nodes, self.laplacian_pe_dim):
+            value = value.to(device=device, dtype=dtype)
+            if spec.get("broadcast") == "graph":
+                value = self._expand_graph_features(
+                    value, batch, num_nodes, width
+                )
+            elif tuple(value.shape) != (num_nodes, width):
                 raise ValueError(
-                    "Expected structural Laplacian eigenvectors with shape "
-                    f"({num_nodes}, {self.laplacian_pe_dim}), got "
-                    f"{tuple(eigenvectors.shape)}."
+                    f"Expected {self.structural_node_type}.{attribute} shape "
+                    f"({num_nodes}, {width}), got {tuple(value.shape)}."
                 )
-            eigenvectors = self._apply_laplacian_sign_flip(eigenvectors, batch)
-            node_eigenvalues = self._expand_graph_eigenvalues(
-                eigenvalues,
-                batch,
-                num_nodes,
-                self.laplacian_pe_dim,
-            )
-            pieces.extend((eigenvectors, node_eigenvalues))
-
-        if self.effective_resistance_pe_dim > 0:
-            resistance = getattr(store, "effective_resistance_pe", None)
-            if resistance is None:
-                raise ValueError(
-                    "Effective-resistance PE is enabled, but the batch is missing "
-                    f"{self.structural_node_type}.effective_resistance_pe."
-                )
-            resistance = resistance.to(device=device, dtype=dtype)
-            expected = (num_nodes, self.effective_resistance_pe_dim)
-            if resistance.shape != expected:
-                raise ValueError(
-                    f"Expected effective-resistance PE shape {expected}, got "
-                    f"{tuple(resistance.shape)}."
-                )
-            pieces.append(resistance)
-
-        if self.effective_impedance_pe_dim > 0:
-            impedance = getattr(store, "effective_impedance_pe", None)
-            if impedance is None:
-                raise ValueError(
-                    "Effective-impedance PE is enabled, but the batch is missing "
-                    f"{self.structural_node_type}.effective_impedance_pe."
-                )
-            impedance = impedance.to(device=device, dtype=dtype)
-            expected = (num_nodes, self.effective_impedance_pe_dim)
-            if impedance.shape != expected:
-                raise ValueError(
-                    f"Expected effective-impedance PE shape {expected}, got "
-                    f"{tuple(impedance.shape)}."
-                )
-            pieces.append(impedance)
+            if spec.get("random_sign_flip", False):
+                value = self._apply_random_sign_flip(value, batch)
+            pieces.append(value)
 
         if self.qk_input_dim > 0:
-            coordinates = getattr(store, "effective_resistance_qk", None)
+            coordinates = getattr(store, self.qk_attribute, None)
             if coordinates is None:
                 raise ValueError(
-                    "Effective-resistance input PE is enabled, but the batch is "
-                    f"missing {self.structural_node_type}.effective_resistance_qk."
+                    "Structural coordinate input is enabled, but the batch is "
+                    f"missing {self.structural_node_type}.{self.qk_attribute}."
                 )
             coordinates = coordinates.to(device=device, dtype=dtype)
             expected = (num_nodes, self.qk_input_dim)
             if tuple(coordinates.shape) != expected:
                 raise ValueError(
-                    f"Expected effective-resistance input coordinates {expected}, "
+                    f"Expected structural input coordinates {expected}, "
                     f"got {tuple(coordinates.shape)}."
                 )
             pieces.append(coordinates)
@@ -898,14 +819,14 @@ class HeteroBase(Module):
                 node_type == self.structural_node_type
                 and self.structural_input_fuser is not None
             ):
-                positional = self._collect_structural_input(
+                structural_input = self._collect_structural_input(
                     data,
                     batch_dict[node_type],
                     device=embedded.device,
                     dtype=embedded.dtype,
                 )
                 embedded = self.structural_input_fuser(
-                    torch.cat((embedded, positional), dim=-1)
+                    torch.cat((embedded, structural_input), dim=-1)
                 )
             embedded_dict[node_type] = embedded
 
@@ -922,73 +843,69 @@ class HeteroBase(Module):
                 return equiv_dict
         return None
 
-    def _get_svd_rpe_dict(self, data):
-        """Collect bus SVD factors stored by OPF preprocessing."""
-        if self.svd_rpe_dim <= 0:
+    def _get_factorized_pairwise_features(self, data):
+        """Collect configured low-rank pairwise factors from node stores."""
+        if self.factorized_pairwise_config is None:
             return None
         result = {}
+        attributes = self.factorized_pairwise_config["attributes"]
         for node_type in self.attn_node_types or data.node_types:
             store = data[node_type]
-            names = {
-                "u_real": "svd_u_real",
-                "u_imag": "svd_u_imag",
-                "v_real": "svd_v_real",
-                "v_imag": "svd_v_imag",
-                "s": "svd_s",
-            }
             values = {}
-            for short_name, attr_name in names.items():
+            for factor_name, attr_name in attributes.items():
                 value = getattr(store, attr_name, None)
                 if value is None:
                     raise ValueError(
-                        f"Ybus SVD-RPE dim={self.svd_rpe_dim}, but node type "
-                        f"'{node_type}' is "
-                        f"missing '{attr_name}'. Re-run SVD-RPE preprocessing."
+                        f"Factorized pairwise input for node type '{node_type}' "
+                        f"is missing attribute '{attr_name}'."
                     )
-                values[short_name] = value
+                values[factor_name] = value
             result[node_type] = values
         return result
 
     def _get_qk_coordinates(self, data, device, dtype):
-        """Return packed bus resistance coordinates for Performer attention."""
+        """Return packed structural coordinates for Performer attention."""
 
         if self.qk_coordinate_dim <= 0:
             return None
         store = data[self.structural_node_type]
-        coordinates = getattr(store, "effective_resistance_qk", None)
+        coordinates = getattr(store, self.qk_attribute, None)
         if coordinates is None:
             raise ValueError(
-                "Effective-resistance Q/K augmentation is enabled, but the batch "
-                f"is missing {self.structural_node_type}.effective_resistance_qk."
+                "Structural Q/K augmentation is enabled, but the batch is missing "
+                f"{self.structural_node_type}.{self.qk_attribute}."
             )
         expected = (int(store.x.size(0)), self.qk_coordinate_dim)
         if tuple(coordinates.shape) != expected:
             raise ValueError(
-                f"Expected bus.effective_resistance_qk shape {expected}, got "
+                f"Expected structural coordinates shape {expected}, got "
                 f"{tuple(coordinates.shape)}."
             )
         return coordinates.to(device=device, dtype=dtype)
 
     @staticmethod
-    def _load_pairwise_rpe_artifact(path):
+    def _load_pairwise_artifact(path, artifact_key):
         try:
             artifact = torch.load(path, map_location="cpu", weights_only=True)
         except TypeError:
             artifact = torch.load(path, map_location="cpu")
-        if not isinstance(artifact, dict) or "pairwise_rpe" not in artifact:
+        if not isinstance(artifact, dict) or artifact_key not in artifact:
             raise ValueError(
-                f"Pairwise RPE cache '{path}' does not contain 'pairwise_rpe'."
+                f"Pairwise cache '{path}' does not contain '{artifact_key}'."
             )
-        return artifact["pairwise_rpe"]
+        return artifact[artifact_key]
 
     def _get_pairwise_features(self, data, batch, device, dtype):
         """Load one topology-level pair tensor per graph in the batch."""
 
-        if self.pairwise_source is None:
+        if self.pairwise_config is None:
             return None
         store = data[self.structural_node_type]
-        tensor_attr = self.pairwise_source
-        path_attr = f"{self.pairwise_source}_path"
+        tensor_attr = self.pairwise_config["attribute"]
+        path_attr = self.pairwise_config.get(
+            "path_attribute", f"{tensor_attr}_path"
+        )
+        artifact_key = self.pairwise_config.get("artifact_key", tensor_attr)
         embedded = getattr(store, tensor_attr, None)
         paths = getattr(store, path_attr, None)
 
@@ -1002,14 +919,14 @@ class HeteroBase(Module):
                 paths = list(paths)
             if len(paths) != num_graphs:
                 raise ValueError(
-                    f"Expected {num_graphs} pairwise RPE cache paths, got "
+                    f"Expected {num_graphs} pairwise cache paths, got "
                     f"{len(paths)}."
                 )
             for path in paths:
                 cache_key = (str(path), str(device), str(dtype))
                 matrix = self._pairwise_device_cache.get(cache_key)
                 if matrix is None:
-                    matrix = self._load_pairwise_rpe_artifact(path).to(
+                    matrix = self._load_pairwise_artifact(path, artifact_key).to(
                         device=device, dtype=dtype
                     )
                     self._pairwise_device_cache[cache_key] = matrix
@@ -1017,13 +934,13 @@ class HeteroBase(Module):
         elif embedded is not None:
             if num_graphs != 1 or embedded.dim() != 3:
                 raise ValueError(
-                    "In-memory pairwise RPE currently supports one graph; use "
+                    "In-memory pairwise features currently support one graph; use "
                     "topology-level cache paths for batched graphs."
                 )
             matrices = [embedded.to(device=device, dtype=dtype)]
         else:
             raise ValueError(
-                f"{self.pairwise_source} is enabled, but the batch has neither "
+                f"Pairwise structural input is enabled, but the batch has neither "
                 f"{self.structural_node_type}.{tensor_attr} nor "
                 f"{self.structural_node_type}.{path_attr}."
             )
@@ -1032,7 +949,7 @@ class HeteroBase(Module):
             expected = (count, count, self.pairwise_feature_dim)
             if tuple(matrix.shape) != expected:
                 raise ValueError(
-                    f"Expected pairwise RPE graph {graph_index} shape {expected}, "
+                    f"Expected pairwise feature graph {graph_index} shape {expected}, "
                     f"got {tuple(matrix.shape)}."
                 )
         return matrices
@@ -1260,18 +1177,22 @@ class HeteroBase(Module):
 
         x_dict, batch_dict = self._prepare_node_features(data)
         equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
-        svd_rpe_dict = self._get_svd_rpe_dict(data) if self.use_global_attn else None
-        direct_pairwise_rpe = (
+        factorized_pairwise = (
+            self._get_factorized_pairwise_features(data)
+            if self.use_global_attn
+            else None
+        )
+        pairwise_features = (
             self._get_pairwise_features(
                 data,
                 batch_dict[self.structural_node_type],
                 device=x_dict[self.structural_node_type].device,
                 dtype=x_dict[self.structural_node_type].dtype,
             )
-            if self.use_global_attn and self.pairwise_source is not None
+            if self.use_global_attn and self.pairwise_config is not None
             else None
         )
-        resistance_qk = (
+        qk_coordinates = (
             self._get_qk_coordinates(
                 data,
                 device=x_dict[self.structural_node_type].device,
@@ -1281,9 +1202,9 @@ class HeteroBase(Module):
             else None
         )
         structural_context = StructuralAttentionContext(
-            factorized_pairwise_features=svd_rpe_dict,
-            pairwise_features=direct_pairwise_rpe,
-            qk_coordinates=resistance_qk,
+            factorized_pairwise_features=factorized_pairwise,
+            pairwise_features=pairwise_features,
+            qk_coordinates=qk_coordinates,
             qk_coefficient=self.qk_coefficient,
         )
 

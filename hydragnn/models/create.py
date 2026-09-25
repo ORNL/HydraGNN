@@ -70,8 +70,8 @@ def create_model_config(
         global_attn_heads=config["Architecture"]["global_attn_heads"],
         attn_only=config["Architecture"].get("attn_only", False),
         attn_node_types=config["Architecture"].get("attn_node_types", None),
-        positional_encodings=config["Architecture"].get(
-            "positional_encodings", None
+        structural_encoding=config["Architecture"].get(
+            "structural_encoding", None
         ),
         output_type=config["Architecture"]["output_type"],
         output_heads=config["Architecture"]["output_heads"],
@@ -388,7 +388,7 @@ def create_model(
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
     attn_node_types: List[str] = None,
-    positional_encodings: dict = None,
+    structural_encoding: dict = None,
 ):
     timer = Timer("create_model")
     timer.start()
@@ -1018,7 +1018,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
 
     elif mpnn_type == "HeteroSAGE":
@@ -1052,7 +1052,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
 
     elif mpnn_type == "HeteroGAT":
@@ -1090,7 +1090,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
 
     elif mpnn_type == "HeteroPNA":
@@ -1126,7 +1126,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
 
     elif mpnn_type == "HeteroRGAT":
@@ -1162,7 +1162,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
     elif mpnn_type == "HeteroHGT":
         model = HeteroHGTStack(
@@ -1196,7 +1196,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
     elif mpnn_type == "HeteroHEAT":
         model = HeteroHEATStack(
@@ -1232,7 +1232,7 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            positional_encodings=positional_encodings,
+            structural_encoding=structural_encoding,
         )
 
     else:

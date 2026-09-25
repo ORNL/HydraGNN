@@ -115,8 +115,8 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["pe_dim"] = 0
     if "pe_encoder" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["pe_encoder"] = "laplacian"
-    if "positional_encodings" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["positional_encodings"] = None
+    if "structural_encoding" not in config["NeuralNetwork"]["Architecture"]:
+        config["NeuralNetwork"]["Architecture"]["structural_encoding"] = None
     if "communicability_method" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["communicability_method"] = "katz"
     if "communicability_alpha_min" not in config["NeuralNetwork"]["Architecture"]:

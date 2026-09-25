@@ -215,7 +215,7 @@ class HeteroGPSConv(torch.nn.Module):
         attn_type: str = "multihead",
         attn_kwargs: Optional[Dict[str, Any]] = None,
         attn_node_types: Optional[list[str]] = None,
-        pe_dim: int = 0,
+        factorized_feature_dim: int = 0,
         pairwise_feature_dim: int = 0,
         rpe_hidden_dim: int = 0,
         rpe_zero_diagonal: bool = True,
@@ -250,20 +250,20 @@ class HeteroGPSConv(torch.nn.Module):
         self.heads = heads
         self.dropout = dropout
         self.attn_type = attn_type
-        self.pe_dim = int(pe_dim)
+        self.factorized_feature_dim = int(factorized_feature_dim)
         self.pairwise_feature_dim = int(pairwise_feature_dim)
         self.qk_coordinate_dim = int(qk_coordinate_dim)
         self.rpe_zero_diagonal = bool(rpe_zero_diagonal)
         active_rpe_count = sum(
             width > 0
             for width in (
-                self.pe_dim,
+                self.factorized_feature_dim,
                 self.pairwise_feature_dim,
                 self.qk_coordinate_dim,
             )
         )
         if active_rpe_count > 1:
-            raise ValueError("Only one attention RPE can be active at a time.")
+            raise ValueError("Only one structural attention input can be active at a time.")
         if self.pairwise_feature_dim > 0 and len(self.attn_node_types) != 1:
             raise ValueError(
                 "Direct pairwise features currently require exactly one "
@@ -272,8 +272,7 @@ class HeteroGPSConv(torch.nn.Module):
         if self.qk_coordinate_dim > 0:
             if attn_type != "performer":
                 raise ValueError(
-                    "Effective-resistance Q/K augmentation requires "
-                    "attn_type='performer'."
+                    "Structural Q/K augmentation requires attn_type='performer'."
                 )
             if len(self.attn_node_types) != 1:
                 raise ValueError(
@@ -308,12 +307,12 @@ class HeteroGPSConv(torch.nn.Module):
 
         self.rpe_mlp = None
         rpe_input_dim = (
-            3 * self.pe_dim if self.pe_dim > 0 else self.pairwise_feature_dim
+            3 * self.factorized_feature_dim if self.factorized_feature_dim > 0 else self.pairwise_feature_dim
         )
         if rpe_input_dim > 0:
             if attn_type != "multihead":
                 raise ValueError(
-                    "Attention RPE bias currently requires attn_type='multihead'."
+                    "Pairwise attention bias currently requires attn_type='multihead'."
                 )
             hidden_dim = int(rpe_hidden_dim) if int(rpe_hidden_dim) > 0 else channels
             use_bias = not (
@@ -440,7 +439,7 @@ class HeteroGPSConv(torch.nn.Module):
             return norm(x, batch=batch)
         return norm(x)
 
-    def _pack_svd_rpe_dict(self, svd_rpe_dict, pack_node_types):
+    def _pack_factorized_features(self, svd_rpe_dict, pack_node_types):
         if svd_rpe_dict is None:
             return None
         packed = {}
@@ -451,13 +450,13 @@ class HeteroGPSConv(torch.nn.Module):
                 node_values = svd_rpe_dict.get(node_type)
                 if node_values is None or name not in node_values:
                     raise ValueError(
-                        f"SVD-RPE is missing '{name}' for attention node type "
+                        f"factorized pairwise input is missing '{name}' for attention node type "
                         f"'{node_type}'."
                     )
                 value = node_values[name]
-                if value.size(-1) != self.pe_dim:
+                if value.size(-1) != self.factorized_feature_dim:
                     raise ValueError(
-                        f"Expected SVD-RPE width {self.pe_dim} for '{node_type}', "
+                        f"Expected factorized pairwise input width {self.factorized_feature_dim} for '{node_type}', "
                         f"got {value.size(-1)}."
                     )
                 values.append(value)
@@ -473,13 +472,13 @@ class HeteroGPSConv(torch.nn.Module):
     ):
         if direct_pairwise_rpe is None:
             raise ValueError(
-                "Direct pairwise RPE is active, but no pair matrices were provided."
+                "direct pairwise features is active, but no pair matrices were provided."
             )
         matrices = list(direct_pairwise_rpe)
         batch_size, max_nodes = mask.shape
         if len(matrices) != batch_size:
             raise ValueError(
-                f"Expected {batch_size} pairwise RPE matrices, got {len(matrices)}."
+                f"Expected {batch_size} pairwise features matrices, got {len(matrices)}."
             )
         counts = mask.sum(dim=1).detach().cpu().tolist()
         if batch_size == 1 and counts[0] == max_nodes:
@@ -487,7 +486,7 @@ class HeteroGPSConv(torch.nn.Module):
             expected = (max_nodes, max_nodes, self.pairwise_feature_dim)
             if tuple(matrix.shape) != expected:
                 raise ValueError(
-                    f"Expected direct pairwise RPE shape {expected}, got "
+                    f"Expected direct pairwise features shape {expected}, got "
                     f"{tuple(matrix.shape)}."
                 )
             return matrix.unsqueeze(0)
@@ -502,7 +501,7 @@ class HeteroGPSConv(torch.nn.Module):
             expected = (count, count, self.pairwise_feature_dim)
             if tuple(matrix.shape) != expected:
                 raise ValueError(
-                    f"Expected direct pairwise RPE graph {graph_index} shape "
+                    f"Expected direct pairwise features graph {graph_index} shape "
                     f"{expected}, got {tuple(matrix.shape)}."
                 )
             dense_rpe[graph_index, :count, :count] = matrix
@@ -558,16 +557,15 @@ class HeteroGPSConv(torch.nn.Module):
 
         attn_bias = None
         if self.rpe_mlp is not None:
-            if self.pe_dim > 0:
-                packed_svd = self._pack_svd_rpe_dict(
+            if self.factorized_feature_dim > 0:
+                packed_svd = self._pack_factorized_features(
                     structural_context.factorized_pairwise_features,
                     pack_node_types,
                 )
                 if packed_svd is None:
                     raise ValueError(
-                        "pe_dim is nonzero but the batch has no Ybus SVD-RPE "
-                        "factors. Re-run OPF preprocessing with "
-                        "pe_encoder='svd_ybus'."
+                        "Factorized pairwise attention is enabled, but the batch "
+                        "contains no factorized pairwise features."
                     )
                 dense_svd = {}
                 for name, value in packed_svd.items():
@@ -577,7 +575,7 @@ class HeteroGPSConv(torch.nn.Module):
                     )
                     if not torch.equal(mask, value_mask):
                         raise RuntimeError(
-                            "SVD-RPE batching mask does not match node mask."
+                            "Factorized pairwise batching mask does not match node mask."
                         )
                     dense_svd[name] = dense_value
 
