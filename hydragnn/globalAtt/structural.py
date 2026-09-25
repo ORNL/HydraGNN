@@ -6,7 +6,7 @@
 ##############################################################################
 
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional, Protocol, Sequence, runtime_checkable
 
 
 @dataclass(frozen=True)
@@ -22,3 +22,12 @@ class StructuralAttentionContext:
     pairwise_features: Optional[Sequence[Any]] = None
     qk_coordinates: Optional[Any] = None
     qk_coefficient: Optional[Any] = None
+
+
+@runtime_checkable
+class StructuralEncodingProvider(Protocol):
+    """Interface implemented by domain-specific structural preprocessors."""
+
+    def __call__(self, graph: Any, topology_id: Optional[str] = None) -> Any:
+        """Attach structural artifacts to ``graph`` and return the graph."""
+        ...

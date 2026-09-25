@@ -134,7 +134,7 @@ from opf_solution_utils import (
     resolve_node_target_type as _resolve_node_target_type,
 )
 from opf_svd_rpe import (
-    OPFSpectralPEPreprocessor,
+    OPFStructuralEncodingProvider,
     resolve_opf_positional_encoding_config,
 )
 
@@ -685,7 +685,7 @@ if __name__ == "__main__":
 
     arch_config = config.setdefault("NeuralNetwork", {}).setdefault("Architecture", {})
     opf_pe_config = resolve_opf_positional_encoding_config(arch_config)
-    spectral_pe_preprocessor = OPFSpectralPEPreprocessor(
+    spectral_pe_preprocessor = OPFStructuralEncodingProvider(
         arch_config,
         cache_dir=os.path.join(datadir, "spectral_pe_cache"),
     )

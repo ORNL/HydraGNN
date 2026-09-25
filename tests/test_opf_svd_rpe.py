@@ -29,6 +29,7 @@ compute_effective_impedance_matrix = _MODULE.compute_effective_impedance_matrix
 compute_effective_impedance_pe = _MODULE.compute_effective_impedance_pe
 compute_effective_impedance_rpe = _MODULE.compute_effective_impedance_rpe
 OPFSpectralPEPreprocessor = _MODULE.OPFSpectralPEPreprocessor
+OPFStructuralEncodingProvider = _MODULE.OPFStructuralEncodingProvider
 resolve_opf_positional_encoding_config = (
     _MODULE.resolve_opf_positional_encoding_config
 )
@@ -624,6 +625,10 @@ def pytest_legacy_svd_configuration_remains_supported():
     assert resolved["precompute"] == ["ybus_svd"]
     assert resolved["ybus_svd"]["dim"] == 4
     assert resolved["ybus_svd"]["relative_tolerance"] == 1.0e-8
+
+
+def pytest_legacy_preprocessor_name_aliases_structural_provider():
+    assert OPFSpectralPEPreprocessor is OPFStructuralEncodingProvider
 
 
 def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
