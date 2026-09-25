@@ -16,8 +16,8 @@ def info(*args, logtype="info", sep=" "):
     getattr(logging, logtype)(sep.join(map(str, args)))
 
 
-class OPFDomainLoss:
-    """Domain-informed regularization for OPF bus-level targets.
+class OPFDomainLoss(torch.nn.Module):
+    """Augmented-Lagrangian enforcement of OPF inequality constraints.
 
     Feasibility penalties (all zero on any strictly feasible OPF solution):
       - voltage_bound_weight           : Penalty for Vm (bus_pred[:, vm_output_index]) outside [v_min, v_max].
@@ -32,11 +32,10 @@ class OPFDomainLoss:
                                         introduces no linearisation bias, unlike the DC approximation it
                                         replaces). Default 1e-4.
 
-    Each raw penalty is normalized by a per-term exponential moving average (EMA)
-    before the weight is applied.  This keeps every term near unit scale and makes
-    the weights directly comparable to the task loss, regardless of the raw
-    physical magnitudes (radians, per-unit power, etc.).
-      - ema_momentum  (default 0.1): EMA decay.  Smaller = slower adaptation.
+    For each constraint family, the mean positive violation ``c >= 0`` contributes
+    ``lambda*c + rho/2*c**2``. After every training epoch the non-negative dual is
+    updated by projected ascent, ``lambda <- max(0, lambda + rho*c_bar)``. ``rho``
+    can grow when the aggregate residual is not decreasing sufficiently.
 
     Curriculum scheduling: domain-loss weights are ramped up gradually so the
     model first converges on the task loss before physics constraints are enforced.
@@ -57,6 +56,7 @@ class OPFDomainLoss:
     """
 
     def __init__(self, config: dict | None = None, node_target_type: str = "bus"):
+        super().__init__()
         cfg = copy.deepcopy(config or {})
         self.enabled = bool(cfg.get("enabled", False))
         self.node_target_type = node_target_type
@@ -88,12 +88,35 @@ class OPFDomainLoss:
         # impedance magnitude observed on well-behaved branches (~0.04 p.u. for ac_line,
         # ~0.21 p.u. for transformer on pglib_opf_case14_ieee).
         self.line_flow_min_x = float(cfg.get("line_flow_min_x", 1e-3))
-        # EMA state for per-term scale normalization.
-        self._ema_momentum = float(cfg.get("ema_momentum", 0.1))
-        self._penalty_ema: dict[str, float] = {}
+        self.register_buffer("rho", torch.tensor(float(cfg.get("rho", 1.0))))
+        self.rho_growth = float(cfg.get("rho_growth", 2.0))
+        self.rho_max = float(cfg.get("rho_max", 1.0e4))
+        self.constraint_reduction = float(cfg.get("constraint_reduction", 0.9))
+        self.dual_update_interval = int(cfg.get("dual_update_interval", 1))
+        self.register_buffer("previous_constraint_norm", torch.tensor(float("inf")))
+        self._constraint_names = (
+            "voltage_bound",
+            "ac_angle_diff",
+            "tr_angle_diff",
+            "ac_line_flow",
+            "tr_line_flow",
+        )
+        for name in self._constraint_names:
+            self.register_buffer(f"dual_{name}", torch.tensor(0.0))
+        self._constraint_sums = {name: 0.0 for name in self._constraint_names}
+        self._constraint_counts = {name: 0 for name in self._constraint_names}
         # Curriculum scheduling.
         self.warmup_epochs = int(cfg.get("warmup_epochs", 0))
         self.ramp_epochs = int(cfg.get("ramp_epochs", 0))
+
+        if self.rho <= 0 or self.rho_growth < 1 or self.rho_max < self.rho:
+            raise ValueError(
+                "DomainLoss requires 0 < rho <= rho_max and rho_growth >= 1."
+            )
+        if not 0 < self.constraint_reduction <= 1:
+            raise ValueError("DomainLoss.constraint_reduction must be in (0, 1].")
+        if self.dual_update_interval <= 0:
+            raise ValueError("DomainLoss.dual_update_interval must be positive.")
 
         if self.voltage_bound_feature_indices is not None:
             if len(self.voltage_bound_feature_indices) != 2:
@@ -126,27 +149,50 @@ class OPFDomainLoss:
         progress = (epoch - self.warmup_epochs) / self.ramp_epochs
         return float(min(progress, 1.0))
 
-    def _normalize(self, name: str, raw: torch.Tensor) -> torch.Tensor:
-        """Normalize *raw* by its EMA so that the effective scale ≈ 1.0 on average.
+    def _augmented_term(self, name, residual, scale, curriculum, update_state, metrics):
+        scaled = float(scale) * residual
+        if update_state:
+            self._constraint_sums[name] += float(scaled.detach())
+            self._constraint_counts[name] += 1
+        dual = getattr(self, f"dual_{name}").to(
+            device=scaled.device, dtype=scaled.dtype
+        )
+        metrics[f"opf_{name}"] = residual.detach()
+        metrics[f"opf_{name}_dual"] = dual.detach()
+        return curriculum * (dual * scaled + 0.5 * self.rho * scaled.square())
 
-        On the first call the EMA is seeded with the raw value, returning 1.0
-        (or near-1.0 for non-zero values).  Subsequent calls use the smoothed
-        estimate so the normalization adapts gradually as training progresses.
-        """
-        val = float(raw.detach())
-        if name not in self._penalty_ema:
-            # Seed: ema = raw value, normalized output = 1.0 on first step.
-            self._penalty_ema[name] = max(val, 1e-8)
-        else:
-            m = self._ema_momentum
-            self._penalty_ema[name] = max(
-                m * val + (1.0 - m) * self._penalty_ema[name], 1e-8
+    @torch.no_grad()
+    def update_multipliers(self, completed_epoch: int):
+        """Apply one projected dual-ascent update from accumulated training residuals."""
+        if completed_epoch < 0 or (completed_epoch + 1) % self.dual_update_interval:
+            return
+        if not any(self._constraint_counts.values()):
+            return
+        means = []
+        for name in self._constraint_names:
+            stats = self.rho.new_tensor(
+                [self._constraint_sums[name], self._constraint_counts[name]]
             )
-        # Floor at 1e-8 prevents division by zero when a penalty term is exactly zero
-        # (e.g. the constraint is already satisfied for all samples in a batch).
-        return raw / self._penalty_ema[name]
+            if dist.is_initialized():
+                dist.all_reduce(stats, op=dist.ReduceOp.SUM)
+            mean = stats[0] / stats[1].clamp_min(1.0)
+            means.append(mean)
+            if stats[1] > 0:
+                dual = getattr(self, f"dual_{name}")
+                dual.copy_(torch.clamp_min(dual + self.rho * mean, 0.0))
+            self._constraint_sums[name] = 0.0
+            self._constraint_counts[name] = 0
 
-    def __call__(self, pred, value, head_index, data):
+        residual_norm = torch.linalg.vector_norm(torch.stack(means))
+        if (
+            torch.isfinite(self.previous_constraint_norm)
+            and residual_norm
+            > self.constraint_reduction * self.previous_constraint_norm
+        ):
+            self.rho.copy_(torch.clamp(self.rho * self.rho_growth, max=self.rho_max))
+        self.previous_constraint_norm.copy_(residual_norm)
+
+    def forward(self, pred, value, head_index, data, update_state=False):
         if not self.enabled or data is None:
             return value.new_zeros(()), {}
 
@@ -188,16 +234,17 @@ class OPFDomainLoss:
                 # F.relu zeros out values that already satisfy the bound, so the gradient
                 # is zero for feasible predictions and proportional to the violation otherwise.
                 # Squaring gives a smooth (C1) penalty with growing gradient for larger violations.
-                bound_penalty = torch.mean(
-                    F.relu(lower - voltage).pow(2) + F.relu(voltage - upper).pow(2)
+                bound_residual = torch.mean(
+                    F.relu(lower - voltage) + F.relu(voltage - upper)
                 )
-                total_penalty = (
-                    total_penalty
-                    + curriculum
-                    * self.voltage_bound_weight
-                    * self._normalize("voltage_bound", bound_penalty)
+                total_penalty = total_penalty + self._augmented_term(
+                    "voltage_bound",
+                    bound_residual,
+                    self.voltage_bound_weight,
+                    curriculum,
+                    update_state,
+                    metrics,
                 )
-                metrics["opf_voltage_bound"] = bound_penalty.detach()
 
         # ── Angle difference limit penalty ──────────────────────────────────
         # Penalise predicted Va angle-differences that violate per-line bounds.
@@ -223,17 +270,17 @@ class OPFDomainLoss:
                 # feasible region [theta_min, theta_max], growing penalty outside it.
                 # No slack is needed here: verified empirically that this term is exactly
                 # zero on OPFDataset ground-truth solutions (Va and theta bounds share units).
-                angdiff_p = torch.mean(
-                    F.relu(delta_theta - theta_max).pow(2)
-                    + F.relu(theta_min - delta_theta).pow(2)
+                angdiff_residual = torch.mean(
+                    F.relu(delta_theta - theta_max) + F.relu(theta_min - delta_theta)
                 )
-                total_penalty = (
-                    total_penalty
-                    + curriculum
-                    * self.angle_diff_weight
-                    * self._normalize(f"{rel_tag}_angle_diff", angdiff_p)
+                total_penalty = total_penalty + self._augmented_term(
+                    f"{rel_tag}_angle_diff",
+                    angdiff_residual,
+                    self.angle_diff_weight,
+                    curriculum,
+                    update_state,
+                    metrics,
                 )
-                metrics[f"opf_{rel_tag}_angle_diff"] = angdiff_p.detach()
 
         # ── Full AC apparent-power thermal limit penalty ────────────────────
         # Reconstruct branch apparent power flow at both ends (S_ij, S_ji) from the
@@ -325,18 +372,20 @@ class OPFDomainLoss:
 
                 # line_flow_slack absorbs floating-point/near-binding-constraint noise;
                 # the full AC formula itself introduces no linearisation bias.
-                flow_p = torch.mean(
-                    F.relu(S_ij.abs() - rate_a - self.line_flow_slack).pow(2)
-                    + F.relu(S_ji.abs() - rate_a - self.line_flow_slack).pow(2)
+                flow_residual = torch.mean(
+                    F.relu(S_ij.abs() - rate_a - self.line_flow_slack)
+                    + F.relu(S_ji.abs() - rate_a - self.line_flow_slack)
                 )
-                total_penalty = (
-                    total_penalty
-                    + curriculum
-                    * self.line_flow_weight
-                    * self._normalize(f"{rel_tag}_line_flow", flow_p)
+                total_penalty = total_penalty + self._augmented_term(
+                    f"{rel_tag}_line_flow",
+                    flow_residual,
+                    self.line_flow_weight,
+                    curriculum,
+                    update_state,
+                    metrics,
                 )
-                metrics[f"opf_{rel_tag}_line_flow"] = flow_p.detach()
 
+        metrics["opf_augmented_rho"] = self.rho.detach()
         metrics["opf_domain_total"] = total_penalty.detach()
         return total_penalty, metrics
 
@@ -430,6 +479,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         _key_labels = {
             "opf_domain_total": "physics_penalty_total",
             "opf_curriculum_scale": "curriculum_scale",
+            "opf_augmented_rho": "augmented_rho",
             "opf_voltage_bound": "raw_voltage_bound",
             "opf_ac_angle_diff": "raw_ac_angle_diff",
             "opf_tr_angle_diff": "raw_tr_angle_diff",
@@ -474,6 +524,14 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self._last_batch = data
         return self.model(data)
 
+    def train(self, mode: bool = True):
+        """Finalize training residuals before entering validation mode."""
+        was_training = self.training
+        result = super().train(mode)
+        if was_training and not mode and self._last_seen_epoch >= 0:
+            self.domain_loss.update_multipliers(self._last_seen_epoch)
+        return result
+
     def loss(self, pred, value, head_index):
         total_loss, tasks_loss = self.model.loss(pred, value, head_index)
         if self._last_batch is None:
@@ -482,14 +540,6 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
                 "domain penalty will be zero for this batch.",
                 logtype="warning",
             )
-        extra_loss, extra_metrics = self.domain_loss(
-            pred,
-            value,
-            head_index,
-            self._last_batch,
-        )
-        self.last_extra_loss_metrics = extra_metrics
-
         # ── Per-epoch accumulation ───────────────────────────────────────────
         # Detect epoch transitions using HYDRAGNN_EPOCH (set by the core training
         # loop).  On each new epoch, flush the previous epoch's accumulated stats
@@ -501,8 +551,18 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
 
         if current_epoch != self._last_seen_epoch and self._last_seen_epoch >= 0:
             # Epoch boundary: flush accumulated stats for the completed epoch.
+            self.domain_loss.update_multipliers(self._last_seen_epoch)
             self._flush_epoch_log(self._last_seen_epoch)
         self._last_seen_epoch = current_epoch
+
+        extra_loss, extra_metrics = self.domain_loss(
+            pred,
+            value,
+            head_index,
+            self._last_batch,
+            update_state=self.training,
+        )
+        self.last_extra_loss_metrics = extra_metrics
 
         # Accumulate task loss (total_loss is the data-driven term before domain is added).
         self._epoch_accum_task.append(float(total_loss.detach()))
@@ -511,6 +571,10 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
             self._epoch_accum.setdefault(key, []).append(float(val))
 
         return total_loss + extra_loss, tasks_loss
+
+    def finalize_domain_state(self):
+        """Commit the final epoch's dual update before checkpointing."""
+        self.domain_loss.update_multipliers(self._last_seen_epoch)
 
 
 def build_solution_target(data, node_target_type: str):
