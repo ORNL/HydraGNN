@@ -15,6 +15,10 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         self.model = model
         self.config = config
         term_list = config.get("supervised", {}).get("terms", [])
+        term_names = [term["variable"] for term in term_list]
+        duplicates = sorted({name for name in term_names if term_names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"Duplicate interatomic training-loss terms: {duplicates}")
         self.terms = {term["variable"]: term for term in term_list}
         unknown = set(self.terms) - self._SUPPORTED_TERMS
         if unknown:
@@ -103,7 +107,8 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
             "Interatomic energy must be predicted by a node or graph head."
         )
 
-    def energy_force_loss(self, pred, data, create_graph=True):
+    def prediction_target_pairs(self, pred, data, create_graph=True):
+        """Build predictions and targets for the configured active terms."""
         if data.pos is None or data.energy is None:
             raise ValueError(
                 "Interatomic training loss requires data.pos and data.energy."
@@ -116,13 +121,14 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         energy_pred = self._graph_energy(pred, data).float()
         energy_true = data.energy.reshape_as(energy_pred).float()
         atom_counts = torch.bincount(data.batch).to(energy_pred.dtype)
-        values = {
-            "energy": (energy_pred, energy_true),
-            "energy_per_atom": (
+        values = {}
+        if "energy" in self.active_terms:
+            values["energy"] = (energy_pred, energy_true)
+        if "energy_per_atom" in self.active_terms:
+            values["energy_per_atom"] = (
                 energy_pred / atom_counts,
                 energy_true / atom_counts,
-            ),
-        }
+            )
 
         if "forces" in self.active_terms:
             if data.forces is None:
@@ -139,8 +145,13 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                     "Predicted energy is not differentiable with respect to positions."
                 )
             values["forces"] = (-gradient.float(), data.forces.float())
+        return values
 
-        total = energy_pred.new_zeros(())
+    def energy_force_loss(self, pred, data, create_graph=True):
+        values = self.prediction_target_pairs(pred, data, create_graph=create_graph)
+        reference_prediction = next(iter(values.values()))[0]
+
+        total = reference_prediction.new_zeros(())
         component_losses = []
         report = {}
         for name in self.active_terms:
