@@ -108,9 +108,15 @@ def unittest_rotational_invariance(tol=1e-14):
 
 @pytest.mark.mpi_skip()
 def test_rotational_invariance():
-    # Test with (default) single precision
-    unittest_rotational_invariance(tol=1e-4)
+    original_dtype = torch.get_default_dtype()
+    try:
+        # Fix the sampled geometries so failures are reproducible.
+        torch.manual_seed(0)
+        unittest_rotational_invariance(tol=1e-4)
 
-    # Test with double precision
-    torch.set_default_tensor_type(torch.DoubleTensor)
-    unittest_rotational_invariance()
+        # Rotations and distance reconstruction accumulate round-off, so use a
+        # strict but realistic float64 tolerance instead of machine-zero scale.
+        torch.set_default_dtype(torch.float64)
+        unittest_rotational_invariance(tol=1e-12)
+    finally:
+        torch.set_default_dtype(original_dtype)

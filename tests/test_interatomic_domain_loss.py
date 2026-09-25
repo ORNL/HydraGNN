@@ -1,3 +1,5 @@
+import importlib
+
 import pytest
 import torch
 from torch_geometric.data import Data
@@ -103,3 +105,31 @@ def test_wrapper_exposes_active_term_metadata_to_training_loop():
     assert model.task_names == ["energy"]
     assert model.task_weights == [2.0]
     assert model.atomistic_mode_enabled
+    assert model.requires_find_unused_parameters
+
+
+def test_interatomic_provider_enables_unused_parameter_detection(monkeypatch):
+    distributed = importlib.import_module("hydragnn.utils.distributed.distributed")
+    model = InteratomicPotentialDomainLoss(EnergyModel(), _config())
+    captured = {}
+
+    def capture_wrapper(model, **kwargs):
+        captured.update(kwargs)
+        return model
+
+    monkeypatch.setattr(distributed, "get_distributed_model", capture_wrapper)
+    monkeypatch.setattr(
+        distributed,
+        "configure_local_sgd",
+        lambda model, optimizer, *args, **kwargs: (model, optimizer),
+    )
+
+    wrapped, _ = distributed.distributed_model_wrapper(
+        model,
+        object(),
+        config={"NeuralNetwork": {"Training": {}}},
+    )
+
+    assert wrapped is model
+    assert captured["find_unused_parameters"] is True
+    assert captured["enhanced_model"] is True
