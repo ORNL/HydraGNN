@@ -7,8 +7,8 @@ every supervised quantity and active constraint:
 ```text
 LossComponents epoch=04  split=validation  total=0.85202000  \
 supervised.energy.raw=0.01200000  supervised.energy.weight=1  \
-supervised.energy.weighted=0.01200000  constraints.voltage_bound.raw=0.00300000  \
-constraints.voltage_bound.weight=0.01  constraints.voltage_bound.weighted=0.00002000
+supervised.energy.weighted=0.01200000  constraints.voltage_limits.raw=0.00300000  \
+constraints.voltage_limits.weight=0.01  constraints.voltage_limits.weighted=0.00002000
 ```
 
 - `raw` is the metric or residual before task weights, constraint scales, or
@@ -18,6 +18,11 @@ constraints.voltage_bound.weight=0.01  constraints.voltage_bound.weighted=0.0000
   actual fixed-penalty or augmented-Lagrangian contribution, including the
   curriculum factor.
 - `total` is the complete objective used by that split.
+
+For a multi-column supervised head, each `.raw` field is computed independently
+for that property. With nonlinear metrics such as RMSE, the per-property
+`.weighted` diagnostics need not add exactly to the head contribution in
+`total`; `total` remains the authoritative optimization objective.
 
 Train, validation, and test values are accumulated independently and reduced
 across distributed ranks. Values are averaged with the same per-graph sampling

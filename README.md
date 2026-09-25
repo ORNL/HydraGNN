@@ -212,13 +212,15 @@ Additionally, many important arguments fall within the `["NeuralNetwork"]` secti
       Examples: `1`, `2`, `3`, `4` ... (int)
     - `["hidden_dim"]`  
       Dimension of node embeddings during convolution (int) - must be a multiple of "global_attn_heads" if "global_attn_engine" is not "None"
-    - `["enable_interatomic_potential"]`  
-      Enable MLIP mode with dynamic graph construction and energy-conserving force prediction (bool, default `false`)
     - Node input encoding is configured per variable in the top-level
       `Variables.inputs` schema. Scalar node inputs support learned
       `embedding` and `one_hot` encodings; inputs without an `encoding` remain
       continuous.
   - `["Training"]`
+    - `["loss"]`
+      Declarative supervised and constraint objective. Energy-conserving MLIPs
+      use `provider: "interatomic_potential"`; OPF constraint training uses
+      `provider: "optimal_power_flow"`. See the training-loss guides below.
     - `["global_attn_redraw_interval"]`
       Number of training batches between Performer random-feature projection
       redraws (positive int, default `1000`); set to `null` to keep the initial
@@ -260,6 +262,9 @@ and propagated alongside the globally attended invariant representation.
 - [Cost-aware graph batching](docs/cost_aware_batching.md)
 - [Reusable dataset downloads](docs/dataset_downloads.md)
 - [Materials preprocessing](docs/materials_preprocessing.md)
+- [Interatomic training-loss configuration](docs/interatomic_training_loss.md)
+- [Named train/validation/test loss reporting](docs/training_loss_reporting.md)
+- [OPF constraint optimization](examples/opf/README_augmented_lagrangian.md)
 - [HPC facility assets](scripts/hpc/README.md)
 
   - top-level `["Variables"]`
@@ -448,8 +453,6 @@ silently reaching the model.
       Examples: `16`, `32`, `64` (int)
     - `["Optimizer"]["learning_rate"]`  
       Examples: `2e-3`, `0.005` (float)
-    - `["compute_grad_energy"]`  
-      Use the gradient of energy to predict forces (bool)
     - `["precision"]`  
       Training precision: `"fp32"`, `"bf16"`, `"fp64"` (str, default `"fp32"`)
     - `["conv_checkpointing"]`  

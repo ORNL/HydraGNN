@@ -1,6 +1,7 @@
 # OPF constraint optimization
 
-`OPFDomainLoss` enforces the enabled OPF inequality constraints with
+The `optimal_power_flow` training-loss provider enforces enabled OPF inequality
+constraints with
 
 \[
 L_{AL} = \sum_i \lambda_i c_i + \frac{\rho}{2}c_i^2,
@@ -13,7 +14,7 @@ implemented families are bus-voltage bounds, AC-line and transformer angle
 bounds, and AC-line and transformer apparent-power limits.
 
 Each constraint `scale` is a physical scaling factor applied to its residual before the
-augmented-Lagrangian calculation. A zero weight disables that family. Duals are
+augmented-Lagrangian calculation. A zero scale disables that family. Duals are
 updated once per completed training epoch; validation and test batches never
 modify them. The duals, `rho`, and the preceding residual norm are registered
 PyTorch buffers and therefore survive normal model checkpoints.
@@ -24,6 +25,55 @@ section defines the data loss, `constraints` defines named residuals, and
 
 - `fixed_penalty`: stateless `scale * residual^2`.
 - `augmented_lagrangian`: stateful dual ascent using the equation above.
+
+The complete layout is:
+
+```json
+"loss": {
+    "enabled": true,
+    "provider": "optimal_power_flow",
+    "supervised": {
+        "default_metric": "mse",
+        "terms": [{"variable": "bus_va_vm", "weight": 1.0}]
+    },
+    "constraints": [
+        {
+            "name": "voltage_limits",
+            "operator": "bounded",
+            "value": "bus_voltage_magnitude",
+            "lower": "bus_vmin",
+            "upper": "bus_vmax",
+            "scale": 0.01
+        },
+        {
+            "name": "angle_limits",
+            "operator": "edge_difference_bounded",
+            "value": "bus_voltage_angle",
+            "relations": ["ac_line", "transformer"],
+            "lower": "angle_minimum",
+            "upper": "angle_maximum",
+            "scale": 0.001
+        },
+        {
+            "name": "thermal_limits",
+            "operator": "ac_thermal_limit",
+            "relations": ["ac_line", "transformer"],
+            "scale": 0.001,
+            "slack": 0.0001
+        }
+    ],
+    "constraint_optimizer": {
+        "type": "augmented_lagrangian",
+        "rho": 1.0,
+        "rho_growth": 2.0,
+        "rho_max": 10000.0,
+        "required_reduction": 0.9,
+        "update_every": 1,
+        "warmup_epochs": 3,
+        "ramp_epochs": 3
+    }
+}
+```
 
 For `augmented_lagrangian`, the options are:
 
@@ -42,3 +92,6 @@ so feature indices are not exposed in loss configuration.
 The canonical example is `opf_solution_heterogeneous.json`. Command-line
 overrides include `--constraint_voltage_scale`, `--constraint_thermal_slack`,
 `--constraint_optimizer_rho`, and `--constraint_optimizer_update_every`.
+Raw and weighted values for every supervised property and constraint are written
+separately for train, validation, and test as documented in
+[Named training-loss reporting](../../docs/training_loss_reporting.md).

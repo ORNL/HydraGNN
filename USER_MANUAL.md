@@ -1034,12 +1034,17 @@ Enable activation recomputation to reduce GPU memory at the cost of extra comput
 
 ```json
 {
+    "Architecture": {
+        "task_weights": [1.0, 10.0]
+    },
     "Training": {
-        "loss_function_type": "mae",  // or "mse", "huber"
-        "task_weights": [1.0, 10.0]   // Weight different tasks
+        "loss_function_type": "mae"
     }
 }
 ```
+
+`Architecture.task_weights` applies to ordinary direct-output heads. Declarative
+interatomic and constrained objectives use `Training.loss`, as described below.
 
 #### Learning Rate Scheduling
 
@@ -1061,16 +1066,37 @@ HydraGNN supports energy-conserving interatomic potential workflows. When enable
 
 ```json
 {
-    "Architecture": {
-        "enable_interatomic_potential": true
-    },
     "Training": {
-        "compute_grad_energy": true
+        "loss": {
+            "enabled": true,
+            "provider": "interatomic_potential",
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+                    {"variable": "energy_per_atom", "weight": 1.0, "normalization": "per_atom"},
+                    {
+                        "variable": "forces",
+                        "weight": 10.0,
+                        "prediction": {
+                            "operator": "negative_gradient",
+                            "of": "energy",
+                            "with_respect_to": "positions"
+                        }
+                    }
+                ]
+            },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"}
+        }
     }
 }
 ```
 
-With `enable_interatomic_potential`, the training loss includes energy, per-atom energy, and force components. Set `compute_grad_energy` to `true` to derive forces via automatic differentiation of the energy prediction.
+The enabled terms define the objective explicitly. The training workflow detects
+the provider and derives forces by automatic differentiation; there is no
+architecture-level interatomic switch or separate `compute_grad_energy` JSON
+flag. See `docs/interatomic_training_loss.md` for validation rules and examples.
 
 Categorical handling is configured on each scalar node input. For example,
 atomic numbers can use a learned embedding:
@@ -1597,8 +1623,26 @@ Features:
 
 ```json
 {
-    "Training": {
-        "compute_grad_energy": true
+    "NeuralNetwork": {
+        "Training": {
+            "loss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {"variable": "energy", "weight": 1.0, "normalization": "per_structure"},
+                        {
+                            "variable": "forces",
+                            "weight": 10.0,
+                            "prediction": {"operator": "negative_gradient", "of": "energy", "with_respect_to": "positions"}
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {"type": "fixed_penalty"}
+            }
+        }
     },
     "Variables": {
         "graph_type": "homogeneous",
@@ -1616,13 +1660,13 @@ Features:
             },
             {"name": "pos", "level": "node", "dim": 3, "role": "position"}
         ],
-        "outputs": [
-            {"name": "energy", "level": "graph", "dim": 1},
-            {"name": "forces", "level": "node", "dim": 3}
-        ]
+        "outputs": [{"name": "energy", "level": "graph", "dim": 1}]
     }
 }
 ```
+
+The dataset must also provide `data.energy` and `data.forces`. Forces are not a
+direct output head in this mode; they are derived from the energy gradient.
 
 ### 5. Custom Dataset Integration
 
@@ -1834,7 +1878,7 @@ timer.stop()
 |--------------|-------------------------|----------------|
 | Molecules | EGNN, SchNet, PaiNN, DimeNet | equivariance=true |
 | Crystals | CGCNN, MACE, EGNN | periodic_boundary_conditions=true |
-| Interatomic Potentials | MACE, PaiNN, SchNet | enable_interatomic_potential=true |
+| Interatomic Potentials | MACE, PaiNN, SchNet | Training.loss.provider="interatomic_potential" |
 | General | PNA, PNAPlus | Balanced performance |
 | Large graphs | GPS with attention | global_attn_engine="GPS" |
 
@@ -1889,9 +1933,13 @@ export NCCL_DEBUG=INFO
 #### Multi-Task Learning
 ```json
 {
-    "task_weights": [1.0, 10.0],  // Weight important tasks higher
-    "loss_function_type": "mae",  // Often more stable than MSE
-    "batch_size": 32              // Larger batches for stable gradients
+    "Architecture": {
+        "task_weights": [1.0, 10.0]
+    },
+    "Training": {
+        "loss_function_type": "mae",
+        "batch_size": 32
+    }
 }
 ```
 
