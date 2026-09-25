@@ -360,7 +360,7 @@ def main():
     arch = config["NeuralNetwork"]["Architecture"]
     radius = arch.get("radius", 5.0)
     max_neighbours = arch.get("max_neighbours", 20)
-    enable_ip = arch.get("enable_interatomic_potential", False)
+    enable_ip = hydragnn.domain_losses.uses_interatomic_potential(config)
 
     structures = generate_structures(
         args.num_structures,

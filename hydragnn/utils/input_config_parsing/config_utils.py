@@ -271,8 +271,6 @@ def update_config(config, train_loader, val_loader, test_loader):
         config["NeuralNetwork"]["Architecture"]["max_ell"] = None
     if "node_max_ell" not in config["NeuralNetwork"]["Architecture"]:
         config["NeuralNetwork"]["Architecture"]["node_max_ell"] = None
-    if "enable_interatomic_potential" not in config["NeuralNetwork"]["Architecture"]:
-        config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"] = False
     # Model-specific defaults are shared with create_model_config so callers
     # that bypass this normalization path receive the same values.
     for key, value in MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS.items():
@@ -313,7 +311,11 @@ def update_config(config, train_loader, val_loader, test_loader):
     if named_schema is not None:
         named_edge_dim = schema_dimensions(named_schema, "edge", "inputs")
         if named_edge_dim:
-            if config["NeuralNetwork"]["Architecture"]["enable_interatomic_potential"]:
+            domain_loss = config["NeuralNetwork"]["Training"].get("DomainLoss", {})
+            if (
+                domain_loss.get("enabled")
+                and domain_loss.get("provider") == "interatomic_potential"
+            ):
                 raise ValueError(
                     "Named edge inputs cannot be used with interatomic-potential "
                     "mode because that mode constructs specialized edge features"
@@ -642,10 +644,6 @@ def update_config_edge_dim(config):
                 config["mpnn_type"] in edge_models
             ), "Edge features can only be used with GAT, PNA, PNAPlus, PAINN, PNAEq, CGCNN, SchNet, EGNN, DimeNet, MACE."
             config["edge_dim"] = len(config["edge_features"])
-            if "enable_interatomic_potential" in config:
-                assert not config[
-                    "enable_interatomic_potential"
-                ], "Edge features cannot be used with interatomic potentials as the model builds its own specialized features for force computation."
         elif config["mpnn_type"] == "CGCNN":
             # CG always needs an integer edge_dim
             # PNA, PNAPlus, and DimeNet would fail with integer edge_dim without edge_attr

@@ -110,10 +110,29 @@ def _model(mpnn_type="EGNN", atomistic=False, encodings=None, input_dim=1):
         out_emb_size=8,
         num_before_skip=1,
         num_after_skip=1,
-        enable_interatomic_potential=atomistic,
+        domain_loss_config=(
+            {
+                "enabled": True,
+                "provider": "interatomic_potential",
+                "terms": {
+                    "energy": {
+                        "enabled": True,
+                        "weight": 0.1,
+                        "target": "energy",
+                        "normalization": "structure",
+                    },
+                    "forces": {
+                        "enabled": True,
+                        "weight": 1.0,
+                        "target": "forces",
+                        "prediction": "negative_energy_gradient",
+                    },
+                },
+            }
+            if atomistic
+            else None
+        ),
         input_node_encodings=encodings,
-        energy_weight=0.1,
-        force_weight=1.0,
         use_gpu=False,
     )
 

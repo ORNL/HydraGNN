@@ -12,7 +12,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-
 RUNS = {
     "case4661_bus_attention_control": {
         "label": "Control",
@@ -78,9 +77,7 @@ def load_run(run_dir: Path) -> dict[str, tuple[list[int], list[float]]]:
 
     values_by_tag_and_step = {tag: {} for tag, _ in PANELS}
     for event_file in event_files:
-        accumulator = EventAccumulator(
-            str(event_file), size_guidance={"scalars": 0}
-        )
+        accumulator = EventAccumulator(str(event_file), size_guidance={"scalars": 0})
         accumulator.Reload()
         available_tags = set(accumulator.Tags()["scalars"])
         for tag, _ in PANELS:
@@ -101,19 +98,14 @@ def load_run(run_dir: Path) -> dict[str, tuple[list[int], list[float]]]:
     return curves
 
 
-def value_at_step(
-    curve: tuple[list[int], list[float]], step: int
-) -> float:
+def value_at_step(curve: tuple[list[int], list[float]], step: int) -> float:
     steps, values = curve
     return values[steps.index(step)]
 
 
 def main() -> None:
     args = parse_args()
-    histories = {
-        run: load_run(args.log_root / run)
-        for run in RUNS
-    }
+    histories = {run: load_run(args.log_root / run) for run in RUNS}
     best_steps = {
         run: min(
             zip(

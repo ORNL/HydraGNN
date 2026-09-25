@@ -291,9 +291,7 @@ def test_attention_accepts_structural_context():
         attn_node_types=["entity"],
         pairwise_feature_dim=1,
     )
-    context = StructuralAttentionContext(
-        pairwise_features=[torch.zeros(3, 3, 1)]
-    )
+    context = StructuralAttentionContext(pairwise_features=[torch.zeros(3, 3, 1)])
 
     output, _ = conv(
         inv_node_feat_dict={"entity": torch.randn(3, 4)},

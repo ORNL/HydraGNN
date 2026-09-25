@@ -12,7 +12,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
-
 RUNS = {
     "case118_heterosage_gps_all_attention": {
         "label": "All-node attention",
@@ -54,9 +53,7 @@ def load_run(run_dir: Path) -> dict[str, tuple[list[int], list[float]]]:
     if not event_files:
         raise FileNotFoundError(f"No TensorBoard event file found in {run_dir}")
 
-    accumulator = EventAccumulator(
-        str(run_dir), size_guidance={"scalars": 0}
-    )
+    accumulator = EventAccumulator(str(run_dir), size_guidance={"scalars": 0})
     accumulator.Reload()
 
     curves = {}
@@ -71,19 +68,14 @@ def load_run(run_dir: Path) -> dict[str, tuple[list[int], list[float]]]:
     return curves
 
 
-def value_at_step(
-    curve: tuple[list[int], list[float]], step: int
-) -> float:
+def value_at_step(curve: tuple[list[int], list[float]], step: int) -> float:
     steps, values = curve
     return values[steps.index(step)]
 
 
 def main() -> None:
     args = parse_args()
-    histories = {
-        run: load_run(args.log_root / run)
-        for run in RUNS
-    }
+    histories = {run: load_run(args.log_root / run) for run in RUNS}
     best_steps = {
         run: min(
             zip(

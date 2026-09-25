@@ -14,9 +14,8 @@ import torch
 from torch_geometric.data import Data
 from typing import Dict, List, Union
 
-import torch_scatter
-
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from hydragnn.domain_losses import create_domain_loss
 from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims
 from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
@@ -70,9 +69,7 @@ def create_model_config(
         global_attn_heads=config["Architecture"]["global_attn_heads"],
         attn_only=config["Architecture"].get("attn_only", False),
         attn_node_types=config["Architecture"].get("attn_node_types", None),
-        structural_encoding=config["Architecture"].get(
-            "structural_encoding", None
-        ),
+        structural_encoding=config["Architecture"].get("structural_encoding", None),
         output_type=config["Architecture"]["output_type"],
         output_heads=config["Architecture"]["output_heads"],
         activation_function=config["Architecture"]["activation_function"],
@@ -111,13 +108,8 @@ def create_model_config(
         node_max_ell=config["Architecture"]["node_max_ell"],
         avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
         conv_checkpointing=config["Training"]["conv_checkpointing"],
-        enable_interatomic_potential=config["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        domain_loss_config=config["Training"].get("DomainLoss"),
         input_node_encodings=config["Architecture"].get("input_node_encodings"),
-        energy_weight=config["Architecture"].get("energy_weight", 0.0),
-        energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
-        force_weight=config["Architecture"].get("force_weight", 0.0),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
@@ -322,11 +314,8 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
-    enable_interatomic_potential: bool = False,
+    domain_loss_config: dict | None = None,
     input_node_encodings: list[dict] | None = None,
-    energy_weight: float = 0.0,
-    energy_peratom_weight: float = 0.0,
-    force_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
     graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
@@ -1239,182 +1228,8 @@ def create_model(
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 
     model.configure_input_feature_encoders(input_node_encodings)
-    model.atomistic_mode_enabled = bool(enable_interatomic_potential)
-
-    # Apply interatomic potential enhancement if requested
-    if enable_interatomic_potential:
-        # Instead of complex inheritance, use composition with delegation
-        # This avoids MRO issues and __init__ complications
-        class EnhancedModelWrapper(torch.nn.Module):
-            def __init__(self, original_model):
-                super().__init__()
-                self.model = original_model
-                self.energy_weight = energy_weight
-                self.energy_peratom_weight = energy_peratom_weight
-                self.force_weight = force_weight
-
-            def __getattr__(self, name):
-                # First try to get from the wrapper itself
-                try:
-                    return super().__getattr__(name)
-                except AttributeError:
-                    pass
-
-                # Then try to get from the wrapped model
-                try:
-                    return getattr(self.model, name)
-                except AttributeError:
-                    # Handle specific method names that may be expected for interatomic potentials
-                    if name in [
-                        "_compute_enhanced_geometric_features",
-                        "_compute_three_body_interactions",
-                        "_apply_atomic_environment_descriptors",
-                    ]:
-                        # Return placeholder methods that don't interfere with existing architectures
-                        return lambda *args, **kwargs: None
-                    raise AttributeError(
-                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
-                    )
-
-            # ---------- forward ----------
-            def forward(self, data):
-
-                return self.model(data)
-
-            def energy_force_loss(self, pred, data, create_graph=True):
-                """
-                Compute energy and force loss for MLIP training.
-
-                This method is specific to interatomic potentials and computes:
-                1. Energy loss between predicted and true total energies
-                2. Force loss between predicted and true forces (via autograd on positions)
-
-                Forces are computed as negative gradients of total energy with respect to positions.
-                """
-                # Asserts
-                assert (
-                    data.pos is not None
-                    and data.energy is not None
-                    and data.forces is not None
-                ), "data.pos, data.energy, data.forces must be provided for energy-force loss. Check your dataset creation and naming."
-                assert (
-                    data.pos.requires_grad
-                ), "data.pos does not have grad, so force predictions cannot be computed. Check that data.pos has grad set to true before prediction."
-
-                assert (
-                    self.num_heads == 1
-                ), "Force predictions require exactly one head."
-
-                # Support both node and graph heads; enforce sum pooling for graph heads
-                if self.head_type[0] == "node":
-                    node_energy_pred = pred[0]
-                    graph_energy_pred = (
-                        torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
-                        .squeeze()
-                        .float()
-                    )
-                elif self.head_type[0] == "graph":
-                    if getattr(self.model, "graph_pooling", "mean") not in ["add"]:
-                        raise ValueError(
-                            "Graph head force loss requires sum pooling (graph_pooling='add')."
-                        )
-                    if isinstance(pred, dict) and "graph" in pred:
-                        graph_energy_pred = pred["graph"][0].squeeze().float()
-                    elif isinstance(pred, (list, tuple)):
-                        graph_energy_pred = pred[0].squeeze().float()
-                    else:
-                        graph_energy_pred = pred.squeeze().float()
-                else:
-                    raise ValueError(
-                        "Force predictions are only supported for node or graph energy heads."
-                    )
-
-                graph_energy_true = data.energy.squeeze().float()
-                tasks_loss = [self.loss_function(graph_energy_pred, graph_energy_true)]
-
-                energy_loss_weight = self.energy_weight
-                energy_peratom_loss_weight = self.energy_peratom_weight
-                force_loss_weight = self.force_weight
-
-                # Interatomic potential training requires at least one active loss term
-                if (
-                    energy_loss_weight <= 0
-                    and energy_peratom_loss_weight <= 0
-                    and force_loss_weight <= 0
-                ):
-                    raise ValueError(
-                        "All interatomic potential loss weights are zero; set at least one of energy_weight, energy_peratom_weight, or force_weight to a positive value."
-                    )
-
-                tot_loss = 0
-                if energy_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(graph_energy_pred, graph_energy_true)
-                        * energy_loss_weight
-                    )
-
-                # Energy per atom
-                natoms = torch.bincount(data.batch)
-                graph_energy_peratom_pred = graph_energy_pred / natoms
-                graph_energy_peratom_true = graph_energy_true / natoms
-                tasks_loss.append(
-                    self.loss_function(
-                        graph_energy_peratom_pred, graph_energy_peratom_true
-                    )
-                )
-
-                if energy_peratom_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(
-                            graph_energy_peratom_pred, graph_energy_peratom_true
-                        )
-                        * energy_peratom_loss_weight
-                    )
-
-                # Forces
-                forces_true = data.forces.float()
-                forces_pred = torch.autograd.grad(
-                    graph_energy_pred,
-                    data.pos,
-                    grad_outputs=torch.ones_like(graph_energy_pred),
-                    retain_graph=graph_energy_pred.requires_grad,
-                    create_graph=create_graph,
-                )[0].float()
-                assert (
-                    forces_pred is not None
-                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                forces_pred = -forces_pred
-                tasks_loss.append(self.loss_function(forces_pred, forces_true))
-
-                if force_loss_weight > 0:
-                    tot_loss += (
-                        self.loss_function(forces_pred, forces_true) * force_loss_weight
-                    )  # Have force-weight be the complement to energy-weight
-                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-                    ##        so, we need to do loss calculation manually without calling the other functions.
-
-                return tot_loss, tasks_loss
-
-            def _compute_enhanced_geometric_features(self, data):
-                """
-                Placeholder for enhanced geometric feature computation (disabled by default).
-                """
-                return data
-
-            def _compute_three_body_interactions(self, data):
-                """
-                Placeholder for three-body interaction computation (disabled by default).
-                """
-                return data
-
-            def _apply_atomic_environment_descriptors(self, data):
-                """
-                Placeholder for atomic environment descriptor application (disabled by default).
-                """
-                return data
-
-        enhanced_model = EnhancedModelWrapper(model)
-        model = enhanced_model
+    model.atomistic_mode_enabled = False
+    model = create_domain_loss(model, domain_loss_config)
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()

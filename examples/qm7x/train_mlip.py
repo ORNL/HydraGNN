@@ -24,6 +24,7 @@ import sys
 import argparse
 
 import hydragnn
+from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.print.print_utils import iterate_tqdm, log
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 
@@ -606,9 +607,7 @@ if __name__ == "__main__":
         log_name,
         verbosity,
         create_plots=False,
-        compute_grad_energy=config["NeuralNetwork"]["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        compute_grad_energy=uses_interatomic_potential(config),
     )
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)

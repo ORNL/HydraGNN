@@ -241,18 +241,10 @@ def train_validate_test(
 
     device = get_device()
     if compute_grad_energy:
-        num_tasks = 3  # [energy, energy per atom, forces]
-        task_dims = [1, 1, 1]
-        task_weights = [
-            model.module.energy_weight,
-            model.module.energy_peratom_weight,
-            model.module.force_weight,
-        ]
-        output_names = [
-            configured_output_names[0],
-            "energy_peratom",
-            "forces",
-        ]
+        num_tasks = len(model.module.task_names)
+        task_dims = [1] * num_tasks
+        task_weights = model.module.task_weights
+        output_names = list(model.module.task_names)
     else:
         num_tasks = model.module.num_heads
         task_dims = model.module.head_dims

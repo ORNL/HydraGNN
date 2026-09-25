@@ -140,7 +140,6 @@ def _build_uma_with_vector_head():
         "num_radial": 8,
         "equivariance": True,
         "uma_equivariant_vector_head": True,  # auto-detect the dim-3 node head
-        "enable_interatomic_potential": False,
         "use_gpu": False,
     }
     try:

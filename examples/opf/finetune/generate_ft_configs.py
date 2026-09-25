@@ -49,6 +49,7 @@ def _base_training(lr, num_epoch, regime):
         "startfrom": "existing_model",
         "DomainLoss": {
             "enabled": False,
+            "provider": "opf",
             "voltage_bound_weight": 0.01,
             "voltage_bound_feature_indices": [2, 3],
             "voltage_output_index": -1,

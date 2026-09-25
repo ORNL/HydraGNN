@@ -23,6 +23,7 @@ torch.manual_seed(random_state)
 import numpy as np
 
 import hydragnn
+from hydragnn.domain_losses import uses_interatomic_potential
 from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.utils.model import print_model, print_optimizer
 from hydragnn.utils.datasets.distdataset import DistDataset
@@ -153,7 +154,7 @@ if __name__ == "__main__":
         "--force_weight",
         type=float,
         default=None,
-        help="Override Architecture.force_weight; when omitted the JSON value is used",
+        help="Override Training.DomainLoss.terms.forces.weight.",
     )
     parser.add_argument(
         "--learning_rate",
@@ -252,7 +253,10 @@ if __name__ == "__main__":
     set_param_value("mpnn_type")
     set_param_value("hidden_dim")
     set_param_value("num_conv_layers")
-    set_param_value("force_weight")
+    if args.force_weight is not None:
+        config["NeuralNetwork"]["Training"]["DomainLoss"]["terms"]["forces"][
+            "weight"
+        ] = args.force_weight
 
     set_param_value("num_filters")
     set_param_value("num_gaussians")
@@ -1003,9 +1007,7 @@ if __name__ == "__main__":
     else:
         context = nullcontext()
 
-    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
-        "enable_interatomic_potential", False
-    )
+    enable_interatomic_potential = uses_interatomic_potential(config)
 
     with context:
         hydragnn.train.train_validate_test(

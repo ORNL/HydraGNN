@@ -38,7 +38,6 @@ import torch
 
 from hydragnn.globalAtt.structural import StructuralEncodingProvider
 
-
 _BUS_BRANCH_TYPES = (
     (("bus", "ac_line", "bus"), False),
     (("bus", "transformer", "bus"), True),
@@ -135,9 +134,7 @@ def resolve_opf_positional_encoding_config(architecture_config):
             f"order: {expected_stats}."
         )
     if list(impedance["components"]) != ["real", "imag"]:
-        raise ValueError(
-            "effective_impedance.components must be ['real', 'imag']."
-        )
+        raise ValueError("effective_impedance.components must be ['real', 'imag'].")
     if not bool(impedance["exclude_diagonal"]):
         raise ValueError(
             "effective_impedance.exclude_diagonal must be true for the "
@@ -226,7 +223,9 @@ def _resolve_compute_device(name):
         return torch.device("cuda" if torch.cuda.is_available() else "cpu")
     device = torch.device(name)
     if device.type == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("Spectral PE compute_device requests CUDA, but it is unavailable.")
+        raise RuntimeError(
+            "Spectral PE compute_device requests CUDA, but it is unavailable."
+        )
     return device
 
 
@@ -371,9 +370,7 @@ def compute_effective_resistance_qk(
     if k <= 0:
         raise ValueError("Effective-resistance Q/K dimension must be positive.")
     if num_bus == 0:
-        return {
-            "effective_resistance_qk": torch.empty((0, k), dtype=torch.float32)
-        }
+        return {"effective_resistance_qk": torch.empty((0, k), dtype=torch.float32)}
     components = _num_bus_components(data)
     if components != 1:
         raise ValueError(
@@ -387,9 +384,7 @@ def compute_effective_resistance_qk(
     tolerance = _eigenvalue_tolerance(values, num_bus, relative_tolerance)
     selected = torch.nonzero(values > tolerance, as_tuple=False).flatten()[:k]
 
-    coordinates = torch.zeros(
-        (num_bus, k), dtype=laplacian.dtype, device=device
-    )
+    coordinates = torch.zeros((num_bus, k), dtype=laplacian.dtype, device=device)
     count = int(selected.numel())
     if count:
         selected_values = values[selected]
@@ -432,8 +427,7 @@ def _offdiagonal_rows(matrix):
 
     if matrix.dim() != 2 or matrix.size(0) != matrix.size(1):
         raise ValueError(
-            "Expected a square pairwise matrix, got "
-            f"shape {tuple(matrix.shape)}."
+            "Expected a square pairwise matrix, got " f"shape {tuple(matrix.shape)}."
         )
     num_bus = matrix.size(0)
     if num_bus < 2:
@@ -573,12 +567,7 @@ def compute_effective_impedance_matrix(
     else:
         zbus = torch.linalg.pinv(ybus, rtol=float(relative_tolerance))
     diagonal = torch.diagonal(zbus)
-    impedance = (
-        diagonal[:, None]
-        + diagonal[None, :]
-        - zbus
-        - zbus.transpose(0, 1)
-    )
+    impedance = diagonal[:, None] + diagonal[None, :] - zbus - zbus.transpose(0, 1)
     impedance.fill_diagonal_(0.0)
     return impedance
 
@@ -602,16 +591,12 @@ def compute_effective_impedance_pe(
             compute_device=compute_device,
         )
     offdiagonal = _offdiagonal_rows(impedance)
-    real_stats = _five_statistics(
-        offdiagonal.real, std_correction=std_correction
-    )
-    imag_stats = _five_statistics(
-        offdiagonal.imag, std_correction=std_correction
-    )
+    real_stats = _five_statistics(offdiagonal.real, std_correction=std_correction)
+    imag_stats = _five_statistics(offdiagonal.imag, std_correction=std_correction)
     return {
-        "effective_impedance_pe": torch.cat(
-            (real_stats, imag_stats), dim=1
-        ).float().cpu()
+        "effective_impedance_pe": torch.cat((real_stats, imag_stats), dim=1)
+        .float()
+        .cpu()
     }
 
 
@@ -685,11 +670,7 @@ def compute_ybus_svd_rpe(
         "svd_v_real": v_selected.real.float().cpu(),
         "svd_v_imag": v_selected.imag.float().cpu(),
         # Repeat per bus so the attention-bias path remains backward compatible.
-        "svd_s": s_selected.float()
-        .view(1, k)
-        .expand(num_bus, k)
-        .contiguous()
-        .cpu(),
+        "svd_s": s_selected.float().view(1, k).expand(num_bus, k).contiguous().cpu(),
     }
 
 
@@ -849,9 +830,7 @@ class OPFStructuralEncodingProvider(StructuralEncodingProvider):
                 compute_device=compute_device,
             )
         if source == "effective_resistance":
-            resistance = self._shared_pairwise_matrix(
-                data, "effective_resistance"
-            )
+            resistance = self._shared_pairwise_matrix(data, "effective_resistance")
             return compute_effective_resistance_pe(
                 data,
                 std_correction=int(settings.get("std_correction", 0)),
@@ -879,9 +858,7 @@ class OPFStructuralEncodingProvider(StructuralEncodingProvider):
                 impedance=impedance,
             )
         if source == "effective_resistance_rpe":
-            resistance = self._shared_pairwise_matrix(
-                data, "effective_resistance"
-            )
+            resistance = self._shared_pairwise_matrix(data, "effective_resistance")
             return compute_effective_resistance_rpe(
                 data,
                 compute_device=compute_device,

@@ -124,10 +124,30 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 task_weights=[1.0],
                 num_conv_layers=2,
                 num_nodes=16,
-                enable_interatomic_potential=True,
-                energy_weight=1.0,
-                energy_peratom_weight=1.0,
-                force_weight=1.0,
+                domain_loss_config={
+                    "enabled": True,
+                    "provider": "interatomic_potential",
+                    "terms": {
+                        "energy": {
+                            "enabled": True,
+                            "weight": 1.0,
+                            "target": "energy",
+                            "normalization": "structure",
+                        },
+                        "energy_per_atom": {
+                            "enabled": True,
+                            "weight": 1.0,
+                            "target": "energy",
+                            "normalization": "atom",
+                        },
+                        "forces": {
+                            "enabled": True,
+                            "weight": 1.0,
+                            "target": "forces",
+                            "prediction": "negative_energy_gradient",
+                        },
+                    },
+                },
                 use_gpu=True,
             )
 

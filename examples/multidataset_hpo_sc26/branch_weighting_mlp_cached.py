@@ -657,12 +657,16 @@ def main():
     energy_weight = (
         args.energy_weight
         if args.energy_weight is not None
-        else config["NeuralNetwork"]["Architecture"].get("energy_weight", 1.0)
+        else config["NeuralNetwork"]["Training"]["DomainLoss"]["terms"]["energy"].get(
+            "weight", 1.0
+        )
     )
     force_weight = (
         args.force_weight
         if args.force_weight is not None
-        else config["NeuralNetwork"]["Architecture"].get("force_weight", 1.0)
+        else config["NeuralNetwork"]["Training"]["DomainLoss"]["terms"]["forces"].get(
+            "weight", 1.0
+        )
     )
 
     # Load existing timing history if resuming

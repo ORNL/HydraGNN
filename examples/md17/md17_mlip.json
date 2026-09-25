@@ -29,7 +29,6 @@
             "node_max_ell": 1,
             "num_radial": 5,
             "num_spherical": 2,
-            "enable_interatomic_potential": true,
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
@@ -54,6 +53,30 @@
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 0.001
+            },
+            "DomainLoss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "terms": {
+                    "energy": {
+                        "enabled": true,
+                        "weight": 1.0,
+                        "target": "energy",
+                        "normalization": "structure"
+                    },
+                    "energy_per_atom": {
+                        "enabled": true,
+                        "weight": 1.0,
+                        "target": "energy",
+                        "normalization": "atom"
+                    },
+                    "forces": {
+                        "enabled": true,
+                        "weight": 1.0,
+                        "target": "forces",
+                        "prediction": "negative_energy_gradient"
+                    }
+                }
             }
         }
     },
