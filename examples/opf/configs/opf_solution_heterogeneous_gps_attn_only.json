@@ -66,7 +66,6 @@
             "correlation": null,
             "max_ell": null,
             "node_max_ell": null,
-            "enable_interatomic_potential": false,
             "equivariance": null,
             "freeze_conv_layers": false,
             "initial_bias": null,

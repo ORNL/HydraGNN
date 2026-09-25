@@ -57,13 +57,10 @@ class StructuralCoordinatePerformerAttention(torch.nn.Module):
         self.heads = int(heads)
         self.head_channels = int(head_channels)
         self.coordinate_dim = int(coordinate_dim)
-        self.augmented_channels = (
-            self.head_channels + self.coordinate_dim + 1
-        )
+        self.augmented_channels = self.head_channels + self.coordinate_dim + 1
         if num_random_features is None:
             num_random_features = int(
-                self.augmented_channels
-                * math.log(max(2, self.augmented_channels))
+                self.augmented_channels * math.log(max(2, self.augmented_channels))
             )
         self.num_random_features = max(1, int(num_random_features))
         self.feature_epsilon = float(feature_epsilon)
@@ -101,9 +98,7 @@ class StructuralCoordinatePerformerAttention(torch.nn.Module):
         coordinates = coordinates.unsqueeze(1).expand(-1, heads, -1, -1)
         squared_norm = coordinates.square().sum(dim=-1, keepdim=True)
         ones = torch.ones_like(squared_norm)
-        coefficient = torch.as_tensor(
-            coefficient, device=q.device, dtype=q.dtype
-        )
+        coefficient = torch.as_tensor(coefficient, device=q.device, dtype=q.dtype)
         bias_scale = math.sqrt(self.head_channels) * coefficient
 
         q_augmented = torch.cat((q, coordinates, ones), dim=-1)
@@ -118,7 +113,7 @@ class StructuralCoordinatePerformerAttention(torch.nn.Module):
 
         # Scaling each side by d^(-1/4) makes their dot product use 1/sqrt(d),
         # where d is the original head width rather than d + rank + 1.
-        normalizer = self.head_channels ** -0.25
+        normalizer = self.head_channels**-0.25
         return q_augmented * normalizer, k_augmented * normalizer
 
     def _positive_features(self, value, is_query):
@@ -134,10 +129,9 @@ class StructuralCoordinatePerformerAttention(torch.nn.Module):
         else:
             # Key scaling must be common to all keys in one batch/head.
             stabilizer = projected.amax(dim=(-2, -1), keepdim=True).detach()
-        ratio = self.num_random_features ** -0.5
+        ratio = self.num_random_features**-0.5
         return ratio * (
-            torch.exp(projected - diagonal - stabilizer)
-            + self.feature_epsilon
+            torch.exp(projected - diagonal - stabilizer) + self.feature_epsilon
         )
 
     @staticmethod
@@ -232,14 +226,10 @@ class HeteroGPSConv(torch.nn.Module):
             unknown = requested - set(self.node_types)
 
             if unknown:
-                raise ValueError(
-                    f"Unknown attention node types: {sorted(unknown)}"
-                )
+                raise ValueError(f"Unknown attention node types: {sorted(unknown)}")
 
             self.attn_node_types = [
-                node_type
-                for node_type in self.node_types
-                if node_type in requested
+                node_type for node_type in self.node_types if node_type in requested
             ]
 
             if not self.attn_node_types:
@@ -263,7 +253,9 @@ class HeteroGPSConv(torch.nn.Module):
             )
         )
         if active_rpe_count > 1:
-            raise ValueError("Only one structural attention input can be active at a time.")
+            raise ValueError(
+                "Only one structural attention input can be active at a time."
+            )
         if self.pairwise_feature_dim > 0 and len(self.attn_node_types) != 1:
             raise ValueError(
                 "Direct pairwise features currently require exactly one "
@@ -307,7 +299,9 @@ class HeteroGPSConv(torch.nn.Module):
 
         self.rpe_mlp = None
         rpe_input_dim = (
-            3 * self.factorized_feature_dim if self.factorized_feature_dim > 0 else self.pairwise_feature_dim
+            3 * self.factorized_feature_dim
+            if self.factorized_feature_dim > 0
+            else self.pairwise_feature_dim
         )
         if rpe_input_dim > 0:
             if attn_type != "multihead":
@@ -315,9 +309,7 @@ class HeteroGPSConv(torch.nn.Module):
                     "Pairwise attention bias currently requires attn_type='multihead'."
                 )
             hidden_dim = int(rpe_hidden_dim) if int(rpe_hidden_dim) > 0 else channels
-            use_bias = not (
-                self.pairwise_feature_dim > 0 and self.rpe_zero_diagonal
-            )
+            use_bias = not (self.pairwise_feature_dim > 0 and self.rpe_zero_diagonal)
             self.rpe_mlp = Sequential(
                 Linear(rpe_input_dim, hidden_dim, bias=use_bias),
                 activation_resolver(act, **(act_kwargs or {})),
@@ -570,9 +562,7 @@ class HeteroGPSConv(torch.nn.Module):
                 dense_svd = {}
                 for name, value in packed_svd.items():
                     value_sorted = value.to(x_sorted.device)[perm]
-                    dense_value, value_mask = to_dense_batch(
-                        value_sorted, batch_sorted
-                    )
+                    dense_value, value_mask = to_dense_batch(value_sorted, batch_sorted)
                     if not torch.equal(mask, value_mask):
                         raise RuntimeError(
                             "Factorized pairwise batching mask does not match node mask."
@@ -598,9 +588,9 @@ class HeteroGPSConv(torch.nn.Module):
                 )
             # [batch, heads, query, key] -> MultiheadAttention's 3-D mask.
             attn_bias = self.rpe_mlp(pair_rpe).permute(0, 3, 1, 2)
-            attn_bias = attn_bias.reshape(
-                -1, dense.size(1), dense.size(1)
-            ).to(dtype=dense.dtype)
+            attn_bias = attn_bias.reshape(-1, dense.size(1), dense.size(1)).to(
+                dtype=dense.dtype
+            )
 
         if isinstance(self.attn, torch.nn.MultiheadAttention):
             key_padding_mask = ~mask

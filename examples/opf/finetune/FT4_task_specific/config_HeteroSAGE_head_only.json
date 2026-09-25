@@ -123,6 +123,7 @@
             "startfrom": "existing_model",
             "DomainLoss": {
                 "enabled": false,
+                "provider": "opf",
                 "voltage_bound_weight": 0.01,
                 "voltage_bound_feature_indices": [
                     2,

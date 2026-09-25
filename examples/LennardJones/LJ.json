@@ -26,10 +26,6 @@
             "num_spherical": 2,
             "hidden_dim": 32,
             "num_conv_layers": 4,
-            "enable_interatomic_potential": true,
-            "energy_weight": 1.0,
-            "energy_peratom_weight": 1.0,
-            "force_weight": 1.0,
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,
@@ -54,7 +50,31 @@
                 "type": "Adam",
                 "learning_rate": 0.005
             },
-            "conv_checkpointing": false
+            "conv_checkpointing": false,
+            "DomainLoss": {
+                "enabled": true,
+                "provider": "interatomic_potential",
+                "terms": {
+                    "energy": {
+                        "enabled": true,
+                        "weight": 1.0,
+                        "target": "energy",
+                        "normalization": "structure"
+                    },
+                    "energy_per_atom": {
+                        "enabled": true,
+                        "weight": 1.0,
+                        "target": "energy",
+                        "normalization": "atom"
+                    },
+                    "forces": {
+                        "enabled": true,
+                        "weight": 1.0,
+                        "target": "forces",
+                        "prediction": "negative_energy_gradient"
+                    }
+                }
+            }
         }
     },
     "Visualization": {

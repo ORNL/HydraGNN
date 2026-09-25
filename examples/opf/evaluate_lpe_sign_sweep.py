@@ -34,7 +34,6 @@ from torch_geometric.loader import DataLoader
 import hydragnn
 from hydragnn.utils.datasets.hdf5dataset import HDF5Dataset
 
-
 DEFAULT_RUNS = {
     "LPE": "case4661_lpe",
     "LPE-signflip": "case4661_lpe_signflip",
@@ -150,7 +149,9 @@ def _make_test_loader(dataset_path: Path, config: dict, max_samples: int | None)
     if max_samples is not None:
         if max_samples <= 0:
             raise ValueError("--max-samples must be positive.")
-        dataset = torch.utils.data.Subset(dataset, range(min(max_samples, len(dataset))))
+        dataset = torch.utils.data.Subset(
+            dataset, range(min(max_samples, len(dataset)))
+        )
     batch_size = int(config["NeuralNetwork"]["Training"].get("batch_size", 1))
     return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
@@ -396,9 +397,7 @@ def main():
                 writer.add_scalar(f"{label}/mse", metrics["mse"], sweep_index)
                 writer.add_scalar(f"{label}/rmse", metrics["rmse"], sweep_index)
                 writer.add_scalar(f"{label}/mae", metrics["mae"], sweep_index)
-                writer.add_scalar(
-                    f"{label}/flip_count", row["flip_count"], sweep_index
-                )
+                writer.add_scalar(f"{label}/flip_count", row["flip_count"], sweep_index)
                 for metric_name, metric_value in metrics.items():
                     if metric_name not in {"mse", "rmse", "mae"}:
                         writer.add_scalar(

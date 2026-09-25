@@ -15,6 +15,7 @@ import torch
 
 import torch.distributed as dist
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from hydragnn.domain_losses import uses_interatomic_potential
 
 from hydragnn.utils.distributed import (
     setup_ddp,
@@ -159,10 +160,7 @@ def train_and_checkpoint(
         f"Starting training with the configuration: \n{json.dumps(config, indent=4, sort_keys=True)}",
     )
 
-    # Get enable_interatomic_potential and pass directly as compute_grad_energy
-    enable_interatomic_potential = config["NeuralNetwork"]["Architecture"].get(
-        "enable_interatomic_potential", False
-    )
+    enable_interatomic_potential = uses_interatomic_potential(config)
 
     train_validate_test(
         model,

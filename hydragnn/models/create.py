@@ -14,9 +14,8 @@ import torch
 from torch_geometric.data import Data
 from typing import Dict, List, Union
 
-import torch_scatter
-
 from hydragnn.architecture_defaults import MODEL_SPECIFIC_ARCHITECTURE_DEFAULTS
+from hydragnn.domain_losses import create_domain_loss
 from hydragnn.utils.input_config_parsing.config_utils import edge_type_dims
 from hydragnn.models.Base import Base
 from hydragnn.models.GINStack import GINStack
@@ -51,34 +50,6 @@ from hydragnn.utils.profiling_and_tracing.time_utils import Timer
 from hydragnn.train.train_validate_test import resolve_precision
 
 
-def compute_forces_and_hessian(
-    energy, positions, *, compute_hessian=False, create_graph=False
-):
-    """Differentiate scalar graph energy into forces and a Cartesian Hessian."""
-    forces = -torch.autograd.grad(
-        energy,
-        positions,
-        grad_outputs=torch.ones_like(energy),
-        # Force-loss backpropagation also needs the differentiated graph when
-        # create_graph=True; evaluation can release it when no Hessian follows.
-        retain_graph=create_graph or compute_hessian,
-        create_graph=create_graph or compute_hessian,
-    )[0]
-    if not compute_hessian:
-        return forces, None
-
-    rows = []
-    for component in forces.reshape(-1):
-        force_gradient = torch.autograd.grad(
-            component,
-            positions,
-            retain_graph=True,
-            create_graph=create_graph,
-        )[0]
-        rows.append(-force_gradient.reshape(-1))
-    return forces, torch.stack(rows)
-
-
 def create_model_config(
     config: dict,
     verbosity: int = 0,
@@ -98,9 +69,7 @@ def create_model_config(
         global_attn_heads=config["Architecture"]["global_attn_heads"],
         attn_only=config["Architecture"].get("attn_only", False),
         attn_node_types=config["Architecture"].get("attn_node_types", None),
-        structural_encoding=config["Architecture"].get(
-            "structural_encoding", None
-        ),
+        structural_encoding=config["Architecture"].get("structural_encoding", None),
         output_type=config["Architecture"]["output_type"],
         output_heads=config["Architecture"]["output_heads"],
         activation_function=config["Architecture"]["activation_function"],
@@ -139,14 +108,8 @@ def create_model_config(
         node_max_ell=config["Architecture"]["node_max_ell"],
         avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
         conv_checkpointing=config["Training"]["conv_checkpointing"],
-        enable_interatomic_potential=config["Architecture"].get(
-            "enable_interatomic_potential", False
-        ),
+        domain_loss_config=config["Training"].get("DomainLoss"),
         input_node_encodings=config["Architecture"].get("input_node_encodings"),
-        energy_weight=config["Architecture"].get("energy_weight", 0.0),
-        energy_peratom_weight=config["Architecture"].get("energy_peratom_weight", 0.0),
-        force_weight=config["Architecture"].get("force_weight", 0.0),
-        hessian_weight=config["Architecture"].get("hessian_weight", 0.0),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False
         ),
@@ -158,9 +121,6 @@ def create_model_config(
         equivariant_attn_lmax=config["Architecture"].get("equivariant_attn_lmax", 1),
         equivariant_attn_num_radial=config["Architecture"].get(
             "equivariant_attn_num_radial", 16
-        ),
-        equivariant_attn_num_hidden_layers=config["Architecture"].get(
-            "equivariant_attn_num_hidden_layers", 1
         ),
         equivariant_attn_feedforward_multiplier=config["Architecture"].get(
             "equivariant_attn_feedforward_multiplier", 2
@@ -354,11 +314,8 @@ def create_model(
     node_max_ell: int = None,
     avg_num_neighbors: int = None,
     conv_checkpointing: bool = False,
-    enable_interatomic_potential: bool = False,
+    domain_loss_config: dict | None = None,
     input_node_encodings: list[dict] | None = None,
-    energy_weight: float = 0.0,
-    energy_peratom_weight: float = 0.0,
-    force_weight: float = 0.0,
     use_graph_attr_conditioning: bool = False,
     graph_attr_dim: int = 0,
     graph_attr_conditioning_mode: str = "fuse_pool",
@@ -419,9 +376,6 @@ def create_model(
     use_gpu: bool = True,
     periodic_boundary_conditions: bool = False,
     attn_only: bool = False,
-    *,
-    hessian_weight: float = 0.0,
-    equivariant_attn_num_hidden_layers: int = 1,
     attn_node_types: List[str] = None,
     structural_encoding: dict = None,
 ):
@@ -668,7 +622,6 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -732,7 +685,6 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -805,7 +757,6 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -851,7 +802,6 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -909,7 +859,6 @@ def create_model(
             graph_pooling=graph_pooling,
             use_graph_attr_conditioning=use_graph_attr_conditioning,
             graph_attr_conditioning_mode=graph_attr_conditioning_mode,
-            equivariant_attn_num_hidden_layers=(equivariant_attn_num_hidden_layers),
             equivariant_attn_lmax=equivariant_attn_lmax,
             equivariant_attn_num_radial=equivariant_attn_num_radial,
             equivariant_attn_feedforward_multiplier=(
@@ -1279,287 +1228,8 @@ def create_model(
         raise ValueError("Unknown mpnn_type: {0}".format(mpnn_type))
 
     model.configure_input_feature_encoders(input_node_encodings)
-    model.atomistic_mode_enabled = bool(enable_interatomic_potential)
-
-    if use_graph_attr_conditioning and graph_attr_dim is not None:
-        if model.graph_attr_conditioning_mode == "film":
-            model._ensure_graph_conditioner(graph_attr_dim, device)
-        elif model.graph_attr_conditioning_mode == "concat_node":
-            model._ensure_graph_concat_projector(graph_attr_dim, hidden_dim, device)
-        elif model.graph_attr_conditioning_mode == "fuse_pool":
-            if "graph" not in output_type:
-                raise ValueError(
-                    "fuse_pool graph conditioning requires at least one graph output"
-                )
-            if not getattr(model, "supports_graph_pool_conditioning", True):
-                raise ValueError(
-                    f"{model.__class__.__name__} does not support fuse_pool graph conditioning"
-                )
-            model._ensure_graph_pool_projector(graph_attr_dim, hidden_dim, device)
-
-    # Apply interatomic potential enhancement if requested
-    if enable_interatomic_potential:
-        # Instead of complex inheritance, use composition with delegation
-        # This avoids MRO issues and __init__ complications
-        class EnhancedModelWrapper(torch.nn.Module):
-            def __init__(self, original_model):
-                super().__init__()
-                self.model = original_model
-                self.energy_weight = energy_weight
-                self.energy_peratom_weight = energy_peratom_weight
-                self.force_weight = force_weight
-                self.hessian_weight = hessian_weight
-
-            def __getattr__(self, name):
-                # First try to get from the wrapper itself
-                try:
-                    return super().__getattr__(name)
-                except AttributeError:
-                    pass
-
-                # Then try to get from the wrapped model
-                try:
-                    return getattr(self.model, name)
-                except AttributeError:
-                    # Handle specific method names that may be expected for interatomic potentials
-                    if name in [
-                        "_compute_enhanced_geometric_features",
-                        "_compute_three_body_interactions",
-                        "_apply_atomic_environment_descriptors",
-                    ]:
-                        # Return placeholder methods that don't interfere with existing architectures
-                        return lambda *args, **kwargs: None
-                    raise AttributeError(
-                        f"'{self.__class__.__name__}' object has no attribute '{name}'"
-                    )
-
-            # ---------- forward ----------
-            def forward(self, data):
-
-                return self.model(data)
-
-            def energy_force_loss(self, pred, data, create_graph=True):
-                """
-                Compute energy and force loss for MLIP training.
-
-                This method is specific to interatomic potentials and computes:
-                1. Energy loss between predicted and true total energies
-                2. Force loss between predicted and true forces (via autograd on positions)
-
-                Forces are computed as negative gradients of total energy with respect to positions.
-                """
-                if data.pos is None:
-                    raise ValueError(
-                        "data.pos is required for interatomic-potential loss"
-                    )
-                if not data.pos.requires_grad:
-                    raise ValueError(
-                        "data.pos must require gradients for force/Hessian prediction"
-                    )
-
-                if self.num_heads < 1:
-                    raise ValueError("Force prediction requires an energy head")
-
-                # Support both node and graph heads; enforce sum pooling for graph heads
-                if self.head_type[0] == "node":
-                    node_energy_pred = pred[0]
-                    graph_energy_pred = (
-                        torch_scatter.scatter_add(node_energy_pred, data.batch, dim=0)
-                        .squeeze()
-                        .float()
-                    )
-                elif self.head_type[0] == "graph":
-                    if getattr(self.model, "graph_pooling", "mean") not in ["add"]:
-                        raise ValueError(
-                            "Graph head force loss requires sum pooling (graph_pooling='add')."
-                        )
-                    if isinstance(pred, dict) and "graph" in pred:
-                        graph_energy_pred = pred["graph"][0].squeeze().float()
-                    elif isinstance(pred, (list, tuple)):
-                        graph_energy_pred = pred[0].squeeze().float()
-                    else:
-                        graph_energy_pred = pred.squeeze().float()
-                else:
-                    raise ValueError(
-                        "Force predictions are only supported for node or graph energy heads."
-                    )
-
-                energy_loss_weight = self.energy_weight
-                energy_peratom_loss_weight = self.energy_peratom_weight
-                force_loss_weight = self.force_weight
-                hessian_loss_weight = self.hessian_weight
-
-                # Interatomic potential training requires at least one active loss term
-                if (
-                    energy_loss_weight <= 0
-                    and energy_peratom_loss_weight <= 0
-                    and force_loss_weight <= 0
-                    and hessian_loss_weight <= 0
-                ):
-                    raise ValueError(
-                        "All interatomic potential loss weights are zero; set at "
-                        "least one of energy_weight, energy_peratom_weight, "
-                        "force_weight, or hessian_weight to a positive value."
-                    )
-
-                if (
-                    energy_loss_weight > 0 or energy_peratom_loss_weight > 0
-                ) and not hasattr(data, "energy"):
-                    raise ValueError(
-                        "data.energy is required when energy_weight or energy_peratom_weight is positive"
-                    )
-                if force_loss_weight > 0 and not hasattr(data, "forces"):
-                    raise ValueError(
-                        "data.forces is required when force_weight is positive"
-                    )
-                if hessian_loss_weight > 0 and not hasattr(data, "hessian"):
-                    raise ValueError(
-                        "data.hessian is required when hessian_weight is positive"
-                    )
-                if hessian_loss_weight > 0 and data.num_graphs != 1:
-                    raise ValueError("Hessian loss currently requires batch size 1")
-
-                zero = graph_energy_pred.sum() * 0.0
-                tot_loss = zero
-                if hasattr(data, "energy"):
-                    graph_energy_true = data.energy.squeeze().float()
-                    energy_loss = self.loss_function(
-                        graph_energy_pred, graph_energy_true
-                    )
-                else:
-                    graph_energy_true = None
-                    energy_loss = zero
-                tasks_loss = [energy_loss]
-                if energy_loss_weight > 0:
-                    tot_loss = tot_loss + energy_loss * energy_loss_weight
-
-                # Energy per atom
-                natoms = torch.bincount(data.batch)
-                graph_energy_peratom_pred = graph_energy_pred / natoms
-                if graph_energy_true is not None:
-                    graph_energy_peratom_true = graph_energy_true / natoms
-                    energy_peratom_loss = self.loss_function(
-                        graph_energy_peratom_pred, graph_energy_peratom_true
-                    )
-                else:
-                    energy_peratom_loss = zero
-                tasks_loss.append(energy_peratom_loss)
-
-                if energy_peratom_loss_weight > 0:
-                    tot_loss = (
-                        tot_loss + energy_peratom_loss * energy_peratom_loss_weight
-                    )
-
-                # NaN Hessians mark structures for which no reference Hessian exists.
-                hessian_mask = None
-                if hessian_loss_weight > 0:
-                    hessian_mask = torch.isfinite(data.hessian)
-                need_hessian = hessian_mask is not None and bool(hessian_mask.any())
-                forces_pred, hessian_pred = compute_forces_and_hessian(
-                    graph_energy_pred,
-                    data.pos,
-                    compute_hessian=need_hessian,
-                    create_graph=create_graph,
-                )
-                forces_pred = forces_pred.float()
-                assert (
-                    forces_pred is not None
-                ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                if hasattr(data, "forces"):
-                    forces_true = data.forces.float()
-                    force_mask = torch.isfinite(forces_true)
-                    force_loss = (
-                        self.loss_function(
-                            forces_pred[force_mask], forces_true[force_mask]
-                        )
-                        if bool(force_mask.any())
-                        else zero
-                    )
-                else:
-                    force_loss = zero
-                tasks_loss.append(force_loss)
-
-                if force_loss_weight > 0:
-                    tot_loss = tot_loss + force_loss * force_loss_weight
-                    ## FixMe: current loss functions require the number of heads to be the number of things being predicted
-                    ##        so, we need to do loss calculation manually without calling the other functions.
-
-                if need_hessian:
-                    hessian_true = data.hessian.reshape(hessian_pred.shape).float()
-                    hessian_mask = hessian_mask.reshape(hessian_pred.shape)
-                    hessian_loss = self.loss_function(
-                        hessian_pred[hessian_mask], hessian_true[hessian_mask]
-                    )
-                    tot_loss = tot_loss + hessian_loss * hessian_loss_weight
-                else:
-                    hessian_loss = zero
-                if hessian_loss_weight > 0:
-                    tasks_loss.append(hessian_loss)
-
-                # Remaining heads are ordinary multitask targets. The first
-                # configured head is reserved for the differentiable energy.
-                if self.num_heads > 1:
-                    if not isinstance(pred, (list, tuple)):
-                        raise ValueError(
-                            "Multitask interatomic potentials require list-like model outputs"
-                        )
-                    if not hasattr(data, "y_loc"):
-                        raise ValueError(
-                            "Multitask interatomic potentials require batched y_loc metadata"
-                        )
-                    sample_sizes = data.y_loc[:, -1]
-                    sample_starts = torch.cumsum(sample_sizes, dim=0) - sample_sizes
-                    for head_index in range(1, self.num_heads):
-                        indices = []
-                        for sample_index in range(data.y_loc.shape[0]):
-                            start = (
-                                sample_starts[sample_index]
-                                + data.y_loc[sample_index, head_index]
-                            )
-                            end = (
-                                sample_starts[sample_index]
-                                + data.y_loc[sample_index, head_index + 1]
-                            )
-                            indices.append(
-                                torch.arange(start, end, device=data.y.device)
-                            )
-                        target = data.y[torch.cat(indices)].reshape(
-                            pred[head_index].shape
-                        )
-                        prediction = pred[head_index]
-                        mask = torch.isfinite(target)
-                        auxiliary_loss = (
-                            self.loss_function(prediction[mask], target[mask])
-                            if bool(mask.any())
-                            else zero
-                        )
-                        tasks_loss.append(auxiliary_loss)
-                        tot_loss = (
-                            tot_loss + auxiliary_loss * self.loss_weights[head_index]
-                        )
-
-                return tot_loss, tasks_loss
-
-            def _compute_enhanced_geometric_features(self, data):
-                """
-                Placeholder for enhanced geometric feature computation (disabled by default).
-                """
-                return data
-
-            def _compute_three_body_interactions(self, data):
-                """
-                Placeholder for three-body interaction computation (disabled by default).
-                """
-                return data
-
-            def _apply_atomic_environment_descriptors(self, data):
-                """
-                Placeholder for atomic environment descriptor application (disabled by default).
-                """
-                return data
-
-        enhanced_model = EnhancedModelWrapper(model)
-        model = enhanced_model
+    model.atomistic_mode_enabled = False
+    model = create_domain_loss(model, domain_loss_config)
 
     if conv_checkpointing:
         model.enable_conv_checkpointing()

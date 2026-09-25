@@ -230,7 +230,24 @@ def test_model_creation_with_enhancement():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "terms": {
+                "energy": {
+                    "enabled": True,
+                    "weight": 1.0,
+                    "target": "energy",
+                    "normalization": "structure",
+                },
+                "forces": {
+                    "enabled": True,
+                    "weight": 1.0,
+                    "target": "forces",
+                    "prediction": "negative_energy_gradient",
+                },
+            },
+        },
         "use_gpu": False,
     }
 
@@ -279,7 +296,24 @@ def test_forward_pass():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "terms": {
+                "energy": {
+                    "enabled": True,
+                    "weight": 1.0,
+                    "target": "energy",
+                    "normalization": "structure",
+                },
+                "forces": {
+                    "enabled": True,
+                    "weight": 1.0,
+                    "target": "forces",
+                    "prediction": "negative_energy_gradient",
+                },
+            },
+        },
         "use_gpu": False,
     }
 
@@ -334,7 +368,24 @@ def test_energy_force_consistency():
         "task_weights": [1.0],
         "num_conv_layers": 2,
         "num_nodes": 10,
-        "enable_interatomic_potential": True,
+        "domain_loss_config": {
+            "enabled": True,
+            "provider": "interatomic_potential",
+            "terms": {
+                "energy": {
+                    "enabled": True,
+                    "weight": 1.0,
+                    "target": "energy",
+                    "normalization": "structure",
+                },
+                "forces": {
+                    "enabled": True,
+                    "weight": 1.0,
+                    "target": "forces",
+                    "prediction": "negative_energy_gradient",
+                },
+            },
+        },
         "use_gpu": False,
     }
 

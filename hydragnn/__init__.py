@@ -8,7 +8,7 @@
 #                                                                            #
 # SPDX-License-Identifier: BSD-3-Clause                                      #
 ##############################################################################
-from . import preprocess, models, train, postprocess, utils
+from . import domain_losses, preprocess, models, train, postprocess, utils
 from ._version import __version__
 
 # ``utils`` is a namespace package, so importing it alone does not expose its
