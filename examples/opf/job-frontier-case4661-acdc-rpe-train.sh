@@ -6,7 +6,7 @@
 #SBATCH -t 02:00:00
 #SBATCH -p batch
 #SBATCH -N 8
-#SBATCH --array=0-1
+#SBATCH --array=0-4
 
 set -euo pipefail
 
@@ -16,16 +16,16 @@ OPF_DIR=${HYDRAGNN_ROOT}/examples/opf
 DATASET_NAME=case4661_acdc_rpe
 
 CONFIGS=(
-    # configs/opf_heterosage_case4661_bus_attention_control.json
-    # configs/opf_heterosage_case4661_dc_summary.json
-    # configs/opf_heterosage_case4661_ac_summary.json
+    configs/opf_heterosage_case4661_bus_attention_control.json
+    configs/opf_heterosage_case4661_dc_summary.json
+    configs/opf_heterosage_case4661_ac_summary.json
     configs/opf_heterosage_case4661_effective_resistance_rpe.json
     configs/opf_heterosage_case4661_effective_impedance_rpe.json
 )
 RUN_NAMES=(
-    # case4661_bus_attention_control
-    # case4661_dc_summary
-    # case4661_ac_summary
+    case4661_bus_attention_control
+    case4661_dc_summary
+    case4661_ac_summary
     case4661_effective_resistance_rpe
     case4661_effective_impedance_rpe
 )

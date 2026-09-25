@@ -965,11 +965,12 @@ def test(
     precision, param_dtype, _ = resolve_precision(precision)
     autocast_context, scaler = get_autocast_and_scaler(precision)
 
-    if compute_grad_energy:
-        import torch_scatter
-
     if num_tasks is None:
-        num_tasks = 3 if compute_grad_energy else model.module.num_heads
+        num_tasks = (
+            len(model.module.task_names)
+            if compute_grad_energy
+            else model.module.num_heads
+        )
 
     total_error = torch.tensor(0.0, device=get_device())
     tasks_error = torch.zeros(num_tasks, device=get_device())
@@ -1083,62 +1084,13 @@ def test(
                     data.pos.requires_grad = True
                     with autocast_context:
                         pred = model(data)
-                        # Support both node and graph heads; enforce sum pooling for graph heads
-                        if model.module.head_type[0] == "node":
-                            node_energy_pred = pred[0]
-                            graph_energy_pred = (
-                                torch_scatter.scatter_add(
-                                    node_energy_pred, data.batch, dim=0
-                                )
-                                .squeeze()
-                                .float()
-                            )
-                        elif model.module.head_type[0] == "graph":
-                            if getattr(
-                                model.module.model, "graph_pooling", "mean"
-                            ) not in ["add"]:
-                                raise ValueError(
-                                    "Graph head force loss requires sum pooling (graph_pooling='add')."
-                                )
-                            if isinstance(pred, dict) and "graph" in pred:
-                                graph_energy_pred = pred["graph"][0].squeeze().float()
-                            elif isinstance(pred, (list, tuple)):
-                                graph_energy_pred = pred[0].squeeze().float()
-                            else:
-                                graph_energy_pred = pred.squeeze().float()
-                        else:
-                            raise ValueError(
-                                "Force predictions are only supported for node or graph energy heads."
-                            )
-
-                        graph_energy_true = data.energy.squeeze().float()
-
-                        ncount = torch.bincount(data.batch)
-                        graph_energy_peratom_pred = graph_energy_pred / ncount
-                        graph_energy_peratom_true = graph_energy_true / ncount
-
-                        forces_true = data.forces.float()
-                        forces_pred = torch.autograd.grad(
-                            graph_energy_pred,
-                            data.pos,
-                            grad_outputs=torch.ones_like(graph_energy_pred),
-                            retain_graph=graph_energy_pred.requires_grad,
-                            create_graph=False,
-                        )[0].float()
-                        assert (
-                            forces_pred is not None
-                        ), "No gradients were found for data.pos. Does your model use positions for prediction?"
-                        forces_pred = -forces_pred
-                        forces_true = forces_true.flatten()
-                        forces_pred = forces_pred.flatten()
-                        true_values[0].append(graph_energy_true.reshape(-1, 1))
-                        true_values[1].append(graph_energy_peratom_true.reshape(-1, 1))
-                        true_values[2].append(forces_true.reshape(-1, 1))
-                        predicted_values[0].append(graph_energy_pred.reshape(-1, 1))
-                        predicted_values[1].append(
-                            graph_energy_peratom_pred.reshape(-1, 1)
+                        values = model.module.prediction_target_pairs(
+                            pred, data, create_graph=False
                         )
-                        predicted_values[2].append(forces_pred.reshape(-1, 1))
+                        for itask, name in enumerate(model.module.task_names):
+                            task_pred, task_true = values[name]
+                            true_values[itask].append(task_true.reshape(-1, 1))
+                            predicted_values[itask].append(task_pred.reshape(-1, 1))
             else:
                 head_index = get_head_indices(model, data)
                 ytrue = data.y
