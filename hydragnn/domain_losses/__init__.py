@@ -7,7 +7,7 @@ def create_domain_loss(model, config):
     provider = config.get("provider")
     if provider == "interatomic_potential":
         return InteratomicPotentialDomainLoss(model, config)
-    if provider == "opf":
+    if provider == "optimal_power_flow":
         # OPF attaches its provider after dataset metadata is available.
         return model
     raise ValueError(f"Unknown DomainLoss provider: {provider!r}.")
