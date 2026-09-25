@@ -25,3 +25,4 @@ from .heterogeneous import (
 )
 from .create import create_model, create_model_config
 from .MultiTaskModelMP import MultiTaskModelMP, DualOptimizer
+from hydragnn.globalAtt.structural import StructuralAttentionContext

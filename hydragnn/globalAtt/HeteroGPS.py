@@ -22,6 +22,8 @@ from torch_geometric.nn.inits import reset
 from torch_geometric.nn.resolver import activation_resolver, normalization_resolver
 from torch_geometric.utils import to_dense_batch
 
+from .structural import StructuralAttentionContext
+
 
 class StructuralCoordinatePerformerAttention(torch.nn.Module):
     """Performer attention with a low-rank squared-distance logit bias.
@@ -548,6 +550,7 @@ class HeteroGPSConv(torch.nn.Module):
         direct_pairwise_rpe=None,
         resistance_qk=None,
         resistance_coefficient=None,
+        structural_context: Optional[StructuralAttentionContext] = None,
     ):
         """Apply all-node attention across every node type in each graph. Needs to be ordered by graph, original order restored after for unpacking."""
         (
@@ -743,6 +746,15 @@ class HeteroGPSConv(torch.nn.Module):
         generalized equivariant arguments (inv_node_feat_dict,
         equiv_node_feat_dict, ...).
         """
+        if structural_context is not None:
+            if svd_rpe_dict is None:
+                svd_rpe_dict = structural_context.factorized_pairwise_features
+            if direct_pairwise_rpe is None:
+                direct_pairwise_rpe = structural_context.pairwise_features
+            if resistance_qk is None:
+                resistance_qk = structural_context.qk_coordinates
+            if resistance_coefficient is None:
+                resistance_coefficient = structural_context.qk_coefficient
         if inv_node_feat_dict is None:
             inv_node_feat_dict = x_dict
         if inv_node_feat_dict is None:
