@@ -141,8 +141,17 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
 
         total = energy_pred.new_zeros(())
         component_losses = []
+        report = {}
         for name in self.active_terms:
             component = self._loss(name, *values[name])
             component_losses.append(component)
-            total = total + float(self.terms[name]["weight"]) * component
+            weight = float(self.terms[name]["weight"])
+            weighted = weight * component
+            total = total + weighted
+            report[f"supervised.{name}"] = {
+                "raw": component.detach(),
+                "weight": weight,
+                "weighted": weighted.detach(),
+            }
+        self.last_loss_components = report
         return total, component_losses

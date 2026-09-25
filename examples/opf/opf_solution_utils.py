@@ -60,6 +60,7 @@ class OPFDomainLoss(torch.nn.Module):
         super().__init__()
         cfg = copy.deepcopy(config or {})
         self.enabled = bool(cfg.get("enabled", False))
+        self.last_loss_components = {}
         self.node_target_type = node_target_type
         constraint_items = cfg.get("constraints", [])
         constraints = {item["name"]: item for item in constraint_items}
@@ -194,9 +195,22 @@ class OPFDomainLoss(torch.nn.Module):
 
     def _augmented_term(self, name, residual, scale, curriculum, update_state, metrics):
         metrics[f"opf_{name}"] = residual.detach()
-        return curriculum * self.constraint_optimizer.penalty(
-            name, residual, scale, update_state
+        contribution = curriculum * self.constraint_optimizer.penalty(
+            name, residual, scale, update_state and curriculum > 0.0
         )
+        report_name = {
+            "voltage_bound": "voltage_limits",
+            "ac_angle_diff": "angle_limits.ac_line",
+            "tr_angle_diff": "angle_limits.transformer",
+            "ac_line_flow": "thermal_limits.ac_line",
+            "tr_line_flow": "thermal_limits.transformer",
+        }[name]
+        self.last_loss_components[f"constraints.{report_name}"] = {
+            "raw": residual.detach(),
+            "weight": float(scale),
+            "weighted": contribution.detach(),
+        }
+        return contribution
 
     @torch.no_grad()
     def update_multipliers(self, completed_epoch: int):
@@ -204,6 +218,7 @@ class OPFDomainLoss(torch.nn.Module):
         self.constraint_optimizer.update(completed_epoch)
 
     def forward(self, pred, value, head_index, data, update_state=False):
+        self.last_loss_components = {}
         if not self.enabled or data is None:
             return value.new_zeros(()), {}
 
@@ -226,10 +241,6 @@ class OPFDomainLoss(torch.nn.Module):
         metrics = {}
         curriculum = self._curriculum_scale()
         metrics["opf_curriculum_scale"] = torch.tensor(curriculum)
-
-        if curriculum == 0.0:
-            metrics["opf_domain_total"] = total_penalty.detach()
-            return total_penalty, metrics
 
         if (
             self.voltage_bound_weight > 0.0
@@ -565,10 +576,6 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         except (ValueError, TypeError):
             current_epoch = -1
 
-        if current_epoch != self._last_seen_epoch and self._last_seen_epoch >= 0:
-            # Epoch boundary: flush accumulated stats for the completed epoch.
-            self.domain_loss.update_multipliers(self._last_seen_epoch)
-            self._flush_epoch_log(self._last_seen_epoch)
         self._last_seen_epoch = current_epoch
 
         extra_loss, extra_metrics = self.domain_loss(
@@ -580,11 +587,10 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         )
         self.last_extra_loss_metrics = extra_metrics
 
-        # Accumulate task loss (total_loss is the data-driven term before domain is added).
-        self._epoch_accum_task.append(float(total_loss.detach()))
-        # Accumulate each domain metric (raw, un-normalized values for interpretability).
-        for key, val in extra_metrics.items():
-            self._epoch_accum.setdefault(key, []).append(float(val))
+        self.last_loss_components = dict(
+            getattr(self.model, "last_loss_components", {})
+        )
+        self.last_loss_components.update(self.domain_loss.last_loss_components)
 
         return total_loss + extra_loss, tasks_loss
 

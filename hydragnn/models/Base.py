@@ -29,6 +29,7 @@ from hydragnn.utils.print.print_utils import print_master
 from hydragnn.utils.model.operations import get_edge_vectors_and_lengths
 from hydragnn.globalAtt.gps import HydraGPSConv
 from hydragnn.globalAtt.equivariant_local_global import EquivariantLocalGlobalConv
+from hydragnn.loss_reporting import supervised_loss_report
 import hydragnn.utils.profiling_and_tracing.tracer as tr
 
 import inspect
@@ -1083,6 +1084,9 @@ class Base(Module):
                 )
                 tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
 
+        self.last_loss_components = supervised_loss_report(
+            self, pred, value, head_index, tasks_loss, var=var
+        )
         return tot_loss, tasks_loss
 
     def __str__(self):

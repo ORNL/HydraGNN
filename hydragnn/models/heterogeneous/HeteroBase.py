@@ -24,6 +24,7 @@ from hydragnn.utils.distributed import get_device
 from hydragnn.models.Base import MLPNode
 from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
 from hydragnn.globalAtt.structural import StructuralAttentionContext
+from hydragnn.loss_reporting import supervised_loss_report
 
 
 class HeteroBase(Module):
@@ -1392,4 +1393,7 @@ class HeteroBase(Module):
                 )
                 tasks_loss.append(self.loss_function(head_pre, head_val, head_var))
 
+        self.last_loss_components = supervised_loss_report(
+            self, pred, value, head_index, tasks_loss, var=var
+        )
         return tot_loss, tasks_loss

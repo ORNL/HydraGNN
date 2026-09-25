@@ -586,11 +586,9 @@ if __name__ == "__main__":
         precision=precision,
     )
 
-    # ── Flush domain-loss log ──────────────────────────────────────────────
     _inner = model.module if hasattr(model, "module") else model
     if isinstance(_inner, OPFEnhancedModelWrapper):
         _inner.finalize_domain_state()
-        _inner._flush_epoch_log(_inner._last_seen_epoch)
 
     # ── Save final checkpoint ──────────────────────────────────────────────
     model_utils.save_model(model, optimizer, log_name)

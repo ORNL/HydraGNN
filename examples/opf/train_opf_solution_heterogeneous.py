@@ -1469,10 +1469,19 @@ if __name__ == "__main__":
                 setattr(domain_loss, attr, 1.0)
         os.environ["HYDRAGNN_EPOCH"] = "0"
         num_tasks = model.module.num_heads
-        hydragnn.train.validate(
+        validation_loss, _ = hydragnn.train.validate(
             val_loader, model, config["Verbosity"]["level"], num_tasks=num_tasks
         )
-        target_model._flush_epoch_log(target_model._last_seen_epoch, force=True)
+        print(
+            "0: "
+            + hydragnn.loss_reporting.format_loss_report(
+                0,
+                "validation",
+                validation_loss,
+                target_model.last_epoch_loss_report,
+            ),
+            flush=True,
+        )
         _diag("Exited eval_domain_penalties_only")
         if dist.is_initialized():
             dist.destroy_process_group()
@@ -1495,16 +1504,10 @@ if __name__ == "__main__":
     )
     _diag("Exited train_validate_test")
 
-    # Flush the final epoch's LossBreakdown line.  The wrapper only flushes on
-    # epoch *transitions* detected inside loss(), so the last epoch's stats would
-    # otherwise never be written (no subsequent epoch triggers the flush).
     if isinstance(model, OPFEnhancedModelWrapper):
         model.finalize_domain_state()
-        model._flush_epoch_log(model._last_seen_epoch)
     elif hasattr(model, "module") and isinstance(model.module, OPFEnhancedModelWrapper):
-        # DDP wraps the model in model.module
         model.module.finalize_domain_state()
-        model.module._flush_epoch_log(model.module._last_seen_epoch)
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
     hydragnn.utils.profiling_and_tracing.print_timers(config["Verbosity"]["level"])

@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from hydragnn.utils.input_config_parsing import get_variable_schema
+
 EXAMPLES = Path(__file__).parents[1] / "examples"
 INTERATOMIC_TERMS = {"energy", "energy_per_atom", "forces"}
 OPF_OPERATORS = {
@@ -46,6 +48,7 @@ def test_examples_do_not_use_removed_training_loss_structure():
     "path,config,loss", list(_loss_configs("interatomic_potential"))
 )
 def test_interatomic_examples_use_declarative_conservative_loss(path, config, loss):
+    get_variable_schema(config)
     assert loss.get("enabled") is True, path
     supervised = loss["supervised"]
     assert supervised.get("default_metric"), path
@@ -70,6 +73,7 @@ def test_interatomic_examples_use_declarative_conservative_loss(path, config, lo
 
 @pytest.mark.parametrize("path,config,loss", list(_loss_configs("optimal_power_flow")))
 def test_opf_examples_use_named_constraint_schema(path, config, loss):
+    get_variable_schema(config)
     assert "supervised" in loss, path
     assert isinstance(loss.get("constraints"), list), path
     assert loss.get("constraint_optimizer", {}).get("type") in {

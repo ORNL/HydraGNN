@@ -26,6 +26,13 @@ from hydragnn.utils.distributed import (
 from hydragnn.utils.model.model import Checkpoint, EarlyStopping
 from hydragnn.globalAtt.gps import redraw_performer_projections
 from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
+from hydragnn.loss_reporting import (
+    accumulate_loss_report,
+    configure_supervised_components,
+    finalize_loss_report,
+    format_loss_report,
+    reset_loss_report,
+)
 
 import os
 
@@ -238,6 +245,7 @@ def train_validate_test(
 
     precision, _, _ = resolve_precision(precision)
     configured_output_names = [spec.name for spec in variable_schema.outputs]
+    configure_supervised_components(model.module, variable_schema.outputs)
 
     device = get_device()
     if compute_grad_energy:
@@ -340,6 +348,15 @@ def train_validate_test(
             print_distributed(
                 verbosity, "Tasks Loss:", [taskerr.item() for taskerr in taskserr]
             )
+            print_distributed(
+                verbosity,
+                format_loss_report(
+                    -1,
+                    dataset_name.removesuffix("set"),
+                    loss,
+                    model.module.last_epoch_loss_report,
+                ),
+            )
         return
 
     timer = Timer("train_validate_test")
@@ -377,6 +394,7 @@ def train_validate_test(
                     "global_attn_redraw_interval", 1000
                 ),
             )
+            train_loss_report = dict(model.module.last_epoch_loss_report)
             tr.stop("train")
             tr.disable()
             if epoch == 0:
@@ -405,6 +423,7 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
+        val_loss_report = dict(model.module.last_epoch_loss_report)
         test_loss, test_taskserr, true_values, predicted_values = test(
             test_loader,
             model,
@@ -415,6 +434,7 @@ def train_validate_test(
             compute_grad_energy=compute_grad_energy,
             precision=precision,
         )
+        test_loss_report = dict(model.module.last_epoch_loss_report)
         scheduler.step(val_loss)
         if writer is not None:
             writer.add_scalar("train error", train_loss, epoch)
@@ -440,6 +460,14 @@ def train_validate_test(
         print_distributed(
             verbosity, "Tasks Test Loss:", [taskerr.item() for taskerr in test_taskserr]
         )
+        for split, total, report in (
+            ("train", train_loss, train_loss_report),
+            ("validation", val_loss, val_loss_report),
+            ("test", test_loss, test_loss_report),
+        ):
+            print_distributed(
+                verbosity, format_loss_report(epoch, split, total, report)
+            )
 
         total_loss_train[epoch] = train_loss
         total_loss_val[epoch] = val_loss
@@ -688,6 +716,7 @@ def train(
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.train()
+    reset_loss_report(model.module)
 
     rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
     model_param_dtype = None
@@ -826,6 +855,7 @@ def train(
             num_samples_local += data.num_graphs
             for itask in range(len(tasks_loss)):
                 tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+            accumulate_loss_report(model.module, data.num_graphs)
         if ibatch < (nbatch - 1):
             tr.start("dataload", **syncopt)
         if use_ddstore:
@@ -842,6 +872,7 @@ def train(
 
     train_error = reduce_values_ranks(train_error)
     tasks_error = reduce_values_ranks(tasks_error)
+    finalize_loss_report(model.module, get_device())
 
     return train_error, tasks_error
 
@@ -863,6 +894,7 @@ def validate(
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
+    reset_loss_report(model.module)
     use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
@@ -904,6 +936,7 @@ def validate(
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        accumulate_loss_report(model.module, data.num_graphs)
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
     if use_ddstore:
@@ -914,6 +947,7 @@ def validate(
     if reduce_ranks:
         val_error = reduce_values_ranks(val_error)
         tasks_error = reduce_values_ranks(tasks_error)
+    finalize_loss_report(model.module, get_device())
     return val_error, tasks_error
 
 
@@ -941,6 +975,7 @@ def test(
     tasks_error = torch.zeros(num_tasks, device=get_device())
     num_samples_local = 0
     model.eval()
+    reset_loss_report(model.module)
     use_ddstore = (
         hasattr(loader.dataset, "ddstore")
         and hasattr(loader.dataset.ddstore, "epoch_begin")
@@ -1017,6 +1052,7 @@ def test(
         num_samples_local += data.num_graphs
         for itask in range(len(tasks_loss)):
             tasks_error[itask] += tasks_loss[itask] * data.num_graphs
+        accumulate_loss_report(model.module, data.num_graphs)
         if use_ddstore:
             loader.dataset.ddstore.epoch_begin()
     if use_ddstore:
@@ -1131,5 +1167,7 @@ def test(
             for itask in range(num_tasks):
                 true_values[itask] = gather_tensor_ranks(true_values[itask])
                 predicted_values[itask] = gather_tensor_ranks(predicted_values[itask])
+
+    finalize_loss_report(model.module, get_device())
 
     return test_error, tasks_error, true_values, predicted_values
