@@ -24,16 +24,22 @@ EXAMPLE_DIR = Path(__file__).resolve().parent
 BASE_CONFIG_PATH = EXAMPLE_DIR / "pubchem_gaussian.json"
 SPHERICAL_HARMONIC_ORDER = 2
 PRIMARY_OBJECTIVE_METRICS = ("Energy", "Forces", "Hessian")
+HPO_CAMPAIGNS = ("primary", "multitask")
 LOSS_PATTERN = re.compile(
     r"^(?:\d+:\s*)?(.+?) Train Loss: "
     r"[-+\d.eE]+, Val Loss: ([-+\d.eE]+), Test Loss: [-+\d.eE]+$"
 )
 
 
-def configure_trial(base_config, parameters):
+def configure_trial(base_config, parameters, campaign="multitask"):
     """Return a trial-local config populated from DeepHyper parameters."""
+    if campaign not in HPO_CAMPAIGNS:
+        raise ValueError(f"Unsupported HPO campaign: {campaign}")
     config = deepcopy(base_config)
     architecture = config["NeuralNetwork"]["Architecture"]
+    if campaign == "primary":
+        config["Variables"]["outputs"] = config["Variables"]["outputs"][:1]
+        architecture["task_weights"] = architecture["task_weights"][:1]
 
     architecture["mpnn_type"] = parameters["mpnn_type"]
     architecture["num_conv_layers"] = int(parameters["num_conv_layers"])
@@ -169,12 +175,15 @@ def run(trial, dequed=None):
     log_dir.mkdir(parents=True, exist_ok=True)
     with BASE_CONFIG_PATH.open(encoding="utf-8") as stream:
         base_config = json.load(stream)
-    config = configure_trial(base_config, trial.parameters)
+    campaign = os.environ.get("HPO_CAMPAIGN", "multitask")
+    config = configure_trial(base_config, trial.parameters, campaign=campaign)
 
     config_path = (log_dir / f"trial-{trial.id}.json").resolve()
     output_path = (log_dir / f"trial-{trial.id}.log").resolve()
     config_path.write_text(json.dumps(config, indent=4) + "\n", encoding="utf-8")
-    command = _trial_command(config_path, f"pubchem_hpo_{trial.id}", dequed)
+    command = _trial_command(
+        config_path, f"pubchem_hpo_{campaign}_{trial.id}", dequed
+    )
 
     try:
         with output_path.open("w", encoding="utf-8") as output:
@@ -189,7 +198,11 @@ def run(trial, dequed=None):
         objective = -math.inf
     return {
         "objective": objective,
-        "metadata": {"config": str(config_path), "log": str(output_path)},
+        "metadata": {
+            "campaign": campaign,
+            "config": str(config_path),
+            "log": str(output_path),
+        },
     }
 
 
@@ -225,9 +238,16 @@ def main():
         default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq,AllScAIP,UMA",
         help="Comma-separated message-passing implementations",
     )
+    parser.add_argument(
+        "--campaign",
+        choices=HPO_CAMPAIGNS,
+        default=os.environ.get("HPO_CAMPAIGN", "multitask"),
+        help="Train only the primary energy head or all configured output heads",
+    )
     args = parser.parse_args()
     if args.dataset_path is not None:
         os.environ["PUBCHEM_DATASET"] = str(args.dataset_path.resolve())
+    os.environ["HPO_CAMPAIGN"] = args.campaign
 
     try:
         from deephyper.evaluator import ProcessPoolEvaluator, queued

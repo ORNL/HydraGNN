@@ -126,6 +126,28 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert allscaip_architecture["allscaip_freq_list"] is None
 
 
+def test_pubchem_hpo_primary_campaign_removes_auxiliary_heads():
+    config_path = (
+        Path(__file__).parents[1]
+        / "examples"
+        / "pubchem_gaussian"
+        / "pubchem_gaussian.json"
+    )
+    base_config = json.loads(config_path.read_text())
+
+    primary = configure_trial(base_config, _hpo_parameters(), campaign="primary")
+    multitask = configure_trial(
+        base_config, _hpo_parameters(), campaign="multitask"
+    )
+
+    assert [output["name"] for output in primary["Variables"]["outputs"]] == [
+        "energy"
+    ]
+    assert primary["NeuralNetwork"]["Architecture"]["task_weights"] == [1.0]
+    assert len(multitask["Variables"]["outputs"]) == 8
+    assert len(multitask["NeuralNetwork"]["Architecture"]["task_weights"]) == 8
+
+
 def test_pubchem_hpo_trial_command_uses_shared_dataset(monkeypatch, tmp_path):
     dataset_path = tmp_path / "pubchem_gaussian.bp"
     monkeypatch.setenv("PUBCHEM_DATASET", str(dataset_path))

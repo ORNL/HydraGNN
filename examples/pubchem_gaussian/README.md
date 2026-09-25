@@ -106,6 +106,23 @@ HPO_MPNN_TYPES=MACE,UMA HPO_MAX_EVALS=100 \
 The spherical-harmonic order is fixed at $\ell_{\max}=2$ for both families; it
 is not sampled as a hyperparameter.
 
+Two directly comparable campaigns can be submitted from the same search space
+and dataset:
+
+```bash
+HPO_CAMPAIGN=primary sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
+HPO_CAMPAIGN=multitask sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
+```
+
+The `primary` campaign exposes only the scalar energy output head; forces and
+Hessians are still obtained by differentiating that energy. The `multitask`
+campaign additionally trains the Mulliken-charge, dipole, quadrupole,
+polarizability, frontier-orbital, rotational-constant, and thermochemistry
+heads. Both campaigns use exactly the same HPO objective: the mean validation
+loss over energy, forces, and Hessian. Auxiliary losses therefore affect the
+learned representation but never directly affect trial selection. Logs and
+DeepHyper search state are written to campaign-specific directories.
+
 For the three-million-sample search, use the resumable successive-halving
 driver and its checked-in stage schedule:
 

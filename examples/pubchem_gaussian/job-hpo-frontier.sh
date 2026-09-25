@@ -18,6 +18,11 @@ HYDRAGNN_VENV="${HYDRAGNN_VENV:-/lustre/orion/lrn070/world-shared/mlupopa/HydraG
 : "${PUBCHEM_DATASET:=/lustre/orion/lrn070/world-shared/kmehta/hydragnn/datasets/pubchem_gaussian.bp}"
 HPO_MPNN_TYPES="${HPO_MPNN_TYPES:-EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq,AllScAIP,UMA}"
 HPO_MAX_EVALS="${HPO_MAX_EVALS:-100}"
+HPO_CAMPAIGN="${HPO_CAMPAIGN:-multitask}"
+if [[ "${HPO_CAMPAIGN}" != "primary" && "${HPO_CAMPAIGN}" != "multitask" ]]; then
+    echo "HPO_CAMPAIGN must be primary or multitask" >&2
+    exit 2
+fi
 [[ -x "${HYDRAGNN_VENV}/bin/python" ]] || { echo "Missing ${HYDRAGNN_VENV}/bin/python" >&2; exit 1; }
 [[ -e "${PUBCHEM_DATASET}" ]] || { echo "Missing ${PUBCHEM_DATASET}" >&2; exit 1; }
 
@@ -31,12 +36,14 @@ export HYDRAGNN_VALTEST=1
 export TASKS_PER_NODE=1
 export NNODES_PER_TRIAL=1
 export NUM_CONCURRENT_TRIALS="${SLURM_JOB_NUM_NODES}"
-export DEEPHYPER_LOG_DIR="pubchem-hpo-logs-${SLURM_JOB_ID}"
-export DEEPHYPER_SEARCH_DIR="pubchem-hpo-${SLURM_JOB_ID}"
+export HPO_CAMPAIGN
+export DEEPHYPER_LOG_DIR="pubchem-hpo-${HPO_CAMPAIGN}-logs-${SLURM_JOB_ID}"
+export DEEPHYPER_SEARCH_DIR="pubchem-hpo-${HPO_CAMPAIGN}-${SLURM_JOB_ID}"
 
 # The PubChem cache must be created before launching concurrent trials:
 # srun -N1 -n1 python examples/pubchem_gaussian/train.py --preonly
 python -u "${HYDRAGNN_ROOT}/examples/pubchem_gaussian/pubchem_gaussian_hpo.py" \
     --dataset-path "${PUBCHEM_DATASET}" \
     --mpnn-types "${HPO_MPNN_TYPES}" \
+    --campaign "${HPO_CAMPAIGN}" \
     --max-evals "${HPO_MAX_EVALS}"
