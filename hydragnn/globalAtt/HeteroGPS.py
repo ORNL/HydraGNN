@@ -23,11 +23,11 @@ from torch_geometric.nn.resolver import activation_resolver, normalization_resol
 from torch_geometric.utils import to_dense_batch
 
 
-class EffectiveResistancePerformerAttention(torch.nn.Module):
-    """Performer attention with a low-rank effective-resistance logit bias.
+class StructuralCoordinatePerformerAttention(torch.nn.Module):
+    """Performer attention with a low-rank squared-distance logit bias.
 
     Content Q/K/V are projected normally. Before the positive random-feature
-    map, resistance coordinates are appended so their dot product contributes
+    map, structural coordinates are appended so their dot product contributes
     ``a * ||x_i - x_j||^2`` up to a query-only term. The normalizer is based on
     the original head width, not the augmented width.
     """
@@ -36,7 +36,7 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
         self,
         channels: int,
         heads: int,
-        resistance_dim: int,
+        coordinate_dim: int,
         head_channels: Optional[int] = 64,
         qkv_bias: bool = False,
         attn_out_bias: bool = True,
@@ -49,14 +49,14 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
             raise ValueError("Performer channels must be divisible by heads.")
         if head_channels is None:
             head_channels = channels // heads
-        if int(resistance_dim) <= 0:
-            raise ValueError("resistance_dim must be positive.")
+        if int(coordinate_dim) <= 0:
+            raise ValueError("coordinate_dim must be positive.")
 
         self.heads = int(heads)
         self.head_channels = int(head_channels)
-        self.resistance_dim = int(resistance_dim)
+        self.coordinate_dim = int(coordinate_dim)
         self.augmented_channels = (
-            self.head_channels + self.resistance_dim + 1
+            self.head_channels + self.coordinate_dim + 1
         )
         if num_random_features is None:
             num_random_features = int(
@@ -78,8 +78,8 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
         )
         self.redraw_projection_matrix()
 
-    def _augment_qk(self, q, k, resistance_coordinates, coefficient):
-        """Append resistance factors and apply the original-width scaling."""
+    def _augment_qk(self, q, k, structural_coordinates, coefficient):
+        """Append structural factors and apply the original-width scaling."""
 
         if q.shape != k.shape or q.dim() != 4:
             raise ValueError("Projected Q and K must have matching [B,H,N,D] shapes.")
@@ -88,14 +88,14 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
             raise ValueError(
                 "Projected Q/K shape does not match the configured Performer heads."
             )
-        expected = (batch_size, num_nodes, self.resistance_dim)
-        if tuple(resistance_coordinates.shape) != expected:
+        expected = (batch_size, num_nodes, self.coordinate_dim)
+        if tuple(structural_coordinates.shape) != expected:
             raise ValueError(
-                f"Expected resistance coordinates with shape {expected}, got "
-                f"{tuple(resistance_coordinates.shape)}."
+                f"Expected structural coordinates with shape {expected}, got "
+                f"{tuple(structural_coordinates.shape)}."
             )
 
-        coordinates = resistance_coordinates.to(device=q.device, dtype=q.dtype)
+        coordinates = structural_coordinates.to(device=q.device, dtype=q.dtype)
         coordinates = coordinates.unsqueeze(1).expand(-1, heads, -1, -1)
         squared_norm = coordinates.square().sum(dim=-1, keepdim=True)
         ones = torch.ones_like(squared_norm)
@@ -150,7 +150,7 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
     def forward(
         self,
         x,
-        resistance_coordinates,
+        structural_coordinates,
         coefficient,
         mask=None,
     ):
@@ -162,7 +162,7 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
             ).permute(0, 2, 1, 3),
             (q, k, v),
         )
-        q, k = self._augment_qk(q, k, resistance_coordinates, coefficient)
+        q, k = self._augment_qk(q, k, structural_coordinates, coefficient)
         q = self._positive_features(q, is_query=True)
         k = self._positive_features(k, is_query=False)
         v_dtype = v.dtype
@@ -185,6 +185,15 @@ class EffectiveResistancePerformerAttention(torch.nn.Module):
         self.v.reset_parameters()
         self.attn_out.reset_parameters()
         self.redraw_projection_matrix()
+
+
+class EffectiveResistancePerformerAttention(
+    StructuralCoordinatePerformerAttention
+):
+    """Compatibility wrapper for the original OPF-specific class name."""
+
+    def __init__(self, *args, resistance_dim: int, **kwargs):
+        super().__init__(*args, coordinate_dim=resistance_dim, **kwargs)
 
 
 class HeteroGPSConv(torch.nn.Module):
@@ -218,6 +227,8 @@ class HeteroGPSConv(torch.nn.Module):
         rpe_hidden_dim: int = 0,
         rpe_zero_diagonal: bool = True,
         resistance_qk_dim: int = 0,
+        pairwise_feature_dim: Optional[int] = None,
+        qk_coordinate_dim: Optional[int] = None,
     ):
         super().__init__()
 
@@ -249,25 +260,48 @@ class HeteroGPSConv(torch.nn.Module):
         self.dropout = dropout
         self.attn_type = attn_type
         self.pe_dim = int(pe_dim)
-        self.direct_rpe_dim = int(direct_rpe_dim)
-        self.resistance_qk_dim = int(resistance_qk_dim)
+        if pairwise_feature_dim is not None and direct_rpe_dim not in (
+            0,
+            pairwise_feature_dim,
+        ):
+            raise ValueError(
+                "direct_rpe_dim and pairwise_feature_dim specify different widths."
+            )
+        if qk_coordinate_dim is not None and resistance_qk_dim not in (
+            0,
+            qk_coordinate_dim,
+        ):
+            raise ValueError(
+                "resistance_qk_dim and qk_coordinate_dim specify different widths."
+            )
+        self.pairwise_feature_dim = int(
+            direct_rpe_dim if pairwise_feature_dim is None else pairwise_feature_dim
+        )
+        self.qk_coordinate_dim = int(
+            resistance_qk_dim
+            if qk_coordinate_dim is None
+            else qk_coordinate_dim
+        )
+        # Compatibility attributes for the original experimental API.
+        self.direct_rpe_dim = self.pairwise_feature_dim
+        self.resistance_qk_dim = self.qk_coordinate_dim
         self.rpe_zero_diagonal = bool(rpe_zero_diagonal)
         active_rpe_count = sum(
             width > 0
             for width in (
                 self.pe_dim,
-                self.direct_rpe_dim,
-                self.resistance_qk_dim,
+                self.pairwise_feature_dim,
+                self.qk_coordinate_dim,
             )
         )
         if active_rpe_count > 1:
             raise ValueError("Only one attention RPE can be active at a time.")
-        if self.direct_rpe_dim > 0 and len(self.attn_node_types) != 1:
+        if self.pairwise_feature_dim > 0 and len(self.attn_node_types) != 1:
             raise ValueError(
                 "Direct pairwise features currently require exactly one "
                 "attention node type."
             )
-        if self.resistance_qk_dim > 0:
+        if self.qk_coordinate_dim > 0:
             if attn_type != "performer":
                 raise ValueError(
                     "Effective-resistance Q/K augmentation requires "
@@ -288,11 +322,11 @@ class HeteroGPSConv(torch.nn.Module):
                 **attn_kwargs,
             )
         elif attn_type == "performer":
-            if self.resistance_qk_dim > 0:
-                self.attn = EffectiveResistancePerformerAttention(
+            if self.qk_coordinate_dim > 0:
+                self.attn = StructuralCoordinatePerformerAttention(
                     channels=channels,
                     heads=heads,
-                    resistance_dim=self.resistance_qk_dim,
+                    coordinate_dim=self.qk_coordinate_dim,
                     **attn_kwargs,
                 )
             else:
@@ -305,7 +339,9 @@ class HeteroGPSConv(torch.nn.Module):
             raise ValueError(f"{attn_type} is not supported")
 
         self.rpe_mlp = None
-        rpe_input_dim = 3 * self.pe_dim if self.pe_dim > 0 else self.direct_rpe_dim
+        rpe_input_dim = (
+            3 * self.pe_dim if self.pe_dim > 0 else self.pairwise_feature_dim
+        )
         if rpe_input_dim > 0:
             if attn_type != "multihead":
                 raise ValueError(
@@ -313,7 +349,7 @@ class HeteroGPSConv(torch.nn.Module):
                 )
             hidden_dim = int(rpe_hidden_dim) if int(rpe_hidden_dim) > 0 else channels
             use_bias = not (
-                self.direct_rpe_dim > 0 and self.rpe_zero_diagonal
+                self.pairwise_feature_dim > 0 and self.rpe_zero_diagonal
             )
             self.rpe_mlp = Sequential(
                 Linear(rpe_input_dim, hidden_dim, bias=use_bias),
@@ -480,7 +516,7 @@ class HeteroGPSConv(torch.nn.Module):
         counts = mask.sum(dim=1).detach().cpu().tolist()
         if batch_size == 1 and counts[0] == max_nodes:
             matrix = matrices[0].to(device=device, dtype=dtype)
-            expected = (max_nodes, max_nodes, self.direct_rpe_dim)
+            expected = (max_nodes, max_nodes, self.pairwise_feature_dim)
             if tuple(matrix.shape) != expected:
                 raise ValueError(
                     f"Expected direct pairwise RPE shape {expected}, got "
@@ -489,13 +525,13 @@ class HeteroGPSConv(torch.nn.Module):
             return matrix.unsqueeze(0)
 
         dense_rpe = torch.zeros(
-            (batch_size, max_nodes, max_nodes, self.direct_rpe_dim),
+            (batch_size, max_nodes, max_nodes, self.pairwise_feature_dim),
             device=device,
             dtype=dtype,
         )
         for graph_index, (matrix, count) in enumerate(zip(matrices, counts)):
             matrix = matrix.to(device=device, dtype=dtype)
-            expected = (count, count, self.direct_rpe_dim)
+            expected = (count, count, self.pairwise_feature_dim)
             if tuple(matrix.shape) != expected:
                 raise ValueError(
                     f"Expected direct pairwise RPE graph {graph_index} shape "
@@ -529,13 +565,13 @@ class HeteroGPSConv(torch.nn.Module):
         dense, mask = to_dense_batch(x_sorted, batch_sorted)
 
         dense_resistance_qk = None
-        if self.resistance_qk_dim > 0:
+        if self.qk_coordinate_dim > 0:
             if resistance_qk is None or resistance_coefficient is None:
                 raise ValueError(
                     "Effective-resistance Q/K attention requires coordinates "
                     "and a coefficient."
                 )
-            expected = (x_all.size(0), self.resistance_qk_dim)
+            expected = (x_all.size(0), self.qk_coordinate_dim)
             if tuple(resistance_qk.shape) != expected:
                 raise ValueError(
                     f"Expected packed resistance coordinates {expected}, got "
@@ -614,7 +650,7 @@ class HeteroGPSConv(torch.nn.Module):
                 attn_mask=attn_bias,
                 need_weights=False,
             )
-        elif isinstance(self.attn, EffectiveResistancePerformerAttention):
+        elif isinstance(self.attn, StructuralCoordinatePerformerAttention):
             dense = self.attn(
                 dense,
                 dense_resistance_qk,

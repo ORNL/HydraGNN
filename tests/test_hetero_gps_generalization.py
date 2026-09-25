@@ -1,7 +1,10 @@
 import torch
 from torch_geometric.nn import GATConv, HeteroConv
 
-from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
+from hydragnn.globalAtt.HeteroGPS import (
+    HeteroGPSConv,
+    StructuralCoordinatePerformerAttention,
+)
 
 
 class DummyEquivariantLocalConv(torch.nn.Module):
@@ -263,3 +266,14 @@ def test_pairwise_features_are_not_tied_to_an_opf_node_name():
 
     assert conv.attn_node_types == ["entity"]
     assert conv.direct_rpe_dim == 2
+
+
+def test_structural_coordinate_performer_has_domain_neutral_api():
+    attention = StructuralCoordinatePerformerAttention(
+        channels=4,
+        heads=1,
+        coordinate_dim=3,
+        num_random_features=4,
+    )
+
+    assert attention.coordinate_dim == 3
