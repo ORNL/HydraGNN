@@ -157,6 +157,30 @@ def test_pubchem_hpo_trial_command_uses_shared_dataset(monkeypatch, tmp_path):
     assert f"--dataset-path={dataset_path}" in command
 
 
+def test_pubchem_hpo_trial_command_uses_requested_nodes_and_gpus(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("TASKS_PER_NODE", "8")
+    monkeypatch.setenv("OMP_NUM_THREADS", "7")
+
+    command = _trial_command(
+        tmp_path / "config.json", "trial", nodes=[f"frontier{i:05d}" for i in range(8)]
+    )
+
+    assert command[:9] == [
+        "srun",
+        "-N",
+        "8",
+        "-n",
+        "64",
+        "--ntasks-per-node",
+        "8",
+        "--cpus-per-task",
+        "7",
+    ]
+    assert "--gpus-per-task=1" in command
+
+
 def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     log_path = tmp_path / "trial.log"
     log_path.write_text(

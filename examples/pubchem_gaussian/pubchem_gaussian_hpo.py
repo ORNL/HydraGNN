@@ -140,6 +140,7 @@ def _trial_command(config_path, log_name, nodes):
     command = []
     if nodes:
         tasks_per_node = int(os.environ.get("TASKS_PER_NODE", "1"))
+        cpus_per_task = int(os.environ.get("OMP_NUM_THREADS", "1"))
         command.extend(
             [
                 "srun",
@@ -149,6 +150,8 @@ def _trial_command(config_path, log_name, nodes):
                 str(len(nodes) * tasks_per_node),
                 "--ntasks-per-node",
                 str(tasks_per_node),
+                "--cpus-per-task",
+                str(cpus_per_task),
                 "--gpus-per-task=1",
                 "--gpu-bind=closest",
                 f"--nodelist={','.join(nodes)}",

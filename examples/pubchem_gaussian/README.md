@@ -123,6 +123,10 @@ loss over energy, forces, and Hessian. Auxiliary losses therefore affect the
 learned representation but never directly affect trial selection. Logs and
 DeepHyper search state are written to campaign-specific directories.
 
+On Frontier, each campaign requests 256 nodes for six hours from `LRN087`.
+Each trial uses eight nodes and all eight GPUs per node, allowing 32 trials to
+run concurrently. The default preliminary search budget is 100 evaluations.
+
 For the three-million-sample search, use the resumable successive-halving
 driver and its checked-in stage schedule:
 
