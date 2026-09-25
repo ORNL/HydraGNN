@@ -84,6 +84,12 @@ class HeteroBase(Module):
         self.node_target_type = node_target_type
         self.attn_node_types = attn_node_types
         self.positional_encodings = positional_encodings or {}
+        self.structural_node_type = self.positional_encodings.get(
+            "target_node_type",
+            attn_node_types[0]
+            if attn_node_types is not None and len(attn_node_types) == 1
+            else "bus",
+        )
         self.share_relation_weights = share_relation_weights
         self._metadata = metadata
         self._initialized = False
@@ -242,9 +248,10 @@ class HeteroBase(Module):
                 raise ValueError(
                     "Direct OPF RPE requires global multihead attention."
                 )
-            if self.attn_node_types != ["bus"]:
+            if self.attn_node_types != [self.structural_node_type]:
                 raise ValueError(
-                    "Direct OPF RPE currently requires attn_node_types=['bus']."
+                    "Direct pairwise features require the configured "
+                    "structural node type to be the sole attention node type."
                 )
 
         self.resistance_qk_coefficient = None
@@ -254,10 +261,10 @@ class HeteroBase(Module):
                     "Effective-resistance Q/K augmentation requires global "
                     "Performer attention."
                 )
-            if self.attn_node_types != ["bus"]:
+            if self.attn_node_types != [self.structural_node_type]:
                 raise ValueError(
-                    "Effective-resistance Q/K augmentation requires "
-                    "attn_node_types=['bus']."
+                    "Structural Q/K augmentation requires the configured "
+                    "structural node type to be the sole attention node type."
                 )
             self.resistance_qk_coefficient = Parameter(
                 torch.tensor(
@@ -267,19 +274,24 @@ class HeteroBase(Module):
             )
 
         # Each Laplacian mode contributes its node value and graph eigenvalue.
-        self.bus_input_pe_dim = (
+        self.structural_input_dim = (
             2 * self.laplacian_pe_dim
             + self.effective_resistance_pe_dim
             + self.effective_impedance_pe_dim
             + self.resistance_qk_input_dim
         )
-        self.bus_pe_fuser = None
-        if self.bus_input_pe_dim > 0:
-            self.bus_pe_fuser = Sequential(
-                Linear(self.hidden_dim + self.bus_input_pe_dim, self.hidden_dim),
+        self.structural_input_fuser = None
+        if self.structural_input_dim > 0:
+            self.structural_input_fuser = Sequential(
+                Linear(self.hidden_dim + self.structural_input_dim, self.hidden_dim),
                 activation_function_selection(activation_function_type),
                 Linear(self.hidden_dim, self.hidden_dim),
             )
+
+        # Compatibility aliases for applications that inspected the original
+        # OPF-specific attributes directly.
+        self.bus_input_pe_dim = self.structural_input_dim
+        self.bus_pe_fuser = self.structural_input_fuser
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_dim = int(graph_attr_dim)
@@ -791,45 +803,46 @@ class HeteroBase(Module):
             f"{num_graphs} graphs."
         )
 
-    def _collect_bus_input_pe(self, data, batch, device, dtype):
+    def _collect_structural_input(self, data, batch, device, dtype):
         pieces = []
-        bus_store = data["bus"]
-        num_bus = int(batch.numel())
+        store = data[self.structural_node_type]
+        num_nodes = int(batch.numel())
 
         if self.laplacian_pe_dim > 0:
-            eigenvectors = getattr(bus_store, "lap_eigvec", None)
-            eigenvalues = getattr(bus_store, "lap_eigval", None)
+            eigenvectors = getattr(store, "lap_eigvec", None)
+            eigenvalues = getattr(store, "lap_eigval", None)
             if eigenvectors is None or eigenvalues is None:
                 raise ValueError(
                     "Laplacian PE is enabled, but the batch is missing "
-                    "bus.lap_eigvec or bus.lap_eigval. Re-run OPF preprocessing."
+                    f"{self.structural_node_type}.lap_eigvec or "
+                    f"{self.structural_node_type}.lap_eigval."
                 )
             eigenvectors = eigenvectors.to(device=device, dtype=dtype)
             eigenvalues = eigenvalues.to(device=device, dtype=dtype)
-            if eigenvectors.shape != (num_bus, self.laplacian_pe_dim):
+            if eigenvectors.shape != (num_nodes, self.laplacian_pe_dim):
                 raise ValueError(
-                    "Expected bus Laplacian eigenvectors with shape "
-                    f"({num_bus}, {self.laplacian_pe_dim}), got "
+                    "Expected structural Laplacian eigenvectors with shape "
+                    f"({num_nodes}, {self.laplacian_pe_dim}), got "
                     f"{tuple(eigenvectors.shape)}."
                 )
             eigenvectors = self._apply_laplacian_sign_flip(eigenvectors, batch)
             node_eigenvalues = self._expand_graph_eigenvalues(
                 eigenvalues,
                 batch,
-                num_bus,
+                num_nodes,
                 self.laplacian_pe_dim,
             )
             pieces.extend((eigenvectors, node_eigenvalues))
 
         if self.effective_resistance_pe_dim > 0:
-            resistance = getattr(bus_store, "effective_resistance_pe", None)
+            resistance = getattr(store, "effective_resistance_pe", None)
             if resistance is None:
                 raise ValueError(
                     "Effective-resistance PE is enabled, but the batch is missing "
-                    "bus.effective_resistance_pe. Re-run OPF preprocessing."
+                    f"{self.structural_node_type}.effective_resistance_pe."
                 )
             resistance = resistance.to(device=device, dtype=dtype)
-            expected = (num_bus, self.effective_resistance_pe_dim)
+            expected = (num_nodes, self.effective_resistance_pe_dim)
             if resistance.shape != expected:
                 raise ValueError(
                     f"Expected effective-resistance PE shape {expected}, got "
@@ -838,14 +851,14 @@ class HeteroBase(Module):
             pieces.append(resistance)
 
         if self.effective_impedance_pe_dim > 0:
-            impedance = getattr(bus_store, "effective_impedance_pe", None)
+            impedance = getattr(store, "effective_impedance_pe", None)
             if impedance is None:
                 raise ValueError(
                     "Effective-impedance PE is enabled, but the batch is missing "
-                    "bus.effective_impedance_pe. Re-run OPF preprocessing."
+                    f"{self.structural_node_type}.effective_impedance_pe."
                 )
             impedance = impedance.to(device=device, dtype=dtype)
-            expected = (num_bus, self.effective_impedance_pe_dim)
+            expected = (num_nodes, self.effective_impedance_pe_dim)
             if impedance.shape != expected:
                 raise ValueError(
                     f"Expected effective-impedance PE shape {expected}, got "
@@ -854,14 +867,14 @@ class HeteroBase(Module):
             pieces.append(impedance)
 
         if self.resistance_qk_input_dim > 0:
-            coordinates = getattr(bus_store, "effective_resistance_qk", None)
+            coordinates = getattr(store, "effective_resistance_qk", None)
             if coordinates is None:
                 raise ValueError(
                     "Effective-resistance input PE is enabled, but the batch is "
-                    "missing bus.effective_resistance_qk. Re-run OPF preprocessing."
+                    f"missing {self.structural_node_type}.effective_resistance_qk."
                 )
             coordinates = coordinates.to(device=device, dtype=dtype)
-            expected = (num_bus, self.resistance_qk_input_dim)
+            expected = (num_nodes, self.resistance_qk_input_dim)
             if tuple(coordinates.shape) != expected:
                 raise ValueError(
                     f"Expected effective-resistance input coordinates {expected}, "
@@ -908,14 +921,17 @@ class HeteroBase(Module):
                 self.node_embedders[node_type] = embedder
             x = x.to(dtype=embedder.weight.dtype)
             embedded = embedder(x)
-            if node_type == "bus" and self.bus_pe_fuser is not None:
-                positional = self._collect_bus_input_pe(
+            if (
+                node_type == self.structural_node_type
+                and self.structural_input_fuser is not None
+            ):
+                positional = self._collect_structural_input(
                     data,
                     batch_dict[node_type],
                     device=embedded.device,
                     dtype=embedded.dtype,
                 )
-                embedded = self.bus_pe_fuser(
+                embedded = self.structural_input_fuser(
                     torch.cat((embedded, positional), dim=-1)
                 )
             embedded_dict[node_type] = embedded
@@ -965,13 +981,14 @@ class HeteroBase(Module):
 
         if self.resistance_qk_dim <= 0:
             return None
-        coordinates = getattr(data["bus"], "effective_resistance_qk", None)
+        store = data[self.structural_node_type]
+        coordinates = getattr(store, "effective_resistance_qk", None)
         if coordinates is None:
             raise ValueError(
                 "Effective-resistance Q/K augmentation is enabled, but the batch "
-                "is missing bus.effective_resistance_qk. Re-run OPF preprocessing."
+                f"is missing {self.structural_node_type}.effective_resistance_qk."
             )
-        expected = (int(data["bus"].x.size(0)), self.resistance_qk_dim)
+        expected = (int(store.x.size(0)), self.resistance_qk_dim)
         if tuple(coordinates.shape) != expected:
             raise ValueError(
                 f"Expected bus.effective_resistance_qk shape {expected}, got "
@@ -996,7 +1013,7 @@ class HeteroBase(Module):
 
         if self.direct_rpe_source is None:
             return None
-        store = data["bus"]
+        store = data[self.structural_node_type]
         tensor_attr = self.direct_rpe_source
         path_attr = f"{self.direct_rpe_source}_path"
         embedded = getattr(store, tensor_attr, None)
@@ -1034,7 +1051,8 @@ class HeteroBase(Module):
         else:
             raise ValueError(
                 f"{self.direct_rpe_source} is enabled, but the batch has neither "
-                f"bus.{tensor_attr} nor bus.{path_attr}. Re-run OPF preprocessing."
+                f"{self.structural_node_type}.{tensor_attr} nor "
+                f"{self.structural_node_type}.{path_attr}."
             )
 
         for graph_index, (matrix, count) in enumerate(zip(matrices, counts)):
@@ -1273,9 +1291,9 @@ class HeteroBase(Module):
         direct_pairwise_rpe = (
             self._get_direct_pairwise_rpe(
                 data,
-                batch_dict["bus"],
-                device=x_dict["bus"].device,
-                dtype=x_dict["bus"].dtype,
+                batch_dict[self.structural_node_type],
+                device=x_dict[self.structural_node_type].device,
+                dtype=x_dict[self.structural_node_type].dtype,
             )
             if self.use_global_attn and self.direct_rpe_source is not None
             else None
@@ -1283,8 +1301,8 @@ class HeteroBase(Module):
         resistance_qk = (
             self._get_resistance_qk(
                 data,
-                device=x_dict["bus"].device,
-                dtype=x_dict["bus"].dtype,
+                device=x_dict[self.structural_node_type].device,
+                dtype=x_dict[self.structural_node_type].dtype,
             )
             if self.use_global_attn and self.resistance_qk_attention_dim > 0
             else None
