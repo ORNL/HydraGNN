@@ -36,6 +36,8 @@ import re
 
 import torch
 
+from hydragnn.globalAtt.structural import StructuralEncodingProvider
+
 
 _BUS_BRANCH_TYPES = (
     (("bus", "ac_line", "bus"), False),
@@ -825,7 +827,7 @@ def _safe_case_name(case_name):
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", str(case_name or "graph"))
 
 
-class OPFSpectralPEPreprocessor:
+class OPFStructuralEncodingProvider(StructuralEncodingProvider):
     """Compute, cache, and attach configured OPF positional encodings."""
 
     def __init__(self, architecture_config, cache_dir=None):
@@ -981,3 +983,7 @@ class OPFSpectralPEPreprocessor:
             artifact, path = self._load_or_compute(data, source, case_name)
             _attach_artifact(data, source, artifact, artifact_path=path)
         return data
+
+
+# Compatibility name retained for existing OPF applications.
+OPFSpectralPEPreprocessor = OPFStructuralEncodingProvider
