@@ -13,38 +13,39 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         super().__init__()
         self.model = model
         self.config = config
-        self.terms = config.get("terms", {})
+        term_list = config.get("supervised", {}).get("terms", [])
+        self.terms = {term["variable"]: term for term in term_list}
         unknown = set(self.terms) - self._SUPPORTED_TERMS
         if unknown:
             raise ValueError(
-                f"Unsupported interatomic DomainLoss terms: {sorted(unknown)}"
+                f"Unsupported interatomic training-loss terms: {sorted(unknown)}"
             )
         self.active_terms = [
             name
             for name, term in self.terms.items()
-            if term.get("enabled", False) and float(term.get("weight", 0.0)) > 0
+            if float(term.get("weight", 0.0)) > 0
         ]
         if not self.active_terms:
             raise ValueError(
-                "Interatomic DomainLoss requires at least one active term."
+                "Interatomic training loss requires at least one active term."
             )
         if "forces" in self.active_terms:
-            prediction = self.terms["forces"].get("prediction")
-            if prediction != "negative_energy_gradient":
+            prediction = self.terms["forces"].get("prediction", {})
+            if prediction.get("operator") != "negative_gradient":
                 raise ValueError(
-                    "The forces term requires prediction='negative_energy_gradient'."
+                    "The forces term requires prediction.operator='negative_gradient'."
                 )
         expected = {
-            "energy": ("energy", "structure"),
-            "energy_per_atom": ("energy", "atom"),
+            "energy": ("energy", "per_structure"),
+            "energy_per_atom": ("energy_per_atom", "per_atom"),
         }
         for name, (target, normalization) in expected.items():
             if name not in self.active_terms:
                 continue
             term = self.terms[name]
             if (
-                term.get("target") != target
-                or term.get("normalization") != normalization
+                term.get("variable") != target
+                or term.get("normalization", normalization) != normalization
             ):
                 raise ValueError(
                     f"Term {name!r} requires target={target!r} and "
@@ -52,11 +53,13 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
                 )
         if (
             "forces" in self.active_terms
-            and self.terms["forces"].get("target") != "forces"
+            and self.terms["forces"].get("variable") != "forces"
         ):
             raise ValueError("The forces term requires target='forces'.")
         if self.model.num_heads != 1:
-            raise ValueError("Interatomic DomainLoss requires exactly one energy head.")
+            raise ValueError(
+                "Interatomic training loss requires exactly one energy head."
+            )
         self.atomistic_mode_enabled = True
         self.task_names = list(self.active_terms)
         self.task_weights = [
@@ -73,7 +76,12 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
         return self.model(data)
 
     def _loss(self, name, prediction, target):
-        loss_name = self.terms[name].get("loss", self.model.loss_function_type)
+        loss_name = self.terms[name].get(
+            "metric",
+            self.config.get("supervised", {}).get(
+                "default_metric", self.model.loss_function_type
+            ),
+        )
         loss_function = loss_function_selection(loss_name)
         if loss_function is None:
             raise ValueError(f"Unknown loss function {loss_name!r} for term {name!r}.")
@@ -97,7 +105,7 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
     def energy_force_loss(self, pred, data, create_graph=True):
         if data.pos is None or data.energy is None:
             raise ValueError(
-                "Interatomic DomainLoss requires data.pos and data.energy."
+                "Interatomic training loss requires data.pos and data.energy."
             )
         if not data.pos.requires_grad:
             raise ValueError(

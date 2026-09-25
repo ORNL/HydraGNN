@@ -125,20 +125,23 @@ def test_model_creation_with_enhancement():
         "domain_loss_config": {
             "enabled": True,
             "provider": "interatomic_potential",
-            "terms": {
-                "energy": {
-                    "enabled": True,
-                    "weight": 1.0,
-                    "target": "energy",
-                    "normalization": "structure",
-                },
-                "forces": {
-                    "enabled": True,
-                    "weight": 1.0,
-                    "target": "forces",
-                    "prediction": "negative_energy_gradient",
-                },
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {"operator": "negative_gradient"},
+                    },
+                ],
             },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
         },
         "use_gpu": False,
     }
@@ -191,20 +194,23 @@ def test_forward_pass():
         "domain_loss_config": {
             "enabled": True,
             "provider": "interatomic_potential",
-            "terms": {
-                "energy": {
-                    "enabled": True,
-                    "weight": 1.0,
-                    "target": "energy",
-                    "normalization": "structure",
-                },
-                "forces": {
-                    "enabled": True,
-                    "weight": 1.0,
-                    "target": "forces",
-                    "prediction": "negative_energy_gradient",
-                },
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {"operator": "negative_gradient"},
+                    },
+                ],
             },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
         },
         "use_gpu": False,
     }
@@ -263,20 +269,23 @@ def test_energy_force_consistency():
         "domain_loss_config": {
             "enabled": True,
             "provider": "interatomic_potential",
-            "terms": {
-                "energy": {
-                    "enabled": True,
-                    "weight": 1.0,
-                    "target": "energy",
-                    "normalization": "structure",
-                },
-                "forces": {
-                    "enabled": True,
-                    "weight": 1.0,
-                    "target": "forces",
-                    "prediction": "negative_energy_gradient",
-                },
+            "supervised": {
+                "default_metric": "mse",
+                "terms": [
+                    {
+                        "variable": "energy",
+                        "weight": 1.0,
+                        "normalization": "per_structure",
+                    },
+                    {
+                        "variable": "forces",
+                        "weight": 1.0,
+                        "prediction": {"operator": "negative_gradient"},
+                    },
+                ],
             },
+            "constraints": [],
+            "constraint_optimizer": {"type": "fixed_penalty"},
         },
         "use_gpu": False,
     }

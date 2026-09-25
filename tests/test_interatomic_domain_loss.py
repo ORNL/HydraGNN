@@ -17,26 +17,29 @@ class EnergyModel(torch.nn.Module):
 def _config(**term_overrides):
     terms = {
         "energy": {
-            "enabled": True,
+            "variable": "energy",
             "weight": 2.0,
-            "target": "energy",
-            "normalization": "structure",
+            "normalization": "per_structure",
         },
         "energy_per_atom": {
-            "enabled": True,
+            "variable": "energy_per_atom",
             "weight": 3.0,
-            "target": "energy",
-            "normalization": "atom",
+            "normalization": "per_atom",
         },
         "forces": {
-            "enabled": True,
+            "variable": "forces",
             "weight": 4.0,
-            "target": "forces",
-            "prediction": "negative_energy_gradient",
+            "prediction": {"operator": "negative_gradient"},
         },
     }
     terms.update(term_overrides)
-    return {"enabled": True, "provider": "interatomic_potential", "terms": terms}
+    return {
+        "enabled": True,
+        "provider": "interatomic_potential",
+        "supervised": {"default_metric": "mse", "terms": list(terms.values())},
+        "constraints": [],
+        "constraint_optimizer": {"type": "fixed_penalty"},
+    }
 
 
 def test_declarative_interatomic_terms_compute_expected_weighted_loss():
@@ -64,18 +67,20 @@ def test_disabled_domain_loss_returns_original_model():
 @pytest.mark.parametrize(
     "config, message",
     [
-        ({"enabled": True, "provider": "unknown", "terms": {}}, "Unknown"),
-        (_config(unknown={"enabled": True, "weight": 1.0}), "Unsupported"),
+        (
+            {"enabled": True, "provider": "unknown", "supervised": {"terms": []}},
+            "Unknown",
+        ),
+        (_config(unknown={"variable": "unknown", "weight": 1.0}), "Unsupported"),
         (
             _config(
                 forces={
-                    "enabled": True,
+                    "variable": "forces",
                     "weight": 1.0,
-                    "target": "forces",
-                    "prediction": "direct",
+                    "prediction": {"operator": "direct"},
                 }
             ),
-            "negative_energy_gradient",
+            "negative_gradient",
         ),
     ],
 )
@@ -86,8 +91,8 @@ def test_invalid_interatomic_domain_loss_configuration(config, message):
 
 def test_wrapper_exposes_active_term_metadata_to_training_loop():
     config = _config(
-        energy_per_atom={"enabled": False, "weight": 0.0},
-        forces={"enabled": False, "weight": 0.0},
+        energy_per_atom={"variable": "energy_per_atom", "weight": 0.0},
+        forces={"variable": "forces", "weight": 0.0},
     )
     model = InteratomicPotentialDomainLoss(EnergyModel(), config)
 

@@ -311,7 +311,7 @@ def update_config(config, train_loader, val_loader, test_loader):
     if named_schema is not None:
         named_edge_dim = schema_dimensions(named_schema, "edge", "inputs")
         if named_edge_dim:
-            domain_loss = config["NeuralNetwork"]["Training"].get("DomainLoss", {})
+            domain_loss = config["NeuralNetwork"]["Training"].get("loss", {})
             if (
                 domain_loss.get("enabled")
                 and domain_loss.get("provider") == "interatomic_potential"

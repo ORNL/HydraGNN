@@ -108,7 +108,7 @@ def create_model_config(
         node_max_ell=config["Architecture"]["node_max_ell"],
         avg_num_neighbors=config["Architecture"]["avg_num_neighbors"],
         conv_checkpointing=config["Training"]["conv_checkpointing"],
-        domain_loss_config=config["Training"].get("DomainLoss"),
+        domain_loss_config=config["Training"].get("loss"),
         input_node_encodings=config["Architecture"].get("input_node_encodings"),
         use_graph_attr_conditioning=config["Architecture"].get(
             "use_graph_attr_conditioning", False

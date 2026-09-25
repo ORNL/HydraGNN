@@ -53,28 +53,36 @@
                 "learning_rate": 0.005
             },
             "conv_checkpointing": false,
-            "DomainLoss": {
+            "loss": {
                 "enabled": true,
                 "provider": "interatomic_potential",
-                "terms": {
-                    "energy": {
-                        "enabled": true,
-                        "weight": 1.0,
-                        "target": "energy",
-                        "normalization": "structure"
-                    },
-                    "energy_per_atom": {
-                        "enabled": true,
-                        "weight": 1.0,
-                        "target": "energy",
-                        "normalization": "atom"
-                    },
-                    "forces": {
-                        "enabled": true,
-                        "weight": 1.0,
-                        "target": "forces",
-                        "prediction": "negative_energy_gradient"
-                    }
+                "supervised": {
+                    "default_metric": "mse",
+                    "terms": [
+                        {
+                            "variable": "energy",
+                            "weight": 1.0,
+                            "normalization": "per_structure"
+                        },
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 1.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
                 }
             }
         }

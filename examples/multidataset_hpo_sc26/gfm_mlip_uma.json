@@ -83,28 +83,31 @@
             "checkpoint_warmup": 1,
             "epoch_start": 0,
             "precision": "fp32",
-            "DomainLoss": {
+            "loss": {
                 "enabled": true,
                 "provider": "interatomic_potential",
-                "terms": {
-                    "energy": {
-                        "enabled": false,
-                        "weight": 0.0,
-                        "target": "energy",
-                        "normalization": "structure"
-                    },
-                    "energy_per_atom": {
-                        "enabled": true,
-                        "weight": 1.0,
-                        "target": "energy",
-                        "normalization": "atom"
-                    },
-                    "forces": {
-                        "enabled": true,
-                        "weight": 10.0,
-                        "target": "forces",
-                        "prediction": "negative_energy_gradient"
-                    }
+                "supervised": {
+                    "default_metric": "mae",
+                    "terms": [
+                        {
+                            "variable": "energy_per_atom",
+                            "weight": 1.0,
+                            "normalization": "per_atom"
+                        },
+                        {
+                            "variable": "forces",
+                            "weight": 10.0,
+                            "prediction": {
+                                "operator": "negative_gradient",
+                                "of": "energy",
+                                "with_respect_to": "positions"
+                            }
+                        }
+                    ]
+                },
+                "constraints": [],
+                "constraint_optimizer": {
+                    "type": "fixed_penalty"
                 }
             }
         }
