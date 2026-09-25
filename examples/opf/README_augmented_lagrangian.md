@@ -20,6 +20,8 @@ PyTorch buffers and therefore survive normal model checkpoints.
 
 Configuration keys under `NeuralNetwork.Training.DomainLoss`:
 
+- `provider`: must be `"optimal_power_flow"`.
+
 - `rho`: initial quadratic coefficient; must be positive.
 - `rho_growth`: multiplier used when constraint reduction stalls; at least 1.
 - `rho_max`: upper bound for `rho`.

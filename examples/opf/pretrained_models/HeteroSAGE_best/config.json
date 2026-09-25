@@ -143,7 +143,7 @@
                     3
                 ],
                 "voltage_output_index": -1,
-                "provider": "opf"
+                "provider": "optimal_power_flow"
             },
             "Optimizer": {
                 "type": "AdamW",
