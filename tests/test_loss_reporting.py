@@ -1,3 +1,4 @@
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +13,7 @@ from hydragnn.loss_reporting import (
 )
 from hydragnn.models.Base import Base
 from hydragnn.utils.input_config_parsing.variable_schema import parse_variable_schema
+from hydragnn.utils.print.print_utils import setup_log
 
 
 def test_variable_schema_accepts_named_components_and_edge_attributes():
@@ -104,3 +106,114 @@ def test_split_accumulator_averages_raw_and_weighted_values_independently():
     assert "split=validation" in line
     assert "constraints.balance.raw=2.66666667" in line
     assert "constraints.balance.weight=3" in line
+
+
+def test_training_workflow_writes_each_split_report_to_run_log(tmp_path, monkeypatch):
+    workflow = importlib.import_module("hydragnn.train.train_validate_test")
+
+    class Core(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.parameter = torch.nn.Parameter(torch.tensor(0.0))
+            self.num_heads = 1
+            self.head_dims = [2]
+            self.loss_weights = [0.25]
+
+    class Wrapped(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.module = Core()
+
+    class Loader:
+        batch_sampler = None
+        sampler = None
+
+    model = Wrapped()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
+    scheduler = SimpleNamespace(step=lambda loss: None)
+    reports = {
+        "train": (1.0, 0.25),
+        "validation": (3.0, 0.75),
+        "test": (5.0, 1.25),
+    }
+
+    def publish(split):
+        raw, weighted = reports[split]
+        model.module.last_epoch_loss_report = {
+            "supervised.energy": {
+                "raw": raw,
+                "weight": 0.25,
+                "weighted": weighted,
+            }
+        }
+
+    def fake_train(*args, **kwargs):
+        publish("train")
+        return torch.tensor(10.0), torch.tensor([1.0])
+
+    def fake_validate(*args, **kwargs):
+        publish("validation")
+        return torch.tensor(20.0), torch.tensor([2.0])
+
+    def fake_test(*args, **kwargs):
+        publish("test")
+        return torch.tensor(30.0), torch.tensor([3.0]), [], []
+
+    monkeypatch.setattr(workflow, "train", fake_train)
+    monkeypatch.setattr(workflow, "validate", fake_validate)
+    monkeypatch.setattr(workflow, "test", fake_test)
+    monkeypatch.setattr(workflow.tr, "enable", lambda: None)
+    monkeypatch.setattr(workflow.tr, "disable", lambda: None)
+    monkeypatch.setattr(workflow.tr, "start", lambda name: None)
+    monkeypatch.setattr(workflow.tr, "stop", lambda name: None)
+    monkeypatch.setattr(workflow.tr, "reset", lambda: None)
+    monkeypatch.chdir(tmp_path)
+    setup_log("loss-report-ci")
+
+    workflow.train_validate_test(
+        model,
+        optimizer,
+        Loader(),
+        Loader(),
+        Loader(),
+        None,
+        scheduler,
+        {
+            "Variables": {
+                "graph_type": "homogeneous",
+                "inputs": [{"name": "features", "level": "node", "dim": 1}],
+                "outputs": [
+                    {
+                        "name": "state",
+                        "level": "graph",
+                        "dim": 2,
+                        "components": ["energy", "volume"],
+                    }
+                ],
+            },
+            "NeuralNetwork": {
+                "Training": {
+                    "num_epoch": 1,
+                    "Checkpoint": False,
+                    "EarlyStopping": False,
+                    "CheckRemainingTime": False,
+                }
+            },
+        },
+        "loss-report-ci",
+        verbosity=1,
+        create_plots=False,
+    )
+
+    report_lines = [
+        line
+        for line in (tmp_path / "logs/loss-report-ci/run.log").read_text().splitlines()
+        if "LossComponents" in line
+    ]
+    assert len(report_lines) == 3
+    assert "split=train" in report_lines[0]
+    assert "supervised.energy.raw=1.00000000" in report_lines[0]
+    assert "split=validation" in report_lines[1]
+    assert "supervised.energy.raw=3.00000000" in report_lines[1]
+    assert "split=test" in report_lines[2]
+    assert "supervised.energy.raw=5.00000000" in report_lines[2]
