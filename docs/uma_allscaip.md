@@ -15,9 +15,13 @@ samples may provide `data.cell` and `data.pbc`; non-periodic samples default to
 a zero cell with periodicity disabled. Optional `charge` and `spin` values are
 graph-level scalars.
 
-Set `enable_interatomic_potential` to `true` when training an energy-conserving
-potential. HydraGNN then obtains conservative forces by differentiating the
-predicted invariant energy with respect to `data.pos`.
+For an energy-conserving potential, configure
+`NeuralNetwork.Training.loss.provider` as `"interatomic_potential"` and include
+a `forces` supervised term with `prediction.operator: "negative_gradient"`.
+HydraGNN then obtains conservative forces by differentiating the predicted
+invariant energy with respect to `data.pos`. See
+[Interatomic-potential training loss](interatomic_training_loss.md) for the full
+JSON structure.
 
 ## UMA
 

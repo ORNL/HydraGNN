@@ -32,3 +32,7 @@ atomic positions. At least one term must be enabled with a positive weight.
 The provider validates variable, normalization, and prediction semantics when the
 model is created. Training and evaluation report only the active terms, in JSON
 order.
+
+Each term is reported by name for train, validation, and test. See
+[Named training-loss reporting](training_loss_reporting.md) for the `.raw`,
+`.weight`, `.weighted`, and `total` fields written to `run.log`.
