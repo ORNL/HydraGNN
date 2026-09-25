@@ -262,9 +262,10 @@ class HeteroGPSConv(torch.nn.Module):
         )
         if active_rpe_count > 1:
             raise ValueError("Only one attention RPE can be active at a time.")
-        if self.direct_rpe_dim > 0 and self.attn_node_types != ["bus"]:
+        if self.direct_rpe_dim > 0 and len(self.attn_node_types) != 1:
             raise ValueError(
-                "Direct pairwise RPE currently requires bus-only attention."
+                "Direct pairwise features currently require exactly one "
+                "attention node type."
             )
         if self.resistance_qk_dim > 0:
             if attn_type != "performer":
@@ -272,10 +273,10 @@ class HeteroGPSConv(torch.nn.Module):
                     "Effective-resistance Q/K augmentation requires "
                     "attn_type='performer'."
                 )
-            if self.attn_node_types != ["bus"]:
+            if len(self.attn_node_types) != 1:
                 raise ValueError(
-                    "Effective-resistance Q/K augmentation requires bus-only "
-                    "attention."
+                    "Structural Q/K augmentation requires exactly one attention "
+                    "node type."
                 )
 
         attn_kwargs = attn_kwargs or {}

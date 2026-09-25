@@ -668,6 +668,9 @@ def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
     )
     embedded, _ = model._prepare_node_features(data)
 
+    assert model.structural_node_type == "bus"
+    assert model.structural_input_dim == 9
+    assert model.structural_input_fuser is not None
     assert model.bus_input_pe_dim == 9  # 2 eigenvectors + 2 values + 5 stats.
     assert model.bus_pe_fuser is not None
     assert embedded["bus"].shape == (3, 8)

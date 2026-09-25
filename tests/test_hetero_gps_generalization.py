@@ -246,3 +246,20 @@ def test_hetero_gps_rejects_unknown_attention_node_types():
         assert "Unknown attention node types" in str(exc)
     else:
         raise AssertionError("Expected unknown attention node type to be rejected.")
+
+
+def test_pairwise_features_are_not_tied_to_an_opf_node_name():
+    metadata = (["a", "entity"], [("entity", "r", "entity")])
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=metadata,
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+        attn_node_types=["entity"],
+        direct_rpe_dim=2,
+    )
+
+    assert conv.attn_node_types == ["entity"]
+    assert conv.direct_rpe_dim == 2
