@@ -86,9 +86,11 @@ class HeteroBase(Module):
         self.structural_encoding = structural_encoding or {}
         self.structural_node_type = self.structural_encoding.get(
             "target_node_type",
-            attn_node_types[0]
-            if attn_node_types is not None and len(attn_node_types) == 1
-            else node_target_type,
+            (
+                attn_node_types[0]
+                if attn_node_types is not None and len(attn_node_types) == 1
+                else node_target_type
+            ),
         )
         if self.structural_encoding and self.structural_node_type is None:
             raise ValueError(
@@ -138,8 +140,7 @@ class HeteroBase(Module):
         pairwise_config = self.structural_encoding.get("pairwise")
         qk_config = self.structural_encoding.get("qk_coordinates") or {}
         active_attention_inputs = sum(
-            item is not None
-            for item in (factorized_config, pairwise_config)
+            item is not None for item in (factorized_config, pairwise_config)
         ) + int(bool(qk_config) and qk_config.get("placement", "qk") in {"qk", "both"})
         if active_attention_inputs > 1:
             raise ValueError("Only one structural attention input may be active.")
@@ -170,14 +171,10 @@ class HeteroBase(Module):
                 "qk_coordinates.placement must be 'input', 'qk', or 'both'."
             )
         self.qk_input_dim = (
-            self.qk_coordinate_dim
-            if self.qk_placement in {"input", "both"}
-            else 0
+            self.qk_coordinate_dim if self.qk_placement in {"input", "both"} else 0
         )
         self.qk_attention_dim = (
-            self.qk_coordinate_dim
-            if self.qk_placement in {"qk", "both"}
-            else 0
+            self.qk_coordinate_dim if self.qk_placement in {"qk", "both"} else 0
         )
 
         if self.pairwise_config is not None:
@@ -220,7 +217,6 @@ class HeteroBase(Module):
                 activation_function_selection(activation_function_type),
                 Linear(self.hidden_dim, self.hidden_dim),
             )
-
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_dim = int(graph_attr_dim)
@@ -740,7 +736,7 @@ class HeteroBase(Module):
         for spec in self.structural_node_inputs:
             attribute = spec["attribute"]
             width = int(spec["dim"])
-            value = getattr(store, attribute, None)
+            value = store[attribute] if attribute in store else None
             if value is None:
                 raise ValueError(
                     f"Structural input requires missing attribute "
@@ -748,9 +744,7 @@ class HeteroBase(Module):
                 )
             value = value.to(device=device, dtype=dtype)
             if spec.get("broadcast") == "graph":
-                value = self._expand_graph_features(
-                    value, batch, num_nodes, width
-                )
+                value = self._expand_graph_features(value, batch, num_nodes, width)
             elif tuple(value.shape) != (num_nodes, width):
                 raise ValueError(
                     f"Expected {self.structural_node_type}.{attribute} shape "
@@ -761,7 +755,9 @@ class HeteroBase(Module):
             pieces.append(value)
 
         if self.qk_input_dim > 0:
-            coordinates = getattr(store, self.qk_attribute, None)
+            coordinates = (
+                store[self.qk_attribute] if self.qk_attribute in store else None
+            )
             if coordinates is None:
                 raise ValueError(
                     "Structural coordinate input is enabled, but the batch is "
@@ -853,7 +849,7 @@ class HeteroBase(Module):
             store = data[node_type]
             values = {}
             for factor_name, attr_name in attributes.items():
-                value = getattr(store, attr_name, None)
+                value = store[attr_name] if attr_name in store else None
                 if value is None:
                     raise ValueError(
                         f"Factorized pairwise input for node type '{node_type}' "
@@ -869,7 +865,7 @@ class HeteroBase(Module):
         if self.qk_coordinate_dim <= 0:
             return None
         store = data[self.structural_node_type]
-        coordinates = getattr(store, self.qk_attribute, None)
+        coordinates = store[self.qk_attribute] if self.qk_attribute in store else None
         if coordinates is None:
             raise ValueError(
                 "Structural Q/K augmentation is enabled, but the batch is missing "
@@ -902,12 +898,10 @@ class HeteroBase(Module):
             return None
         store = data[self.structural_node_type]
         tensor_attr = self.pairwise_config["attribute"]
-        path_attr = self.pairwise_config.get(
-            "path_attribute", f"{tensor_attr}_path"
-        )
+        path_attr = self.pairwise_config.get("path_attribute", f"{tensor_attr}_path")
         artifact_key = self.pairwise_config.get("artifact_key", tensor_attr)
-        embedded = getattr(store, tensor_attr, None)
-        paths = getattr(store, path_attr, None)
+        embedded = store[tensor_attr] if tensor_attr in store else None
+        paths = store[path_attr] if path_attr in store else None
 
         num_graphs = int(batch.max().item()) + 1 if batch.numel() else 0
         counts = torch.bincount(batch, minlength=num_graphs).detach().cpu().tolist()
@@ -919,8 +913,7 @@ class HeteroBase(Module):
                 paths = list(paths)
             if len(paths) != num_graphs:
                 raise ValueError(
-                    f"Expected {num_graphs} pairwise cache paths, got "
-                    f"{len(paths)}."
+                    f"Expected {num_graphs} pairwise cache paths, got " f"{len(paths)}."
                 )
             for path in paths:
                 cache_key = (str(path), str(device), str(dtype))

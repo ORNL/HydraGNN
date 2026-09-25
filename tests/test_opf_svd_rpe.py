@@ -15,7 +15,6 @@ from hydragnn.globalAtt.structural import StructuralAttentionContext
 from hydragnn.models.heterogeneous.HeteroBase import HeteroBase
 from hydragnn.models.heterogeneous.HeteroSAGEStack import HeteroSAGEStack
 
-
 _MODULE_PATH = Path(__file__).parents[1] / "examples" / "opf" / "opf_svd_rpe.py"
 _SPEC = importlib.util.spec_from_file_location("opf_svd_rpe", _MODULE_PATH)
 _MODULE = importlib.util.module_from_spec(_SPEC)
@@ -85,9 +84,7 @@ def _model_structural_config(preprocessing):
 def test_opf_provider_produces_every_declared_structural_attribute(
     config_path, tmp_path
 ):
-    architecture = json.loads(config_path.read_text())["NeuralNetwork"][
-        "Architecture"
-    ]
+    architecture = json.loads(config_path.read_text())["NeuralNetwork"]["Architecture"]
     structural = architecture.get("structural_encoding", {})
     provider = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path / config_path.stem)
@@ -116,9 +113,9 @@ def test_opf_provider_produces_every_declared_structural_attribute(
     qk = structural.get("qk_coordinates")
     if qk:
         assert hasattr(store, qk["attribute"])
-resolve_opf_positional_encoding_config = (
-    _MODULE.resolve_opf_positional_encoding_config
-)
+
+
+resolve_opf_positional_encoding_config = _MODULE.resolve_opf_positional_encoding_config
 
 
 def _two_bus_transformer():
@@ -152,9 +149,7 @@ def _three_bus_path():
             [-0.5, 0.5, 0.0, 0.0, 0.0, 1.0, 2.0, 2.0, 2.0],
         ]
     )
-    data["bus", "transformer", "bus"].edge_index = torch.empty(
-        (2, 0), dtype=torch.long
-    )
+    data["bus", "transformer", "bus"].edge_index = torch.empty((2, 0), dtype=torch.long)
     data["bus", "transformer", "bus"].edge_attr = torch.empty((0, 11))
     data["shunt", "shunt_link", "bus"].edge_index = torch.empty(
         (2, 0), dtype=torch.long
@@ -251,9 +246,9 @@ def test_topological_laplacian_stores_smallest_nonzero_eigenpairs():
 
 
 def test_effective_resistance_summary_excludes_diagonal():
-    stats = compute_effective_resistance_pe(
-        _three_bus_path(), compute_device="cpu"
-    )["effective_resistance_pe"]
+    stats = compute_effective_resistance_pe(_three_bus_path(), compute_device="cpu")[
+        "effective_resistance_pe"
+    ]
     expected = torch.tensor(
         [
             [1.0, 2.0, 0.5, 1.5, 1.5],
@@ -269,9 +264,9 @@ def test_effective_resistance_summary_excludes_diagonal():
     two_bus["bus", "ac_line", "bus"].edge_attr = two_bus[
         "bus", "ac_line", "bus"
     ].edge_attr[:1]
-    two_bus_stats = compute_effective_resistance_pe(
-        two_bus, compute_device="cpu"
-    )["effective_resistance_pe"]
+    two_bus_stats = compute_effective_resistance_pe(two_bus, compute_device="cpu")[
+        "effective_resistance_pe"
+    ]
     assert torch.allclose(two_bus_stats[:, 3], torch.tensor([1.0, 1.0]))
 
 
@@ -282,18 +277,16 @@ def test_effective_resistance_rpe_is_raw_pairwise_distance():
     rpe = compute_effective_resistance_rpe(
         _three_bus_path(), compute_device="cpu", resistance=matrix
     )["pairwise_rpe"]
-    expected = torch.tensor(
-        [[0.0, 1.0, 2.0], [1.0, 0.0, 1.0], [2.0, 1.0, 0.0]]
-    )
+    expected = torch.tensor([[0.0, 1.0, 2.0], [1.0, 0.0, 1.0], [2.0, 1.0, 0.0]])
     assert rpe.shape == (3, 3, 1)
     assert torch.allclose(rpe[..., 0], expected, atol=1.0e-5)
 
 
 def test_effective_resistance_qk_coordinates_reconstruct_truncated_distance():
     data = _three_bus_path()
-    coordinates = compute_effective_resistance_qk(
-        data, k=2, compute_device="cpu"
-    )["effective_resistance_qk"]
+    coordinates = compute_effective_resistance_qk(data, k=2, compute_device="cpu")[
+        "effective_resistance_qk"
+    ]
     reconstructed = torch.cdist(coordinates, coordinates).square()
     exact = compute_effective_resistance_matrix(data, compute_device="cpu").float()
 
@@ -310,18 +303,12 @@ def test_resistance_qk_augmentation_matches_explicit_softmax_bias():
         num_random_features=16,
         dropout=0.0,
     )
-    q = torch.tensor(
-        [[[[1.0, 0.5, -0.5, 2.0], [0.0, 1.0, 0.5, -1.0]]]]
-    )
-    k = torch.tensor(
-        [[[[0.5, -1.0, 1.5, 0.0], [1.0, 0.5, 0.0, -0.5]]]]
-    )
+    q = torch.tensor([[[[1.0, 0.5, -0.5, 2.0], [0.0, 1.0, 0.5, -1.0]]]])
+    k = torch.tensor([[[[0.5, -1.0, 1.5, 0.0], [1.0, 0.5, 0.0, -0.5]]]])
     coordinates = torch.tensor([[[0.0, 1.0], [2.0, -1.0]]])
     coefficient = torch.tensor(0.3, requires_grad=True)
 
-    q_augmented, k_augmented = attention._augment_qk(
-        q, k, coordinates, coefficient
-    )
+    q_augmented, k_augmented = attention._augment_qk(q, k, coordinates, coefficient)
     augmented_scores = q_augmented @ k_augmented.transpose(-2, -1)
     content_scores = (q @ k.transpose(-2, -1)) / math.sqrt(4.0)
     resistance = torch.cdist(coordinates, coordinates).square().unsqueeze(1)
@@ -427,16 +414,12 @@ def test_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
     x = {"bus": torch.randn(3, 4)}
     batch = {"bus": torch.zeros(3, dtype=torch.long)}
     pairwise = torch.zeros(3, 3, 2)
-    pairwise[..., 0] = torch.tensor(
-        [[0.0, 1.0, 2.0], [1.0, 0.0, 1.0], [2.0, 1.0, 0.0]]
-    )
+    pairwise[..., 0] = torch.tensor([[0.0, 1.0, 2.0], [1.0, 0.0, 1.0], [2.0, 1.0, 0.0]])
     out_a, _ = conv(
         x,
         {},
         batch,
-        structural_context=StructuralAttentionContext(
-            pairwise_features=[pairwise]
-        ),
+        structural_context=StructuralAttentionContext(pairwise_features=[pairwise]),
     )
     changed = pairwise.clone()
     changed[0, 2, 1] = 4.0
@@ -464,9 +447,7 @@ def test_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
             "laplacian": {"dim": 2},
         }
     }
-    preprocessor = OPFStructuralEncodingProvider(
-        architecture, cache_dir=str(tmp_path)
-    )
+    preprocessor = OPFStructuralEncodingProvider(architecture, cache_dir=str(tmp_path))
     first = preprocessor(_three_bus_path(), topology_id="path")
     second = preprocessor(_three_bus_path(), topology_id="path")
 
@@ -493,9 +474,9 @@ def test_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
             "compute_device": "cpu",
         }
     }
-    data = OPFStructuralEncodingProvider(
-        architecture, cache_dir=str(tmp_path)
-    )(_three_bus_path(), topology_id="path")
+    data = OPFStructuralEncodingProvider(architecture, cache_dir=str(tmp_path))(
+        _three_bus_path(), topology_id="path"
+    )
     bus = data["bus"]
     assert not hasattr(bus, "effective_resistance_rpe")
     assert not hasattr(bus, "effective_impedance_rpe")
@@ -525,14 +506,15 @@ def test_heterobase_loads_topology_level_rpe_cache(tmp_path):
             },
         }
     }
-    data = OPFStructuralEncodingProvider(
-        architecture, cache_dir=str(tmp_path)
-    )(_three_bus_path(), topology_id="path")
+    data = OPFStructuralEncodingProvider(architecture, cache_dir=str(tmp_path))(
+        _three_bus_path(), topology_id="path"
+    )
     # Keep the forward smoke test focused on bus attention; pooling an empty
     # auxiliary node store is independently unsupported by HeteroBase.
     del data["shunt", "shunt_link", "bus"]
     del data["shunt"]
     model = HeteroSAGEStack(
+        edge_dim=0,
         input_dim=4,
         hidden_dim=8,
         output_dim=[1],
@@ -594,12 +576,11 @@ def test_heterobase_shares_one_resistance_coefficient_across_performer_layers():
             },
         }
     }
-    data = OPFStructuralEncodingProvider(architecture)(
-        _three_bus_path(), "path"
-    )
+    data = OPFStructuralEncodingProvider(architecture)(_three_bus_path(), "path")
     del data["shunt", "shunt_link", "bus"]
     del data["shunt"]
     model = HeteroSAGEStack(
+        edge_dim=0,
         input_dim=4,
         hidden_dim=8,
         output_dim=[1],
@@ -635,9 +616,7 @@ def test_heterobase_shares_one_resistance_coefficient_across_performer_layers():
     outputs[0].square().sum().backward()
 
     coefficient_names = [
-        name
-        for name, _ in model.named_parameters()
-        if "qk_coefficient" in name
+        name for name, _ in model.named_parameters() if "qk_coefficient" in name
     ]
     assert coefficient_names == ["qk_coefficient"]
     assert model.qk_coefficient.shape == ()
@@ -658,12 +637,11 @@ def test_resistance_coordinates_can_be_fused_before_qkv_projection():
             },
         }
     }
-    data = OPFStructuralEncodingProvider(architecture)(
-        _three_bus_path(), "path"
-    )
+    data = OPFStructuralEncodingProvider(architecture)(_three_bus_path(), "path")
     del data["shunt", "shunt_link", "bus"]
     del data["shunt"]
     model = HeteroSAGEStack(
+        edge_dim=0,
         input_dim=4,
         hidden_dim=8,
         output_dim=[1],
@@ -712,9 +690,7 @@ def test_laplacian_sign_flip_is_graphwise_and_train_only():
         training = True
 
     harness = _SignFlipHarness()
-    vectors = torch.tensor(
-        [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]]
-    )
+    vectors = torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]])
     batch = torch.tensor([0, 0, 1, 1])
     torch.manual_seed(11)
     flipped = HeteroBase._apply_random_sign_flip(harness, vectors, batch)
@@ -741,6 +717,7 @@ def test_laplacian_and_resistance_are_fused_only_into_bus_input():
     }
     data = OPFStructuralEncodingProvider(architecture)(_three_bus_path(), "path")
     model = HeteroSAGEStack(
+        edge_dim=0,
         input_dim=4,
         hidden_dim=8,
         output_dim=[1],
@@ -789,6 +766,7 @@ def test_ten_dimensional_impedance_summary_is_fused_into_bus_input():
     }
     data = OPFStructuralEncodingProvider(architecture)(_three_bus_path(), "path")
     model = HeteroSAGEStack(
+        edge_dim=0,
         input_dim=4,
         hidden_dim=8,
         output_dim=[1],

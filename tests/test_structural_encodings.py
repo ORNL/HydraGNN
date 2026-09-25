@@ -36,6 +36,7 @@ def _attention(
 
 def _hetero_stack(structural_encoding):
     return HeteroSAGEStack(
+        edge_dim=0,
         input_dim=3,
         hidden_dim=4,
         output_dim=[1],
@@ -149,9 +150,7 @@ def test_structural_input_supports_graph_broadcast_and_sign_flip():
     first["entity"].values = torch.tensor([[5.0, 6.0]])
     second = HeteroData()
     second["entity"].x = torch.randn(3, 3)
-    second["entity"].vectors = torch.tensor(
-        [[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]
-    )
+    second["entity"].vectors = torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]])
     second["entity"].values = torch.tensor([[13.0, 14.0]])
     data = Batch.from_data_list([first, second])
     model = _hetero_stack(
@@ -177,9 +176,7 @@ def test_structural_input_supports_graph_broadcast_and_sign_flip():
     assert embedded["entity"].shape == (5, 4)
     assert collected.shape == (5, 4)
     assert torch.equal(collected[:2, 2:], torch.tensor([[5.0, 6.0]]).expand(2, -1))
-    assert torch.equal(
-        collected[2:, 2:], torch.tensor([[13.0, 14.0]]).expand(3, -1)
-    )
+    assert torch.equal(collected[2:, 2:], torch.tensor([[13.0, 14.0]]).expand(3, -1))
     assert torch.equal(collected[:2, :2].abs(), first["entity"].vectors.abs())
     assert torch.equal(collected[2:, :2].abs(), second["entity"].vectors.abs())
 
@@ -263,9 +260,7 @@ def test_structural_attention_checkpoint_round_trip():
     torch.manual_seed(12)
     original = _attention(pairwise_feature_dim=1).eval()
     x = torch.randn(3, 4)
-    context = StructuralAttentionContext(
-        pairwise_features=[torch.randn(3, 3, 1)]
-    )
+    context = StructuralAttentionContext(pairwise_features=[torch.randn(3, 3, 1)])
     expected, _ = original(
         inv_node_feat_dict={"entity": x},
         edge_index_dict={},
