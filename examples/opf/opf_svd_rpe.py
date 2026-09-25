@@ -43,28 +43,14 @@ _BUS_BRANCH_TYPES = (
     (("bus", "ac_line", "bus"), False),
     (("bus", "transformer", "bus"), True),
 )
-_PE_SOURCE_ALIASES = {
-    "laplacian": "laplacian",
-    "lpe": "laplacian",
-    "topological_laplacian": "laplacian",
-    "effective_resistance": "effective_resistance",
-    "resistance": "effective_resistance",
-    "er": "effective_resistance",
-    "dc_summary": "effective_resistance",
-    "effective_impedance": "effective_impedance",
-    "impedance": "effective_impedance",
-    "ac_summary": "effective_impedance",
-    "effective_resistance_rpe": "effective_resistance_rpe",
-    "resistance_rpe": "effective_resistance_rpe",
-    "er_rpe": "effective_resistance_rpe",
-    "effective_resistance_qk": "effective_resistance_qk",
-    "resistance_qk": "effective_resistance_qk",
-    "er_qk": "effective_resistance_qk",
-    "effective_impedance_rpe": "effective_impedance_rpe",
-    "impedance_rpe": "effective_impedance_rpe",
-    "ei_rpe": "effective_impedance_rpe",
-    "ybus_svd": "ybus_svd",
-    "svd_ybus": "ybus_svd",
+_PE_SOURCES = {
+    "laplacian",
+    "effective_resistance",
+    "effective_impedance",
+    "effective_resistance_rpe",
+    "effective_resistance_qk",
+    "effective_impedance_rpe",
+    "ybus_svd",
 }
 _CACHE_VERSION = "opf-spectral-pe-v1"
 
@@ -77,21 +63,20 @@ def _canonical_sources(values):
     result = []
     for value in values:
         key = str(value).lower()
-        if key not in _PE_SOURCE_ALIASES:
+        if key not in _PE_SOURCES:
             raise ValueError(
                 f"Unknown OPF positional encoding source '{value}'. Expected one "
                 "of: laplacian, effective_resistance, effective_impedance, "
                 "effective_resistance_rpe, effective_resistance_qk, "
                 "effective_impedance_rpe, ybus_svd."
             )
-        canonical = _PE_SOURCE_ALIASES[key]
-        if canonical not in result:
-            result.append(canonical)
+        if key not in result:
+            result.append(key)
     return result
 
 
 def resolve_opf_positional_encoding_config(architecture_config):
-    """Return a validated, backward-compatible OPF PE configuration."""
+    """Return a validated OPF structural-encoding configuration."""
 
     arch = architecture_config or {}
     nested = arch.get("positional_encodings")
@@ -100,19 +85,6 @@ def resolve_opf_positional_encoding_config(architecture_config):
     elif not isinstance(nested, dict):
         raise TypeError("Architecture.positional_encodings must be a dictionary.")
     config = copy.deepcopy(nested)
-
-    # Preserve the original SVD-RPE configuration format.
-    legacy_encoder = str(arch.get("pe_encoder", "none")).lower()
-    legacy_svd = legacy_encoder in {"svd_ybus", "ybus_svd"}
-    if not config and legacy_svd and int(arch.get("pe_dim", 0)) > 0:
-        config = {
-            "precompute": ["ybus_svd"],
-            "use": ["ybus_svd"],
-            "ybus_svd": {
-                "dim": int(arch["pe_dim"]),
-                "relative_tolerance": arch.get("svd_rpe_tolerance"),
-            },
-        }
 
     use = _canonical_sources(config.get("use", []))
     precompute = _canonical_sources(config.get("precompute", use))
@@ -983,7 +955,3 @@ class OPFStructuralEncodingProvider(StructuralEncodingProvider):
             artifact, path = self._load_or_compute(data, source, case_name)
             _attach_artifact(data, source, artifact, artifact_path=path)
         return data
-
-
-# Compatibility name retained for existing OPF applications.
-OPFSpectralPEPreprocessor = OPFStructuralEncodingProvider

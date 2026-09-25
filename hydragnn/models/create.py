@@ -98,7 +98,6 @@ def create_model_config(
         global_attn_heads=config["Architecture"]["global_attn_heads"],
         attn_only=config["Architecture"].get("attn_only", False),
         attn_node_types=config["Architecture"].get("attn_node_types", None),
-        pe_encoder=config["Architecture"].get("pe_encoder", None),
         positional_encodings=config["Architecture"].get(
             "positional_encodings", None
         ),
@@ -424,7 +423,6 @@ def create_model(
     hessian_weight: float = 0.0,
     equivariant_attn_num_hidden_layers: int = 1,
     attn_node_types: List[str] = None,
-    pe_encoder: str = None,
     positional_encodings: dict = None,
 ):
     timer = Timer("create_model")
@@ -1060,7 +1058,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
 
@@ -1095,7 +1092,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
 
@@ -1134,7 +1130,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
 
@@ -1171,7 +1166,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
 
@@ -1208,7 +1202,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
     elif mpnn_type == "HeteroHGT":
@@ -1243,7 +1236,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
     elif mpnn_type == "HeteroHEAT":
@@ -1280,7 +1272,6 @@ def create_model(
             node_input_dims=node_input_dims,
             attn_only=attn_only,
             attn_node_types=attn_node_types,
-            pe_encoder=pe_encoder,
             positional_encodings=positional_encodings,
         )
 
