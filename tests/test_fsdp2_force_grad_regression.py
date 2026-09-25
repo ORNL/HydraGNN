@@ -18,6 +18,7 @@ import torch.distributed as dist
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 
+from hydragnn.domain_losses import InteratomicPotentialDomainLoss
 from hydragnn.models.create import create_model
 from hydragnn.utils.distributed import get_distributed_model
 from hydragnn.utils.model.model import update_multibranch_heads
@@ -153,9 +154,7 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 use_gpu=True,
             )
 
-            assert (
-                model.__class__.__name__ == "EnhancedModelWrapper"
-            ), "Model must use HydraGNN EnhancedModelWrapper"
+            assert isinstance(model, InteratomicPotentialDomainLoss)
 
             model = get_distributed_model(model, verbosity=0)
 

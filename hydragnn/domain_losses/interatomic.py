@@ -109,9 +109,14 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
 
     def prediction_target_pairs(self, pred, data, create_graph=True):
         """Build predictions and targets for the configured active terms."""
-        if data.pos is None or data.energy is None:
+        if data.pos is None:
+            raise ValueError("Interatomic training loss requires data.pos.")
+        needs_energy_target = bool(
+            {"energy", "energy_per_atom"}.intersection(self.active_terms)
+        )
+        if needs_energy_target and data.energy is None:
             raise ValueError(
-                "Interatomic training loss requires data.pos and data.energy."
+                "Enabled energy terms require an energy target in data.energy."
             )
         if not data.pos.requires_grad:
             raise ValueError(
@@ -119,16 +124,17 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
             )
 
         energy_pred = self._graph_energy(pred, data).float()
-        energy_true = data.energy.reshape_as(energy_pred).float()
-        atom_counts = torch.bincount(data.batch).to(energy_pred.dtype)
         values = {}
-        if "energy" in self.active_terms:
-            values["energy"] = (energy_pred, energy_true)
-        if "energy_per_atom" in self.active_terms:
-            values["energy_per_atom"] = (
-                energy_pred / atom_counts,
-                energy_true / atom_counts,
-            )
+        if needs_energy_target:
+            energy_true = data.energy.reshape_as(energy_pred).float()
+            if "energy" in self.active_terms:
+                values["energy"] = (energy_pred, energy_true)
+            if "energy_per_atom" in self.active_terms:
+                atom_counts = torch.bincount(data.batch).to(energy_pred.dtype)
+                values["energy_per_atom"] = (
+                    energy_pred / atom_counts,
+                    energy_true / atom_counts,
+                )
 
         if "forces" in self.active_terms:
             if data.forces is None:

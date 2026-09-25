@@ -114,6 +114,7 @@ def finalize_loss_report(model, device):
             "weighted": float(totals[1] / denominator),
         }
     model.last_epoch_loss_report = report
+    reset_loss_report(model)
     return report
 
 

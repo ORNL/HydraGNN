@@ -105,6 +105,48 @@ def test_duplicate_interatomic_terms_are_rejected():
         create_domain_loss(EnergyModel(), config)
 
 
+def test_smooth_l1_term_uses_an_instantiated_loss():
+    config = _config(
+        energy={
+            "variable": "energy",
+            "weight": 1.0,
+            "normalization": "per_structure",
+            "metric": "smooth_l1",
+        },
+        energy_per_atom={"variable": "energy_per_atom", "weight": 0.0},
+        forces={"variable": "forces", "weight": 0.0},
+    )
+    model = create_domain_loss(EnergyModel(), config)
+    data = Data(
+        pos=torch.tensor([[2.0, 0.0, 0.0]], requires_grad=True),
+        batch=torch.tensor([0]),
+        energy=torch.tensor([2.0]),
+    )
+
+    total, components = model.energy_force_loss(model(data), data)
+
+    assert total.item() == pytest.approx(1.5)
+    assert components[0].item() == pytest.approx(1.5)
+
+
+def test_force_only_term_does_not_require_energy_target():
+    config = _config(
+        energy={"variable": "energy", "weight": 0.0},
+        energy_per_atom={"variable": "energy_per_atom", "weight": 0.0},
+    )
+    model = create_domain_loss(EnergyModel(), config)
+    data = Data(
+        pos=torch.tensor([[1.0, 0.0, 0.0]], requires_grad=True),
+        batch=torch.tensor([0]),
+        forces=torch.tensor([[-2.0, 0.0, 0.0]]),
+    )
+
+    total, components = model.energy_force_loss(model(data), data)
+
+    assert total.item() == pytest.approx(0.0)
+    assert components[0].item() == pytest.approx(0.0)
+
+
 @pytest.mark.parametrize(
     "disabled, expected",
     [

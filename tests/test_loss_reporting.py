@@ -102,6 +102,8 @@ def test_split_accumulator_averages_raw_and_weighted_values_independently():
     assert report["constraints.balance"]["raw"] == pytest.approx(8.0 / 3.0)
     assert report["constraints.balance"]["weight"] == pytest.approx(3.0)
     assert report["constraints.balance"]["weighted"] == pytest.approx(25.0 / 3.0)
+    assert model._loss_report_sums == {}
+    assert model._loss_report_count == 0
     line = format_loss_report(2, "validation", 9.0, report)
     assert "split=validation" in line
     assert "constraints.balance.raw=2.66666667" in line
