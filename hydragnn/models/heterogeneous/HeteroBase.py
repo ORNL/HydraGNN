@@ -23,6 +23,7 @@ from hydragnn.utils.model import activation_function_selection, loss_function_se
 from hydragnn.utils.distributed import get_device
 from hydragnn.models.Base import MLPNode
 from hydragnn.globalAtt.HeteroGPS import HeteroGPSConv
+from hydragnn.globalAtt.structural import StructuralAttentionContext
 
 
 class HeteroBase(Module):
@@ -1307,6 +1308,12 @@ class HeteroBase(Module):
             if self.use_global_attn and self.resistance_qk_attention_dim > 0
             else None
         )
+        structural_context = StructuralAttentionContext(
+            factorized_pairwise_features=svd_rpe_dict,
+            pairwise_features=direct_pairwise_rpe,
+            qk_coordinates=resistance_qk,
+            qk_coefficient=self.resistance_qk_coefficient,
+        )
 
         edge_attr_dict = self._get_edge_attr_dict(data)
 
@@ -1318,10 +1325,7 @@ class HeteroBase(Module):
                     edge_index_dict=data.edge_index_dict,
                     batch_dict=batch_dict,
                     edge_attr_dict=edge_attr_dict,
-                    svd_rpe_dict=svd_rpe_dict,
-                    direct_pairwise_rpe=direct_pairwise_rpe,
-                    resistance_qk=resistance_qk,
-                    resistance_coefficient=self.resistance_qk_coefficient,
+                    structural_context=structural_context,
                 )
             elif edge_attr_dict is None:
                 x_dict = conv(x_dict, data.edge_index_dict)

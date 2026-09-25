@@ -5,6 +5,7 @@ from hydragnn.globalAtt.HeteroGPS import (
     HeteroGPSConv,
     StructuralCoordinatePerformerAttention,
 )
+from hydragnn.globalAtt.structural import StructuralAttentionContext
 
 
 class DummyEquivariantLocalConv(torch.nn.Module):
@@ -277,3 +278,28 @@ def test_structural_coordinate_performer_has_domain_neutral_api():
     )
 
     assert attention.coordinate_dim == 3
+
+
+def test_attention_accepts_structural_context():
+    conv = HeteroGPSConv(
+        channels=4,
+        metadata=(["entity"], []),
+        conv=None,
+        heads=1,
+        dropout=0.0,
+        attn_type="multihead",
+        attn_node_types=["entity"],
+        pairwise_feature_dim=1,
+    )
+    context = StructuralAttentionContext(
+        pairwise_features=[torch.zeros(3, 3, 1)]
+    )
+
+    output, _ = conv(
+        inv_node_feat_dict={"entity": torch.randn(3, 4)},
+        edge_index_dict={},
+        batch_dict={"entity": torch.zeros(3, dtype=torch.long)},
+        structural_context=context,
+    )
+
+    assert output["entity"].shape == (3, 4)
