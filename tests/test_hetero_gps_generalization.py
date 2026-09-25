@@ -262,11 +262,11 @@ def test_pairwise_features_are_not_tied_to_an_opf_node_name():
         dropout=0.0,
         attn_type="multihead",
         attn_node_types=["entity"],
-        direct_rpe_dim=2,
+        pairwise_feature_dim=2,
     )
 
     assert conv.attn_node_types == ["entity"]
-    assert conv.direct_rpe_dim == 2
+    assert conv.pairwise_feature_dim == 2
 
 
 def test_structural_coordinate_performer_has_domain_neutral_api():

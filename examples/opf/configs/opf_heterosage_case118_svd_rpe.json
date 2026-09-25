@@ -8,8 +8,6 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 8,
-            "pe_encoder": "svd_ybus",
-            "svd_rpe_tolerance": null,
             "max_neighbours": 100,
             "global_attn_engine": "GPS",
             "global_attn_type": "multihead",
@@ -94,7 +92,20 @@
                     "target_type": "shunt",
                     "dim": 0
                 }
-            ]
+            ],
+            "positional_encodings": {
+                "target_node_type": "bus",
+                "precompute": [
+                    "ybus_svd"
+                ],
+                "use": [
+                    "ybus_svd"
+                ],
+                "ybus_svd": {
+                    "dim": 8,
+                    "relative_tolerance": null
+                }
+            }
         },
         "Training": {
             "num_epoch": 50,

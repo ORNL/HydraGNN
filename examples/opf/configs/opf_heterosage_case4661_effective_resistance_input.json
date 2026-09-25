@@ -8,7 +8,6 @@
             "hidden_dim": 64,
             "num_conv_layers": 4,
             "pe_dim": 0,
-            "pe_encoder": "none",
             "positional_encodings": {
                 "precompute": [
                     "effective_resistance_qk"
@@ -23,7 +22,8 @@
                     "relative_tolerance": null,
                     "coefficient_init": 0.0,
                     "placement": "input"
-                }
+                },
+                "target_node_type": "bus"
             },
             "max_neighbours": 100,
             "global_attn_engine": "GPS",

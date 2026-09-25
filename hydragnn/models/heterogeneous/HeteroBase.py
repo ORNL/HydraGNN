@@ -66,7 +66,6 @@ class HeteroBase(Module):
         metadata=None,
         attn_only: bool = False,
         attn_node_types: list[str] | None = None,
-        pe_encoder: str | None = None,
         positional_encodings: dict | None = None,
     ):
         super().__init__()
@@ -124,32 +123,9 @@ class HeteroBase(Module):
         active_pe_sources = self.positional_encodings.get("use", [])
         if isinstance(active_pe_sources, str):
             active_pe_sources = [active_pe_sources]
-        aliases = {
-            "lpe": "laplacian",
-            "topological_laplacian": "laplacian",
-            "resistance": "effective_resistance",
-            "er": "effective_resistance",
-            "dc_summary": "effective_resistance",
-            "impedance": "effective_impedance",
-            "ac_summary": "effective_impedance",
-            "resistance_rpe": "effective_resistance_rpe",
-            "er_rpe": "effective_resistance_rpe",
-            "resistance_qk": "effective_resistance_qk",
-            "er_qk": "effective_resistance_qk",
-            "impedance_rpe": "effective_impedance_rpe",
-            "ei_rpe": "effective_impedance_rpe",
-            "svd_ybus": "ybus_svd",
-        }
         self.active_pe_sources = {
-            aliases.get(str(source).lower(), str(source).lower())
-            for source in active_pe_sources
+            str(source).lower() for source in active_pe_sources
         }
-        if (
-            not self.active_pe_sources
-            and str(pe_encoder or "").lower() in {"svd_ybus", "ybus_svd"}
-            and int(pe_dim) > 0
-        ):
-            self.active_pe_sources.add("ybus_svd")
 
         laplacian_config = self.positional_encodings.get("laplacian", {})
         self.laplacian_pe_dim = (
@@ -189,62 +165,62 @@ class HeteroBase(Module):
         resistance_qk_config = self.positional_encodings.get(
             "effective_resistance_qk", {}
         )
-        self.resistance_qk_dim = (
+        self.qk_coordinate_dim = (
             int(resistance_qk_config.get("dim", 8))
             if "effective_resistance_qk" in self.active_pe_sources
             else 0
         )
-        self.resistance_qk_placement = str(
+        self.qk_placement = str(
             resistance_qk_config.get("placement", "qk")
         ).lower()
-        if self.resistance_qk_placement not in {"input", "qk", "both"}:
+        if self.qk_placement not in {"input", "qk", "both"}:
             raise ValueError(
                 "effective_resistance_qk.placement must be 'input', 'qk', or "
                 "'both'."
             )
-        self.resistance_qk_input_dim = (
-            self.resistance_qk_dim
-            if self.resistance_qk_placement in {"input", "both"}
+        self.qk_input_dim = (
+            self.qk_coordinate_dim
+            if self.qk_placement in {"input", "both"}
             else 0
         )
-        self.resistance_qk_attention_dim = (
-            self.resistance_qk_dim
-            if self.resistance_qk_placement in {"qk", "both"}
+        self.qk_attention_dim = (
+            self.qk_coordinate_dim
+            if self.qk_placement in {"qk", "both"}
             else 0
         )
 
-        direct_rpe_sources = self.active_pe_sources & {
+        pairwise_sources = self.active_pe_sources & {
             "effective_resistance_rpe",
             "effective_impedance_rpe",
         }
         attention_rpe_count = (
-            len(direct_rpe_sources)
+            len(pairwise_sources)
             + int(self.svd_rpe_dim > 0)
-            + int(self.resistance_qk_attention_dim > 0)
+            + int(self.qk_attention_dim > 0)
         )
         if attention_rpe_count > 1:
             raise ValueError("Only one attention RPE can be active at a time.")
-        self.direct_rpe_source = (
-            next(iter(direct_rpe_sources)) if direct_rpe_sources else None
+        self.pairwise_source = (
+            next(iter(pairwise_sources)) if pairwise_sources else None
         )
-        direct_rpe_config = self.positional_encodings.get(
-            self.direct_rpe_source, {}
+        pairwise_config = self.positional_encodings.get(
+            self.pairwise_source, {}
         )
-        self.direct_rpe_dim = (
-            int(direct_rpe_config.get("feature_dim", 1))
-            if self.direct_rpe_source is not None
+        self.pairwise_feature_dim = (
+            int(pairwise_config.get("feature_dim", 1))
+            if self.pairwise_source is not None
             else 0
         )
-        self.direct_rpe_hidden_dim = (
-            int(direct_rpe_config.get("mlp_hidden_dim", 8))
-            if self.direct_rpe_source is not None
+        self.pairwise_hidden_dim = (
+            int(pairwise_config.get("mlp_hidden_dim", 8))
+            if self.pairwise_source is not None
             else 0
         )
-        self.direct_rpe_zero_diagonal = bool(
-            direct_rpe_config.get("zero_diagonal_bias", True)
+        self.pairwise_zero_diagonal = bool(
+            pairwise_config.get("zero_diagonal_bias", True)
         )
-        self._direct_rpe_device_cache = {}
-        if self.direct_rpe_source is not None:
+        self._pairwise_device_cache = {}
+        if self.pairwise_source is not None:
             if not self.use_global_attn or self.global_attn_type != "multihead":
                 raise ValueError(
                     "Direct OPF RPE requires global multihead attention."
@@ -255,8 +231,8 @@ class HeteroBase(Module):
                     "structural node type to be the sole attention node type."
                 )
 
-        self.resistance_qk_coefficient = None
-        if self.resistance_qk_attention_dim > 0:
+        self.qk_coefficient = None
+        if self.qk_attention_dim > 0:
             if not self.use_global_attn or self.global_attn_type != "performer":
                 raise ValueError(
                     "Effective-resistance Q/K augmentation requires global "
@@ -267,7 +243,7 @@ class HeteroBase(Module):
                     "Structural Q/K augmentation requires the configured "
                     "structural node type to be the sole attention node type."
                 )
-            self.resistance_qk_coefficient = Parameter(
+            self.qk_coefficient = Parameter(
                 torch.tensor(
                     float(resistance_qk_config.get("coefficient_init", 0.0)),
                     dtype=torch.float32,
@@ -279,7 +255,7 @@ class HeteroBase(Module):
             2 * self.laplacian_pe_dim
             + self.effective_resistance_pe_dim
             + self.effective_impedance_pe_dim
-            + self.resistance_qk_input_dim
+            + self.qk_input_dim
         )
         self.structural_input_fuser = None
         if self.structural_input_dim > 0:
@@ -289,10 +265,6 @@ class HeteroBase(Module):
                 Linear(self.hidden_dim, self.hidden_dim),
             )
 
-        # Compatibility aliases for applications that inspected the original
-        # OPF-specific attributes directly.
-        self.bus_input_pe_dim = self.structural_input_dim
-        self.bus_pe_fuser = self.structural_input_fuser
 
         self.use_graph_attr_conditioning = use_graph_attr_conditioning
         self.graph_attr_dim = int(graph_attr_dim)
@@ -538,10 +510,10 @@ class HeteroBase(Module):
                 attn_type=self.global_attn_type,
                 attn_node_types=self.attn_node_types,
                 pe_dim=self.svd_rpe_dim,
-                direct_rpe_dim=self.direct_rpe_dim,
-                rpe_hidden_dim=self.direct_rpe_hidden_dim,
-                rpe_zero_diagonal=self.direct_rpe_zero_diagonal,
-                resistance_qk_dim=self.resistance_qk_attention_dim,
+                pairwise_feature_dim=self.pairwise_feature_dim,
+                rpe_hidden_dim=self.pairwise_hidden_dim,
+                rpe_zero_diagonal=self.pairwise_zero_diagonal,
+                qk_coordinate_dim=self.qk_attention_dim,
             )
         raise ValueError(f"Unsupported global_attn_engine: {self.global_attn_engine}")
 
@@ -867,7 +839,7 @@ class HeteroBase(Module):
                 )
             pieces.append(impedance)
 
-        if self.resistance_qk_input_dim > 0:
+        if self.qk_input_dim > 0:
             coordinates = getattr(store, "effective_resistance_qk", None)
             if coordinates is None:
                 raise ValueError(
@@ -875,7 +847,7 @@ class HeteroBase(Module):
                     f"missing {self.structural_node_type}.effective_resistance_qk."
                 )
             coordinates = coordinates.to(device=device, dtype=dtype)
-            expected = (num_nodes, self.resistance_qk_input_dim)
+            expected = (num_nodes, self.qk_input_dim)
             if tuple(coordinates.shape) != expected:
                 raise ValueError(
                     f"Expected effective-resistance input coordinates {expected}, "
@@ -977,10 +949,10 @@ class HeteroBase(Module):
             result[node_type] = values
         return result
 
-    def _get_resistance_qk(self, data, device, dtype):
+    def _get_qk_coordinates(self, data, device, dtype):
         """Return packed bus resistance coordinates for Performer attention."""
 
-        if self.resistance_qk_dim <= 0:
+        if self.qk_coordinate_dim <= 0:
             return None
         store = data[self.structural_node_type]
         coordinates = getattr(store, "effective_resistance_qk", None)
@@ -989,7 +961,7 @@ class HeteroBase(Module):
                 "Effective-resistance Q/K augmentation is enabled, but the batch "
                 f"is missing {self.structural_node_type}.effective_resistance_qk."
             )
-        expected = (int(store.x.size(0)), self.resistance_qk_dim)
+        expected = (int(store.x.size(0)), self.qk_coordinate_dim)
         if tuple(coordinates.shape) != expected:
             raise ValueError(
                 f"Expected bus.effective_resistance_qk shape {expected}, got "
@@ -1009,14 +981,14 @@ class HeteroBase(Module):
             )
         return artifact["pairwise_rpe"]
 
-    def _get_direct_pairwise_rpe(self, data, batch, device, dtype):
+    def _get_pairwise_features(self, data, batch, device, dtype):
         """Load one topology-level pair tensor per graph in the batch."""
 
-        if self.direct_rpe_source is None:
+        if self.pairwise_source is None:
             return None
         store = data[self.structural_node_type]
-        tensor_attr = self.direct_rpe_source
-        path_attr = f"{self.direct_rpe_source}_path"
+        tensor_attr = self.pairwise_source
+        path_attr = f"{self.pairwise_source}_path"
         embedded = getattr(store, tensor_attr, None)
         paths = getattr(store, path_attr, None)
 
@@ -1035,12 +1007,12 @@ class HeteroBase(Module):
                 )
             for path in paths:
                 cache_key = (str(path), str(device), str(dtype))
-                matrix = self._direct_rpe_device_cache.get(cache_key)
+                matrix = self._pairwise_device_cache.get(cache_key)
                 if matrix is None:
                     matrix = self._load_pairwise_rpe_artifact(path).to(
                         device=device, dtype=dtype
                     )
-                    self._direct_rpe_device_cache[cache_key] = matrix
+                    self._pairwise_device_cache[cache_key] = matrix
                 matrices.append(matrix)
         elif embedded is not None:
             if num_graphs != 1 or embedded.dim() != 3:
@@ -1051,13 +1023,13 @@ class HeteroBase(Module):
             matrices = [embedded.to(device=device, dtype=dtype)]
         else:
             raise ValueError(
-                f"{self.direct_rpe_source} is enabled, but the batch has neither "
+                f"{self.pairwise_source} is enabled, but the batch has neither "
                 f"{self.structural_node_type}.{tensor_attr} nor "
                 f"{self.structural_node_type}.{path_attr}."
             )
 
         for graph_index, (matrix, count) in enumerate(zip(matrices, counts)):
-            expected = (count, count, self.direct_rpe_dim)
+            expected = (count, count, self.pairwise_feature_dim)
             if tuple(matrix.shape) != expected:
                 raise ValueError(
                     f"Expected pairwise RPE graph {graph_index} shape {expected}, "
@@ -1290,29 +1262,29 @@ class HeteroBase(Module):
         equiv_node_feat_dict = self._get_equiv_node_feat_dict(data)
         svd_rpe_dict = self._get_svd_rpe_dict(data) if self.use_global_attn else None
         direct_pairwise_rpe = (
-            self._get_direct_pairwise_rpe(
+            self._get_pairwise_features(
                 data,
                 batch_dict[self.structural_node_type],
                 device=x_dict[self.structural_node_type].device,
                 dtype=x_dict[self.structural_node_type].dtype,
             )
-            if self.use_global_attn and self.direct_rpe_source is not None
+            if self.use_global_attn and self.pairwise_source is not None
             else None
         )
         resistance_qk = (
-            self._get_resistance_qk(
+            self._get_qk_coordinates(
                 data,
                 device=x_dict[self.structural_node_type].device,
                 dtype=x_dict[self.structural_node_type].dtype,
             )
-            if self.use_global_attn and self.resistance_qk_attention_dim > 0
+            if self.use_global_attn and self.qk_attention_dim > 0
             else None
         )
         structural_context = StructuralAttentionContext(
             factorized_pairwise_features=svd_rpe_dict,
             pairwise_features=direct_pairwise_rpe,
             qk_coordinates=resistance_qk,
-            qk_coefficient=self.resistance_qk_coefficient,
+            qk_coefficient=self.qk_coefficient,
         )
 
         edge_attr_dict = self._get_edge_attr_dict(data)

@@ -6,9 +6,10 @@ import torch
 from torch_geometric.data import Batch, HeteroData
 
 from hydragnn.globalAtt.HeteroGPS import (
-    EffectiveResistancePerformerAttention,
+    StructuralCoordinatePerformerAttention,
     HeteroGPSConv,
 )
+from hydragnn.globalAtt.structural import StructuralAttentionContext
 from hydragnn.models.heterogeneous.HeteroBase import HeteroBase
 from hydragnn.models.heterogeneous.HeteroSAGEStack import HeteroSAGEStack
 
@@ -28,7 +29,6 @@ compute_effective_resistance_qk = _MODULE.compute_effective_resistance_qk
 compute_effective_impedance_matrix = _MODULE.compute_effective_impedance_matrix
 compute_effective_impedance_pe = _MODULE.compute_effective_impedance_pe
 compute_effective_impedance_rpe = _MODULE.compute_effective_impedance_rpe
-OPFSpectralPEPreprocessor = _MODULE.OPFSpectralPEPreprocessor
 OPFStructuralEncodingProvider = _MODULE.OPFStructuralEncodingProvider
 resolve_opf_positional_encoding_config = (
     _MODULE.resolve_opf_positional_encoding_config
@@ -121,10 +121,24 @@ def pytest_heterogps_svd_rpe_changes_attention_output():
             "s": torch.rand(3, 2),
         }
     }
-    out_a, _ = conv(x, {}, batch, svd_rpe_dict=factors)
+    out_a, _ = conv(
+        x,
+        {},
+        batch,
+        structural_context=StructuralAttentionContext(
+            factorized_pairwise_features=factors
+        ),
+    )
     changed = {"bus": {name: value.clone() for name, value in factors["bus"].items()}}
     changed["bus"]["v_imag"] += 2.0
-    out_b, _ = conv(x, {}, batch, svd_rpe_dict=changed)
+    out_b, _ = conv(
+        x,
+        {},
+        batch,
+        structural_context=StructuralAttentionContext(
+            factorized_pairwise_features=changed
+        ),
+    )
     assert not torch.allclose(out_a["bus"], out_b["bus"])
 
 
@@ -202,11 +216,11 @@ def pytest_effective_resistance_qk_coordinates_reconstruct_truncated_distance():
 
 
 def pytest_resistance_qk_augmentation_matches_explicit_softmax_bias():
-    attention = EffectiveResistancePerformerAttention(
+    attention = StructuralCoordinatePerformerAttention(
         channels=4,
         heads=1,
         head_channels=4,
-        resistance_dim=2,
+        coordinate_dim=2,
         num_random_features=16,
         dropout=0.0,
     )
@@ -249,7 +263,7 @@ def pytest_heterogps_resistance_performer_updates_global_coefficient():
         dropout=0.0,
         attn_type="performer",
         attn_node_types=["bus"],
-        resistance_qk_dim=2,
+        qk_coordinate_dim=2,
         attn_kwargs={"head_channels": 4, "num_random_features": 32},
     )
     conv.eval()
@@ -262,8 +276,10 @@ def pytest_heterogps_resistance_performer_updates_global_coefficient():
         x,
         {},
         batch,
-        resistance_qk=coordinates,
-        resistance_coefficient=coefficient,
+        structural_context=StructuralAttentionContext(
+            qk_coordinates=coordinates,
+            qk_coefficient=coefficient,
+        ),
     )
     output["bus"].square().sum().backward()
 
@@ -317,7 +333,7 @@ def pytest_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
         dropout=0.0,
         attn_type="multihead",
         attn_node_types=["bus"],
-        direct_rpe_dim=2,
+        pairwise_feature_dim=2,
         rpe_hidden_dim=4,
         rpe_zero_diagonal=True,
     )
@@ -328,11 +344,23 @@ def pytest_direct_pairwise_rpe_changes_attention_and_has_zero_self_bias():
     pairwise[..., 0] = torch.tensor(
         [[0.0, 1.0, 2.0], [1.0, 0.0, 1.0], [2.0, 1.0, 0.0]]
     )
-    out_a, _ = conv(x, {}, batch, direct_pairwise_rpe=[pairwise])
+    out_a, _ = conv(
+        x,
+        {},
+        batch,
+        structural_context=StructuralAttentionContext(
+            pairwise_features=[pairwise]
+        ),
+    )
     changed = pairwise.clone()
     changed[0, 2, 1] = 4.0
     changed[2, 0, 1] = 4.0
-    out_b, _ = conv(x, {}, batch, direct_pairwise_rpe=[changed])
+    out_b, _ = conv(
+        x,
+        {},
+        batch,
+        structural_context=StructuralAttentionContext(pairwise_features=[changed]),
+    )
     assert not torch.allclose(out_a["bus"], out_b["bus"])
 
     learned_bias = conv.rpe_mlp(pairwise)
@@ -350,7 +378,7 @@ def pytest_spectral_preprocessor_caches_and_batches_graph_eigenvalues(tmp_path):
             "laplacian": {"dim": 2},
         }
     }
-    preprocessor = OPFSpectralPEPreprocessor(
+    preprocessor = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path)
     )
     first = preprocessor(_three_bus_path(), case_name="path")
@@ -379,7 +407,7 @@ def pytest_pairwise_rpe_artifacts_are_referenced_instead_of_embedded(tmp_path):
             "compute_device": "cpu",
         }
     }
-    data = OPFSpectralPEPreprocessor(
+    data = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path)
     )(_three_bus_path(), case_name="path")
     bus = data["bus"]
@@ -411,7 +439,7 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
             },
         }
     }
-    data = OPFSpectralPEPreprocessor(
+    data = OPFStructuralEncodingProvider(
         architecture, cache_dir=str(tmp_path)
     )(_three_bus_path(), case_name="path")
     # Keep the forward smoke test focused on bus attention; pooling an empty
@@ -450,15 +478,15 @@ def pytest_heterobase_loads_topology_level_rpe_cache(tmp_path):
         positional_encodings=architecture["positional_encodings"],
     )
     embedded, batch = model._prepare_node_features(data)
-    matrices = model._get_direct_pairwise_rpe(
+    matrices = model._get_pairwise_features(
         data,
         batch["bus"],
         device=embedded["bus"].device,
         dtype=embedded["bus"].dtype,
     )
 
-    assert model.direct_rpe_source == "effective_impedance_rpe"
-    assert model.direct_rpe_dim == 2
+    assert model.pairwise_source == "effective_impedance_rpe"
+    assert model.pairwise_feature_dim == 2
     assert len(matrices) == 1
     assert matrices[0].shape == (3, 3, 2)
 
@@ -480,7 +508,7 @@ def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers(
             },
         }
     }
-    data = OPFSpectralPEPreprocessor(architecture)(
+    data = OPFStructuralEncodingProvider(architecture)(
         _three_bus_path(), "path"
     )
     del data["shunt", "shunt_link", "bus"]
@@ -523,12 +551,12 @@ def pytest_heterobase_shares_one_resistance_coefficient_across_performer_layers(
     coefficient_names = [
         name
         for name, _ in model.named_parameters()
-        if "resistance_qk_coefficient" in name
+        if "qk_coefficient" in name
     ]
-    assert coefficient_names == ["resistance_qk_coefficient"]
-    assert model.resistance_qk_coefficient.shape == ()
-    assert model.resistance_qk_coefficient.grad is not None
-    assert all(conv.resistance_qk_dim == 2 for conv in model.graph_convs)
+    assert coefficient_names == ["qk_coefficient"]
+    assert model.qk_coefficient.shape == ()
+    assert model.qk_coefficient.grad is not None
+    assert all(conv.qk_coordinate_dim == 2 for conv in model.graph_convs)
     assert outputs[0].shape == (3, 1)
 
 
@@ -544,7 +572,7 @@ def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
             },
         }
     }
-    data = OPFSpectralPEPreprocessor(architecture)(
+    data = OPFStructuralEncodingProvider(architecture)(
         _three_bus_path(), "path"
     )
     del data["shunt", "shunt_link", "bus"]
@@ -584,11 +612,11 @@ def pytest_resistance_coordinates_can_be_fused_before_qkv_projection():
     model.eval()
     outputs = model(data)
 
-    assert model.resistance_qk_placement == "input"
-    assert model.resistance_qk_input_dim == 2
-    assert model.resistance_qk_attention_dim == 0
-    assert model.resistance_qk_coefficient is None
-    assert model.bus_input_pe_dim == 2
+    assert model.qk_placement == "input"
+    assert model.qk_input_dim == 2
+    assert model.qk_attention_dim == 0
+    assert model.qk_coefficient is None
+    assert model.structural_input_dim == 2
     assert embedded["bus"].shape == (3, 8)
     assert outputs[0].shape == (3, 1)
 
@@ -617,20 +645,6 @@ def pytest_laplacian_sign_flip_is_graphwise_and_train_only():
     )
 
 
-def pytest_legacy_svd_configuration_remains_supported():
-    resolved = resolve_opf_positional_encoding_config(
-        {"pe_encoder": "svd_ybus", "pe_dim": 4, "svd_rpe_tolerance": 1.0e-8}
-    )
-    assert resolved["use"] == ["ybus_svd"]
-    assert resolved["precompute"] == ["ybus_svd"]
-    assert resolved["ybus_svd"]["dim"] == 4
-    assert resolved["ybus_svd"]["relative_tolerance"] == 1.0e-8
-
-
-def pytest_legacy_preprocessor_name_aliases_structural_provider():
-    assert OPFSpectralPEPreprocessor is OPFStructuralEncodingProvider
-
-
 def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
     architecture = {
         "positional_encodings": {
@@ -640,7 +654,7 @@ def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
             "laplacian": {"dim": 2, "random_sign_flip": False},
         }
     }
-    data = OPFSpectralPEPreprocessor(architecture)(_three_bus_path(), "path")
+    data = OPFStructuralEncodingProvider(architecture)(_three_bus_path(), "path")
     model = HeteroSAGEStack(
         input_dim=4,
         hidden_dim=8,
@@ -676,8 +690,6 @@ def pytest_laplacian_and_resistance_are_fused_only_into_bus_input():
     assert model.structural_node_type == "bus"
     assert model.structural_input_dim == 9
     assert model.structural_input_fuser is not None
-    assert model.bus_input_pe_dim == 9  # 2 eigenvectors + 2 values + 5 stats.
-    assert model.bus_pe_fuser is not None
     assert embedded["bus"].shape == (3, 8)
     assert embedded["shunt"].shape == (0, 8)
 
@@ -690,7 +702,7 @@ def pytest_ten_dimensional_impedance_summary_is_fused_into_bus_input():
             "compute_device": "cpu",
         }
     }
-    data = OPFSpectralPEPreprocessor(architecture)(_three_bus_path(), "path")
+    data = OPFStructuralEncodingProvider(architecture)(_three_bus_path(), "path")
     model = HeteroSAGEStack(
         input_dim=4,
         hidden_dim=8,
@@ -723,5 +735,5 @@ def pytest_ten_dimensional_impedance_summary_is_fused_into_bus_input():
     )
     embedded, _ = model._prepare_node_features(data)
 
-    assert model.bus_input_pe_dim == 10
+    assert model.structural_input_dim == 10
     assert embedded["bus"].shape == (3, 8)
