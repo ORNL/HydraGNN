@@ -55,6 +55,10 @@ def test_declarative_interatomic_terms_compute_expected_weighted_loss():
 
     assert [value.item() for value in components] == pytest.approx([1.0, 0.25, 0.0])
     assert total.item() == pytest.approx(2.75)
+    assert model.last_loss_components["supervised.energy"]["raw"].item() == 1.0
+    assert model.last_loss_components["supervised.energy"]["weight"] == 2.0
+    assert model.last_loss_components["supervised.energy"]["weighted"].item() == 2.0
+    assert model.last_loss_components["supervised.forces"]["raw"].item() == 0.0
     total.backward()
     assert data.pos.grad is not None
 

@@ -105,6 +105,10 @@ def test_voltage_violation_flows_through_domain_loss_and_updates_dual():
 
     assert metrics["opf_voltage_bound"].item() == pytest.approx(0.1)
     assert augmented.item() == pytest.approx(0.01)
+    component = loss.last_loss_components["constraints.voltage_limits"]
+    assert component["raw"].item() == pytest.approx(0.1)
+    assert component["weight"] == pytest.approx(1.0)
+    assert component["weighted"].item() == pytest.approx(0.01)
     augmented.backward()
     assert prediction[0].grad[0, 1].item() == pytest.approx(0.2)
 
