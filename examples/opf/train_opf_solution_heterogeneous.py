@@ -340,7 +340,7 @@ def _prepare_sample(
         data, edge_dim=edge_dim, feature_schema=edge_feature_schema
     )
     if spectral_pe_preprocessor is not None and spectral_pe_preprocessor.enabled:
-        spectral_pe_preprocessor(data, case_name=case_name)
+        spectral_pe_preprocessor(data, topology_id=case_name)
     if not to_homogeneous:
         return data
     _validate_node_stores_for_homogeneous(data)

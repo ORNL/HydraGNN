@@ -950,8 +950,8 @@ class OPFStructuralEncodingProvider(StructuralEncodingProvider):
         self._memory_cache[memory_key] = (artifact, path)
         return artifact, path
 
-    def __call__(self, data, case_name=None):
+    def __call__(self, data, topology_id=None):
         for source in self.config["precompute"]:
-            artifact, path = self._load_or_compute(data, source, case_name)
+            artifact, path = self._load_or_compute(data, source, topology_id)
             _attach_artifact(data, source, artifact, artifact_path=path)
         return data
