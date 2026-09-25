@@ -22,6 +22,8 @@ import sys
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 BASE_CONFIG_PATH = EXAMPLE_DIR / "pubchem_gaussian.json"
+SPHERICAL_HARMONIC_ORDER = 2
+PRIMARY_OBJECTIVE_METRICS = ("Energy", "Forces", "Hessian")
 LOSS_PATTERN = re.compile(
     r"^(?:\d+:\s*)?(.+?) Train Loss: "
     r"[-+\d.eE]+, Val Loss: ([-+\d.eE]+), Test Loss: [-+\d.eE]+$"
@@ -84,14 +86,14 @@ def configure_trial(base_config, parameters):
         architecture["allscaip_freq_list"] = None
     elif architecture["mpnn_type"] == "UMA":
         architecture["equivariance"] = True
-        architecture["max_ell"] = 2
+        architecture["max_ell"] = SPHERICAL_HARMONIC_ORDER
         architecture["num_radial"] = 6
-        architecture["uma_mmax"] = 2
+        architecture["uma_mmax"] = SPHERICAL_HARMONIC_ORDER
     elif architecture["mpnn_type"] == "MACE":
-        architecture["max_ell"] = 2
-        architecture["node_max_ell"] = 2
+        architecture["max_ell"] = SPHERICAL_HARMONIC_ORDER
+        architecture["node_max_ell"] = SPHERICAL_HARMONIC_ORDER
         architecture["num_radial"] = 6
-        architecture["equivariant_attn_lmax"] = 2
+        architecture["equivariant_attn_lmax"] = SPHERICAL_HARMONIC_ORDER
 
     return config
 
@@ -117,9 +119,14 @@ def validation_losses(log_path):
 def validation_objective(log_path):
     """Return the negative mean of the latest energy, force, and Hessian losses."""
     losses = validation_losses(log_path)
-    if losses is None or not all(math.isfinite(value) for value in losses.values()):
+    if losses is None or not all(
+        math.isfinite(losses.get(name, math.inf))
+        for name in PRIMARY_OBJECTIVE_METRICS
+    ):
         return -math.inf
-    return -sum(losses.values()) / len(losses)
+    return -sum(losses[name] for name in PRIMARY_OBJECTIVE_METRICS) / len(
+        PRIMARY_OBJECTIVE_METRICS
+    )
 
 
 def _trial_command(config_path, log_name, nodes):
@@ -150,6 +157,9 @@ def _trial_command(config_path, log_name, nodes):
             f"--log={log_name}",
         ]
     )
+    dataset_path = os.environ.get("PUBCHEM_DATASET")
+    if dataset_path:
+        command.append(f"--dataset-path={dataset_path}")
     return command
 
 
@@ -205,11 +215,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--max-evals", type=int, default=100)
     parser.add_argument(
+        "--dataset-path",
+        type=Path,
+        default=os.environ.get("PUBCHEM_DATASET"),
+        help="Existing PubChem Gaussian ADIOS2 dataset",
+    )
+    parser.add_argument(
         "--mpnn-types",
         default="EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq,AllScAIP,UMA",
         help="Comma-separated message-passing implementations",
     )
     args = parser.parse_args()
+    if args.dataset_path is not None:
+        os.environ["PUBCHEM_DATASET"] = str(args.dataset_path.resolve())
 
     try:
         from deephyper.evaluator import ProcessPoolEvaluator, queued

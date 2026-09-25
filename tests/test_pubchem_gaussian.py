@@ -16,6 +16,7 @@ import torch
 from hydragnn.models.create import compute_forces_and_hessian
 
 from examples.pubchem_gaussian.pubchem_gaussian_hpo import (
+    _trial_command,
     configure_trial,
     validation_losses,
     validation_objective,
@@ -125,6 +126,15 @@ def test_pubchem_hpo_configures_architecture_and_conditional_attention():
     assert allscaip_architecture["allscaip_freq_list"] is None
 
 
+def test_pubchem_hpo_trial_command_uses_shared_dataset(monkeypatch, tmp_path):
+    dataset_path = tmp_path / "pubchem_gaussian.bp"
+    monkeypatch.setenv("PUBCHEM_DATASET", str(dataset_path))
+
+    command = _trial_command(tmp_path / "config.json", "trial", nodes=None)
+
+    assert f"--dataset-path={dataset_path}" in command
+
+
 def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
     log_path = tmp_path / "trial.log"
     log_path.write_text(
@@ -134,6 +144,7 @@ def test_pubchem_hpo_objective_uses_latest_named_validation_losses(tmp_path):
         "Energy Train Loss: 1, Val Loss: 2, Test Loss: 3\n"
         "Forces Train Loss: 4, Val Loss: 5, Test Loss: 6\n"
         "Hessian Train Loss: 7, Val Loss: 8, Test Loss: 9\n"
+        "thermochemistry Train Loss: 1e9, Val Loss: 1e9, Test Loss: 1e9\n"
     )
 
     assert validation_objective(log_path) == pytest.approx(-5.0)

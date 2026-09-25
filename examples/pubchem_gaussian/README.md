@@ -93,6 +93,19 @@ srun -N1 -n1 python examples/pubchem_gaussian/train.py --preonly
 sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
 ```
 
+The Frontier launcher defaults to the shared PubChem Gaussian ADIOS2 dataset.
+Override `PUBCHEM_DATASET` to select another cache, `HPO_MPNN_TYPES` to select
+model families, and `HPO_MAX_EVALS` to set the search budget. For example, a
+MACE/UMA-only search uses:
+
+```bash
+HPO_MPNN_TYPES=MACE,UMA HPO_MAX_EVALS=100 \
+	sbatch examples/pubchem_gaussian/job-hpo-frontier.sh
+```
+
+The spherical-harmonic order is fixed at $\ell_{\max}=2$ for both families; it
+is not sampled as a hyperparameter.
+
 For the three-million-sample search, use the resumable successive-halving
 driver and its checked-in stage schedule:
 
