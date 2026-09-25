@@ -654,19 +654,19 @@ def main():
         if "scheduler_state_dict" in ckpt_mlp:
             scheduler.load_state_dict(ckpt_mlp["scheduler_state_dict"])
 
+    loss_terms = {
+        term["variable"]: term
+        for term in config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+    }
     energy_weight = (
         args.energy_weight
         if args.energy_weight is not None
-        else config["NeuralNetwork"]["Training"]["loss"]["terms"]["energy"].get(
-            "weight", 1.0
-        )
+        else loss_terms["energy"].get("weight", 1.0)
     )
     force_weight = (
         args.force_weight
         if args.force_weight is not None
-        else config["NeuralNetwork"]["Training"]["loss"]["terms"]["forces"].get(
-            "weight", 1.0
-        )
+        else loss_terms["forces"].get("weight", 1.0)
     )
 
     # Load existing timing history if resuming

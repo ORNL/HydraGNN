@@ -114,7 +114,7 @@ def test_example_config_builds_model(filename, expected_mpnn, expected_str):
         model = create_model_config(
             config=config["NeuralNetwork"], verbosity=0, use_gpu=False
         )
-        # The interatomic DomainLoss provider wraps the backbone in
+        # The interatomic training-loss provider wraps the backbone in
         # EnhancedModelWrapper; unwrap to inspect the underlying stack.
         inner = getattr(model, "model", model)
         assert str(inner) == expected_str

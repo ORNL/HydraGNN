@@ -346,7 +346,11 @@
                 "name": "bus_va_vm",
                 "level": "node",
                 "dim": 2,
-                "node_type": "bus"
+                "node_type": "bus",
+                "components": [
+                    "bus_voltage_angle",
+                    "bus_voltage_magnitude"
+                ]
             }
         ]
     },
