@@ -8,6 +8,7 @@ class InteratomicPotentialDomainLoss(torch.nn.Module):
     """Declarative energy/force training objective for interatomic potentials."""
 
     _SUPPORTED_TERMS = {"energy", "energy_per_atom", "forces"}
+    requires_find_unused_parameters = True
 
     def __init__(self, model, config):
         super().__init__()
