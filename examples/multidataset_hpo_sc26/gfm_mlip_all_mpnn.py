@@ -254,7 +254,8 @@ if __name__ == "__main__":
     set_param_value("hidden_dim")
     set_param_value("num_conv_layers")
     if args.force_weight is not None:
-        config["NeuralNetwork"]["Training"]["loss"]["terms"]["forces"][
+        terms = config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+        next(term for term in terms if term["variable"] == "forces")[
             "weight"
         ] = args.force_weight
 

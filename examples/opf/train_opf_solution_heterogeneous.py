@@ -1411,13 +1411,13 @@ if __name__ == "__main__":
         dl_enabled = domain_loss_config.get("enabled", False)
         if rank == 0:
             info(
-                f"[DomainLoss] config (enabled={dl_enabled}): "
+                f"[Training.loss] config (enabled={dl_enabled}): "
                 + ", ".join(
                     f"{k}={v}" for k, v in domain_loss_config.items() if k != "enabled"
                 )
             )
         if dl_enabled and rank == 0:
-            info("[DomainLoss] Wrapping model with OPFEnhancedModelWrapper.")
+            info("[Training.loss] Wrapping model with OPFEnhancedModelWrapper.")
         model = OPFEnhancedModelWrapper(
             model,
             OPFDomainLoss(
@@ -1455,7 +1455,7 @@ if __name__ == "__main__":
         target_model = model.module if hasattr(model, "module") else model
         if not isinstance(target_model, OPFEnhancedModelWrapper):
             raise RuntimeError(
-                "--eval_domain_penalties_only requires a DomainLoss section in the "
+                "--eval_domain_penalties_only requires a Training.loss section in the "
                 "config so the model is wrapped with OPFEnhancedModelWrapper."
             )
         domain_loss = target_model.domain_loss

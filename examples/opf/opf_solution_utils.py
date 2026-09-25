@@ -88,7 +88,13 @@ class OPFDomainLoss(torch.nn.Module):
         bus_inputs = []
         for item in (variables or {}).get("inputs", []):
             if item.get("level") == "node" and item.get("node_type") == "bus":
-                bus_inputs.extend([item["name"]] * int(item["dim"]))
+                components = item.get("components")
+                if components is not None and len(components) != int(item["dim"]):
+                    raise ValueError(
+                        f"Variables input {item['name']!r} has dim={item['dim']} "
+                        f"but {len(components)} named components."
+                    )
+                bus_inputs.extend(components or [item["name"]] * int(item["dim"]))
         output_components = []
         for item in (variables or {}).get("outputs", []):
             if item.get("node_type") == "bus":

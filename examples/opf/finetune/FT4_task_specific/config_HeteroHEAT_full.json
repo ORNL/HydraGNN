@@ -121,61 +121,6 @@
             "checkpoint_warmup": 2,
             "continue": 0,
             "startfrom": "existing_model",
-            "loss": {
-                "enabled": false,
-                "provider": "optimal_power_flow",
-                "supervised": {
-                    "default_metric": "mse",
-                    "terms": [
-                        {
-                            "variable": "bus_va_vm",
-                            "weight": 1.0
-                        }
-                    ]
-                },
-                "constraints": [
-                    {
-                        "name": "voltage_limits",
-                        "operator": "bounded",
-                        "value": "bus_voltage_magnitude",
-                        "lower": "bus_vmin",
-                        "upper": "bus_vmax",
-                        "scale": 0.01
-                    },
-                    {
-                        "name": "angle_limits",
-                        "operator": "edge_difference_bounded",
-                        "value": "bus_voltage_angle",
-                        "relations": [
-                            "ac_line",
-                            "transformer"
-                        ],
-                        "lower": "angle_minimum",
-                        "upper": "angle_maximum",
-                        "scale": 0.001
-                    },
-                    {
-                        "name": "thermal_limits",
-                        "operator": "ac_thermal_limit",
-                        "relations": [
-                            "ac_line",
-                            "transformer"
-                        ],
-                        "scale": 0.001,
-                        "slack": 0.0001
-                    }
-                ],
-                "constraint_optimizer": {
-                    "type": "augmented_lagrangian",
-                    "rho": 1.0,
-                    "rho_growth": 2.0,
-                    "rho_max": 10000.0,
-                    "required_reduction": 0.9,
-                    "update_every": 1,
-                    "warmup_epochs": 3,
-                    "ramp_epochs": 3
-                }
-            },
             "Optimizer": {
                 "type": "AdamW",
                 "learning_rate": 0.0001
@@ -346,7 +291,11 @@
                 "name": "generator_pg_qg",
                 "level": "node",
                 "dim": 2,
-                "node_type": "generator"
+                "node_type": "generator",
+                "components": [
+                    "generator_active_power",
+                    "generator_reactive_power"
+                ]
             }
         ]
     },

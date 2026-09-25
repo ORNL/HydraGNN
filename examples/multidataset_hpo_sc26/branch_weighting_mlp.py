@@ -598,19 +598,19 @@ def main():
     )
     loss_fn = F.mse_loss
 
+    loss_terms = {
+        term["variable"]: term
+        for term in config["NeuralNetwork"]["Training"]["loss"]["supervised"]["terms"]
+    }
     energy_weight = (
         args.energy_weight
         if args.energy_weight is not None
-        else config["NeuralNetwork"]["Training"]["loss"]["terms"]["energy"].get(
-            "weight", 1.0
-        )
+        else loss_terms["energy"].get("weight", 1.0)
     )
     force_weight = (
         args.force_weight
         if args.force_weight is not None
-        else config["NeuralNetwork"]["Training"]["loss"]["terms"]["forces"].get(
-            "weight", 1.0
-        )
+        else loss_terms["forces"].get("weight", 1.0)
     )
 
     os.makedirs(args.output_dir, exist_ok=True)

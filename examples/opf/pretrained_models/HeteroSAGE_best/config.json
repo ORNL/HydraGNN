@@ -198,7 +198,13 @@
                 "name": "bus_features",
                 "level": "node",
                 "dim": 4,
-                "node_type": "bus"
+                "node_type": "bus",
+                "components": [
+                    "bus_base_kv",
+                    "bus_type",
+                    "bus_vmin",
+                    "bus_vmax"
+                ]
             },
             {
                 "name": "generator_features",

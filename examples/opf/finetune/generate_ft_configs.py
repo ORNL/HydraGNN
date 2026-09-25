@@ -213,6 +213,13 @@ def _variables(output_name, level, dim, node_type=None):
     output = {"name": output_name, "level": level, "dim": dim}
     if node_type is not None:
         output["node_type"] = node_type
+    if output_name == "bus_va_vm":
+        output["components"] = ["bus_voltage_angle", "bus_voltage_magnitude"]
+    elif output_name == "generator_pg_qg":
+        output["components"] = [
+            "generator_active_power",
+            "generator_reactive_power",
+        ]
     return {
         "graph_type": "heterogeneous",
         "node_types": ["bus", "generator", "load", "shunt"],
@@ -408,6 +415,10 @@ def generate_all():
                         out_dim,
                     )
                     training = _base_training(lr, fm["epochs"], regime)
+                    if tgt == "generator":
+                        # The current OPF constraint provider operates on predicted
+                        # bus voltage and cannot constrain a generator-only head.
+                        training.pop("loss")
                     cfg = {
                         "_ft_strategy": ft_dir,
                         "_ft_description": fm["desc"],
