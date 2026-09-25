@@ -625,10 +625,34 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--domain_loss_ema_momentum",
+        "--domain_loss_rho",
         type=float,
         default=None,
-        help="Override DomainLoss.ema_momentum for per-term EMA normalization (default 0.1).",
+        help="Initial augmented-Lagrangian quadratic coefficient.",
+    )
+    parser.add_argument(
+        "--domain_loss_rho_growth",
+        type=float,
+        default=None,
+        help="Factor used to increase rho when feasibility stalls.",
+    )
+    parser.add_argument(
+        "--domain_loss_rho_max",
+        type=float,
+        default=None,
+        help="Maximum augmented-Lagrangian quadratic coefficient.",
+    )
+    parser.add_argument(
+        "--domain_loss_constraint_reduction",
+        type=float,
+        default=None,
+        help="Required epoch-to-epoch residual reduction before rho is increased.",
+    )
+    parser.add_argument(
+        "--domain_loss_dual_update_interval",
+        type=int,
+        default=None,
+        help="Completed training epochs between projected dual-ascent updates.",
     )
     parser.add_argument(
         "--domain_loss_warmup_epochs",
@@ -734,7 +758,11 @@ if __name__ == "__main__":
         "angle_diff_weight": args.domain_loss_angle_diff_weight,
         "line_flow_weight": args.domain_loss_line_flow_weight,
         "line_flow_slack": args.domain_loss_line_flow_slack,
-        "ema_momentum": args.domain_loss_ema_momentum,
+        "rho": args.domain_loss_rho,
+        "rho_growth": args.domain_loss_rho_growth,
+        "rho_max": args.domain_loss_rho_max,
+        "constraint_reduction": args.domain_loss_constraint_reduction,
+        "dual_update_interval": args.domain_loss_dual_update_interval,
         "warmup_epochs": args.domain_loss_warmup_epochs,
         "ramp_epochs": args.domain_loss_ramp_epochs,
     }
@@ -1480,9 +1508,11 @@ if __name__ == "__main__":
     # epoch *transitions* detected inside loss(), so the last epoch's stats would
     # otherwise never be written (no subsequent epoch triggers the flush).
     if isinstance(model, OPFEnhancedModelWrapper):
+        model.finalize_domain_state()
         model._flush_epoch_log(model._last_seen_epoch)
     elif hasattr(model, "module") and isinstance(model.module, OPFEnhancedModelWrapper):
         # DDP wraps the model in model.module
+        model.module.finalize_domain_state()
         model.module._flush_epoch_log(model.module._last_seen_epoch)
 
     hydragnn.utils.model.save_model(model, optimizer, log_name)
