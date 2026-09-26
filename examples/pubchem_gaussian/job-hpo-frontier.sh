@@ -13,7 +13,7 @@ module unload darshan-runtime 2>/dev/null || true
 module load cpe/24.07 cce/18.0.0 rocm/7.2.0 amd-mixed/7.2.0 \
     craype-accel-amd-gfx90a PrgEnv-gnu miniforge3/23.11.0-0 git-lfs
 
-HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+HYDRAGNN_ROOT="${HYDRAGNN_ROOT:-${SLURM_SUBMIT_DIR:-$(pwd)}}"
 HYDRAGNN_VENV="${HYDRAGNN_VENV:-/lustre/orion/lrn070/world-shared/mlupopa/HydraGNN-Installation-Frontier-ROCm72/hydragnn_venv_rocm72}"
 : "${PUBCHEM_DATASET:=/lustre/orion/lrn070/world-shared/kmehta/hydragnn/datasets/pubchem_gaussian.bp}"
 HPO_MPNN_TYPES="${HPO_MPNN_TYPES:-EGNN,SchNet,DimeNet,MACE,PAINN,PNAEq,AllScAIP,UMA}"
