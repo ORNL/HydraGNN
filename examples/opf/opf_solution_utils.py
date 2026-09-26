@@ -11,6 +11,7 @@ from torch_geometric.utils import degree
 
 from hydragnn.utils.input_config_parsing import get_variable_schema
 from hydragnn.domain_losses import create_constraint_optimizer
+from hydragnn.utils.model.model import loss_function_selection
 
 
 def info(*args, logtype="info", sep=" "):
@@ -62,6 +63,25 @@ class OPFDomainLoss(torch.nn.Module):
         self.enabled = bool(cfg.get("enabled", False))
         self.last_loss_components = {}
         self.node_target_type = node_target_type
+        supervised = cfg.get("supervised", {})
+        self.supervised_default_metric = supervised.get("default_metric", "mse")
+        supervised_items = supervised.get("terms", [])
+        self.supervised_terms = {
+            item["variable"]: copy.deepcopy(item) for item in supervised_items
+        }
+        if len(self.supervised_terms) != len(supervised_items):
+            raise ValueError("Training.loss supervised variables must be unique.")
+        self.output_names = [
+            item["name"] for item in (variables or {}).get("outputs", [])
+        ]
+        if self.supervised_terms and variables:
+            unknown = set(self.supervised_terms) - set(self.output_names)
+            missing = set(self.output_names) - set(self.supervised_terms)
+            if unknown or missing:
+                raise ValueError(
+                    "Training.loss supervised terms must match Variables.outputs: "
+                    f"missing={sorted(missing)}, unknown={sorted(unknown)}."
+                )
         constraint_items = cfg.get("constraints", [])
         constraints = {item["name"]: item for item in constraint_items}
         if len(constraints) != len(constraint_items):
@@ -551,6 +571,44 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         self._last_batch = data
         return self.model(data)
 
+    def _supervised_loss(self, pred, value, head_index):
+        """Evaluate the declarative supervised OPF objective."""
+        if not self.domain_loss.supervised_terms:
+            return self.model.loss(pred, value, head_index)
+        if len(pred) != len(self.domain_loss.output_names):
+            raise ValueError(
+                "The number of model heads must match the configured OPF outputs."
+            )
+
+        total = pred[0].new_zeros(())
+        task_losses = []
+        report = {}
+        for index, (prediction, variable) in enumerate(
+            zip(pred, self.domain_loss.output_names)
+        ):
+            term = self.domain_loss.supervised_terms[variable]
+            target = value[head_index[index]].to(prediction)
+            if target.shape != prediction.shape:
+                target = target.reshape_as(prediction)
+            metric_name = term.get("metric", self.domain_loss.supervised_default_metric)
+            metric = loss_function_selection(metric_name)
+            if metric is None:
+                raise ValueError(
+                    f"Unknown loss function {metric_name!r} for term {variable!r}."
+                )
+            raw = metric(prediction, target)
+            weight = float(term.get("weight", 1.0))
+            weighted = weight * raw
+            total = total + weighted
+            task_losses.append(raw)
+            report[f"supervised.{variable}"] = {
+                "raw": raw.detach(),
+                "weight": weight,
+                "weighted": weighted.detach(),
+            }
+        self.model.last_loss_components = report
+        return total, task_losses
+
     def train(self, mode: bool = True):
         """Finalize training residuals before entering validation mode."""
         was_training = self.training
@@ -560,7 +618,7 @@ class OPFEnhancedModelWrapper(torch.nn.Module):
         return result
 
     def loss(self, pred, value, head_index):
-        total_loss, tasks_loss = self.model.loss(pred, value, head_index)
+        total_loss, tasks_loss = self._supervised_loss(pred, value, head_index)
         if self._last_batch is None:
             info(
                 "[OPFEnhancedModelWrapper] loss() called before forward(); "

@@ -20,6 +20,7 @@
             "radius": 5.0,
             "hidden_dim": 200,
             "num_conv_layers": 4,
+            "graph_pooling": "add",
             "output_heads": {
                 "node": {
                     "num_headlayers": 2,

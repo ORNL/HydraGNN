@@ -10,7 +10,9 @@
 ##############################################################################
 
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -25,7 +27,10 @@ from hydragnn.utils.input_config_parsing import (
     edge_type_dims,
     validate_edge_type_contract,
 )
-from hydragnn.utils.input_config_parsing.config_utils import update_config_edge_dim
+from hydragnn.utils.input_config_parsing.config_utils import (
+    update_config,
+    update_config_edge_dim,
+)
 from hydragnn.utils.input_config_parsing.variable_schema import (
     encoded_schema_dimensions,
     get_variable_schema,
@@ -114,6 +119,27 @@ def test_explicit_edge_types_require_all_fields():
 def test_relation_only_edge_dim_dictionary_is_rejected():
     with pytest.raises(ValueError, match="edge_dim dictionaries are unsupported"):
         update_config_edge_dim({"edge_dim": {"line": 9}})
+
+
+def test_null_training_loss_is_accepted_with_named_edge_inputs():
+    config_path = (
+        Path(__file__).resolve().parents[1] / "examples" / "zinc" / "zinc.json"
+    )
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["NeuralNetwork"]["Training"]["loss"] = None
+    sample = Data(num_nodes=2)
+    loader = SimpleNamespace(dataset=[sample])
+    previous = os.environ.get("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE")
+    os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = "0"
+    try:
+        updated = update_config(config, loader, loader, loader)
+    finally:
+        if previous is None:
+            os.environ.pop("HYDRAGNN_USE_VARIABLE_GRAPH_SIZE", None)
+        else:
+            os.environ["HYDRAGNN_USE_VARIABLE_GRAPH_SIZE"] = previous
+
+    assert updated["NeuralNetwork"]["Architecture"]["edge_dim"] == 1
 
 
 def _heterogeneous_edge_sample():

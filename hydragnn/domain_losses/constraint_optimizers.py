@@ -5,6 +5,13 @@ import torch.distributed as dist
 class ConstraintOptimizer(torch.nn.Module):
     """Turn named non-negative constraint residuals into scalar loss terms."""
 
+    @staticmethod
+    def _validate_scale(scale):
+        scale = float(scale)
+        if scale < 0:
+            raise ValueError("Constraint scales must be non-negative.")
+        return scale
+
     def penalty(self, name, residual, scale=1.0, update_state=False):
         raise NotImplementedError
 
@@ -14,7 +21,7 @@ class ConstraintOptimizer(torch.nn.Module):
 
 class FixedPenalty(ConstraintOptimizer):
     def penalty(self, name, residual, scale=1.0, update_state=False):
-        return float(scale) * residual.square()
+        return self._validate_scale(scale) * residual.square()
 
 
 class AugmentedLagrangian(ConstraintOptimizer):
@@ -37,7 +44,7 @@ class AugmentedLagrangian(ConstraintOptimizer):
             raise ValueError("Invalid augmented_lagrangian update configuration.")
 
     def penalty(self, name, residual, scale=1.0, update_state=False):
-        value = float(scale) * residual
+        value = self._validate_scale(scale) * residual
         if update_state:
             self._sums[name] += float(value.detach())
             self._counts[name] += 1
