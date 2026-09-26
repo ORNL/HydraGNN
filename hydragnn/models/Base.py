@@ -64,6 +64,7 @@ class Base(Module):
         graph_attr_conditioning_mode: str = "concat_node",
         equivariant_attn_lmax: int = 1,
         equivariant_attn_num_radial: int = 16,
+        equivariant_attn_num_hidden_layers: int = 1,
         equivariant_attn_feedforward_multiplier: int = 2,
         equivariant_attn_allow_scalar_only: bool = False,
         equivariant_attn_require_tensor_coupling: bool = True,
@@ -88,6 +89,7 @@ class Base(Module):
         self.global_attn_dropout = dropout
         self.equivariant_attn_lmax = equivariant_attn_lmax
         self.equivariant_attn_num_radial = equivariant_attn_num_radial
+        self.equivariant_attn_num_hidden_layers = equivariant_attn_num_hidden_layers
         self.equivariant_attn_feedforward_multiplier = (
             equivariant_attn_feedforward_multiplier
         )
@@ -298,6 +300,7 @@ class Base(Module):
                     heads=self.global_attn_heads,
                     lmax=self.equivariant_attn_lmax,
                     num_radial=self.equivariant_attn_num_radial,
+                    num_hidden_layers=self.equivariant_attn_num_hidden_layers,
                     feedforward_multiplier=(
                         self.equivariant_attn_feedforward_multiplier
                     ),
@@ -614,12 +617,14 @@ class Base(Module):
                     raise ValueError(
                         "EquivariantTransformer requires invariant node features"
                     )
-                return self.node_emb(node_features.float()), data.pos, conv_args
+                node_features = node_features.to(self.node_emb.weight.dtype)
+                return self.node_emb(node_features), data.pos, conv_args
             # encode node positional embeddings
             x = self.pos_emb(data.pe)
             # if node features are available, generate mebeddings, concatenate with positional embeddings and map to hidden dim
             if self.input_dim:
-                x = torch.cat((self.node_emb(node_features.float()), x), 1)
+                node_features = node_features.to(self.node_emb.weight.dtype)
+                x = torch.cat((self.node_emb(node_features), x), 1)
                 x = self.node_lin(x)
             # repeat for edge features and relative edge encodings
             if self.is_edge_model:

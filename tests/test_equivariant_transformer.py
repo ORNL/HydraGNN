@@ -30,6 +30,7 @@ def _sample(dtype=torch.float64):
 def test_equivariant_rms_norm_is_rotation_equivariant():
     irreps, features, _, _ = _sample()
     norm = EquivariantRMSNorm(irreps).double()
+    assert norm.gain.shape == (1,)
     rotation = o3.rand_matrix(dtype=torch.float64)
     representation = irreps.D_from_matrix(rotation)
 
@@ -49,7 +50,11 @@ def test_equivariant_transformer_layer_preserves_se3_equivariance():
     torch.manual_seed(21)
     irreps, features, positions, batch = _sample()
     layer = EquivariantTransformerLayer(
-        irreps, heads=2, lmax=1, feedforward_multiplier=2
+        irreps,
+        heads=2,
+        lmax=1,
+        num_hidden_layers=3,
+        feedforward_multiplier=2,
     ).double()
     rotation = o3.rand_matrix(dtype=torch.float64)
     translation = torch.randn(1, 3, dtype=torch.float64)

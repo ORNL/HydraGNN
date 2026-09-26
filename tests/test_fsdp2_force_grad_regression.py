@@ -11,6 +11,7 @@
 import os
 import tempfile
 from importlib import import_module
+from pathlib import Path
 
 import pytest
 import torch
@@ -70,7 +71,7 @@ def _bf16_supported():
     ["EGNN", "DimeNet", "SchNet", "MACE", "PAINN", "PNAEq"],
 )
 def test_fsdp2_enhanced_wrapper_force_grad_regression(
-    monkeypatch, precision, mpnn_type
+    monkeypatch, capsys, precision, mpnn_type
 ):
     has_cuda = torch.cuda.is_available()
     has_xpu = hasattr(torch, "xpu") and torch.xpu.is_available()
@@ -83,10 +84,12 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
     if dist.is_initialized():
         pytest.skip("Distributed process group already initialized")
 
-    with tempfile.NamedTemporaryFile() as init_file:
+    with tempfile.NamedTemporaryFile(delete=False) as init_file:
+        init_path = Path(init_file.name)
+    try:
         dist.init_process_group(
             backend=backend,
-            init_method=f"file://{init_file.name}",
+            init_method=f"file://{init_path}",
             rank=0,
             world_size=1,
         )
@@ -94,7 +97,9 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
         try:
             monkeypatch.setenv("HYDRAGNN_USE_FSDP", "1")
             monkeypatch.setenv("HYDRAGNN_FSDP_VERSION", "2")
-            monkeypatch.setenv("HYDRAGNN_FSDP_STRATEGY", "SHARD_GRAD_OP")
+            fsdp_strategy = "FULL_SHARD" if mpnn_type == "DimeNet" else "SHARD_GRAD_OP"
+            monkeypatch.setenv("HYDRAGNN_FSDP_STRATEGY", fsdp_strategy)
+            monkeypatch.setenv("HYDRAGNN_VERIFY_FSDP2_SHARDING", "1")
             monkeypatch.setenv("HYDRAGNN_AGGR_BACKEND", "torch")
             monkeypatch.setenv("HYDRAGNN_USE_ddstore", "0")
 
@@ -108,15 +113,37 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 }
             }
 
+            model_options = {}
+            if mpnn_type == "DimeNet":
+                model_options.update(
+                    basis_emb_size=8,
+                    envelope_exponent=5,
+                    int_emb_size=64,
+                    out_emb_size=128,
+                    num_after_skip=2,
+                    num_before_skip=1,
+                    num_radial=6,
+                    num_spherical=7,
+                    radius=5.0,
+                    equivariant_attn_num_hidden_layers=3,
+                    equivariant_attn_feedforward_multiplier=4,
+                    equivariant_attn_allow_scalar_only=True,
+                    equivariant_attn_require_tensor_coupling=False,
+                )
+
+            global_attn_engine = (
+                "EquivariantTransformer" if mpnn_type == "DimeNet" else ""
+            )
+
             model = create_model(
                 mpnn_type=mpnn_type,
                 input_dim=1,
                 hidden_dim=32,
                 output_dim=[1],
                 pe_dim=6,
-                global_attn_engine="",
+                global_attn_engine=global_attn_engine,
                 global_attn_type="",
-                global_attn_heads=1,
+                global_attn_heads=4 if mpnn_type == "DimeNet" else 1,
                 output_type=["node"],
                 output_heads=update_multibranch_heads(output_heads),
                 activation_function="relu",
@@ -129,6 +156,7 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
                 energy_peratom_weight=1.0,
                 force_weight=1.0,
                 use_gpu=True,
+                **model_options,
             )
 
             assert (
@@ -166,6 +194,8 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
         finally:
             if dist.is_initialized():
                 dist.destroy_process_group()
+    finally:
+        init_path.unlink(missing_ok=True)
 
     assert torch.isfinite(train_error)
     assert len(task_errors) == 3
@@ -173,3 +203,6 @@ def test_fsdp2_enhanced_wrapper_force_grad_regression(
     assert reshard_calls, "Expected FSDP2 reshard toggling calls"
     assert reshard_calls[0] is False
     assert True in reshard_calls
+    diagnostic = capsys.readouterr().out
+    assert "[fsdp2-sharding] phase=parameters" in diagnostic
+    assert "[fsdp2-sharding] phase=gradients" in diagnostic

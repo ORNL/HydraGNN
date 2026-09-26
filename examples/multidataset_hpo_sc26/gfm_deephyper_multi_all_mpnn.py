@@ -139,17 +139,28 @@ def run(trial, dequed=None):
     try:
         result = subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         fout = open(f"{DEEPHYPER_LOG_DIR}/error_{SLURM_JOB_ID}_{trial.id}.txt", "r")
+        energy_per_atom_val_loss = None
         while True:
             line = fout.readline()
-            if "Tasks Val Loss" in line:
-                nums = re.findall(num_pattern, line, flags=re.IGNORECASE)
-                ## Task Val Loss: [a, b, c]. The output must be -(b+c)/2
-                output = -0.5 * (to_float(nums[1]) + to_float(nums[2]))
-                print(
-                    f"Val losses: {-to_float(nums[1])}, {-to_float(nums[2])} Average: {output}",
-                    flush=True,
-                    file=f,
+            if "Energy Per Atom Train Loss" in line:
+                match = re.search(
+                    rf"Val Loss:\s*({num_pattern})", line, flags=re.IGNORECASE
                 )
+                if match:
+                    energy_per_atom_val_loss = to_float(match.group(1))
+            elif "Forces Train Loss" in line:
+                match = re.search(
+                    rf"Val Loss:\s*({num_pattern})", line, flags=re.IGNORECASE
+                )
+                if match and energy_per_atom_val_loss is not None:
+                    force_val_loss = to_float(match.group(1))
+                    output = -0.5 * (energy_per_atom_val_loss + force_val_loss)
+                    print(
+                        f"Val losses: {-energy_per_atom_val_loss}, "
+                        f"{-force_val_loss} Average: {output}",
+                        flush=True,
+                        file=f,
+                    )
             if not line:
                 break
         fout.close()

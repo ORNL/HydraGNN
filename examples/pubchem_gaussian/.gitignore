@@ -1,0 +1,4 @@
+dataset/raw/
+dataset/*.pickle/
+dataset/*.bp/
+dataset/*.bp.incomplete/
