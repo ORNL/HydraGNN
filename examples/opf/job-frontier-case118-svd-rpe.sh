@@ -50,7 +50,7 @@ export HSA_FORCE_FINE_GRAIN_PCIE=1
 cd "${OPF_DIR}"
 
 if [[ ! -d dataset/case118_svd_rpe.h5 ]]; then
-    echo "Missing dataset/case118_svd_rpe.h5; submit job-frontier-preonly.sh first." >&2
+    echo "Missing dataset/case118_svd_rpe.h5; submit job-frontier-case118-svd-rpe-preonly.sh first." >&2
     exit 1
 fi
 

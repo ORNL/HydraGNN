@@ -4,7 +4,11 @@ import pytest
 import torch
 from torch_geometric.data import Data
 
-from hydragnn.domain_losses import InteratomicPotentialDomainLoss, create_domain_loss
+from hydragnn.domain_losses import (
+    InteratomicPotentialDomainLoss,
+    create_domain_loss,
+    defer_domain_loss,
+)
 
 
 class EnergyModel(torch.nn.Module):
@@ -68,6 +72,23 @@ def test_declarative_interatomic_terms_compute_expected_weighted_loss():
 def test_disabled_domain_loss_returns_original_model():
     model = EnergyModel()
     assert create_domain_loss(model, {"enabled": False}) is model
+
+
+def test_core_factory_rejects_metadata_dependent_opf_provider():
+    with pytest.raises(ValueError, match="OPF training entry point"):
+        create_domain_loss(
+            EnergyModel(),
+            {"enabled": True, "provider": "optimal_power_flow"},
+        )
+
+
+def test_metadata_dependent_provider_can_be_explicitly_deferred():
+    config = {"Training": {"loss": {"enabled": True, "provider": "optimal_power_flow"}}}
+
+    deferred = defer_domain_loss(config, "optimal_power_flow")
+
+    assert deferred["Training"]["loss"]["enabled"] is False
+    assert config["Training"]["loss"]["enabled"] is True
 
 
 @pytest.mark.parametrize(
@@ -145,6 +166,27 @@ def test_force_only_term_does_not_require_energy_target():
 
     assert total.item() == pytest.approx(0.0)
     assert components[0].item() == pytest.approx(0.0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_interatomic_loss_preserves_requested_precision(dtype):
+    model = create_domain_loss(EnergyModel(), _config())
+    data = Data(
+        pos=torch.tensor([[1.0, 0.0, 0.0]], dtype=dtype, requires_grad=True),
+        batch=torch.tensor([0]),
+        energy=torch.tensor([1.0], dtype=dtype),
+        forces=torch.tensor([[-2.0, 0.0, 0.0]], dtype=dtype),
+    )
+
+    values = model.prediction_target_pairs(model(data), data)
+    total, components = model.energy_force_loss(model(data), data)
+
+    assert total.dtype == dtype
+    assert all(component.dtype == dtype for component in components)
+    assert all(
+        prediction.dtype == target.dtype == dtype
+        for prediction, target in values.values()
+    )
 
 
 @pytest.mark.parametrize(

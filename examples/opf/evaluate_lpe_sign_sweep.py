@@ -245,8 +245,11 @@ def _create_model(config: dict, sample, device):
             node_type: int(sample[node_type].x.size(-1))
             for node_type in sample.node_types
         }
+    model_config = hydragnn.domain_losses.defer_domain_loss(
+        config["NeuralNetwork"], "optimal_power_flow"
+    )
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
+        config=model_config,
         verbosity=0,
         use_gpu=device.type != "cpu",
         metadata=sample.metadata(),

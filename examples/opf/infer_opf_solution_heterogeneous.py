@@ -310,8 +310,11 @@ if __name__ == "__main__":
             "Add node_input_dims to the config to initialize node embedders."
         )
 
+    model_config = hydragnn.domain_losses.defer_domain_loss(
+        config["NeuralNetwork"], "optimal_power_flow"
+    )
     model = hydragnn.models.create_model_config(
-        config=config["NeuralNetwork"],
+        config=model_config,
         verbosity=config["Verbosity"]["level"],
         metadata=metadata,
         node_input_dims=node_input_dims,
